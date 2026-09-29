@@ -147,9 +147,12 @@ public static class NatashasFavourite
     /// fade it out from under the ring (that would be a free dodge nobody made).</summary>
     public const int DodgeMinLifetimeMs = DodgeMs + 600;
 
-    /// <summary>Whether a flash may be dealt red at all (the roll itself still decides).</summary>
-    public static bool FlashMayRoll(bool dodgeOn, int idleSeconds) =>
-        dodgeOn && idleSeconds >= 0 && idleSeconds < DodgeIdleSec;
+    /// <summary>Whether a flash may be dealt red at all (the roll itself still decides). Only a
+    /// flash the player can dodge: a click-through flash (Clickable off, a session that turns it
+    /// off, Solid mode on the shared host) can be neither clicked nor flung, so its ring would
+    /// always run out and book +5:00.</summary>
+    public static bool FlashMayRoll(bool dodgeOn, bool clickable, int idleSeconds) =>
+        dodgeOn && clickable && idleSeconds >= 0 && idleSeconds < DodgeIdleSec;
 
     /// <summary>1..0, how much ring is left <paramref name="elapsedMs"/> after the flash showed.</summary>
     public static double DodgeLeft(double elapsedMs) =>

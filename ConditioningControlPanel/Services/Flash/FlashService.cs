@@ -75,6 +75,11 @@ namespace ConditioningControlPanel.Services
         internal static int ResolveFlashCap(bool useLayer, bool useHost)
             => (useLayer || useHost) ? MAX_CONCURRENT_FLASH_HOST : MAX_CONCURRENT_FLASH;
 
+        /// <summary>Can the mouse click or fling a flash drawn this way? The shared solid-mode host
+        /// is click-through by design (gaze-pop and linger only). One truth for the spawn, the red
+        /// roll and "stay until popped".</summary>
+        internal static bool MouseClickable(bool clickable, bool solidHost) => clickable && !solidHost;
+
         /// <summary>Does a flash spawned now stay until popped? See <see cref="FlashStayRule"/>.</summary>
         private static bool StayUntilPopped(AppSettings settings, bool pointFired)
             => FlashStayRule.Applies(settings.FlashStayUntilPopped, settings.FlashClickable, pointFired);
@@ -1733,7 +1738,7 @@ namespace ConditioningControlPanel.Services
                 // The shared host is fully click-through (pops on it would need the global mouse
                 // hook, like bubbles) — solid-mode flashes are gaze-pop/linger only by design.
                 window.PreviewV2 = imageData.PreviewV2;
-                window.IsClickable = (settings.FlashClickable || window.PreviewV2) && !useHost;
+                window.IsClickable = MouseClickable(settings.FlashClickable || window.PreviewV2, useHost);
                 window.Background = System.Windows.Media.Brushes.Black;
                 window.IsFadingOut = false;
                 window.LifetimeCts = windowCts;
@@ -1827,11 +1832,11 @@ namespace ConditioningControlPanel.Services
                 // default: off means no red flashes at all), about one flash in ten wears red and
                 // shows a 4 s ring; +5:00 only if the ring empties before a click or a fling.
                 // Never a hydra copy, a remix mirror, a v2 preview or a picture a bubble delivered
-                // (that bubble had its own roll), never to someone away from the keyboard, and only
-                // while the row can charge.
+                // (that bubble had its own roll), never a flash nobody can click or fling (set just
+                // above), never to someone away from the keyboard, and only while the row can charge.
                 var natasha = hydraGeneration == 0 && !imageData.RemixMirror && !imageData.PreviewV2
                     && imageData.BubbleOriginPx == null
-                    && Chaster.NatashasFavourite.FlashMayRoll(settings.ChasterFlashDodge, ActivityTracker.GetIdleSeconds())
+                    && Chaster.NatashasFavourite.FlashMayRoll(settings.ChasterFlashDodge, window.IsClickable, ActivityTracker.GetIdleSeconds())
                     && App.Chaster?.CanBook(Chaster.NatashasFavourite.EventId) == true
                     && Chaster.NatashasFavourite.Roll(_random);
                 window.IsNatasha = natasha;
