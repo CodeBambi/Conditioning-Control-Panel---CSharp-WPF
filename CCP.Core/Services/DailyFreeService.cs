@@ -84,8 +84,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static readonly TimeSpan DayRollMaxWait = TimeSpan.FromMinutes(10);
 
-        public DailyFreeService()
+        /// <summary>False: never fetch the server override (a CCP_USERDATA_DIR sandbox - tests, kc - must not reach the
+        /// real proxy); the seeded pick still rotates daily.</summary>
+        private readonly bool _fetchOverride;
+
+        public DailyFreeService(bool fetchOverride = true)
         {
+            _fetchOverride = fetchOverride;
             _dayRollTimer = new Timer(_ => OnDayRollTick(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             ArmDayRollTimer();
         }
@@ -256,6 +261,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task RefreshAsync()
         {
+            if (!_fetchOverride) return;
             var today = LocalDateStamp();
             var now = DateTime.UtcNow;
 

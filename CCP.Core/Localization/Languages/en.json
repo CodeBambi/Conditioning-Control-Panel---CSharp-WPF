@@ -1344,6 +1344,7 @@
   "exclusives_badge_beta": "BETA",
   "exclusives_chip_unlocked": "UNLOCKED",
   "exclusives_chip_lab": "✨ LAB ACCESS",
+  "exclusives_not_on_this_build": "Not available on this build yet.",
   "exclusives_chip_pass_ready": "WEEKLY PASS READY",
   "exclusives_enter": "Open",
   "tab_fyp": "For You",

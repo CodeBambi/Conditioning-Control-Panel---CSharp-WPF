@@ -1,13 +1,20 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -16,8 +23,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// <para>The WPF shell owns only the backdrop and geometry chores; all roster/card logic lives
     /// in MainWindow.Exclusives.cs. What survived here is the ambient canvas tuning (fog + dust +
-    /// aurora at 0.55, copied from StartExclusivesMotion - canvas composition, not service logic).
-    /// Everything else is a stub or a placeholder.</para>
+    /// aurora at 0.55, copied from StartExclusivesMotion - canvas composition, not service logic)
+    /// plus the roster/gate repaint (RefreshVault), which reads Core's ExclusiveFeature.All.</para>
     ///
     /// <para>Dropped:
     /// <c>RoundClipOnResize</c> - WPF's ClipToBounds is rectangular, so a rounded host needed clip
@@ -36,7 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _ambientFx = this.FindControl<AmbientFxCanvas>("ExclusivesAmbientFx")!;
 
             LoadBackdrop();
-            LoadPlaceholderVault();
+            RefreshVault();
 
             // The tab is permanently mounted on WPF and MainWindow parks its canvas through
             // RegisterTabFx. No tab host on this head: the view runs its own room and stops it on
@@ -52,7 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>ModChanged may be raised off the UI thread; marshal before touching the Image.</summary>
-        private void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(LoadBackdrop);
+        private void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(() => { LoadBackdrop(); RefreshVault(); });
 
         /// <summary>WPF LoadBackdrop: null keeps what is already painted rather than blanking the room.</summary>
         private void LoadBackdrop()
@@ -76,134 +83,158 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         // ------------------------------------------------------------------
-        // Placeholder vault
+        // The vault (WPF MainWindow.Exclusives.cs EnsureExclusivesBuilt + RefreshExclusivesTab)
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Paints the spotlight and fills the shelf with sample cards.
-        ///
-        /// ponytail: DailyFreeService is NOT a blocker any more - it is in Core
-        /// (CCP.Core/Services/DailyFreeService.cs). What is still head-side is the registry itself,
-        /// ConditioningControlPanel/Models/ExclusiveFeature.cs (its gate probe reads App.Patreon),
-        /// plus ConditioningControlPanel/Features/VaultLivery.cs and
-        /// ConditioningControlPanel/Services/FxTheme.cs. The rows are the real registry's first six entries with their real loc
-        /// keys, spread across every branch the card template carries - tier 1, tier 2, untiered,
-        /// NEW, BETA, no badge, a locked veil and both entitlement chips - so the render proof
-        /// exercises the markup rather than one happy path.
+        /// Repaints the spotlight and the shelf from <see cref="ExclusiveFeature.All"/> and each
+        /// feature's live gate. Called on construction, on every show of the tab
+        /// (MainShellWindow.OnTabShown) and on a mod switch, as WPF's refresh is.
+        /// ponytail: no Ken Burns, sheen, veil breath, FREE TODAY pulse, tier-plate refresh,
+        /// accent re-tint or "coming soon" teasers yet - see the parity ledger.
         /// </summary>
-        private void LoadPlaceholderVault()
+        internal void RefreshVault()
         {
-            // The spotlight is ExclusiveFeature.All[0] - "fyp", tier 1, badged NEW. Keys and the
-            // "emoji + title" shape are EnsureExclusivesBuilt's.
-            this.FindControl<TextBlock>("TxtSpotArtGlyph")!.Text = "📱";
-            this.FindControl<TextBlock>("TxtSpotTitle")!.Text = "📱 " + Loc.Get("tab_fyp");
-            this.FindControl<TextBlock>("TxtSpotTagline")!.Text = Loc.Get("exclusives_tag_fyp");
-            this.FindControl<TextBlock>("TxtSpotBadge")!.Text = Loc.Get("exclusives_badge_new");
-            this.FindControl<TextBlock>("TxtSpotFreeToday")!.Text = Loc.Get("mosaic_free_today");
-            this.FindControl<TierBadge>("SpotTierBadge")!.Tier = 1;
+            // Just Drop is hidden, not veiled, until the server opens its door (WPF :745).
+            var rows = new List<ExclusiveCardRow>();
+            foreach (var f in ExclusiveFeature.All)
+                if (f.Key != "justdrop" || SettingsPaletteIndex.JustDropDoorAvailable())
+                    rows.Add(new ExclusiveCardRow(f));
+            this.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource = rows;
 
-            this.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource = new List<ExclusiveCardRow>
-            {
-                new() { Emoji = "📱", TitleKey = "tab_fyp", TaglineKey = "exclusives_tag_fyp",
-                        Tier = 1, BadgeKey = "exclusives_badge_new", State = ExclusiveCardState.Unlocked },
-                new() { Emoji = "🎚", TitleKey = "jd_door_title", TaglineKey = "exclusives_tag_justdrop",
-                        Tier = 2, State = ExclusiveCardState.Locked },
-                new() { Emoji = "💫", TitleKey = "tab_blink_trainer", TaglineKey = "exclusives_tag_blinktrainer",
-                        Tier = 1, State = ExclusiveCardState.PassReady },
-                new() { Emoji = "🎙️", TitleKey = "tab_shelistening", TaglineKey = "exclusives_tag_shelistening",
-                        Tier = 1, BadgeKey = "exclusives_badge_beta", State = ExclusiveCardState.Locked },
-                new() { Emoji = "❓", TitleKey = "tab_gradedintake", TaglineKey = "exclusives_tag_gradedintake",
-                        State = ExclusiveCardState.Unlocked },
-                new() { Emoji = "💜", TitleKey = "tab_haptics", TaglineKey = "exclusives_tag_haptics",
-                        Tier = 1, State = ExclusiveCardState.Unlocked },
-            };
+            var spot = new ExclusiveCardRow(ExclusiveFeature.All[0]);
+            this.FindControl<TextBlock>("TxtSpotArtGlyph")!.Text = spot.Art == null ? spot.Feature.Emoji : "";
+            var spotArt = this.FindControl<Image>("SpotArtImage")!;
+            spotArt.Source = ModArt.TryLoad(ArtName(spot.Feature.BannerArtResource), 1400) ?? spot.Art;
+            this.FindControl<TextBlock>("TxtSpotTitle")!.Text = spot.Title;
+            this.FindControl<TextBlock>("TxtSpotTagline")!.Text = spot.Tagline;
+            this.FindControl<Border>("SpotBadge")!.IsVisible = spot.HasBadge;
+            this.FindControl<TextBlock>("TxtSpotBadge")!.Text = spot.BadgeText;
+            this.FindControl<Border>("SpotVeil")!.IsVisible = spot.IsLocked;
+            this.FindControl<TextBlock>("TxtSpotFreeToday")!.Text = Loc.Get("mosaic_free_today");
+            this.FindControl<Border>("SpotFreeToday")!.IsVisible = spot.HasFreePill;
+            var badge = this.FindControl<TierBadge>("SpotTierBadge")!;
+            badge.Tier = spot.Tier;
+            badge.FreeToday = spot.BadgeFreeToday;
+            var card = this.FindControl<Border>("SpotlightCard")!;
+            card.Cursor = spot.Cursor;
+            ToolTip.SetTip(card, spot.UnavailableTip);
+            var open = this.FindControl<Button>("BtnSpotOpen")!;
+            open.IsEnabled = spot.IsAvailable;
+            ToolTip.SetTip(open, spot.UnavailableTip);
+            ToolTip.SetShowOnDisabled(open, true);
         }
 
-        // ------------------------------------------------------------------
-        // Stubs for what MainWindow owned
-        // ------------------------------------------------------------------
+        /// <summary>"Resources/features/x.png" -> "features/x.png", the name ModArt resolves.</summary>
+        internal static string? ArtName(string? resource) =>
+            resource?.StartsWith("Resources/", StringComparison.Ordinal) == true ? resource["Resources/".Length..] : resource;
 
-        private void Spotlight_Click(object? sender, RoutedEventArgs e) => OpenSpotlight();
+        private void Spotlight_Click(object? sender, RoutedEventArgs e) => Open(ExclusiveFeature.All[0]);
 
-        private void Spotlight_PointerReleased(object? sender, global::Avalonia.Input.PointerReleasedEventArgs e)
-            => OpenSpotlight();
+        // WPF MouseLeftButtonUp: left button only.
+        private void Spotlight_PointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (e.InitialPressMouseButton == MouseButton.Left) Open(ExclusiveFeature.All[0]);
+        }
+
+        private void Card_PointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (e.InitialPressMouseButton == MouseButton.Left && (sender as Control)?.DataContext is ExclusiveCardRow row)
+                Open(row.Feature);
+        }
 
         /// <summary>
-        /// WPF: <c>MainWindow.OpenExclusiveSpotlight()</c>, i.e. ShowTab(ExclusiveFeature.All[0].Key).
-        /// ponytail: needs the shell's tab host and
-        /// ConditioningControlPanel/Models/ExclusiveFeature.cs (for All[0].Key) - so the hero is
-        /// inert here rather than navigating somewhere wrong.
+        /// ponytail: "fyp"/"justdrop" are shell WindowKeys and "backroom" (WPF BtnStartBackRoom_Click)
+        /// has no launcher on this head. Their cards stay visible but inert (no hand, honest tooltip),
+        /// and never reach ShowTab, so they do not fire a navigation bark either.
         /// </summary>
-        private static void OpenSpotlight() { }
-    }
+        internal static bool IsOnThisBuild(string key) => key is not ("fyp" or "justdrop" or "backroom");
 
-    /// <summary>Gate state of a vault card, mirroring Models.ExclusiveGateState.</summary>
-    public enum ExclusiveCardState
-    {
-        Locked,
-        PassReady,
-        Unlocked,
+        /// <summary>WPF OpenExclusiveFeature: the card never blocks, the destination's own gate does.</summary>
+        private void Open(ExclusiveFeature feature)
+        {
+            if (IsOnThisBuild(feature.Key))
+                (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ShowTab(feature.Key);
+        }
+
+        /// <summary>WPF OnExclusiveCardHover: the shared hover pop on the art, driven from the card.
+        /// ponytail: no MotionFx.HoverLift or glow bloom on this head yet.</summary>
+        private void Card_PointerEntered(object? sender, PointerEventArgs e) => HoverPop.Enter(CardArt(sender));
+
+        private void Card_PointerExited(object? sender, PointerEventArgs e) => HoverPop.Leave(CardArt(sender));
+
+        private static Control? CardArt(object? card) =>
+            (card as Control)?.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == "CardArt");
     }
 
     /// <summary>
-    /// One shelf card. The Avalonia-side stand-in for an ExclusiveFeature plus the state
-    /// MainWindow.Exclusives.cs paints onto it (ApplyExclusiveCardState / VaultLivery.Apply): the
-    /// chip's three colours and its offset under a tier sign, the veil, the resting edge. Every
-    /// literal below is copied from that file so the port is a rename away from the real model.
+    /// One shelf card: an <see cref="ExclusiveFeature"/> plus the state
+    /// MainWindow.Exclusives.cs paints onto it (ApplyExclusiveCardState / VaultLivery.Apply).
     /// </summary>
     public sealed class ExclusiveCardRow
     {
-        public string Emoji { get; set; } = "";
-        public string TitleKey { get; set; } = "";
-        public string TaglineKey { get; set; } = "";
-        public string? BadgeKey { get; set; }
-        public int Tier { get; set; }
-        public ExclusiveCardState State { get; set; }
+        public ExclusiveCardRow(ExclusiveFeature feature)
+        {
+            Feature = feature;
+            State = feature.GateState();
+            FreeToday = feature.IsFreeToday(State);
+            // WPF ExclusiveArtPath: Takeover forks its art under BambiSleep.
+            Art = ModArt.TryLoad(feature.Key == "bambitakeover" && CoreMods.ActiveModId == BuiltInMods.BambiSleepId
+                ? "features/bambi takeover.png"
+                : ExclusivesTabView.ArtName(feature.ArtResource), 700);
+        }
 
-        /// <summary>"emoji + title", the shape BuildExclusiveCard gives every card.</summary>
-        public string Title => $"{Emoji} {Loc.Get(TitleKey)}";
-        public string Tagline => Loc.Get(TaglineKey);
+        public ExclusiveFeature Feature { get; }
+        public ExclusiveGateState State { get; }
+        public bool FreeToday { get; }
+        public Bitmap? Art { get; }
+        public bool HasArt => Art != null;
+        public bool IsAvailable => ExclusivesTabView.IsOnThisBuild(Feature.Key);
+        public Cursor Cursor => new(IsAvailable ? StandardCursorType.Hand : StandardCursorType.Arrow);
+        public string? UnavailableTip => IsAvailable ? null : Loc.Get("exclusives_not_on_this_build");
+        public int Tier => Feature.Tier;
 
-        public bool HasBadge => BadgeKey != null;
-        public string BadgeText => BadgeKey == null ? "" : Loc.Get(BadgeKey);
+        /// <summary>"emoji + title"; WPF ExclusiveTitle takes Takeover's name from the mod.</summary>
+        public string Title => $"{Feature.Emoji} " + (Feature.Key == "bambitakeover"
+            ? App.Mods?.GetTakeoverLabel() ?? Loc.Get(Feature.TitleLocKey)
+            : Loc.Get(Feature.TitleLocKey));
+        public string Tagline => Loc.Get(Feature.TaglineLocKey);
+        public string Emoji => Feature.Emoji;
 
-        public bool IsLocked => State == ExclusiveCardState.Locked;
+        public bool HasBadge => Feature.BadgeLocKey != null;
+        public string BadgeText => Feature.BadgeLocKey == null ? "" : Loc.Get(Feature.BadgeLocKey);
 
-        /// <summary>The WPF card dims its ART to 0.75 under the veil; the glyph stand-in carries
-        /// that as the same proportional dim of its own resting opacity.</summary>
-        public double ArtOpacity => IsLocked ? 0.13 : 0.18;
+        /// <summary>The daily free unlock outranks the padlock.</summary>
+        public bool IsLocked => State == ExclusiveGateState.Locked && !FreeToday;
 
-        /// <summary>A veiled card shows the padlock, not a price chip.</summary>
-        public bool HasChip => !IsLocked;
+        /// <summary>WPF dims the art to 0.75 under the veil; the glyph fallback keeps its own ratio.</summary>
+        public double ArtOpacity => IsLocked ? 0.75 : 1.0;
+        public double GlyphOpacity => IsLocked ? 0.13 : 0.18;
 
-        /// <summary>On a tiered card the badge owns the top-right corner, so the chip drops below
-        /// it (VaultLivery.ChipTopWhenTiered = 84) rather than fighting it.</summary>
+        public bool HasChip => !IsLocked && !FreeToday;
+
+        /// <summary>VaultLivery.Apply: a tiered card says its free day with the badge re-stamp;
+        /// only an untiered one wears the gold pill.</summary>
+        public bool HasFreePill => FreeToday && Tier <= 0;
+        public bool BadgeFreeToday => FreeToday && Tier > 0;
+
         public Thickness ChipMargin => Tier > 0 ? new Thickness(0, 84, 8, 0) : new Thickness(0, 8, 8, 0);
 
-        public string ChipText => Loc.Get(State == ExclusiveCardState.PassReady
+        public string ChipText => Loc.Get(State == ExclusiveGateState.PassReady
             ? "exclusives_chip_pass_ready"
             : "exclusives_chip_unlocked");
 
-        // Teal for owned, gold for a pass that is ready to burn - ApplyExclusiveCardState's own
-        // three-brush recipe per state, alphas included.
-        public IBrush ChipForeground => State == ExclusiveCardState.PassReady
-            ? Brush("#FFD27A") : Brush("#7FE7E0");
-
-        public IBrush ChipBackground => State == ExclusiveCardState.PassReady
-            ? Brush("#33FFD27A") : Brush("#2E7FE7E0");
-
-        public IBrush ChipBorderBrush => State == ExclusiveCardState.PassReady
-            ? Brush("#73FFD27A") : Brush("#667FE7E0");
+        public IBrush ChipForeground => State == ExclusiveGateState.PassReady ? Brush("#FFD27A") : Brush("#7FE7E0");
+        public IBrush ChipBackground => State == ExclusiveGateState.PassReady ? Brush("#33FFD27A") : Brush("#2E7FE7E0");
+        public IBrush ChipBorderBrush => State == ExclusiveGateState.PassReady ? Brush("#73FFD27A") : Brush("#667FE7E0");
 
         /// <summary>
-        /// The card's resting rim. WPF takes the untiered one from the active mod's accent
-        /// (ExclusiveEdgeDefault) and overwrites a tiered card's with the constant vault livery.
-        /// ponytail: both literals are the default mod's values. The untiered rim is not a plain
-        /// accent read: ExclusiveEdgeDefault is the accent hue-shifted -59 degrees
-        /// (MainWindow.Exclusives.cs:125-174 ShiftHue/VaultPartner, head-only), so it needs that
-        /// HSV rotation in Core first; the tiered rim needs Features/VaultLivery.cs.
+        /// Resting rim (VaultLivery.Apply). Untiered free-today is EdgeFree at 2px.
+        /// ponytail: the untiered edge is the default mod's accent hue-shifted (ShiftHue is head-only
+        /// on WPF) and a tiered card's 3px animated TierFxBorder livery is not applied here.
         /// </summary>
-        public IBrush EdgeBrush => Tier > 0 ? Brush("#66FFC94E") : Brush("#4DB478FF");
+        public IBrush EdgeBrush => Tier > 0 ? Brush("#66FFC94E") : FreeToday ? Brush("#E6FFD27A") : Brush("#4DB478FF");
+        public Thickness EdgeThickness => new(Tier <= 0 && FreeToday ? 2 : 1);
 
         private static IBrush Brush(string hex) => new SolidColorBrush(Color.Parse(hex));
     }
