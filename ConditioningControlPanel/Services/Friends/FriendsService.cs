@@ -76,7 +76,8 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
 
     /// <summary>The app's own wiring: the real wire, the account off AppSettings.</summary>
     public static FriendsService CreateForApp() => new(
-        new FriendsApi(),
+        new FriendsApi(null, Services.BackRoom.BackRoomApi.AppIdentity, Services.BackRoom.BackRoomApi.BaseUrl,
+            MergedAccountRecovery.TryHandle),
         () => Services.BackRoom.BackRoomApi.AppIdentity()?.UnifiedId);
 
     // ---- IFriendsService ----

@@ -5,9 +5,9 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using ConditioningControlPanel.Services.BackRoom;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Friends;
 
@@ -41,7 +41,7 @@ public interface IFriendsApi
 
 /// <summary>
 /// THE FRIENDS WIRE (CONTRACT.md beside this file). Every op is <c>POST /v2/friends/&lt;op&gt;</c>
-/// with the account's token door, the same pair <see cref="BackRoomApi.AppIdentity"/> stamps.
+/// with the account's token door, the same pair the head's <c>BackRoomApi.AppIdentity</c> stamps.
 /// Every reply is worded into the shared enums: a gateway HTML page, a 404 from a proxy that has
 /// no friends routes yet, a timeout and a dead socket all read <c>TryLater</c>, never a throw.
 /// Nothing is retried: a send is not idempotent.
@@ -57,15 +57,20 @@ public sealed class FriendsApi : IFriendsApi
     private readonly HttpClient _http;
     private readonly Func<(string UnifiedId, string Token)?> _identity;
     private readonly string _baseUrl;
+    private readonly Func<int, string, bool>? _onReply;
 
     /// <param name="http">Null = the shared client.</param>
-    /// <param name="identity">Null = <see cref="BackRoomApi.AppIdentity"/>.</param>
-    /// <param name="baseUrl">Null = <see cref="BackRoomApi.BaseUrl"/> (the same proxy, same DEBUG override).</param>
-    public FriendsApi(HttpClient? http = null, Func<(string UnifiedId, string Token)?>? identity = null, string? baseUrl = null)
+    /// <param name="identity">The account's token door (the head passes <c>BackRoomApi.AppIdentity</c>).</param>
+    /// <param name="baseUrl">The proxy (the head passes <c>BackRoomApi.BaseUrl</c>, same DEBUG override).</param>
+    /// <param name="onReply">Contract D hook, handed every status + body (the head passes
+    /// <c>MergedAccountRecovery.TryHandle</c>). Null = none.</param>
+    public FriendsApi(HttpClient? http, Func<(string UnifiedId, string Token)?> identity, string baseUrl,
+        Func<int, string, bool>? onReply = null)
     {
         _http = http ?? SharedHttp;
-        _identity = identity ?? BackRoomApi.AppIdentity;
-        _baseUrl = baseUrl ?? BackRoomApi.BaseUrl;
+        _identity = identity;
+        _baseUrl = baseUrl;
+        _onReply = onReply;
     }
 
     // ---- wire strings ----
@@ -233,18 +238,18 @@ public sealed class FriendsApi : IFriendsApi
             req.Headers.Add("X-Auth-Token", id.Value.Token);
             using var res = await _http.SendAsync(req, budget.Token).ConfigureAwait(false);
             var text = await res.Content.ReadAsStringAsync(budget.Token).ConfigureAwait(false);
-            try { MergedAccountRecovery.TryHandle((int)res.StatusCode, text); } catch { }
+            try { _onReply?.Invoke((int)res.StatusCode, text); } catch { }
             return Read((int)res.StatusCode, text);
         }
         catch (OperationCanceledException) { return null; }
         catch (HttpRequestException ex)
         {
-            App.Logger?.Debug("Friends {Op} network failure: {E}", op, ex.Message);
+            Log.Debug("Friends {Op} network failure: {E}", op, ex.Message);
             return null;
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("Friends {Op} failed: {E}", op, ex.Message);
+            Log.Debug("Friends {Op} failed: {E}", op, ex.Message);
             return null;
         }
     }
