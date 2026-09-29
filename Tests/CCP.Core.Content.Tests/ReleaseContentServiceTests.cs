@@ -330,6 +330,11 @@ public sealed class ReleaseContentServiceTests : IDisposable
     [Theory]
     [InlineData("http://127.0.0.1:9/", true)]
     [InlineData("http://localhost:9", true)]
+    [InlineData("http://[::1]:9/", true)]
+    [InlineData("http://127.0.0.1:9/base/?q=1#f", true)]
+    [InlineData("http://evil@127.0.0.1:9/", false)]
+    [InlineData("http://127.0.0.1@evil.com/", false)]
+    [InlineData("http://localhost.evil.com/", false)]
     [InlineData("https://evil.example/", false)]
     [InlineData("file:///tmp/", false)]
     [InlineData(null, false)]
@@ -337,7 +342,7 @@ public sealed class ReleaseContentServiceTests : IDisposable
     {
         var format = ReleaseContentService.ResolveBaseUrlFormat(url);
         Assert.Equal(honoured, !format.StartsWith("https://github.com/", StringComparison.Ordinal));
-        if (honoured) Assert.Equal(url!.TrimEnd('/') + "/{0}/", format);
+        if (honoured) Assert.Equal(new Uri(url!).GetLeftPart(UriPartial.Path).TrimEnd('/') + "/{0}/", format);
     }
 
     [Fact]

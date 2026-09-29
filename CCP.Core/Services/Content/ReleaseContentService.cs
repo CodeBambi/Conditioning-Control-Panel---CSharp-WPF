@@ -96,13 +96,18 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         internal static string ResolveBaseUrlFormat(string? overrideUrl)
         {
+            if (string.IsNullOrWhiteSpace(overrideUrl)) return ReleaseBaseUrlFormat;
             if (Uri.TryCreate(overrideUrl, UriKind.Absolute, out var uri)
                 && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-                && uri.IsLoopback)
+                && uri.IsLoopback
+                && (uri.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6 || uri.Host == "localhost")
+                && string.IsNullOrEmpty(uri.UserInfo))
             {
-                Log.Information("ReleaseContentService: using loopback content server {Url}", uri);
-                return overrideUrl!.TrimEnd('/') + "/{0}/";
+                var baseUrl = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+                Log.Information("ReleaseContentService: using loopback content server {Url}", baseUrl);
+                return baseUrl + "/{0}/";
             }
+            Log.Warning("ReleaseContentService: CCP_CONTENT_BASE_URL ignored - only a loopback http(s) host without user info is honoured");
             return ReleaseBaseUrlFormat;
         }
         private const string ManifestFileName = "content-manifest.json";
@@ -1123,6 +1128,15 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>Runs <paramref name="apply"/> through <see cref="CoreReleaseContent.UiInvoke"/>
+        /// (inline when unseeded). False = the UI is shutting down and it did not run.</summary>
+        private static bool OnUi(Action apply)
+        {
+            var ui = CoreReleaseContent.UiInvoke;
+            if (ui == null) { apply(); return true; }
+            return ui(apply);
+        }
+
         /// <summary>
         /// Stamps a finished pack into settings — on the UI thread.
         ///
@@ -1133,15 +1147,6 @@ namespace ConditioningControlPanel.Services
         /// caller raises <see cref="PackInstalled"/> immediately afterwards and ModService compares
         /// this very stamp to decide whether to re-extract.
         /// </summary>
-        /// <summary>Runs <paramref name="apply"/> through <see cref="CoreReleaseContent.UiInvoke"/>
-        /// (inline when unseeded). False = the UI is shutting down and it did not run.</summary>
-        private static bool OnUi(Action apply)
-        {
-            var ui = CoreReleaseContent.UiInvoke;
-            if (ui == null) { apply(); return true; }
-            return ui(apply);
-        }
-
         private void RecordInstalled(ContentPackInfo info)
         {
             try
