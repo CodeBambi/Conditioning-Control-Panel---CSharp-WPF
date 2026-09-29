@@ -711,7 +711,9 @@ public sealed class LeashService : ILeashService
         try
         {
             var c = App.Chaster;
-            if (c != null && c.IsLinked)
+            // chaster_linked is what offers the holder "Chaster time": only while it can book
+            // (linked, tab on, the player's "leash" row on). Rows are never switched on here.
+            if (c != null && c.TakesLeashTime)
             {
                 linked = true;
                 var l = c.Lock;
