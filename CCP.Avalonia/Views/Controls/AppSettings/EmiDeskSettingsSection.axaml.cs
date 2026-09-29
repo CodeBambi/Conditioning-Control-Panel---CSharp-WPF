@@ -121,9 +121,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (_loading) return;
             bool on = ChkEnabled.IsChecked == true;
             Persist(() => CoreSettings.Current.EmiDeskEnabled = on);
-            // ponytail: turning her off must also take her off the screen and free the chord -
-            // needs App.EmiDesk.Dismiss / ApplyHotkey (ConditioningControlPanel/Services/EmiDesk/
-            // EmiDeskService.cs), Win32 and still in the WPF head.
+            // WPF :123. ponytail: ApplyHotkey (freeing the chord) has no X11 chord grab on this head.
+            if (!on) Windows.EmiDesk.EmiDeskService.Instance.Dismiss();
             RefreshHotkeyButton();
         }
 
