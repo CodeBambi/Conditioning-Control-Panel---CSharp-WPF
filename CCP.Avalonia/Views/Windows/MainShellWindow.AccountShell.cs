@@ -4,7 +4,10 @@
 // CoreSettings and LocalizationManager are already cross-platform, so the two selectors share the
 // WPF head's single writer and persistence path here.
 
+using System;
 using Avalonia.Controls;
+using Avalonia.Data;
+using Avalonia.Data.Converters;
 using Avalonia.Interactivity;
 using ConditioningControlPanel.Avalonia.Views.Controls.AppSettings;
 using ConditioningControlPanel.Localization;
@@ -19,8 +22,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // WPF MainWindow.AccountShell.cs:37: a plain tab button.
         internal void BtnPatreonExclusives_Click(object? sender, RoutedEventArgs e) => ShowTab("exclusives");
 
-        // ponytail: needs the services in MainWindow.AccountShell.cs; wired when they move to Core.
-        private void BtnUpdateAvailable_Click(object? sender, RoutedEventArgs e) { }
+        // WPF MainWindow.AccountShell.cs:482 (the server-banner URL branch has no banner service here).
+        private async void BtnUpdateAvailable_Click(object? sender, RoutedEventArgs e) =>
+            await Platform.AppUpdater.PillClickedAsync(this);
+
+        /// <summary>WPF App.xaml.cs:4884 lights the pill; the version text and the install/download
+        /// tooltip are WPF MainWindow.Marquee.cs:816-821's. Bound, so a language change keeps it.</summary>
+        internal void ShowUpdatePill(string version)
+        {
+            if (Named<Button>("BtnUpdateAvailable") is not { } b) return;
+            b.Tag = "UpdateAvailable";
+            b.Bind(ContentControl.ContentProperty, LocF("btn_update_to_version", version));
+            b.Bind(ToolTip.TipProperty, LocF(OperatingSystem.IsWindows()
+                ? "tooltip_update_to_version_install" : "tooltip_update_to_version_download", version));
+        }
+
+        /// <summary>WPF MainWindow.AccountShell.cs:510.</summary>
+        internal void ShowUpdateAvailableButton(bool updateAvailable)
+        {
+            if (Named<Button>("BtnUpdateAvailable") is not { } b) return;
+            b.Tag = updateAvailable ? "UpdateAvailable" : "NoUpdate";
+            b.Bind(ContentControl.ContentProperty, LocF(updateAvailable ? "btn_update_now" : "btn_update_up_to_date", null));
+            b.Bind(ToolTip.TipProperty, LocF(updateAvailable ? "tooltip_update_now" : "tooltip_update_up_to_date", null));
+        }
+
+        private static Binding LocF(string key, string? arg) => new($"[{key}]")
+        {
+            Source = LocalizationManager.Instance,
+            Mode = BindingMode.OneWay,
+            Converter = new FuncValueConverter<string?, string>(f => arg is null ? f ?? key : string.Format(f ?? key, arg)),
+        };
 
         private bool _syncingLanguageSelectors;
 
