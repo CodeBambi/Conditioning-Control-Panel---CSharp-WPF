@@ -2,11 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Media;
 using System.Text.Json;
-using System.Windows;
-using System.Windows.Threading;
+using System.Threading;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services;
 
@@ -50,8 +49,11 @@ public class QuestProgressEventArgs : EventArgs
 public class QuestService : IDisposable
 {
     private readonly string _progressPath;
-    private readonly DispatcherTimer _saveTimer;
-    private readonly DispatcherTimer _refreshTimer;
+    private readonly QuestDefinitionService? _definitions;
+    // Thread-pool timers whose ticks hop to the UI thread through CoreDispatch, which is where
+    // the WPF DispatcherTimers ran them (Progress is only ever touched on the UI thread).
+    private readonly Timer _saveTimer;
+    private readonly Timer _refreshTimer;
     private readonly Random _random = new();
     private bool _isDirty;
 
@@ -111,8 +113,11 @@ public class QuestService : IDisposable
     public event EventHandler<QuestProgressEventArgs>? QuestProgressChanged;
     public event EventHandler? QuestsRefreshed;
 
-    public QuestService()
+    public QuestService(QuestDefinitionService? definitions = null) : this(definitions, CorePaths.UserData) { }
+
+    internal QuestService(QuestDefinitionService? definitions, string userDataPath)
     {
+        _definitions = definitions;
         // FIRST LINE ON PURPOSE (ccp-bugs#1151). The board is rolled a few statements below, and
         // the camera probe is a cold DirectShow enumeration that rarely finishes inside the gate's
         // 400ms budget. Starting it before the quests.json read buys it that read; the recheck
@@ -120,7 +125,7 @@ public class QuestService : IDisposable
         QuestHardwareGate.Shared.Prime();
 
         _progressPath = Path.Combine(
-            App.UserDataPath,
+            userDataPath,
             "quests.json");
 
         Progress = LoadProgress();
@@ -133,8 +138,7 @@ public class QuestService : IDisposable
         CheckAndGenerateQuests();
 
         // Auto-save every 30 seconds if dirty (off UI thread)
-        _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-        _saveTimer.Tick += (s, e) =>
+        _saveTimer = new Timer(_ => CoreDispatch.Post(() =>
         {
             if (_isDirty)
             {
@@ -155,16 +159,14 @@ public class QuestService : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Error(ex, "Failed to save quest progress");
+                        Log.Error(ex, "Failed to save quest progress");
                     }
                 });
             }
-        };
-        _saveTimer.Start();
+        }), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
 
         // Quest refresh timer — detect day/week rollover while app is running
-        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
-        _refreshTimer.Tick += (s, e) =>
+        _refreshTimer = new Timer(_ => CoreDispatch.Post(() =>
         {
             var dailyExpired = Progress.IsDailyExpired();
             var weeklyExpired = Progress.IsWeeklyExpired();
@@ -178,27 +180,26 @@ public class QuestService : IDisposable
             {
                 if (dailyExpired || weeklyExpired)
                 {
-                    App.Logger?.Information("Quest rollover detected (daily={Daily}, weekly={Weekly})", dailyExpired, weeklyExpired);
+                    Log.Information("Quest rollover detected (daily={Daily}, weekly={Weekly})", dailyExpired, weeklyExpired);
                 }
                 if (premiumRecheck)
                 {
                     // NOT cleared here: CheckAndGenerateQuests recomputes the flag from what is
                     // still deferred. Clearing it up front dropped the re-roll for good if the
                     // entitlement flapped back to unresolved before the inner check ran.
-                    App.Logger?.Information("Quest premium recheck: entitlement resolved, reconciling deferred quests");
+                    Log.Information("Quest premium recheck: entitlement resolved, reconciling deferred quests");
                 }
                 if (hardwareRecheck)
                 {
                     // Same rule: cleared by CheckAndGenerateQuests, not here.
-                    App.Logger?.Information("Quest hardware recheck: probe resolved, reconciling the board");
+                    Log.Information("Quest hardware recheck: probe resolved, reconciling the board");
                 }
                 CheckAndGenerateQuests();
                 QuestsRefreshed?.Invoke(this, EventArgs.Empty);
             }
-        };
-        _refreshTimer.Start();
+        }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
 
-        App.Logger?.Information("QuestService initialized. Daily board: [{Daily}], Weekly: {Weekly}",
+        Log.Information("QuestService initialized. Daily board: [{Daily}], Weekly: {Weekly}",
             string.Join(", ", Progress.DailyQuests.Select(q => q?.DefinitionId ?? "empty")),
             Progress.WeeklyQuest?.DefinitionId ?? "none");
     }
@@ -219,7 +220,7 @@ public class QuestService : IDisposable
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Quest progress file corrupted, attempting recovery from .tmp");
+                Log.Warning(ex, "Quest progress file corrupted, attempting recovery from .tmp");
             }
         }
 
@@ -232,7 +233,7 @@ public class QuestService : IDisposable
                 var progress = JsonSerializer.Deserialize<QuestProgress>(json);
                 if (progress != null)
                 {
-                    App.Logger?.Warning("Recovered quest progress from .tmp file");
+                    Log.Warning("Recovered quest progress from .tmp file");
                     // Promote .tmp to main file so future loads succeed normally
                     try { File.Move(tmpPath, _progressPath, overwrite: true); } catch { }
                     return progress;
@@ -240,7 +241,7 @@ public class QuestService : IDisposable
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to recover quest progress from .tmp file");
+                Log.Error(ex, "Failed to recover quest progress from .tmp file");
             }
         }
 
@@ -266,7 +267,7 @@ public class QuestService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to save quest progress");
+            Log.Error(ex, "Failed to save quest progress");
         }
     }
 
@@ -312,7 +313,7 @@ public class QuestService : IDisposable
         // If weekly quest definition is missing (removed from server), regenerate
         if (Progress.WeeklyQuest != null && !Progress.WeeklyQuest.IsCompleted && GetCurrentWeeklyDefinition() == null)
         {
-            App.Logger?.Information("Weekly quest definition '{QuestId}' no longer available, regenerating",
+            Log.Information("Weekly quest definition '{QuestId}' no longer available, regenerating",
                 Progress.WeeklyQuest.DefinitionId);
             GenerateNewWeeklyQuest();
             changed = true;
@@ -327,7 +328,7 @@ public class QuestService : IDisposable
             if (weeklyDef != null && !IsQuestAvailableForTier(weeklyDef)
                 && CanDropPremiumQuest(Progress.WeeklyQuest, "weekly"))
             {
-                App.Logger?.Information("Weekly quest '{QuestId}' requires premium (access lost), regenerating",
+                Log.Information("Weekly quest '{QuestId}' requires premium (access lost), regenerating",
                     Progress.WeeklyQuest.DefinitionId);
                 GenerateNewWeeklyQuest();
                 changed = true;
@@ -344,7 +345,7 @@ public class QuestService : IDisposable
             if (weeklyDef != null && NeedsAbsentHardware(weeklyDef)
                 && CanDropUnservableQuest(Progress.WeeklyQuest, "weekly"))
             {
-                App.Logger?.Information("Weekly quest '{QuestId}' needs hardware this machine does not have, regenerating",
+                Log.Information("Weekly quest '{QuestId}' needs hardware this machine does not have, regenerating",
                     Progress.WeeklyQuest.DefinitionId);
                 GenerateNewWeeklyQuest(excludeId: Progress.WeeklyQuest.DefinitionId);
                 changed = true;
@@ -357,7 +358,7 @@ public class QuestService : IDisposable
             var weeklyDef = GetCurrentWeeklyDefinition();
             if (weeklyDef != null && !IsQuestAvailableForLevel(weeklyDef.Category))
             {
-                App.Logger?.Information("Weekly quest '{QuestId}' requires locked feature ({Category}), regenerating",
+                Log.Information("Weekly quest '{QuestId}' requires locked feature ({Category}), regenerating",
                     Progress.WeeklyQuest.DefinitionId, weeklyDef.Category);
                 GenerateNewWeeklyQuest();
                 changed = true;
@@ -374,10 +375,10 @@ public class QuestService : IDisposable
         if (WeeklyRolledUnresolved && IsEntitlementResolved())
         {
             WeeklyRolledUnresolved = false;
-            if (App.Patreon?.HasPremiumAccess == true && Progress.WeeklyQuest != null
+            if (CoreEntitlement.HasPremium && Progress.WeeklyQuest != null
                 && !Progress.WeeklyQuest.IsCompleted && Progress.WeeklyQuest.CurrentProgress == 0)
             {
-                App.Logger?.Information("Weekly quest '{QuestId}' was rolled before the entitlement resolved — re-rolling with premium access",
+                Log.Information("Weekly quest '{QuestId}' was rolled before the entitlement resolved — re-rolling with premium access",
                     Progress.WeeklyQuest.DefinitionId);
                 GenerateNewWeeklyQuest();
                 changed = true;
@@ -444,7 +445,7 @@ public class QuestService : IDisposable
             changed = true;
 
             if (carried.Count > 0)
-                App.Logger?.Information("Quest day rollover: carried {Count} quest(s) completed after midnight onto today's board", carried.Count);
+                Log.Information("Quest day rollover: carried {Count} quest(s) completed after midnight onto today's board", carried.Count);
         }
 
         // ---- 2. MIGRATION. A quests.json written by a pre-three-up build has one quest and a
@@ -469,7 +470,7 @@ public class QuestService : IDisposable
             }
 
             changed = true;
-            App.Logger?.Information("Migrated single-slot daily quest to the three-up board (kept '{QuestId}', {Earned} slot(s) already earned today)",
+            Log.Information("Migrated single-slot daily quest to the three-up board (kept '{QuestId}', {Earned} slot(s) already earned today)",
                 legacy.DefinitionId, alreadyEarned);
         }
 
@@ -518,7 +519,7 @@ public class QuestService : IDisposable
             var replacement = RollDailyQuest(DailyBoardIds(skipIndex: i));
             if (replacement == null) continue;
 
-            App.Logger?.Information("Daily slot {Slot}: '{QuestId}' {Reason}, regenerating as '{NewId}'",
+            Log.Information("Daily slot {Slot}: '{QuestId}' {Reason}, regenerating as '{NewId}'",
                 i + 1, slot.DefinitionId, reason, replacement.DefinitionId);
             slots[i] = replacement;
             changed = true;
@@ -541,7 +542,7 @@ public class QuestService : IDisposable
             var replacement = RollDailyQuest(DailyBoardIds(skipIndex: i));
             if (replacement == null) continue;
 
-            App.Logger?.Information("Daily slot {Slot}: '{QuestId}' duplicates an earlier seat, regenerating as '{NewId}'",
+            Log.Information("Daily slot {Slot}: '{QuestId}' duplicates an earlier seat, regenerating as '{NewId}'",
                 i + 1, slot.DefinitionId, replacement.DefinitionId);
             slots[i] = replacement;
             if (!string.IsNullOrEmpty(replacement.DefinitionId)) seenIds.Add(replacement.DefinitionId);
@@ -555,7 +556,7 @@ public class QuestService : IDisposable
         if (DailyRolledUnresolved && IsEntitlementResolved())
         {
             DailyRolledUnresolved = false;
-            if (App.Patreon?.HasPremiumAccess == true)
+            if (CoreEntitlement.HasPremium)
             {
                 for (int i = 0; i < slots.Count; i++)
                 {
@@ -565,7 +566,7 @@ public class QuestService : IDisposable
                     var replacement = RollDailyQuest(DailyBoardIds(skipIndex: i));
                     if (replacement == null) continue;
 
-                    App.Logger?.Information("Daily slot {Slot} ('{QuestId}') was rolled before the entitlement resolved - re-rolling with premium access",
+                    Log.Information("Daily slot {Slot} ('{QuestId}') was rolled before the entitlement resolved - re-rolling with premium access",
                         i + 1, slot.DefinitionId);
                     slots[i] = replacement;
                     changed = true;
@@ -623,8 +624,8 @@ public class QuestService : IDisposable
         if (DailyRolledUnresolved) _premiumRecheckPending = true;
 
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
-        var questPool = App.QuestDefinitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
-        var hasPremium = App.Patreon?.HasPremiumAccess == true;
+        var questPool = _definitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
+        var hasPremium = CoreEntitlement.HasPremium;
         // Cached, so dealing all three seats enumerates devices once (ccp-bugs#1151). An
         // unresolved answer rolls from the everything-present pool and arms the recheck, exactly
         // as an unresolved entitlement rolls from the free pool and arms its own.
@@ -658,8 +659,8 @@ public class QuestService : IDisposable
         if (availableQuests.Count == 0) return null;
 
         var selectedQuest = availableQuests[_random.Next(availableQuests.Count)];
-        App.Logger?.Information("Rolled daily quest: {QuestId} (from {Source})",
-            selectedQuest.Id, App.QuestDefinitions != null ? "server" : "embedded");
+        Log.Information("Rolled daily quest: {QuestId} (from {Source})",
+            selectedQuest.Id, _definitions != null ? "server" : "embedded");
         return new ActiveQuest(selectedQuest.Id);
     }
 
@@ -687,7 +688,7 @@ public class QuestService : IDisposable
         if (WeeklyRolledUnresolved) _premiumRecheckPending = true;
 
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
-        var questPool = App.QuestDefinitions?.GetWeeklyQuests() ?? QuestDefinition.WeeklyQuests.ToList();
+        var questPool = _definitions?.GetWeeklyQuests() ?? QuestDefinition.WeeklyQuests.ToList();
         // Same hardware gate as the daily roll (ccp-bugs#1151): no webcam, no blink weekly. The
         // weekly slot is the one that hurt most - nothing re-examined it until the week turned
         // over, so a blink quest dealt here sat on the board for seven days.
@@ -717,8 +718,8 @@ public class QuestService : IDisposable
         Progress.WeeklyQuest = new ActiveQuest(selectedQuest.Id);
         Progress.WeeklyQuestGeneratedAt = DateTime.Now;
 
-        App.Logger?.Information("Generated new weekly quest: {QuestId} (from {Source})",
-            selectedQuest.Id, App.QuestDefinitions != null ? "server" : "embedded");
+        Log.Information("Generated new weekly quest: {QuestId} (from {Source})",
+            selectedQuest.Id, _definitions != null ? "server" : "embedded");
     }
 
     /// <summary>
@@ -742,7 +743,7 @@ public class QuestService : IDisposable
         if (!IsEntitlementResolved())
         {
             _premiumRecheckPending = true;
-            App.Logger?.Information(
+            Log.Information(
                 "Premium {Slot} quest '{QuestId}' kept: entitlement not resolved yet, deferring the decision",
                 slot, quest.DefinitionId);
             return false;
@@ -751,13 +752,13 @@ public class QuestService : IDisposable
         var canDrop = CanDropPremiumQuest(entitlementResolved: true, WasEverPremium(), quest.CurrentProgress);
         if (!canDrop)
         {
-            App.Logger?.Information(
+            Log.Information(
                 "Premium {Slot} quest '{QuestId}' kept: lapsed patron, already has progress ({Progress})",
                 slot, quest.DefinitionId, quest.CurrentProgress);
         }
         else if (quest.CurrentProgress > 0)
         {
-            App.Logger?.Information(
+            Log.Information(
                 "Premium {Slot} quest '{QuestId}' dropped despite progress ({Progress}): this account has never had premium access",
                 slot, quest.DefinitionId, quest.CurrentProgress);
         }
@@ -791,7 +792,7 @@ public class QuestService : IDisposable
     {
         if (Progress.LastPremiumSeenUtc != null) return true;
 
-        var settings = App.Settings?.Current;
+        var settings = CoreSettings.Service?.Current;
         if (settings == null) return false;
         return HasPremiumEvidenceInSettings(
             settings.PatreonPremiumValidUntil, settings.PatreonLabValidUntil, settings.PatreonTier);
@@ -826,7 +827,7 @@ public class QuestService : IDisposable
     {
         if (Progress.LastPremiumSeenUtc != null) return;
 
-        var settings = App.Settings?.Current;
+        var settings = CoreSettings.Service?.Current;
         if (settings == null) return;
         if (!HasPremiumEvidenceInSettings(
                 settings.PatreonPremiumValidUntil, settings.PatreonLabValidUntil, settings.PatreonTier))
@@ -834,7 +835,7 @@ public class QuestService : IDisposable
 
         Progress.LastPremiumSeenUtc = DateTime.UtcNow;
         _isDirty = true;
-        App.Logger?.Information(
+        Log.Information(
             "Quest premium history bootstrapped from cached Patreon state (tier {Tier}, premium grace {Premium}, lab grace {Lab})",
             settings.PatreonTier, settings.PatreonPremiumValidUntil, settings.PatreonLabValidUntil);
     }
@@ -846,7 +847,7 @@ public class QuestService : IDisposable
     /// </summary>
     private bool StampPremiumSeen()
     {
-        if (App.Patreon?.HasPremiumAccess != true || !IsEntitlementResolved()) return false;
+        if (!CoreEntitlement.HasPremium || !IsEntitlementResolved()) return false;
         // A day's resolution is plenty: this only answers "ever", and rewriting it on every tick
         // would dirty the file once a minute for the whole session.
         var now = DateTime.UtcNow;
@@ -881,7 +882,7 @@ public class QuestService : IDisposable
     {
         if (quest.CurrentProgress > 0)
         {
-            App.Logger?.Information(
+            Log.Information(
                 "Unservable {Slot} quest '{QuestId}' kept: it already has progress ({Progress})",
                 slot, quest.DefinitionId, quest.CurrentProgress);
             return false;
@@ -909,18 +910,18 @@ public class QuestService : IDisposable
         // as unresolved: the decision is deferred (never lost), the refresh tick stays quiet
         // while nobody is signed in, and the first post-login sync settles it for real.
         if (IsSignedOutWithOwnedQuests(
-                App.UnifiedUserId ?? App.Settings?.Current?.UnifiedId, Progress?.OwnerUnifiedId))
+                CoreAccount.UnifiedUserId ?? CoreSettings.Service?.Current?.UnifiedId, Progress?.OwnerUnifiedId))
             return false;
 
-        var patreon = App.Patreon;
-        if (patreon == null) return false;
-        if (patreon.IsVerifying) return false;
-        if (patreon.HasPremiumAccess) return true;
+        var patreonVerifying = CoreQuests.PatreonVerifyingProvider?.Invoke();
+        if (patreonVerifying == null) return false;
+        if (patreonVerifying == true) return false;
+        if (CoreEntitlement.HasPremium) return true;
         // Premium access is the OR of both providers (PatreonService.HasPremiumAccess folds in
         // SubscribeStar), so an un-entitled read while a SubscribeStar validation is still in
         // flight is just as unresolved as a Patreon one — without this, a SubscribeStar-only
         // subscriber's quest was dropped at the settle mark for reading "resolved, no access".
-        if (App.SubscribeStar?.IsVerifying == true) return false;
+        if (CoreQuests.SubscribeStarVerifyingProvider?.Invoke() == true) return false;
         return DateTime.UtcNow - _startedUtc >= EntitlementSettleWindow;
     }
 
@@ -1082,7 +1083,7 @@ public class QuestService : IDisposable
         // Don't regenerate if current quest is still within this week
         if (Progress.WeeklyQuest != null && !Progress.IsWeeklyExpired())
         {
-            App.Logger?.Information("Skipping weekly quest force-regeneration - quest still within current week");
+            Log.Information("Skipping weekly quest force-regeneration - quest still within current week");
             return;
         }
 
@@ -1090,7 +1091,7 @@ public class QuestService : IDisposable
         GenerateNewWeeklyQuest(excludeId: oldId);
         _isDirty = true;
         Save();
-        App.Logger?.Information("Force-regenerated weekly quest (old: {OldId}, new: {NewId})",
+        Log.Information("Force-regenerated weekly quest (old: {OldId}, new: {NewId})",
             oldId, Progress.WeeklyQuest?.DefinitionId);
     }
 
@@ -1116,7 +1117,7 @@ public class QuestService : IDisposable
         SyncLegacyDailyMirror();
         _isDirty = true;
         Save();
-        App.Logger?.Information("Force-regenerated {Count} daily quest slot(s)", rerolled);
+        Log.Information("Force-regenerated {Count} daily quest slot(s)", rerolled);
     }
 
     private static DateTime GetStartOfWeek(DateTime date)
@@ -1144,7 +1145,7 @@ public class QuestService : IDisposable
         if (quest == null || string.IsNullOrEmpty(quest.DefinitionId)) return null;
 
         // Try remote quests first, fall back to embedded
-        var remoteQuests = App.QuestDefinitions?.GetDailyQuests();
+        var remoteQuests = _definitions?.GetDailyQuests();
         if (remoteQuests != null)
         {
             var remoteQuest = remoteQuests.FirstOrDefault(q => q.Id == quest.DefinitionId);
@@ -1188,7 +1189,7 @@ public class QuestService : IDisposable
         if (Progress.WeeklyQuest == null) return null;
 
         // Try remote quests first, fall back to embedded
-        var remoteQuests = App.QuestDefinitions?.GetWeeklyQuests();
+        var remoteQuests = _definitions?.GetWeeklyQuests();
         if (remoteQuests != null)
         {
             var remoteQuest = remoteQuests.FirstOrDefault(q => q.Id == Progress.WeeklyQuest.DefinitionId);
@@ -1205,7 +1206,7 @@ public class QuestService : IDisposable
     /// <summary>
     /// Check if user has Patreon premium access
     /// </summary>
-    private bool HasPatreonAccess => App.Patreon?.HasPremiumAccess == true;
+    private bool HasPatreonAccess => CoreEntitlement.HasPremium;
 
     /// <summary>
     /// Get remaining daily rerolls (1 base + 2 for Patreon = 3 max)
@@ -1227,7 +1228,7 @@ public class QuestService : IDisposable
         {
             if (Progress.DailyQuests[i]?.IsCompleted == false) return RerollDailyQuest(i);
         }
-        App.Logger?.Debug("Cannot reroll: no unfinished daily slot");
+        Log.Debug("Cannot reroll: no unfinished daily slot");
         return false;
     }
 
@@ -1243,26 +1244,26 @@ public class QuestService : IDisposable
     {
         if (slot < 0 || slot >= Progress.DailyQuests.Count)
         {
-            App.Logger?.Debug("Cannot reroll daily slot {Slot}: not on the board", slot);
+            Log.Debug("Cannot reroll daily slot {Slot}: not on the board", slot);
             return false;
         }
 
         var quest = Progress.DailyQuests[slot];
         if (quest == null)
         {
-            App.Logger?.Debug("Cannot reroll empty daily slot {Slot}", slot);
+            Log.Debug("Cannot reroll empty daily slot {Slot}", slot);
             return false;
         }
 
         if (quest.IsCompleted)
         {
-            App.Logger?.Debug("Cannot reroll completed daily quest");
+            Log.Debug("Cannot reroll completed daily quest");
             return false;
         }
 
         if (!Progress.CanRerollDaily(HasPatreonAccess))
         {
-            App.Logger?.Debug("No daily rerolls remaining");
+            Log.Debug("No daily rerolls remaining");
             return false;
         }
 
@@ -1278,7 +1279,7 @@ public class QuestService : IDisposable
         var replacement = RollDailyQuest(DailyBoardIds());
         if (replacement == null)
         {
-            App.Logger?.Warning("Daily reroll found no replacement quest - the pool is empty, keeping '{QuestId}' and NOT spending the reroll",
+            Log.Warning("Daily reroll found no replacement quest - the pool is empty, keeping '{QuestId}' and NOT spending the reroll",
                 quest.DefinitionId);
             return false;
         }
@@ -1290,7 +1291,7 @@ public class QuestService : IDisposable
         _isDirty = true;
         Save();
 
-        App.Logger?.Information("Daily slot {Slot} rerolled from {OldId} to {NewId} (rerolls used: {Used})",
+        Log.Information("Daily slot {Slot} rerolled from {OldId} to {NewId} (rerolls used: {Used})",
             slot + 1, oldId, replacement.DefinitionId, Progress.DailyRerollsUsed);
         return true;
     }
@@ -1303,13 +1304,13 @@ public class QuestService : IDisposable
     {
         if (!Progress.CanRerollWeekly(HasPatreonAccess))
         {
-            App.Logger?.Debug("No weekly rerolls remaining");
+            Log.Debug("No weekly rerolls remaining");
             return false;
         }
 
         if (Progress.WeeklyQuest?.IsCompleted == true)
         {
-            App.Logger?.Debug("Cannot reroll completed weekly quest");
+            Log.Debug("Cannot reroll completed weekly quest");
             return false;
         }
 
@@ -1319,7 +1320,7 @@ public class QuestService : IDisposable
         _isDirty = true;
         Save();
 
-        App.Logger?.Information("Weekly quest rerolled from {OldId} to {NewId} (rerolls used: {Used})",
+        Log.Information("Weekly quest rerolled from {OldId} to {NewId} (rerolls used: {Used})",
             oldId, Progress.WeeklyQuest?.DefinitionId, Progress.WeeklyRerollsUsed);
         return true;
     }
@@ -1508,7 +1509,7 @@ public class QuestService : IDisposable
     ///
     /// SELF-CONTROL NEVER COUNTS. A user can pair their own phone or browser to their own
     /// session, so the target's unified id is compared against this install's own
-    /// (App.UnifiedUserId) and a match is dropped. When the caller cannot supply a target id
+    /// (CoreAccount.UnifiedUserId) and a match is dropped. When the caller cannot supply a target id
     /// the command is dropped too: crediting an unattributable command would reopen the
     /// self-control loophole, and a silent under-count is the safer failure.
     ///
@@ -1517,7 +1518,7 @@ public class QuestService : IDisposable
     /// </summary>
     public void TrackRemoteCommandIssued(string? targetUnifiedId)
     {
-        if (!CountsAsForeignSubject(targetUnifiedId, App.UnifiedUserId)) return;
+        if (!CountsAsForeignSubject(targetUnifiedId, CoreAccount.UnifiedUserId)) return;
         UpdateQuestProgress(QuestCategory.RemoteIssue, 1);
     }
 
@@ -1610,7 +1611,7 @@ public class QuestService : IDisposable
 
         // Training Programs observe the same signals as quests, from the same choke point, so the two
         // can never disagree about what the user actually did. One tracking pass, not two.
-        try { App.Programs?.TrackVerifier(category, amount); } catch { /* a program must never break quests */ }
+        try { CoreQuests.TrackProgramVerifierProvider?.Invoke(category, amount); } catch { /* a program must never break quests */ }
 
         // Check EVERY unfinished daily seat. All three of today's quests are live at once, so one
         // spiral minute legitimately advances every seat that is asking for spiral minutes - the
@@ -1731,20 +1732,20 @@ public class QuestService : IDisposable
             Progress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
             var logCutoff = DayKey(cutoff);
             Progress.QuestCompletionLog.RemoveAll(e => string.CompareOrdinal(e.D, logCutoff) < 0);
-            App.Settings?.Current?.StreakShieldUsedDates?.RemoveAll(d => d.Date < cutoff);
+            CoreSettings.Service?.Current?.StreakShieldUsedDates?.RemoveAll(d => d.Date < cutoff);
 
             // Apply streak shield if yesterday is missing (would break streak)
             var yesterday = today.AddDays(-1);
             if (!Progress.DailyQuestCompletionDates.Any(d => d.Date == yesterday)
-                && App.Settings?.Current?.LastDailyQuestDate?.Date < yesterday)
+                && CoreSettings.Service?.Current?.LastDailyQuestDate?.Date < yesterday)
             {
-                if (App.SkillTree?.UseStreakShield() == true)
+                if (CoreQuests.UseStreakShieldProvider?.Invoke() == true)
                 {
                     Progress.DailyQuestCompletionDates.Add(yesterday);
-                    var settings = App.Settings?.Current;
+                    var settings = CoreSettings.Service?.Current;
                     if (settings != null && !settings.StreakShieldUsedDates.Contains(yesterday))
                         settings.StreakShieldUsedDates.Add(yesterday);
-                    App.Logger?.Information("Quest streak shield used! Filled gap at {Date}", yesterday);
+                    Log.Information("Quest streak shield used! Filled gap at {Date}", yesterday);
                 }
             }
 
@@ -1770,12 +1771,12 @@ public class QuestService : IDisposable
         // moves with the XP curve, because it was the curve that made the old one a runaway.
         // ProgressionService.QuestLevelScale reads the per-user epoch, so this is a no-op for
         // every un-migrated account.
-        var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-        var betterQuestsMultiplier = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
+        var playerLevel = CoreSettings.Service?.Current?.PlayerLevel ?? 1;
+        var betterQuestsMultiplier = CoreSettings.Service?.Current is { } skillSettings ? SkillTreeRules.GetRerollBonusMultiplier(skillSettings) : 1.0;
         // Quest streak bonus: +3% per consecutive day
-        var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
+        var questStreak = CoreSettings.Service?.Current?.DailyQuestStreak ?? 0;
         var streakMultiplier = 1.0 + (questStreak * 0.03);
-        var scaledXP = (int)Math.Round(def.XPReward * ProgressionService.QuestLevelScale(playerLevel) * betterQuestsMultiplier * streakMultiplier);
+        var scaledXP = (int)Math.Round(def.XPReward * XpCurve.QuestLevelScale(playerLevel, XpCurve.EpochOf(CoreSettings.Service?.Current)) * betterQuestsMultiplier * streakMultiplier);
 
         Progress.TotalXPFromQuests += scaledXP;
 
@@ -1785,24 +1786,24 @@ public class QuestService : IDisposable
         // Award XP. XPSource.Quest, not Other: nothing branches on the source inside AddXP (the
         // old comment's recursion worry was never about which value was passed), but THE BANK's
         // flight only fires for completion-shaped awards and a quest payout is the archetype.
-        App.Progression?.AddXP(scaledXP, XPSource.Quest);
+        CoreProgression.AddXP(scaledXP, "Quest");
 
         // Check for Perfect Bimbo Week bonus (7, 14, 30 day daily quest streaks).
         // CheckPerfectWeekBonus grants the XP itself (before it writes its paid-once latch, so a
         // crash between the two cannot burn the milestone) and returns what it awarded.
         if (type == QuestType.Daily)
         {
-            var bonusXP = App.SkillTree?.CheckPerfectWeekBonus() ?? 0;
+            var bonusXP = CoreQuests.CheckPerfectWeekBonusProvider?.Invoke() ?? 0;
             if (bonusXP > 0)
             {
-                App.Logger?.Information("Perfect Bimbo Week bonus granted: {XP} XP", bonusXP);
+                Log.Information("Perfect Bimbo Week bonus granted: {XP} XP", bonusXP);
             }
         }
 
         // Play celebration effects
         PlayCompletionEffects();
 
-        App.Logger?.Information("Quest completed: {QuestName} ({Type}) - Awarded {XP} XP (base: {BaseXP}, level: {Level}, streak: {Streak}x{StreakPct}%)",
+        Log.Information("Quest completed: {QuestName} ({Type}) - Awarded {XP} XP (base: {BaseXP}, level: {Level}, streak: {Streak}x{StreakPct}%)",
             def.Name, type, scaledXP, def.XPReward, playerLevel, questStreak, questStreak * 3);
 
         // Fire event
@@ -1821,8 +1822,8 @@ public class QuestService : IDisposable
     {
         try
         {
-            // Play Windows notification sound
-            SystemSounds.Exclamation.Play();
+            // The head plays the Windows notification sound and posts the haptic event.
+            CoreQuests.PlayCompletionEffectsProvider?.Invoke();
 
             // Quest completion posts its OWN event kind, so the Haptics tab's "Quest complete"
             // routing row (enable / intensity / pattern / target toy) is what decides how this
@@ -1830,11 +1831,10 @@ public class QuestService : IDisposable
             // leaving the quest row on screen doing nothing at all.
             // ONE call only: this fired twice, which stacked two overlapping copies of the
             // same pattern on the toy rather than making it play any stronger.
-            _ = App.Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.QuestComplete);
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("Error playing quest completion effects: {Error}", ex.Message);
+            Log.Debug("Error playing quest completion effects: {Error}", ex.Message);
         }
     }
 
@@ -1846,7 +1846,7 @@ public class QuestService : IDisposable
     /// </summary>
     public void RecalculateStreak()
     {
-        var settings = App.Settings?.Current;
+        var settings = CoreSettings.Service?.Current;
         if (settings == null) return;
 
         var completedDates = new HashSet<DateTime>(
@@ -1879,7 +1879,7 @@ public class QuestService : IDisposable
         // counter — and must never lower it (dates may have been trimmed/lost).
         if (streak > settings.DailyQuestStreak)
         {
-            App.Logger?.Debug("RecalculateStreak: calendar proves {Calculated} > stored {Current} — repairing upward",
+            Log.Debug("RecalculateStreak: calendar proves {Calculated} > stored {Current} — repairing upward",
                 streak, settings.DailyQuestStreak);
             settings.DailyQuestStreak = streak;
         }
@@ -1899,7 +1899,7 @@ public class QuestService : IDisposable
     /// </summary>
     private void AdvanceQuestStreak()
     {
-        var settings = App.Settings?.Current;
+        var settings = CoreSettings.Service?.Current;
         if (settings == null) return;
 
         var yesterday = DateTime.Today.AddDays(-1);
@@ -1915,7 +1915,7 @@ public class QuestService : IDisposable
         else
         {
             // Gap with no shield: the streak broke; today is day 1 of a new streak.
-            App.Logger?.Information("Quest streak reset to 1 — gap before {Today} (was {Prev})",
+            Log.Information("Quest streak reset to 1 — gap before {Today} (was {Prev})",
                 DateTime.Today.ToString("yyyy-MM-dd"), settings.DailyQuestStreak);
             settings.DailyQuestStreak = 1;
         }
@@ -1938,7 +1938,7 @@ public class QuestService : IDisposable
             CheckAndGenerateQuests();
         }
 
-        App.Logger?.Information("QuestService progress reset (generateQuests={Generate})", generateQuests);
+        Log.Information("QuestService progress reset (generateQuests={Generate})", generateQuests);
     }
 
     /// <summary>
@@ -1955,7 +1955,7 @@ public class QuestService : IDisposable
         if (Progress.OwnerUnifiedId == unifiedId) return;
         Progress.OwnerUnifiedId = unifiedId;
         Save();
-        App.Logger?.Information("Quest progress stamped as owned by {UnifiedId} (preserved across logout)", unifiedId);
+        Log.Information("Quest progress stamped as owned by {UnifiedId} (preserved across logout)", unifiedId);
     }
 
     /// <summary>
@@ -1972,7 +1972,7 @@ public class QuestService : IDisposable
         var owner = Progress.OwnerUnifiedId;
         if (!string.IsNullOrEmpty(owner) && owner != unifiedId)
         {
-            App.Logger?.Information("Quest progress belongs to {Owner} but {UnifiedId} signed in — resetting quest file", owner, unifiedId);
+            Log.Information("Quest progress belongs to {Owner} but {UnifiedId} signed in — resetting quest file", owner, unifiedId);
             ResetProgress(generateQuests: false);
         }
 
@@ -1983,8 +1983,8 @@ public class QuestService : IDisposable
 
     public void Dispose()
     {
-        _saveTimer.Stop();
-        _refreshTimer.Stop();
+        _saveTimer.Dispose();
+        _refreshTimer.Dispose();
         if (_isDirty)
         {
             Save();

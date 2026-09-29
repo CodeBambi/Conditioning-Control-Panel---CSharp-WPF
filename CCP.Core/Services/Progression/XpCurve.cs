@@ -16,6 +16,10 @@ namespace ConditioningControlPanel.Services
         /// <summary>The Descent recurve, live only after the migration ceremony. See <see cref="XpForLevelV2"/>.</summary>
         public const int CurveEpochDescent = 1;
 
+        /// <summary>The curve an account is on: Descent only after the migration ceremony.</summary>
+        public static int EpochOf(ConditioningControlPanel.Models.AppSettings? settings) =>
+            settings?.DescentEpoch == CurveEpochDescent ? CurveEpochDescent : CurveEpochLegacy;
+
         /// <summary>
         /// Ceiling on any level a lifetime-XP figure may be derived to. Curve v2's cumulative
         /// cost past L300 is a quarter of a billion XP, so this can only ever be hit by garbage

@@ -395,6 +395,30 @@ namespace ConditioningControlPanel
             CoreProgression.AddXPProvider = (amount, source) =>
                 Progression?.AddXP(amount, Enum.TryParse<Services.XPSource>(source, out var s) ? s : Services.XPSource.Other);
             CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+            // QuestService moved to Core; these are the head services it still reads. Lazy, like
+            // the App.X?. reads they replace (SkillTree, Programs and Haptics are built later).
+            CoreQuests.PatreonVerifyingProvider = () => Patreon?.IsVerifying;
+            CoreQuests.SubscribeStarVerifyingProvider = () => SubscribeStar?.IsVerifying == true;
+            CoreQuests.UseStreakShieldProvider = () => SkillTree?.UseStreakShield() == true;
+            CoreQuests.CheckPerfectWeekBonusProvider = () => SkillTree?.CheckPerfectWeekBonus() ?? 0;
+            CoreQuests.TrackProgramVerifierProvider = (category, amount) => Programs?.TrackVerifier(category, amount);
+            CoreQuests.PlayCompletionEffectsProvider = () =>
+            {
+                // Play Windows notification sound
+                SystemSounds.Exclamation.Play();
+
+                // Quest completion posts its OWN event kind, so the Haptics tab's "Quest complete"
+                // routing row (enable / intensity / pattern / target toy) is what decides how this
+                // feels. ONE call only: two stacked overlapping copies of the pattern on the toy.
+                _ = Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.QuestComplete);
+            };
+            // A camera that cannot be COUNTED is not a camera that is MISSING: the strict pair
+            // throws, the gate's CachedProbe catches, and the answer is present + UNRESOLVED.
+            CoreQuests.CameraProbe = () => WebcamDeviceEnumerator.EnumerateStrict().Count > 0
+                || WebcamWinRtEnumerator.EnumerateStrict().Count > 0;
+            // Not SpeechService.HasCaptureDevice: that swallows a WaveIn throw into "false", which
+            // would read as absent AND resolved. A throw here reaches CachedProbe.Run and fails open.
+            CoreQuests.MicrophoneProbe = () => NAudio.Wave.WaveInEvent.DeviceCount > 0;
             // The Training Programs ledger moved to Core (Services/Program/ProgramService.cs).
             // These five are what it still cannot own: the pledge check, the toast, the badge
             // store, the content-pack video count and the roadmap instance. Read lazily, because
@@ -2502,7 +2526,7 @@ namespace ConditioningControlPanel
             }
             QuestDefinitions = new QuestDefinitionService();
             _ = QuestDefinitions.InitializeAsync(); // Fire and forget - will load from cache first
-            Quests = new QuestService();
+            Quests = new QuestService(QuestDefinitions);
             QuestDefinitions.QuestDefinitionsUpdated += () =>
             {
                 // When server definitions change, re-check quests (regenerates if definition was removed)
