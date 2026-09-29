@@ -259,6 +259,25 @@ expect(!sfx.state().pulsing && fake.state === 'closed', 'dispose stops the pulse
   expect(rnames().slice(n0).join() === 'replayIn,replaySlam,replaySlam,replaySlam,replayHit,replayHit,replayHit,replayOut', 'the beats trigger the cues in order: ' + rnames().slice(n0).join());
   expect(rf.wires.some((w) => w[0] === 'delay' && w[1] === 'filter'), 'the replay has its own dark room tail');
 
+  // the turn card owns the air: as it comes in the replay fades out, echoes and all,
+  // and nothing more of that replay plays; the next replay sounds as before
+  expect(rsfx.state().tail > 0, 'a finished replay leaves its echoes ringing');
+  rbus.emit('turn-card', { side: 'b', style: 'slam', short: false });
+  expect(rsfx.state().yielded && rsfx.state().tail === 0, 'a card after a finished replay fades its echoes out');
+  rbus.emit('replay-show', { layout: 'corner', n: 1, hit });
+  expect(rsfx.state().tail > 0 && !rsfx.state().yielded && rsfx.state().ducked, 'the next replay opens its echo room again and ducks the beds');
+  rbus.emit('turn-card', { side: 'w', style: 'tag', short: true });
+  expect(rsfx.state().yielded && rsfx.state().tail === 0 && !rsfx.state().ducked && rsfx.state().beds === 1,
+    'a card landing on a corner replay fades it and its echoes out and lets the beds up');
+  const hushed = during(() => {
+    rbus.emit('replay-panel-in', { i: 0, n: 1, layout: 'corner' });
+    rbus.emit('replay-panel-hit', { i: 0, n: 1, layout: 'corner', hit });
+    rbus.emit('replay-exit', { layout: 'corner', skipped: false });
+    rbus.emit('replay-exit', { layout: 'corner', skipped: true });
+  });
+  expect(hushed.length === 0, 'nothing more of that replay plays under the card (' + hushed.length + ' voices)');
+  rbus.emit('replay-done', {});
+
   // a skip: tape stop instead of the whoosh, and the next replay still sounds
   rbus.emit('replay-show', { layout: 'corner', n: 1, hit: null });
   rbus.emit('replay-panel-in', { i: 0, n: 1, layout: 'corner' });
