@@ -41,8 +41,8 @@
 //   StartTutorial(TutorialType.Deeper) is not on this head.
 //   The rail pulse - StartDeeperTabPulse / StopDeeperTabPulse, a WPF storyboard on BtnDeeper.
 //   The catalogue - TriggerCatalogueLookupForNavigation, RunCatalogueLookupAsync,
-//   OpenCataloguePickerDialog, DownloadAndOpenCatalogueEntryAsync, SubmitDeeperLibraryEntryAsync,
-//   ShowCatalogueLookupToast, ShowCatalogueSubmissionResultToast, IsCatalogueEligible. App.Catalogue
+//   OpenCataloguePickerDialog, DownloadAndOpenCatalogueEntryAsync,
+//   ShowCatalogueLookupToast (the submit half is in DeeperSubmissions.cs). App.Catalogue
 //   plus App.Notifications, the same pair MainShellWindow.CatalogueSubmissions.cs left out.
 //   IsImportableEnhancementPath is pure and would compile, and is held back with
 //   ImportEnhancementFiles, its only caller.
