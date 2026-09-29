@@ -864,3 +864,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: HoverPopTests (Full/Off, real pointer enter/leave), fail-proven. Live hover not shown: Keincheck hit-test lands on the
   window template Panel in the content area (investigating separately). Rows wired: behavior-hover-pop, shell-profile-wardrobe,
   views-adorned-avatar. Review: ACCEPT.
+
+## avalonia-port/content-hit-test: +82
+- Question: Keincheck hit_test in tab content returned the window template Panel. Answer: not an app bug. Keincheck answers
+  from the last drawn frame; the live shell was Minimized (first-run window active), so no new frames. Real input reaches the
+  controls: ContentHitTestTests (Studio/Presets/Awareness/Quests, hit test + headless press on every visible button), fail-proven.
