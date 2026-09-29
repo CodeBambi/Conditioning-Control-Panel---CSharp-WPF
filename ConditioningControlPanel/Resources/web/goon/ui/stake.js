@@ -121,13 +121,16 @@ export function refusalLine(reason) {
 
 /**
  * The recap line for a settled reply. `staked` is what WE put on it. Returns
- * {text, tone} or null when there is nothing to say (no stake).
+ * {text, tone} or null when there is nothing to say (no stake). A lost time
+ * stake says what the player's own tab booked (`booked_s`, from the host) when
+ * the host said so, as chess does: the tab can refuse or cut the server's time_s.
  */
 export function resultLine(settled, staked) {
   if (!isStaked(staked)) return null;
   if (!settled || typeof settled !== 'object') return { text: S.stake.settling, tone: 'pending' };
   const delta = Math.floor(Number(settled.sp_delta) || 0);
-  const timeS = Math.floor(Number(settled.time_s) || 0);
+  const booked = settled.booked_s;
+  const timeS = Math.floor(typeof booked === 'number' && Number.isFinite(booked) ? booked : (Number(settled.time_s) || 0));
   if (settled.result === 'won') {
     return delta > 0 ? { text: S.stake.wonSp(delta), tone: 'won' } : { text: S.stake.returned, tone: 'void' };
   }
@@ -202,6 +205,7 @@ export function createStakeClient({ send, logger = null, now = () => Date.now() 
     if (!e) {
       e = {
         you: null, them: null, known: false, locked: false, lockSent: false, settled: null,
+        booked: undefined,   // seconds the player's own tab took for a lost time stake, when the host said
         pending: false, error: '', endedAt: 0, final: false, lastOffer: null, retried: false,
       };
       byMatch.set(code, e);
@@ -259,7 +263,7 @@ export function createStakeClient({ send, logger = null, now = () => Date.now() 
     /** Settled, or given up on: the recap stops saying "settling". */
     settledFor(code) {
       const e = entry(code);
-      if (e.settled) return e.settled;
+      if (e.settled) return e.booked !== undefined ? { ...e.settled, booked_s: e.booked } : e.settled;
       if (e.endedAt && now() - e.endedAt > SETTLE_GIVE_UP_MS) return { result: 'void', local: true };
       return null;
     },
@@ -305,6 +309,7 @@ export function createStakeClient({ send, logger = null, now = () => Date.now() 
           if (m.them !== undefined) { e.them = normStake(m.them); e.known = true; }
           if (m.locked === true) e.locked = true;
           if (m.settled && typeof m.settled === 'object') e.settled = m.settled;
+          if (typeof m.booked_s === 'number' && Number.isFinite(m.booked_s)) e.booked = m.booked_s;
         }
         emit();
       }

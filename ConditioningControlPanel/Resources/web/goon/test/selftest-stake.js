@@ -96,6 +96,39 @@ const ID = { unifiedId: 'u_abc123', displayName: 'me' };
   ok(resultLine({ result: 'void', local: true }, t30).tone === 'void', 'local give-up: returned');
 }
 
+// ------------------------------------------------ 4b. what the tab actually booked
+// A lost time stake the player's own Circe's tab refused (safety hold after panic, day
+// limit, pvp_loss row off, tab paused) or only part-booked still read "+30 min on your
+// lock": the recap took the server's time_s and dropped the host's booked_s. Chess got
+// it right (bug hunt 2026-09-29, STAKES-2).
+{
+  const t30 = { kind: 'time', amount: 1800 };
+  const frame = (booked) => ({
+    type: 'stake', op: 'settled', game: 'goon', ok: true, match: 'ABC123',
+    you: t30, them: { kind: 'sp', amount: 10 }, locked: true,
+    settled: { result: 'lost', sp_delta: 0, time_s: 1800, sp: 100 }, booked_s: booked,
+  });
+  const recap = (booked) => {
+    const c = createStakeClient({ send: () => {} });
+    c.receive({ type: 'stake', op: 'offer', ok: true, match: 'ABC123', stake: t30, sp: 100 });
+    c.finish('ABC123');
+    c.receive(frame(booked));
+    return c;
+  };
+  const line = (c) => resultLine(c.settledFor('ABC123'), c.get('ABC123').you).text;
+  ok(line(recap(1800)) === '+30 min on your lock', 'the tab took all of it', line(recap(1800)));
+  ok(line(recap(600)) === '+10 min on your lock', 'the tab took part: the recap says what landed', line(recap(600)));
+  ok(line(recap(0)) === S.stake.lost, 'the tab took nothing: no minutes are claimed', line(recap(0)));
+  const later = recap(600);
+  later.receive({ type: 'stake', op: 'state', game: 'goon', ok: true, match: 'ABC123', you: t30, them: null, locked: true, settled: { result: 'lost', sp_delta: 0, time_s: 1800, sp: 100 } });
+  ok(line(later) === '+10 min on your lock', 'a later frame without booked_s keeps what the host booked', line(later));
+  const c = createStakeClient({ send: () => {} });
+  c.receive({ type: 'stake', op: 'offer', ok: true, match: 'NOBOOK', stake: t30, sp: 100 });
+  c.finish('NOBOOK');
+  c.receive({ ...frame(undefined), match: 'NOBOOK' });
+  ok(resultLine(c.settledFor('NOBOOK'), c.get('NOBOOK').you).text === '+30 min on your lock', 'a host that says nothing about booking: the server figure');
+}
+
 // ------------------------------------------------ 5. the claim
 {
   const session = { identity: ID, room: { code: 'ABC123', token: 'tok', role: 'guest' } };
