@@ -97,7 +97,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["lockdown"] = "LockdownTab",        ["blinktrainer"] = "BlinkTrainerTab",
             ["shelistening"] = "SheListeningTab", ["gradedintake"] = "GradedIntakeTab",
             ["appsettings"] = "AppSettingsTab",  ["spiral"] = "SpiralTab",
-            ["exclusives"] = "ExclusivesTab",
+            ["exclusives"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
         };
 
         /// <summary>Keys that open a window or a service rather than a tab. ShowTab leaves the
@@ -209,6 +209,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                     // WPF MainWindow.Exclusives.cs RefreshExclusivesTab "on tab show": gates can move between visits.
                     case "exclusives": RefreshExclusivesTab(); break;
+                    // WPF MainWindow.TabNavigation.cs:588-593 (AnimateTabIn is the header's ponytail).
+                    case "chaster": Named<Tabs.ChasterTabView>("ChasterTab")?.OnTabShown(); break;
 
                     // WPF MainWindow.TabNavigation.cs:324-337: spend the tab's seen-flag on any
                     // route in, then the one-time explainer on top of the tab just shown.
