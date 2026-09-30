@@ -682,7 +682,7 @@ namespace ConditioningControlPanel.Services
 
             current = Regex.Replace(current, @"[ \t]{2,}", " ");
             current = TidyTail(current);
-            App.Logger?.Information("[AI-HYGIENE] stripped {Chars} char(s) of leaked instruction text",
+            Log.Information("[AI-HYGIENE] stripped {Chars} char(s) of leaked instruction text",
                 text!.Length - current.Length);
             return current;
         }

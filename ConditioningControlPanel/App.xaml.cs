@@ -542,6 +542,11 @@ namespace ConditioningControlPanel
             // The app's one moderation log. Read lazily on every call because ModerationLog is
             // constructed in OnStartup, long after this ctor - and it is declared null! until then.
             CoreModerationLog.InstanceProvider = () => ModerationLog;
+            CoreModerationLog.GuardProvider = () => ModerationGuard;
+            CoreModerationLog.CounterProvider = () => ModerationCounter;
+            // AiService moved to Core; these two are the App-bound bits it used to reach directly.
+            CoreAccount.PatreonAccessTokenProvider = () => Patreon?.GetAccessToken();
+            AiService.MergedAccountHook = r => MergedAccountRecovery.TryHandleAsync(r);
             // Webcam capability + the consent revoke. The tracking engine stays here (capture
             // device, ONNX sessions, OpenCvSharp loop); only "is there one" and "undo consent"
             // cross. Read lazily: Webcam is constructed in OnStartup, long after this ctor, and is

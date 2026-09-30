@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// the conversation.
         /// </summary>
         public const string OneShotObsolete =
-            "Legacy one-shot AI call. Use CompanionBrain.ChatAsync / ReactAsync (App.Brain), " +
+            "Legacy one-shot AI call. Use CompanionBrain.ChatAsync / ReactAsync (the app's CompanionBrain), " +
             "or IAiService.SendAsync for a raw multi-turn transport call. " +
             "These adapters are kept so existing call sites compile through the Train 1 migration.";
     }

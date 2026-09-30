@@ -404,23 +404,8 @@ namespace ConditioningControlPanel.Services
         /// a null service must never leave a stale override standing. Returns true if anything moved.
         /// The prompt TEXT is deliberately kept, so re-ticking "use custom prompt" restores the edits.
         /// </summary>
-        public static bool ClearCustomPromptOverride(AppSettings? settings)
-        {
-            if (settings == null) return false;
-
-            var changed = false;
-            if (settings.ActiveCommunityPromptId != null)
-            {
-                settings.ActiveCommunityPromptId = null;
-                changed = true;
-            }
-            if (settings.CompanionPrompt?.UseCustomPrompt == true)
-            {
-                settings.CompanionPrompt.UseCustomPrompt = false;
-                changed = true;
-            }
-            return changed;
-        }
+        public static bool ClearCustomPromptOverride(AppSettings? settings) =>
+            PersonalityService.ClearCustomPromptOverride(settings);
 
         /// <summary>
         /// Deactivates the current community prompt, reverting to defaults.

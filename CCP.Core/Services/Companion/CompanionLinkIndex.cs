@@ -1,3 +1,4 @@
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -172,7 +173,7 @@ namespace ConditioningControlPanel.Services.Companion
                 // DefaultVideoLinks. This is what she is actually told to name, so it is the set
                 // that most needs a working chip; omitting it would also strip her own pool's URLs
                 // as "unsanctioned" if she ever echoed one.
-                var pool = App.Mods?.GetVideoLinks();
+                var pool = CoreMods.Service?.GetVideoLinks();
                 if (pool != null)
                     foreach (var kvp in pool)
                         Add(entries, urls, kvp.Key, kvp.Value);
@@ -180,7 +181,7 @@ namespace ConditioningControlPanel.Services.Companion
                 foreach (var (title, url) in BambiSprite.ContentCatalogue)
                     Add(entries, urls, title, url);
 
-                var kb = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
+                var kb = CoreSettings.Service?.Current?.GlobalKnowledgeBaseLinks;
                 if (kb != null)
                     foreach (var link in kb)
                         Add(entries, urls, link?.Title, link?.Url);
@@ -190,7 +191,7 @@ namespace ConditioningControlPanel.Services.Companion
                 // A half-built index would silently sanction fewer links than it should, and the
                 // caller strips whatever is not sanctioned — so fail to the empty index (strip
                 // everything) rather than to a partial one, and say why.
-                App.Logger?.Warning(ex, "CompanionLinkIndex: failed to build the sanctioned-link index");
+                Log.Warning(ex, "CompanionLinkIndex: failed to build the sanctioned-link index");
                 entries.Clear();
                 urls.Clear();
             }
@@ -221,16 +222,16 @@ namespace ConditioningControlPanel.Services.Companion
         /// </summary>
         private static string Fingerprint()
         {
-            var sb = new System.Text.StringBuilder("mod:").Append(App.Mods?.ActiveModId ?? "none");
+            var sb = new System.Text.StringBuilder("mod:").Append(CoreMods.Service?.ActiveModId ?? "none");
 
             // Contents, not Count: renaming a row or swapping a URL in place used to leave a
             // stale index that stripped the just-edited link as unsanctioned.
-            var pool = App.Mods?.GetVideoLinks();
+            var pool = CoreMods.Service?.GetVideoLinks();
             sb.Append("|pool:").Append(pool?.Count ?? 0);
             if (pool != null)
                 foreach (var kvp in pool) sb.Append('|').Append(kvp.Key).Append('#').Append(kvp.Value);
 
-            var kb = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
+            var kb = CoreSettings.Service?.Current?.GlobalKnowledgeBaseLinks;
             sb.Append("|kb:").Append(kb?.Count ?? 0);
             if (kb != null)
                 foreach (var link in kb) sb.Append('|').Append(link?.Url).Append('#').Append(link?.Title);

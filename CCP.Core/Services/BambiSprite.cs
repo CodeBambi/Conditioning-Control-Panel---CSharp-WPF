@@ -1,3 +1,4 @@
+using Serilog;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -34,7 +35,7 @@ namespace ConditioningControlPanel.Services
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
         private string GetCoreMediaLinks()
         {
-            var isBambiMode = App.Mods?.IsBambiMode ?? false;
+            var isBambiMode = CoreMods.Service?.IsBambiMode ?? false;
 
             if (isBambiMode)
             {
@@ -113,7 +114,7 @@ CRITICAL: copy a title character-for-character. Never invent, rename, shorten or
                 // section uses, which the models copy from reliably (so the titles match
                 // KnownVideoLinks and render as clickable links).
                 var titleLines = string.Join("\n", PoolTitles().Select(k => $"- \"{k}\""));
-                App.Logger?.Debug("BambiSprite: mod video-link block active with {Count} titles", modVideoLinks.Count);
+                Log.Debug("BambiSprite: mod video-link block active with {Count} titles", modVideoLinks.Count);
                 return $@"
 --- VIDEO LINKS (the ONLY videos you may name) ---
 When you suggest a video, copy its title EXACTLY from this list, word for word, and say it naturally — the app turns it into a clickable link. Do NOT output URLs. NEVER invent a title or name anything not on this list. Never attribute a video to an uploader or creator (never say it is ""from"" someone) — say the title alone. If nothing fits, don't name a video at all.
@@ -123,7 +124,7 @@ When you suggest a video, copy its title EXACTLY from this list, word for word, 
             {
                 // Sissy Hypno mode (legacy fallback for the Sissy mod and any mode without its
                 // own video link set) - check if user has configured custom SH video links
-                var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
+                var hasUserSHLinks = !string.IsNullOrWhiteSpace(CoreSettings.Service?.Current?.HypnotubeLinksSissyHypno);
 
                 if (hasUserSHLinks)
                 {
@@ -216,7 +217,7 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
         /// consistent snapshot source (and so tests can supply a pool without a ModService).
         /// </summary>
         private static Dictionary<string, string>? GetVideoPool()
-            => VideoPoolProvider != null ? VideoPoolProvider() : App.Mods?.GetVideoLinks();
+            => VideoPoolProvider != null ? VideoPoolProvider() : CoreMods.Service?.GetVideoLinks();
 
         /// <summary>Test seam for <see cref="GetVideoPool"/>. Null in production.</summary>
         internal static Func<Dictionary<string, string>?>? VideoPoolProvider;
@@ -494,8 +495,8 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
             var boringDomains = "vscode, visual studio, github, stackoverflow, outlook, teams, slack, word, excel, gmail, protonmail";
 
             // Get mod-aware user term
-            var userTerm = App.Mods?.GetUserTerm() ?? "Subject";
-            var isBambiMode = App.Mods?.IsBambiMode ?? false;
+            var userTerm = CoreMods.Service?.GetUserTerm() ?? "Subject";
+            var isBambiMode = CoreMods.Service?.IsBambiMode ?? false;
 
             // Example responses seed the model's video picks. Draw the titles from the ACTIVE mod's
             // real pool (varies every build) instead of hardcoding Bambi titles: hardcoded examples
@@ -616,7 +617,7 @@ Example responses with REAL video names:
                 _cachedFingerprint = fingerprint;
                 PrefixBuildCount++;
 
-                App.Logger?.Information(
+                Log.Information(
                     "[AI-PROMPT] prefix rebuilt prefix_tok~{Tokens} builds={Builds}",
                     built.Length / 4, PrefixBuildCount);
 
@@ -678,18 +679,18 @@ Example responses with REAL video names:
 
         internal static PrefixInputs CaptureFingerprintInputs()
         {
-            var s = App.Settings?.Current;
+            var s = CoreSettings.Service?.Current;
             var companionPrompt = s?.CompanionPrompt;
             var useCustom = UsesCustomPrompt(s);
 
             // The sections that actually get baked in: the community prompt when one is assigned,
             // otherwise the active preset's. Hashing the TEXT (not just the id) is what makes an edit
             // in the Companion tab invalidate the prefix on the very next call.
-            var sections = Sections(useCustom ? companionPrompt : App.Personality?.GetActivePreset()?.PromptSettings);
+            var sections = Sections(useCustom ? companionPrompt : PersonalityService.Shared.GetActivePreset()?.PromptSettings);
 
             return new PrefixInputs(
-                ModId: App.Mods?.ActiveModId ?? "none",
-                IsBambiMode: App.Mods?.IsBambiMode ?? false,
+                ModId: CoreMods.Service?.ActiveModId ?? "none",
+                IsBambiMode: CoreMods.Service?.IsBambiMode ?? false,
                 SlutMode: s?.SlutModeEnabled == true,
                 PresetId: s?.ActivePersonalityPresetId ?? string.Empty,
                 CommunityPromptId: s?.ActiveCommunityPromptId ?? string.Empty,
@@ -761,7 +762,7 @@ Example responses with REAL video names:
         /// restore today's byte-for-byte output.
         /// </summary>
         public string GetSystemPrompt()
-            => Companion.Brain.CompanionBrain.IsEnabled ? GetStablePrompt() : BuildSystemPrompt();
+            => CoreSettings.Service?.Current?.UseCompanionBrain != false ? GetStablePrompt() : BuildSystemPrompt(); // CompanionBrain.IsEnabled
 
         /// <summary>
         /// The actual assembly, unchanged from what shipped. Randomness (and therefore whether the
@@ -782,13 +783,13 @@ Example responses with REAL video names:
 
             // Check for an active custom prompt: a community/asset prompt assigned via the
             // Companion tab, or one hand-edited in the prompt editor (which carries no id).
-            var companionPrompt = App.Settings?.Current?.CompanionPrompt;
-            if (UsesCustomPrompt(App.Settings?.Current))
+            var companionPrompt = CoreSettings.Service?.Current?.CompanionPrompt;
+            if (UsesCustomPrompt(CoreSettings.Service?.Current))
             {
                 // Build a temporary preset wrapper so we can reuse BuildPromptFromPreset
                 var communityPreset = new Models.PersonalityPreset
                 {
-                    Id = App.Settings?.Current?.ActiveCommunityPromptId ?? "custom",
+                    Id = CoreSettings.Service?.Current?.ActiveCommunityPromptId ?? "custom",
                     Name = "Community Prompt",
                     PromptSettings = companionPrompt
                 };
@@ -797,7 +798,7 @@ Example responses with REAL video names:
             else
             {
                 // Get the active personality preset from PersonalityService
-                var activePreset = App.Personality?.GetActivePreset();
+                var activePreset = PersonalityService.Shared.GetActivePreset();
                 assembled = activePreset?.PromptSettings != null
                     ? BuildPromptFromPreset(activePreset)
                     : GetDefaultBambiSpritePrompt();
@@ -821,7 +822,7 @@ Example responses with REAL video names:
             // current preset has a SlutModePersonality defined, swap to that — same
             // base personality, spicier vibe. Falls back to standard Personality if the
             // preset has no slut variant (e.g., presets that are already explicit).
-            var slutMode = App.Settings?.Current?.SlutModeEnabled == true;
+            var slutMode = CoreSettings.Service?.Current?.SlutModeEnabled == true;
             var usingSlutVariant = slutMode && !string.IsNullOrWhiteSpace(settings.SlutModePersonality);
             var personalityText = usingSlutVariant ? settings.SlutModePersonality : settings.Personality;
             if (!string.IsNullOrWhiteSpace(personalityText))
@@ -871,7 +872,7 @@ Example responses with REAL video names:
                 // on the first title and, in non-Bambi mods, name videos the mod doesn't even have.
                 var kb = StripHardcodedVideoTitleList(settings.KnowledgeBase);
 
-                var isBambiMode = App.Settings?.Current?.IsBambiMode != false;
+                var isBambiMode = CoreSettings.Service?.Current?.IsBambiMode != false;
                 if (!isBambiMode)
                 {
                     // Filter out Bambi-titled content from knowledge base in non-Bambi modes
@@ -898,7 +899,7 @@ Example responses with REAL video names:
             sb.AppendLine();
 
             // Append GLOBAL knowledge base links (shared across all personalities)
-            var globalLinks = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
+            var globalLinks = CoreSettings.Service?.Current?.GlobalKnowledgeBaseLinks;
             if (globalLinks?.Count > 0)
             {
                 sb.AppendLine("--- GLOBAL KNOWLEDGE BASE LINKS ---");
@@ -919,17 +920,17 @@ Example responses with REAL video names:
             var modProvidesVideoLinks = (GetVideoPool()?.Count ?? 0) > 0;
             if (settings != null && !modProvidesVideoLinks)
             {
-                if (App.Settings?.Current?.IsBambiMode == true)
+                if (CoreSettings.Service?.Current?.IsBambiMode == true)
                 {
                     // Bambi mode: use user links if set, otherwise use default GlobalKnowledgeBaseLinks video content
-                    hypnotubeLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksBambiSleep)
-                        ? App.Settings.Current.HypnotubeLinksBambiSleep
+                    hypnotubeLinks = !string.IsNullOrWhiteSpace(CoreSettings.Service?.Current?.HypnotubeLinksBambiSleep)
+                        ? CoreSettings.Service!.Current.HypnotubeLinksBambiSleep
                         : ""; // Default Bambi links are already in GlobalKnowledgeBaseLinks
                 }
                 else
                 {
                     // Sissy mode: only use user links if set, otherwise no video links
-                    hypnotubeLinks = App.Settings?.Current?.HypnotubeLinksSissyHypno ?? "";
+                    hypnotubeLinks = CoreSettings.Service?.Current?.HypnotubeLinksSissyHypno ?? "";
                 }
             }
 
@@ -944,7 +945,7 @@ Example responses with REAL video names:
                 // build down, reachable today by a Bambi user who clears the video pool while
                 // HypnotubeLinksBambiSleep is set, which is exactly the branch that reaches here.
                 // First name wins, matching ToDictionary's insertion order for the non-dup case.
-                var urlToName = ReverseByUrlFirstWins(AvatarTubeWindow.KnownVideoLinks);
+                var urlToName = ReverseByUrlFirstWins(CoreModsHooks.KnownVideoLinksProvider?.Invoke() ?? HypnotubeDefaultLinks.KnownVideoTitles);
                 foreach (var rawUrl in hypnotubeLinks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
                     if (urlToName.TryGetValue(rawUrl, out var name))
@@ -985,11 +986,11 @@ Example responses with REAL video names:
             }
 
             // Inject quiz context if the user has taken a quiz
-            var quizPct = App.Settings?.Current?.LatestQuizScorePercentage ?? -1;
+            var quizPct = CoreSettings.Service?.Current?.LatestQuizScorePercentage ?? -1;
             if (quizPct >= 0)
             {
-                var archetype = App.Settings?.Current?.LatestQuizArchetype ?? "";
-                var profileSnippet = App.Settings?.Current?.LatestQuizProfileText ?? "";
+                var archetype = CoreSettings.Service?.Current?.LatestQuizArchetype ?? "";
+                var profileSnippet = CoreSettings.Service?.Current?.LatestQuizProfileText ?? "";
                 sb.AppendLine();
                 sb.AppendLine("--- QUIZ CONTEXT ---");
                 if (!string.IsNullOrEmpty(archetype))
@@ -1011,7 +1012,7 @@ Example responses with REAL video names:
             var prompt = MakePromptModeAware(sb.ToString());
 
             // Apply mod text replacements (e.g. "Bambi" → "Unit" for drone mod)
-            prompt = App.Mods?.MakeModAware(prompt) ?? prompt;
+            prompt = CoreMods.Service?.MakeModAware(prompt) ?? prompt;
 
             // Substitute the media-links block AFTER the replacement passes — see MediaLinksToken.
             prompt = prompt.Replace(MediaLinksToken, GetCoreMediaLinks());
@@ -1062,10 +1063,10 @@ Example responses with REAL video names:
         /// </summary>
         private string MakePromptModeAware(string prompt)
         {
-            if (App.Mods?.IsBambiMode == true)
+            if (CoreMods.Service?.IsBambiMode == true)
                 return prompt; // Bambi prompts are written for Bambi terms; no transform needed
 
-            var userTerm = App.Mods?.GetUserTerm() ?? "babe";
+            var userTerm = CoreMods.Service?.GetUserTerm() ?? "babe";
 
             // Replace user references while preserving video/file titles
             // These patterns match "call the user Bambi", "she IS Bambi", etc.
@@ -1121,16 +1122,16 @@ LINK RULE (applies to every reply, no exceptions):
         private string GetDefaultBambiSpritePrompt()
         {
             // Get mod-aware terms
-            var companionName = App.Mods?.GetCompanionName() ?? "Companion";
-            var userTerm = App.Mods?.GetUserTerm() ?? "Subject";
-            var isBambiMode = App.Mods?.IsBambiMode ?? false;
-            var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
+            var companionName = CoreMods.Service?.GetCompanionName() ?? "Companion";
+            var userTerm = CoreMods.Service?.GetUserTerm() ?? "Subject";
+            var isBambiMode = CoreMods.Service?.IsBambiMode ?? false;
+            var hasUserSHLinks = !string.IsNullOrWhiteSpace(CoreSettings.Service?.Current?.HypnotubeLinksSissyHypno);
 
             // Unmodded (no mod, or the neutral CCP Default mod) this last-resort prompt used to
             // describe the companion as hyper-femme bimbo and the goal as sissy content, which is
             // a themed persona nobody picked. Swap only those words on the vanilla path; every
             // themed mod - Bambi, Sissy, Drone, Locked - gets the exact text it got before.
-            var modId = App.Mods?.ActiveModId;
+            var modId = CoreMods.Service?.ActiveModId;
             var isVanilla = string.IsNullOrWhiteSpace(modId)
                 || string.Equals(modId, Models.BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
             var assistantKind = isVanilla ? "calm, attentive" : "giggly, hyper-femme";
@@ -1146,7 +1147,7 @@ LINK RULE (applies to every reply, no exceptions):
             var browseContent = isVanilla ? "hypno content" : "sissy content";
 
             // The active mod's OWN pool — user override, else the mod's shipped DefaultVideoLinks
-            // (App.Mods.GetVideoLinks, the same source the browser and chaos link pool read).
+            // (CoreMods.Service!.GetVideoLinks, the same source the browser and chaos link pool read).
             //
             // Live bug 2026-08-06: this branch used to consult only the LEGACY
             // HypnotubeLinksSissyHypno setting, so a SissyHypno user who never edited that field
@@ -1156,7 +1157,7 @@ LINK RULE (applies to every reply, no exceptions):
             //
             // Sorted, because a Dictionary's key order is not stable across runs and this text sits
             // in the CACHED PREFIX — an unsorted list would break prompt caching on every launch.
-            var modPool = App.Mods?.GetVideoLinks();
+            var modPool = CoreMods.Service?.GetVideoLinks();
             var poolNames = modPool is { Count: > 0 }
                 ? modPool.Keys.Where(n => !string.IsNullOrWhiteSpace(n))
                               .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
@@ -1256,7 +1257,7 @@ OUTPUT RULES:
             }
 
             // Append global knowledge base links
-            var globalLinks = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
+            var globalLinks = CoreSettings.Service?.Current?.GlobalKnowledgeBaseLinks;
             if (globalLinks?.Count > 0)
             {
                 sb.AppendLine("--- GLOBAL KNOWLEDGE BASE LINKS ---");
@@ -1269,7 +1270,7 @@ OUTPUT RULES:
             sb.AppendLine(LinkFloorRule);
 
             var defaultPrompt = sb.ToString();
-            return App.Mods?.MakeModAware(defaultPrompt) ?? defaultPrompt;
+            return CoreMods.Service?.MakeModAware(defaultPrompt) ?? defaultPrompt;
         }
 
         // ==========================================

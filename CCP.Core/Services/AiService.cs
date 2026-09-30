@@ -1,3 +1,4 @@
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -54,6 +55,12 @@ namespace ConditioningControlPanel.Services
         private const int FreeDailyLimit = 100;     // Free users (logged in, no Patreon)
         private const int Tier1DailyLimit = 1000;   // Tier 1 supporters
         private const int Tier2DailyLimit = 2000;   // Tier 2 / Lab (whitelist folds to tier 2)
+        /// <summary>The proxy's hard per-message reject size; PromptAssembler.ProxyHardRejectCap reads this.</summary>
+        public const int ProxyHardRejectCap = 9900;
+
+        /// <summary>Contract D: WPF seeds MergedAccountRecovery.TryHandleAsync (it is App-bound); unseeded is a no-op.</summary>
+        public static Func<HttpResponseMessage, Task>? MergedAccountHook;
+
         private const int MaxTokensHardCap = 100; // Hard cap on response tokens to control costs (~50 words, enough for video names)
 
         /// <summary>
@@ -81,8 +88,8 @@ namespace ConditioningControlPanel.Services
         // can chat; the tiers buy a bigger daily tank. HasLabAccess is the canonical tier-2 bar
         // (whitelist and SubscribeStar fold into it), HasAiAccess the tier-1 one.
         internal static int EffectiveDailyLimit =>
-            App.Patreon?.HasLabAccess == true ? Tier2DailyLimit
-            : App.Patreon?.HasAiAccess == true ? Tier1DailyLimit
+            CoreAccount.HasLabAccess ? Tier2DailyLimit
+            : CoreAccount.HasPremiumAccess ? Tier1DailyLimit
             : FreeDailyLimit;
 
         // Fallback response when API unavailable or limit reached — pick from idle phrases for variety
@@ -93,7 +100,7 @@ namespace ConditioningControlPanel.Services
             // a themed line - this is what a free user hears most (cloud down, cap hit).
             // GetPhrases returns an EMPTY array when nothing matches, so the length check matters:
             // indexing an empty array here used to throw.
-            var phrases = App.Mods?.GetPhrases("Idle");
+            var phrases = CoreMods.Service?.GetPhrases("Idle");
             if (phrases == null || phrases.Length == 0)
             {
                 phrases = new[]
@@ -109,30 +116,39 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Whether AI is available (cloud identity or Patreon access)
         /// </summary>
-        public bool IsAvailable => App.HasCloudIdentity || App.Patreon?.HasAiAccess == true;
+        public bool IsAvailable => !string.IsNullOrEmpty(CoreAccount.UnifiedUserId) || CoreAccount.HasPremiumAccess;
 
         /// <summary>
         /// Daily requests remaining (client-side tracking)
         /// </summary>
         public int DailyRequestsRemaining => Companion.CompanionExperience.IsV2Enabled
-            ? _previewQuota.Remaining(App.UnifiedUserId, DateTimeOffset.UtcNow)
+            ? _previewQuota.Remaining(CoreAccount.UnifiedUserId, DateTimeOffset.UtcNow)
             : Math.Max(0, DailyLimit - _dailyRequestCount);
 
-        public AiService()
+        /// <summary>CCP_AI_BASE_URL is honoured only for a loopback host; a CCP_USERDATA_DIR sandbox without
+        /// one gets null, and a null base never sends (fail closed) - tests and Keincheck never reach the real proxy.</summary>
+        internal static string? ResolveBaseUrl(string? overrideUrl, bool sandboxed) =>
+            LoopbackUrl.IsHonoured(overrideUrl, out var u) ? u.GetLeftPart(UriPartial.Path).TrimEnd('/')
+            : sandboxed ? null : ProxyBaseUrl;
+
+        public AiService() : this(ResolveBaseUrl(Environment.GetEnvironmentVariable("CCP_AI_BASE_URL"),
+            !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")))) { }
+
+        internal AiService(string? baseUrl)
         {
             _httpClient = new HttpClient
             {
-                BaseAddress = new Uri(ProxyBaseUrl),
+                BaseAddress = baseUrl == null ? null : new Uri(baseUrl),
                 Timeout = TimeSpan.FromSeconds(30)
             };
-            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", CoreReleaseContent.AppVersion);
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{CoreReleaseContent.AppVersion}");
 
             _bambiSprite = new BambiSprite();
             _lastResetDate = DateTime.Today;
             _dailyRequestCount = 0;
 
-            App.Logger?.Information("AiService initialized (proxy mode, V2 auth or Patreon)");
+            Log.Information("AiService initialized (proxy mode, V2 auth or Patreon)");
         }
 
         /// <summary>
@@ -173,12 +189,12 @@ namespace ConditioningControlPanel.Services
             _ = isUserMessage;
 
             // Offline mode → canned phrase, never an AI reply.
-            if (App.Settings?.Current?.OfflineMode == true)
+            if (CoreSettings.Service?.Current?.OfflineMode == true)
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             if (!IsAvailable)
             {
-                App.Logger?.Debug("AiService: AI not available — user needs to log in for AI chat");
+                Log.Debug("AiService: AI not available — user needs to log in for AI chat");
                 return new AiReplyResult(Loc.Get("ai_login_required_hint"), IsAiGenerated: false, Refusal: null);
             }
 
@@ -302,9 +318,9 @@ namespace ConditioningControlPanel.Services
             string purpose = AiMeter.PurposeChat)
         {
             // Check offline mode first
-            if (App.Settings?.Current?.OfflineMode == true)
+            if (CoreSettings.Service?.Current?.OfflineMode == true)
             {
-                App.Logger?.Debug("AiService: Offline mode enabled, skipping AI request");
+                Log.Debug("AiService: Offline mode enabled, skipping AI request");
                 return null;
             }
 
@@ -320,13 +336,13 @@ namespace ConditioningControlPanel.Services
 
             // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass).
             // Runs BEFORE the HTTP request so prohibited inputs never leave the client.
-            var guard = App.ModerationGuard;
+            var guard = CoreModerationLog.Guard;
             if (guard != null)
             {
                 var inputCheck = guard.CheckInput(userInput ?? string.Empty);
                 if (!inputCheck.Allow && inputCheck.Category.HasValue)
                 {
-                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
+                    CoreModerationLog.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
                     // Only escalate the user-facing Content Policy Notice for content the
                     // user actually typed. returnRefusalSentinel is true only on the
                     // interactive chat path; every background/auto reaction (awareness,
@@ -334,15 +350,15 @@ namespace ConditioningControlPanel.Services
                     // the warning — that filtering is "on us, not on them". The hit is
                     // still logged above for the CCBill compliance record either way.
                     if (returnRefusalSentinel)
-                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:cloud");
-                    App.Logger?.Information("AiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                        CoreModerationLog.Counter?.RecordHit(inputCheck.Category.Value, "input:cloud");
+                    Log.Information("AiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
                     Meter(AiMeter.OutcomeRefusedInput);
                     return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
                 }
                 // ProfessionalAdvice is soft (Allow=true with Category set) — log only.
                 if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
                 {
-                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: "cloud");
+                    CoreModerationLog.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: "cloud");
                 }
             }
 
@@ -375,17 +391,17 @@ namespace ConditioningControlPanel.Services
                 var outputCheck = guard.CheckOutput(sanitized ?? string.Empty);
                 if (!outputCheck.Allow && outputCheck.Category.HasValue)
                 {
-                    App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
+                    CoreModerationLog.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
                     // Model OUTPUT that trips the filter is never the user's doing, so
                     // it does NOT escalate the Content Policy Notice (logged above for
                     // compliance only). The warning is reserved for user-typed input.
-                    App.Logger?.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                    Log.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                     Meter(AiMeter.OutcomeRefusedOutput, raw.Length);
                     return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
                 }
                 if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
                 {
-                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
+                    CoreModerationLog.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
                 }
             }
 
@@ -431,8 +447,13 @@ namespace ConditioningControlPanel.Services
             // Check access (cloud identity or Patreon)
             if (!IsAvailable)
             {
-                App.Logger?.Debug("AiService: No AI access - HasCloudIdentity={Cloud}, HasAiAccess={HasAi}",
-                    App.HasCloudIdentity, App.Patreon?.HasAiAccess);
+                Log.Debug("AiService: No AI access - HasCloudIdentity={Cloud}, HasAiAccess={HasAi}",
+                    !string.IsNullOrEmpty(CoreAccount.UnifiedUserId), CoreAccount.HasPremiumAccess);
+                return new ProxyPostResult(ProxyOutcome.Skipped, null);
+            }
+            if (_httpClient.BaseAddress == null)
+            {
+                Log.Debug("AiService: sandboxed profile without a loopback CCP_AI_BASE_URL - not sending");
                 return new ProxyPostResult(ProxyOutcome.Skipped, null);
             }
 
@@ -441,13 +462,13 @@ namespace ConditioningControlPanel.Services
             {
                 _dailyRequestCount = 0;
                 _lastResetDate = DateTime.Today;
-                App.Logger?.Debug("AiService: Daily request count reset");
+                Log.Debug("AiService: Daily request count reset");
             }
 
             // Circuit breaker check (client-side backup)
             if (options?.CompanionV2 != true && _dailyRequestCount >= DailyLimit)
             {
-                App.Logger?.Debug("AiService: Daily limit reached ({Limit} requests)", DailyLimit);
+                Log.Debug("AiService: Daily limit reached ({Limit} requests)", DailyLimit);
                 return new ProxyPostResult(ProxyOutcome.Skipped, null);
             }
 
@@ -458,8 +479,8 @@ namespace ConditioningControlPanel.Services
                 HttpResponseMessage? response;
 
                 // Try V2 auth first (unified_id + X-Auth-Token) — free for all cloud users
-                var unifiedId = App.UnifiedUserId;
-                var authToken = App.Settings?.Current?.AuthToken;
+                var unifiedId = CoreAccount.UnifiedUserId;
+                var authToken = CoreSettings.Service?.Current?.AuthToken;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
                     var v2Request = new V2ChatRequest
@@ -480,12 +501,12 @@ namespace ConditioningControlPanel.Services
                     v2Msg.Content = JsonContent.Create(v2Request);
 
                     response = await _httpClient.SendAsync(v2Msg, cancellationToken);
-                    await MergedAccountRecovery.TryHandleAsync(response);   // contract D
+                    if (MergedAccountHook != null) await MergedAccountHook(response);   // contract D
 
                     // If V2 endpoint not deployed yet (404), fall back to legacy Patreon auth
                     if (response.StatusCode == System.Net.HttpStatusCode.NotFound && options?.CompanionV2 != true)
                     {
-                        App.Logger?.Debug("AiService: V2 endpoint not available, trying legacy auth");
+                        Log.Debug("AiService: V2 endpoint not available, trying legacy auth");
                         response.Dispose();
                         response = await SendLegacyRequestAsync(messages, maxTokens, temperature, purposeWire, cancellationToken);
                         if (response == null) return new ProxyPostResult(ProxyOutcome.Error, null);
@@ -502,13 +523,13 @@ namespace ConditioningControlPanel.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorText = await response.Content.ReadAsStringAsync(cancellationToken);
-                    App.Logger?.Warning("AiService: Proxy returned {Status} ({Bytes} bytes)",
+                    Log.Warning("AiService: Proxy returned {Status} ({Bytes} bytes)",
                         response.StatusCode, errorText.Length);
                     if (options?.CompanionV2 == true)
                     {
                         var failure = CompanionProxyContract.ReadFailure((int)response.StatusCode, errorText);
                         var quota = CompanionProxyContract.ReadQuota(errorText, options.RequestId);
-                        if (quota != null) _previewQuota.Update(unifiedId, App.UnifiedUserId, quota.RequestsRemaining, quota.ResetsAt);
+                        if (quota != null) _previewQuota.Update(unifiedId, CoreAccount.UnifiedUserId, quota.RequestsRemaining, quota.ResetsAt);
                         response.Dispose();
                         return new ProxyPostResult(ProxyOutcome.Error, null, Failure: failure.Failure,
                             Retryable: failure.Retryable, RequestId: options.RequestId, Refusal: failure.Refusal);
@@ -528,7 +549,7 @@ namespace ConditioningControlPanel.Services
 
                 if (result == null || !string.IsNullOrEmpty(result.Error))
                 {
-                    App.Logger?.Warning("AiService: Proxy error: {Error}", result?.Error);
+                    Log.Warning("AiService: Proxy error: {Error}", result?.Error);
                     return new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
@@ -537,13 +558,13 @@ namespace ConditioningControlPanel.Services
 
                 if (string.IsNullOrEmpty(result.Content))
                 {
-                    App.Logger?.Warning("AiService: Empty response from proxy");
+                    Log.Warning("AiService: Empty response from proxy");
                     return new ProxyPostResult(ProxyOutcome.Empty, null);
                 }
 
                 if (options?.CompanionV2 == true)
                 {
-                    _previewQuota.Update(unifiedId, App.UnifiedUserId, result.RequestsRemaining, result.ResetsAt);
+                    _previewQuota.Update(unifiedId, CoreAccount.UnifiedUserId, result.RequestsRemaining, result.ResetsAt);
                 }
 
                 // Update remaining count if provided by server (server is authoritative)
@@ -552,11 +573,11 @@ namespace ConditioningControlPanel.Services
                     // Server tells us how many requests remain - calculate our count from that
                     var serverLimit = Math.Max(DailyLimit, _dailyRequestCount + result.RequestsRemaining.Value);
                     _dailyRequestCount = serverLimit - result.RequestsRemaining.Value;
-                    App.Logger?.Debug("AiService: Server says {Remaining} remaining, calculated count={Count}",
+                    Log.Debug("AiService: Server says {Remaining} remaining, calculated count={Count}",
                         result.RequestsRemaining.Value, _dailyRequestCount);
                 }
 
-                App.Logger?.Information("AiService: Got reply ({RequestCount}/{Limit} today, {Remaining} remaining)",
+                Log.Information("AiService: Got reply ({RequestCount}/{Limit} today, {Remaining} remaining)",
                     _dailyRequestCount, DailyLimit, DailyRequestsRemaining);
 
                 // #739: "companion spits out gibberish" could not be diagnosed from a user's log,
@@ -567,7 +588,7 @@ namespace ConditioningControlPanel.Services
                 // rides along in every bug report (LogPipeline has no level floor on that sink), so
                 // the reply itself would leave the machine. Garbage-on-arrival is still readable
                 // from the shape - a reply full of U+FFFD or control characters is the provider's.
-                App.Logger?.Debug("AiService: raw reply shape: {Length} chars, {Garbled} garbled, {Lines} lines",
+                Log.Debug("AiService: raw reply shape: {Length} chars, {Garbled} garbled, {Lines} lines",
                     result.Content?.Length ?? 0, CountGarbledChars(result.Content), CountLines(result.Content));
 
                 return new ProxyPostResult(ProxyOutcome.Ok, result.Content,
@@ -576,19 +597,19 @@ namespace ConditioningControlPanel.Services
             }
             catch (TaskCanceledException)
             {
-                App.Logger?.Warning("AiService: Request cancelled or timed out");
+                Log.Warning("AiService: Request cancelled or timed out");
                 return new ProxyPostResult(ProxyOutcome.Error, null,
                     Failure: cancellationToken.IsCancellationRequested ? AiFailureKind.Cancelled : AiFailureKind.Unavailable,
                     Retryable: true);
             }
             catch (HttpRequestException ex)
             {
-                App.Logger?.Warning(ex, "AiService: Network error");
+                Log.Warning(ex, "AiService: Network error");
                 return new ProxyPostResult(ProxyOutcome.Error, null);
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "AiService: Failed to get AI reply");
+                Log.Error(ex, "AiService: Failed to get AI reply");
                 return new ProxyPostResult(ProxyOutcome.Error, null);
             }
         }
@@ -727,7 +748,7 @@ namespace ConditioningControlPanel.Services
             // guaranteed to 400 - and the safety blocks are not ours to shorten to avoid it.
             if (cut.Length > cap)
             {
-                App.Logger?.Warning(
+                Log.Warning(
                     "AiService: cannot salvage the system message - the safety preamble and floor alone are " +
                     "{Chars} chars against a {Cap}-char cap, and neither may be trimmed",
                     cut.Length, cap);
@@ -766,9 +787,9 @@ namespace ConditioningControlPanel.Services
                 options.CompanionV2 ? AiReplyResult.Failed(failure, retryable)
                     : new(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
-            if (App.Settings?.Current?.OfflineMode == true)
+            if (CoreSettings.Service?.Current?.OfflineMode == true)
             {
-                App.Logger?.Debug("AiService.SendAsync: offline mode, skipping AI request");
+                Log.Debug("AiService.SendAsync: offline mode, skipping AI request");
                 return Canned(AiFailureKind.Offline, false);
             }
 
@@ -776,30 +797,30 @@ namespace ConditioningControlPanel.Services
             // we haven't seen before; earlier turns already passed the guard when they were sent,
             // and re-checking them would double-log the compliance record.
             var newestUser = wire.LastOrDefault(m => m.Role == ChatMessage.RoleUser)?.Content ?? string.Empty;
-            var guard = App.ModerationGuard;
+            var guard = CoreModerationLog.Guard;
             if (guard != null)
             {
                 var inputCheck = guard.CheckInput(newestUser);
                 if (!inputCheck.Allow && inputCheck.Category.HasValue)
                 {
-                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
+                    CoreModerationLog.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
                     // Escalate the user-facing Content Policy Notice only for text the user typed.
                     if (options.Interactive)
-                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:cloud");
-                    App.Logger?.Information("AiService.SendAsync: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                        CoreModerationLog.Counter?.RecordHit(inputCheck.Category.Value, "input:cloud");
+                    Log.Information("AiService.SendAsync: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
                     Meter(AiMeter.OutcomeRefusedInput);
                     return new AiReplyResult(string.Empty, IsAiGenerated: false,
                         Refusal: new ModerationRefusalInfo(inputCheck.Category, ModerationSource.Input));
                 }
                 if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
                 {
-                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: "cloud");
+                    CoreModerationLog.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: "cloud");
                 }
             }
 
             if (!IsAvailable)
             {
-                App.Logger?.Debug("AiService.SendAsync: AI not available — user needs to log in for AI chat");
+                Log.Debug("AiService.SendAsync: AI not available — user needs to log in for AI chat");
                 return options.CompanionV2 ? AiReplyResult.Failed(AiFailureKind.SignInRequired)
                     : new AiReplyResult(Loc.Get("ai_login_required_hint"), IsAiGenerated: false, Refusal: null);
             }
@@ -817,7 +838,7 @@ namespace ConditioningControlPanel.Services
                 var compacted = CompactForRetry(wire, RetryHistoryTurns);
                 if (compacted != null)
                 {
-                    App.Logger?.Warning(
+                    Log.Warning(
                         "AiService.SendAsync: proxy rejected the request as input_too_large — retrying with {Before}→{After} message(s)",
                         wire.Length, compacted.Length);
                     meterInputChars = compacted.Sum(m => m.Content?.Length ?? 0);
@@ -825,7 +846,7 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
-                    App.Logger?.Warning(
+                    Log.Warning(
                         "AiService.SendAsync: proxy rejected the request as input_too_large and there is no history left to shed — " +
                         "the system prompt itself is over the 10000-char cap");
                 }
@@ -838,10 +859,10 @@ namespace ConditioningControlPanel.Services
                 if (!options.CompanionV2 && post.Outcome == ProxyOutcome.TooLarge)
                 {
                     var salvaged = SalvageOversizeSystemMessage(
-                        compacted ?? wire, Companion.Brain.PromptAssembler.ProxyHardRejectCap);
+                        compacted ?? wire, ProxyHardRejectCap);
                     if (salvaged != null)
                     {
-                        App.Logger?.Warning(
+                        Log.Warning(
                             "AiService.SendAsync: system message still over the proxy cap after shedding history " +
                             "({Before}->{After} chars) - retrying with the middle of the prompt cut out; " +
                             "the companion is answering with reduced context until the knowledge base or personality is trimmed",
@@ -878,16 +899,16 @@ namespace ConditioningControlPanel.Services
                 var outputCheck = guard.CheckOutput(sanitized ?? string.Empty);
                 if (!outputCheck.Allow && outputCheck.Category.HasValue)
                 {
-                    App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
+                    CoreModerationLog.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
                     // Model output tripping the filter is not the user's doing — no counter hit.
-                    App.Logger?.Information("AiService.SendAsync: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                    Log.Information("AiService.SendAsync: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                     Meter(AiMeter.OutcomeRefusedOutput, raw.Length);
                     return new AiReplyResult(string.Empty, IsAiGenerated: false,
                         Refusal: new ModerationRefusalInfo(outputCheck.Category, ModerationSource.Output));
                 }
                 if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
                 {
-                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
+                    CoreModerationLog.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
                 }
             }
 
@@ -926,7 +947,7 @@ namespace ConditioningControlPanel.Services
             var repaired = AiTextHygiene.TrimCutOffTail(sanitized, maxTokens, out var trimmed);
             if (trimmed)
             {
-                App.Logger?.Warning(
+                Log.Warning(
                     "[AI] cloud reply hit the {Cap}-token cap and stopped mid-sentence - trimmed the dangling " +
                     "fragment ({Before} -> {After} chars)", maxTokens, sanitized.Length, repaired.Length);
                 sanitized = repaired;
@@ -935,7 +956,7 @@ namespace ConditioningControlPanel.Services
             // If sanitization removed everything meaningful, return a fallback
             if (string.IsNullOrWhiteSpace(sanitized))
             {
-                App.Logger?.Warning("AiService: Response was entirely metadata, returning fallback");
+                Log.Warning("AiService: Response was entirely metadata, returning fallback");
                 return GetFallbackResponse();
             }
 
@@ -949,10 +970,10 @@ namespace ConditioningControlPanel.Services
             int maxTokens, double temperature, string? purposeWire,
             System.Threading.CancellationToken cancellationToken = default)
         {
-            var accessToken = App.Patreon?.GetAccessToken();
+            var accessToken = CoreAccount.PatreonAccessToken;
             if (string.IsNullOrEmpty(accessToken))
             {
-                App.Logger?.Warning("AiService: No auth method available (no Patreon token)");
+                Log.Warning("AiService: No auth method available (no Patreon token)");
                 return null;
             }
 

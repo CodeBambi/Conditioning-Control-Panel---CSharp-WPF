@@ -63,6 +63,12 @@ namespace ConditioningControlPanel
         public static volatile Func<bool>? IsWhitelistedProvider;
         public static volatile Func<bool>? HasPremiumAccessProvider;
         public static volatile Func<bool>? HasLabAccessProvider;
+        /// <summary>Patreon OAuth token for the legacy AI proxy auth (WPF App.Patreon.GetAccessToken).</summary>
+        public static volatile Func<string?>? PatreonAccessTokenProvider;
+        public static string? PatreonAccessToken
+        {
+            get { try { return PatreonAccessTokenProvider?.Invoke(); } catch { return null; } }
+        }
 
         /// <summary>
         /// Rename this account on the server. Answers with the name the SERVER settled on, which is
