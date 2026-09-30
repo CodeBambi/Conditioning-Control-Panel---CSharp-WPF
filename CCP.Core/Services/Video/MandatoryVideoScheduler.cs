@@ -18,7 +18,13 @@ namespace ConditioningControlPanel.Services
         void Show(string path, bool strict);
         /// <summary>Close every video window; returns the seconds of the clip that were watched.</summary>
         double CloseAll();
+        /// <summary>WPF ShowMessage: the attention-check verdict over every screen for
+        /// <paramref name="ms"/>, then <paramref name="then"/> on the UI thread.</summary>
+        void ShowMessage(AttentionVerdict verdict, int ms, Action then);
     }
+
+    /// <summary>What an ended clip's attention checks come to (WPF EndCurrentVideo :5955).</summary>
+    public enum AttentionVerdict { None, Pass, Troll, Fail, Mercy }
 
     /// <summary>What a key press does in a mandatory-video window (WPF SetupStrictHandlers).</summary>
     public enum VideoKeyAction { None, Dismiss, ForceStop, Swallow }
@@ -31,7 +37,7 @@ namespace ConditioningControlPanel.Services
     /// (<c>FinalizeWatchCredit</c> :7424) and the strict-key rules. Drawing is the head's
     /// <see cref="IMandatoryVideoHost"/>.
     /// ponytail: local library only - content-pack and remote clips, the duration filter
-    /// (MetadataCache), attention checks, grace pause, cascade/feed/DND/browser-media defers and the
+    /// (MetadataCache), grace pause, cascade/feed/DND/browser-media defers and the
     /// interaction queue are WPF-head services; add each here when it reaches Core.
     /// <para><b>Deliberate deviation:</b> a scheduled tick that finds an empty library re-arms the
     /// schedule. WPF returns from ContinueTriggerVideo (:2424) without ScheduleNext, so its schedule
@@ -54,6 +60,27 @@ namespace ConditioningControlPanel.Services
         private Queue<string> _queue = new();
         private ITimer? _scheduler, _preroll;
         private volatile bool _running, _playing;
+        private int _retryGeneration, _noVideosShown;
+
+        /// <summary>The library came back empty for the first time this launch (WPF's "no videos"
+        /// guidance dialog). Raised on the UI thread.</summary>
+        public event Action? NoVideos;
+
+        /// <summary>Replays forced this run (WPF _penalties); reset by <see cref="End"/>.</summary>
+        public int Penalties { get; private set; }
+        /// <summary>This clip's attention spawns and catches (WPF _spawned / _hits).</summary>
+        public int AttentionSpawned { get; private set; }
+        public int AttentionHits { get; private set; }
+
+        /// <summary>A target batch went up (WPF SpawnTarget's _spawned++).</summary>
+        public void NoteSpawn() => AttentionSpawned++;
+
+        /// <summary>One target of a batch was caught: +15 XP (WPF SpawnTarget onHit).</summary>
+        public void NoteHit()
+        {
+            AttentionHits++;
+            CoreProgression.AddXP(AttentionHitXp, "Video");
+        }
 
         public MandatoryVideoScheduler(IMandatoryVideoHost host, TimeProvider? time = null, Func<IReadOnlyList<string>>? library = null)
         {
@@ -77,6 +104,51 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>WPF GetEffectiveVolume (:1630): master x video, 0-100.</summary>
         public static int EffectiveVolume(int master, int video) => (int)(master / 100.0 * (video / 100.0) * 100);
+
+        /// <summary>WPF: +15 XP per caught target (SpawnTarget onHit).</summary>
+        public const int AttentionHitXp = 15;
+
+        /// <summary>WPF SetupAttention: AttentionDensity targets, or 1..density when randomized.</summary>
+        public static int AttentionTargetCount(int density, bool randomize, Random r)
+        {
+            var max = Math.Max(1, density);
+            return randomize ? r.Next(1, max + 1) : max;
+        }
+
+        /// <summary>WPF SetupAttention: spawn seconds in [3, 3 + max(1, dur-8)], sorted, at least 3 s apart
+        /// (a 0-length clip counts as 60 s).</summary>
+        public static List<double> AttentionSpawnTimes(int total, double durationSeconds, Random r)
+        {
+            var window = Math.Max(1, (durationSeconds > 0 ? durationSeconds : 60) - 8);
+            var t = Enumerable.Range(0, total).Select(_ => 3 + r.NextDouble() * window).OrderBy(x => x).ToList();
+            for (var i = 1; i < t.Count; i++) if (t[i] - t[i - 1] < 3) t[i] = t[i - 1] + 3;
+            return t;
+        }
+
+        /// <summary>WPF EndCurrentVideo: every spawn caught passes (1 in 10 passes is trolled into a
+        /// replay); any miss fails; with no spawn there is no verdict.</summary>
+        public static AttentionVerdict Evaluate(bool enabled, int spawned, int hits, double roll) =>
+            !enabled || spawned <= 0 ? AttentionVerdict.None
+            : hits < spawned ? AttentionVerdict.Fail
+            : roll < 0.1 ? AttentionVerdict.Troll : AttentionVerdict.Pass;
+
+        /// <summary>WPF: a pass pays (replays + 1) x 50 + 200 XP.</summary>
+        public static int AttentionPassXp(int penalties) => (penalties + 1) * 50 + 200;
+
+        /// <summary>WPF NeedsBlurFill: bars (and so the blurred fill) only when the clip's aspect is
+        /// more than 3% off the screen's.</summary>
+        public static bool NeedsBlurFill(double videoAspect, double screenAspect) =>
+            videoAspect > 0 && screenAspect > 0 && Math.Abs(videoAspect / screenAspect - 1.0) > 0.03;
+
+        /// <summary>WPF AttentionTargetVisual.FormatTriggerText: 2 words stack, 4+ words split in two lines.</summary>
+        public static string FormatTriggerText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return text;
+            var w = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (w.Length == 2) return $"{w[0]}\n{w[1]}";
+            if (w.Length >= 4) return string.Join(" ", w.Take(w.Length / 2)) + "\n" + string.Join(" ", w.Skip(w.Length / 2));
+            return text;
+        }
 
         public static bool IsSupportedVideoExtension(string path)
         {
@@ -111,6 +183,7 @@ namespace ConditioningControlPanel.Services
         public void Stop()
         {
             _running = false;
+            _retryGeneration++;   // WPF CancelPendingRetry: a verdict message must not replay after a stop
             Dispose(ref _scheduler);
             ForceCleanup();
             Log.Debug("VideoService stopped");
@@ -151,12 +224,14 @@ namespace ConditioningControlPanel.Services
             var path = PickNext();
             if (path == null)
             {
-                // ponytail: WPF shows the "no videos found" guidance dialog once per launch; logged here.
                 Log.Warning("VideoService: no videos found in the library");
+                // WPF #1124: the guidance dialog once per launch, never per tick.
+                if (Interlocked.Exchange(ref _noVideosShown, 1) == 0) NoVideos?.Invoke();
                 return false;
             }
             IsStrict = strictOverride ?? CoreSettings.Current.StrictLockEnabled;
             _playing = true;
+            AttentionSpawned = AttentionHits = 0;
             CoreFlash.Stop();   // WPF PlayVideo: App.Flash?.Stop()
             var strict = IsStrict;
             Dispose(ref _preroll);
@@ -180,12 +255,55 @@ namespace ConditioningControlPanel.Services
         public void End()
         {
             if (!Finish()) return;
+            AfterEnd();
+        }
+
+        private void AfterEnd()
+        {
+            Penalties = 0;
             if (_running && CoreSettings.Current.FlashEnabled) CoreFlash.Start();
             if (_running) ScheduleNext();
         }
 
+        /// <summary>WPF EndCurrentVideo: the clip played to its end. Scores the attention checks
+        /// (pass XP and achievements); a fail or a troll closes the clip, shows the verdict and plays
+        /// a fresh clip with the same strictness, until the third replay earns mercy
+        /// (MercySystemEnabled), which ends the run like <see cref="End"/>.
+        /// ponytail: no Chaster "video"/"attention" notes and no Trainer companion -25 XP on a fail;
+        /// neither service is on this seam yet.</summary>
+        public void Ended()
+        {
+            if (!_playing) return;
+            var s = CoreSettings.Current;
+            var verdict = Evaluate(s.AttentionChecksEnabled, AttentionSpawned, AttentionHits, _random.NextDouble());
+            if (verdict != AttentionVerdict.None)
+                Log.Information("Attention result: {Hits}/{Spawned} = {Verdict} (replays {Penalties})", AttentionHits, AttentionSpawned, verdict, Penalties);
+            if (verdict is AttentionVerdict.Pass or AttentionVerdict.Troll)
+            {
+                CoreProgression.AddXP(AttentionPassXp(Penalties), "Video");
+                CoreProgression.TrackAttentionCheck(true);
+            }
+            else if (verdict == AttentionVerdict.Fail) CoreProgression.TrackAttentionCheck(false);
+            if (verdict is not (AttentionVerdict.Troll or AttentionVerdict.Fail)) { End(); return; }
+
+            Penalties++;
+            var mercy = Penalties >= 3 && s.MercySystemEnabled;
+            var strict = IsStrict;
+            var gen = ++_retryGeneration;
+            Finish();
+            _host.ShowMessage(mercy ? AttentionVerdict.Mercy : verdict, mercy ? 2500 : 2000, () =>
+            {
+                if (gen != _retryGeneration) return;   // stopped or replaced while the message was up
+                if (mercy || !Trigger(strict)) AfterEnd();
+            });
+        }
+
         /// <summary>WPF ForceCleanup: close without scheduling a replacement.</summary>
-        public void ForceCleanup() => Finish();
+        public void ForceCleanup()
+        {
+            _retryGeneration++;
+            Finish();
+        }
 
         private bool Finish()
         {

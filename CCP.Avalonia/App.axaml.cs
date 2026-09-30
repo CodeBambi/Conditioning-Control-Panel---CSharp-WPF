@@ -386,6 +386,12 @@ namespace ConditioningControlPanel.Avalonia
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 // WPF AchievementService.TrackVideoWatched -> App.Quests.TrackVideoMinutes.
                 CoreProgression.TrackVideoWatchedProvider = sec => Quests?.TrackVideoMinutes(Achievements?.TrackVideoWatched(sec) ?? sec / 60.0);
+                CoreProgression.TrackAttentionCheckProvider = passed =>
+                {
+                    if (passed) { Achievements?.TrackAttentionCheckPassed(isVideo: true); return; }
+                    Achievements?.TrackAttentionCheckFailed();
+                    Achievements?.TrackVideoAttentionCheckFailed();
+                };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
 

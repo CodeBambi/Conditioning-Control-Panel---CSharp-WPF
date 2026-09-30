@@ -37,7 +37,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     {
         private static readonly BouncingTextEngine Engine = new();
         private static readonly List<BouncingTextOverlayWindow> Windows = new();
-        private static bool _running;
+        private static bool _running, _paused;
+        private static int _chain;   // bumped by PauseForVideo: a frame requested before it is dropped
         private static TimeSpan? _last;
         private static Visual? _host;
 
@@ -120,6 +121,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public static void Stop()
         {
             _running = false;
+            _paused = false;
             foreach (var w in Windows) w.Close();
             Windows.Clear();
             Engine.Stop();
@@ -172,8 +174,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static void NextFrame()
         {
             var w = Windows[0];
-            w.RequestAnimationFrame(now => { if (_running && Windows.Count > 0 && Windows[0] == w) OnFrame(now); });
+            var chain = _chain;
+            w.RequestAnimationFrame(now => { if (_running && chain == _chain && Windows.Count > 0 && Windows[0] == w) OnFrame(now); });
         }
+
+        /// <summary>WPF OnVideoStartedPause / OnVideoEndedResume: a mandatory video sleeps the loop and
+        /// hides the text, unless Show Over Videos (BouncingTextAlwaysOnTop) is on. Resuming re-baselines
+        /// dt, and its first frame shows the windows again.</summary>
+        internal static void PauseForVideo(bool pause)
+        {
+            if (!_running || _paused == pause || (pause && CoreSettings.Current.BouncingTextAlwaysOnTop)) return;
+            _paused = pause;
+            _chain++;
+            Log.Information("Bouncing text {State} for a mandatory video", pause ? "paused" : "resumed");
+            if (pause) { foreach (var w in Windows) X11Overlay.SetOpacity(w, 0); return; }
+            _last = null;
+            NextFrame();
+        }
+
+        internal static bool IsPaused => _paused;
 
         private static void OnFrame(TimeSpan now)
         {

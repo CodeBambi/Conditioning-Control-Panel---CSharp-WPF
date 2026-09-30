@@ -246,29 +246,7 @@ namespace ConditioningControlPanel.Services
         /// - 4+ words: 2 lines with words split evenly
         /// - 1 word or 3 words: keep as-is
         /// </summary>
-        internal static string FormatTriggerText(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return text;
-
-            var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-            if (words.Length == 2)
-            {
-                // 2 words: stack vertically
-                return $"{words[0]}\n{words[1]}";
-            }
-            else if (words.Length >= 4)
-            {
-                // 4+ words: split into 2 lines
-                int mid = words.Length / 2;
-                var line1 = string.Join(" ", words.Take(mid));
-                var line2 = string.Join(" ", words.Skip(mid));
-                return $"{line1}\n{line2}";
-            }
-
-            // 1 or 3 words: keep as-is
-            return text;
-        }
+        internal static string FormatTriggerText(string text) => MandatoryVideoScheduler.FormatTriggerText(text);
 
         internal static void PlayPopSound()
         {
