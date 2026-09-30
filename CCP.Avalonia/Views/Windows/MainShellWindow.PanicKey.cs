@@ -62,7 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 && SettingsPaletteWindow.TryConsumeEscape();
             var rung = PanicPolicy.Decide(lockCardOpen, paletteClaimed, PanicPolicy.OverrideEnabled(s));
             Serilog.Log.Information("Panic key pressed ({Rung})", rung);
-            if (rung == PanicPolicy.Rung.DismissLockCard) StopLockCards();
+            if (rung == PanicPolicy.Rung.DismissLockCard) { StopLockCards(); StopCameraForPanic(); }
             if (!PanicPolicy.StopsSurfaces(rung)) return;
             // WPF #735: with PanicOverridesAll off (RunLadder), the first press over a playing mandatory
             // video grace-pauses it instead (TryGracePause refuses when panic overrides all), and the
@@ -70,9 +70,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (rung == PanicPolicy.Rung.RunLadder && Views.Overlays.MandatoryVideoOverlay.Instance.TryGracePause(fromPanicKey: true))
             {
                 Serilog.Log.Information("Panic press consumed as video grace pause");
+                StopCameraForPanic();
                 return;
             }
             bool wasRunning = CoreEngine.IsRunning;
+            // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
+            Views.Overlays.BlinkTrainerSession.Stop();
             // WPF RunPanicStopTail: StopEngine while running, StopAdHocEffects otherwise - both are
             // CoreEngine.Stop here (it stops everything either way) and neither unticks a flag.
             // WPF PanicStopEverySurface (MainWindow.xaml.cs:1992): the toys go to zero first, bypassing
@@ -81,6 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             StopAutonomyForPanic();   // WPF KillAllAudio -> Autonomy.Stop: panic stops Takeover (decisions 2026-09-30)
             StopEngine();
             StopLockCards();   // WPF StopAdHocEffects: App.LockCard.Stop(dismissOpenCards: true)
+            StopCameraForPanic();
             if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop
 
             if ((now - _lastPanicTime).TotalMilliseconds > 2000) _panicPressCount = 0;
@@ -88,8 +92,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_panicPressCount >= 2)
             {
                 Serilog.Log.Information("Double panic! Exiting application...");
-                RequestExit();
+                ExitWithoutBill();   // WPF MainWindow.xaml.cs:1841 shuts down directly, no bill
             }
+        }
+
+        /// <summary>Decision C (docs/avalonia-decisions.md, panic and the camera; deliberate WPF deviation):
+        /// every panic press that is not a palette-claimed Escape closes the camera, after the audio and
+        /// overlay teardown. Fire-and-forget: Stop can block up to 5 s on a wedged driver. Consent,
+        /// calibration, device choice and settings are kept. The Blink Trainer session is stopped with
+        /// it (it has nothing to swap on without blinks), which also cancels a queued session start;
+        /// the tracker's own generation stops a start already in flight from publishing its camera.</summary>
+        internal static void StopCameraForPanic()
+        {
+            Views.Overlays.BlinkTrainerSession.Stop();
+            var tracker = Platform.WebcamTracker.Instance;
+            bool on = tracker.IsRunning || tracker.IsStarting;
+            _ = tracker.StopAsync();
+            if (on) App.Notifications.Show(Loc.Get("panic_camera_stopped"), Helpers.NotificationType.Info, TimeSpan.FromSeconds(5));
         }
 
         // ---- Native Wayland windows: the GlobalShortcuts portal, bound only while effects run ----
@@ -102,7 +121,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static DispatcherTimer? _portalWatch;
 
         private static bool AnyEffectRunning =>
-            CoreEngine.IsRunning || CoreFlash.IsRunning || CoreSubliminal.IsRunning || BouncingTextOverlay.IsRunning;
+            CoreEngine.IsRunning || CoreFlash.IsRunning || CoreSubliminal.IsRunning || BouncingTextOverlay.IsRunning
+            || Views.Overlays.BlinkTrainerSession.IsRunning;
 
         /// <summary>Every desktop-effect start goes through here. <paramref name="start"/> must re-check
         /// that the effect is still wanted: it can run up to 30 s later, after a panic or an untick.</summary>

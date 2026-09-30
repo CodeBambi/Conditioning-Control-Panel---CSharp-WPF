@@ -2970,6 +2970,7 @@
   "tooltip_change_camera_shortcut": "点击更改摄像头快捷键",
   "camera_shortcut_toast_started": "摄像头跟踪已开始",
   "camera_shortcut_toast_stopped": "摄像头跟踪已停止",
+  "panic_camera_stopped": "摄像头已停止。开始跟踪即可恢复。",
   "dialog_chat_shortcut_capture_title": "设置聊天快捷键",
   "dialog_chat_shortcut_capture_prompt": "按下你想用来打开聊天输入框的按键组合",
   "dialog_chat_shortcut_capture_hint": "使用任意修饰键（Ctrl/Alt/Shift）加一个按键。Esc取消",

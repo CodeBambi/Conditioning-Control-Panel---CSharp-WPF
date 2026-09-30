@@ -46,6 +46,27 @@ namespace ConditioningControlPanel.Services
             return gifs > 0 ? $"{pack.ImagePaths.Count - gifs} images, {gifs} GIFs" : $"{pack.ImagePaths.Count} images";
         }
 
+        /// <summary>Cap on how many tiles an overlay lays out (keeps decode cost sane on extreme aspects).</summary>
+        public const int MaxTiles = 6;
+
+        /// <summary>
+        /// The session overlay's tile grid for an image on a screen: a portrait image on a wide screen
+        /// tiles across, a panorama tiles down, and aspects within 5% show once (Uniform fit). Lifted
+        /// out of WPF BlinkTrainerService.ApplyAsset/ApplyAssetMixed, which delegate here.
+        /// </summary>
+        public static (int Cols, int Rows) TileGrid(double imageAspect, double screenAspect)
+        {
+            int cols = 1, rows = 1;
+            if (imageAspect > 0)
+            {
+                if (imageAspect < screenAspect * 0.95)
+                    cols = Math.Min(MaxTiles, Math.Max(1, (int)Math.Ceiling(screenAspect / imageAspect)));
+                else if (imageAspect > screenAspect * 1.05)
+                    rows = Math.Min(MaxTiles, Math.Max(1, (int)Math.Ceiling(imageAspect / screenAspect)));
+            }
+            return (cols, rows);
+        }
+
         /// <summary>A folder card's title: the basename, else the directory name, else the path.</summary>
         public static string FolderDisplayName(string folder)
         {

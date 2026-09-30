@@ -487,6 +487,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 return;
             }
 
+            // The far side of the first run (WPF FirstRunWizard.xaml.cs:502): ten minutes in which
+            // passive surfaces go to the Inbox instead of popping.
+            Platform.StartupLadder.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10));
+
             if (wizard.StartTourRequested)
             {
                 // The SHORT WALK, not the door-by-door tour: seven cards, about ninety seconds,
@@ -511,7 +515,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (CoreSettings.Current.HasAcceptedAgeVerification) return;
                 HandBackFirstRun(reason);
                 Log.Information("[FirstRun] The 18+ gate was never accepted ({Reason}) - shutting down rather than running ungated", reason);
-                owner.RequestExit();
+                owner.ExitWithoutBill();   // WPF FirstRunWizard.xaml.cs:443 Shutdown, no bill
             }
             catch (Exception ex) { Log.Warning(ex, "[FirstRun] Could not stop an ungated launch"); }
         }

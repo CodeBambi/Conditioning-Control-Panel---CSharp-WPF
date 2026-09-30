@@ -399,16 +399,8 @@ public class BlinkTrainerService : IDisposable
             ? ov.Window.ActualWidth / ov.Window.ActualHeight
             : 16.0 / 9.0;
 
-        // Compute tile count. 5% deadband = aspects already match closely
-        // enough that a single Uniform fit looks fine.
-        int cols = 1, rows = 1;
-        if (imageAspect > 0)
-        {
-            if (imageAspect < screenAspect * 0.95)
-                cols = Math.Min(MaxTiles, Math.Max(1, (int)Math.Ceiling(screenAspect / imageAspect)));
-            else if (imageAspect > screenAspect * 1.05)
-                rows = Math.Min(MaxTiles, Math.Max(1, (int)Math.Ceiling(imageAspect / screenAspect)));
-        }
+        // Tile count (Core, shared with the Avalonia head). 5% deadband = aspects already match.
+        var (cols, rows) = BlinkTrainerState.TileGrid(imageAspect, screenAspect);
 
         // Single-tile path: Uniform fit, no cropping.
         if (cols == 1 && rows == 1)
@@ -466,14 +458,7 @@ public class BlinkTrainerService : IDisposable
             ? ov.Window.ActualWidth / ov.Window.ActualHeight
             : 16.0 / 9.0;
 
-        int cols = 1, rows = 1;
-        if (leadAspect > 0)
-        {
-            if (leadAspect < screenAspect * 0.95)
-                cols = Math.Min(MaxTiles, Math.Max(1, (int)Math.Ceiling(screenAspect / leadAspect)));
-            else if (leadAspect > screenAspect * 1.05)
-                rows = Math.Min(MaxTiles, Math.Max(1, (int)Math.Ceiling(leadAspect / screenAspect)));
-        }
+        var (cols, rows) = BlinkTrainerState.TileGrid(leadAspect, screenAspect);
 
         // Single-tile path (aspects match): just show the lead with Uniform fit.
         if (cols == 1 && rows == 1)
@@ -827,9 +812,6 @@ public class BlinkTrainerService : IDisposable
         // once the hwnd is valid; stopped/released in Cleanup.
         public DispatcherTimer? ZOrderTimer { get; set; }
     }
-
-    /// <summary>Cap on how many tiles we'll lay out (keeps GIF/CPU cost sane on extreme aspects).</summary>
-    private const int MaxTiles = 6;
 
     // ─── Win32 interop ───────────────────────────────────────────────────────
     private const int GWL_EXSTYLE = -20;

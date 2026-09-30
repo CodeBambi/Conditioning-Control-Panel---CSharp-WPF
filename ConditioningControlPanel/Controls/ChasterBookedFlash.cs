@@ -60,7 +60,7 @@ namespace ConditioningControlPanel.Controls
                 FontFamily = Services.UI.FontGuard.Mono,
                 FontSize = 15,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(plan.Colour),
+                Foreground = new SolidColorBrush(plan.Colour.Wpf()),
                 TextAlignment = TextAlignment.Center,
                 RenderTransform = _lift,
                 IsHitTestVisible = false,
@@ -168,5 +168,11 @@ namespace ConditioningControlPanel.Controls
             _figure.Arrange(new Rect(new Point(x, y), size));
             return finalSize;
         }
+    }
+
+    /// <summary>BookedFlashPlan colours live in Core as 0xAARRGGBB; this is the WPF brush colour.</summary>
+    internal static class BookedFlashColour
+    {
+        internal static Color Wpf(this uint argb) => Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
     }
 }

@@ -745,6 +745,7 @@
   "tooltip_change_camera_shortcut": "Clique para alterar o atalho da câmera",
   "camera_shortcut_toast_started": "Rastreamento de câmera iniciado",
   "camera_shortcut_toast_stopped": "Rastreamento de câmera parado",
+  "panic_camera_stopped": "Câmera parada. Inicie o rastreamento para retomar.",
   "btn_confirm": "Confirmar",
   "btn_save": "Salvar",
   "btn_close": "Fechar",

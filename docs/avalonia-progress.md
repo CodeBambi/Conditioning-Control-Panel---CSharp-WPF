@@ -1102,3 +1102,31 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - CompanionBrain slice 3: MemorySignalWriter moved to Core (head sources via SourcesHook/DeferredSourcesHook, WPF wiring unchanged);
   Core MandatoryVideoScheduler.VideoStarted; Avalonia seeds SignalMirrorFactory (profile, level-ups, feature use, video starts, chat turns).
 - Evidence: MemorySignalSeedTests + VideoStarted test, fail-proven x3; live memory.json profile. Row stays stub (bark echo, mantra/drain/wipe).
+
+## avalonia-port/inbox-flyout: +612
+- InboxItem/StartupQueueCore moved to Core; new Core StartupInbox (WPF StartupPresenter delegates). Avalonia StartupLadder parks passive
+  cards (programs intro, wardrobe toasts) through the Core quiet rule; shell badge (99+, hidden at 0) opens InboxFlyout.
+- Evidence: InboxFlyoutTests (3, fail-proven); render-all. ctrl-inbox-flyout wired, shell-inbox stub.
+
+## avalonia-port/chaos-hub-state: +272
+- Chaos slice 1: ChaosMetaStore + ChaosRanks moved to Core (WPF ChaosMeta delegates). Avalonia slot picker shows real saves/ranks/locks,
+  erase with WPF confirm, persists the chosen slot; hub balances/rank/stats read the active save; overlay uses the Core ranks.
+- Evidence: ChaosMetaStoreTests (incl. legacy migration), ChaosHubStateTests, fail-proven. Rows stay stub (no opener, shelves, ChaosModeService, waves).
+
+## avalonia-port/blink-trainer-session: +777
+- Webcam slice 3 part 1: Blink Trainer session on Avalonia (click-through overlay per screen, swap per blink, looped video, auto-stop,
+  haptic, quest credit), tab Start/Stop/countdown/preview, CoreWebcam seeded (Devices Start tracking/Privacy/Revoke). Merge with part 2.
+
+## avalonia-port/blink-trainer-session-safety: +338
+- Blink Trainer review fixes (revoke deletes calibration, close-to-tray stop, panic during start, cached preview pool, haptic off-thread) and
+  the oracle-deep decision: every panic and the tray Stop everything also stop the camera (consent kept, notice shown). Fail-proven.
+
+## avalonia-port/chaster-bill: +918
+- Chaster exit bill (tray/Settings Exit; panic, 18+ refusal and ungated first run skip it), import confirm on both preset paths, account badge,
+  booked "+time" flash on the rail padlock (Core BookedFlashPlan). Faked-write secret tests now read an empty store, never the keyring.
+- Evidence: ChasterBillTests (7, fail-proven), headless frames. Rows wired x4, receipt stub. No Keincheck run.
+
+## avalonia-port/mantra-service: +499
+- MantraService moved to Core (WPF seeds XP/quest/Chaster seams); Avalonia MantraWindow on App.Mantra with synthesised tones and a LibVLC
+  drone at WPF's volumes; exit cleanup; mantra favourite in memory signals.
+- Evidence: MantraServiceTests, MantraWindowSessionTests, fail-proven. win-mantra stays stub (no opener, animations).

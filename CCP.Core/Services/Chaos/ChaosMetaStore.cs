@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -35,7 +36,25 @@ public static class ChaosMetaStore
 
     /// <summary>The currently-selected slot (1-3), read from settings. Falls back to slot 1
     /// before settings have loaded.</summary>
-    public static int ActiveSlot => Clamp(App.Settings?.Current?.ChaosActiveSlot ?? 1);
+    public static int ActiveSlot => Clamp(CoreSettings.Current.ChaosActiveSlot);
+
+    /// <summary>Remember the live slot in settings (the settings half of ChaosMeta.SwitchSlot,
+    /// which then reloads state; a head without ChaosMeta only needs this half).</summary>
+    public static int SetActiveSlot(int slot)
+    {
+        slot = Clamp(slot);
+        CoreSettings.Current.ChaosActiveSlot = slot;
+        CoreSettings.Save();
+        return slot;
+    }
+
+    /// <summary>Headline stats for every slot, for the pre-descent picker. Pure read.</summary>
+    public static System.Collections.Generic.List<SlotSummary> AllSummaries()
+    {
+        var list = new System.Collections.Generic.List<SlotSummary>();
+        for (int s = 1; s <= SlotCount; s++) list.Add(ReadSummary(s));
+        return list;
+    }
 
     private static int Clamp(int slot) => slot < 1 || slot > SlotCount ? 1 : slot;
 
@@ -54,7 +73,7 @@ public static class ChaosMetaStore
             var state = LoadFromPath(SlotFilePath(slot));
             if (state == null)
             {
-                App.Logger?.Warning("ChaosMetaStore: slot {Slot} parsed to null; using fresh meta state", slot);
+                Log.Warning("ChaosMetaStore: slot {Slot} parsed to null; using fresh meta state", slot);
                 return new ChaosMetaState();
             }
             state.PurchasedUpgrades ??= new();
@@ -71,7 +90,7 @@ public static class ChaosMetaStore
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("ChaosMetaStore.Load(slot {Slot}) failed ({Error}); using fresh meta state", slot, ex.Message);
+            Log.Warning("ChaosMetaStore.Load(slot {Slot}) failed ({Error}); using fresh meta state", slot, ex.Message);
             return new ChaosMetaState();
         }
     }
@@ -107,7 +126,7 @@ public static class ChaosMetaStore
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("ChaosMetaStore.ReadSummary(slot {Slot}): {E}", slot, ex.Message);
+            Log.Debug("ChaosMetaStore.ReadSummary(slot {Slot}): {E}", slot, ex.Message);
         }
         return summary;
     }
@@ -129,7 +148,7 @@ public static class ChaosMetaStore
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("ChaosMetaStore.Delete(slot {Slot}) failed: {E}", slot, ex.Message);
+            Log.Warning("ChaosMetaStore.Delete(slot {Slot}) failed: {E}", slot, ex.Message);
         }
         return removed;
     }
@@ -143,11 +162,11 @@ public static class ChaosMetaStore
             var slot1 = SlotFilePath(1);
             if (File.Exists(slot1) || !File.Exists(LegacyPath)) return;
             File.Copy(LegacyPath, slot1, overwrite: false);
-            App.Logger?.Information("ChaosMetaStore: migrated legacy chaos_meta.json into slot 1");
+            Log.Information("ChaosMetaStore: migrated legacy chaos_meta.json into slot 1");
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("ChaosMetaStore: legacy->slot1 migration failed: {E}", ex.Message);
+            Log.Warning("ChaosMetaStore: legacy->slot1 migration failed: {E}", ex.Message);
         }
     }
 
@@ -196,7 +215,7 @@ public static class ChaosMetaStore
         {
             state.Gold += refund;
             if (state.GiftGiven) state.GiftGiven = false;   // the gift rode a pocket; re-arm it for the first dial
-            App.Logger?.Information("ChaosMetaStore: v3 migration refunded {Refund} gold for retired pockets", refund);
+            Log.Information("ChaosMetaStore: v3 migration refunded {Refund} gold for retired pockets", refund);
         }
         state.ToyPockets = 0;
         state.AccessoryPockets = 0;
@@ -231,7 +250,7 @@ public static class ChaosMetaStore
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("ChaosMetaStore.Save(slot {Slot}) failed: {Error}", slot, ex.Message);
+            Log.Warning("ChaosMetaStore.Save(slot {Slot}) failed: {Error}", slot, ex.Message);
         }
     }
 }

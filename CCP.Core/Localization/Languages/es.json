@@ -745,6 +745,7 @@
   "tooltip_change_camera_shortcut": "Haz clic para cambiar el atajo de la cámara",
   "camera_shortcut_toast_started": "Seguimiento de cámara iniciado",
   "camera_shortcut_toast_stopped": "Seguimiento de cámara detenido",
+  "panic_camera_stopped": "Cámara detenida. Inicia el seguimiento para continuar.",
   "btn_confirm": "Confirmar",
   "btn_save": "Guardar",
   "btn_close": "Cerrar",

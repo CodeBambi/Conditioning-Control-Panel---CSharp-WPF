@@ -122,7 +122,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnPolicyReadFull")!.Click += (_, _) => BtnPolicyRead_Click();
             this.FindControl<Button>("BtnPolicyReadSlim")!.Click += (_, _) => BtnPolicyRead_Click();
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
-            _btnInstall.Click += (_, _) => BtnInstall_Click();
+            _btnInstall.Click += async (_, _) => await BtnInstall_Click();
             _btnClone.Click += async (_, _) => await BtnClone_Click();
             _btnDeletePreset.Click += async (_, _) => await BtnDeletePreset_Click();
 
@@ -1247,7 +1247,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         // Install / Clone / Close handlers
         // ============================================================
 
-        private void BtnInstall_Click()
+        private async Task BtnInstall_Click()
         {
             // New custom preset must be registered before it can be installed, otherwise
             // KeywordTriggerPresetService.GetPreset returns null. Persist now so the
@@ -1266,7 +1266,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
             else
             {
-                Presets.InstallPreset(_preset.Id);
+                // Lock time in a preset needs a yes first; "no" activates the rest without it (WPF :1231).
+                var allowChaster = await ChasterImportConfirmDialog.AskAsync(this, Presets.ChasterSummary(_preset.Id));
+                Presets.InstallPreset(_preset.Id, allowChaster);
             }
 
             Changed = true;
