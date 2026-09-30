@@ -1,17 +1,19 @@
 import { createHotseat } from './hotseat.js';
 import { soloOptions, saveSolo } from './save.js';
 import { handoffSeconds } from '../ui/turn-handoff.js';
+import { LEVELS, thinkSeconds } from './search.js';
 
 /** A local human seat around the same referee and animation path as two-player play. */
-export function createSolo({ bus, board, hud = null, options = {}, restore = null, workerFactory = () => new Worker(new URL('./solo-worker.js', import.meta.url), { type: 'module' }) }) {
+export function createSolo({ bus, board, hud = null, options = {}, restore = null, thinkTime = thinkSeconds, workerFactory = () => new Worker(new URL('./solo-worker.js', import.meta.url), { type: 'module' }) }) {
   const setup = soloOptions(restore?.options || options);
   const me = restore?.me || (setup.side === 'random' ? (Math.random() < .5 ? 'w' : 'b') : setup.side);
   const local = createHotseat({ bus, board: { ...board, setSide: (_side, instant) => board.setSide(me, instant) }, hud,
     clockMs: setup.clockMs, restore, fen: restore?.fen });
   let worker = null, disposed = false, started = false, pending = false, serial = 0, reply = null, quietFor = 0;
+  let thinkFor = 0, thought = 0, sitting = false;
   const startedAt = Date.now(), elapsed = Number(restore?.durationMs) || 0;
   function record() { return { ...local.record(), mode: 'solo', me, options: setup, fen: restore?.fen,
-    opponent: 'Computer · ' + ({ relaxed: 'Relaxed', club: 'Club', sharp: 'Sharp' }[setup.level]), durationMs: elapsed + Date.now() - startedAt }; }
+    opponent: 'Computer · ' + LEVELS[setup.level].label, durationMs: elapsed + Date.now() - startedAt }; }
   function save() { if (started) saveSolo(record()); }
   function stopThinking() {
     serial++; pending = false;
@@ -22,28 +24,38 @@ export function createSolo({ bus, board, hud = null, options = {}, restore = nul
   function receive(id, fen, move) {
     if (disposed || id !== serial || local.rules.fen() !== fen || local.isOver() || !pending) return;
     reply = { id, fen, move };
-    bus.emit('thinking', { active: false });
   }
   function playReply(dt) {
     if (!pending) return;
     quietFor = board.anim?.busy?.() ? 0 : quietFor + Math.max(0, dt);
-    if (!reply) return;
     const wait = handoffSeconds(local.clock);
     if (local.plies() && wait > 0) {
       if (board.anim?.busy?.()) return;
       if (board.turnHandoff ? !board.turnHandoff.ready() : quietFor < wait) return;
+      // Then it sits over the board a moment, whether or not the worker has answered yet.
+      // The pause starts on the frame after the card clears, so its own dt is not spent twice.
+      if (thinkFor > 0) {
+        if (!sitting) { sitting = true; return; }
+        thought += Math.max(0, dt);
+        if (thought < thinkFor) return;
+      }
     }
+    if (!reply) return;
     if (!wait) board.anim?.skip?.();
     const result = reply;
     reply = null; pending = false;
+    bus.emit('thinking', { active: false });
     if (disposed || result.id !== serial || local.rules.fen() !== result.fen || local.isOver()) return;
     if (result.move) local.tryMove(result.move.from, result.move.to, result.move.promotion || 'q');
     save();
   }
   function think() {
     if (!started || disposed || pending || local.isOver() || local.turn() === me) return;
-    pending = true; quietFor = 0;
+    pending = true; quietFor = 0; thought = 0; sitting = false;
     const id = ++serial, fen = local.rules.fen();
+    let legal = 20;
+    try { legal = local.rules.chess.moves().length; } catch { /* keep the middle figure */ }
+    thinkFor = Math.max(0, Number(thinkTime({ level: setup.level, legal, clock: local.clock, side: local.turn() })) || 0);
     bus.emit('thinking', { active: true });
     // Search while the previous move is still performing; only applying its reply waits.
     const fallback = () => {
