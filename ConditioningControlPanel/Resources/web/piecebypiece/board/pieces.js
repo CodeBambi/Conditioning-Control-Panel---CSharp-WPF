@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { squareToWorld } from './scene.js';
+import { finishSculptSurface } from './sculpt-finish.js';
 
 export const TYPES = ['p', 'n', 'b', 'r', 'q', 'k'];
 export const GLB_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
@@ -326,7 +327,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     else group.remove(piece);
   }
 
-  function move(from, to) {
+  function move(from, to, motion = {}) {
     const piece = bySquare.get(from);
     if (!piece) return null;
     bySquare.delete(from);
@@ -335,7 +336,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     const was = piece.position.clone();
     place(piece, to);
     bySquare.set(to, piece);
-    if (hooks.onMoved) hooks.onMoved(piece, was, squareToWorld(from, 0));
+    if (hooks.onMoved) hooks.onMoved(piece, was, squareToWorld(from, 0), motion);
     jiggle?.follow?.(piece);
     return piece;
   }
@@ -417,6 +418,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     if (!meshes.length) return null;
     let body = meshes.findIndex((m) => m.geometry.attributes.color);
     if (body < 0) body = 0;
+    finishSculptSurface(meshes[body].geometry);
     let height = 0;
     for (const m of meshes) if (m.geometry.boundingBox) height = Math.max(height, m.geometry.boundingBox.max.y);
     return {

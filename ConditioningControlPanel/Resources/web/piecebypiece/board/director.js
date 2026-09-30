@@ -502,9 +502,9 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
       if (rec && !rec.victim && !rec.started) { rec.victim = piece; rec.objs.add(piece); }
       return baseCaptured?.(piece);
     };
-    hooks.onMoved = (piece, was, origin) => {
+    hooks.onMoved = (piece, was, origin, motion) => {
       const to = piece.position.clone(), from = (origin || was).clone();
-      const r = baseMoved?.(piece, was, origin);
+      const r = baseMoved?.(piece, was, origin, motion);
       noteMove(piece, from, to);
       return r;
     };

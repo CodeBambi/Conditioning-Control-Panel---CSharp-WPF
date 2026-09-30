@@ -24,6 +24,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { sculptOutlineGeometry } from './sculpt-finish.js';
 import { SILICONE_GLSL } from './silicone.js';
 import { TUNING as J } from './jiggle.js';
 
@@ -147,7 +148,7 @@ export function createOutline({ group, bus = null }) {
   }
 
   function hullMaterial(u, color, flipped = false) {
-    const mat = new THREE.MeshBasicMaterial({ color, side: flipped ? THREE.FrontSide : THREE.BackSide, fog: false, toneMapped: false });
+    const mat = new THREE.MeshBasicMaterial({ color, side: flipped ? THREE.FrontSide : THREE.BackSide, depthWrite: false, fog: false, toneMapped: false });
     const own = { uWidth: { value: T.widthPx }, uSign: { value: flipped ? -1 : 1 } };
     mat.userData.pbpHull = own;
     mat.onBeforeCompile = (shader) => {
@@ -194,12 +195,15 @@ export function createOutline({ group, bus = null }) {
     piece.traverse((o) => { if (o.isMesh && o.geometry && !o.userData.pbpHull && o !== patch) sources.push(o); });
     for (const src of sources) {
       const mat = hullMaterial(u, base, insideOut(src.geometry));
-      const hull = new THREE.Mesh(src.geometry, mat);
+      const hull = new THREE.Mesh(sculptOutlineGeometry(src.geometry), mat);
       hull.userData.pbpHull = true;
       hull.castShadow = false;
       hull.receiveShadow = false;
       hull.raycast = () => {};          // the line is never something you can grab
-      hull.renderOrder = -1;            // inked first; the skin paints over the inside
+      // Board first, then ink, then skin. The hull must not write depth:
+      // expanded concave folds otherwise punch dark flecks through pale paint.
+      hull.renderOrder = 1;
+      src.renderOrder = 2;
       hull.position.copy(src.position);
       hull.rotation.copy(src.rotation);
       hull.scale.copy(src.scale);

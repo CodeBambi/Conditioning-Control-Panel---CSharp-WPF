@@ -509,9 +509,9 @@ export function createOnlineMatch({
     if (!played) return null;
 
     if (played.capturedSquare && played.capturedSquare !== to) pieces.remove(played.capturedSquare);
-    pieces.move(from, to);
     const hop = rules.rookHop(played);
-    if (hop) pieces.move(hop.from, hop.to);
+    pieces.move(from, to, { castle: !!hop });
+    if (hop) pieces.move(hop.from, hop.to, { castle: true });
     if (played.promotion) pieces.setPosition(rules.position());
 
     if (played.captured) {

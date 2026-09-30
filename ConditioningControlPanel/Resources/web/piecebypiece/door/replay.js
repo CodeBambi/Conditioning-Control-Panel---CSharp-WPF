@@ -22,9 +22,10 @@ export function showReplayStep(board, replay, index, animate = false) {
   if (animate && next === replay.i + 1 && move) {
     const flags = String(move.flags || '');
     if (flags.includes('e')) board.pieces.remove(move.to[0] + move.from[1]);
-    board.pieces.move(move.from, move.to);
-    if (flags.includes('k')) board.pieces.move('h' + move.from[1], 'f' + move.from[1]);
-    if (flags.includes('q')) board.pieces.move('a' + move.from[1], 'd' + move.from[1]);
+    const castle = flags.includes('k') || flags.includes('q');
+    board.pieces.move(move.from, move.to, { castle });
+    if (flags.includes('k')) board.pieces.move('h' + move.from[1], 'f' + move.from[1], { castle });
+    if (flags.includes('q')) board.pieces.move('a' + move.from[1], 'd' + move.from[1], { castle });
     if (move.promotion) board.pieces.setPosition(replay.positions[next]);
   } else board.pieces.setPosition(replay.positions[next]);
   replay.i = next;
