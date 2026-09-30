@@ -93,4 +93,27 @@ public sealed class CatalogueLookupTests : IDisposable
         var failing = Lookup(f, _ => false);
         Assert.IsType<DownloadResult.OpenError>(await failing.DownloadAndOpenAsync(Entry("https://x/e1"), CancellationToken.None));
     }
+
+    /// <summary>The sandbox rule (CatalogueClient.ResolveBaseUrl): a CCP_USERDATA_DIR sandbox with no loopback
+    /// override never sends, lookup or download; a loopback override is where both go, and a non-loopback
+    /// bundle URL is refused under it.</summary>
+    [Fact]
+    public async Task SandboxWithoutAnOverrideSendsNothingAndALoopbackOverrideIsWhereItGoes()
+    {
+        var f = new Fake { Respond = _ => Body("{\"enhancements\":[]}") };
+        var bare = new CatalogueLookup(() => _lib, "9.9.9", null, f, overrideUrl: null, sandboxed: true);
+        Assert.IsType<LookupResult.NetworkError>(await bare.LookupForUrlAsync(HtUrl, CancellationToken.None));
+        Assert.IsType<DownloadResult.NetworkError>(await bare.DownloadAndOpenAsync(Entry("http://127.0.0.1:9/e1"), CancellationToken.None));
+        Assert.Empty(f.Seen);
+        // A non-loopback override is not honoured either.
+        var remote = new CatalogueLookup(() => _lib, "9.9.9", null, f, "https://evil.example", sandboxed: true);
+        Assert.IsType<LookupResult.NetworkError>(await remote.LookupForUrlAsync(HtUrl, CancellationToken.None));
+        Assert.Empty(f.Seen);
+
+        var loop = new CatalogueLookup(() => _lib, "9.9.9", null, f, "http://127.0.0.1:4555", sandboxed: true);
+        Assert.IsType<LookupResult.None>(await loop.LookupForUrlAsync(HtUrl, CancellationToken.None));
+        Assert.StartsWith("http://127.0.0.1:4555/api/enhancements/by-ht-url?url=", Assert.Single(f.Seen).RequestUri!.ToString());
+        Assert.IsType<DownloadResult.NetworkError>(await loop.DownloadAndOpenAsync(Entry("https://app.cclabs.app/e1"), CancellationToken.None));
+        Assert.Single(f.Seen);
+    }
 }

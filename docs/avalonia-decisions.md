@@ -197,3 +197,20 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   NavigateBrowser with the requested URL, so with no web engine nothing is looked up, as on WPF with no browser.
   Headless tests drive the internal WebHost.OnNavigationCompleted seam. IsBrowserShowingKnownSite stays unwritten until
   its caller SyncSiteRadiosToActiveMod is ported. DashboardFold reads no URL, so it is untouched.
+
+## 2026-10-01: sandbox rule for the catalogue lookup; clients still outside it (known gap)
+- CatalogueLookup (by-ht-url lookup and bundle download) now resolves its base URL through CatalogueClient.ResolveBaseUrl:
+  loopback CCP_CATALOGUE_BASE_URL only; a CCP_USERDATA_DIR sandbox without one sends nothing; under a loopback override a
+  non-loopback bundle FileUrl is refused (`CatalogueLookupTests.SandboxWithoutAnOverrideSendsNothingAndALoopbackOverrideIsWhereItGoes`).
+- Known gap, a separate branch will add a shared HTTP-layer guard. These still reach real servers from a sandbox:
+  CCP.Core/Services/BugReportService.cs:24; CCP.Core/Services/Descent/DescentCountdownService.cs:101;
+  CCP.Core/Services/Progression/QuestDefinitionService.cs:20; CCP.Core/Services/Progression/LeaderboardClient.cs:17;
+  CCP.Core/Services/Account/V2AuthService.cs:30; CCP.Core/Services/Account/ProviderSubscription.cs:23;
+  CCP.Core/Services/Account/SyncPush.cs:30; CCP.Core/Services/Account/DiscordAccount.cs:53 (ProviderSubscription.ProxyBaseUrl);
+  CCP.Avalonia/Views/Dialogs/LoginDialog.axaml.cs:58; CCP.Avalonia/Views/Dialogs/UsernamePickerDialog.axaml.cs:49;
+  web views loading fixed hosts (SpiralTabView.axaml.cs:85 embed, MainShellWindow.Browser.cs:77-78 site homes,
+  MainShellWindow.TabNavigation.cs:346).
+  Not audited (HTTP with a caller-supplied URL, so the rule depends on the caller): FriendsApi, ServerClock, HtMetadataFetcher,
+  EnhancementFetcher, GoonContracts, ChasterLadderApi, AnnouncementPopup, MainShellWindow.Marquee, EnhancementPlayerWindow.
+  Already under the rule: CatalogueClient, CatalogueLookup, RemoteRelay, AiService, ReleaseContentService, DailyFreeService,
+  AppUpdater, ChasterHead.

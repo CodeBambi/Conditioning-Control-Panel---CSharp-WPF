@@ -199,6 +199,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             Log.Warning("WebHost: navigation blocked to {Host}{Path}", target.Host, target.AbsolutePath);
         }
 
+        /// <summary>
+        /// Loads <paramref name="url"/> even when it is already the <see cref="Source"/>: WPF #867, clicking
+        /// the site you are on takes you home and Reload reloads. Assigning an equal Source raises no
+        /// change, so it would do nothing. Source is kept in step (the fallback panel names it).
+        /// </summary>
+        public void Navigate(Uri url)
+        {
+            _explicitNavigate = true;
+            try { Source = url; } finally { _explicitNavigate = false; }
+            NavigationRequests++;
+            if (_web is null) return;
+            try { _web.Navigate(url); }
+            catch (Exception ex) { Log.Debug("WebHost: Navigate failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>Count of <see cref="Navigate"/> calls handed to the engine; a headless test's view of it.</summary>
+        internal int NavigationRequests { get; private set; }
+
+        private bool _explicitNavigate;
+
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
@@ -211,7 +231,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             var src = Source;
             // src! because NativeWebView.Source is annotated non-nullable while its StyledProperty's
             // own default IS null - clearing the page back to null is a real state, not a bug.
-            if (_web is not null) { _web.Source = src!; return; }
+            if (_web is not null) { if (!_explicitNavigate) _web.Source = src!; return; }
             // No engine: the panel at least names the page that was meant to load.
             _txtSource.Text = src?.ToString() ?? "";
             _txtSource.IsVisible = src is not null;

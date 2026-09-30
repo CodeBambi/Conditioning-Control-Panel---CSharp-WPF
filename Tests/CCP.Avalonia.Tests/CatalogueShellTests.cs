@@ -133,9 +133,18 @@ public sealed class CatalogueShellTests
                 hypno.IsChecked = true;
                 hypno.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Equal("https://hypnotube.com/", web.Source?.ToString());
+                Assert.Equal(1, web.NavigationRequests);
+                // WPF #867: re-clicking the site you are on, and Reload, navigate again although the URL is equal.
+                hypno.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                tab.FindControl<Button>("BtnReloadBrowser")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(3, web.NavigationRequests);
+
+                // Asking for an HT video looks nothing up: only a completed navigation does.
+                var video = new Uri("https://hypnotube.com/video/sleepy-123.html");
+                Assert.True(shell.NavigateToUrlInBrowser(video.AbsoluteUri));
+                for (var i = 0; i < 20; i++) { Dispatcher.UIThread.RunJobs(); await Task.Delay(5); }
                 Assert.DoesNotContain(fake.Seen, u => u.Contains("by-ht-url"));
 
-                var video = new Uri("https://hypnotube.com/video/sleepy-123.html");
                 web.OnNavigationCompleted(video);
                 Assert.Equal(video, web.CurrentUrl);
                 Assert.Equal(Loc.Get("label_connected_2"), tab.FindControl<TextBlock>("TxtBrowserStatus")!.Text);
