@@ -1085,3 +1085,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   settings service so a queued save cannot land in the next test.
 - Evidence: full CCP.Avalonia.Tests 5 runs in a row green; each fix fail-proven (language switch keeps code text, untouched labels
   still re-localize).
+
+## avalonia-port/webcam-capture + webcam-capture-safety: +921 / +168
+- Detectors (BlazeFace/FaceMesh/Iris) moved to Core FaceModels.cs (WPF delegates). Avalonia WebcamTracker: IFrameSource seam, OpenCV V4L2
+  source (OpenCvSharp4 4.13 + OnnxRuntime 1.20.1; Linux natives only on Linux), frames only in memory, consent at start and every frame,
+  each session owns and always releases its camera, an abandoned loop blocks a new Start until it exits. Blink Trainer tracker toggle.
+- Evidence: WebcamTrackerTests (fake source), fail-proven; ldd clean; tarball +54.1 MB; live with the device unavailable. Never a real camera.
