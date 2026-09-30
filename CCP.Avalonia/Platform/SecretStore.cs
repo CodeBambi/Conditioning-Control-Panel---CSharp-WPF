@@ -29,7 +29,7 @@ internal static class SecretStore
     /// stick. AccountSeed.Logout resets it; the shell tells the user.</summary>
     internal static volatile bool ClearFailed;
 
-    /// <summary>Tests only: replaces the OS write.</summary>
+    /// <summary>Tests only: replaces the OS write, and makes OS reads return an empty store.</summary>
     internal static Func<string, string?, bool>? OsWriteOverride;
 
     /// <summary>A CCP_USERDATA_DIR sandbox (tests, kc) does not isolate the keyring, so it never touches it: memory only.</summary>
@@ -68,8 +68,9 @@ internal static class SecretStore
         NotRemembered = true;
     }
 
+    // A faked OS write means a test owns the store: it never reads the real keyring either (empty store).
     private static (bool Ok, string? Value) OsRead(string name) =>
-        Sandboxed ? (true, null) : OperatingSystem.IsWindows() ? (true, Dpapi.Read(CorePaths.UserData, name))
+        Sandboxed || OsWriteOverride is not null ? (true, null) : OperatingSystem.IsWindows() ? (true, Dpapi.Read(CorePaths.UserData, name))
         : OperatingSystem.IsLinux() ? Libsecret.Read(name) : (true, null);
 
     private static bool OsWrite(string name, string? value) =>
