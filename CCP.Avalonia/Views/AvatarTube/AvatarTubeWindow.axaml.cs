@@ -1152,6 +1152,65 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             });
         }
 
+        private DispatcherTimer? _listeningDotsTimer;
+
+        /// <summary>
+        /// WPF ShowListeningBubble (Speech.cs:702): "she's listening" - the line plus dots animating
+        /// "" -> "." -> ".." -> "..." every 400 ms, taking over any bubble, no voice. Muted: flagged
+        /// only, so Hide stays balanced. The next GigglePriority (the confirmation) replaces it.
+        /// </summary>
+        public void ShowListeningBubble(string text)
+        {
+            RunOnAvatar(() =>
+            {
+                if (_isPlayingUninterruptibleClip) return;
+                _speechTimer?.Stop();
+                _isGiggling = false;
+                _isShowingAiBubble = false;
+                _isListeningBubble = true;
+                if (IsMuted) return;
+                if (_isShowingChatHistory)
+                {
+                    _isShowingChatHistory = false;
+                    _chatHistoryView.IsVisible = false;
+                    _speechScroller.IsVisible = true;
+                }
+                _aiBadge.IsVisible = false;
+                _policyBadge.IsVisible = false;
+                var baseText = text ?? "";
+                _txtSpeech.Text = baseText;
+                _speechBubble.MaxWidth = 380;
+                ApplySpeechBubblePlacement();
+                _speechBubble.IsVisible = true;
+
+                _listeningDotsTimer?.Stop();
+                int step = 0;
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+                timer.Tick += (_, _) =>
+                {
+                    if (!_isListeningBubble) { timer.Stop(); return; }
+                    step = (step + 1) % 4;
+                    _txtSpeech.Text = baseText + new string('.', step);
+                };
+                _listeningDotsTimer = timer;
+                timer.Start();
+            });
+        }
+
+        /// <summary>WPF HideListeningBubble: stop the dots; collapse the bubble only if the
+        /// listening bubble is still the one on screen (a confirmation already took over otherwise).</summary>
+        public void HideListeningBubble()
+        {
+            RunOnAvatar(() =>
+            {
+                _listeningDotsTimer?.Stop();
+                _listeningDotsTimer = null;
+                if (!_isListeningBubble) return;
+                _isListeningBubble = false;
+                _speechBubble.IsVisible = false;
+            });
+        }
+
         /// <summary>
         /// True while the companion is mid-chat: an AI bubble is on screen, or a genuine AI reply
         /// landed within <paramref name="windowMs"/>. The bark system asks this to avoid talking

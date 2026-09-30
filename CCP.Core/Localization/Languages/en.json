@@ -5890,7 +5890,7 @@
   "set2_mic_system_default": "System default",
   "set2_chip_on": "On",
   "set2_chip_off": "Off",
-  "sl_voice_not_on_this_build": "Voice commands aren't available on this build yet, so the mic stays closed. Your wake word and push-to-talk settings are kept.",
+  "sl_mantras_not_on_this_build": "Spoken mantras aren't available on this build yet. Voice commands work: call her, then say a command.",
   "set2_panic_change_in_settings": "Change the panic key in Settings → Devices.",
   "set2_takeover_mic_moved": "Mic & voice control — wake word (\"Hey Bambi\"), push-to-talk and spoken commands — now live in Settings → Devices. They work whether or not Takeover is running.",
   "set2_general_language_title": "Language",

@@ -46,7 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    from <c>CoreSettings.Current</c>, with the mod pack's accent from <c>CoreMods</c>, so a
     ///    recoloured card draws correctly here.
     ///  - <b>Voice solve is wired</b> through the Core SpeechEngine the head seeds
-    ///    (PulseMicSource.Speech). <b>Services still in the WPF head</b>: App.Autonomy (mic hand-off),
+    ///    (PulseMicSource.Speech). <b>Services still in the WPF head</b>:
     ///    App.Progression / App.Achievements / App.LockCard (XP, achievements, completion notify)
     ///    and App.PanicHook (no global keyboard hook exists on this head at all).
     ///
@@ -839,17 +839,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ── Voice solve (speak the phrase) ─────────────────────────────────────
         //
-        // WPF :956-1089, on the Core SpeechEngine. ponytail: no Autonomy mic eviction/restore
-        // (App.Autonomy UserDrivenVoiceArmed / StopVoiceInput / RefreshVoiceInputModes) - no Linux
-        // wake/PTT loop holds the mic yet. A holder that appears later is still covered: its busy
-        // session reads as Unavailable and the card falls back to typing after 6 tries.
+        // WPF :956-1089, on the Core SpeechEngine, with WPF's mic hand-off: an armed wake/PTT loop
+        // (MainShellWindow.VoiceCommands.cs) is stood down for the card's life and re-armed after.
 
         private static SpeechEngine? Speech => Platform.PulseMicSource.Speech;
+        private bool _evictedVoiceInput;
 
         private void StartVoiceSolve()
         {
             if (_voiceListening || !_voiceMode) return;
             _voiceListening = true;
+            if (MainShellWindow.Current is { } shell && (shell.WakeLoopArmed || shell.PushToTalkArmed))
+            {
+                shell.StopVoiceInput();
+                _evictedVoiceInput = true;
+                Serilog.Log.Information("LockCardWindow: claimed mic from the wake/PTT loop for voice solve");
+            }
             _voiceCts = new System.Threading.CancellationTokenSource();
             if (Speech is { } sp)
             {
@@ -873,6 +878,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try { if (Speech?.IsListening == true) Speech.StopListening(); } catch { }
             try { _voiceCts?.Dispose(); } catch { }
             _voiceCts = null;
+            if (_evictedVoiceInput)
+            {
+                _evictedVoiceInput = false;
+                MainShellWindow.Current?.RefreshVoiceInputModes();
+            }
         }
 
         private async Task RunVoiceSolveLoopAsync(System.Threading.CancellationToken ct)
