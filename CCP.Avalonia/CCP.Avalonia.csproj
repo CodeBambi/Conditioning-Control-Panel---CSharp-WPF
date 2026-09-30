@@ -51,6 +51,8 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <!-- Same file sink and version WPF ships (ConditioningControlPanel.csproj:130). -->
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+    <!-- Remote Control pairing QR, same package and version WPF uses (ConditioningControlPanel.csproj:154). -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Windows')))">
