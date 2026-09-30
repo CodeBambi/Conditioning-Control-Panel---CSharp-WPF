@@ -35,6 +35,7 @@
 
 import { buildReplay, showReplayStep, resultLine } from './replay.js';
 import { readSolo, soloOptions } from '../game/save.js';
+import { LEVELS, LEVEL_ORDER } from '../game/search.js';
 import { requestRematch } from '../net/rematch.js';
 import { isHosted, identity, whenIdentity, postToHost, onHostMessage } from '../bridge.js';
 import { createStake, pills as stakePills, stakeLabel, refusalText, sameStake, isNone } from '../net/stake.js';
@@ -162,10 +163,21 @@ export function createDoor(opts = {}) {
     if (screen === 'replay') { const r = body.querySelector('.door-scrub'); if (r) r.addEventListener('input', () => stepReplay(Number(r.value))); }
     for (const input of body.querySelectorAll('[data-setup]')) input.addEventListener('change', () => {
       setup = soloOptions({ ...setup, [input.dataset.setup]: input.value });
-      const label = card.querySelector('[data-act=solo] .k'); if (label) label.textContent = setup.level + ' computer';
+      paintLevel();
     });
     const focus = body.querySelector('.door-btn.primary') || body.querySelector('button');
     if (focus && !still()) later(() => { try { focus.focus({ preventScroll: true }); } catch { /* fine */ } }, 60);
+  }
+
+  /** The solo button and the level row say the same level; a pick repaints both in place. */
+  const levelWord = () => LEVELS[setup.level].label.toLowerCase() + ' computer';
+  function levelHtml() {
+    return `<div class="level-row" role="group" aria-label="Computer strength">${LEVEL_ORDER.map(id => `<button type="button" class="level-pill${id === setup.level ? ' on' : ''}" data-act="level" data-id="${id}" aria-pressed="${id === setup.level}" title="${esc(LEVELS[id].blurb)}">${esc(LEVELS[id].label)}</button>`).join('')}</div>`
+      + `<p class="level-blurb">${esc(LEVELS[setup.level].blurb)}</p>`;
+  }
+  function paintLevel() {
+    const label = card.querySelector('[data-act=solo] .k'); if (label) label.textContent = levelWord();
+    const slot = card.querySelector('.level-slot'); if (slot) slot.innerHTML = levelHtml();
   }
 
   // ---------------------------------------------------------------- stakes
@@ -210,11 +222,11 @@ export function createDoor(opts = {}) {
       <h1 class="door-title"><b>piece by piece</b></h1>
       <p class="door-h">Your next move.</p>
       ${saved ? `<button type="button" class="door-btn primary" data-act="continue">Continue game <span class="k">${esc(fmtMoves(saved.moves.length))}</span></button>` : ''}
-      <button type="button" class="door-btn ${saved ? '' : 'primary'}" data-act="solo">Play solo <span class="k">${esc(setup.level)} computer</span></button>
+      <button type="button" class="door-btn ${saved ? '' : 'primary'}" data-act="solo">Play solo <span class="k">${esc(levelWord())}</span></button>
+      <div class="level-slot">${levelHtml()}</div>
       <button type="button" class="door-btn" data-act="lobby">Play a friend <span class="k">online</span></button>
       <button type="button" class="door-btn" data-act="hotseat">Two players here <span class="k">one board</span></button>
       <details class="door-setup"><summary>Solo setup</summary><div class="door-settings">
-        <label>Opponent<select data-setup="level">${option('relaxed', 'Relaxed - a gentle warm-up', setup.level)}${option('club', 'Club - looks one reply ahead', setup.level)}${option('sharp', 'Sharp - plans further ahead', setup.level)}</select></label>
         <label>Your pieces<select data-setup="side">${option('w', 'White', setup.side)}${option('b', 'Black', setup.side)}${option('random', 'Surprise me', setup.side)}</select></label>
         <label>Clock<select data-setup="clockMs">${option('0', 'Untimed', String(setup.clockMs))}${option('300000', '5 minutes each', String(setup.clockMs))}${option('900000', '15 minutes each', String(setup.clockMs))}</select></label>
         ${saved ? '<p class="door-sub">A new solo game replaces your unfinished one.</p>' : ''}
@@ -562,6 +574,7 @@ export function createDoor(opts = {}) {
       // all for nobody (afterHost); look() reads the quiet rejection as a re-render
       case 'quick': if (screen !== 'lobby') show('lobby'); if (lobby) look(afterHost(() => lobby.quickMatch())); break;
       case 'solo': deal('solo'); break;
+      case 'level': if (LEVELS[id]) { setup = soloOptions({ ...setup, level: id }); paintLevel(); } break;
       case 'continue': { const saved = readSolo(); if (saved) deal('solo', null, saved); else render(); break; }
       case 'hotseat': deal('hotseat'); break;
       case 'lobby': show('lobby'); break;
