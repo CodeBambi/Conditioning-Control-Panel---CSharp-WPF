@@ -107,6 +107,7 @@ public sealed class GradedIntakeGateTests
             CoreAccount.HasPremiumAccessProvider, CoreAccount.HasLabAccessProvider, CoreEntitlement.HasPremiumProvider,
             CoreEntitlement.HasLabProvider, CoreProgram.HasPremiumProvider);
         Assert.False(s.HasCachedLabAccess);   // a free account until the TierChanged below
+        (s.IntakePassSpentWeek, s.IntakePassSpentUtc) = ("", null);   // seeded here: an unspent week, whatever ran before
         var raised = 0;
         EventHandler onChanged = (_, _) => raised++;
         try
@@ -121,6 +122,44 @@ public sealed class GradedIntakeGateTests
             Assert.Equal("", s.IntakePassSpentWeek);
             Assert.Null(s.IntakePassSpentUtc);
             Assert.Equal(2, raised);
+        }
+        finally
+        {
+            AvApp.IntakePass.PassStateChanged -= onChanged;
+            (CoreAccount.IsLoggedInProvider, CoreAccount.DisplayNameProvider, CoreAccount.IsWhitelistedProvider,
+                CoreAccount.HasPremiumAccessProvider, CoreAccount.HasLabAccessProvider, CoreEntitlement.HasPremiumProvider,
+                CoreEntitlement.HasLabProvider, CoreProgram.HasPremiumProvider) = saved;
+            (s.IntakePassSpentWeek, s.IntakePassSpentUtc) = (week, utc);
+            service.SaveImmediate();
+            CoreSettings.ServiceProvider = prevSettings;
+        }
+    }
+
+    /// <summary>A second Seed() re-points the pass at the new providers: a TierChanged on the
+    /// first Patreon provider must no longer reach PassStateChanged (IntakePassService detach).</summary>
+    [Fact]
+    public void ReseedDetachesThePreviousProviders()
+    {
+        var service = new SettingsService();
+        var prevSettings = CoreSettings.ServiceProvider;
+        CoreSettings.ServiceProvider = () => service;
+        var s = service.Current;
+        var (week, utc) = (s.IntakePassSpentWeek, s.IntakePassSpentUtc);
+        var saved = (CoreAccount.IsLoggedInProvider, CoreAccount.DisplayNameProvider, CoreAccount.IsWhitelistedProvider,
+            CoreAccount.HasPremiumAccessProvider, CoreAccount.HasLabAccessProvider, CoreEntitlement.HasPremiumProvider,
+            CoreEntitlement.HasLabProvider, CoreProgram.HasPremiumProvider);
+        var raised = 0;
+        EventHandler onChanged = (_, _) => raised++;
+        try
+        {
+            Assert.True(AccountSeed.Seed(p => new ProviderSubscription(p, () => new AppSettings())));
+            var first = AccountSeed.Patreon!;
+            Assert.True(AccountSeed.Seed(p => new ProviderSubscription(p, () => new AppSettings())));
+            Assert.NotSame(first, AccountSeed.Patreon);
+            AvApp.IntakePass.PassStateChanged += onChanged;
+
+            first.SetWhitelistStatus(true);   // TierChanged on the stale provider
+            Assert.Equal(0, raised);
         }
         finally
         {
