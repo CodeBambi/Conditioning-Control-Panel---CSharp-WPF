@@ -20,13 +20,31 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.0.0";
+        public const string AppVersion = "7.0.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.0.0 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.0.1 - Stay Tuned
+
+[a quick fix on top of 7.0.0]
+
+NEW IN 7.0.1
+
+LAG AND FLICKER
+the Awareness and Listening pages no longer flip between a wide and a compact layout over and over. that flip was what made the whole app lag when you opened them.
+
+GOON GAME
+the game no longer closes itself when a busy moment makes the picture pause for a few seconds. it waits longer and only steps in when it is really stuck.
+
+AI AND VIDEOS
+when the AI names a video that is not in your library, nothing random plays any more.
+
+EVERYTHING ELSE
+the rest is 7.0.0: Breakout, Piece by Piece, Circe's Tab, the Locktober raffle, Stakes, Friends and the Leash. if you are coming from 6.11.5, read the 7.0.0 notes on the release page.
+
+v7.0.0 - Stay Tuned
 
 [Task impossible. We should continue]
 
