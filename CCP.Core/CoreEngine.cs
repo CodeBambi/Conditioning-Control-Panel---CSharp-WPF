@@ -7,7 +7,7 @@ namespace ConditioningControlPanel
     /// <summary>
     /// The plain engine: WPF <c>MainWindow.StartEngine</c> / <c>StopEngine</c>
     /// (ConditioningControlPanel/MainWindow/MainWindow.StartStop.cs:294, :444) for the features
-    /// this Core drives - flash, subliminal, bouncing text and the lock-card schedule. Saved
+    /// this Core drives - flash, subliminal, bouncing text, bubbles and the lock-card schedule. Saved
     /// flags take effect here and only here; a card toggle writes its flag and, only while
     /// running, applies it live (<see cref="ApplyLive"/>), as the WPF cards do.
     ///
@@ -45,6 +45,7 @@ namespace ConditioningControlPanel
             if (!audioOnly) CoreFlash.Start();   // it checks FlashEnabled itself
             if (!audioOnly && s.SubliminalEnabled) CoreSubliminal.Start();
             if (!audioOnly && s.LockCardEnabled) LockCardScheduler.Instance.Start();
+            if (!audioOnly && s.BubblesEnabled) CoreBubbles.Start();   // WPF StartStop.cs:337
             if (!audioOnly && s.PopQuizEnabled) PopQuiz?.Start();   // WPF StartStop.cs:393
             if (!audioOnly && s.BouncingTextEnabled) CoreBouncingText.Start();
             else CoreBouncingText.Stop();   // WPF: clean up any leftover state
@@ -62,6 +63,7 @@ namespace ConditioningControlPanel
             _stopInProgress = true;
             try
             {
+                CoreBubbles.Stop();   // WPF StartStop.cs:473, before video
                 CoreFlash.Stop();
                 CoreBouncingText.Stop();
                 CoreSubliminal.Stop();
@@ -84,6 +86,7 @@ namespace ConditioningControlPanel
             if (!s.SubliminalEnabled) ApplyLive("subliminal", false);
             if (!s.LockCardEnabled) ApplyLive("lockcard", false);
             if (!s.BouncingTextEnabled) ApplyLive("bouncingtext", false);
+            if (!s.BubblesEnabled) ApplyLive("bubbles", false);
         }
 
         /// <summary>A card or wall toggle already wrote its flag; start or stop the matching
@@ -97,6 +100,7 @@ namespace ConditioningControlPanel
                 case "subliminal": if (on) CoreSubliminal.Start(); else CoreSubliminal.Stop(); break;
                 case "lockcard": if (on) LockCardScheduler.Instance.Start(); else LockCardScheduler.Instance.Stop(); break;
                 case "bouncingtext": if (on) CoreBouncingText.Start(); else CoreBouncingText.Stop(); break;
+                case "bubbles": if (on) CoreBubbles.Start(); else CoreBubbles.Stop(); break;
             }
         }
     }

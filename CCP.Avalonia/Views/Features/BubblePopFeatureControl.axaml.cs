@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
 {
@@ -75,6 +76,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             CoreMods.ModChanged += OnModChanged;
+            Overlays.BubbleOverlay.XpBudgetChanged += UpdateAmbientXpBudgetLine;   // WPF AmbientXpBudgetChanged
             RebindToCurrentSettings();
         }
 
@@ -82,6 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
             CoreMods.ModChanged -= OnModChanged;
+            Overlays.BubbleOverlay.XpBudgetChanged -= UpdateAmbientXpBudgetLine;
             Unhook();
             base.OnDetachedFromVisualTree(e);
         }
@@ -155,13 +158,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// </summary>
         private void UpdateAmbientXpBudgetLine()
         {
-            // ponytail: needs Services.BubbleService.AmbientBubbleDailyXpCap and
-            // AmbientBubbleXpPaidToday() (ConditioningControlPanel/Services/BubbleService.cs, still
-            // in the WPF head) - the paid-today counter is on AppSettings in Core, but the 300 cap
-            // and the clamp are not, and duplicating the constant here would put it in two places.
-            // WPF also repaints this from BubbleService.AmbientXpBudgetChanged, which is the same
-            // head-side class.
-            TxtAmbientXpBudget.Text = Loc.GetF("label_ambient_bubble_xp_budget", 0, 300);
+            TxtAmbientXpBudget.Text = Loc.GetF("label_ambient_bubble_xp_budget",
+                AmbientBubbleXp.PaidToday(CoreSettings.Current), AmbientBubbleXp.DailyXpCap);
         }
 
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -189,8 +187,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // Live-apply: start/stop the bubble service if the engine is running.
             if (CoreSession.IsEngineRunning)
             {
-                // ponytail: App.Bubbles.Start()/Stop() - BubbleService
-                // (ConditioningControlPanel/Services/BubbleService.cs), still in the WPF head.
+                if (CoreSettings.Current.BubblesEnabled) CoreBubbles.Start(); else CoreBubbles.Stop();
             }
         }
 
@@ -200,8 +197,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var v = (int)e.NewValue;
             TxtFreq.Text = v.ToString();
             CoreSettings.Current.BubblesFrequency = v;
-            // ponytail: WPF also calls App.Bubbles.RefreshFrequency() here. Needs BubbleService
-            // (ConditioningControlPanel/Services/), still in the WPF head.
+            CoreBubbles.RefreshFrequency();
             CoreSettings.Save();
         }
 
@@ -246,8 +242,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // third ("is it actually running") is the service's own.
             if (CoreSession.IsEngineRunning && CoreSettings.Current.BubblesEnabled)
             {
-                // ponytail: App.Bubbles.IsRunning, then Stop() + Start() - BubbleService
-                // (ConditioningControlPanel/Services/BubbleService.cs), still in the WPF head.
+                CoreBubbles.Stop();
+                CoreBubbles.Start();
             }
         }
 
