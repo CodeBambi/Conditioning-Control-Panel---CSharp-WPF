@@ -57,8 +57,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             BlinkTrainerStatusAction.Click += (_, _) => _statusAction?.Invoke();
 
-            // Camera-only actions: visibly off, with the reason on hover, until a tracker lands.
-            foreach (var b in new[] { BtnBlinkTrainerStartSession, BtnBlinkTrainerStartStopTracker, BtnBlinkTrainerCalibrate, BtnBlinkTrainerQuickRecal })
+            // Session and calibration still need BlinkTrainerService / WebcamCalibrationWindow: visibly
+            // off, with the reason on hover. The tracker toggle is live (Platform/WebcamTracker).
+            foreach (var b in new[] { BtnBlinkTrainerStartSession, BtnBlinkTrainerCalibrate, BtnBlinkTrainerQuickRecal })
             {
                 b.IsEnabled = false;
                 ToolTip.SetShowOnDisabled(b, true);
@@ -92,6 +93,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 }
 
                 RebuildFolderCards();
+                RefreshTrackerButton();
                 RefreshWebcamColumn();
                 RefreshGate();
                 RefreshStatusRow();
@@ -448,11 +450,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Refresh();
         }
 
-        // Disabled in the constructor: WebcamTrackingService, BlinkTrainerService and
-        // WebcamCalibrationWindow have no Linux twin (see MainShellWindow.BlinkTrainer.cs).
+        // Disabled in the constructor: BlinkTrainerService and WebcamCalibrationWindow have no
+        // Linux twin yet (see MainShellWindow.BlinkTrainer.cs).
         private void BtnBlinkTrainerCalibrate_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerQuickRecal_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerStartSession_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnBlinkTrainerStartStopTracker_Click(object? sender, RoutedEventArgs e) { }
+
+        /// <summary>WPF ToggleWebcamTrackingAsync (MainWindow.BlinkTrainer.cs:310): stop if running;
+        /// else consent dialog when stale, then start off the UI thread. A failed start says why
+        /// (OpenCV missing, no camera) instead of silently staying off.</summary>
+        private async void BtnBlinkTrainerStartStopTracker_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var tracker = Platform.WebcamTracker.Instance;
+                if (tracker.IsRunning) { await tracker.StopAsync(); RefreshTrackerButton(); return; }
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                if (!WebcamConsent.IsCurrent(CoreSettings.Current))
+                {
+                    var dlg = new Dialogs.WebcamConsentDialog();
+                    await dlg.ShowDialog(owner);
+                    Refresh();
+                    if (!WebcamConsent.IsCurrent(CoreSettings.Current)) return;
+                }
+                BtnBlinkTrainerStartStopTracker.IsEnabled = false;
+                bool started = await tracker.StartAsync();
+                BtnBlinkTrainerStartStopTracker.IsEnabled = true;
+                RefreshTrackerButton();
+                if (!started && tracker.LastError != null)
+                    await Dialogs.MessageDialog.ShowAsync(owner, "Webcam tracking", tracker.LastError);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Blink Trainer tracker toggle failed"); }
+        }
+
+        /// <summary>WPF RefreshBlinkTrainerTrackerButton: the literal label WPF authors untranslated.</summary>
+        private void RefreshTrackerButton()
+        {
+            if (BtnBlinkTrainerStartStopTracker.Content is TextBlock tb)
+                tb.Text = Platform.WebcamTracker.Instance.IsRunning ? "Stop tracker" : "Start tracker";
+        }
     }
 }

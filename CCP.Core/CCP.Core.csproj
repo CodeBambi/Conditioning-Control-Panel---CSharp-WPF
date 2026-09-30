@@ -50,6 +50,10 @@
          Its build/ targets add libvosk to Core's output, picked by the BUILD MACHINE's OS (not the RID),
          and that file copies on to every consumer; heads still reference Vosk themselves. -->
     <PackageReference Include="Vosk" Version="0.3.38" />
+    <!-- Webcam detectors (Services/Webcam/FaceModels.cs): managed halves only. Each head brings its
+         own OpenCV + ONNX Runtime natives, so nothing native ships from here. -->
+    <PackageReference Include="OpenCvSharp4" Version="4.9.0.20240103" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.20.1" />
   </ItemGroup>
 
   <!--
