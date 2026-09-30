@@ -1,7 +1,9 @@
 using System;
+using System.IO;
 using System.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Webcam;
 using OpenCvSharp;
 using Xunit;
@@ -18,11 +20,14 @@ public sealed class WebcamTrackerTests
     {
         public bool OpenResult = true;
         public int Opens, Reads;
-        public bool Disposed;
+        public volatile bool Disposed;
+        /// <summary>Unset = Read blocks, as a wedged driver does.</summary>
+        public readonly ManualResetEventSlim Gate = new(true);
         public bool Open() { Opens++; return OpenResult; }
         public bool Read(Mat bgr)
         {
             Interlocked.Increment(ref Reads);
+            Gate.Wait();
             bgr.Create(480, 640, MatType.CV_8UC3);
             bgr.SetTo(Scalar.All(0)); // no face in it: the detector says so and nothing fires
             Thread.Sleep(5);
@@ -84,14 +89,82 @@ public sealed class WebcamTrackerTests
         WithConsent(true, () =>
         {
             WebcamTracker.SourceFactory = () => src;
+            WebcamTracker.Instance.FrameErrors = 0;
             Assert.True(WebcamTracker.Instance.Start(), WebcamTracker.Instance.LastError);
             Assert.True(WebcamTracker.Instance.IsRunning);
-            var until = DateTime.UtcNow.AddSeconds(20);
-            while (Volatile.Read(ref src.Reads) < 5 && DateTime.UtcNow < until) Thread.Sleep(20);
-            Assert.True(src.Reads >= 5);
+            WaitFor(() => Volatile.Read(ref src.Reads) >= 5);
+            Assert.Equal(0, WebcamTracker.Instance.FrameErrors); // the loop swallows; nothing may have thrown
             WebcamTracker.Instance.Stop();
             Assert.False(WebcamTracker.Instance.IsRunning);
             Assert.True(src.Disposed);
+        });
+    }
+
+    private static void WaitFor(Func<bool> cond)
+    {
+        var until = DateTime.UtcNow.AddSeconds(20);
+        while (!cond() && DateTime.UtcNow < until) Thread.Sleep(20);
+        Assert.True(cond());
+    }
+
+    [Fact]
+    public void Detectors_RunOnASyntheticFrame_WithoutThrowing()
+    {
+        var dir = WebcamTracker.ModelDir;
+        using var face = new BlazeFaceDetector(Path.Combine(dir, "face_detection_short_range.onnx"), Path.Combine(dir, "blazeface_anchors.json"));
+        using var mesh = new FaceMeshDetector(Path.Combine(dir, "face_landmark.onnx"));
+        using var iris = new IrisDetector(Path.Combine(dir, "iris_landmark.onnx"));
+        using var bgr = new Mat(480, 640, MatType.CV_8UC3, new Scalar(90, 120, 160));
+        Cv2.Circle(bgr, new Point(320, 240), 120, new Scalar(150, 180, 220), -1);
+
+        Assert.Null(face.Detect(bgr)); // flat blob, no face
+        var lm = mesh.Detect(bgr, new Rect(200, 120, 240, 240));
+        Assert.True(lm == null || lm.Length == 468);
+        var eye = iris.Detect(bgr, new[] { 260f, 220f }, new[] { 300f, 220f }, isRightEye: true);
+        Assert.NotNull(eye);
+        Assert.Equal(71, eye!.Contour.Length);
+    }
+
+    [Fact]
+    public void RevokingConsent_WhileRunning_ClosesTheCamera()
+    {
+        var src = new FakeSource();
+        WithConsent(true, () =>
+        {
+            WebcamTracker.SourceFactory = () => src;
+            Assert.True(WebcamTracker.Instance.Start(), WebcamTracker.Instance.LastError);
+            ConditioningControlPanel.CoreSettings.Current.WebcamConsentGiven = false;
+            WaitFor(() => src.Disposed);
+            WaitFor(() => !WebcamTracker.Instance.IsRunning);
+        });
+    }
+
+    [Fact]
+    public void WedgedStop_AbandonsTheLoop_RefusesStart_UntilItReleasesTheCamera()
+    {
+        var wedged = new FakeSource();
+        var next = new FakeSource();
+        WithConsent(true, () =>
+        {
+            WebcamTracker.SourceFactory = () => wedged;
+            Assert.True(WebcamTracker.Instance.Start(), WebcamTracker.Instance.LastError);
+            WaitFor(() => Volatile.Read(ref wedged.Reads) >= 1);
+            wedged.Gate.Reset();
+            int r = Volatile.Read(ref wedged.Reads);
+            WaitFor(() => Volatile.Read(ref wedged.Reads) > r); // this Read is now blocked on the gate
+            WebcamTracker.Instance.Stop();                          // 5 s join times out
+            Assert.False(WebcamTracker.Instance.IsRunning);
+            Assert.False(wedged.Disposed);
+
+            WebcamTracker.SourceFactory = () => next;
+            Assert.False(WebcamTracker.Instance.Start());
+            Assert.StartsWith("The previous camera session is still closing", WebcamTracker.Instance.LastError);
+            Assert.Equal(0, next.Opens);
+
+            wedged.Gate.Set();                  // driver lets go: the abandoned loop closes its camera
+            WaitFor(() => wedged.Disposed);
+            Thread.Sleep(100);
+            Assert.True(WebcamTracker.Instance.Start(), WebcamTracker.Instance.LastError);
         });
     }
 }
