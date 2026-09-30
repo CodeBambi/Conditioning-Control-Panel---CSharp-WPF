@@ -72,6 +72,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             bool wasRunning = CoreEngine.IsRunning;
             // WPF RunPanicStopTail: StopEngine while running, StopAdHocEffects otherwise - both are
             // CoreEngine.Stop here (it stops everything either way) and neither unticks a flag.
+            // WPF PanicStopEverySurface (MainWindow.xaml.cs:1992): the toys go to zero first, bypassing
+            // throttles and gates, whatever else the stop pass does.
+            try { CoreHaptics.Service?.PanicStop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: haptics stop failed"); }
             StopEngine();
             StopLockCards();   // WPF StopAdHocEffects: App.LockCard.Stop(dismissOpenCards: true)
             if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop

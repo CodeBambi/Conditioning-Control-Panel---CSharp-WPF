@@ -23,11 +23,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// colours therefore differ from the pre-seam render: those were WPF's App.Mods-is-null
     /// fallbacks, which never fired in the real app.)
     ///
-    /// What is still NOT ported: the device half. <c>App.Haptics</c> (HapticService) and
-    /// <c>PatreonService</c> have no seam in Core, so there is no transport to open and no premium
-    /// answer to read. Connect and Test Buzz therefore report WPF's own FAILURE outcome rather than
-    /// a placeholder success - see <see cref="BtnConnect_Click"/> for why a fabricated device list
-    /// was removed. Nothing on page 3 claims a device is paired.
+    /// Page 3 connects and test-buzzes through <see cref="CoreHaptics"/> behind WPF's premium gate.
     ///
     /// Strings that the WPF code-behind ASSIGNS to a control carrying <c>{loc:Str}</c> are bound
     /// here instead (<see cref="BindLoc"/>): Avalonia keeps the XAML binding alive under a local
@@ -125,33 +121,53 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ------------------------------------------------------------------ page 3
 
-        /// <summary>
-        /// WPF's own failure branch, which is the TRUE outcome on a head with no haptic stack:
-        /// nothing connected, no devices, and the per-provider hint that tells the author what to
-        /// check. <see cref="ApplyProviderSettings"/> is deliberately NOT called from here - the
-        /// provider choice is already written when the page advances (BtnNext_Click), which is
-        /// where WPF writes it too on the path that never reaches a service.
-        ///
-        /// <para>ponytail: previously this showed <c>wizard_connect_ok</c> plus two fabricated
-        /// device names to exercise the list template. That was a control lying about state - the
-        /// wizard said "connected, 2 toys found" with no transport open and the premium gate never
-        /// consulted, and <c>_connected = true</c> swapped Connect for Done, so the author left
-        /// believing their toy was paired. Replaced with the failure the head can honestly report.
-        /// The real handler needs ConditioningControlPanel/Services/Haptics/HapticService.cs
-        /// (ConnectAsync / ConnectedDevices), and its gate needs
-        /// ConditioningControlPanel/Services/Account/PatreonService.cs (HasPremiumAccess) OR
-        /// DailyFreeService.IsFreeToday("haptics") - DailyFreeService is in Core, HasPremiumAccess
-        /// has no seam, and half a premium gate is not a gate, so the gate is not attempted here.
-        /// Its strings, when it lands, are "gate_premium_locked" / "msg_haptic_feedback_patreon_only".
-        /// The "connected but zero toys yet" branch (wizard_connect_no_toys) is a live-transport
-        /// state and cannot be reached without one.</para>
-        /// </summary>
-        private void BtnConnect_Click()
+        /// <summary>WPF BtnConnect_Click (HapticsSetupWindow.xaml.cs:109): the premium gate (or the
+        /// "haptics" free day), provider settings, then a real ConnectAsync through
+        /// <see cref="CoreHaptics"/>; "connected, no toys yet" is a nearly-there, not a failure.</summary>
+        private async void BtnConnect_Click()
         {
-            _connected = false;
-            ShowResult(false, "wizard_connect_failed", FailureHint(), Array.Empty<string>());
-            UpdateChrome();
+            if (_connecting || CoreHaptics.Service is not { } haptics) return;
+            if (!CoreEntitlement.HasPremium && !CoreEntitlement.IsFreeToday("haptics"))
+            {
+                ShowResult(false, "gate_premium_locked", "msg_haptic_feedback_patreon_only", Array.Empty<string>());
+                return;
+            }
+            ApplyProviderSettings();
+
+            _connecting = true;
+            BtnConnect.IsEnabled = false;
+            ConnectProgress.IsVisible = true;
+            ConnectResultBox.IsVisible = false;
+            BtnWizardTestBuzz.IsVisible = false;
+            BindLoc(TxtConnectStatus, "login_connecting");
+            try
+            {
+                var ok = await haptics.ConnectAsync();
+                var devices = haptics.ConnectedDevices;
+                _connected = ok;
+                if (ok && devices.Count > 0) ShowResult(true, "wizard_connect_ok", "wizard_connect_ok_hint", devices);
+                else if (ok) ShowResult(true, "wizard_connect_no_toys", "wizard_connect_no_toys_hint", Array.Empty<string>());
+                else ShowResult(false, "wizard_connect_failed", FailureHint(), Array.Empty<string>());
+            }
+            catch (Exception ex)
+            {
+                _connected = false;
+                ShowResult(false, "wizard_connect_failed", FailureHint(), Array.Empty<string>());
+                SetText(TxtConnectHint, ex.Message);
+            }
+            finally
+            {
+                _connecting = false;
+                ConnectProgress.IsVisible = false;
+                BtnConnect.IsEnabled = true;
+                UpdateChrome();
+            }
         }
+
+        private bool _connecting;
+
+        private static void SetText(TextBlock target, string text) =>
+            target.Bind(TextBlock.TextProperty, new Binding { Source = text });
 
         /// <summary>Per-provider "what to check", ported verbatim from WPF's FailureHint().</summary>
         private string FailureHint() => _provider switch
@@ -180,11 +196,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             BtnWizardTestBuzz.IsVisible = success;
         }
 
-        private void BtnWizardTestBuzz_Click()
+        private async void BtnWizardTestBuzz_Click()
         {
-            // ponytail: needs HapticService.TestAsync
-            // (ConditioningControlPanel/Services/Haptics/HapticService.cs); no seam in Core.
-            BindLoc(TxtConnectHint, "wizard_test_failed");
+            if (CoreHaptics.Service is not { } haptics) return;
+            BtnWizardTestBuzz.IsEnabled = false;
+            try
+            {
+                if (await haptics.TestAsync() != Services.HapticTestResult.Success)
+                    BindLoc(TxtConnectHint, "wizard_test_failed");
+            }
+            catch (Exception ex) { SetText(TxtConnectHint, ex.Message); }
+            finally { BtnWizardTestBuzz.IsEnabled = true; }
         }
 
         // ------------------------------------------------------------------ chrome

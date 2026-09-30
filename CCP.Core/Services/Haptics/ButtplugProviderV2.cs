@@ -131,7 +131,7 @@ namespace ConditioningControlPanel.Services.Haptics
             if (!string.IsNullOrWhiteSpace(_urlOverride)) return _urlOverride!;
             try
             {
-                var fromSettings = App.Settings?.Current?.Haptics?.ButtplugUrl;
+                var fromSettings = CoreSettings.Current.Haptics?.ButtplugUrl;
                 if (!string.IsNullOrWhiteSpace(fromSettings)) return fromSettings!.Trim();
             }
             catch { /* settings not up yet */ }

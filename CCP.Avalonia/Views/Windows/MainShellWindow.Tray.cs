@@ -77,6 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static void StopEverything()
         {
             Serilog.Log.Information("Tray: Stop everything");
+            try { CoreHaptics.Service?.PanicStop(); } catch (System.Exception ex) { Serilog.Log.Warning(ex, "Tray stop: haptics stop failed"); }
             StopEngine();
         }
 

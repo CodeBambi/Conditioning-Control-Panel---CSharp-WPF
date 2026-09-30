@@ -1,3 +1,4 @@
+using Serilog;
 using System;
 using System.IO;
 using System.Threading;
@@ -126,7 +127,7 @@ namespace ConditioningControlPanel.Services.Haptics
                             var bytes = new FileInfo(candidate).Length;
                             if (bytes > MaxScriptBytes)
                             {
-                                App.Logger?.Warning(
+                                Log.Warning(
                                     "FunScript: ignoring {Path} — {Size:F1} MB is past the {Cap} MB cap",
                                     candidate, bytes / (1024.0 * 1024.0), MaxScriptBytes / (1024 * 1024));
                             }
@@ -138,7 +139,7 @@ namespace ConditioningControlPanel.Services.Haptics
                         }
                         catch (Exception ex)
                         {
-                            App.Logger?.Debug("FunScript: could not read {Path}: {E}", candidate, ex.Message);
+                            Log.Debug("FunScript: could not read {Path}: {E}", candidate, ex.Message);
                         }
                         break;
                     }
@@ -146,7 +147,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     if (json == null || foundPath == null) return;          // no script: stay silent
                     if (!FunScript.TryParse(json, out var parsed) || parsed == null)
                     {
-                        App.Logger?.Warning("FunScript: {Path} has no usable actions — ignoring", foundPath);
+                        Log.Warning("FunScript: {Path} has no usable actions — ignoring", foundPath);
                         return;
                     }
 
@@ -162,7 +163,7 @@ namespace ConditioningControlPanel.Services.Haptics
                         _lastPositionSent = -1;
                     }
 
-                    App.Logger?.Information(
+                    Log.Information(
                         "FunScript: loaded {Path} ({Actions} actions, {Seconds:F0}s) for {Video}",
                         Path.GetFileName(foundPath), parsed.Actions.Count,
                         parsed.DurationMs / 1000.0, Path.GetFileName(videoPath!));
@@ -172,7 +173,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("FunScript: load failed (non-fatal): {E}", ex.Message);
+                    Log.Debug("FunScript: load failed (non-fatal): {E}", ex.Message);
                 }
             });
         }
@@ -213,16 +214,20 @@ namespace ConditioningControlPanel.Services.Haptics
             }
         }
 
+        /// <summary>Head seam for the video playhead (WPF: VideoService.PrimaryPlaybackTimeMsChanged).
+        /// Subscribes the handler and returns its unsubscribe; null = no video service.</summary>
+        public static Func<Action<long>, Action?>? SubscribePlaybackTime;
+        private Action? _unsubscribe;
+
         private void Subscribe()
         {
             try
             {
-                var video = App.Video;
-                if (video == null || _subscribed) return;
-                video.PrimaryPlaybackTimeMsChanged += OnPlaybackTimeMs;
-                _subscribed = true;
+                if (_subscribed) return;
+                _unsubscribe = SubscribePlaybackTime?.Invoke(OnPlaybackTimeMs);
+                _subscribed = _unsubscribe != null;
             }
-            catch (Exception ex) { App.Logger?.Debug("FunScript: subscribe failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("FunScript: subscribe failed: {E}", ex.Message); }
         }
 
         private void Unsubscribe()
@@ -231,8 +236,8 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 if (!_subscribed) return;
                 _subscribed = false;
-                var video = App.Video;
-                if (video != null) video.PrimaryPlaybackTimeMsChanged -= OnPlaybackTimeMs;
+                _unsubscribe?.Invoke();
+                _unsubscribe = null;
             }
             catch { }
         }
@@ -300,14 +305,14 @@ namespace ConditioningControlPanel.Services.Haptics
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FunScript: render tick error (non-fatal): {E}", ex.Message);
+                Log.Debug("FunScript: render tick error (non-fatal): {E}", ex.Message);
             }
         }
 
         private async Task SafeSetPositionAsync(double position01)
         {
             try { await _haptics.SetPositionAsync(position01).ConfigureAwait(false); }
-            catch (Exception ex) { App.Logger?.Debug("FunScript: position send failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("FunScript: position send failed: {E}", ex.Message); }
         }
 
         private void ZeroLayer()
