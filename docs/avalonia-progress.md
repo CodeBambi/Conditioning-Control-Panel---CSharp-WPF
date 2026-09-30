@@ -1030,3 +1030,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   AppClusterMap tables without an override file.
 - Evidence: WindowAwarenessServiceTests (9) + tube reaction test, fail-proven; live test windows only. Rows stay stub (OCR/keyword
   Awareness tab, v2 observer, privacy view). Review: ACCEPT + notes fixed.
+
+## avalonia-port/she-listening: +360
+- Core VoiceInputRules (armed rule, modes to run with entitlement/consent/availability, wake-phrase parse + variants, sensitivity
+  maths); WPF AutonomyService.Voice and MainWindow.SheListening delegate. She's Listening tab wired over real settings behind the voice
+  gate (Start/Stop, consent, revoke, mantras, calibrate notice, device/models folders); Stop/revoke cut voice lock-card capture.
+  The mic never opens on this head (no voice-command consumer yet); armed shows an honest "not on this build" status (decision logged).
+- Evidence: VoiceInputRulesTests + Vosk WAV test + SheListeningTests (fakes/WAV only, never the real mic), fail-proven. Rows stay stub
+  (blocker: AutonomyService.VoiceCommands). Review: ACCEPT.
