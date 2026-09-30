@@ -2,6 +2,11 @@ using System;
 
 namespace ConditioningControlPanel.Services.Startup
 {
+    /// <summary>A window a passive startup surface opens (a feature card, a server announcement).
+    /// While one is on screen the next passive surface waits its turn
+    /// (<see cref="StartupQueueCore.PassiveWaits"/>).</summary>
+    public interface IPassiveStartupSurface { }
+
     /// <summary>
     /// One row in the startup Inbox: a surface that wanted to interrupt, parked until the user
     /// asks for it.

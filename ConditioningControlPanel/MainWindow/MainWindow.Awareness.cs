@@ -422,7 +422,7 @@ namespace ConditioningControlPanel
                 App.KeywordTriggers?.Stop();
                 App.ScreenOcr?.Stop();
                 if (settings.PanicKeyEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
             }
 
             // Keep the sub-toggle in sync with master so the UI reads consistently.
@@ -492,7 +492,7 @@ namespace ConditioningControlPanel
                 // Turning keyboard off — just stop the keyboard hook if nothing else needs it.
                 // Don't turn off master (other sources like OCR may still be active).
                 if (settings.PanicKeyEnabled != true && !settings.ScreenOcrEnabled)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
             }
         }
 

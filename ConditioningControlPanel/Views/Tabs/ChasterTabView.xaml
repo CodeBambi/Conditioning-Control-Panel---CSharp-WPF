@@ -419,7 +419,9 @@
                 </Grid>
 
                 <!-- ================= 1. THE LOCK ================= -->
-                <Border x:Name="HeroCard" Grid.Row="1" Style="{StaticResource CirceCard}" Padding="0" Height="368"
+                <!-- MinHeight, not Height: with the hint, the pills and the pick all up, the column is
+                     taller than 368 and the card cut "Use Locktober" off at its foot (1563x943). -->
+                <Border x:Name="HeroCard" Grid.Row="1" Style="{StaticResource CirceCard}" Padding="0" MinHeight="368"
                         BorderBrush="{DynamicResource PanelAccentBrush}" Margin="0,0,0,10">
                     <Grid x:Name="HeroBody">
                         <Grid.ColumnDefinitions>

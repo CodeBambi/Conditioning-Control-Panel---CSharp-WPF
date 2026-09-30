@@ -714,7 +714,7 @@ namespace ConditioningControlPanel
                         _keyboardHook.SuppressSystemKeys = false;
                         if (App.Settings.Current.PanicKeyEnabled != true &&
                             App.Settings.Current.KeywordTriggersEnabled != true)
-                            _keyboardHook.Stop();
+                            StopKeyboardHookUnlessLeashed();
                     }
 
                     UnhookPossessionReadout();

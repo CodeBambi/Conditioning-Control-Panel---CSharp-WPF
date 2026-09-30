@@ -6,7 +6,9 @@
  * match) and can be changed on the found screen; the server locks it on the
  * first move. Leaving mid-match never costs: the server voids it. A finished
  * match spends the pick: the next one starts at Off and the player picks again
- * (owner, 2026-09-29), so a stake is never carried into a match unasked.
+ * (owner, 2026-09-29), so a stake is never carried into a match unasked. The
+ * shelf is emptied as the board is dealt (play()), so a window closed mid-match
+ * spends the pick too; the stake itself the server voids and hands back.
  *
  * The page never talks to /v2/stakes itself. Every call goes through the host
  * (Services/Stakes/StakeBridge.cs), which also books a lost time stake in C#:
@@ -198,6 +200,7 @@ export function createStake({ post, onMessage, store = true, later = (fn, ms) =>
   let poll = 0; let pollUntil = 0;
   let retried = false;   // one quiet retry per offer when the server's stake lock was held
   let gone = null;       // { match, after, retried }: a match the door left before it started
+  let playing = false;   // the board is dealt: a pick made now is this match's, never the shelf's
   const send = (m) => { try { post && post(m); } catch { /* no host */ } };
   const takeBack = (match) => send({ type: 'stake-offer', match, kind: 'none', amount: 0 });
   const emit = () => { for (const fn of [...subs]) { try { fn(state); } catch { /* keep going */ } } };
@@ -246,7 +249,7 @@ export function createStake({ post, onMessage, store = true, later = (fn, ms) =>
     const was = state;
     state = reduce(state, m);
     // a refused offer put the lit pill back on the stake that stands; the shelf follows it
-    if (store && m.op === 'offer' && !sameStake(was.pick, state.pick)) writePick(state.pick);
+    if (store && !playing && m.op === 'offer' && !sameStake(was.pick, state.pick)) writePick(state.pick);
     // limits landed while a match waits for its offer
     if (m.op === 'limits' && !was.enabled && state.enabled && state.match && !isNone(state.pick)) offer();
     emit();
@@ -266,7 +269,7 @@ export function createStake({ post, onMessage, store = true, later = (fn, ms) =>
       // amount would stand while the row lit the second (bug hunt 2026-09-29, STAKES-7)
       if (state.busy) return;
       state = { ...state, pick: p, refusal: null };
-      if (store) writePick(p);
+      if (store && !playing) writePick(p);
       offer();
       emit();
     },
@@ -280,12 +283,19 @@ export function createStake({ post, onMessage, store = true, later = (fn, ms) =>
       startPoll();
       emit();
     },
+    /** The board was dealt: the pick is in play. The shelf goes back to Off now, so a window
+     *  closed mid-match never carries the pick to the next one; end() drops the live one. */
+    play() {
+      playing = true;
+      if (store && !isNone(state.pick)) writePick(NONE);
+    },
     /** The match is over: the host polls until it settles, and books what is owed. */
     end(matchId) {
       const id = matchId || state.match;
       stopPoll();
       // the match spends the pick: the next one starts at Off
       const pick = state.pick;
+      playing = false;
       state = { ...state, pick: { ...NONE } };
       if (store && !isNone(pick)) writePick(NONE);
       if (!id || !state.enabled) { emit(); return; }
@@ -305,6 +315,7 @@ export function createStake({ post, onMessage, store = true, later = (fn, ms) =>
     /** Back to the menu: forget the match (the pick stays). */
     clear() {
       stopPoll();
+      playing = false;
       state = { ...state, match: null, ended: null, you: null, them: null, locked: false, settled: null, booked: undefined, pending: false, refusal: null, busy: false };
       emit();
     },

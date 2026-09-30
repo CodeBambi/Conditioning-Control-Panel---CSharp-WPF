@@ -135,6 +135,12 @@ public static class ChasterLadder
     /// pushed. Without that move, owed time would count twice, once as "cancelled" on the day it was
     /// booked and again as verified on the day it reached the lock. So gross minus pushed is exactly
     /// what credits cancelled. <paramref name="settled"/> false sends the raw bookings instead.</para>
+    ///
+    /// <para>A day that pushed nothing is not a day the server can verify, so what its credits
+    /// cancelled rides with the time still owed and is claimed on the day that time lands (TAB-12:
+    /// +5:00 at 23:59:40 UTC, -1:40 at 23:59:50, the 3:20 lands at 00:00:20, and the raffle counts
+    /// 5:00 on the second day). A day that ends with nothing owed and nothing pushed drops it: every
+    /// slip-up was cancelled and none of it reached a lock.</para>
     /// </summary>
     public static IReadOnlyDictionary<string, LadderClaim> Claims(TabState state, DateTime nowUtc, bool settled = true)
     {
@@ -142,14 +148,20 @@ public static class ChasterLadder
         if (state.Ladder?.Days is not { } days) return claims;
         var first = MonthKey(PreviousMonth(nowUtc));
         var last = MonthKey(nowUtc);
-        foreach (var (key, day) in days)
+        long carried = 0;
+        foreach (var (key, day) in days.Where(d => d.Value != null && IsDayKey(d.Key)).OrderBy(d => d.Key, StringComparer.Ordinal))
         {
-            if (day == null || !IsDayKey(key)) continue;
+            var raw = settled ? (long)day.Gross + day.OpenAtStart - day.Open : day.Gross;
+            var pushed = Math.Clamp(day.Pushed, 0, MaxClaimSeconds);
+            if (settled)
+            {
+                if (pushed > 0) { raw += carried; carried = 0; }
+                else if (day.Open > 0) { carried += Math.Max(0, raw); raw = 0; }
+                else carried = 0;
+            }
             var month = key[..7];
             if (string.CompareOrdinal(month, first) < 0 || string.CompareOrdinal(month, last) > 0) continue;
-            var raw = settled ? (long)day.Gross + day.OpenAtStart - day.Open : day.Gross;
             var gross = (int)Math.Clamp(raw, 0, MaxClaimSeconds);
-            var pushed = Math.Clamp(day.Pushed, 0, MaxClaimSeconds);
             if (gross > 0 || pushed > 0) claims[key] = new LadderClaim(gross, pushed);
         }
         return claims;
