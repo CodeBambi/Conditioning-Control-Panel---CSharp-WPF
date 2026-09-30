@@ -11,6 +11,9 @@
  *                                        window.PBP.ramp.debug() into the log
  *                       [--after <ms>]   how long to let the page run on after
  *                                        that expression (default 1200)
+ *                       [--viewport W,H] the page's own viewport, exact (CDP device
+ *                                        metrics); a headless window has a floor
+ *                                        on its width, so phone sizes want this
  *                       [--size W,H]     the window, default 1280,860; a phone
  *                                        held upright is about 390,844
  *
@@ -41,6 +44,7 @@ const hold = arg('hold', '');
 const evalExpr = arg('eval', '');
 const afterMs = Number(arg('after', '1200'));
 const size = arg('size', '1280,860');
+const viewport = arg('viewport', '');
 
 const profile = join(tmpdir(), 'pbp-edge-' + Date.now());
 const edge = spawn(EDGE, [
@@ -149,6 +153,10 @@ async function main() {
   await cdp.send('Runtime.enable');
   await cdp.send('Log.enable');
   await cdp.send('Page.enable');
+  if (viewport) {
+    const [w, h] = viewport.split(',').map(Number);
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: w < 600 });
+  }
   await cdp.send('Page.navigate', { url });
   await sleep(waitMs);
 

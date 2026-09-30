@@ -31,6 +31,13 @@
  * anybody: the lobby says so in one line, with quick match off, rather than
  * showing an empty room and a quick match that fails - and never the mock,
  * whose invented names a desktop player would try to join.
+ *
+ * OPEN TABLES. The lobby screen is a list you browse, not a room you stand in:
+ * watching it (lobby.onTables) never lists the player. One tap on a row's
+ * Join sits at that table; Host a table is the only thing that puts the
+ * player on the list, and the list's own poll hears somebody sit down. A
+ * poll repaints the list slot alone, keeping its scroll and focus, so a
+ * three-second tick never throws the reader back to the top.
  * ==========================================================================*/
 
 import { buildReplay, showReplayStep, resultLine } from './replay.js';
@@ -52,6 +59,29 @@ export const TUNING = Object.freeze({
 const T = TUNING;
 
 const PIECE_WORD = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+
+/** The clocks a hosted table can carry. */
+const HOST_TCS = Object.freeze([
+  { label: '5+3', initial_ms: 300000, increment_ms: 3000 },
+  { label: '10+0', initial_ms: 600000, increment_ms: 0 },
+  { label: '15+10', initial_ms: 900000, increment_ms: 10000 },
+]);
+
+/** What a refused seat says, in one short line under the buttons. */
+const SEAT_NOTES = Object.freeze({
+  gone: 'that table just closed',
+  blocked: 'that table is not open to you',
+  self: 'that is your own table',
+  left: 'nobody answered',
+});
+
+/** 600000 + 5000 -> "10+5". Minutes that are not whole read as m:ss. */
+export function tcWord(tc) {
+  if (!tc || !Number.isFinite(Number(tc.initial_ms))) return '';
+  const sec = Math.round(Number(tc.initial_ms) / 1000);
+  const min = sec % 60 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : String(sec / 60);
+  return `${min}+${Math.round((Number(tc.increment_ms) || 0) / 1000)}`;
+}
 
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
@@ -83,6 +113,13 @@ export function createDoor(opts = {}) {
   let looking = false;
   let ask = null;               // an incoming challenge { id, name, accept, decline, timer }
   let people = [];
+  let playingNow = [];          // [{ white, black, timeControl, moves }], names only
+  let lookKind = null;          // 'quick' | 'join' | 'host' | 'challenge' while looking
+  let joiningId = null;         // the table a Join is sitting down at
+  let note = '';                // one line after a refused seat
+  let tableCount = null;        // for the menu's button, once asked
+  let hostTc = HOST_TCS[1];
+  const seenTables = new Set(); // rows already drawn once land without their entrance
   let replay = null;            // { moves, positions, marks, i, timer }
   const timers = new Set();
   const unbind = [];
@@ -155,10 +192,14 @@ export function createDoor(opts = {}) {
   }
 
   function render() {
+    const kept = card.querySelector('.tables-scroll');
+    const top = kept ? kept.scrollTop : 0;
     card.innerHTML = '';
     const body = document.createElement('div'); body.className = 'door-body';
     body.innerHTML = ({ menu, lobby: lobbyScreen, found, games, profile, replay: replayScreen, end }[screen] || menu)();
     card.append(body);
+    const sc = body.querySelector('.tables-scroll'); if (sc && top) sc.scrollTop = top;
+    if (screen === 'menu') countTables();
     if (screen === 'profile') { const inp = body.querySelector('input'); if (inp && !inp.readOnly) inp.addEventListener('change', () => setPlayerName(inp.value)); }
     if (screen === 'replay') { const r = body.querySelector('.door-scrub'); if (r) r.addEventListener('input', () => stepReplay(Number(r.value))); }
     for (const input of body.querySelectorAll('[data-setup]')) input.addEventListener('change', () => {
@@ -224,7 +265,7 @@ export function createDoor(opts = {}) {
       ${saved ? `<button type="button" class="door-btn primary" data-act="continue">Continue game <span class="k">${esc(fmtMoves(saved.moves.length))}</span></button>` : ''}
       <button type="button" class="door-btn ${saved ? '' : 'primary'}" data-act="solo">Play solo <span class="k">${esc(levelWord())}</span></button>
       <div class="level-slot">${levelHtml()}</div>
-      <button type="button" class="door-btn" data-act="lobby">Play a friend <span class="k">online</span></button>
+      <button type="button" class="door-btn" data-act="lobby">Open tables <span class="k tables-count">${esc(countWord())}</span></button>
       <button type="button" class="door-btn" data-act="hotseat">Two players here <span class="k">one board</span></button>
       <details class="door-setup"><summary>Solo setup</summary><div class="door-settings">
         <label>Your pieces<select data-setup="side">${option('w', 'White', setup.side)}${option('b', 'Black', setup.side)}${option('random', 'Surprise me', setup.side)}</select></label>
@@ -238,35 +279,114 @@ export function createDoor(opts = {}) {
       <div class="door-foot"><span>esc leaves the board</span><span class="name">at the board as <b>${esc(me())}</b></span></div>`;
   }
 
+  const countWord = () => (tableCount ? `${tableCount} open` : 'online');
+
+  /** The menu's button says how many tables are open: one read, never a listing. */
+  function countTables() {
+    if (!lobby || typeof lobby.tables !== 'function') return;
+    askHost().then(() => (signedOut ? null : lobby.tables())).then((t) => {
+      if (!t) return;
+      tableCount = (t.open || []).length;
+      const el = screen === 'menu' && card.querySelector('.tables-count');
+      if (el) el.textContent = countWord();
+    }).catch(() => {});
+  }
+
   function lobbyScreen() {
-    // Three rooms: the one with people in it, the one with nobody to play as
+    // Three rooms: the one with tables in it, the one with nobody to play as
     // (hosted, signed out), and the one with no lobby behind it at all. The
-    // last two are one line each and quick match is off, never a dead button.
+    // last two are one line each and every button is off, never a dead one.
     const canPlay = !!lobby && !signedOut;
-    const rows = people.map((p) => `
-      <li class="door-item" data-id="${esc(p.id)}">
-        <span class="who">${esc(p.name)}</span>
-        <span class="meta">${esc(waitWord(p.waitingSince))}</span>
-        <button type="button" class="door-pill" data-act="challenge" data-id="${esc(p.id)}">join</button>
-      </li>`).join('');
+    const hosting = looking && lookKind === 'host';
     const askRow = ask ? `
       <div class="door-ask"><span><b>${esc(ask.name)}</b> wants a game</span>
         <button type="button" class="door-pill" data-act="accept">play</button>
         <button type="button" class="door-link" data-act="decline">ignore</button></div>` : '';
-    const sub = signedOut ? 'not signed in'
-      : !lobby ? 'online play is not available right now'
-        : `${people.length ? `<b>${people.length}</b> at the board` : 'nobody else here yet'} - you are visible as <b>${esc(me())}</b>`;
-    const empty = signedOut ? 'sign in to play online'
-      : !lobby ? 'the board here still works - play here from the menu'
-        : '<span class="door-dot"></span>nobody at the board yet - you are first in line';
+    const dot = '<span class="door-dot"></span>';
+    const quickLabel = lookKind === 'quick' ? `looking for a game ${dot}`
+      : lookKind === 'challenge' ? `waiting for an answer ${dot}` : 'quick match';
+    const hostLabel = hosting ? `at your table ${dot}` : `host a table <span class="k">${esc(hostTc.label)}</span>`;
+    const clocks = (canPlay && !looking) ? `<div class="level-row tc-row" role="group" aria-label="Your table's clock">${HOST_TCS.map((t) => `<button type="button" class="level-pill${t === hostTc ? ' on' : ''}" data-act="hosttc" data-id="${esc(t.label)}" aria-pressed="${t === hostTc}">${esc(t.label)}</button>`).join('')}</div>` : '';
+    const stop = hosting ? 'leave the table' : lookKind === 'join' ? 'stand up' : 'stop looking';
     return `
-      <h1 class="door-title">lobby</h1>
-      <p class="door-sub">${sub}</p>
-      ${canPlay ? '<div class="stake-slot">' + stakeHtml() + '</div>' : ''}
-      ${askRow}
-      <button type="button" class="door-btn primary" data-act="quick" ${(looking || !canPlay) ? 'disabled' : ''}>${looking ? 'looking for a game' : 'quick match'} ${looking ? '<span class="door-dot"></span>' : '<span class="k">whoever waited longest</span>'}</button>
-      ${people.length && canPlay ? `<ul class="door-list">${rows}</ul>` : `<div class="door-empty">${empty}</div>`}
-      <div class="door-foot"><span>esc - back</span>${looking ? '<button type="button" class="door-link" data-act="cancel">stop looking</button>' : ''}</div>`;
+      <div class="tables-panel">
+        <div class="tables-side">
+          <h1 class="door-title">open tables</h1>
+          <p class="door-sub tables-sub">${subHtml()}</p>
+          ${canPlay ? '<div class="stake-slot">' + stakeHtml() + '</div>' : ''}
+          ${askRow}
+          <div class="door-row tables-actions">
+            <button type="button" class="door-btn primary" data-act="quick" title="whoever waited longest" ${((looking && !hosting) || !canPlay) ? 'disabled' : ''}>${quickLabel}</button>
+            <button type="button" class="door-btn host-btn${hosting ? ' on' : ''}" data-act="host" ${(looking || !canPlay || typeof lobby.host !== 'function') ? 'disabled' : ''}>${hostLabel}</button>
+          </div>
+          ${clocks}
+          <p class="tables-note" role="status">${esc(note)}</p>
+        </div>
+        <div class="tables-slot">${tablesHtml()}</div>
+      </div>
+      <div class="door-foot"><span>esc - back</span>${looking ? `<button type="button" class="door-link" data-act="cancel">${stop}</button>` : ''}</div>`;
+  }
+
+  function subHtml() {
+    if (signedOut) return 'not signed in';
+    if (!lobby) return 'online play is not available right now';
+    if (looking && lookKind === 'host') return `your table is open as <b>${esc(me())}</b>`;
+    return `<b>${people.length}</b> open &middot; <b>${playingNow.length}</b> playing now`;
+  }
+
+  /** The scroll region: the open tables, then the games on right now. */
+  function tablesHtml() {
+    if (signedOut) return '<div class="door-empty">sign in to see open tables</div>';
+    if (!lobby) return '<div class="door-empty">the board here still works - play here from the menu</div>';
+    const hosting = looking && lookKind === 'host';
+    const mine = hosting ? `
+      <li class="table-row mine"><span class="table-name">${esc(me())}</span>
+        <span class="table-meta"><b>${esc(hostTc.label)}</b><span>your table</span></span><span class="door-dot"></span></li>` : '';
+    const rows = people.map((p, i) => {
+      const fresh = !seenTables.has(p.id);
+      const sitting = lookKind === 'join' && joiningId === p.id;
+      const meta = [tcWord(p.timeControl) ? `<b>${esc(tcWord(p.timeControl))}</b>` : '', `<span>${esc(waitWord(p.waitingSince))}</span>`,
+        (p.rating !== null && p.rating !== undefined && Number.isFinite(Number(p.rating))) ? `<span class="rating">${esc(Math.round(Number(p.rating)))}</span>` : ''].join('');
+      return `
+      <li class="table-row${fresh ? ' fresh' : ''}${sitting ? ' sitting' : ''}" style="--i:${Math.min(i, 8)}" data-id="${esc(p.id)}">
+        <span class="table-name">${esc(p.name)}</span>
+        <span class="table-meta">${meta}</span>
+        <button type="button" class="table-join" data-act="join" data-id="${esc(p.id)}" aria-label="join ${esc(p.name)}" ${(looking && !hosting) ? 'disabled' : ''}>${sitting ? 'sitting <span class="door-dot"></span>' : 'join'}</button>
+      </li>`;
+    }).join('');
+    for (const p of people) seenTables.add(p.id);
+    const open = (mine || rows) ? `<ul class="tables-list" aria-label="Open tables">${mine}${rows}</ul>`
+      : '<div class="door-empty tables-empty">no open tables. host one</div>';
+    const games = playingNow.map((g) => `
+      <li class="playing-row"><span class="who">${esc(g.white)} <i>vs</i> ${esc(g.black)}</span>
+        <span class="meta">${esc([tcWord(g.timeControl), fmtMoves(g.moves)].filter(Boolean).join(' - '))}</span></li>`).join('');
+    return `<div class="tables-scroll" tabindex="0" aria-label="Open tables and games on now">${open}
+      <h2 class="tables-h">playing now</h2>
+      ${games ? `<ul class="playing-list">${games}</ul>` : '<p class="tables-none">no games on right now</p>'}</div>`;
+  }
+
+  /**
+   * A poll landed: repaint the list slot and the count line only, keeping the
+   * scroll and the focused Join where they were.
+   */
+  function paintTables() {
+    if (screen !== 'lobby') return;
+    const slot = card.querySelector('.tables-slot');
+    if (!slot) { render(); return; }
+    const sc = slot.querySelector('.tables-scroll');
+    const top = sc ? sc.scrollTop : 0;
+    const a = document.activeElement;
+    const inSlot = !!(a && slot.contains(a));
+    const focusId = inSlot && a.dataset ? a.dataset.id : null;
+    slot.innerHTML = tablesHtml();
+    const sc2 = slot.querySelector('.tables-scroll');
+    if (sc2) sc2.scrollTop = top;
+    if (inSlot) {
+      const back = (focusId && slot.querySelector(`[data-act=join][data-id="${CSS.escape(focusId)}"]`)) || sc2;
+      try { back && back.focus({ preventScroll: true }); } catch { /* fine */ }
+    }
+    const sub = card.querySelector('.tables-sub');
+    if (sub) sub.innerHTML = subHtml();
   }
 
   function found() {
@@ -366,10 +486,17 @@ export function createDoor(opts = {}) {
     await askHost();
     if (!['lobby', 'end'].includes(screen)) return;
     if (signedOut || !lobby) { if (screen === 'lobby') render(); return; }
-    try { await lobby.enter({ name: me() }); } catch { /* the door still opens */ }
-    if (!['lobby', 'end'].includes(screen)) { lobby.leave(); return; }
     if (offList) offList();
-    offList = lobby.onList((l) => { people = l || []; if (screen === 'lobby') render(); });
+    const tables = (t) => { people = (t && t.open) || []; playingNow = (t && t.playing) || []; tableCount = people.length; paintTables(); };
+    if (typeof lobby.onTables === 'function') {
+      // browse: the list is read, the player is not put on it
+      offList = lobby.onTables(tables);
+    } else {
+      // an older lobby with no tables: stand in it, as before
+      try { await lobby.enter({ name: me() }); } catch { /* the door still opens */ }
+      if (!['lobby', 'end'].includes(screen)) { lobby.leave(); return; }
+      offList = lobby.onList((l) => { people = l || []; paintTables(); });
+    }
     if (offAsk) offAsk();
     offAsk = lobby.onChallenge((offer) => {
       if (!['lobby', 'end'].includes(screen) || ask) { try { offer.decline(); } catch { /* fine */ } return; }
@@ -378,31 +505,46 @@ export function createDoor(opts = {}) {
       ask.timer = later(() => { if (ask === offer) { try { offer.decline(); } catch { /* fine */ } ask = null; if (['lobby', 'end'].includes(screen)) render(); } }, T.askTimeoutMs);
       render();
     });
-    try { people = await lobby.list(); } catch { people = []; }
-    if (screen === 'lobby') render();
+    try {
+      if (typeof lobby.tables === 'function') tables(await lobby.tables());
+      else { people = await lobby.list(); paintTables(); }
+    } catch { /* the poll fills it in */ }
   }
   function leaveLobby() {
     looking = false;
+    lookKind = null;
+    joiningId = null;
+    note = '';
     if (ask) { try { ask.decline(); } catch { /* fine */ } ask = null; }
     if (offList) { offList(); offList = null; }
     if (offAsk) { offAsk(); offAsk = null; }
     try { if (lobby) lobby.leave(); } catch { /* fine */ }
   }
 
-  async function look(promise) {
+  let lookSeq = 0;
+  async function look(promise, kind = 'challenge', id = null) {
+    // A new look may start while one is out (Join from your own table): the old
+    // one rejects 'cancelled' later, and must not clear the new one's state.
+    const mine = ++lookSeq;
     looking = true;
+    lookKind = kind;
+    joiningId = id;
+    note = '';
     root.classList.add('looking');
     if (screen === 'lobby') render();
+    const done = () => { looking = false; lookKind = null; joiningId = null; root.classList.remove('looking'); };
     try {
       const match = await promise;
-      looking = false;
-      root.classList.remove('looking');
+      if (mine !== lookSeq) return;
+      done();
       matched(match);
     } catch (err) {
-      looking = false;
-      root.classList.remove('looking');
+      if (mine !== lookSeq) return;
+      done();
+      const why = err && err.message;
+      note = SEAT_NOTES[why] && why !== 'left' ? SEAT_NOTES[why] : '';
       if (screen === 'lobby') render();
-      if (err && err.message === 'left') sfx('squelch');
+      if (SEAT_NOTES[why]) sfx('squelch');
     }
   }
 
@@ -572,7 +714,10 @@ export function createDoor(opts = {}) {
     switch (name) {
       // the lobby is asked only once the host has said who we are, and not at
       // all for nobody (afterHost); look() reads the quiet rejection as a re-render
-      case 'quick': if (screen !== 'lobby') show('lobby'); if (lobby) look(afterHost(() => lobby.quickMatch())); break;
+      case 'quick': if (screen !== 'lobby') show('lobby'); if (lobby) look(afterHost(() => lobby.quickMatch()), 'quick'); break;
+      case 'join': if (lobby && id) look(afterHost(() => (typeof lobby.join === 'function' ? lobby.join(id) : lobby.challenge(id))), 'join', id); break;
+      case 'host': if (lobby && typeof lobby.host === 'function') look(afterHost(() => lobby.host({ timeControl: { initial_ms: hostTc.initial_ms, increment_ms: hostTc.increment_ms } })), 'host'); break;
+      case 'hosttc': { const t = HOST_TCS.find((c) => c.label === id); if (t) { hostTc = t; render(); } break; }
       case 'solo': deal('solo'); break;
       case 'level': if (LEVELS[id]) { setup = soloOptions({ ...setup, level: id }); paintLevel(); } break;
       case 'continue': { const saved = readSolo(); if (saved) deal('solo', null, saved); else render(); break; }
@@ -665,7 +810,7 @@ export function createDoor(opts = {}) {
     screen: () => screen,
     /** For the harness: the door's state, and levers to pull. */
     debug: {
-      state: () => ({ screen, looking, ask: ask ? ask.name : null, people: people.length, current: current ? current.mode : null, replay: replay ? replay.i : null, games: listGames().length, signedOut, hosted: !!host.isHosted, inLobby: !!offList }),
+      state: () => ({ screen, looking, lookKind, note, ask: ask ? ask.name : null, people: people.length, playing: playingNow.length, current: current ? current.mode : null, replay: replay ? replay.i : null, games: listGames().length, signedOut, hosted: !!host.isHosted, inLobby: !!offList }),
       act,
       openReplay,
       matched,

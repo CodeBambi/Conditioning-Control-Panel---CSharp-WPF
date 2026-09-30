@@ -14,7 +14,20 @@
  *   cancel()          -> void
  *   dispose()         -> void
  *
- *   Match = { id, opponent: { id, name }, side: 'w' | 'b', clockMs }
+ *   tables()          -> Promise<{ open, playing }>   browse; never lists me
+ *   onTables(fn)      -> off     polls while anyone watches
+ *   join(id)          -> Promise<Match>   rejects 'gone' / 'self' / 'blocked' / 'left'
+ *                       (a 409 in_match resumes that game instead)
+ *   host(opts)        -> Promise<Match>   list me, wait for someone to sit down
+ *
+ *   Match   = { id, opponent: { id, name }, side: 'w' | 'b', clockMs }
+ *   open    = [{ id, name, waitingSince, rating, timeControl }]   oldest first
+ *   playing = [{ white, black, timeControl, startedMs, moves }]   names only
+ *
+ * BROWSING IS NOT SITTING. Watching the open tables reads GET /lobby and never
+ * posts /lobby/enter, so a player looking at the list is not on it. Only
+ * host() lists the player; while it waits, the same poll reads `matched`, the
+ * server's word that somebody sat down at our table.
  *
  * boot.js imports this in preference to the mock and falls back when the import
  * fails OR when the factory answers null. Answering null is a first-class
@@ -112,13 +125,23 @@ export function createServerLobby({
 
   const listListeners = new Set();
   const challengeListeners = new Set();
+  const tableListeners = new Set();
 
   let tc = timeControl || DEFAULT_TIME_CONTROL;
   let entered = false;
+  /** We posted /lobby/enter (enter or host) and have not stood up: the listing needs renewing. */
+  let listed = false;
   let disposed = false;
   let handle = null;
   let lastEnter = 0;
   let people = [];
+  let playing = [];
+  /**
+   * Match ids a `matched` read has already handed over. The server keeps
+   * answering `matched` for as long as the match is live, so a repeat of the
+   * same id deals nothing twice.
+   */
+  const seenMatched = new Set();
   /** Incoming challenge ids we have already offered the door, so it is asked once. */
   const offered = new Set();
   /** Incoming challenge ids the player turned down, so a stale row is not re-offered. */
@@ -154,6 +177,30 @@ export function createServerLobby({
       rating: (p.rating === null || p.rating === undefined) ? null : Number(p.rating),
       timeControl: p.time_control || null,
     };
+  }
+
+  /** A `playing` row: two names and a count, never an id (contract). */
+  function toPlaying(p) {
+    const name = (v) => String((v && typeof v === 'object' ? (v.display_name || v.name) : v) || 'someone');
+    return {
+      white: name(p.white),
+      black: name(p.black),
+      timeControl: p.time_control || null,
+      startedMs: Number(p.started_ms) || 0,
+      moves: Math.max(0, Number(p.moves) || 0),
+    };
+  }
+
+  function tablesSnapshot() {
+    return { open: list(), playing: playing.map((p) => Object.assign({}, p)) };
+  }
+
+  /** Take one GET /lobby answer in. Answers whether it was one. */
+  function absorb(res) {
+    if (!(res && res.ok && res.data && Array.isArray(res.data.players))) return false;
+    people = res.data.players.filter((p) => p && p.self !== true).map(toRow);
+    playing = Array.isArray(res.data.playing) ? res.data.playing.filter(Boolean).slice(0, 30).map(toPlaying) : [];
+    return true;
   }
 
   /**
@@ -245,12 +292,12 @@ export function createServerLobby({
    * and refreshes sees it on that refresh and not the one after.
    */
   async function refresh(everything = false) {
-    if (disposed || !entered) return;
+    if (disposed || !active()) return;
 
     // Keep the listing alive. /quick counts as a refresh, so this only fires
     // while the player is sitting in the lobby rather than queueing.
     const queueing = !!(pending && pending.kind === 'quick');
-    if (!queueing && Date.now() - lastEnter >= REENTER_MS) {
+    if (listed && !queueing && Date.now() - lastEnter >= REENTER_MS) {
       lastEnter = Date.now();
       api.lobbyEnter(tc).catch(() => {});
     }
@@ -264,11 +311,25 @@ export function createServerLobby({
       || ((polls - 1) % CHALLENGE_TICKS === 0);
 
     const [lob, chal] = await Promise.all([api.lobbyList(), askChallenges ? api.challenges() : Promise.resolve(null)]);
-    if (disposed || !entered) return;
+    if (disposed || !active()) return;
 
-    if (lob.ok && Array.isArray(lob.data.players)) {
-      people = lob.data.players.filter((p) => p && p.self !== true).map(toRow);
+    if (absorb(lob)) {
       emit(listListeners, list());
+      emit(tableListeners, tablesSnapshot());
+      // Somebody sat down at our table. Only a host is waiting for this; the
+      // quick queue hears the same pairing from /quick below.
+      const mt = lob.data.matched;
+      const mid = mt && (mt.match_id || mt.matchId);
+      if (mid && !seenMatched.has(String(mid)) && pending && pending.kind === 'host') {
+        const request = pending;
+        seenMatched.add(String(mid));
+        listed = false;
+        try {
+          const m = await matchFrom(String(mid), mt.color, null);
+          if (!disposed && pending === request) resolveLook(announce(m));
+        } catch (err) { if (pending === request) rejectLook('left'); }
+        return;
+      }
     }
 
     if (chal && chal.ok) {
@@ -324,10 +385,20 @@ export function createServerLobby({
     handle = null;
     refresh()
       .catch(() => {})
-      .then(() => { if (!disposed && entered) handle = setT(tick, pollMs); });
+      .then(() => { if (!disposed && active()) handle = setT(tick, pollMs); });
   }
 
   function stopPoll() { if (handle) { clearT(handle); handle = null; } }
+
+  /**
+   * Is anybody asking for the poll? A look or a listing, or a screen watching
+   * the tables or waiting on a challenge. The tick stops on its own once
+   * nobody is, so an unsubscribe needs no bookkeeping.
+   */
+  function active() { return entered || listed || tableListeners.size > 0 || challengeListeners.size > 0; }
+
+  /** Start the poll now if it is not running; the first tick lands on the next turn. */
+  function kick() { if (!disposed && !handle && active()) handle = setT(tick, 0); }
 
   /* ------------------------------------------------------------- the doors */
 
@@ -340,7 +411,49 @@ export function createServerLobby({
     if (pending && pending.kind === 'challenge' && pending.challengeId) {
       api.declineChallenge(pending.challengeId).catch(() => {});
     }
+    // Getting up from our own table takes the table away with us, and giving
+    // up on quick match takes us out of the queue /quick put us in: a player
+    // who is only browsing again must not be pairable.
+    if (pending && ((pending.kind === 'host' && listed) || pending.kind === 'quick')) {
+      listed = false;
+      entered = false;
+      api.lobbyLeave().catch(() => {});
+      rejectLook('cancelled');
+      return true;
+    }
     rejectLook('cancelled');
+    return false;
+  }
+
+  /** The challenge flow behind challenge() and join()'s old-server fallback. */
+  function challengeImpl(id, options, resolve, reject) {
+    const request = pending = { kind: 'challenge', challengeId: null, resolve, reject, settled: false, previousMatchId: options.previousMatchId || null };
+    entered = true;
+    kick();
+    (async () => {
+      // Same wait as quickMatch, for the same reason.
+      await whenIdentity();
+      if (disposed || pending !== request || request.settled) return;
+      if (!signedIn()) { rejectLook('left'); return; }
+      const res = await api.challenge(String(id), options.timeControl || tc, options.color);
+      if (disposed || pending !== request || request.settled) return;
+      // He is not there any more, or the server refused the pairing. The
+      // door plays its refusal on exactly this word.
+      if (!res.ok) { rejectLook('left'); return; }
+      const direct = res.data.match_id || res.data.matchId;
+      if (direct) {
+        if (direct === request.previousMatchId) throw new Error('not ready');
+        const m = await matchFrom(direct, res.data.color, null, !!request.previousMatchId);
+        if (!disposed && pending === request) resolveLook(announce(m));
+        return;
+      }
+      const cid = res.data.challenge_id || res.data.challengeId || null;
+      if (!cid) { rejectLook('left'); return; }
+      request.challengeId = String(cid);
+      // The friends drawer sends this id to the friend as an invite.
+      if (typeof options.onChallengeId === 'function') { try { options.onChallengeId(request.challengeId); } catch { /* the wait goes on */ } }
+      // ...and the poll watches for him to say yes.
+    })().catch((err) => { if (pending === request) rejectLook(err.message || 'left'); });
   }
 
   return {
@@ -356,6 +469,7 @@ export function createServerLobby({
       const res = await api.lobbyEnter(tc);
       if (!res.ok) throw new Error(res.error || 'enter failed');
       entered = true;
+      listed = true;
       lastEnter = Date.now();
       if (!handle) handle = setT(tick, pollMs);
       await refresh();
@@ -367,22 +481,112 @@ export function createServerLobby({
      * server's own 180s expiry is the real backstop.
      */
     leave() {
+      // Anything but browsing may have put us on the server's list (a table,
+      // the quick queue, a challenge's poll), so only browsing skips the goodbye.
+      const wasListed = listed || entered;
+      listed = false;
       entered = false;
-      stopPoll();
-      cancel();
+      const said = cancel();
+      if (!active()) stopPoll();
       people = [];
+      playing = [];
       offered.clear();
       refused.clear();
-      if (signedIn()) api.lobbyLeave().catch(() => {});
+      // A player who only browsed never sat down, so there is nothing to stand up from.
+      if (wasListed && !said && signedIn()) api.lobbyLeave().catch(() => {});
     },
 
     async list() {
       if (disposed) return [];
-      const res = await api.lobbyList();
-      if (res.ok && Array.isArray(res.data.players)) {
-        people = res.data.players.filter((p) => p && p.self !== true).map(toRow);
-      }
+      absorb(await api.lobbyList());
       return list();
+    },
+
+    /** The open tables and the games on right now. Reads only; never lists the player. */
+    async tables() {
+      if (disposed) return { open: [], playing: [] };
+      await whenIdentity();
+      if (disposed || !signedIn()) return { open: [], playing: [] };
+      if (absorb(await api.lobbyList())) emit(listListeners, list());
+      return tablesSnapshot();
+    },
+
+    onTables(fn) {
+      if (typeof fn !== 'function') return () => {};
+      tableListeners.add(fn);
+      kick();
+      return () => tableListeners.delete(fn);
+    },
+
+    /**
+     * Sit at one open table, by the `p_` id off its row. The table's time
+     * control is the game's. An older server with no /join answers a bare 404,
+     * and then this is a challenge to the same row, which is what it was before.
+     */
+    join(id) {
+      cancel();
+      if (disposed) return Promise.reject(new Error('cancelled'));
+      if (!id) return Promise.reject(new Error('gone'));
+      const row = people.find((p) => p.id === String(id)) || null;
+      return new Promise((resolve, reject) => {
+        const request = pending = { kind: 'join', challengeId: null, resolve, reject, settled: false };
+        (async () => {
+          await whenIdentity();
+          if (disposed || pending !== request || request.settled) return;
+          if (!signedIn()) { rejectLook('left'); return; }
+          const res = await api.join(String(id));
+          if (disposed || pending !== request || request.settled) return;
+          // Already in a live game (409 in_match): that game is the answer, not a refusal.
+          const live = !res.ok && res.serverError === 'in_match' && res.data && (res.data.match_id || res.data.matchId);
+          if (live) {
+            const m = await matchFrom(String(live), res.data.color, null);
+            if (!disposed && pending === request) resolveLook(announce(m));
+            return;
+          }
+          if (!res.ok) {
+            if (res.error === 'not_deployed') {
+              pending = null;
+              challengeImpl(String(id), {}, resolve, reject);
+              return;
+            }
+            const word = res.serverError === 'self' ? 'self'
+              : res.serverError === 'blocked' ? 'blocked'
+                : (res.serverError === 'table_gone' || res.serverError === 'invalid_target' || res.status === 409) ? 'gone' : 'left';
+            rejectLook(word);
+            return;
+          }
+          const mid = res.data.match_id || res.data.matchId;
+          if (!mid) { rejectLook('gone'); return; }
+          const m = await matchFrom(String(mid), res.data.color, row ? { id: row.id, name: row.name } : null);
+          if (!disposed && pending === request) resolveLook(announce(m));
+        })().catch(() => { if (pending === request) rejectLook('left'); });
+      });
+    },
+
+    /**
+     * Host a table: list the player with a time control and wait for somebody
+     * to sit down. Resolves with the Match; rejects 'cancelled' when the player
+     * gets up (cancel() takes the listing down with it).
+     */
+    host(opts = {}) {
+      cancel();
+      if (disposed) return Promise.reject(new Error('cancelled'));
+      if (opts && opts.timeControl) tc = opts.timeControl;
+      return new Promise((resolve, reject) => {
+        const request = pending = { kind: 'host', challengeId: null, resolve, reject, settled: false };
+        (async () => {
+          await whenIdentity();
+          if (disposed || pending !== request || request.settled) return;
+          if (!signedIn()) { rejectLook('left'); return; }
+          const res = await api.lobbyEnter(tc);
+          if (disposed || pending !== request || request.settled) return;
+          if (!res.ok) { rejectLook('left'); return; }
+          listed = true;
+          entered = true;
+          lastEnter = Date.now();
+          kick();
+        })().catch(() => { if (pending === request) rejectLook('left'); });
+      });
     },
 
     onList(fn) {
@@ -438,35 +642,7 @@ export function createServerLobby({
       cancel();
       if (disposed) return Promise.reject(new Error('cancelled'));
       if (!id) return Promise.reject(new Error('left'));
-      return new Promise((resolve, reject) => {
-        const request = pending = { kind: 'challenge', challengeId: null, resolve, reject, settled: false, previousMatchId: options.previousMatchId || null };
-        entered = true;
-        if (!handle) handle = setT(tick, pollMs);
-        (async () => {
-          // Same wait as quickMatch, for the same reason.
-          await whenIdentity();
-          if (disposed || pending !== request || request.settled) return;
-          if (!signedIn()) { rejectLook('left'); return; }
-          const res = await api.challenge(String(id), options.timeControl || tc, options.color);
-          if (disposed || pending !== request || request.settled) return;
-          // He is not there any more, or the server refused the pairing. The
-          // door plays its refusal on exactly this word.
-          if (!res.ok) { rejectLook('left'); return; }
-          const direct = res.data.match_id || res.data.matchId;
-          if (direct) {
-            if (direct === request.previousMatchId) throw new Error('not ready');
-            const m = await matchFrom(direct, res.data.color, null, !!request.previousMatchId);
-            if (!disposed && pending === request) resolveLook(announce(m));
-            return;
-          }
-          const cid = res.data.challenge_id || res.data.challengeId || null;
-          if (!cid) { rejectLook('left'); return; }
-          request.challengeId = String(cid);
-          // The friends drawer sends this id to the friend as an invite.
-          if (typeof options.onChallengeId === 'function') { try { options.onChallengeId(request.challengeId); } catch { /* the wait goes on */ } }
-          // ...and the poll watches for him to say yes.
-        })().catch((err) => { if (pending === request) rejectLook(err.message || 'left'); });
-      });
+      return new Promise((resolve, reject) => challengeImpl(id, options, resolve, reject));
     },
 
     /**
@@ -492,17 +668,21 @@ export function createServerLobby({
     dispose() {
       disposed = true;
       stopPoll();
-      cancel();
+      const wasListed = listed || entered;
+      listed = false;
+      const said = cancel();
       entered = false;
+      listed = false;
       listListeners.clear();
       challengeListeners.clear();
-      if (signedIn()) api.lobbyLeave().catch(() => {});
+      tableListeners.clear();
+      if (wasListed && !said && signedIn()) api.lobbyLeave().catch(() => {});
     },
 
     /** Matches the mock's `debug` block, so a harness can poke either one. */
     debug: {
       isMock: false,
-      state: () => ({ entered, looking: pending ? pending.kind : null, people: list(), timeControl: tc, polls }),
+      state: () => ({ entered, listed, looking: pending ? pending.kind : null, people: list(), playing: playing.length, timeControl: tc, polls }),
       /** A full poll, challenges included, off the cadence - see refresh. */
       refresh: () => refresh(true),
     },
