@@ -297,6 +297,14 @@ namespace ConditioningControlPanel.Avalonia
                 }
                 // After the version seed: installing / loading a mod checks its MinAppVersion.
                 StartMods();
+                // WPF App.xaml.cs:2513 (App.Chaster). After the version seed: it is the User-Agent.
+                // ponytail: no StartSettle / ChasterHooks yet (WPF :3149-3150) - this slice only reads the lock.
+                try
+                {
+                    Platform.ChasterHead.Service = Platform.ChasterHead.Create(
+                        Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.ChasterHead.EnvVar));
+                }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "[Chaster] service could not be built"); }
                 // WPF App.xaml.cs:2940-2968. EnsureBaselineAsync keeps WPF's rules: no-op on a full
                 // install, under a debugger, in offline mode, or when nothing is missing. A Linux dev
                 // build never reads as a full install (flashes_audio is not shipped here), so an
@@ -589,6 +597,7 @@ namespace ConditioningControlPanel.Avalonia
             try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }
             try { Platform.LayeredAudio.Instance?.Shutdown(); } catch { }
             try { ReleaseContent?.Dispose(); } catch { }
+            try { Platform.ChasterHead.Service?.Dispose(); } catch { }
 
             // WPF App.OnExit: a best-effort final push, capped at 2 s (off the UI thread, as WPF's Task.Run).
             try { if (Platform.AccountSeed.Sync is { Loaded: true } sync) System.Threading.Tasks.Task.Run(() => sync.PushAsync("shutdown")).Wait(TimeSpan.FromSeconds(2)); }

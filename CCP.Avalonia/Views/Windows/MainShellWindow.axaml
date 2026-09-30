@@ -1349,6 +1349,8 @@
                     <!-- ponytail: Controls/SpiralRailHost.cs (278 lines) is not on this base and is out of scope for
                          this layer; a collapsed stand-in keeps the rail measuring as it does today. -->
                     <Border x:Name="SpiralRail" IsVisible="False"/>
+                    <!-- 2026-09-21 (owner): CIRCE'S TAB took the medallion's slot. See Controls/ChasterRailChip.cs. -->
+                    <fx:ChasterRailChip x:Name="ChasterRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
                     <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). A gold clock that appears
                          seven days before the migration ceremony, shakes harder the closer it gets,
@@ -2552,6 +2554,10 @@
                      supporter-only features (ExclusiveFeature.All); replaced the launcher
                      popup submenu. Cards navigate; destination tabs own the premium gates. -->
                 <views:ExclusivesTabView x:Name="ExclusivesTab" Margin="10,5,10,10" IsVisible="False" />
+
+                <!-- Circe's tab ("chaster"): the Chaster link and the price-per-event tab.
+                     Door: the padlock at the foot of the rail. See Views/Tabs/ChasterTabView.axaml.cs. -->
+                <views:ChasterTabView x:Name="ChasterTab" Margin="10,5,10,10" IsVisible="False" />
 
 
                 <!-- Settings Tab ("appsettings") — the Settings door's own page, added in Phase 2 of

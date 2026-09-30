@@ -1,0 +1,149 @@
+<!-- PORTED (first read-only slice) from ConditioningControlPanel/Views/Tabs/ChasterTabView.xaml.
+     ponytail: what is not here yet is listed in the code-behind header. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView">
+    <UserControl.Resources>
+        <ControlTheme x:Key="CirceCta" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="19"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Height" Value="56"/>
+            <Setter Property="Padding" Value="28,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="Bg" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bg"><Setter Property="Opacity" Value="0.92"/></Style>
+            <Style Selector="^:disabled /template/ Border#Bg"><Setter Property="Opacity" Value="0.4"/></Style>
+        </ControlTheme>
+        <ControlTheme x:Key="CirceLink" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Content="{TemplateBinding Content}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"/>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+        <ControlTheme x:Key="CirceFact" TargetType="Border">
+            <Setter Property="Background" Value="#14FFFFFF"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="26,22,26,20" MaxWidth="1080" RowDefinitions="Auto,Auto,Auto">
+            <!-- header: the name, and the account -->
+            <Grid Grid.Row="0" Margin="4,0,4,14">
+                <TextBlock Text="{loc:Str chaster_title}" FontFamily="Fredoka, Segoe UI" FontSize="28"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                <Border x:Name="AccountStrip" HorizontalAlignment="Right" VerticalAlignment="Center" IsVisible="False"
+                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                        BorderThickness="1.5" CornerRadius="19" Height="38" Padding="10,0"
+                        ToolTip.Tip="{loc:Str chaster_account_strip_tip}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str chaster_account_linked}" FontSize="12" Foreground="#5FFFD0" VerticalAlignment="Center"/>
+                        <Rectangle Width="1" Height="16" Fill="{DynamicResource GlassBorderBrush}" Margin="10,0" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnChasterSite" Theme="{StaticResource CirceLink}" VerticalAlignment="Center" Click="BtnChasterSite_Click">
+                            <Border Height="26" CornerRadius="13" Padding="8,0,10,0" Background="#26FFFFFF" BorderBrush="#40FFFFFF" BorderThickness="1">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Canvas Width="10" Height="12" VerticalAlignment="Center" Margin="0,0,6,0">
+                                        <Path Data="M2,5.5 L2,3.5 A3,3 0 0 1 8,3.5 L8,5.5" Stroke="#FF8FA3" StrokeThickness="1.4"/>
+                                        <Rectangle Canvas.Top="5" Width="10" Height="7" RadiusX="1.5" RadiusY="1.5" Fill="#FF8FA3"/>
+                                    </Canvas>
+                                    <TextBlock x:Name="TxtAccountLock" FontSize="12" MaxWidth="170" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtAccountLeft" FontFamily="Consolas, Courier New" FontSize="12" FontWeight="Bold"
+                                               Foreground="#FF8FA3" Margin="8,0,0,0" VerticalAlignment="Center" IsVisible="False"/>
+                                    <TextBlock Text="&#x2197;" FontSize="12" Margin="7,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 1. THE LOCK -->
+            <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}"
+                    BorderThickness="1" CornerRadius="18" MinHeight="368" Margin="0,0,0,10">
+                <StackPanel Margin="26,14,26,14" VerticalAlignment="Center">
+                    <TextBlock x:Name="HeroTitle" Text="{loc:Str chaster_hero_title}" FontFamily="Fredoka, Segoe UI" FontSize="88"
+                               FontWeight="Bold" Foreground="#FF7AC0" HorizontalAlignment="Center" IsVisible="False"/>
+                    <StackPanel x:Name="HeroClockRow" Orientation="Horizontal" IsVisible="False">
+                        <StackPanel x:Name="HeroClock" Orientation="Horizontal"/>
+                        <TextBlock Text="{loc:Str chaster_lock_lead}" FontSize="13" VerticalAlignment="Bottom"
+                                   Margin="12,0,0,12" Foreground="{DynamicResource TextMutedBrush}"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtHeroEnds" FontSize="13" Margin="0,2,0,0" IsVisible="False" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="SetupHint" IsVisible="False" FontSize="16" FontWeight="SemiBold" Foreground="White"
+                               TextWrapping="Wrap" MaxWidth="480" HorizontalAlignment="Left" Margin="0,8,0,12"/>
+                    <WrapPanel x:Name="HeroPills" Margin="0,10,0,0"/>
+                    <TextBlock x:Name="TxtMood" FontFamily="Fredoka, Segoe UI" FontSize="14" FontWeight="Bold" Margin="0,4,0,0" IsVisible="False"/>
+                    <StackPanel x:Name="LockRow" Orientation="Horizontal" Margin="0,8,0,0" IsVisible="False">
+                        <ComboBox x:Name="CmbLock" FontSize="16" MinWidth="260" SelectionChanged="CmbLock_SelectionChanged"/>
+                        <Button x:Name="BtnUseLock" Theme="{StaticResource CirceCta}" Padding="20,0" Height="48" Background="#E0B052"
+                                Click="BtnUseLock_Click">
+                            <TextBlock x:Name="TxtUseLock" FontSize="16" FontWeight="Bold" Foreground="#21152E"/>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- NOT LINKED: the same hero, one ask. -->
+                    <StackPanel x:Name="UnlinkedPanel" IsVisible="False">
+                        <TextBlock Text="{loc:Str chaster_intro_1}" TextWrapping="Wrap" FontSize="14" MaxWidth="460" HorizontalAlignment="Left"
+                                   LineHeight="21" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,18"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BtnLink" Theme="{StaticResource CirceCta}" MinWidth="220" Click="BtnLink_Click"
+                                    ToolTip.Tip="{loc:Str chaster_link_test_hint}">
+                                <TextBlock Text="{loc:Str chaster_link}"/>
+                            </Button>
+                            <StackPanel x:Name="LinkingRow" Orientation="Horizontal" IsVisible="False" Margin="16,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Str chaster_linking}" VerticalAlignment="Center" FontSize="13"
+                                           Foreground="{DynamicResource TextLightBrush}" Margin="0,0,10,0"/>
+                                <Button Theme="{StaticResource CirceLink}" Click="BtnCancelLink_Click">
+                                    <TextBlock Text="{loc:Str chaster_cancel}" Foreground="{DynamicResource TextLightBrush}" TextDecorations="Underline"/>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Text="{loc:Str chaster_link_browser_hint}" TextWrapping="Wrap" FontSize="11" MaxWidth="460"
+                                   HorizontalAlignment="Left" Foreground="{DynamicResource TextMutedBrush}" Margin="2,10,0,0"/>
+                        <TextBlock x:Name="TxtLinkNote" IsVisible="False" TextWrapping="Wrap" FontSize="12" Foreground="#FFC98A" Margin="2,8,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Unlinked: three facts, no paragraphs. -->
+            <UniformGrid x:Name="FactRow" Grid.Row="2" Columns="3" IsVisible="False" Margin="0,4,-10,0">
+                <Border Theme="{StaticResource CirceFact}">
+                    <StackPanel>
+                        <TextBlock x:Name="TxtFactCap1" Text="3:00:00" FontFamily="Fredoka, Segoe UI" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextLightBrush}"/>
+                        <TextBlock Text="{loc:Str chaster_fact_cap}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </Border>
+                <Border Theme="{StaticResource CirceFact}">
+                    <StackPanel>
+                        <TextBlock Text="&#x21BA;" FontFamily="Fredoka, Segoe UI" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextLightBrush}"/>
+                        <TextBlock Text="{loc:Str chaster_fact_floor}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </Border>
+                <Border Theme="{StaticResource CirceFact}">
+                    <StackPanel>
+                        <TextBlock Text="PANIC" FontFamily="Fredoka, Segoe UI" FontSize="22" FontWeight="Bold" Foreground="#FF6B8A"/>
+                        <TextBlock Text="{loc:Str chaster_fact_panic}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
