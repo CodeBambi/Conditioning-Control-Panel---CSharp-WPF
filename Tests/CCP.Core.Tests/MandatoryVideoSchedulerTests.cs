@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Services;
 using Xunit;
@@ -290,4 +291,67 @@ public sealed class MandatoryVideoSchedulerTests
         }
         finally { CoreEngine.Stop(); CoreEngine.Video = null; }
     });
+
+    // WPF #735: one grace pause per clip, only while it plays; the same keystroke's second handler
+    // is swallowed for 200 ms; the countdown rounds up.
+    [Fact]
+    public void GracePauseRules()
+    {
+        Assert.Equal(GraceDecision.Pause, MandatoryVideoScheduler.EvaluateGrace(true, false, false, false, double.MaxValue));
+        Assert.Equal(GraceDecision.ConsumedDedup, MandatoryVideoScheduler.EvaluateGrace(true, false, true, true, 150));
+        Assert.Equal(GraceDecision.FallThrough, MandatoryVideoScheduler.EvaluateGrace(true, false, true, false, 5000));   // press 2
+        Assert.Equal(GraceDecision.FallThrough, MandatoryVideoScheduler.EvaluateGrace(true, false, false, true, 5000));   // spent
+        Assert.Equal(GraceDecision.FallThrough, MandatoryVideoScheduler.EvaluateGrace(false, false, false, false, double.MaxValue));
+        Assert.Equal(60, MandatoryVideoScheduler.GraceSecondsRemaining(0));
+        Assert.Equal(59, MandatoryVideoScheduler.GraceSecondsRemaining(1.2));
+        Assert.Equal(0, MandatoryVideoScheduler.GraceSecondsRemaining(61));
+
+        // Which keys try it (WPF SetupStrictHandlers). Strict: Esc only, with a non-Esc panic key and
+        // a live listener - the fall-open force-stop keeps Esc when nothing global can stop the clip.
+        Assert.Equal(false, MandatoryVideoScheduler.GraceKey(true, "Escape", true, "F12"));
+        Assert.Null(MandatoryVideoScheduler.GraceKey(true, "Escape", true, "F12", panicListenerLive: false));
+        Assert.Null(MandatoryVideoScheduler.GraceKey(true, "Escape", true, "Escape"));
+        Assert.Null(MandatoryVideoScheduler.GraceKey(true, "F12", true, "F12"));
+        Assert.Equal(false, MandatoryVideoScheduler.GraceKey(false, "Escape", true, "F12"));
+        Assert.Equal(true, MandatoryVideoScheduler.GraceKey(false, "Escape", true, "Escape"));
+        Assert.Equal(true, MandatoryVideoScheduler.GraceKey(false, "F12", true, "F12"));
+        Assert.Null(MandatoryVideoScheduler.GraceKey(false, "F12", false, "F12"));
+    }
+
+    // WPF vout watchdog, safety timer (+5 s), 600 s fallback, max-length cap and mid-play loss.
+    [Fact]
+    public void ClipGuards()
+    {
+        Assert.Null(MandatoryVideoScheduler.Guard(7.9, false, 0, 0, 0));
+        Assert.Equal("no frame", MandatoryVideoScheduler.Guard(8, false, 0, 0, 0));
+        Assert.Null(MandatoryVideoScheduler.Guard(34.9, true, 30, 0, 0));
+        Assert.Equal("overran", MandatoryVideoScheduler.Guard(35, true, 30, 0, 0));
+        Assert.Null(MandatoryVideoScheduler.Guard(599, true, 0, 0, 0));
+        Assert.Equal("overran", MandatoryVideoScheduler.Guard(600, true, 0, 0, 0));
+        Assert.Equal("max length", MandatoryVideoScheduler.Guard(20, true, 30, 0, 20));
+        Assert.Null(MandatoryVideoScheduler.Guard(20, true, 30, 0, 0));
+        Assert.Equal("stalled", MandatoryVideoScheduler.Guard(10, true, 30, 8, 0));
+        Assert.Null(MandatoryVideoScheduler.Guard(10, true, 30, 7.9, 0));
+    }
+
+    // WPF CompanionService.OnAttentionCheckFailed: only the Trainer's perk costs 25 XP, floored at 0.
+    [Fact]
+    public void TrainerPerkPaysForAFailedCheck()
+    {
+        var s = new ConditioningControlPanel.Models.AppSettings();
+        var trainer = ConditioningControlPanel.Models.CompanionDefinition.AllCompanions
+            .First(c => c.BonusType == ConditioningControlPanel.Models.CompanionBonusType.StrictModeBonus);
+        s.ActiveCompanionId = (int)trainer.Id;
+        s.ActiveCompanionProgress.CurrentXP = 30;
+        Assert.True(ConditioningControlPanel.Services.Companion.CompanionPerks.ApplyAttentionFailPenalty(s));
+        Assert.Equal(5, s.ActiveCompanionProgress.CurrentXP);
+        Assert.True(ConditioningControlPanel.Services.Companion.CompanionPerks.ApplyAttentionFailPenalty(s));
+        Assert.Equal(0, s.ActiveCompanionProgress.CurrentXP);
+        var other = ConditioningControlPanel.Models.CompanionDefinition.AllCompanions
+            .First(c => c.BonusType != ConditioningControlPanel.Models.CompanionBonusType.StrictModeBonus);
+        s.ActiveCompanionId = (int)other.Id;
+        s.ActiveCompanionProgress.CurrentXP = 30;
+        Assert.False(ConditioningControlPanel.Services.Companion.CompanionPerks.ApplyAttentionFailPenalty(s));
+        Assert.Equal(30, s.ActiveCompanionProgress.CurrentXP);
+    }
 }

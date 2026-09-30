@@ -29,6 +29,10 @@ namespace ConditioningControlPanel.Services
     /// <summary>What a key press does in a mandatory-video window (WPF SetupStrictHandlers).</summary>
     public enum VideoKeyAction { None, Dismiss, ForceStop, Swallow }
 
+    /// <summary>WPF VideoService.GraceDecision (#735): pause now, swallow the same keystroke's second
+    /// handler, or fall through to the normal Esc/panic path.</summary>
+    public enum GraceDecision { Pause, ConsumedDedup, FallThrough }
+
     /// <summary>
     /// The portable half of WPF <c>VideoService</c> (ConditioningControlPanel/Services/Video/VideoService.cs):
     /// the schedule (<c>ScheduleNext</c> :2952), the local pick (<c>GetNextVideo</c> :7997 /
@@ -37,7 +41,7 @@ namespace ConditioningControlPanel.Services
     /// (<c>FinalizeWatchCredit</c> :7424) and the strict-key rules. Drawing is the head's
     /// <see cref="IMandatoryVideoHost"/>.
     /// ponytail: local library only - content-pack and remote clips, the duration filter
-    /// (MetadataCache), grace pause, cascade/feed/DND/browser-media defers and the
+    /// (MetadataCache; the max-length cap in <see cref="Guard"/> still holds the max), cascade/feed/DND/browser-media defers and the
     /// interaction queue are WPF-head services; add each here when it reaches Core.
     /// <para><b>Deliberate deviation:</b> a scheduled tick that finds an empty library re-arms the
     /// schedule. WPF returns from ContinueTriggerVideo (:2424) without ScheduleNext, so its schedule
@@ -171,6 +175,59 @@ namespace ConditioningControlPanel.Services
             return panicEnabled && key == panicKey ? VideoKeyAction.ForceStop : VideoKeyAction.None;
         }
 
+        // ---- grace pause (WPF #735) and the clip guards ----
+
+        /// <summary>WPF GraceWindowSeconds: the pause resumes on its own after this.</summary>
+        public const int GraceWindowSeconds = 60;
+        /// <summary>WPF GraceDedupMs: one physical keystroke reaching two handlers pauses once.</summary>
+        public const int GraceDedupMs = 200;
+
+        /// <summary>WPF EvaluateGraceRequest: one grace pause per clip, only while it is really on
+        /// screen; the press after it (or any press once it is spent) is the normal Esc/panic.</summary>
+        public static GraceDecision EvaluateGrace(bool videoPlaying, bool cleaningUp, bool alreadyPaused, bool consumed,
+            double msSinceLastGraceAction, int dedupMs = GraceDedupMs)
+        {
+            if (msSinceLastGraceAction < dedupMs) return GraceDecision.ConsumedDedup;
+            if (!videoPlaying || cleaningUp || alreadyPaused || consumed) return GraceDecision.FallThrough;
+            return GraceDecision.Pause;
+        }
+
+        /// <summary>WPF GraceSecondsRemaining: the countdown rounds up, so "60" shows for a full second.</summary>
+        public static int GraceSecondsRemaining(double elapsedSeconds, int windowSeconds = GraceWindowSeconds)
+            => (int)Math.Max(0, Math.Ceiling(windowSeconds - elapsedSeconds));
+
+        /// <summary>WPF SetupStrictHandlers: whether this press first tries the grace pause, and if so
+        /// whether it counts as the panic key (null = not a grace key). Strict: only Esc, only with a
+        /// panic key that is not Esc; never when the strict fall-open force-stop owns the key.
+        /// Otherwise Esc (as the panic key when it is bound to Esc) and the panic key.</summary>
+        public static bool? GraceKey(bool strict, string key, bool panicEnabled, string? panicKey, bool panicListenerLive = true)
+        {
+            var escIsPanic = Safety.PanicPolicy.EscapeIsThePanicKey(panicEnabled, panicKey);
+            if (strict)
+                return panicListenerLive && key == "Escape" && panicEnabled && !escIsPanic ? false : null;
+            if (key == "Escape") return escIsPanic;
+            return panicEnabled && key == panicKey ? true : null;
+        }
+
+        /// <summary>WPF VoutGraceMs: no frame this long after Play is a dead output.</summary>
+        public const double NoFrameSeconds = 8;
+        /// <summary>WPF VoutLostGraceMs-sized: a clock that stops advancing mid-clip is a wedged decoder.</summary>
+        public const double StallSeconds = 8;
+        /// <summary>WPF MaxVideoFallbackSeconds: the cap when the clip never reports a length.</summary>
+        public const double FallbackSeconds = 600;
+
+        /// <summary>WPF's clip guards, on the unpaused play clock (a grace pause freezes it, as WPF
+        /// re-phases its timers): no frame (vout watchdog), a stalled clock (mid-play loss), past the
+        /// length + 5 s (safety timer), 600 s with no length (fallback), the user's max length
+        /// (max-length cap, VideoMaxDurationSeconds). Returns why the clip must end, or null.</summary>
+        public static string? Guard(double playedSeconds, bool framed, double lengthSeconds, double sinceProgressSeconds, int maxSeconds)
+        {
+            if (!framed) return playedSeconds >= NoFrameSeconds ? "no frame" : null;
+            if (maxSeconds > 0 && playedSeconds >= maxSeconds) return "max length";
+            if (lengthSeconds > 0 ? playedSeconds >= lengthSeconds + 5 : playedSeconds >= FallbackSeconds) return "overran";
+            return sinceProgressSeconds >= StallSeconds ? "stalled" : null;
+        }
+
         public void Start()
         {
             if (_running) return;
@@ -271,9 +328,8 @@ namespace ConditioningControlPanel.Services
         /// a fresh clip with the same strictness, until the third replay earns mercy
         /// (MercySystemEnabled), which ends the run like <see cref="End"/>.
         /// Pass/fail reach achievements (and the head's Chaster "attention" note) through
-        /// <see cref="CoreProgression.TrackAttentionCheck"/>.
-        /// ponytail: no Chaster "video" note on a natural end and no Trainer companion -25 XP on a fail;
-        /// neither is on this seam yet.</summary>
+        /// <see cref="CoreProgression.TrackAttentionCheck"/> (the head's provider also takes the
+        /// Trainer's -25 XP); the Chaster "video" note is the head's, it knows whether a frame showed.</summary>
         public void Ended()
         {
             if (!_playing) return;

@@ -93,9 +93,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             Log.Information("BubbleService started - {Freq} bubbles/min", s.BubblesFrequency);
         }
 
+        private static bool _paused;
+
+        /// <summary>WPF BubbleService.PauseAndClear (a mandatory video took the screen): spawning stops
+        /// and every bubble goes, no animation.</summary>
+        public static void PauseAndClear()
+        {
+            if (!_running) return;
+            _paused = true;
+            _spawnTimer?.Stop();
+            Field.Bubbles.Clear();
+            foreach (var w in Windows) w.Sync();
+        }
+
+        /// <summary>WPF BubbleService.Resume.</summary>
+        public static void Resume()
+        {
+            if (!_running || !_paused) return;
+            _paused = false;
+            _spawnTimer?.Start();
+        }
+
         public static void Stop()
         {
-            _running = false;
+            _running = _paused = false;
             _pending = false;
             _spawnTimer?.Stop();
             _spawnTimer = null;

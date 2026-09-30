@@ -301,12 +301,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             await new AttentionTargetEditorDialog().ShowDialog(owner);
         }
 
-        private void BtnTestVideo_Click(object? sender, RoutedEventArgs e)
+        private async void BtnTestVideo_Click(object? sender, RoutedEventArgs e)
         {
-            // WPF TriggerVideo(userInitiated: true). ponytail: WPF first offers "a video appears to be
-            // playing / another interaction is in progress - force reset?" prompts; this head has no
-            // interaction queue, so a press during a video is ignored.
-            CoreEngine.Video?.Trigger();
+            // WPF BtnTestVideo_Click -> TriggerVideo(userInitiated: true), after its stuck-video prompt.
+            // ponytail: WPF's second prompt ("another interaction is in progress") needs the interaction
+            // queue, which this head does not have.
+            if (CoreEngine.Video is not { } video) return;
+            if (video.IsPlaying)
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                if (!await Dialogs.MessageDialog.ConfirmAsync(owner, "Video Playing",
+                        "A video appears to be playing.\n\nIf you don't see a video, it may be stuck. Click Yes to force reset and try again.",
+                        okText: "Yes")) return;
+                Serilog.Log.Warning("User requested force reset of stuck video state");
+                video.ForceCleanup();
+            }
+            video.Trigger();
         }
     }
 }

@@ -42,6 +42,7 @@ public sealed class MandatoryVideoOverlayTests
             CoreProgression.TrackVideoWatchedProvider = s => credited += s;
             var s = CoreSettings.Current;
             var panic = (s.PanicKeyEnabled, s.PanicKey);
+            var maxLen = s.VideoMaxDurationSeconds;
             (s.PanicKeyEnabled, s.PanicKey) = (true, "F12");
             var saved = (s.AudioDuckingEnabled, s.VideoBlurredBackgroundEnabled, s.AttentionChecksEnabled);
             (s.AudioDuckingEnabled, s.VideoBlurredBackgroundEnabled, s.AttentionChecksEnabled) = (true, true, false);
@@ -132,12 +133,33 @@ public sealed class MandatoryVideoOverlayTests
                     Assert.Equal(0, o.LiveTargets);
                     Assert.Equal(1, v.AttentionHits);
                     await Task.Delay(1200);
+
+                    // WPF #735 grace pause: the clip's first Esc pauses it behind the card (guards asleep);
+                    // Resume plays on, and the spent pause makes the next Esc a dismiss.
+                    w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
+                    Assert.True(v.IsPlaying && o.GracePaused && sf.Grace.IsVisible && !sf.Layer.IsHitTestVisible, "first Esc = grace pause");
+                    Assert.Contains("60", sf.Countdown.Text);
+                    s.VideoMaxDurationSeconds = 1;
+                    o.GuardTick();
+                    Assert.True(v.IsPlaying, "the clip guards sleep through a grace pause");
+                    s.VideoMaxDurationSeconds = 0;
+                    o.ResumeFromGrace("test");
+                    Assert.True(!o.GracePaused && !sf.Grace.IsVisible && sf.Layer.IsHitTestVisible, "resumed");
+                    await Task.Delay(300);   // past the 200 ms same-keystroke dedup
                     w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
                     Assert.False(v.IsPlaying);
                     Assert.Empty(o.Windows);
                     Assert.True(o.Sink == null, "frame buffer freed");
                     Assert.True(credited >= 1, $"credited {credited}s");
                     Assert.True((ducks, unducks) == (3, 3), $"every close releases its duck ({ducks}/{unducks})");
+
+                    // The max-length cap (VideoMaxDurationSeconds = 1) ends the next clip.
+                    s.VideoMaxDurationSeconds = 1;
+                    w = await Open(strict: false);
+                    await Task.Delay(1100);
+                    o.GuardTick();
+                    Assert.False(v.IsPlaying, "max-length cap ends the clip");
+                    Assert.Empty(o.Windows);
                 });
             }
             finally
@@ -150,6 +172,7 @@ public sealed class MandatoryVideoOverlayTests
                 (CoreAudio.DuckProvider, CoreAudio.UnduckProvider) = (duck, unduck);
                 (s.AudioDuckingEnabled, s.VideoBlurredBackgroundEnabled, s.AttentionChecksEnabled) = saved;
                 (s.PanicKeyEnabled, s.PanicKey) = panic;
+                s.VideoMaxDurationSeconds = maxLen;
             }
         }
         finally { Directory.Delete(dir, true); }

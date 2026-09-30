@@ -24,6 +24,18 @@ namespace ConditioningControlPanel.Services.Companion
 
         public static string NameKey(CompanionBonusType type) => "companion_perk_name_" + (int)type;
 
+        /// <summary>WPF CompanionService.OnAttentionCheckFailed: with the Trainer's perk (StrictModeBonus)
+        /// active, a failed video attention check costs the active companion 25 XP, never below 0.
+        /// True when it applied; the caller saves.</summary>
+        public static bool ApplyAttentionFailPenalty(AppSettings s)
+        {
+            var perk = Resolve(s.CompanionPerk, CompanionDefinition.GetById((CompanionId)s.ActiveCompanionId).BonusType, CompanionExperience.IsV2Enabled);
+            if (perk != CompanionBonusType.StrictModeBonus) return false;
+            var p = s.ActiveCompanionProgress;
+            p.CurrentXP = System.Math.Max(0, p.CurrentXP - 25.0);
+            return true;
+        }
+
         public static CompanionPerk For(CompanionBonusType type) => type switch
         {
             CompanionBonusType.PinkFilterBonus => new("perk_pink_filter", "❀", false),
