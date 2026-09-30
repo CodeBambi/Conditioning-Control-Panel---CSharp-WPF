@@ -190,6 +190,7 @@ public sealed class TakeoverTests
                     .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                     .SetupWithoutStarting();
             var s = CoreSettings.Current;
+            var resume = s.AutonomyResumeOnStartup;
             s.AutonomyConsentGiven = true;
             s.AutonomyResumeOnStartup = false;
             var (pinkOn, pinkOpacity) = (s.PinkFilterEnabled, s.PinkFilterOpacity);
@@ -212,6 +213,7 @@ public sealed class TakeoverTests
                 PinkFilterOverlay.PulseHold = false;
                 (s.PinkFilterEnabled, s.PinkFilterOpacity) = (pinkOn, pinkOpacity);
                 (CoreBubbles.StartAction, CoreBubbles.StopAction) = (start, stop);
+                s.AutonomyResumeOnStartup = resume;
                 CoreEntitlement.HasPremiumProvider = null;
                 s.AutonomyModeEnabled = s.AutonomyConsentGiven = false;
                 CoreEngine.Stop();
@@ -240,6 +242,23 @@ public sealed class TakeoverTests
         Assert.Single(timers)();
         Assert.False(s.PinkFilterEnabled);
         Assert.Equal(20, s.PinkFilterOpacity);
+    });
+
+    /// <summary>Exit (app or shell close) during a pulse saves the user's own tint, not the boost.</summary>
+    [Fact]
+    public Task ExitDuringPinkPulseSavesTheUsersTint() => WithArmedShell((shell, _) =>
+    {
+        var s = CoreSettings.Current;
+        (s.PinkFilterEnabled, s.PinkFilterOpacity) = (false, 10);
+        shell.PerformAutonomy(AutonomyActionType.PinkFilterPulse);
+        Assert.True(s.PinkFilterEnabled);
+        (bool, int) saved = default;
+        global::ConditioningControlPanel.Avalonia.App.SaveSettingsOnExit(shell, () => saved = (s.PinkFilterEnabled, s.PinkFilterOpacity));
+        Assert.Equal((false, 10), saved);
+
+        shell.PerformAutonomy(AutonomyActionType.PinkFilterPulse);
+        shell.Close();   // the Closed handler hands the pulse back too
+        Assert.Equal((false, 10), (s.PinkFilterEnabled, s.PinkFilterOpacity));
     });
 
     /// <summary>WPF: a running session owns the overlays, so the pink pulse is skipped.</summary>

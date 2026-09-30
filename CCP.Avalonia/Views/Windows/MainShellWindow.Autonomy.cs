@@ -56,7 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF AnnounceAction: the tube says it (text only; no event audio here).
             Autonomy.AnnouncementMade += (_, phrase) => Dispatcher.UIThread.Post(() =>
                 _avatarTubeWindow?.GigglePriority(phrase, false, aiGenerated: false));
-            Closed += (_, _) => { Autonomy.Stop(); StopVoiceInput(); };
+            Closed += (_, _) => { CancelAutonomyPulses(); Autonomy.Stop(); StopVoiceInput(); };
             Opened += (_, _) => { ResumeAutonomyOnStartup(); RefreshVoiceInputModes(); };
         }
 

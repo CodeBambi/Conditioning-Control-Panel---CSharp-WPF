@@ -765,6 +765,15 @@ namespace ConditioningControlPanel.Avalonia
             return media;
         }
 
+        /// <summary>The exit save, after Takeover hands back what a pulse borrowed - else a boosted
+        /// pink tint is saved as the user's own (WPF StopEngine cancels pulses before the save).</summary>
+        internal static void SaveSettingsOnExit(Views.Windows.MainShellWindow? shell, Action save)
+        {
+            try { shell?.CancelAutonomyPulses(); } catch (Exception ex) { Serilog.Log.Debug("Exit pulse cancel failed: {E}", ex.Message); }
+            try { save(); }
+            catch { /* SettingsService logs save failures; exit must continue */ }
+        }
+
         private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
         {
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
@@ -789,8 +798,8 @@ namespace ConditioningControlPanel.Avalonia
 
             // Flush while the dispatcher is still usable. In particular, a serialize retry from a
             // background save must not see the shutdown-safe drop provider below.
-            try { Settings?.SaveImmediate(); }
-            catch { /* SettingsService logs save failures; exit must continue */ }
+            var shell = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as Views.Windows.MainShellWindow;
+            SaveSettingsOnExit(shell, () => Settings?.SaveImmediate());
 
             // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
