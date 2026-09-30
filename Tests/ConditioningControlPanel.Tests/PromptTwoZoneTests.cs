@@ -136,12 +136,30 @@ public class PromptTwoZoneTests : IDisposable
     {
         // The kill switch (UseCompanionBrain=false) must land on the ORIGINAL builder, randomness
         // and all. If this ever goes stable too, the flag stops being a real rollback.
-        var legacy = new BambiSprite();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        for (int i = 0; i < 30; i++) seen.Add(legacy.BuildSystemPrompt());
+        //
+        // BambiSprite lives in Core and reads the stateless PersonalityService.Shared, which always
+        // yields a preset (the neutral default has no {{VIDEO}} tokens, so nothing to shuffle). With
+        // App.Personality null this used to fall to the default prompt instead; reach the shuffle
+        // through a preset that samples titles per build. Twin: CCP.Core.Tests/BambiSpriteLegacyShuffleTests.
+        var service = (SettingsService)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(SettingsService));
+        typeof(SettingsService).GetField("<Current>k__BackingField",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(service, new Models.AppSettings { ActivePersonalityPresetId = Models.PersonalityPresets.SlutModeId });
+        var priorProvider = CoreSettings.ServiceProvider;
+        CoreSettings.ServiceProvider = () => service;
+        try
+        {
+            var legacy = new BambiSprite();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < 30; i++) seen.Add(legacy.BuildSystemPrompt());
 
-        Assert.True(seen.Count > 1,
-            "legacy build produced 30 byte-identical prompts - the per-call sampling is gone");
+            Assert.True(seen.Count > 1,
+                "legacy build produced 30 byte-identical prompts - the per-call sampling is gone");
+        }
+        finally
+        {
+            CoreSettings.ServiceProvider = priorProvider;
+        }
     }
 
     [Fact]
