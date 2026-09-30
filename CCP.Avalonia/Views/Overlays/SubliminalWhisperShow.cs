@@ -15,8 +15,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// later, and a Reset after a Freeze. Which clip, how loud and when come from Core
     /// <see cref="SubliminalWhisper"/>; this class only plays and draws.
     ///
-    /// <para>ponytail: no haptic (Core has no haptic seam yet - the gap between whisper and card is
-    /// kept so the timing matches); CoreAudio.PlayOneShot has no stop handle, so a new whisper does
+    /// <para>Haptics through <see cref="CoreHaptics"/> as WPF: HapticLeadMs after the whisper, or
+    /// straight away and the card after <c>SubliminalAnticipationMs</c> when nothing is whispered
+    /// (TriggerSubliminalWithHapticPattern :563).</para>
+    /// <para>ponytail: CoreAudio.PlayOneShot has no stop handle, so a new whisper does
     /// not cut the previous one and Stop does not silence one mid-play (WPF StopAudio); no
     /// MarkWhisperAudio (no bark system here); no deferred Reset (only mandatory video defers).</para>
     /// </summary>
@@ -46,7 +48,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
             else
             {
-                Draw(text);
+                HapticThenDraw(text);
                 CoreProgression.AddXP(10, "Subliminal");
             }
         }
@@ -62,7 +64,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
             else
             {
-                Draw(text);
+                HapticThenDraw(text);
                 Log.Information("Bambi Freeze triggered (no audio file, or whispers muted)");
             }
         }
@@ -79,7 +81,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             After(delay, () =>
             {
                 var text = App.Mods?.GetResetTriggerText() ?? "Reset";
-                if (!Whisper(text)) Draw(text);
+                if (!Whisper(text)) HapticThenDraw(text);
                 Log.Debug("Bambi Reset triggered after Bambi Freeze");
             });
         }
@@ -98,8 +100,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             CoreAudio.PlayOneShot(path, SubliminalWhisper.Volume(s.MasterVolume, s.SubAudioVolume), "whisper",
                 onFinished: () => After(SubliminalWhisper.UnduckDelayMs, () => CoreAudio.Unduck(gen)));
             Log.Debug("Playing subliminal audio: {Path}", Path.GetFileName(path));
-            After(SubliminalWhisper.HapticLeadMs + SubliminalWhisper.VisualAfterHapticMs, () => Draw(text));
+            After(SubliminalWhisper.HapticLeadMs, () =>
+            {
+                _ = CoreHaptics.Service?.TriggerSubliminalPatternAsync(text);
+                After(SubliminalWhisper.VisualAfterHapticMs, () => Draw(text));
+            });
             return true;
+        }
+
+        /// <summary>WPF TriggerSubliminalWithHapticPattern: haptic first, the card after the provider's
+        /// spin-up head start (0 with no toy connected).</summary>
+        internal static void HapticThenDraw(string text)
+        {
+            var haptics = CoreHaptics.Service;
+            _ = haptics?.TriggerSubliminalPatternAsync(text);
+            var anticipationMs = haptics?.SubliminalAnticipationMs ?? 0;
+            if (anticipationMs > 0) After(anticipationMs, () => Draw(text));
+            else Draw(text);
         }
     }
 }

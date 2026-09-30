@@ -113,6 +113,7 @@ check 'GetManifestResourceStream' 'Embedded-resource read. Resources live in the
 check 'GetExecutingAssembly'      'Returns whichever assembly the code compiled into - moving the caller to Core silently changes what it finds.'
 check 'typeof\([^)]*\)\.Assembly' 'Same trap as GetExecutingAssembly: assembly identity changes when the type moves.'
 check 'Assembly\.GetEntryAssembly' 'Entry assembly is the head (or null when hosted). Core must not depend on who started the process.'
+check '^using System\.Windows\b'   'WPF namespace import. Resolves only because some BCL types share System.Windows.*; Core must not depend on it.'
 [ "$FAIL" -eq 0 ] && echo "OK - no forbidden APIs in CCP.Core ($(wc -l < "$WORK/baseline.txt") baselined, see BASELINE)"
 
 # The ratchet. A baselined line that no longer matches means the fix landed, so the entry is dead

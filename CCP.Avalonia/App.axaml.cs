@@ -299,6 +299,12 @@ namespace ConditioningControlPanel.Avalonia
                     fetchOverride: string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")));
                 _ = dailyFree.RefreshAsync();
                 CoreEntitlement.IsFreeTodayProvider = dailyFree.IsFreeToday;
+                // WPF App.xaml.cs:2875/2941: the one HapticService, gated (premium / daily free) in its
+                // mixer. Connects only to what the user runs (Intiface at ButtplugUrl, Lovense Remote).
+                // ponytail: no MockToast (mock toys log only), no funscript playhead (FunScriptService.
+                // SubscribePlaybackTime unseeded: no video time source here), no EMI Desk.
+                CoreHaptics.Service = new Services.HapticService(Settings.Current.Haptics);
+                _ = CoreHaptics.Service.AutoConnectOnStartupAsync();
                 // After the version seed (the proxy client's headers carry it). Fail closed; the
                 // startup validate runs on the UI thread as WPF's does (App.xaml.cs OnStartup).
                 // WPF App.xaml.cs:2856. Start() arms nothing without a cached ceremony timestamp.
@@ -644,6 +650,10 @@ namespace ConditioningControlPanel.Avalonia
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
             _exiting = true;
 
+            // WPF App.OnExit:5965: haptics FIRST and synchronously (bounded ~2 s). A Lovense level has no
+            // server-side watchdog, so a toy not countermanded here keeps running after the app is gone.
+            try { CoreHaptics.Service?.ShutdownStop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Haptics shutdown stop failed"); }
+
             try { (((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!).MainWindow as Views.Windows.MainShellWindow)?.Tray?.Dispose(); } catch { }
 
             // Restore any app we ducked; a pending Unduck would otherwise die with the process.
@@ -666,6 +676,8 @@ namespace ConditioningControlPanel.Avalonia
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
+            // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
+            try { CoreHaptics.Service?.Dispose(); } catch { }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never
             // opened the quest page.

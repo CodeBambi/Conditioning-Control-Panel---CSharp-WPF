@@ -30,13 +30,9 @@
 //   * Tab visibility: WPF's IsVisibleChanged becomes a PropertyChanged filter on IsVisibleProperty,
 //     which is exactly the property ShowTab writes.
 //
-// One entry point cannot reach its dot yet: SetHapticsStatusPulse. Views/Tabs/HapticsTabView.axaml
-// is ported but nothing hosts it - StudioTabView.axaml:249 carries a placard named PanelHaptics
-// where <tabs:HapticsTabView x:Name="PanelHaptics"/> belongs. The lookup is deliberately TWO hops,
-// StudioRack -> PanelHaptics -> HapticStatusDot, because the dot lives in HapticsTabView's own
-// namescope and a single FindControl off the rack would search the rack's scope only - the
-// cross-namescope trap WPF's own MainWindow.Animations.cs comments describe. It no-ops safely
-// against today's placard and starts working the moment that Border becomes the page.
+// SetHapticsStatusPulse is called by HapticsTabView.RefreshHapticConnectionUi with the real
+// connection state. The lookup is TWO hops, StudioRack -> PanelHaptics -> HapticStatusDot, because
+// the dot lives in HapticsTabView's own namescope.
 
 using System;
 using System.Collections.Generic;
@@ -287,8 +283,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             SetStatusPulse(Named<Control>("BlinkTrainerTab")?.FindControl<Control>("BlinkTrainerStatusDot"), running);
         }
 
-        /// <summary>Haptics: the connection dot breathes while a device is actually connected. See
-        /// the header - the view exists but nothing hosts it, so this no-ops today.</summary>
+        /// <summary>Haptics: the connection dot breathes while a device is actually connected.</summary>
         internal void SetHapticsStatusPulse(bool connected)
         {
             EnsurePr4aFx();

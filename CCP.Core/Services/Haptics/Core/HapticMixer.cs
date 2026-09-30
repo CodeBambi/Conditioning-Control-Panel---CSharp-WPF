@@ -1,3 +1,4 @@
+using Serilog;
 using System.Collections.Generic;
 using System.Threading;
 using ConditioningControlPanel.Models;
@@ -197,8 +198,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 // toggle while the mixer stayed silent (DailyFreeService).
                 try
                 {
-                    return (App.Patreon?.HasPremiumAccess ?? false)
-                           || App.DailyFree?.IsFreeToday("haptics") == true;
+                    return CoreEntitlement.HasPremium || CoreEntitlement.IsFreeToday("haptics");
                 }
                 catch { return false; }
             }
@@ -239,7 +239,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 bool busy = false;
                 try { busy = await TickAsync(ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
-                catch (Exception ex) { App.Logger?.Debug("HapticMixer tick error (non-fatal): {E}", ex.Message); }
+                catch (Exception ex) { Log.Debug("HapticMixer tick error (non-fatal): {E}", ex.Message); }
 
                 try { await Task.Delay(busy ? DefaultTickMs : IdleTickMs, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
@@ -412,7 +412,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 if (pending != null) GetDeviceState(device.DeviceKey).Quantized = pending;
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { App.Logger?.Debug("Haptic send to {Device} failed: {E}", device.DeviceKey, ex.Message); }
+            catch (Exception ex) { Log.Debug("Haptic send to {Device} failed: {E}", device.DeviceKey, ex.Message); }
         }
 
         /// <summary>Combine floor + transients for one device and turn them into actuator outputs.
@@ -1014,7 +1014,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 ClearAllInternal(completeSequences: true);
                 _panicMutedUntil = Environment.TickCount64 + PanicMuteMs;
             }
-            App.Logger?.Warning("Haptics: PANIC STOP — all layers zeroed, all providers stopped");
+            Log.Warning("Haptics: PANIC STOP — all layers zeroed, all providers stopped");
             _ = PanicStopAsync();
         }
 
@@ -1036,7 +1036,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 }
                 var ok = await SafeStopAllAsync().ConfigureAwait(false);
                 if (!ok)
-                    App.Logger?.Warning("Haptics: panic all-stop attempt {Attempt}/{Total} did not complete cleanly",
+                    Log.Warning("Haptics: panic all-stop attempt {Attempt}/{Total} did not complete cleanly",
                                         attempt, PanicStopAttempts);
             }
         }
@@ -1088,7 +1088,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Haptics StopAll failed (non-fatal): {E}", ex.Message);
+                Log.Debug("Haptics StopAll failed (non-fatal): {E}", ex.Message);
                 RequestResync();
                 return false;
             }
@@ -1127,7 +1127,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 // Task.Run so no continuation ever needs the (already shutting down) UI dispatcher.
                 Task.Run(() => FlushStopAsync(budget)).Wait(budget + TimeSpan.FromMilliseconds(250));
             }
-            catch (Exception ex) { App.Logger?.Debug("Haptics shutdown stop failed (non-fatal): {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Haptics shutdown stop failed (non-fatal): {E}", ex.Message); }
         }
 
         /// <summary>Shutdown watchdog. ProcessExit runs on a background thread with its own budget,

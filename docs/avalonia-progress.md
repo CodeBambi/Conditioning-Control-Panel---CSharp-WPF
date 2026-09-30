@@ -991,3 +991,13 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   paths on Linux).
 - Evidence: Core + Avalonia tests (Windows-safe path asserts), fail-proven; live whisper at 40%, freeze card on 3 screens,
   game at +0.8 s, reset at +5.2 s. Rows stay stub (freeze haptic; subliminal StealsFocus, shared host, whisper stop). Review: FIX -> fixed.
+
+## avalonia-port/haptics-core: +864
+- HapticService + device manager, mixer, patterns, Buttplug (Intiface) and Lovense providers, ButtplugUrl, FunScript, ToyInput moved to
+  Core (git mv; WPF delegates; three head seams). CoreHaptics seeded by both heads (shared auto-connect; exit stop first). Avalonia
+  call sites as WPF: bubble pop, bounce, subliminal/freeze timing, video hit/background vibe/FunScript. Panic key and tray stop
+  zero the toys first (WPF PanicStopEverySurface). Haptics page: real settings (save only on change), premium-gated enable/connect,
+  providers, addresses (#1310), panic/test/status; wizard connect/test. core-guards now rejects using System.Windows in Core.
+- Evidence: HapticsCoreTests, HapticsHeadTests (incl. panic zeroes the toy), fail-proven; mock toy only, no real hardware; live gates
+  shown without premium. Rows stay stub (toy cards/routing, pattern editors, premium live connect); feat-intiface-url wired.
+  Review: FIX -> fixed.

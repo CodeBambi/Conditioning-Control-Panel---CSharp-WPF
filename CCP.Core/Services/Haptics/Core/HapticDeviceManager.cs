@@ -1,3 +1,4 @@
+using Serilog;
 using System.Collections.Generic;
 using System.Threading;
 using ConditioningControlPanel.Models;
@@ -102,7 +103,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             var targets = EnabledProviders();
             if (targets.Count == 0)
             {
-                App.Logger?.Warning("Haptics: no provider enabled — nothing to connect");
+                Log.Warning("Haptics: no provider enabled — nothing to connect");
                 return false;
             }
 
@@ -111,12 +112,12 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 try
                 {
                     var ok = await p.ConnectAsync(ct).ConfigureAwait(false);
-                    if (!ok) App.Logger?.Warning("Haptics: provider {Provider} failed to connect", p.Key);
+                    if (!ok) Log.Warning("Haptics: provider {Provider} failed to connect", p.Key);
                     return ok;
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "Haptics: provider {Provider} threw while connecting", p.Key);
+                    Log.Warning(ex, "Haptics: provider {Provider} threw while connecting", p.Key);
                     return false;
                 }
             })).ConfigureAwait(false);
@@ -132,7 +133,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             foreach (var p in providers)
             {
                 try { await p.DisconnectAsync().ConfigureAwait(false); }
-                catch (Exception ex) { App.Logger?.Debug("Haptics: {Provider} disconnect error: {E}", p.Key, ex.Message); }
+                catch (Exception ex) { Log.Debug("Haptics: {Provider} disconnect error: {E}", p.Key, ex.Message); }
             }
             Rebuild();
         }
@@ -163,7 +164,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                         // Abandoned, but still observed: an unobserved fault later would surface as
                         // an UnobservedTaskException on a random pool thread.
                         _ = stop.ContinueWith(t => { _ = t.Exception; }, TaskScheduler.Default);
-                        App.Logger?.Warning("Haptics: {Provider} StopAll timed out after {Ms}ms", p.Key,
+                        Log.Warning("Haptics: {Provider} StopAll timed out after {Ms}ms", p.Key,
                                             (int)perProviderTimeout.TotalMilliseconds);
                         return false;
                     }
@@ -172,7 +173,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("Haptics: {Provider} StopAll error: {E}", p.Key, ex.Message);
+                    Log.Debug("Haptics: {Provider} StopAll error: {E}", p.Key, ex.Message);
                     return false;
                 }
             })).ConfigureAwait(false);
@@ -312,7 +313,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             if (string.IsNullOrEmpty(deviceKey)) return;
             var cfg = _settings.V2.Device(deviceKey);
             mutate(cfg);
-            try { App.Settings?.Save(); } catch { }
+            try { CoreSettings.Save(); } catch { }
             Rebuild();
         }
 

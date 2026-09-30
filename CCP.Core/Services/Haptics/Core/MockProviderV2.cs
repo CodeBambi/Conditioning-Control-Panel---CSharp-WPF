@@ -18,6 +18,9 @@ namespace ConditioningControlPanel.Services.Haptics.Core
     /// </summary>
     public sealed class MockProviderV2 : IHapticProviderV2
     {
+        /// <summary>Head-supplied visualiser (WPF: the shared MockToast window). Null = log only.</summary>
+        public static Action<string>? Toast;
+
         private const int ToastThrottleMs = 200;
 
         private readonly object _gate = new();
@@ -60,7 +63,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             }
             Log.Information("MockProviderV2: 3 virtual toys online");
             Raise();
-            MockToast.Post("Mock haptics connected\nLush / Edge / Solace");
+            Toast?.Invoke("Mock haptics connected\nLush / Edge / Solace");
             return Task.FromResult(true);
         }
 
@@ -128,7 +131,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                     for (int i = 0; i < levels.Length; i++) levels[i] = 0;
                 _lastToastAt = 0;
             }
-            if (IsConnected) MockToast.Post("Mock haptics: ALL STOP");
+            if (IsConnected) Toast?.Invoke("Mock haptics: ALL STOP");
             return Task.CompletedTask;
         }
 
@@ -154,7 +157,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 }
                 text = string.Join("\n", lines);
             }
-            if (!string.IsNullOrEmpty(text)) MockToast.Post(text);
+            if (!string.IsNullOrEmpty(text)) Toast?.Invoke(text);
         }
 
         private static string Short(ActuatorType t) => t switch

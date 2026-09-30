@@ -1,3 +1,4 @@
+using Serilog;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
@@ -166,7 +167,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     body = await PostToAsync(candidate, LovensePatterns.BuildGetToysPayload(),
                                              ProbeTimeout, ct).ConfigureAwait(false);
                     winner = candidate;
-                    App.Logger?.Information("Lovense: reached Game Mode API at {Base}", candidate);
+                    Log.Information("Lovense: reached Game Mode API at {Base}", candidate);
                     break;
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -179,7 +180,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     // thing a failed connect left behind, with every per-candidate reason invisible
                     // at the default level - so nobody could tell a refused port from a TLS
                     // rejection from a DNS failure on the alias.
-                    App.Logger?.Information("Lovense: {Base} did not answer ({Reason})", candidate, ex.Message);
+                    Log.Information("Lovense: {Base} did not answer ({Reason})", candidate, ex.Message);
                     failures.Add(ClassifyProbeFailure(ex));
                 }
             }
@@ -190,7 +191,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 // said which of the two it was overall or whether the PC even sits on the phone's
                 // subnet, so every report read "check Game Mode" whatever the real cause.
                 var sameSubnet = LocalSharesSubnetWith(ExtractHost(configured));
-                App.Logger?.Information("Lovense: probe summary {Summary}, PC on the phone's subnet: {Same}",
+                Log.Information("Lovense: probe summary {Summary}, PC on the phone's subnet: {Same}",
                     string.Join(",", failures), sameSubnet?.ToString() ?? "unknown");
                 RaiseError($"Could not reach Lovense Remote at {configured ?? "(unset)"}. " +
                            UnreachableHint(failures, sameSubnet));
@@ -210,7 +211,7 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 // Reachable, but GetToys answered with something we cannot read (error envelope /
                 // foreign firmware). Never treat that as "no toys" - the 20 s poll retries.
-                App.Logger?.Debug("Lovense: GetToys answered unintelligibly at connect ({Bytes} bytes)",
+                Log.Debug("Lovense: GetToys answered unintelligibly at connect ({Bytes} bytes)",
                                   body?.Length ?? 0);
             }
             _lastPollUtc = DateTime.UtcNow;
@@ -226,7 +227,7 @@ namespace ConditioningControlPanel.Services.Haptics
 
             // Two-way input is best-effort and must never block or fail the connect.
             try { _events.Start(_baseUrl, ExtractHost(_baseUrl)); }
-            catch (Exception ex) { App.Logger?.Debug("Lovense Toy Events start failed: {Reason}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Lovense Toy Events start failed: {Reason}", ex.Message); }
 
             return true;
         }
@@ -332,7 +333,7 @@ namespace ConditioningControlPanel.Services.Haptics
                         _toys[kv.Key] = kv.Value;
                         _state[kv.Key] = new DeviceState();
                         changed = true;
-                        App.Logger?.Information("Lovense toy: {Id} {Name} ({Caps}) battery={Battery}",
+                        Log.Information("Lovense toy: {Id} {Name} ({Caps}) battery={Battery}",
                             kv.Value.Id, kv.Value.DisplayName, kv.Value.CapabilitySummary, kv.Value.Battery);
                     }
                 }
@@ -520,7 +521,7 @@ namespace ConditioningControlPanel.Services.Haptics
             }
             if (fresh == null) return;
 
-            App.Logger?.Debug("Lovense: {Toy} actuator(s) {Verbs} have no LAN action fragment - " +
+            Log.Debug("Lovense: {Toy} actuator(s) {Verbs} have no LAN action fragment - " +
                               "those channels stay silent.", toy.Id, string.Join(",", fresh));
         }
 
@@ -586,7 +587,7 @@ namespace ConditioningControlPanel.Services.Haptics
             catch (Exception ex)
             {
                 // Panic stop must never throw - it runs on shutdown paths.
-                App.Logger?.Debug("Lovense StopAll partial failure: {Reason}", ex.Message);
+                Log.Debug("Lovense StopAll partial failure: {Reason}", ex.Message);
             }
         }
 
@@ -599,7 +600,7 @@ namespace ConditioningControlPanel.Services.Haptics
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Lovense stop failed for {Toy}: {Reason}", toyId ?? "(all)", ex.Message);
+                Log.Debug("Lovense stop failed for {Toy}: {Reason}", toyId ?? "(all)", ex.Message);
             }
         }
 
@@ -781,7 +782,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     catch (OperationCanceledException) { break; }
                     catch (Exception ex)
                     {
-                        App.Logger?.Debug("Lovense reconnect attempt failed: {Reason}", ex.Message);
+                        Log.Debug("Lovense reconnect attempt failed: {Reason}", ex.Message);
                     }
                     continue;
                 }
@@ -801,7 +802,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("Lovense maintenance tick failed: {Reason}", ex.Message);
+                    Log.Debug("Lovense maintenance tick failed: {Reason}", ex.Message);
                 }
             }
         }
@@ -874,20 +875,20 @@ namespace ConditioningControlPanel.Services.Haptics
                     ApplyToys(fresh, raiseIfChanged: false);
                     _lastPollUtc = DateTime.UtcNow;
 
-                    App.Logger?.Information("Lovense: reconnected to {Base} after an outage.", baseUrl);
+                    Log.Information("Lovense: reconnected to {Base} after an outage.", baseUrl);
                     RaiseDevicesChanged();   // the manager recomputes IsConnected from this
 
                     try { _events.Start(baseUrl, ExtractHost(baseUrl)); }
-                    catch (Exception ex) { App.Logger?.Debug("Lovense Toy Events restart failed: {Reason}", ex.Message); }
+                    catch (Exception ex) { Log.Debug("Lovense Toy Events restart failed: {Reason}", ex.Message); }
                     return;
                 }
 
-                App.Logger?.Debug("Lovense: reconnect probe answered unintelligibly ({Bytes} bytes)", body?.Length ?? 0);
+                Log.Debug("Lovense: reconnect probe answered unintelligibly ({Bytes} bytes)", body?.Length ?? 0);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Lovense: reconnect probe to {Base} failed ({Reason})", baseUrl, ex.Message);
+                Log.Debug("Lovense: reconnect probe to {Base} failed ({Reason})", baseUrl, ex.Message);
             }
 
             lock (_lock)
@@ -932,7 +933,7 @@ namespace ConditioningControlPanel.Services.Haptics
         private string? ResolveConfiguredUrl()
         {
             if (!string.IsNullOrWhiteSpace(ConfiguredUrlOverride)) return ConfiguredUrlOverride;
-            var url = App.Settings?.Current?.Haptics?.LovenseUrl;
+            var url = CoreSettings.Current.Haptics?.LovenseUrl;
             return string.IsNullOrWhiteSpace(url) ? null : url;
         }
 
@@ -1217,7 +1218,7 @@ namespace ConditioningControlPanel.Services.Haptics
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Lovense GetToys parse failed: {Reason}", ex.Message);
+                Log.Debug("Lovense GetToys parse failed: {Reason}", ex.Message);
                 return false;
             }
             finally
@@ -1415,11 +1416,11 @@ namespace ConditioningControlPanel.Services.Haptics
 
             if (!lost)
             {
-                App.Logger?.Debug("Lovense send failed for {Toy}: {Reason}", toy.Id, ex.Message);
+                Log.Debug("Lovense send failed for {Toy}: {Reason}", toy.Id, ex.Message);
                 return;
             }
 
-            App.Logger?.Warning(ex, "Lovense: lost contact with toy {Toy}", toy.Id);
+            Log.Warning(ex, "Lovense: lost contact with toy {Toy}", toy.Id);
             RaiseError($"Lost contact with {toy.DisplayName}: {ex.Message}");
             RaiseDevicesChanged();
 
@@ -1454,7 +1455,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 if (!_connected) return;
                 if (++_pollFailures < MaxConsecutiveFailures)
                 {
-                    App.Logger?.Debug("Lovense: {Reason}", reason);
+                    Log.Debug("Lovense: {Reason}", reason);
                     return;
                 }
                 _pollFailures = 0;
@@ -1462,7 +1463,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 ArmReconnectNoLock();
             }
 
-            App.Logger?.Warning("Lovense: {Reason} - marking the connection down, retrying in the background.",
+            Log.Warning("Lovense: {Reason} - marking the connection down, retrying in the background.",
                                 reason);
             RaiseError("Lovense Remote stopped answering. Retrying in the background.");
             RaiseDevicesChanged();
@@ -1505,20 +1506,20 @@ namespace ConditioningControlPanel.Services.Haptics
             }
 
             try { ToyEvent?.Invoke(this, e); }
-            catch (Exception ex) { App.Logger?.Debug("Lovense ToyEvent handler threw: {Reason}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Lovense ToyEvent handler threw: {Reason}", ex.Message); }
         }
 
         private void RaiseDevicesChanged()
         {
             try { DevicesChanged?.Invoke(this, EventArgs.Empty); }
-            catch (Exception ex) { App.Logger?.Debug("Lovense DevicesChanged handler threw: {Reason}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Lovense DevicesChanged handler threw: {Reason}", ex.Message); }
         }
 
         private void RaiseError(string message)
         {
-            App.Logger?.Warning("Lovense: {Message}", message);
+            Log.Warning("Lovense: {Message}", message);
             try { Error?.Invoke(this, message); }
-            catch (Exception ex) { App.Logger?.Debug("Lovense Error handler threw: {Reason}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Lovense Error handler threw: {Reason}", ex.Message); }
         }
 
         // ==================================================================
