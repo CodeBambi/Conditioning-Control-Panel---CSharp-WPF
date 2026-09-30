@@ -221,7 +221,7 @@ public partial class ChaosHubWindow
             Opacity = rankShort ? 0.6 : 1.0,
         };
         if (rankShort) ChaosTips.Attach(card, item.Label, DEEPER_TIP,
-            item.RankNeed.HasValue ? ChaosRanks.RankSpecifics(item.RankNeed.Value) : null);
+            item.RankNeed.HasValue ? ChaosRanks.RankSpecifics(item.RankNeed.Value, ChaosMeta.State.RunsCompleted) : null);
         else ChaosTips.Attach(card, item.Label, item.Line, accent: goldColor);
         return card;
     }

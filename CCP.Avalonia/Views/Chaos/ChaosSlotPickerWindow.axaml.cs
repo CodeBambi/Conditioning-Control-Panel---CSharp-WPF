@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using ConditioningControlPanel.Services.Chaos;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Chaos
@@ -20,42 +21,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// deleted, and the footer tells the player exactly where the saves live on disk.
     ///
     /// PORTED from ConditioningControlPanel/Chaos/ChaosSlotPickerWindow.xaml.cs. Deviations:
-    ///  - <c>ChaosMeta</c> / <c>ChaosMetaStore</c> / <c>ChaosRanks</c> are WPF-head services, so
-    ///    the picker draws <see cref="SampleSummaries"/> and the delete action is a stub. Where
-    ///    they live, so the notes below do not have to repeat it:
-    ///    ConditioningControlPanel/Services/Chaos/ChaosUpgrades.cs (<c>ChaosMeta</c>),
-    ///    .../ChaosMetaStore.cs and .../ChaosRanks.cs. The
-    ///    three card shapes (a live save, an empty slot, a stitched-shut slot) are all exercised
-    ///    by that sample, so the render still proves every builder.
+    ///  - <c>ChaosMeta.AllSlotSummaries/DeleteSlot/ActiveSlot</c> read Core's <c>ChaosMetaStore</c>
+    ///    directly (the WPF facade delegates to the same calls); ChaosMeta's live State reload on
+    ///    switch stays WPF-side, so a chosen slot is persisted via <c>ChaosMetaStore.SetActiveSlot</c>.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>; <see cref="Pick"/> is async, because
     ///    Avalonia's <c>ShowDialog</c> is.
     ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>; <c>MouseLeftButtonUp</c> ->
     ///    <c>PointerReleased</c>; <c>Cursors.Hand</c> -> <c>StandardCursorType.Hand</c>;
     ///    <c>ToolTip =</c> -> <c>ToolTip.SetTip</c>; <c>App.Logger</c> -> Serilog's static Log.
-    ///  - <c>MessageBox.Show</c> is <c>Dialogs.MessageDialog</c> on this head now. The erase
-    ///    confirmation is still not raised, but for the other reason: there is no erase to
-    ///    confirm (see <see cref="DeleteSlot_Click"/>).
+    ///  - <c>MessageBox.Show</c> -> <c>Dialogs.MessageDialog.ConfirmAsync</c>.
     ///  - The constructor is <c>internal</c> and parameterless, as in WPF; that also makes it the
     ///    render constructor <c>--render-all</c> discovers.
     /// </summary>
     public partial class ChaosSlotPickerWindow : Window
     {
-        /// <summary>Headline stats for one save slot. Mirrors the head's
-        /// <c>ConditioningControlPanel.Services.Chaos.SlotSummary</c> field for field.
-        /// ponytail: needs ChaosMetaStore.ReadSummary, wired when it moves to Core.</summary>
-        internal sealed class SlotSummary
-        {
-            public int Slot { get; set; }
-            public bool Exists { get; set; }
-            public int Sparks { get; set; }
-            public int Gold { get; set; }
-            public int RunsCompleted { get; set; }
-            public long BestScore { get; set; }
-            public DateTime? LastPlayedUtc { get; set; }
-            public bool HasRagdoll { get; set; }
-            public bool HasPorcelain { get; set; }
-        }
-
         private static readonly Color BrandPink = Color.FromRgb(0xE8, 0x43, 0x93);
         private static readonly IBrush CardBg = new SolidColorBrush(Color.FromRgb(0x1C, 0x1A, 0x36));
         private static readonly IBrush CardBgSel = new SolidColorBrush(Color.FromRgb(0x2A, 0x20, 0x42));
@@ -78,10 +57,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             AvaloniaXamlLoader.Load(this);
 
             _slotsPanel = this.FindControl<StackPanel>("SlotsPanel")!;
-            // ponytail: needs ChaosMeta.ActiveSlot, wired when it moves to Core.
-            _selected = 1;
-            // ChaosMetaStore.SaveFolder is exactly this expression in the head.
-            this.FindControl<TextBlock>("PathText")!.Text = CorePaths.UserData;
+            _selected = ChaosMetaStore.ActiveSlot;
+            this.FindControl<TextBlock>("PathText")!.Text = ChaosMetaStore.SaveFolder;
 
             var header = this.FindControl<Grid>("HeaderBar")!;
             header.PointerPressed += (_, e) =>
@@ -108,38 +85,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 w.Show();
                 return null;   // ponytail: needs an owner to be modal against; callers always have one.
             }
-            return await w.ShowDialog<bool?>(owner) == true ? w.ChosenSlot : (int?)null;
+            if (await w.ShowDialog<bool?>(owner) != true) return null;
+            // WPF's caller commits via ChaosMeta.SwitchSlot; its settings half is all this head has.
+            return ChaosMetaStore.SetActiveSlot(w.ChosenSlot);
         }
-
-        /// <summary>
-        /// Stand-in for <c>ChaosMeta.AllSlotSummaries()</c>. Slot 1 is a played save that owns the
-        /// Ragdoll, slot 2 is therefore an open but empty seat, slot 3 has no Porcelain anywhere
-        /// and is stitched shut - one of each card the picker can draw.
-        /// ponytail: needs ChaosMeta, wired when it moves to Core.
-        /// </summary>
-        private static List<SlotSummary> SampleSummaries() => new()
-        {
-            new SlotSummary
-            {
-                Slot = 1, Exists = true, RunsCompleted = 4, Sparks = 1820, Gold = 640,
-                BestScore = 12400, LastPlayedUtc = new DateTime(2026, 8, 30, 21, 15, 0, DateTimeKind.Utc),
-                HasRagdoll = true,
-            },
-            new SlotSummary { Slot = 2 },
-            new SlotSummary { Slot = 3 },
-        };
-
-        /// <summary>Stand-in for <c>ChaosRanks.Name(ChaosRanks.For(runs))</c>; same thresholds and
-        /// same words. ponytail: needs ChaosRanks, wired when it moves to Core.</summary>
-        private static string RankName(int runsCompleted) => runsCompleted switch
-        {
-            >= 100 => "Claimed",
-            >= 50 => "Devoted",
-            >= 25 => "Entranced",
-            >= 10 => "Slipping",
-            >= 3 => "Tempted",
-            _ => "Curious",
-        };
 
         private void RebuildCards()
         {
@@ -150,7 +99,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             // Crafting Part 2: slots 2/3 are stitched shut until the Ragdoll / Porcelain
             // dolls are crafted in THE BOUDOIR. Any save's craft unlocks globally, and a
             // pre-existing save keeps its slot open (back-compat with pre-craft slots).
-            var summaries = SampleSummaries();
+            var summaries = ChaosMetaStore.AllSummaries();
             bool anyRagdoll = false, anyPorcelain = false;
             foreach (var s in summaries)
             {
@@ -267,7 +216,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             {
                 body.Children.Add(new TextBlock
                 {
-                    Text = RankName(s.RunsCompleted),
+                    Text = ChaosRanks.Name(ChaosRanks.For(s.RunsCompleted)),
                     FontSize = 20,
                     FontWeight = FontWeight.Bold,
                     Foreground = new SolidColorBrush(BrandPink),
@@ -369,25 +318,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             }
         }
 
-        // ponytail: the dialog half is done - Dialogs.MessageDialog.ConfirmAsync is this head's
-        // MessageBox and this window can own it. The remaining blocker is the erase itself:
-        // ChaosMeta.DeleteSlot lives in ConditioningControlPanel/Services/Chaos/ChaosUpgrades.cs,
-        // still WPF head-side with no seam. Prompting for a delete this head cannot perform would
-        // be worse than the log line, so the prompt waits for the service, not the other way
-        // round.
-        private void DeleteSlot_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        private async void DeleteSlot_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
             e.Handled = true;   // don't let the click also select the card
             if (sender is not Button { Tag: int slot }) return;
-            Log.Debug("ChaosSlotPicker: erase Save {Slot} requested; no service on this head yet", slot);
+            if (!await global::ConditioningControlPanel.Avalonia.Views.Dialogs.MessageDialog.ConfirmAsync(
+                    this, "Erase save", EraseMessage(slot, ChaosMetaStore.AllSummaries()), defaultToCancel: true)) return;
+            if (ChaosMetaStore.Delete(slot)) Log.Information("ChaosMeta: deleted save slot {Slot}", slot);
+            RebuildCards();
+        }
+
+        /// <summary>WPF ChaosSlotPickerWindow.DeleteSlot_Click's prompt, word for word.</summary>
+        internal static string EraseMessage(int slot, List<SlotSummary> summaries)
+        {
+            var msg = $"Erase Save {slot}?\n\nThis permanently deletes this local save. It can't be undone.";
+            // Crafting Part 2: if no surviving save holds the doll that stitches this slot
+            // open, erasing it locks the slot shut again — say so before the player commits.
+            if (slot == 2 || slot == 3)
+            {
+                bool dollElsewhere = false;
+                foreach (var s in summaries)
+                {
+                    if (s.Slot == slot) continue;
+                    dollElsewhere |= slot == 2 ? s.HasRagdoll : s.HasPorcelain;
+                }
+                if (!dollElsewhere)
+                    msg += slot == 2
+                        ? "\n\nWithout this save, Save 2 is Stitched Shut again until the Ragdoll is crafted in THE BOUDOIR."
+                        : "\n\nWithout this save, Save 3 is Stitched Shut again until the Porcelain doll is crafted in THE BOUDOIR.";
+            }
+            return msg;
         }
 
         private void BtnOpenFolder_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
             try
             {
-                System.IO.Directory.CreateDirectory(CorePaths.UserData);
-                Process.Start(new ProcessStartInfo { FileName = CorePaths.UserData, UseShellExecute = true });
+                System.IO.Directory.CreateDirectory(ChaosMetaStore.SaveFolder);
+                Process.Start(new ProcessStartInfo { FileName = ChaosMetaStore.SaveFolder, UseShellExecute = true });
             }
             catch (Exception ex)
             {

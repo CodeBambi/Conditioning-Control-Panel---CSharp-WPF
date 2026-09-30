@@ -79,16 +79,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// content or a settings read rather than a service: <c>ChaosSfx</c> (ContentLocator +
     /// CoreAudio + the master-volume curve), <c>ChaosTips</c> (40 lines of control composition),
     /// <c>ChaosBoonColors</c> (an id table, now ChaosBoonColors.cs beside this file),
-    /// <c>ChaosRanks</c>'s two members (shipped copy) and <c>ChaosWindowZ.BornTopmost</c>
-    /// (<c>AppSettings.ChaosPinOnTop</c>). <c>ChaosArt</c>, <c>ChaosMeta</c>,
-    /// <c>ChaosLessons</c>, <c>ChaosGlyphs</c>, <c>ChaosNarrator</c>,
+    /// <c>ChaosRanks</c>/<c>ChaosRank</c>/<c>ChaosGlyphs</c> (Core, Services/Chaos/ChaosRanks.cs)
+    /// and <c>ChaosWindowZ.BornTopmost</c> (<c>AppSettings.ChaosPinOnTop</c>). <c>ChaosArt</c>,
+    /// <c>ChaosMeta</c>, <c>ChaosLessons</c>, <c>ChaosNarrator</c>,
     /// <c>ChaosAnnouncerOverlay</c>, <c>ChaosModeService</c> and <c>RevealService</c>
     /// still live in the WPF
     /// head - all under ConditioningControlPanel/Services/Chaos/ except <c>ChaosWindowZ</c> and
     /// <c>ChaosAnnouncerOverlay</c>, which are ConditioningControlPanel/Chaos/ - and this project
     /// may not reference it. They are stubbed in the Stubs region below,
-    /// shaped so every call site ports unchanged. <c>ChaosBoon</c>, <c>ChaosRarity</c>,
-    /// <c>ChaosRank</c> and the run snapshot are local stand-ins for the same reason;
+    /// shaped so every call site ports unchanged. <c>ChaosBoon</c>, <c>ChaosRarity</c>
+    /// and the run snapshot are local stand-ins for the same reason;
     /// <c>ChaosConversation</c> and friends are already in Core and are used for real, as is
     /// <c>ChaosMetaState</c> — the recap reads the real save MODEL; only its store is head-side.</para>
     ///
@@ -1472,9 +1472,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// <summary>Mirrors <c>Services.Chaos.ChaosRarity</c>.</summary>
         public enum ChaosRarity { Common, Uncommon, Rare }
 
-        /// <summary>Mirrors <c>Services.Chaos.ChaosRank</c>.</summary>
-        public enum ChaosRank { Curious = 0, Tempted = 1, Slipping = 2, Entranced = 3, Devoted = 4, Claimed = 5 }
-
         /// <summary>The end-of-run snapshot the recap reads. WPF took the live
         /// <c>ChaosRunState</c> (an INotifyPropertyChanged model with ~40 members); the recap only
         /// ever reads these nine, and <c>s.Config.Difficulty.ToString()</c> flattens to a string.
@@ -1697,38 +1694,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             };
             public static void Save() { }
             public static MetaGoal? NextGoal() => new() { Name = "porcelain mask", Cost = 1_500, Affordable = true };
-        }
-
-        private static class ChaosGlyphs
-        {
-            public const string Drops = "✦";
-            public const string Xp = "🕰";
-        }
-
-        /// <summary>Not a stub any more. Both members this view calls are shipped COPY rather
-        /// than behaviour, so they are reproduced verbatim from
-        /// ConditioningControlPanel/Services/Chaos/ChaosRanks.cs instead of stood in for.
-        /// <c>Line</c> returned <c>""</c> before, which drew an empty row inside the rank card.
-        /// ponytail: the REST of that class - <c>For</c>, <c>Thresholds</c>, <c>RankSpecifics</c>,
-        /// <c>CapstoneLockedTip</c> - reads <c>ChaosMeta.State</c> and stays head-side. This view
-        /// calls none of it.</summary>
-        private static class ChaosRanks
-        {
-            /// <summary>The head's <c>ChaosRanks.NameLower</c> is this exact mapping for all six
-            /// ranks.</summary>
-            public static string NameLower(ChaosRank r) => r.ToString().ToLowerInvariant();
-
-            /// <summary>The one dim line under the bare rank word on the rank card. Ships
-            /// verbatim, as it does in the head.</summary>
-            public static string Line(ChaosRank r) => r switch
-            {
-                ChaosRank.Tempted   => "tempted. three times down. you can stop calling it curiosity.",
-                ChaosRank.Slipping  => "slipping. the climb out takes longer every time. you noticed. you came anyway.",
-                ChaosRank.Entranced => "entranced. you don't fall anymore. you arrive.",
-                ChaosRank.Devoted   => "devoted. the dollhouse keeps a room warm for you now. it always knew it would.",
-                ChaosRank.Claimed   => "claimed. it stopped counting your visits a long time ago. so did you.",
-                _                   => "",
-            };
         }
 
     }
