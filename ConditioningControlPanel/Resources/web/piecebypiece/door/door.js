@@ -38,6 +38,12 @@
  * player on the list, and the list's own poll hears somebody sit down. A
  * poll repaints the list slot alone, keeping its scroll and focus, so a
  * three-second tick never throws the reader back to the top.
+ *
+ * PICTURES FIRST, ONCE. Every start (solo, two here, continue, quick match,
+ * a table, a join, a challenge, a friend's game) goes through gate(): with
+ * Distraction on and no picture choice saved, the shared picker asks first
+ * (ui/pictures.js), and the pick starts the game. Saved, it is never asked
+ * again; the menu's Pictures link opens the manager.
  * ==========================================================================*/
 
 import { buildReplay, showReplayStep, resultLine } from './replay.js';
@@ -47,6 +53,7 @@ import { requestRematch } from '../net/rematch.js';
 import { isHosted, identity, whenIdentity, postToHost, onHostMessage } from '../bridge.js';
 import { createStake, pills as stakePills, stakeLabel, refusalText, sameStake, isNone } from '../net/stake.js';
 import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen } from './store.js';
+import { pictureChoice } from '../ui/pictures.js';
 
 /** Every number the door decides with. */
 export const TUNING = Object.freeze({
@@ -127,6 +134,18 @@ export function createDoor(opts = {}) {
   // host says stakes are on for this account.
   const stake = opts.stake || createStake({ post: postToHost, onMessage: onHostMessage });
   let stakeChip = null;
+  // Where Distraction's pictures come from (ui/pictures.js). Every start asks first while no
+  // choice is saved, once (owner, 2026-09-30); after that the manager is the only way in.
+  const pictures = opts.pictures || pictureChoice;
+  /** Run a start, after the one-time picture ask if it is still owed. Backing out starts nothing. */
+  function gate(start, backedOut = () => {}) {
+    let owed = false;
+    try { owed = pictures.needsChoice(); } catch { owed = false; }
+    if (!owed) { start(); return; }
+    Promise.resolve(pictures.ask({ still: still() })).then((go) => {
+      if (go) start(); else backedOut();
+    }).catch(() => start());
+  }
 
   /**
    * Who the host says we are, behind one object so a harness can stand in for
@@ -275,6 +294,7 @@ export function createDoor(opts = {}) {
       <div class="door-links">
         <button type="button" class="door-link" data-act="games">Past games</button>
         <button type="button" class="door-link" data-act="profile">Profile</button>
+        ${pictures.available() ? '<button type="button" class="door-link" data-act="pictures">Pictures</button>' : ''}
       </div>
       <div class="door-foot"><span>esc leaves the board</span><span class="name">at the board as <b>${esc(me())}</b></span></div>`;
   }
@@ -714,22 +734,29 @@ export function createDoor(opts = {}) {
     switch (name) {
       // the lobby is asked only once the host has said who we are, and not at
       // all for nobody (afterHost); look() reads the quiet rejection as a re-render
-      case 'quick': if (screen !== 'lobby') show('lobby'); if (lobby) look(afterHost(() => lobby.quickMatch()), 'quick'); break;
-      case 'join': if (lobby && id) look(afterHost(() => (typeof lobby.join === 'function' ? lobby.join(id) : lobby.challenge(id))), 'join', id); break;
-      case 'host': if (lobby && typeof lobby.host === 'function') look(afterHost(() => lobby.host({ timeControl: { initial_ms: hostTc.initial_ms, increment_ms: hostTc.increment_ms } })), 'host'); break;
+      // every start below goes through gate(): the picture ask, once, while nothing is saved
+      case 'quick': gate(() => { if (screen !== 'lobby') show('lobby'); if (lobby) look(afterHost(() => lobby.quickMatch()), 'quick'); }); break;
+      case 'join': if (lobby && id) gate(() => look(afterHost(() => (typeof lobby.join === 'function' ? lobby.join(id) : lobby.challenge(id))), 'join', id)); break;
+      case 'host': if (lobby && typeof lobby.host === 'function') gate(() => look(afterHost(() => lobby.host({ timeControl: { initial_ms: hostTc.initial_ms, increment_ms: hostTc.increment_ms } })), 'host')); break;
       case 'hosttc': { const t = HOST_TCS.find((c) => c.label === id); if (t) { hostTc = t; render(); } break; }
-      case 'solo': deal('solo'); break;
+      case 'solo': gate(() => deal('solo')); break;
       case 'level': if (LEVELS[id]) { setup = soloOptions({ ...setup, level: id }); paintLevel(); } break;
-      case 'continue': { const saved = readSolo(); if (saved) deal('solo', null, saved); else render(); break; }
-      case 'hotseat': deal('hotseat'); break;
+      case 'continue': gate(() => { const saved = readSolo(); if (saved) deal('solo', null, saved); else render(); }); break;
+      case 'hotseat': gate(() => deal('hotseat')); break;
       case 'lobby': show('lobby'); break;
       case 'games': show('games'); break;
       case 'profile': show('profile'); break;
-      case 'challenge': if (lobby) look(afterHost(() => lobby.challenge(id))); break;
+      case 'pictures': Promise.resolve(pictures.manage({ still: still() })).then(() => { if (screen === 'menu') render(); }).catch(() => {}); break;
+      case 'challenge': if (lobby) gate(() => look(afterHost(() => lobby.challenge(id)))); break;
       case 'cancel': try { if (lobby) lobby.cancel(); } catch { /* fine */ } break;
       // accepting is a round trip on a server; the mock answers at once and
-      // Promise.resolve makes both read the same
-      case 'accept': if (ask) { const a = ask; ask = null; if (a.timer) clearTimeout(a.timer); Promise.resolve(a.accept()).then((m) => { if (m) matched(m); }).catch(() => { sfx('squelch'); if (screen) render(); }); } break;
+      // Promise.resolve makes both read the same. The ask comes first; backing
+      // out of it declines, as ignoring the challenge would.
+      case 'accept': if (ask) {
+        const a = ask; ask = null; if (a.timer) clearTimeout(a.timer);
+        gate(() => Promise.resolve(a.accept()).then((m) => { if (m) matched(m); }).catch(() => { sfx('squelch'); if (screen) render(); }),
+          () => { try { a.decline(); } catch { /* fine */ } if (screen) render(); });
+      } break;
       case 'decline': if (ask) { try { ask.decline(); } catch { /* fine */ } if (ask.timer) clearTimeout(ask.timer); ask = null; render(); } break;
       case 'go': go(); break;
       case 'stake': { const [k, a] = String(id || '').split(':'); stake.choose(k, Number(a)); break; }
@@ -738,7 +765,7 @@ export function createDoor(opts = {}) {
       case 'rprev': stopReplay(); stepReplay(replay ? replay.i - 1 : 0); break;
       case 'rnext': stopReplay(); stepReplay(replay ? replay.i + 1 : 0, true); break;
       case 'rplay': if (replay && replay.timer) { stopReplay(); render(); } else playReplay(); break;
-      case 'rematch': rematch(); break;
+      case 'rematch': gate(rematch); break;
       case 'menu': toMenu(); break;
       default: break;
     }
@@ -755,6 +782,7 @@ export function createDoor(opts = {}) {
   function onKey(e) {
     if (e.key !== 'Escape' || screen === null) return;
     if (screen === 'menu') return;                  // boot posts pbp:exit
+    if (pictures.isOpen && pictures.isOpen()) return;   // the picture card's own Escape closes it
     e.stopImmediatePropagation();
     e.preventDefault();
     if (screen === 'found') { if (countTimer) { clearTimeout(countTimer); timers.delete(countTimer); countTimer = null; } current = null; stake.withdraw(); stake.clear(); show('lobby'); return; }
@@ -788,17 +816,22 @@ export function createDoor(opts = {}) {
     const tell = (challengeId) => { try { postToHost({ type: 'pbp:friend-challenge', friendId: m.friendId || null, challengeId: challengeId || null }); } catch { /* no host */ } };
     const busy = current && current.mode === 'online' && !game.isOver();
     if (busy || !lobby) { if (m.mode === 'challenge') tell(null); return; }
+    // a friend's game is a start too: the picture ask comes first while nothing is saved
     if (m.mode === 'challenge' && m.friendId) {
-      if (screen !== 'lobby') show('lobby');
-      let told = false;
-      const said = (id) => { if (!told) { told = true; tell(id); } };
-      look(afterHost(() => lobby.challenge(String(m.friendId), { onChallengeId: said }))
-        .catch((err) => { said(null); throw err; }));
+      gate(() => {
+        if (screen !== 'lobby') show('lobby');
+        let told = false;
+        const said = (id) => { if (!told) { told = true; tell(id); } };
+        look(afterHost(() => lobby.challenge(String(m.friendId), { onChallengeId: said }))
+          .catch((err) => { said(null); throw err; }));
+      }, () => tell(null));
       return;
     }
     if (m.mode === 'accept' && m.challengeId && typeof lobby.acceptChallenge === 'function') {
-      if (screen !== 'lobby') show('lobby');
-      look(afterHost(() => lobby.acceptChallenge(String(m.challengeId))));
+      gate(() => {
+        if (screen !== 'lobby') show('lobby');
+        look(afterHost(() => lobby.acceptChallenge(String(m.challengeId))));
+      });
     }
   }
 

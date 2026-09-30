@@ -24,6 +24,7 @@ import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js'
 import { createPauseHush } from './ui/pause-hush.js';
 import { createHostEscape, HOST_ESCAPE } from './ui/host-escape.js';
 import { presentation } from './game/preferences.js';
+import { pictureChoice } from './ui/pictures.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -100,6 +101,7 @@ function main() {
   // reducedMotion starts from the player's saved choice: preferences.js ran before PBP existed, so its
   // own first write went nowhere, and every mover reads PBP.settings.
   window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: presentation().reducedMotion } };
+  window.PBP.pictures = pictureChoice;   // the picture choice + niche manager (ui/pictures.js)
   board.turnHandoff = createTurnHandoff({ bus, game, board, menuOpen: () => !!window.PBP.door?.isUp() });
   { const dispose = view.dispose; view.dispose = () => { board.turnHandoff.dispose(); dispose(); }; }
   // The follow camera and the capture replay (board/director.js). It blends on top
@@ -296,7 +298,8 @@ function main() {
   pauseCard.setAttribute('role', 'dialog');
   pauseCard.setAttribute('aria-modal', 'true');
   pauseCard.innerHTML = '<div class="pbp-pause-card"><h2>PAUSED</h2><p class="pbp-pause-note" hidden>Online game: the clock keeps running.</p>'
-    + '<button type="button" data-pause="resume">Resume</button><button type="button" data-pause="leave">Leave the board</button></div>';
+    + '<button type="button" data-pause="resume">Resume</button><button type="button" data-pause="pictures" hidden>Pictures</button>'
+    + '<button type="button" data-pause="leave">Leave the board</button></div>';
   document.body.appendChild(pauseCard);
   let pausedGame = false;
   const onlineSeat = () => !!(window.PBP.game?.current && typeof window.PBP.game.current.offerDraw === 'function');
@@ -308,6 +311,8 @@ function main() {
     pauseCard.querySelector('.pbp-pause-note').hidden = !online;
     if (!online) { const clock = window.PBP.game?.clock; if (p) clock?.pause?.(); else clock?.resume?.(); }
     pauseHush.set(p);
+    // the niche manager is one tap away on the pause card, wherever a host keeps a picture choice
+    pauseCard.querySelector('[data-pause="pictures"]').hidden = !(p && pictureChoice.available() && presentation().experience !== 'classic');
     if (p) pauseCard.querySelector('[data-pause="resume"]').focus();
   }
   const pauseHush = createPauseHush({ board, ramp: () => window.PBP.ramp, isPaused: () => pausedGame });
@@ -319,6 +324,7 @@ function main() {
     const b = e.target.closest('[data-pause]');
     if (!b) return;
     if (b.dataset.pause === 'resume') setGamePaused(false);
+    else if (b.dataset.pause === 'pictures') pictureChoice.manage({ still: presentation().reducedMotion }).then(() => { if (pausedGame) pauseCard.querySelector('[data-pause="resume"]').focus(); });
     else postToHost({ type: 'pbp:exit' });   // leave hushed, the window closes
   });
   const inGameNow = () => !window.PBP.door?.isUp() && window.PBP.game && !window.PBP.game.isOver();
