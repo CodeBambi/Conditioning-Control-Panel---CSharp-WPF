@@ -177,7 +177,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "WebcamCalibrationData: failed to load");
+                Log.Warning(ex, "WebcamCalibrationData: failed to load");
                 return null;
             }
         }
@@ -192,7 +192,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "WebcamCalibrationData: failed to save");
+                Log.Warning(ex, "WebcamCalibrationData: failed to save");
             }
         }
 
@@ -204,7 +204,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "WebcamCalibrationData: failed to delete");
+                Log.Warning(ex, "WebcamCalibrationData: failed to delete");
             }
         }
 
