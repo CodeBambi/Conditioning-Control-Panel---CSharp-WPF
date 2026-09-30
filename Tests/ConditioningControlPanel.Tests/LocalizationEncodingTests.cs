@@ -62,7 +62,7 @@ public class LocalizationEncodingTests
         var bad = new List<string>();
         foreach (var lang in Languages)
         {
-            var path = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json");
+            var path = Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json");
             foreach (var prop in JObject.Parse(File.ReadAllText(path, Encoding.UTF8)).Properties())
                 if (prop.Value.Type == JTokenType.String && LooksDoubleEncoded((string)prop.Value!))
                     bad.Add($"{lang} {prop.Name}: {prop.Value}");

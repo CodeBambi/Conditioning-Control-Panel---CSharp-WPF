@@ -908,3 +908,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   mute rule (EmiMuteRule) moved to Core, both heads use them; WPF behaviour identical, exit flush kept.
 - Evidence: EmiDeskSummonTests (5, fail-proven); live summon/mute/dismiss. Rows stay stub (ring, codex, book, options, chord
   hotkey, face/voice, RefreshOutfit, StopPresentation). Review: FIX -> fixed, ACCEPT.
+
+## avalonia-port/chaster-core: +53
+- ChasterClient (App.Logger -> Serilog.Log), 17 pure Chaster rule files (incl. release 6.11.5 CirceLines/CircesMood/TabPriceEdit),
+  StakeRules and LockSnapshot/LockLookup moved to CCP.Core with git mv; ChasterClientTests (27, fake handler) now run on Linux.
+  ChasterService stays in WPF (App partial + System.Windows.Point); next slice splits CreateForApp and adds a Core point type.
+- Evidence: 27 tests, fail-proven; full gate. No UI; ledger notes only. Review: ACCEPT.
