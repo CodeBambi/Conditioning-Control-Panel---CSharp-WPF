@@ -1,10 +1,11 @@
 import { Chess } from '../vendor/chess.js';
+import { levelOf } from './search.js';
 const KEY = 'pbp-solo-current-v1', OPTIONS = 'pbp-solo-options-v1';
 export function soloOptions(value = null) {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(OPTIONS) || '{}'); } catch { /* fresh defaults */ }
   const source = value || saved || {};
-  const result = { level: ['relaxed', 'club', 'sharp'].includes(source.level) ? source.level : 'club',
+  const result = { level: levelOf(source.level),
     side: ['w', 'b', 'random'].includes(source.side) ? source.side : 'w',
     clockMs: [0, 300000, 900000].includes(Number(source.clockMs)) ? Number(source.clockMs) : 0 };
   if (value) try { localStorage.setItem(OPTIONS, JSON.stringify(result)); } catch { /* optional storage */ }

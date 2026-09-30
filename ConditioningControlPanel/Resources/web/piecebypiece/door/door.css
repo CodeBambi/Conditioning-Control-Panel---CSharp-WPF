@@ -113,6 +113,20 @@
 .door-pill:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
 .door-item.leaving { animation: door-leave 180ms ease both; }
 
+/* --- the computer's strength: five pills under Play solo, the pick lit --- */
+.level-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: -2px 0 0; }
+.level-pill {
+  cursor: pointer; padding: 6px 11px; border-radius: 999px; color: var(--pbp-ink);
+  background: rgba(245, 230, 200, 0.05); border: 1px solid rgba(245, 230, 200, 0.2);
+  font: 10px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase;
+  transition: transform 140ms cubic-bezier(.2, 1.5, .4, 1), background-color 140ms ease, border-color 140ms ease;
+}
+.level-pill:hover { border-color: rgba(255, 105, 180, 0.5); }
+.level-pill:active { transform: scale(0.95); }
+.level-pill.on { color: var(--pbp-pink); background: rgba(255, 105, 180, 0.16); border-color: rgba(255, 105, 180, 0.7); }
+.level-pill:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
+.level-blurb { margin: 2px 0 0; text-align: center; font-size: 11px; opacity: 0.55; }
+
 /* --- the stake row: one line of small pills, the pick lit; online games only --- */
 .stake-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .stake-k { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.55; margin-right: 4px; }
