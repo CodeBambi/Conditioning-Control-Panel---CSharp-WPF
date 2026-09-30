@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -40,7 +39,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             public readonly ScaleTransform Scale = new(1, 1);
             public readonly RotateTransform Rotate = new();
-            public readonly Stopwatch Clock = new();
+            public long Started;
             public DispatcherTimer? Timer;
             public bool Entering;
             public double FromScale = 1, FromAngle;
@@ -99,15 +98,26 @@ namespace ConditioningControlPanel.Avalonia.Controls
             rig.Entering = entering;
             rig.FromScale = rig.Scale.ScaleX;
             rig.FromAngle = rig.Rotate.Angle;
-            rig.Clock.Restart();
+            rig.Started = Time.GetTimestamp();
             rig.Timer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => Step(rig));
             rig.Timer.Start();
             Step(rig);
         }
 
+        /// <summary>The animation clock. Tests swap in a stepped clock and call <see cref="Step(Control)"/>,
+        /// so the sampled curve does not depend on how late a loaded machine fires the 16 ms timer.</summary>
+        internal static TimeProvider Time = TimeProvider.System;
+
+        /// <summary>One timer tick for <paramref name="c"/> at <see cref="Time"/>'s now; like the real
+        /// tick, a no-op once the timer has stopped.</summary>
+        internal static void Step(Control c)
+        {
+            if (Rigs.TryGetValue(c, out var rig) && rig.Timer?.IsEnabled == true) Step(rig);
+        }
+
         private static void Step(Rig rig)
         {
-            double t = rig.Clock.Elapsed.TotalMilliseconds;
+            double t = Time.GetElapsedTime(rig.Started).TotalMilliseconds;
             double scale, angle;
             bool done;
             if (rig.Entering)

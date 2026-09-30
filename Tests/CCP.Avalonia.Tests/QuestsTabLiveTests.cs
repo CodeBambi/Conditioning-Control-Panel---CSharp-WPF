@@ -59,6 +59,24 @@ public sealed class QuestsTabLiveTests
                 // The card quotes what CompleteQuest pays (one Core formula); the payout lands below.
                 var payout = QuestService.ScaledQuestXp(pop.XPReward, settings);
                 Assert.Equal($"🎁 {payout} XP", card0.FindControl<TextBlock>("TxtXp")!.Text);
+
+                // A language switch after the paint (any earlier test's SetLanguage, posted from
+                // off the UI thread, used to land here) keeps what code wrote, as WPF does, and still
+                // re-localizes text code never touched.
+                var seasonTitle = tab.FindControl<TextBlock>("TxtSeasonTitle")!;
+                var loc = ConditioningControlPanel.Localization.LocalizationManager.Instance;
+                var lang = loc.CurrentLanguage;
+                try
+                {
+                    loc.SetLanguage(lang == "de" ? "en" : "de");
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("section_seasons"), seasonTitle.Text);
+                    Assert.Equal(QuestDefinition.WeeklyQuests.Find(d => d.Id == "flash_monsoon_w")!.Name,
+                        tab.FindControl<TextBlock>("TxtWeeklyQuestName")!.Text);
+                }
+                finally { loc.SetLanguage(lang); }
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("section_seasons"), seasonTitle.Text);
                 Assert.Equal(QuestDefinition.WeeklyQuests.Find(d => d.Id == "flash_monsoon_w")!.Name,
                     tab.FindControl<TextBlock>("TxtWeeklyQuestName")!.Text);
 

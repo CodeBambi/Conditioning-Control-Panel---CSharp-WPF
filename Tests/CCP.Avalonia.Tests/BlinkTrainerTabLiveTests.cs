@@ -83,7 +83,11 @@ public sealed class BlinkTrainerTabLiveTests
                 // Camera-only actions are off with a reason, never a live-looking no-op.
                 Assert.False(tab.FindControl<Button>("BtnBlinkTrainerStartSession")!.IsEnabled);
                 Assert.False(tab.FindControl<Button>("BtnBlinkTrainerCalibrate")!.IsEnabled);
-                Assert.NotNull(ToolTip.GetTip(tab.FindControl<Button>("BtnBlinkTrainerStartStopTracker")!));
+                Assert.NotNull(ToolTip.GetTip(tab.FindControl<Button>("BtnBlinkTrainerStartSession")!));
+                // The tracker toggle is live now (Platform/WebcamTracker), labelled as WPF does.
+                var tracker = tab.FindControl<Button>("BtnBlinkTrainerStartStopTracker")!;
+                Assert.True(tracker.IsEnabled);
+                Assert.Equal("Start tracker", ((TextBlock)tracker.Content!).Text);
 
                 tab.IsVisible = false; // leaving the tab stops the loop
                 Assert.False(tab.DemoRunning);

@@ -53,10 +53,24 @@
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <!-- Remote Control pairing QR, same package and version WPF uses (ConditioningControlPanel.csproj:154). -->
     <PackageReference Include="QRCoder" Version="1.6.0" />
+    <!-- Webcam tracking (Platform/WebcamTracker.cs), docs/avalonia-decisions.md 2026-09-30. 4.13, not
+         WPF's 4.9: no Linux runtime exists for 4.9, and 4.10/4.11 link Ubuntu-22.04-only libs (libavcodec58,
+         libtiff5, gtk2...); 4.13 needs only glibc 2.28 + GTK3 (ldd: nothing missing). OnnxRuntime carries CPU natives
+         for every RID; a RID publish keeps only its own. -->
+    <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
   </ItemGroup>
 
   <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Windows')))">
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Linux')))">
+    <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260627" />
+    <!-- OnnxRuntime's props copy the win-x64 onnxruntime.dll to the root on any AnyCPU build (11 MB of
+         Windows native in the Linux tarball). -->
+    <None Remove="$(NuGetPackageRoot)microsoft.ml.onnxruntime/1.20.1/runtimes/win-x64/native/*.dll" />
   </ItemGroup>
 
   <ItemGroup>

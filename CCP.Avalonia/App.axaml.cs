@@ -428,6 +428,9 @@ namespace ConditioningControlPanel.Avalonia
                 // Speech: Core Vosk engine over parec, seeding CoreSpeech (model is a drop-in, no download).
                 try { Platform.PulseMicSource.Seed(); }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Speech] engine unavailable on this head"); }
+                // Webcam: only the revoke verb crosses (it must close the camera). IsAvailable stays unseeded
+                // until calibration/tracker-test land, so the Devices section keeps its controls off.
+                CoreWebcam.RevokeConsentAction = () => Platform.WebcamTracker.Instance.Stop();
                 // CoreMindWipe stays unseeded, and it is the audio surface that is missing rather
                 // than the feature: MindWipeSchedule (Core) already decides the tick interval, the
                 // per-tick probability, the session escalation and which clips are candidates.
@@ -744,6 +747,7 @@ namespace ConditioningControlPanel.Avalonia
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
+            try { Platform.WebcamTracker.Instance.Stop(); } catch { /* WPF App.OnExit:6185 Webcam.Dispose */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never
             // opened the quest page.

@@ -99,7 +99,7 @@ public sealed class TubeChatBrainTests
             AvApp.Ai?.Dispose();
             (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain);
             CoreAccount.UnifiedUserId = null;
-            CoreSettings.ServiceProvider = null;
+            service.SaveImmediate(); CoreSettings.ServiceProvider = null;
             Directory.Delete(dir, true);
         }
     });
