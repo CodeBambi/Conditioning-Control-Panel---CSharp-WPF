@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
@@ -19,10 +20,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// The gate is no longer a plain t1 lock: free accounts get one run a week, so
     /// <c>GradedIntakeGate</c> (with its swappable copy) and <c>GradedIntakePassBanner</c> are
-    /// painted together from <c>MainWindow.RefreshGradedIntakeGate</c>, which is the only thing
-    /// that should ever touch their visibility. That host does not exist on this head, so both
-    /// keep the authored starting state from the markup (hidden), exactly as WPF does before the
-    /// host's first refresh pass.
+    /// painted together from <see cref="RefreshGradedIntakeGate"/> (WPF MainWindow.Lab.cs:343),
+    /// which is the only thing that should ever touch their visibility. It lives on the view here:
+    /// it runs on attach (WPF: every Exclusives navigation) and on the pass's PassStateChanged,
+    /// which also fires on either provider's TierChanged (WPF Patreon.cs:294 / Lab.cs:435).
     ///
     /// On WPF every handler below is a one-line hop to the identically named <c>MainWindow</c>
     /// method. THE POP-QUIZ PAIR IS NOT A HOP ANY MORE: <c>PopQuizEnabled</c> and
@@ -49,7 +50,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // rewritten when the language changes or the {loc:Str} binding still living under that
             // local value would put the seeded "2/session hr" back in the old language.
             LocalizationManager.Instance.LanguageChanged += (_, _) =>
-                Dispatcher.UIThread.Post(() => ShowFrequency((int)Math.Round(SliderPopQuizFrequency.Value)));
+                Dispatcher.UIThread.Post(() =>
+                {
+                    ShowFrequency((int)Math.Round(SliderPopQuizFrequency.Value));
+                    RefreshGradedIntakeGate();   // same trap: the gate copy is written from code
+                });
 
             SyncFromSettings();
         }
@@ -59,17 +64,72 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             RefreshPastQuizzes();   // WPF refreshes on tab navigation (MainWindow.TabNavigation.cs:548)
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
+            App.IntakePass.PassStateChanged += OnIntakePassStateChanged;
             SyncFromSettings();
+            RefreshGradedIntakeGate();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            App.IntakePass.PassStateChanged -= OnIntakePassStateChanged;
             base.OnDetachedFromVisualTree(e);
         }
 
         // A cloud restore or a factory reset swaps the settings instance; repaint from the new one.
         private void OnCurrentReplaced() => Dispatcher.UIThread.Post(SyncFromSettings);
+
+        // WPF Lab.cs:444: the pass is spent (or entitlement lands) off the UI thread.
+        private void OnIntakePassStateChanged(object? sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(RefreshGradedIntakeGate);
+
+        /// <summary>
+        /// WPF MainWindow.Lab.cs:343. Premium and Available open the page (Available also shows the
+        /// pass banner); Spent and NeedsLogin show the gate with their own copy and disable the
+        /// launch zone behind it. Pop Quiz sits outside the gated Border and stays reachable.
+        /// ponytail: PremiumGateFx (decoration only) is not ported.
+        /// </summary>
+        internal void RefreshGradedIntakeGate()
+        {
+            try
+            {
+                var state = App.IntakePass.State;
+                var open = state == IntakePassState.Premium || state == IntakePassState.Available;
+
+                GradedIntakeGate.IsVisible = !open;
+                GradedIntakeGatedContent.IsEnabled = open;
+                GradedIntakePassBanner.IsVisible = state == IntakePassState.Available;
+
+                if (state == IntakePassState.NeedsLogin)
+                {
+                    SetGateCopy(Loc.Get("intake_gate_login_headline"), Loc.Get("intake_gate_login_body"),
+                        Loc.Get("intake_gate_login_cta"));
+                }
+                else if (state == IntakePassState.Spent)
+                {
+                    SetGateCopy(Loc.Get("intake_gate_spent_headline"), SpentBody(),
+                        Loc.Get("intake_gate_spent_cta"));
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("RefreshGradedIntakeGate failed: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>Two keys rather than one with a {0}: DaysUntilNextPass floors at 1 (WPF Lab.cs:391).</summary>
+        private static string SpentBody()
+        {
+            var days = IntakePassService.DaysUntilNextPass;
+            return days == 1 ? Loc.Get("intake_gate_spent_body_one_day") : Loc.GetF("intake_gate_spent_body", days);
+        }
+
+        private void SetGateCopy(string headline, string body, string cta)
+        {
+            TxtGradedIntakeGateHeadline.Text = headline;
+            TxtGradedIntakeGateBody.Text = body;
+            if (BtnGradedIntakeGateUnlock.Content is TextBlock label) label.Text = cta;
+        }
 
         /// <summary>
         /// The pop-quiz half of WPF's <c>MainWindow.LoadSettingsToUI</c> (MainWindow.xaml.cs:3552),
@@ -92,14 +152,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void ShowFrequency(int perHour) =>
             TxtPopQuizFrequency.Text = Loc.GetF("label_0_session_hr", perHour);
 
-        // ponytail: the web view is NOT the blocker - this head ships Views/Controls/WebHost, a
-        // real Avalonia.Controls.WebView with a navigation gate and InvokeScriptAsync. What is
-        // missing is everything around it: Services/Quiz/IntakeHostService (the window and the
-        // page protocol), Services/IntakePassService (which spends the pass) and CoreAi for the
-        // tier gate in front of both - see ConditioningControlPanel/MainWindow/MainWindow.Lab.cs
-        // :148. Nothing here can start a run, and a button that opens nothing is better than one
-        // that pretends the pass was spent.
-        private void BtnStartIntake_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF MainWindow.Lab.cs:148: the pass gate and the AI gate in front of the launch.</summary>
+        internal async void BtnStartIntake_Click(object? sender, RoutedEventArgs e)
+        {
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            var pass = App.IntakePass;
+            if (!pass.CanStartIntake)
+            {
+                if (pass.State == IntakePassState.NeedsLogin)
+                {
+                    if (owner != null)
+                        await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                            Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
+                }
+                else
+                {
+                    App.Notifications.Show(SpentBody(), Helpers.NotificationType.Warning,
+                        TimeSpan.FromSeconds(8), Loc.Get("intake_gate_spent_cta"),
+                        () => (owner as Windows.MainShellWindow)?.OpenAppSettingsSection("account"));
+                }
+                return;
+            }
+
+            if (!CoreAi.IsAvailable)
+            {
+                if (owner != null)
+                    await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                        Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
+                return;
+            }
+
+            // ponytail: the launch itself is missing - Services/Quiz/IntakeHostService (the WebHost
+            // window and the page protocol, 1.6k LOC, WPF-only) is what runs a run and calls
+            // IntakePassService.ConsumeForCompletedIntake on its result. Port it next; until then a
+            // run that passes both gates opens nothing, and the pass is never spent.
+            Log.Information("Graded Intake: gates passed, but IntakeHostService is not ported");
+        }
 
         /// <summary>WPF MainWindow.Lab.cs:116. The button is IsVisible="False" on both heads ("pending
         /// removal"), so no user reaches this; kept wired so unhiding it is one attribute.</summary>

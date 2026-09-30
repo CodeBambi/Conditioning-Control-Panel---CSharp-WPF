@@ -21,6 +21,9 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>In-app corner toasts (WPF App.Notifications). Queues until the shell attaches it.</summary>
         public static Helpers.NotificationService Notifications { get; } = new();
 
+        /// <summary>Weekly free-tier pass for the Graded Intake (WPF App.IntakePass).</summary>
+        public static IntakePassService IntakePass { get; } = new();
+
         /// <summary>HT-URL lookup + download (WPF App.CatalogueLookup). The shell registers the opener.</summary>
         internal static CatalogueLookup CatalogueLookup { get; set; } = new(
             () => Services.Deeper.DeeperLocalLibrary.DefaultFolder, CoreReleaseContent.AppVersion, OnUiThread);
@@ -396,6 +399,12 @@ namespace ConditioningControlPanel.Avalonia
                     fetchOverride: string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")));
                 _ = dailyFree.RefreshAsync();
                 CoreEntitlement.IsFreeTodayProvider = dailyFree.IsFreeToday;
+                // WPF App.xaml.cs:494/2636/2937: the weekly Graded Intake pass, re-raised on either
+                // provider's TierChanged so every door repaints when entitlement lands.
+                CoreEntitlement.IntakePassAvailableProvider = () => IntakePass.IsPassAvailable;
+                IntakePass.AttachEntitlementSources(
+                    h => { if (Platform.AccountSeed.Patreon is { } p) p.TierChanged += h; if (Platform.AccountSeed.SubscribeStar is { } s) s.TierChanged += h; },
+                    h => { if (Platform.AccountSeed.Patreon is { } p) p.TierChanged -= h; if (Platform.AccountSeed.SubscribeStar is { } s) s.TierChanged -= h; });
                 // WPF App.xaml.cs:2875/2941: the one HapticService, gated (premium / daily free) in its
                 // mixer. Connects only to what the user runs (Intiface at ButtplugUrl, Lovense Remote).
                 // ponytail: no MockToast (mock toys log only), no funscript playhead (FunScriptService.
@@ -619,6 +628,8 @@ namespace ConditioningControlPanel.Avalonia
                     shell.RefreshNavPremiumTags();
                 });
                 dailyFree.TodayChanged += RepaintVeils;
+                // WPF NavPremiumTags.cs:118 / Lab.cs:435: a spent or refunded pass moves the star and the vault.
+                IntakePass.PassStateChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
