@@ -30,6 +30,30 @@ public sealed class AchievementEngineTests : IDisposable
         new AchievementStore(path).Load().IsUnlocked(id);
 
     [Fact]
+    public void AttentionTrackersCountAndUnlockAtWpfThresholds()
+    {
+        var engine = new AchievementEngine(new AchievementStore(MainPath));
+        var p = engine.Progress;
+        engine.TrackAttentionCheckPassed();
+        engine.TrackAttentionCheckPassed();
+        engine.TrackAttentionCheckPassed(isVideo: true);
+        Assert.Equal((3, 1), (p.TotalAttentionChecksPassed, p.VideoAttentionChecksPassed));
+        engine.TrackVideoAttentionCheckFailed();
+        Assert.Equal(1, p.VideoAttentionChecksFailed);
+
+        engine.TrackAttentionCheckFailed(); engine.TrackAttentionCheckFailed();
+        Assert.False(p.IsUnlocked("mercy_beggar"));
+        engine.TrackAttentionCheckFailed();                  // 3rd failure
+        Assert.Equal(3, p.AttentionCheckFailures);
+        Assert.True(OnDisk(MainPath, "mercy_beggar"));
+
+        while (p.TotalAttentionChecksPassed < 99) engine.TrackAttentionCheckPassed();
+        Assert.False(p.IsUnlocked("eyes_front"));
+        engine.TrackAttentionCheckPassed();                  // 100th pass
+        Assert.True(OnDisk(MainPath, "eyes_front"));
+    }
+
+    [Fact]
     public void UnlockPersistsThenRaisesExactlyOnce()
     {
         var engine = new AchievementEngine(new AchievementStore(MainPath));

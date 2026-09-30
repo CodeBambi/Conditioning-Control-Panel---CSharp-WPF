@@ -231,6 +231,7 @@ namespace ConditioningControlPanel.Services
             }
             IsStrict = strictOverride ?? CoreSettings.Current.StrictLockEnabled;
             _playing = true;
+            _retryGeneration++;   // WPF PlayVideo CancelPendingRetry: a new clip retires any pending verdict replay
             AttentionSpawned = AttentionHits = 0;
             CoreFlash.Stop();   // WPF PlayVideo: App.Flash?.Stop()
             var strict = IsStrict;
@@ -269,8 +270,10 @@ namespace ConditioningControlPanel.Services
         /// (pass XP and achievements); a fail or a troll closes the clip, shows the verdict and plays
         /// a fresh clip with the same strictness, until the third replay earns mercy
         /// (MercySystemEnabled), which ends the run like <see cref="End"/>.
-        /// ponytail: no Chaster "video"/"attention" notes and no Trainer companion -25 XP on a fail;
-        /// neither service is on this seam yet.</summary>
+        /// Pass/fail reach achievements (and the head's Chaster "attention" note) through
+        /// <see cref="CoreProgression.TrackAttentionCheck"/>.
+        /// ponytail: no Chaster "video" note on a natural end and no Trainer companion -25 XP on a fail;
+        /// neither is on this seam yet.</summary>
         public void Ended()
         {
             if (!_playing) return;

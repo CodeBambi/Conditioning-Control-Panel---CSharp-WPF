@@ -185,6 +185,30 @@ public sealed class MandatoryVideoSchedulerTests
     });
 
     [Fact]
+    public void A_new_clip_during_the_verdict_message_cancels_the_pending_replay() => With(60, false, () =>
+    {
+        var s = CoreSettings.Current;
+        var (a, m) = (s.AttentionChecksEnabled, s.MercySystemEnabled);
+        (s.AttentionChecksEnabled, s.MercySystemEnabled) = (true, true);
+        try
+        {
+            var clock = new FakeClock(); var host = new Host();
+            var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+            v.Trigger(); clock.Advance(MandatoryVideoScheduler.PreRoll);
+            v.NoteSpawn(); v.Ended();                        // missed: the 2 s verdict message is up
+            Assert.True(v.Trigger());                        // the Test button in that gap
+            clock.Advance(MandatoryVideoScheduler.PreRoll);
+            Assert.Equal(2, host.Shown.Count);
+            host.Then!();                                    // the message ends: its replay is stale
+            clock.Advance(TimeSpan.FromSeconds(5));
+            Assert.Equal(2, host.Shown.Count);
+            Assert.True(v.IsPlaying);
+            Assert.Equal(1, v.Penalties);                    // a stale replay would have run AfterEnd (reset to 0)
+        }
+        finally { (s.AttentionChecksEnabled, s.MercySystemEnabled) = (a, m); }
+    });
+
+    [Fact]
     public void No_videos_is_raised_once_per_launch()
     {
         var v = new MandatoryVideoScheduler(new Host(), new FakeClock(), () => Array.Empty<string>());
