@@ -231,3 +231,7 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
 - Choice: (b) for now; the pop stays `missing` in the ledger. BookedFlashPlan moved to Core with colours as 0xAARRGGBB `uint`
   (WPF converts with `BookedFlashColour.Wpf()`), so both heads draw one plan.
 - Advisor: none (worker, per branch brief avalonia-port/chaster-bill).
+## 2026-09-30: Mantra Lab audio and opener (avalonia-port/mantra-service)
+MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `CoreProgression.AddXP("Mantra")`, new `CoreProgression.TrackMantraCompletedProvider`, `MantraService.ChasterNote`, seeded by both heads). WPF's NAudio SignalGenerators become synthesised 16-bit WAVs (`CCP.Avalonia/Platform/ToneWav.cs`, per-process temp dir): tones through `CoreAudio.PlayOneShot` at WPF's 0.15 gain; the drone (90 Hz + 0.4 x 180 Hz, 10 s of whole cycles) as a looping `LayeredAudio.VlcLayerPlayer` whose volume follows WPF's gain ramp x MantraDroneVolume. No NAudio on Linux. `MainShellWindow.StartMantraSession` is ported with no caller, exactly as WPF (MainWindow.PlayTab.cs:~264; the Mantras card left the Play page 2026-08-12); where the game lives is still an owner call. Its WPF failure MessageBox is dropped on this head (logged only). The drone player starts muted and unmutes once its first volume sticks (no full-volume blip); exit closes the window and deletes the temp WAVs.
+- Test: `Tests/CCP.Core.Tests/MantraServiceTests.cs`, `Tests/CCP.Avalonia.Tests/MantraWindowSessionTests.cs` (fail-proven x7).
+- Advisor: none (worker).
