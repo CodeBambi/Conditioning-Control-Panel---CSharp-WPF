@@ -42,6 +42,9 @@ public sealed class MandatoryVideoOverlayTests
             CoreProgression.TrackVideoWatchedProvider = s => credited += s;
             var s = CoreSettings.Current;
             var panic = (s.PanicKeyEnabled, s.PanicKey);
+            var maxLen = s.VideoMaxDurationSeconds;
+            var overrides = s.PanicOverridesAll;
+            var engineVideo = CoreEngine.Video;
             (s.PanicKeyEnabled, s.PanicKey) = (true, "F12");
             var saved = (s.AudioDuckingEnabled, s.VideoBlurredBackgroundEnabled, s.AttentionChecksEnabled);
             (s.AudioDuckingEnabled, s.VideoBlurredBackgroundEnabled, s.AttentionChecksEnabled) = (true, true, false);
@@ -52,6 +55,7 @@ public sealed class MandatoryVideoOverlayTests
             CoreProgression.AddXPProvider = (x, _) => xp += x;
             var o = MandatoryVideoOverlay.Instance;
             var v = new ConditioningControlPanel.Services.MandatoryVideoScheduler(o, library: () => new[] { clip });
+            CoreEngine.Video = v;
             var real = o.Scheduler;
             var listener = MandatoryVideoOverlay.PanicListenerLive;
             o.Scheduler = v;
@@ -132,12 +136,62 @@ public sealed class MandatoryVideoOverlayTests
                     Assert.Equal(0, o.LiveTargets);
                     Assert.Equal(1, v.AttentionHits);
                     await Task.Delay(1200);
+
+                    // WPF #735 grace pause: the clip's first Esc pauses it behind the card (guards asleep);
+                    // Resume plays on, and the spent pause makes the next Esc a dismiss.
+                    w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
+                    Assert.True(v.IsPlaying && o.GracePaused && sf.Grace.IsVisible && !sf.Layer.IsHitTestVisible, "first Esc = grace pause");
+                    Assert.Contains("60", sf.Countdown.Text);
+                    s.VideoMaxDurationSeconds = 1;
+                    o.GuardTick();
+                    Assert.True(v.IsPlaying, "the clip guards sleep through a grace pause");
+                    s.VideoMaxDurationSeconds = 0;
+                    o.ResumeFromGrace("test");
+                    Assert.True(!o.GracePaused && !sf.Grace.IsVisible && sf.Layer.IsHitTestVisible, "resumed");
+                    await Task.Delay(300);   // past the 200 ms same-keystroke dedup
                     w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
                     Assert.False(v.IsPlaying);
                     Assert.Empty(o.Windows);
                     Assert.True(o.Sink == null, "frame buffer freed");
                     Assert.True(credited >= 1, $"credited {credited}s");
                     Assert.True((ducks, unducks) == (3, 3), $"every close releases its duck ({ducks}/{unducks})");
+
+                    // WPF vout heal: output lost for 5 s replays the same clip once; lost again, it ends.
+                    w = await Open(strict: false);
+                    o.FrameTs -= System.Diagnostics.Stopwatch.Frequency * 6;
+                    o.GuardTick();
+                    Assert.True(v.IsPlaying && o.Windows.Count == 1 && o.Windows[0] != w, "lost output replays the clip once");
+                    for (var i = 0; i < 100 && o.FirstFrameMs < 0; i++) await Task.Delay(50);
+                    o.FrameTs -= System.Diagnostics.Stopwatch.Frequency * 6;
+                    o.GuardTick();
+                    Assert.False(v.IsPlaying, "lost again after the replay: the clip ends");
+                    Assert.Empty(o.Windows);
+
+                    // The global panic press (WPF HandlePanicKeyPress): with PanicOverridesAll off the first
+                    // press grace-pauses the clip and the next one stops it; with it on, panic wins at once.
+                    var shell = new global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+                    shell.Show();
+                    var t0 = DateTime.Now;
+                    s.PanicOverridesAll = false;
+                    w = await Open(strict: false);
+                    shell.HandlePanicKeyPress(t0);
+                    Assert.True(v.IsPlaying && o.GracePaused, "override off: the global panic press grace-pauses");
+                    await Task.Delay(300);
+                    shell.HandlePanicKeyPress(t0.AddSeconds(10));
+                    Assert.False(v.IsPlaying, "override off: the second press stops it");
+                    s.PanicOverridesAll = true;
+                    w = await Open(strict: false);
+                    shell.HandlePanicKeyPress(t0.AddSeconds(20));
+                    Assert.False(v.IsPlaying || o.GracePaused, "override on: panic wins");
+                    shell.Close();
+
+                    // The max-length cap (VideoMaxDurationSeconds = 1) ends the next clip.
+                    s.VideoMaxDurationSeconds = 1;
+                    w = await Open(strict: false);
+                    await Task.Delay(1100);
+                    o.GuardTick();
+                    Assert.False(v.IsPlaying, "max-length cap ends the clip");
+                    Assert.Empty(o.Windows);
                 });
             }
             finally
@@ -150,6 +204,9 @@ public sealed class MandatoryVideoOverlayTests
                 (CoreAudio.DuckProvider, CoreAudio.UnduckProvider) = (duck, unduck);
                 (s.AudioDuckingEnabled, s.VideoBlurredBackgroundEnabled, s.AttentionChecksEnabled) = saved;
                 (s.PanicKeyEnabled, s.PanicKey) = panic;
+                s.VideoMaxDurationSeconds = maxLen;
+                s.PanicOverridesAll = overrides;
+                CoreEngine.Video = engineVideo;
             }
         }
         finally { Directory.Delete(dir, true); }

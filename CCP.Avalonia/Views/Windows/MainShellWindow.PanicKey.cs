@@ -61,6 +61,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Serilog.Log.Information("Panic key pressed ({Rung})", rung);
             if (rung == PanicPolicy.Rung.DismissLockCard) StopLockCards();
             if (!PanicPolicy.StopsSurfaces(rung)) return;
+            // WPF #735: with PanicOverridesAll off (RunLadder), the first press over a playing mandatory
+            // video grace-pauses it instead (TryGracePause refuses when panic overrides all), and the
+            // window's own handling of the same keystroke is deduped there. Not a ladder rung.
+            if (rung == PanicPolicy.Rung.RunLadder && Views.Overlays.MandatoryVideoOverlay.Instance.TryGracePause(fromPanicKey: true))
+            {
+                Serilog.Log.Information("Panic press consumed as video grace pause");
+                return;
+            }
             bool wasRunning = CoreEngine.IsRunning;
             // WPF RunPanicStopTail: StopEngine while running, StopAdHocEffects otherwise - both are
             // CoreEngine.Stop here (it stops everything either way) and neither unticks a flag.

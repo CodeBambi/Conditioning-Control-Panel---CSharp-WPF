@@ -975,3 +975,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: BubbleCountSchedulerTests + BubbleCountGameTests (committed 3 KB clip, runs on CI), fail-proven; live 3 screens,
   correct answer, strict retry. Rows: win-bubble-count-result wired; feat-bubble-count stub (Bambi Freeze lead-in); win-bubble-count
   stub (click raises the game over its bubbles). Review: FIX -> fixed.
+
+## avalonia-port/video-grace-watchdog: +462
+- Mandatory Video slice 3: Esc grace pause (WPF #735; 60 s card in the video window, auto-resume; the global panic key grace-pauses
+  only when panic-overrides-all is off, else panic wins), lost/dead output replays the clip once then ends (WPF vout heal; deviations
+  logged), overrun/max-length guards from the first frame, Test-button stuck/force-reset prompt, ambient bubbles held for the whole
+  run, Chaster "video" note, Trainer -25 XP (CompanionPerks moved to Core).
+- Evidence: scheduler + overlay + shell panic tests, fail-proven; live grace pause/resume/auto-resume, stuck prompt, panic stop, max
+  length. Rows stay stub (UI-freeze watchdog, pack clips, min-duration filter, interaction queue). Review: FIX -> fixed.

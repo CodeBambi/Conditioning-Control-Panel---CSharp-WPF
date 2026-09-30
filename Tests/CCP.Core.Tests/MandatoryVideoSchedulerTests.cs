@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Services;
 using Xunit;
@@ -137,7 +138,11 @@ public sealed class MandatoryVideoSchedulerTests
         {
             var clock = new FakeClock(); var host = new Host();
             var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+            var bubbles = new List<string>();   // WPF: bubbles held from the first clip until the run ends
+            CoreBubbles.PauseAction = () => bubbles.Add("pause");
+            CoreBubbles.ResumeAction = () => bubbles.Add("resume");
             v.Trigger(); clock.Advance(MandatoryVideoScheduler.PreRoll);
+            Assert.Equal(new[] { "pause" }, bubbles);
             for (var replay = 1; replay <= 2; replay++)
             {
                 v.NoteSpawn(); v.NoteSpawn(); v.NoteHit();   // 1 of 2 caught
@@ -150,10 +155,12 @@ public sealed class MandatoryVideoSchedulerTests
                 Assert.Equal(replay + 1, host.Shown.Count);
                 Assert.True(host.Shown[^1].Strict);
                 Assert.Equal(0, v.AttentionSpawned);
+                Assert.DoesNotContain("resume", bubbles);    // not through the verdict or the replay
             }
             v.NoteSpawn(); v.Ended();                        // third miss: mercy, no replay
             Assert.Equal(AttentionVerdict.Mercy, host.Messages[^1]);
             host.Then!();
+            Assert.Equal("resume", bubbles[^1]);
             clock.Advance(TimeSpan.FromSeconds(5));
             Assert.Equal(3, host.Shown.Count);
             Assert.Equal(0, v.Penalties);
@@ -181,6 +188,7 @@ public sealed class MandatoryVideoSchedulerTests
             (s.AttentionChecksEnabled, s.MercySystemEnabled) = (a, m);
             CoreProgression.AddXPProvider = null;
             CoreProgression.TrackAttentionCheckProvider = null;
+            CoreBubbles.PauseAction = CoreBubbles.ResumeAction = null;
         }
     });
 
@@ -290,4 +298,75 @@ public sealed class MandatoryVideoSchedulerTests
         }
         finally { CoreEngine.Stop(); CoreEngine.Video = null; }
     });
+
+    // WPF #735: one grace pause per clip, only while it plays; the same keystroke's second handler
+    // is swallowed for 200 ms; the countdown rounds up.
+    [Fact]
+    public void GracePauseRules()
+    {
+        Assert.Equal(GraceDecision.Pause, MandatoryVideoScheduler.EvaluateGrace(true, false, false, false, double.MaxValue));
+        Assert.Equal(GraceDecision.ConsumedDedup, MandatoryVideoScheduler.EvaluateGrace(true, false, true, true, 150));
+        Assert.Equal(GraceDecision.FallThrough, MandatoryVideoScheduler.EvaluateGrace(true, false, true, false, 5000));   // press 2
+        Assert.Equal(GraceDecision.FallThrough, MandatoryVideoScheduler.EvaluateGrace(true, false, false, true, 5000));   // spent
+        Assert.Equal(GraceDecision.FallThrough, MandatoryVideoScheduler.EvaluateGrace(false, false, false, false, double.MaxValue));
+        Assert.Equal(60, MandatoryVideoScheduler.GraceSecondsRemaining(0));
+        Assert.Equal(59, MandatoryVideoScheduler.GraceSecondsRemaining(1.2));
+        Assert.Equal(0, MandatoryVideoScheduler.GraceSecondsRemaining(61));
+
+        // Which keys try it (WPF SetupStrictHandlers). Strict: Esc only, with a non-Esc panic key and
+        // a live listener - the fall-open force-stop keeps Esc when nothing global can stop the clip.
+        Assert.Equal(false, MandatoryVideoScheduler.GraceKey(true, "Escape", true, "F12"));
+        Assert.Null(MandatoryVideoScheduler.GraceKey(true, "Escape", true, "F12", panicListenerLive: false));
+        Assert.Null(MandatoryVideoScheduler.GraceKey(true, "Escape", true, "Escape"));
+        Assert.Null(MandatoryVideoScheduler.GraceKey(true, "F12", true, "F12"));
+        Assert.Equal(false, MandatoryVideoScheduler.GraceKey(false, "Escape", true, "F12"));
+        Assert.Equal(true, MandatoryVideoScheduler.GraceKey(false, "Escape", true, "Escape"));
+        Assert.Equal(true, MandatoryVideoScheduler.GraceKey(false, "F12", true, "F12"));
+        Assert.Null(MandatoryVideoScheduler.GraceKey(false, "F12", false, "F12"));
+    }
+
+    // WPF vout watchdog (8 s), mid-play vout loss (5 s) - both replay once - and the safety timer
+    // (+5 s), 600 s fallback and max-length cap on the clock from the first frame.
+    [Fact]
+    public void ClipGuards()
+    {
+        string? G(double show, double played, bool framed, double len, double sinceFrame, int max, bool video = true)
+            => MandatoryVideoScheduler.Guard(show, played, framed, video, len, sinceFrame, max);
+        Assert.Null(G(7.9, 0, false, 0, 0, 0));
+        Assert.Equal("no frame", G(8, 0, false, 0, 0, 0));
+        Assert.Null(G(30, 30, false, 0, 0, 0, video: false));            // audio-only plays out
+        Assert.Null(G(40, 34.9, true, 30, 0, 0));                        // counts from the first frame
+        Assert.Equal("overran", G(40, 35, true, 30, 0, 0));
+        Assert.Null(G(700, 599, true, 0, 0, 0));
+        Assert.Equal("overran", G(600, 600, true, 0, 0, 0));
+        Assert.Equal("max length", G(25, 20, true, 30, 0, 20));
+        Assert.Null(G(25, 19.9, true, 30, 0, 20));
+        Assert.Equal("output lost", G(10, 10, true, 30, 5, 0));
+        Assert.Null(G(10, 10, true, 30, 4.9, 0));
+        Assert.True(MandatoryVideoScheduler.GuardHeals("no frame", false));
+        Assert.True(MandatoryVideoScheduler.GuardHeals("output lost", false));
+        Assert.False(MandatoryVideoScheduler.GuardHeals("output lost", true));
+        Assert.False(MandatoryVideoScheduler.GuardHeals("max length", false));
+    }
+
+    // WPF CompanionService.OnAttentionCheckFailed: only the Trainer's perk costs 25 XP, floored at 0.
+    [Fact]
+    public void TrainerPerkPaysForAFailedCheck()
+    {
+        var s = new ConditioningControlPanel.Models.AppSettings();
+        var trainer = ConditioningControlPanel.Models.CompanionDefinition.AllCompanions
+            .First(c => c.BonusType == ConditioningControlPanel.Models.CompanionBonusType.StrictModeBonus);
+        s.ActiveCompanionId = (int)trainer.Id;
+        s.ActiveCompanionProgress.CurrentXP = 30;
+        Assert.True(ConditioningControlPanel.Services.Companion.CompanionPerks.ApplyAttentionFailPenalty(s));
+        Assert.Equal(5, s.ActiveCompanionProgress.CurrentXP);
+        Assert.True(ConditioningControlPanel.Services.Companion.CompanionPerks.ApplyAttentionFailPenalty(s));
+        Assert.Equal(0, s.ActiveCompanionProgress.CurrentXP);
+        var other = ConditioningControlPanel.Models.CompanionDefinition.AllCompanions
+            .First(c => c.BonusType != ConditioningControlPanel.Models.CompanionBonusType.StrictModeBonus);
+        s.ActiveCompanionId = (int)other.Id;
+        s.ActiveCompanionProgress.CurrentXP = 30;
+        Assert.False(ConditioningControlPanel.Services.Companion.CompanionPerks.ApplyAttentionFailPenalty(s));
+        Assert.Equal(30, s.ActiveCompanionProgress.CurrentXP);
+    }
 }

@@ -415,6 +415,12 @@ namespace ConditioningControlPanel.Avalonia
                     ChasterNote("attention");
                     Achievements?.TrackVideoAttentionCheckFailed();
                     ChasterNote("attention");
+                    // WPF App.Companion?.OnAttentionCheckFailed(): the Trainer's -25 XP.
+                    if (Services.Companion.CompanionPerks.ApplyAttentionFailPenalty(CoreSettings.Current))
+                    {
+                        CoreSettings.Save();
+                        Serilog.Log.Information("Trainer penalty: -25 XP for attention check fail. Current XP: {XP:F1}", CoreSettings.Current.ActiveCompanionProgress.CurrentXP);
+                    }
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();

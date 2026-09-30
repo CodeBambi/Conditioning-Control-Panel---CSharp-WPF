@@ -371,13 +371,13 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _graceCountdownTimer;
         private readonly List<GracePauseOverlayWindow> _graceOverlays = new();
         /// <summary>Seconds the video stays paused before it resumes on its own.</summary>
-        internal const int GraceWindowSeconds = 60;
+        internal const int GraceWindowSeconds = MandatoryVideoScheduler.GraceWindowSeconds;
         /// <summary>
         /// Dedup window for ONE physical panic keystroke (see <see cref="TryGracePauseFromPanic"/>).
         /// Far below any human rapid double-tap, far above the dispatcher latency between the window
         /// handler and the queued global handler.
         /// </summary>
-        internal const int GraceDedupMs = 200;
+        internal const int GraceDedupMs = MandatoryVideoScheduler.GraceDedupMs;
         /// <summary>Floor for a re-armed guard timer, so rounding can never re-arm one at ~0ms.</summary>
         private static readonly TimeSpan MinReArmInterval = TimeSpan.FromMilliseconds(250);
 
@@ -6160,18 +6160,6 @@ namespace ConditioningControlPanel.Services
 
         #region Grace Pause (#735)
 
-        /// <summary>What a panic press should do to a (possibly playing) mandatory video.</summary>
-        internal enum GraceDecision
-        {
-            /// <summary>Perform the grace pause; the press is consumed and must NOT reach the ladder.</summary>
-            Pause,
-            /// <summary>Same physical keystroke as a pause we just performed — swallow it, change nothing.</summary>
-            ConsumedDedup,
-            /// <summary>Not pausable (no video / already paused / budget spent) — the press is
-            /// today's normal panic press.</summary>
-            FallThrough
-        }
-
         /// <summary>
         /// Pure decision for one panic press, extracted so the ladder can be unit-tested without
         /// LibVLC (same seam pattern as <see cref="EvaluateVoutMidPlay"/>).
@@ -6198,17 +6186,11 @@ namespace ConditioningControlPanel.Services
             bool consumed,
             double msSinceLastGraceAction,
             int dedupMs = GraceDedupMs)
-        {
-            if (msSinceLastGraceAction < dedupMs) return GraceDecision.ConsumedDedup;
-            if (!videoPlaying || cleaningUp) return GraceDecision.FallThrough;
-            if (alreadyPaused) return GraceDecision.FallThrough;   // press 2 = today's normal panic
-            if (consumed) return GraceDecision.FallThrough;        // one grace pause per video run
-            return GraceDecision.Pause;
-        }
+            => MandatoryVideoScheduler.EvaluateGrace(videoPlaying, cleaningUp, alreadyPaused, consumed, msSinceLastGraceAction, dedupMs);
 
         /// <summary>Seconds still to show on the countdown card (rounded up, never negative).</summary>
         internal static int GraceSecondsRemaining(double elapsedSeconds, int windowSeconds)
-            => (int)Math.Max(0, Math.Ceiling(windowSeconds - elapsedSeconds));
+            => MandatoryVideoScheduler.GraceSecondsRemaining(elapsedSeconds, windowSeconds);
 
         /// <summary>True once the grace window has fully elapsed and the video must resume itself.</summary>
         internal static bool ShouldAutoResume(double elapsedSeconds, int windowSeconds)
