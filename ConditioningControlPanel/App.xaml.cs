@@ -2664,6 +2664,46 @@ namespace ConditioningControlPanel
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
 
+            // Core brain pieces reach head-only services through these (PromptAssembler/MemoryStore moved to Core).
+            Services.Companion.Brain.MemoryStore.SignalMirrorFactory = store =>
+            {
+                var writer = new Services.Companion.Brain.MemorySignalWriter(store);
+                writer.Start();
+                return writer;
+            };
+            Services.Companion.Brain.MemoryStore.WireDeferredSignalsHook = signals =>
+                (signals as Services.Companion.Brain.MemorySignalWriter)?.WireDeferredSources();
+            Services.Companion.Brain.PromptAssembler.PossessionState = () =>
+                (Possession is { IsHaunting: true } director ? (int)director.CurrentRung : null,
+                 Services.Possession.PossessionRemember.EscapeAttempts);
+            Services.Companion.Brain.PromptAssembler.NoticeSurface = () =>
+            {
+                var dispatcher = Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return null;
+                return message => dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { Notifications?.Show(message, NotificationType.Warning, TimeSpan.FromSeconds(12)); }
+                    catch (Exception ex) { Logger?.Debug("PromptAssembler: oversize notice failed to show: {Error}", ex.Message); }
+                }));
+            };
+
+            Services.Companion.Brain.CompanionBrain.UserMessageSent = () => Companion?.NotifyUserMessageSent();
+            Services.Companion.Brain.CompanionBrain.CommandExecutor = commands =>
+            {
+                if (Commands == null) return;
+                Commands.BeginBatch();
+                foreach (var command in commands) Commands.ExecuteCommand(command);
+            };
+            Services.Companion.Brain.CompanionBrain.EffectScheduler = execute =>
+            {
+                var dispatcher = Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.CheckAccess()) execute();
+                else dispatcher.BeginInvoke(execute, System.Windows.Threading.DispatcherPriority.Normal);
+            };
+            Services.Companion.Brain.CompanionBrain.ClearLegacyLocalHistoryHook = () => (Ai as AiServiceStrategy)?.ClearLocalHistory();
+            Services.Companion.Brain.CompanionBrain.MemoryRecalled = LocalAiService.SignalPersistentMemoryRecalled;
+            Services.Companion.Brain.CompanionBrain.ActivitiesProvider = Services.Companion.CompanionActivities.Current;
+
             // CompanionBrain sits between every caller and the AI strategy: it owns conversation
             // state so providers stay dumb transports. Constructed unconditionally (it reads the
             // stored session and can report it for diagnostics); whether calls actually route
@@ -2672,7 +2712,7 @@ namespace ConditioningControlPanel
             try
             {
                 Brain = new Services.Companion.Brain.CompanionBrain(Ai);
-                Brain.AttachBarkSource(Bark);
+                if (Bark is { } bark) Brain.AttachBarkSource(h => bark.BarkSpoken += h, h => bark.BarkSpoken -= h);
                 Services.Companion.Asks.CompanionAskService.Instance.Start();
                 Logger?.Information("CompanionBrain initialized (enabled={Enabled}, restored={Restored} turns)",
                     Services.Companion.Brain.CompanionBrain.IsEnabled, Brain.RestoredTurnCount);

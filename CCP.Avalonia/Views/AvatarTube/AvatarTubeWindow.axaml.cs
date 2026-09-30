@@ -1414,10 +1414,11 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// WPF SendChatMessageAsync (AvatarTubeWindow.ChatInput.cs:747), the stateless path: cooldown gate,
         /// then App.Ai's GetBambiReplyExAsync, which runs ModerationGuard on the input before anything
         /// leaves and on the reply before it is shown. A refused input never enters the chat log (P2/H5).
-        /// <para>ponytail: WPF routes through CompanionBrain (history, memory, asks) while UseCompanionBrain
-        /// is on, its default; the brain is still head-side, so every send here takes WPF's kill-switch-off
-        /// path. Also missing: the thinking animation, the double bounce, the season-recap/achievement
-        /// hooks and the enabled-phrases filter (App.CompanionPhrases).</para>
+        /// <para>As WPF (ChatInput.cs:772), a send routes through the Core CompanionBrain (conversation
+        /// history, memory) while UseCompanionBrain is on, its default, and takes the stateless call when
+        /// it is off or the brain failed to build. ponytail: still missing - CompanionAskService's
+        /// OfferForRequest after a brain reply (head-side in WPF), the thinking animation, the double
+        /// bounce, the season-recap/achievement hooks and the enabled-phrases filter (App.CompanionPhrases).</para>
         /// </summary>
         internal async System.Threading.Tasks.Task SendChatAsync()
         {
@@ -1432,12 +1433,15 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _inputPanel.IsVisible = false;   // WPF ToggleInputPanel
 
             var ai = App.Ai;
+            var brain = App.Brain;   // decided once, up front, as WPF (ChatInput.cs:772)
             if (CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true })
             {
                 try
                 {
-#pragma warning disable CS0618 // WPF's kill-switch-off path; the brain is not on this head
-                    var result = await ai.GetBambiReplyExAsync(input);
+#pragma warning disable CS0618 // WPF's kill-switch-off path
+                    var result = ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain)
+                        ? await brain!.ChatAsync(input)
+                        : await ai.GetBambiReplyExAsync(input);
 #pragma warning restore CS0618
                     if (result.Refusal != null) { ShowModerationRefusalBubble(result.Refusal.Source); return; }
                     AddToChatHistory(input, isUser: true);

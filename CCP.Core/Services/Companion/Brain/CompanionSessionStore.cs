@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -82,7 +83,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public string SessionPath => _sessionPath;
 
         private static bool MemoryEnabled =>
-            App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false;
+            CoreSettings.Current.CompanionPrompt?.ChatMemoryEnabled != false;
 
         // ---------- persisted shape ----------
 
@@ -115,7 +116,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             if (!MemoryEnabled)
             {
-                App.Logger?.Debug("CompanionSessionStore: chat memory disabled — starting with an empty session");
+                Log.Debug("CompanionSessionStore: chat memory disabled — starting with an empty session");
                 return CompanionSessionSnapshot.Empty;
             }
 
@@ -124,7 +125,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (File.Exists(_sessionPath))
                 {
                     var turns = ParseSession(File.ReadAllText(_sessionPath));
-                    App.Logger?.Information("CompanionSessionStore: restored {Count} turn(s) from session.json", turns.Count);
+                    Log.Information("CompanionSessionStore: restored {Count} turn(s) from session.json", turns.Count);
                     return new CompanionSessionSnapshot(turns, ImportedFromLegacy: false);
                 }
 
@@ -133,7 +134,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     var imported = ImportLegacyHistory(File.ReadAllText(_legacyPath));
                     if (imported.Count > 0)
                     {
-                        App.Logger?.Information(
+                        Log.Information(
                             "CompanionSessionStore: imported {Count} turn(s) from local_chat_history.json (one-time)",
                             imported.Count);
                         // Write straight away so the import is genuinely one-time even if this run
@@ -145,7 +146,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "CompanionSessionStore: failed to load companion session");
+                Log.Warning(ex, "CompanionSessionStore: failed to load companion session");
             }
 
             return CompanionSessionSnapshot.Empty;
@@ -282,7 +283,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "CompanionSessionStore: failed to persist companion session");
+                Log.Warning(ex, "CompanionSessionStore: failed to persist companion session");
             }
         }
 
@@ -297,11 +298,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     var tmp = _sessionPath + ".tmp";
                     if (File.Exists(tmp)) File.Delete(tmp);
                 }
-                App.Logger?.Information("CompanionSessionStore: session wiped");
+                Log.Information("CompanionSessionStore: session wiped");
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "CompanionSessionStore: failed to wipe companion session");
+                Log.Warning(ex, "CompanionSessionStore: failed to wipe companion session");
             }
         }
     }

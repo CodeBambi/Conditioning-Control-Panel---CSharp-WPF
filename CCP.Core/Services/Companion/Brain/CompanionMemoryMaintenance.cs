@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -160,7 +161,7 @@ internal sealed class CompanionMemoryMaintenance : IDisposable
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { App.Logger?.Debug("Companion maintenance failed ({Kind})", ex.GetType().Name); }
+        catch (Exception ex) { Log.Debug("Companion maintenance failed ({Kind})", ex.GetType().Name); }
     }
 
     private bool Current(int revision, string? context, CancellationToken token) =>
@@ -200,7 +201,7 @@ internal sealed class CompanionMemoryMaintenance : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             MemoryStore.AtomicWrite(_path, JsonSerializer.Serialize(_state));
         }
-        catch (Exception ex) { App.Logger?.Debug("Companion maintenance save failed ({Kind})", ex.GetType().Name); }
+        catch (Exception ex) { Log.Debug("Companion maintenance save failed ({Kind})", ex.GetType().Name); }
     }
 
     public void Dispose()

@@ -57,7 +57,7 @@ internal static class ConversationDelivery
 
     /// <summary>True when an ask card will follow this reply: the model must not pick for it.</summary>
     internal static bool CardFollows(string input) =>
-        App.Settings?.Current?.CompanionAsksEnabled == true && (WantsMedia(input) || WantsActivity(input));
+        CoreSettings.Current.CompanionAsksEnabled == true && (WantsMedia(input) || WantsActivity(input));
 
     private const string CardFollowsRule =
         "A choice card with buttons appears under your reply. Tease them toward it in one or two lines; " +
@@ -99,4 +99,11 @@ internal static class ConversationDelivery
         }
         return (prose, ids);
     }
+}
+
+internal sealed record CompanionActivity(string Id, string Label, string Description,
+    Func<bool> CheckAccess, Func<bool> Open)
+{
+    internal bool Allowed { get { try { return CheckAccess(); } catch { return false; } } }
+    internal bool TryOpen() => Allowed && Open();
 }
