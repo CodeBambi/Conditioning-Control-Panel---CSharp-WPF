@@ -151,7 +151,7 @@ export async function mount(ctx) {
     startFresh = false; previewRun = null; syncModeMenu();
     ui.play.focus({ preventScroll: true });
   }
-  let raf = 0, running = false, suspended = false, paused = false, escPaused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
+  let raf = 0, running = false, suspended = false, paused = false, lastT = 0, dpr = 1, frames = 0, audioOn = false;
   let sizeW = 0, sizeH = 0, fieldScale = 1, fieldOx = 0, fieldOy = 0, moved = false;
   let lastSat = -1, lastState = '', lastTimeScale = 1, lastCombo = 0, lastSp = 0, sawHit = false, sourceChanged = false;
   const lastCue = {};
@@ -292,7 +292,6 @@ export async function mount(ctx) {
     if (paused === p) return;
     input.left = input.right = input.launch = false; keysDown.l = keysDown.r = false; touchDrag = null;
     paused = p; ui.paused.hidden = !p; el.classList.toggle('is-paused', p);
-    if (!p) escPaused = false;
     ui.paused.querySelector('[data-menu="save-menu"]').hidden = !activeEndless;
     ui.paused.querySelector('.bo-save-note').hidden = !activeEndless;
     ui.paused.querySelector('.bo-save-note').textContent = 'Continue restarts this board with its starting colour. Best combo kept.';
@@ -805,11 +804,10 @@ export async function mount(ctx) {
       if(typing || game.snapshot().demoComplete)return;
       if(!menuOpen&&game.snapshot().finale?.phase!=='outro'&&(e.key==='Escape'||e.key.toLowerCase()==='p')){
         e.preventDefault();
-        // Desktop (tester report 2026-09-30): the panel keeps a first Escape as the pause, so Escape, Escape leaves,
-        // as in chess. A pause the player did not open with Escape (a click away, the P key) takes one Escape to
-        // arm first, so one press never leaves. The web (no panel) keeps Escape as a pause toggle.
-        if(e.key==='Escape'&&paused&&ctx.hostKeepsEscape){if(escPaused)back();else escPaused=true;return;}
-        setPaused(!paused);if(paused){escPaused=e.key==='Escape';el.querySelector('[data-menu="resume"]').focus();}else canvas.focus();return;
+        // Desktop (tester report 2026-09-30): the panel keeps a first Escape as the pause, and an Escape on any
+        // pause card leaves, as in chess (owner call). The web (no panel) keeps Escape as a pause toggle.
+        if(e.key==='Escape'&&paused&&ctx.hostKeepsEscape){back();return;}
+        setPaused(!paused);if(paused)el.querySelector('[data-menu="resume"]').focus();else canvas.focus();return;
       }
       if(paused)return;
       if(e.key==='Escape' && game.snapshot().finale?.phase==='outro') {
