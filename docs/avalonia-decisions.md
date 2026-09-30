@@ -260,3 +260,14 @@ MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `Cor
   EnhancementFetcher, GoonContracts, ChasterLadderApi, AnnouncementPopup, MainShellWindow.Marquee, EnhancementPlayerWindow.
   Already under the rule: CatalogueClient, CatalogueLookup, RemoteRelay, AiService, ReleaseContentService, DailyFreeService,
   AppUpdater, ChasterHead.
+## 2026-09-30: EmiDesk ring/codex/book slice (emidesk-ring)
+- Question: which of ring, codex, book, options, summon count/placement fits one layer honestly?
+- Choice: the pure data half of WPF `EmiCodex` (chapter models, fail-soft `Read(dir)`, bookmark) moved to Core
+  `EmiCodexChapters` (WPF delegates; the WebView2 host stays head-side); the Avalonia plain reader drops its placeholder
+  chapters and reads the shipped `Assets/web/codex/chapters` (linked as Content). Summon counts through `EmiState.NoteSummon`
+  and placement round-trips through EmiState; the monitor key is `Screen.DisplayName`, or the screen's bounds when the
+  platform names none (headless, some X11), since WinForms DeviceName has no Avalonia twin.
+- Not in this slice: ring opener (needs EmiTargets openers + EmiSuggester composition, WPF head), codex opener (only the
+  bookOffer moment opens it in WPF), book demos/cards, options' global click-away, `RefreshOutfit` (Arcademy outfit store is
+  head-only) and `StopPresentation` (no presentation mode on this head). Ledger rows stay stub.
+- Advisor: worker.

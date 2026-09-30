@@ -1134,3 +1134,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/webhost-live-url: +240
 - WebHost live URL (CurrentUrl, NavigationCompleted, always-navigate Navigate); site buttons/Reload navigate; the HT catalogue lookup fires on
   completion at WPF's point; CatalogueLookup obeys the sandbox/loopback rule. Fail-proven tests; completion not seen live (no web engine here).
+
+## avalonia-port/emidesk-ring: +310
+- Core EmiCodexChapters (WPF EmiCodex delegates); the Avalonia Codex reads the shipped chapters and keeps its bookmark; EmiDesk summon count
+  and placement through EmiState. Fail-proven tests. Ring/Book/Options and the Codex opener stay stub.
