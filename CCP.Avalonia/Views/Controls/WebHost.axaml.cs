@@ -157,9 +157,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
         private void OnNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
         {
+            var target = e.Request;
+            // A CCP_USERDATA_DIR sandbox never loads a real site, whatever the caller's gate says.
+            if (!ConditioningControlPanel.Services.SandboxNet.Allows(target)) { e.Cancel = true; return; }
             var gate = AllowNavigation;
             if (gate is null) return;
-            var target = e.Request;
             // No URL to judge: refuse. A navigation the gate cannot see is exactly the one a
             // hostile page would use to slip past it.
             if (target is null) { e.Cancel = true; return; }
@@ -181,7 +183,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             var src = Source;
             // src! because NativeWebView.Source is annotated non-nullable while its StyledProperty's
             // own default IS null - clearing the page back to null is a real state, not a bug.
-            if (_web is not null) { _web.Source = src!; return; }
+            // A sandbox never loads a real site (see OnNavigationStarted); the panel may still name it.
+            if (_web is not null) { _web.Source = ConditioningControlPanel.Services.SandboxNet.Allows(src) ? src! : null!; return; }
             // No engine: the panel at least names the page that was meant to load.
             _txtSource.Text = src?.ToString() ?? "";
             _txtSource.IsVisible = src is not null;

@@ -208,3 +208,20 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   Deviations: GIF/animated webp show their first frame; mix mode buckets only already-seen images; no explicit tracking-monitor
   pick (placement = DualMonitorEnabled ? all : primary); no stage video preview; no SeasonRecap credit.
 - Advisor: supervisor (progress update), worker.
+## 2026-09-30: one network guard for every CCP_USERDATA_DIR sandbox
+- Question: ~15 clients (BugReportService, DescentCountdownService, QuestDefinitionService, LeaderboardClient, V2AuthService,
+  ProviderSubscription, SyncPush, LoginDialog, FriendsApi, ServerClock, Marquee, AnnouncementPopup, UsernamePicker, hypnotube
+  HtMetadataFetcher/EnhancementFetcher, the app.cclabs.app spiral embed) had no sandbox rule, so tests/kc/render-all could reach
+  production. Per-client rules (Catalogue, Remote, AI, AppUpdater, Chaster, DailyFree, ReleaseContent) do not scale.
+- Choice: Core `SandboxNet` (CCP.Core/Services/SandboxNet.cs), installed by `CorePaths` whenever it honours CCP_USERDATA_DIR
+  (outside any catch: a failed guard fails loudly). It sets `HttpClient.DefaultProxy` (and `WebRequest.DefaultWebProxy`) to a proxy
+  on a loopback port that is bound and never listens; loopback hosts bypass it. Every HttpClient / HttpClientHandler /
+  SocketsHttpHandler (incl. UrlSafety's ConnectCallback handler, ServerClockHandler) and ClientWebSocket therefore gets
+  "connection refused" before any DNS or connect to the real host; honoured LoopbackUrl overrides still work. Re-grep found no
+  product code that sets UseProxy or its own Proxy; `SandboxNetTests.NoProductCodeOptsOutOfTheDefaultProxy` fails if one appears.
+  Non-HTTP egress asks `SandboxNet.Allows(uri)` (loopback, file:, about:, data: only in a sandbox): Avalonia `WebHost` (source and
+  every navigation) and LoginDialog's OAuth/verification browser launches. LibVLC plays FromPath only (no network MRLs). Production
+  (no CCP_USERDATA_DIR) never installs it.
+- Not covered: plain informational link launches (privacy policy, Patreon, release page, etc.) open the browser, not the app's own
+  connection; the WPF head's own launch sites; WebView subresources of an allowed local page.
+- Advisor: worker (brief sandbox-net-guard).
