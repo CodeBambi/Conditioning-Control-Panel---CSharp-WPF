@@ -612,13 +612,7 @@ public class AchievementService : IDisposable
     public void TrackAttentionCheckFailed()
     {
         try { App.Chaster?.Note("attention"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster attention hook"); }
-        _progress.AttentionCheckFailures++;
-        _isDirty = true;
-        
-        if (_progress.AttentionCheckFailures >= MercyBeggarFailures)
-        {
-            TryUnlock("mercy_beggar");
-        }
+        _engine.TrackAttentionCheckFailed();
     }
     
     /// <summary>
@@ -807,21 +801,7 @@ public class AchievementService : IDisposable
     /// <summary>
     /// Track attention check passed (any type)
     /// </summary>
-    public void TrackAttentionCheckPassed(bool isVideo = false)
-    {
-        _progress.TotalAttentionChecksPassed++;
-        if (isVideo)
-        {
-            _progress.VideoAttentionChecksPassed++;
-        }
-        _isDirty = true;
-
-        // Eyes Front (100 attention checks passed)
-        if (_progress.TotalAttentionChecksPassed >= EyesFrontAttentionChecks)
-        {
-            TryUnlock("eyes_front");
-        }
-    }
+    public void TrackAttentionCheckPassed(bool isVideo = false) => _engine.TrackAttentionCheckPassed(isVideo);
 
     /// <summary>
     /// Track video attention check failure
@@ -829,8 +809,7 @@ public class AchievementService : IDisposable
     public void TrackVideoAttentionCheckFailed()
     {
         try { App.Chaster?.Note("attention"); } catch (Exception ex) { Diag.Swallowed(ex, "chaster attention hook"); }
-        _progress.VideoAttentionChecksFailed++;
-        _isDirty = true;
+        _engine.TrackVideoAttentionCheckFailed();
     }
 
     /// <summary>

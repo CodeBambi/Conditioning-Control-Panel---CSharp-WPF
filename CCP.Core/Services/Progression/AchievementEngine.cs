@@ -161,6 +161,29 @@ internal sealed class AchievementEngine
         return minutes;
     }
 
+    /// <summary>WPF TrackAttentionCheckPassed: totals and eyes_front.</summary>
+    public void TrackAttentionCheckPassed(bool isVideo = false)
+    {
+        Progress.TotalAttentionChecksPassed++;
+        if (isVideo) Progress.VideoAttentionChecksPassed++;
+        _isDirty = true;
+        if (Progress.TotalAttentionChecksPassed >= AchievementRules.EyesFrontAttentionChecks) TryUnlock("eyes_front");
+    }
+
+    /// <summary>WPF TrackAttentionCheckFailed: failures and mercy_beggar.</summary>
+    public void TrackAttentionCheckFailed()
+    {
+        Progress.AttentionCheckFailures++;
+        _isDirty = true;
+        if (Progress.AttentionCheckFailures >= AchievementRules.MercyBeggarFailures) TryUnlock("mercy_beggar");
+    }
+
+    public void TrackVideoAttentionCheckFailed()
+    {
+        Progress.VideoAttentionChecksFailed++;
+        _isDirty = true;
+    }
+
     public void TrackBubbleCountGameResult(bool success)
     {
         if (success) Progress.TotalBubbleCountCorrect++;

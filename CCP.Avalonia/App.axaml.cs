@@ -152,6 +152,13 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>achievements.json. Tests that run the desktop path override it with a sandbox path.</summary>
         protected virtual string AchievementsPath => AchievementStore.DefaultPath;
 
+        /// <summary>WPF App.Chaster?.Note(id), with its swallow: inert until the tab is on and priced.</summary>
+        internal static void ChasterNote(string id)
+        {
+            try { Platform.ChasterHead.Service?.Note(id); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] {Id} hook", id); }
+        }
+
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
@@ -386,6 +393,15 @@ namespace ConditioningControlPanel.Avalonia
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 // WPF AchievementService.TrackVideoWatched -> App.Quests.TrackVideoMinutes.
                 CoreProgression.TrackVideoWatchedProvider = sec => Quests?.TrackVideoMinutes(Achievements?.TrackVideoWatched(sec) ?? sec / 60.0);
+                CoreProgression.TrackAttentionCheckProvider = passed =>
+                {
+                    if (passed) { Achievements?.TrackAttentionCheckPassed(isVideo: true); return; }
+                    // WPF: TrackAttentionCheckFailed and TrackVideoAttentionCheckFailed each note "attention".
+                    Achievements?.TrackAttentionCheckFailed();
+                    ChasterNote("attention");
+                    Achievements?.TrackVideoAttentionCheckFailed();
+                    ChasterNote("attention");
+                };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
 

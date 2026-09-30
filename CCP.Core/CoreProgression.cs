@@ -62,5 +62,13 @@ namespace ConditioningControlPanel
         {
             try { TrackVideoWatchedProvider?.Invoke(seconds); } catch { }
         }
+
+        /// <summary>A mandatory video's attention checks passed (true) or failed (false).</summary>
+        public static volatile Action<bool>? TrackAttentionCheckProvider;
+
+        public static void TrackAttentionCheck(bool passed)
+        {
+            try { TrackAttentionCheckProvider?.Invoke(passed); } catch { }
+        }
     }
 }

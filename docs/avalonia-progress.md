@@ -958,3 +958,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   glow.
 - Evidence: ChasterTab2Tests (4, fail-proven x7); live against a loopback fake (consent, pause, unlink + revoke, 0 binding errors).
   Rows stay stub (FX, peek spring/idle/pulse, program/escape hooks). Review: ACCEPT + P3 fixed.
+
+## avalonia-port/video-attention: +821
+- Mandatory Video slice 2: attention checks (Core rules; WPF VideoService/AttentionTargets/AchievementService delegate: target
+  count/timing, verdict, +15 XP per catch, (replays+1)*50+200 pass, troll, third-replay mercy, stop/new clip cancels a pending
+  replay), blurred fill when the clip letterboxes (64-px downscale, 0.6-0.8 ms/frame, 0 dropped), audio ducking, bouncing-text
+  pause, no-videos dialog once per launch, Chaster attention notes (twice per fail, as WPF).
+- Evidence: Core + Avalonia tests incl. attention trackers, fail-proven; live replays -> mercy, 3/3 catch, blurred bars, duck
+  100->20->100%. Rows stay stub (grace pause, watchdogs, duration filter, bubble pause). Review: ACCEPT + P3s fixed.
