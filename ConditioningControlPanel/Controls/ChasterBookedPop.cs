@@ -104,7 +104,7 @@ namespace ConditioningControlPanel.Controls
             _stage.Children.Add(_source);
             Content = _stage;
 
-            Paint(look.Text, look.Colour);
+            Paint(look.Text, look.Colour.Wpf());
             Label(look.Source);
             SourceInitialized += (_, _) => PlaceNative();
         }

@@ -187,3 +187,12 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   (Ubuntu 22.04 build); if OpenCV fails to load, the feature is disabled with a message, never a crash. The LibVLC v4l2 source is a
   documented fallback behind an IFrameSource seam. Check ldd of libOpenCvSharpExtern.so before shipping.
 - Advisor: oracle.
+
+## 2026-09-30: Chaster booked figure on Avalonia
+- Question: WPF shows a booked price first as ChasterBookedPop (a topmost window at the cause or cursor) and only falls back to
+  the rail-padlock adorner. Which does the Avalonia head show?
+- Options: (a) port the pop window (desktop-wide topmost, cursor from Win32; Bucket E, not permitted on Wayland); (b) always the
+  rail adorner, WPF's own fallback.
+- Choice: (b) for now; the pop stays `missing` in the ledger. BookedFlashPlan moved to Core with colours as 0xAARRGGBB `uint`
+  (WPF converts with `BookedFlashColour.Wpf()`), so both heads draw one plan.
+- Advisor: none (worker, per branch brief avalonia-port/chaster-bill).

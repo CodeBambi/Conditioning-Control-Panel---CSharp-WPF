@@ -2,7 +2,7 @@
 // rail with the lock's clock under it; opens Circe's tab; dimmed, never hidden, while unlinked.
 // The hover peek (WPF FillPeek :546) and the glow following the ring colour (:429) are real.
 // ponytail: no peek spring-in (:516), idle breath/swing (StartIdle), mood-pip pop or Pulse
-// (the booked flash is not on this head); the glow's colour follows, its opacity does not breathe.
+// (the booked flash floats off it: MainShellWindow.ChasterFlash.cs); the glow's colour follows, its opacity does not breathe.
 using System;
 using System.Linq;
 using Avalonia;
