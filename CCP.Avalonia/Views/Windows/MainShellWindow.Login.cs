@@ -51,6 +51,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 UpdateLevelDisplay();
                 // WPF UpdatePatreonUI -> RefreshEntitlementVeils: an account change moves every veil.
                 RefreshEntitlementVeils(persist: accountChanged);
+                // WPF Patreon.cs:294: the pass is per-account, so sign-in/out moves the intake door.
+                App.IntakePass.RaiseChanged();
             }
             catch (Exception ex)
             {

@@ -225,15 +225,20 @@ public class IntakePassService : IDisposable
     /// providers exist - which is LATER in App.OnStartup than this service is constructed, hence
     /// a separate call rather than constructor work. The providers are head services, so the
     /// head passes how to hook (<paramref name="attach"/>) and unhook (<paramref name="detach"/>)
-    /// the handler on both Patreon and SubscribeStar's TierChanged.
+    /// the handler on both Patreon and SubscribeStar's TierChanged. A second call re-points the
+    /// hook at the new providers (detaching the old ones) - WPF calls it once; the Avalonia head
+    /// calls it from each <c>AccountSeed.Seed()</c>, which is where its providers are built.
     /// </summary>
     public void AttachEntitlementSources(
         Action<EventHandler<ConditioningControlPanel.Models.PatreonTier>> attach,
         Action<EventHandler<ConditioningControlPanel.Models.PatreonTier>> detach)
     {
-        if (_entitlementHooked) return;
+        if (_entitlementHooked && _entitlementHandler != null)
+        {
+            try { _detachEntitlement?.Invoke(_entitlementHandler); } catch { }
+        }
         _entitlementHooked = true;
-        _entitlementHandler = OnEntitlementChanged;
+        _entitlementHandler ??= OnEntitlementChanged;
         _detachEntitlement = detach;
 
         try { attach(_entitlementHandler); }

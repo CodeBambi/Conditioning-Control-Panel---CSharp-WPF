@@ -7,7 +7,9 @@ using Avalonia.Skia;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -26,6 +28,7 @@ public sealed class GradedIntakeGateTests
         {
             EnsureAvalonia();
             var service = new SettingsService();
+            var prevSettings = CoreSettings.ServiceProvider;
             CoreSettings.ServiceProvider = () => service;
             var (week, utc) = (service.Current.IntakePassSpentWeek, service.Current.IntakePassSpentUtc);
             var (loggedIn, lab) = (CoreAccount.IsLoggedInProvider, CoreAccount.HasLabAccessProvider);
@@ -83,53 +86,79 @@ public sealed class GradedIntakeGateTests
                 service.Current.IntakePassSpentWeek = week;
                 service.Current.IntakePassSpentUtc = utc;
                 service.SaveImmediate();
-                CoreSettings.ServiceProvider = null;
+                CoreSettings.ServiceProvider = prevSettings;
             }
             return Task.CompletedTask;
         });
     }
 
-    /// <summary>WPF IntakePassService.RefundLateResolvedPremium: a run charged before premium
-    /// resolved is handed back when the provider's TierChanged lands.</summary>
+    /// <summary>The real head wiring: AccountSeed.Seed() hooks the pass onto the providers it builds,
+    /// so a TierChanged that resolves premium re-raises PassStateChanged and refunds a spend charged
+    /// before it (WPF IntakePassService.RefundLateResolvedPremium, App.xaml.cs:2937).</summary>
     [Fact]
-    public void LateResolvedPremiumRefundsThisSessionsSpend()
+    public void SeededProvidersTierChangeRefundsThisSessionsSpend()
     {
         var service = new SettingsService();
+        var prevSettings = CoreSettings.ServiceProvider;
         CoreSettings.ServiceProvider = () => service;
-        var (week, utc) = (service.Current.IntakePassSpentWeek, service.Current.IntakePassSpentUtc);
-        var (loggedIn, lab) = (CoreAccount.IsLoggedInProvider, CoreAccount.HasLabAccessProvider);
-        var isLab = false;
-        CoreAccount.IsLoggedInProvider = () => true;
-        CoreAccount.HasLabAccessProvider = () => isLab;
+        var s = service.Current;
+        var (week, utc) = (s.IntakePassSpentWeek, s.IntakePassSpentUtc);
+        var saved = (CoreAccount.IsLoggedInProvider, CoreAccount.DisplayNameProvider, CoreAccount.IsWhitelistedProvider,
+            CoreAccount.HasPremiumAccessProvider, CoreAccount.HasLabAccessProvider, CoreEntitlement.HasPremiumProvider,
+            CoreEntitlement.HasLabProvider, CoreProgram.HasPremiumProvider);
+        Assert.False(s.HasCachedLabAccess);   // a free account until the TierChanged below
+        var raised = 0;
+        EventHandler onChanged = (_, _) => raised++;
         try
         {
-            EventHandler<PatreonTier>? tierChanged = null;
-            using var pass = new IntakePassService();
-            pass.AttachEntitlementSources(h => tierChanged += h, h => tierChanged -= h);
-            var raised = 0;
-            pass.PassStateChanged += (_, _) => raised++;
+            Assert.True(AccountSeed.Seed(p => new ProviderSubscription(p, () => new AppSettings())));
+            AvApp.IntakePass.PassStateChanged += onChanged;
 
-            pass.ConsumeForCompletedIntake();
-            Assert.Equal(IntakePassState.Spent, pass.State);
+            AvApp.IntakePass.ConsumeForCompletedIntake();
+            Assert.Equal(IntakePassService.CurrentWeekKey(), s.IntakePassSpentWeek);
 
-            isLab = true;
-            tierChanged!.Invoke(null, PatreonTier.Level2);
-            Assert.Equal("", service.Current.IntakePassSpentWeek);
-            Assert.Null(service.Current.IntakePassSpentUtc);
+            AccountSeed.Patreon!.SetWhitelistStatus(true);   // a real TierChanged, resolving tier 2
+            Assert.Equal("", s.IntakePassSpentWeek);
+            Assert.Null(s.IntakePassSpentUtc);
             Assert.Equal(2, raised);
-
-            isLab = false;
-            Assert.Equal(IntakePassState.Available, pass.State);
         }
         finally
         {
-            CoreAccount.IsLoggedInProvider = loggedIn;
-            CoreAccount.HasLabAccessProvider = lab;
-            service.Current.IntakePassSpentWeek = week;
-            service.Current.IntakePassSpentUtc = utc;
+            AvApp.IntakePass.PassStateChanged -= onChanged;
+            (CoreAccount.IsLoggedInProvider, CoreAccount.DisplayNameProvider, CoreAccount.IsWhitelistedProvider,
+                CoreAccount.HasPremiumAccessProvider, CoreAccount.HasLabAccessProvider, CoreEntitlement.HasPremiumProvider,
+                CoreEntitlement.HasLabProvider, CoreProgram.HasPremiumProvider) = saved;
+            (s.IntakePassSpentWeek, s.IntakePassSpentUtc) = (week, utc);
             service.SaveImmediate();
-            CoreSettings.ServiceProvider = null;
+            CoreSettings.ServiceProvider = prevSettings;
         }
+    }
+
+    /// <summary>WPF Patreon.cs:294: sign-in and sign-out (UpdateQuickLoginUI) repaint the intake door.</summary>
+    [Fact]
+    public async Task SignInOrOutRaisesPassStateChanged()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureAvalonia();
+            var raised = 0;
+            EventHandler onChanged = (_, _) => raised++;
+            var shell = new MainShellWindow();
+            try
+            {
+                shell.Show();
+                Dispatcher.UIThread.RunJobs();
+                AvApp.IntakePass.PassStateChanged += onChanged;
+                shell.UpdateQuickLoginUI(accountChanged: true);
+                Assert.Equal(1, raised);
+            }
+            finally
+            {
+                AvApp.IntakePass.PassStateChanged -= onChanged;
+                shell.Close();
+            }
+            return Task.CompletedTask;
+        });
     }
 
     private static void EnsureAvalonia()

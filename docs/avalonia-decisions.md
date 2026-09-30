@@ -239,6 +239,7 @@ MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `Cor
 ## graded-intake: IntakePassService in Core takes its entitlement hooks from the head
 `IntakePassService` moved to Core unchanged except for one seam: `AttachEntitlementSources()` read
 `App.Patreon`/`App.SubscribeStar` directly, so it now takes `attach`/`detach` delegates and each head
-passes its two providers' `TierChanged` (WPF App.xaml.cs, Avalonia App.axaml.cs via AccountSeed).
+passes its two providers' `TierChanged` (WPF App.xaml.cs; Avalonia `AccountSeed.Seed()`, the point where its
+providers exist). A second call re-points the hook at the new providers instead of being a no-op.
 Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate lives on
 `GradedIntakeTabView` rather than the shell, because this head's shell cannot reach x:Name fields.

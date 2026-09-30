@@ -47,6 +47,11 @@ internal static class AccountSeed
         CoreEntitlement.HasPremiumProvider = () => CoreAccount.HasPremiumAccess;
         CoreEntitlement.HasLabProvider = () => CoreAccount.HasLabAccess;
         CoreProgram.HasPremiumProvider = () => CoreAccount.HasPremiumAccess; // WPF App.xaml.cs:426
+        // WPF App.xaml.cs:2937: the weekly intake pass re-evaluates (and refunds a pre-premium spend)
+        // on either provider's TierChanged. Here, because this is where the providers now exist.
+        App.IntakePass.AttachEntitlementSources(
+            h => { patreon.TierChanged += h; substar.TierChanged += h; },
+            h => { patreon.TierChanged -= h; substar.TierChanged -= h; });
         return true;
     }
 

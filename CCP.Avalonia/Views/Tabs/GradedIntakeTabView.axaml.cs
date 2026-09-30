@@ -23,7 +23,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// painted together from <see cref="RefreshGradedIntakeGate"/> (WPF MainWindow.Lab.cs:343),
     /// which is the only thing that should ever touch their visibility. It lives on the view here:
     /// it runs on attach (WPF: every Exclusives navigation) and on the pass's PassStateChanged,
-    /// which also fires on either provider's TierChanged (WPF Patreon.cs:294 / Lab.cs:435).
+    /// (WPF Lab.cs:435). That event fires on a spend, on either provider's TierChanged (hooked in
+    /// AccountSeed.Seed) and on sign-in/out (MainShellWindow.UpdateQuickLoginUI, WPF Patreon.cs:294).
     ///
     /// On WPF every handler below is a one-line hop to the identically named <c>MainWindow</c>
     /// method. THE POP-QUIZ PAIR IS NOT A HOP ANY MORE: <c>PopQuizEnabled</c> and

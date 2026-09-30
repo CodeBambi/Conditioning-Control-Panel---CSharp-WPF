@@ -399,12 +399,9 @@ namespace ConditioningControlPanel.Avalonia
                     fetchOverride: string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")));
                 _ = dailyFree.RefreshAsync();
                 CoreEntitlement.IsFreeTodayProvider = dailyFree.IsFreeToday;
-                // WPF App.xaml.cs:494/2636/2937: the weekly Graded Intake pass, re-raised on either
-                // provider's TierChanged so every door repaints when entitlement lands.
+                // WPF App.xaml.cs:494: the weekly Graded Intake pass. Its TierChanged hooks are
+                // attached by AccountSeed.Seed() below, once the providers exist.
                 CoreEntitlement.IntakePassAvailableProvider = () => IntakePass.IsPassAvailable;
-                IntakePass.AttachEntitlementSources(
-                    h => { if (Platform.AccountSeed.Patreon is { } p) p.TierChanged += h; if (Platform.AccountSeed.SubscribeStar is { } s) s.TierChanged += h; },
-                    h => { if (Platform.AccountSeed.Patreon is { } p) p.TierChanged -= h; if (Platform.AccountSeed.SubscribeStar is { } s) s.TierChanged -= h; });
                 // WPF App.xaml.cs:2875/2941: the one HapticService, gated (premium / daily free) in its
                 // mixer. Connects only to what the user runs (Intiface at ButtplugUrl, Lovense Remote).
                 // ponytail: no MockToast (mock toys log only), no funscript playhead (FunScriptService.
@@ -629,7 +626,12 @@ namespace ConditioningControlPanel.Avalonia
                 });
                 dailyFree.TodayChanged += RepaintVeils;
                 // WPF NavPremiumTags.cs:118 / Lab.cs:435: a spent or refunded pass moves the star and the vault.
-                IntakePass.PassStateChanged += (_, _) => RepaintVeils();
+                // Not RepaintVeils: that persists the lapse pass, and sign-in/out raises this at startup.
+                IntakePass.PassStateChanged += (_, _) => Dispatcher.UIThread.Post(() =>
+                {
+                    shell.RefreshExclusivesTab();
+                    shell.RefreshNavPremiumTags();
+                });
                 if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
