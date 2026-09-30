@@ -1503,6 +1503,9 @@ namespace ConditioningControlPanel
         /// <para>Piece by Piece rides the same rule (owner, 2026-09-29): without it the first Escape of a
         /// chess game closed the board, so its own pause card could never be reached. The board's pause
         /// goes quiet at once (ui/pause-hush.js) and an Escape on the pause card leaves.</para>
+        ///
+        /// <para>Breakout rides it too (tester report, 2026-09-30: Escape closed the whole game window).
+        /// The first Escape pauses it; an Escape on its pause card leaves.</para>
         /// </summary>
         private bool TryRacePauseOnEscape()
         {
@@ -1511,22 +1514,32 @@ namespace ConditioningControlPanel
                 var now = DateTime.UtcNow;
                 bool raceInFront = Services.Chaos.CaucusHostService.IsInFront;
                 bool boardInFront = Services.PieceByPiece.PieceByPieceHostService.IsInFront;
+                bool breakoutInFront = Services.BackRoom.BackRoomHostService.IsBreakoutInFront;
                 bool claim = Services.Safety.PanicPolicy.GameClaimsEscapeAsPause(
                     App.Settings?.Current?.PanicKey,
-                    gameInFront: raceInFront || boardInFront,
+                    gameInFront: raceInFront || boardInFront || breakoutInFront,
                     engineRunning: _isRunning,
                     lockCardOpen: LockCardWindow.IsAnyOpen(),
                     lastClaimUtc: _lastRaceEscapeClaimUtc,
                     nowUtc: now);
                 if (!claim) { _lastRaceEscapeClaimUtc = null; return false; }
                 _lastRaceEscapeClaimUtc = now;
-                VideoDiag.Log("PANIC", $"Escape kept by {(raceInFront ? "Racing Thoughts" : "Piece by Piece")} as its pause (again within 2 s = full panic)");
-                // The board pauses on its own keydown, which never comes while its WebView2 is out of
-                // keyboard focus, so it is handed the kept press too; the page drops it when the real
-                // key reached it as well (ui/host-escape.js).
-                if (Services.Safety.PanicPolicy.BoardGetsKeptEscape(claim, raceInFront, boardInFront,
-                        boardReady: Services.PieceByPiece.PieceByPieceHostService.IsReady))
-                    Services.PieceByPiece.PieceByPieceHostService.PostKeptEscape();
+                VideoDiag.Log("PANIC", $"Escape kept by {(raceInFront ? "Racing Thoughts" : boardInFront ? "Piece by Piece" : "Breakout")} as its pause (again within 2 s = full panic)");
+                // Each game pauses on its own keydown, which never comes while its WebView2 is out of
+                // keyboard focus, so the game in front is handed the kept press too; the page drops it
+                // when the real key reached it as well (host-escape.js).
+                switch (Services.Safety.PanicPolicy.KeptEscapeGoesTo(claim,
+                            raceInFront, raceReady: Services.Chaos.CaucusHostService.IsReady,
+                            boardInFront, boardReady: Services.PieceByPiece.PieceByPieceHostService.IsReady,
+                            breakoutInFront, breakoutReady: Services.BackRoom.BackRoomHostService.IsBreakoutReady))
+                {
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Race:
+                        Services.Chaos.CaucusHostService.PostKeptEscape(); break;
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Board:
+                        Services.PieceByPiece.PieceByPieceHostService.PostKeptEscape(); break;
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Breakout:
+                        Services.BackRoom.BackRoomHostService.PostKeptEscape(); break;
+                }
                 return true;
             }
             catch (Exception ex)

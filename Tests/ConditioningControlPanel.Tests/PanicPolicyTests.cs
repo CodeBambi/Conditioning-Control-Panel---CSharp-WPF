@@ -709,24 +709,41 @@ public class PanicPolicyTests
         Assert.Contains("CaucusHostService.IsInFront", body);
     }
 
-    // ---- The board is handed the Escape it kept (6.11.5) ----
-    // The board pauses on its own keydown, which never comes while its WebView2 is out of keyboard
+    // ---- The game in front is handed the Escape it kept (chess 6.11.5, Breakout and the race 7.0) ----
+    // Each game pauses on its own keydown, which never comes while its WebView2 is out of keyboard
     // focus (the title bar clicked): the panel kept the press, so nothing paused and nothing panicked.
-    // The page's half (played once, dropped when the real key came too) is pinned by
-    // piecebypiece/smoke/host-escape-smoke.mjs.
+    // The pages' half (played once, dropped when the real key came too) is pinned by
+    // piecebypiece/smoke/host-escape-smoke.mjs and backroom/stations/breakout/host-escape.test.js.
 
     [Fact]
     public void BoardKeptTheEscape_ThePageIsHandedIt()
-        => Assert.True(BoardGetsKeptEscape(claimed: true, raceInFront: false, boardInFront: true, boardReady: true));
+        => Assert.Equal(KeptEscapePage.Board, KeptEscapeGoesTo(true, false, false, true, true, false, false));
+
+    [Fact]
+    public void BreakoutKeptTheEscape_ThePageIsHandedIt()
+        => Assert.Equal(KeptEscapePage.Breakout, KeptEscapeGoesTo(true, false, false, false, false, true, true));
+
+    [Fact]
+    public void RaceKeptTheEscape_ThePageIsHandedIt()
+        => Assert.Equal(KeptEscapePage.Race, KeptEscapeGoesTo(true, true, true, false, false, false, false));
 
     [Theory]
-    [InlineData(false, false, true, true)]  // not kept: a full panic, which closes the board
-    [InlineData(true, true, false, true)]   // the race kept it: it brakes on its own key, unchanged
-    [InlineData(true, true, true, true)]    // the race wins a tie, as the claim's log line reads
-    [InlineData(true, false, false, true)]  // the board is not in front
-    [InlineData(true, false, true, false)]  // still booting: the frame would queue and land after ready
-    public void EverythingElse_HandsTheBoardNothing(bool claimed, bool raceInFront, bool boardInFront, bool boardReady)
-        => Assert.False(BoardGetsKeptEscape(claimed, raceInFront, boardInFront, boardReady));
+    //          claimed raceF  raceR  boardF boardR brkF   brkR
+    [InlineData(false, false, false, true, true, false, false)]  // not kept: a full panic, which closes the game
+    [InlineData(false, false, false, false, false, true, true)]  // not kept, Breakout: same
+    [InlineData(true, true, false, true, true, false, false)]    // the race wins a tie, and is still booting
+    [InlineData(true, false, false, false, true, false, true)]   // nothing is in front
+    [InlineData(true, false, false, true, false, false, false)]  // the board is booting: the frame would land after ready
+    [InlineData(true, false, false, false, false, true, false)]  // Breakout is booting
+    [InlineData(true, true, false, false, false, false, false)]  // the race is booting or on its way out
+    public void EverythingElse_HandsNoPageAnything(bool claimed, bool raceInFront, bool raceReady,
+        bool boardInFront, bool boardReady, bool breakoutInFront, bool breakoutReady)
+        => Assert.Equal(KeptEscapePage.None, KeptEscapeGoesTo(claimed, raceInFront, raceReady,
+            boardInFront, boardReady, breakoutInFront, breakoutReady));
+
+    [Fact]
+    public void TheRaceWinsATie_AsTheClaimsLogLineReads()
+        => Assert.Equal(KeptEscapePage.Race, KeptEscapeGoesTo(true, true, true, true, true, true, true));
 
     [Fact]
     public void TheKeptEscape_IsPostedOnlyOnceThePressWasKept()
@@ -738,11 +755,26 @@ public class PanicPolicyTests
         var end = source.IndexOf("private void HandlePanicKeyPress()", start, StringComparison.Ordinal);
         var body = end > start ? source[start..end] : source[start..];
         var kept = body.IndexOf("_lastRaceEscapeClaimUtc = now;", StringComparison.Ordinal);
-        var gate = body.IndexOf("PanicPolicy.BoardGetsKeptEscape(claim", StringComparison.Ordinal);
-        var post = body.IndexOf("PieceByPieceHostService.PostKeptEscape()", StringComparison.Ordinal);
-        Assert.True(kept >= 0 && gate > kept, "the board must be handed the press only once it was kept");
-        Assert.True(post > gate, "PostKeptEscape must sit behind BoardGetsKeptEscape");
+        var gate = body.IndexOf("PanicPolicy.KeptEscapeGoesTo(claim", StringComparison.Ordinal);
+        Assert.True(kept >= 0 && gate > kept, "a page must be handed the press only once it was kept");
+        foreach (var post in new[] { "CaucusHostService.PostKeptEscape()", "PieceByPieceHostService.PostKeptEscape()",
+                     "BackRoomHostService.PostKeptEscape()" })
+            Assert.True(body.IndexOf(post, StringComparison.Ordinal) > gate, post + " must sit behind KeptEscapeGoesTo");
         Assert.Contains("PieceByPieceHostService.IsReady", body);
+        Assert.Contains("CaucusHostService.IsReady", body);
+        Assert.Contains("BackRoomHostService.IsBreakoutReady", body);
+    }
+
+    [Fact]
+    public void BreakoutInFront_IsAGameInFrontForTheEscapePause()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private bool TryRacePauseOnEscape()", StringComparison.Ordinal);
+        var end = source.IndexOf("private void HandlePanicKeyPress()", start, StringComparison.Ordinal);
+        var body = source[start..end];
+        Assert.Contains("BackRoomHostService.IsBreakoutInFront", body);
+        Assert.Contains("gameInFront: raceInFront || boardInFront || breakoutInFront", body);
     }
 
     [Fact]

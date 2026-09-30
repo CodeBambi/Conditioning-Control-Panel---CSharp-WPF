@@ -105,10 +105,15 @@ import { createHostMediaSource } from './hostMedia.js';
 import { warmWallPosters } from './race/wallWarm.js';
 // THE LOOM: the player's own woven spirals, so a race pop can draw one of theirs.
 import { setLoomSpirals } from './engine/loomSpirals.js';
+// Escape the panel kept as the race's pause, handed over while the page is out of keyboard focus.
+import { createHostEscape, HOST_ESCAPE } from './race/hostEscape.js';
 
 const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250, PERF_LOG_MS = 2000;
 const params = new URLSearchParams(location.search);
 const hosted = bridge.isHosted;
+// Made before any of the race's own listeners (race/hostEscape.js): its capture listener hears every real
+// Escape, so a focused race handles one press once. Unhosted, no frame ever comes.
+const hostEscape = createHostEscape();
 /**
  * Where `surface` goes with no host under the page: `?back=<path>` if it is same origin, else a
  * same-origin referrer, else null and the verb comes off the list. Same origin only, always, so the
@@ -290,6 +295,8 @@ bridge.on('setting', (m) => {
 bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
 bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
 bridge.on('exit-request', surface);
+// The kept press plays through input.js's Brake (and the menu's own Escape), once.
+bridge.on(HOST_ESCAPE, () => hostEscape.kept());
 // THE LOOM (crafting Part 2): the host's saved-spiral library, the same frame boot.js takes.
 // An entry carrying `params` is woven live by race/loomSpiralFx.js; one without is still its
 // gif. The host pushes this on `ready` and again after every save or delete, so a spiral woven
