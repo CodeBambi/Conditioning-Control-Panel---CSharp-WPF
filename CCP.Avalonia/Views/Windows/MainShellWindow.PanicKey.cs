@@ -73,6 +73,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 return;
             }
             bool wasRunning = CoreEngine.IsRunning;
+            // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
+            Views.Overlays.BlinkTrainerSession.Stop();
             // WPF RunPanicStopTail: StopEngine while running, StopAdHocEffects otherwise - both are
             // CoreEngine.Stop here (it stops everything either way) and neither unticks a flag.
             // WPF PanicStopEverySurface (MainWindow.xaml.cs:1992): the toys go to zero first, bypassing
@@ -102,7 +104,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static DispatcherTimer? _portalWatch;
 
         private static bool AnyEffectRunning =>
-            CoreEngine.IsRunning || CoreFlash.IsRunning || CoreSubliminal.IsRunning || BouncingTextOverlay.IsRunning;
+            CoreEngine.IsRunning || CoreFlash.IsRunning || CoreSubliminal.IsRunning || BouncingTextOverlay.IsRunning
+            || Views.Overlays.BlinkTrainerSession.IsRunning;
 
         /// <summary>Every desktop-effect start goes through here. <paramref name="start"/> must re-check
         /// that the effect is still wanted: it can run up to 30 s later, after a panic or an untick.</summary>

@@ -187,3 +187,16 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   (Ubuntu 22.04 build); if OpenCV fails to load, the feature is disabled with a message, never a crash. The LibVLC v4l2 source is a
   documented fallback behind an IFrameSource seam. Check ldd of libOpenCvSharpExtern.so before shipping.
 - Advisor: oracle.
+
+## 2026-09-30: Blink Trainer session on Avalonia (webcam slice 3)
+- Question: how much of BlinkTrainerService/calibration fits this slice, and where does the session live?
+- Choice: the session is head code (`Views/Overlays/BlinkTrainerSession.cs`, overlay windows are head-only); the pure parts
+  moved to Core (`BlinkTrainerAssetPool` by git mv, `BlinkTrainerState.TileGrid`, WPF delegates). Overlays use the pink-filter
+  refusals (click-through + transparency or nothing). The start goes through `StartEffect` so the Wayland panic shortcut is
+  bound first; a Stop/panic while the bind is pending cancels it (`Generation`). Panic, owner close, app exit and consent revoke
+  stop the session. Calibration, quick recal and tracker test are NOT in this slice: all three need the gaze-projection feed
+  (WPF WebcamCalibrationWindow ~2.1k LOC + gaze maths) that WebcamTracker does not emit; their buttons stay disabled with a
+  reason. `CoreWebcam.IsAvailable` is seeded true, and revoke now keeps all four promises in one place (`WebcamTracker.RevokeConsent`).
+  Deviations: GIF/animated webp show their first frame; mix mode buckets only already-seen images; no explicit tracking-monitor
+  pick (placement = DualMonitorEnabled ? all : primary); no stage video preview; no SeasonRecap credit.
+- Advisor: supervisor (progress update), worker.

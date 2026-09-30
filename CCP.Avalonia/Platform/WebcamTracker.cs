@@ -153,6 +153,24 @@ namespace ConditioningControlPanel.Avalonia.Platform
             }
         }
 
+        /// <summary>WPF WebcamTrackingService.RevokeConsent, all four promises: stop everything using the
+        /// camera, drop the calibration, clear the consent record, turn the webcam features off. Seeded as
+        /// CoreWebcam.RevokeConsentAction; UI thread (it closes the Blink Trainer overlays).</summary>
+        internal static void RevokeConsent()
+        {
+            Views.Overlays.BlinkTrainerSession.Stop();
+            Instance.Stop();
+            var s = CoreSettings.Current;
+            s.WebcamConsentGiven = false;
+            s.WebcamConsentVersion = "";
+            s.WebcamConsentDate = null;
+            s.WebcamCalibrated = false;
+            s.WebcamCalibrationMode = "";
+            s.WebcamTriggersEnabled = false;
+            s.FocusGameEnabled = false;
+            CoreSettings.Save();
+        }
+
         public void Stop()
         {
             var run = Interlocked.Exchange(ref _run, null);

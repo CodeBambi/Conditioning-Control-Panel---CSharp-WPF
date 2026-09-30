@@ -54,6 +54,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnChatShortcutDevices.Click += BtnChatShortcut_Click;
             BtnPanicKey.Click += BtnPanicKey_Click;
             BtnWebcamRevokeConsent.Click += BtnWebcamRevokeConsent_Click;
+            BtnWebcamReviewPrivacy.Click += BtnWebcamReviewPrivacy_Click;
+            BtnWebcamDebugStart.Click += BtnWebcamDebugStart_Click;
 
             SyncFromSettings();
             PopulateMicDevices();
@@ -219,43 +221,77 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         // =====================================================================================
 
         /// <summary>
-        /// The engine bar's honest half, now that <see cref="CoreWebcam"/> exists: with no webcam
-        /// engine on this head every control that would talk to one is DISABLED and the reason is
-        /// stated, rather than left enabled-and-inert. A greyed button with a written reason is the
-        /// difference between "this build can't" and "this build is broken".
+        /// The engine bar, gated on <see cref="CoreWebcam.IsAvailable"/> (seeded true on this head by
+        /// Platform/WebcamTracker). Privacy info, Start tracking and Revoke are live.
         ///
-        /// <para>The three checkboxes above are untouched on purpose - blink-to-recalibrate, drift
-        /// correction and gaze restriction are pure settings writes on a file both heads share, and
-        /// WPF honours them. Storing a preference is not the same as promising a camera.</para>
-        ///
-        /// <para>ponytail: the device/monitor combos, calibrate, quick-recal, start tracking,
-        /// tracker test and the debug cursor stay stubs even once a head seeds the seam - each needs
-        /// the per-frame gaze/iris/pose feed, which <see cref="CoreWebcam"/> deliberately does not
-        /// carry (see the class doc there for why splitting state from frames would be worse than
-        /// carrying neither). <c>App.GazeCursor</c> is additionally a WPF window
-        /// (Services/Tracking/GazeDebugCursorService.cs).</para>
-        ///
-        /// <para>The status pill is likewise left at its <c>rf_webcam_stopped</c> literal: it would
-        /// need <c>OnTrackingStateChanged</c> to stay true, and a pill read once at construction is
-        /// a pill that lies the moment tracking starts.</para>
+        /// <para>ponytail: the device/monitor combos, calibrate, quick-recal, tracker test and the debug
+        /// cursor stay DISABLED with a stated reason: each needs device enumeration or the per-frame
+        /// gaze/iris/pose feed, which WebcamTracker does not emit yet (blink only). The status pill stays
+        /// at its <c>rf_webcam_stopped</c> literal for the same reason (no OnTrackingStateChanged).</para>
         /// </summary>
         private void RefreshWebcamAvailability()
         {
             bool has = CoreWebcam.IsAvailable;
-
-            CmbWebcamDevice.IsEnabled = has;
-            BtnWebcamDeviceRefresh.IsEnabled = has;
-            CmbWebcamMonitor.IsEnabled = has;
             BtnWebcamReviewPrivacy.IsEnabled = has;
-            BtnWebcamDebugCalibrate.IsEnabled = has;
-            BtnWebcamDebugQuickRecal.IsEnabled = has;
             BtnWebcamDebugStart.IsEnabled = has;
-            BtnWebcamDebugTrackerTest.IsEnabled = has;
             BtnWebcamRevokeConsent.IsEnabled = has;
-            ChkWebcamDebugCursor.IsEnabled = has;   // IsEnabled only - never IsChecked, which would fire the handler
-
+            foreach (var c in new Control[] { CmbWebcamDevice, BtnWebcamDeviceRefresh, CmbWebcamMonitor, BtnWebcamDebugCalibrate,
+                         BtnWebcamDebugQuickRecal, BtnWebcamDebugTrackerTest, ChkWebcamDebugCursor })
+            {
+                c.IsEnabled = false;   // IsEnabled only - never IsChecked, which would fire the handler
+                ToolTip.SetShowOnDisabled(c, true);
+                ToolTip.SetTip(c, "Needs webcam gaze tracking, which this build does not have yet (blink detection only).");
+            }
             if (!has)
                 AppendWebcamDebugLog("No webcam tracking engine on this build — camera controls are unavailable.");
+            RefreshWebcamStartLabel();
+        }
+
+        private void RefreshWebcamStartLabel()
+            => BtnWebcamDebugStart.Content = Platform.WebcamTracker.Instance.IsRunning ? "Stop tracking" : "Start tracking";
+
+        /// <summary>WPF BtnWebcamReviewPrivacy_Click: the consent dialog as review; Cancel changes nothing.</summary>
+        private async void BtnWebcamReviewPrivacy_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                await new WebcamConsentDialog().ShowDialog(owner);
+                AppendWebcamDebugLog("Privacy info reviewed.");
+            }
+            catch (Exception ex) { Log.Warning(ex, "Webcam review privacy dialog failed"); }
+        }
+
+        /// <summary>WPF BtnWebcamDebugStart_Click (MainWindow.LabTab.cs:495): stop if running; else
+        /// consent when stale, then start off the UI thread and log the outcome.</summary>
+        private async void BtnWebcamDebugStart_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var tracker = Platform.WebcamTracker.Instance;
+                if (tracker.IsRunning)
+                {
+                    AppendWebcamDebugLog("Stop requested.");
+                    await tracker.StopAsync();
+                    RefreshWebcamStartLabel();
+                    return;
+                }
+                if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
+                {
+                    if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                    AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                    await new WebcamConsentDialog().ShowDialog(owner);
+                    if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined or dialog cancelled."); return; }
+                    AppendWebcamDebugLog("Consent granted.");
+                }
+                AppendWebcamDebugLog("Starting webcam (camera open + model load can take a few seconds)…");
+                BtnWebcamDebugStart.IsEnabled = false;
+                bool started = await tracker.StartAsync();
+                BtnWebcamDebugStart.IsEnabled = true;
+                RefreshWebcamStartLabel();
+                AppendWebcamDebugLog(started ? "Start() returned true — capture thread launching." : $"Start() returned false. {tracker.LastError}");
+            }
+            catch (Exception ex) { Log.Warning(ex, "Webcam debug start failed"); }
         }
 
         /// <summary>
@@ -273,10 +309,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Clearing <c>WebcamConsentGiven</c> here instead is exactly the half-measure the old note
         /// refused — it would keep three of the dialog's four promises and claim all four.</para>
         ///
-        /// <para>ponytail: WPF also unchecks the debug cursor and refreshes three blink-trainer rows
-        /// (RefreshBlinkTrainerWebcamColumn / RefreshBlinkTrainerStatusRow /
-        /// ApplyBlinkTrainerStageMode). The cursor toggle and the blink trainer are both still
-        /// WPF-head, so there is nothing here to re-read.</para>
+        /// <para>WPF also refreshes three blink-trainer rows; here the Blink Trainer page re-reads
+        /// consent whenever it is shown, and the debug cursor does not exist on this head.</para>
         /// </summary>
         private async void BtnWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e)
         {
@@ -297,6 +331,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (!ok) return;
 
                 CoreWebcam.RevokeConsent();
+                RefreshWebcamStartLabel();
                 AppendWebcamDebugLog("Consent revoked. Calibration deleted; webcam features disabled.");
             }
             catch (Exception ex)
