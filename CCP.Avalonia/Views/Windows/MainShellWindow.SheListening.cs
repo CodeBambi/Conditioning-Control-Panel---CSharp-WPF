@@ -5,19 +5,17 @@
 // Every tab handler is wired: master Start/Stop (premium bar, speech check, consent, default wake
 // word), revoke consent, spoken mantras with the consent gate, calibrate, the premium veil.
 //
-// ponytail: the mic is NEVER opened on this head. On WPF an armed wake word / push-to-talk feeds
-// AutonomyService.VoiceCommands (+ RunSpokenMantraAsync, MantraVoice) - none of it ported - so a
-// capture here would have no consumer (avalonia-decisions.md "voice arm without consumer").
-// Arming therefore writes the settings and the hero says plainly (sl_voice_not_on_this_build)
-// that voice commands are not on this build. Port VoiceCommands, then start
-// PulseMicSource.Speech.WaitForWakeWordAsync(VoiceInputRules.ExpandWakeVariants(...)) from
-// VoiceInputRules.ModesToRun. Also not here: sherpa wake engine (calibration shows WPF's "not
-// installed" notice), UpdateMicPill, SetSheListeningStatusPulse, BtnSL_OpenModels.
+// The mic opens through MainShellWindow.VoiceCommands.cs (the wake loop / push-to-talk feeding
+// Core VoiceCommands) exactly under WPF's conditions; every repaint here reconciles it, so arm,
+// Stop, revoke and an entitlement lapse all open or close it. ponytail: not here - sherpa wake
+// engine (calibration shows WPF's "not installed" notice), UpdateMicPill, SetSheListeningStatusPulse,
+// BtnSL_OpenModels.
 //
 // _slLoading, not _isLoading: a partial-class field is declared once, and Avalonia's CheckBox
 // raises IsCheckedChanged on a programmatic set, so seeding needs its own guard.
 
 using System;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
@@ -82,6 +80,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// Called on tab show.</summary>
         internal void RefreshSheListeningTab()
         {
+            // First, tab or no tab: WPF pairs every arm/Stop/revoke/lapse with RefreshVoiceInputModes.
+            RefreshVoiceInputModes();
             var tab = SheListeningPage;
             if (tab == null) return;
             var s = CoreSettings.Current;
@@ -97,6 +97,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             catch (Exception ex) { Log.Debug("RefreshSheListeningTab: {E}", ex.Message); }
             finally { _slLoading = wasLoading; }
+
+            tab.ShowOnlyVoiceCommands(VoiceCmds.Available.Select(i => i.Name).ToHashSet());
 
             // "Revoke consent" only means something once consent exists.
             tab.SL_PrivacyCard.IsVisible = s.MicConsentGiven;
@@ -185,10 +187,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (armed)
             {
-                // WPF: green "She's listening / The mic is open". Not true here - see the header.
-                tab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0xC1, 0x07));
-                tab.SL_StatusTitle.Text = "Mic off";
-                tab.SL_StatusSub.Text = Loc.Get("sl_voice_not_on_this_build");
+                tab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0x90, 0xEE, 0x90));
+                tab.SL_StatusTitle.Text = "She's listening";
+                tab.SL_StatusSub.Text = "The mic is open. Call her, then say a command.";
             }
             else
             {
@@ -199,7 +200,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF ToggleVoiceMic: the master Start/Stop. Arming is premium-barred (the veil is
-        /// only a Border); disarming never is. Arming writes settings only - see the header.</summary>
+        /// only a Border); disarming never is.</summary>
         internal async void ToggleVoiceMic()
         {
             var s = CoreSettings.Current;
@@ -234,7 +235,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             s.SpeechWakeWordEnabled = false;
             s.SpeechPushToTalkEnabled = false;
             CoreSettings.Save();
-            try { Platform.PulseMicSource.Speech?.StopListening(); } catch { }
+            StopVoiceInput();   // WPF App.Autonomy.StopVoiceInput: cut the capture, stand the loop down
             try { LockCardWindow.DisableVoiceForAll(); } catch { }
             RefreshSheListeningTab();
         }
@@ -249,17 +250,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         "This turns off every voice feature (wake word, push-to-talk, spoken mantras, voice lock cards) and clears your mic consent. You'll be asked again next time you enable one.",
                         defaultToCancel: true))
                     return;
-                DisarmVoiceMic();
-                var s = CoreSettings.Current;
-                s.SpokenMantrasEnabled = false;
-                s.AutonomyCanTriggerVoiceCommand = false;
-                s.LockCardVoiceMode = false;
-                s.MicConsentGiven = false;
-                CoreSettings.Save();
-                Log.Information("Microphone consent revoked");
-                RefreshSheListeningTab();
+                RevokeMicConsent();
             }
             catch (Exception ex) { Log.Warning(ex, "SL_RevokeMicConsent_Click failed"); }
+        }
+
+        /// <summary>The revoke itself, once confirmed.</summary>
+        internal void RevokeMicConsent()
+        {
+            DisarmVoiceMic();
+            var s = CoreSettings.Current;
+            s.SpokenMantrasEnabled = false;
+            s.AutonomyCanTriggerVoiceCommand = false;
+            s.LockCardVoiceMode = false;
+            s.MicConsentGiven = false;
+            CoreSettings.Save();
+            Log.Information("Microphone consent revoked");
+            RefreshSheListeningTab();
         }
 
         /// <summary>WPF SL_Calibrate_Click's first branch: this head has no sherpa wake engine

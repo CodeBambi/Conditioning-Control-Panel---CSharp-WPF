@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using Avalonia.Controls.Documents;
+using Avalonia.LogicalTree;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -23,14 +27,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// <para>Every button forwards to MainShellWindow.SheListening.cs, as WPF forwards to
     /// MainWindow.SheListening.cs. ponytail: the Test button (WPF BtnTestVoice_Click ->
-    /// AutonomyService.TestVoiceCommand) needs MantraVoice + VoiceCommands, not on this head, so it
-    /// says so (sl_voice_not_on_this_build).</para>
+    /// AutonomyService.TestVoiceCommand) runs a spoken mantra, and MantraVoiceService is not on this
+    /// head, so it says so (sl_mantras_not_on_this_build).</para>
     /// </summary>
     public partial class SheListeningTabView : UserControl
     {
         private bool _isLoading;
 
         private Windows.MainShellWindow? Main => TopLevel.GetTopLevel(this) as Windows.MainShellWindow;
+
+        // Each "What you can say" row's phrase lines, as authored (rows are rebuilt from these).
+        private readonly Dictionary<TextBlock, List<Inline>> _voiceRowLines = new();
+
+        /// <summary>
+        /// "What you can say" names only what this head can do. The axaml keeps WPF's full list; each
+        /// row header carries <c>Tag="voice:intent|intent"</c>. A row whose phrase lines match its
+        /// intents one to one keeps only the runnable lines; any other row shows iff one is runnable.
+        /// </summary>
+        internal void ShowOnlyVoiceCommands(ISet<string> runnable)
+        {
+            foreach (var head in this.GetLogicalDescendants().OfType<TextBlock>()
+                         .Where(t => t.Tag is string tag && tag.StartsWith("voice:")).ToList())
+            {
+                var names = ((string)head.Tag!)["voice:".Length..].Split('|');
+                var any = names.Any(runnable.Contains);
+                head.IsVisible = any;
+                if (head.Parent is not Panel panel || panel.Children.IndexOf(head) + 1 >= panel.Children.Count
+                    || panel.Children[panel.Children.IndexOf(head) + 1] is not TextBlock desc) continue;
+                desc.IsVisible = any;
+                if (desc.Inlines is not { } inlines) continue;
+                if (!_voiceRowLines.TryGetValue(desc, out var all)) _voiceRowLines[desc] = all = inlines.ToList();
+                var lines = new List<List<Inline>> { new() };
+                foreach (var i in all) { if (i is LineBreak) lines.Add(new()); else lines[^1].Add(i); }
+                if (lines.Count != names.Length) continue;
+                inlines.Clear();
+                foreach (var (line, name) in lines.Zip(names).Where(l => runnable.Contains(l.Second)))
+                {
+                    if (inlines.Count > 0) inlines.Add(new LineBreak());
+                    inlines.AddRange(line);
+                }
+            }
+        }
 
         public SheListeningTabView()
         {
@@ -42,7 +79,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnSL_TestMantra.Click += (_, _) =>
             {
                 if (Main is { } mw)
-                    _ = Dialogs.MessageDialog.ShowAsync(mw, "She's Listening", ConditioningControlPanel.Localization.Loc.Get("sl_voice_not_on_this_build"));
+                    _ = Dialogs.MessageDialog.ShowAsync(mw, "She's Listening", ConditioningControlPanel.Localization.Loc.Get("sl_mantras_not_on_this_build"));
             };
             BtnSL_RevokeConsent.Click += (_, _) => Main?.SL_RevokeMicConsent_Click();
             BtnSL_GateUnlock.Click += (s, e) => Main?.BtnGateUnlock_Click(s, e);

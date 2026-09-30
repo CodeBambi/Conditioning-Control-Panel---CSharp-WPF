@@ -58,6 +58,10 @@ internal static class X11PanicKey
     /// cannot fire. Re-resolved on the next key event after a rebind or a keyboard layout change.</summary>
     internal static int BoundKeycode => _boundCode;
 
+    /// <summary>Push-to-talk: the key name (read per press) and what a press does (listener thread).</summary>
+    internal static volatile Func<string?>? PushToTalkKey;
+    internal static volatile Action? PushToTalk;
+
     /// <summary>Starts the listener once. <paramref name="onPress"/> runs on the listener thread for
     /// every press of <paramref name="currentKey"/>() (read per event, so rebinds apply live).
     /// False when there is no X display or no XInput 2.2 - the caller logs and relies on the tray.</summary>
@@ -136,6 +140,9 @@ internal static class X11PanicKey
 
                 Resolve();
                 if (_boundCode != 0 && keycode == _boundCode) onPress();
+                // She's Listening push-to-talk rides the same XI2 listener (WPF GlobalKeyboardHook).
+                if (PushToTalk is { } ptt && KeysymOf(PushToTalkKey?.Invoke()) is var ps and not 0
+                    && keycode == XKeysymToKeycode(display, ps)) ptt();
             }
             catch (Exception ex)
             {

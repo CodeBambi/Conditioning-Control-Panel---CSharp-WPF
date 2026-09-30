@@ -140,7 +140,7 @@ public sealed class LockCardVoiceTests
         card.CaptureRenderedFrame()?.Save(Path.Combine(dir, name + ".png"));
     }
 
-    private static string Model()
+    internal static string Model()
     {
         var model = Environment.GetEnvironmentVariable("CCP_VOSK_MODEL") is { Length: > 0 } m ? m
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -154,7 +154,7 @@ public sealed class LockCardVoiceTests
         return model;
     }
 
-    private static byte[] Wav([CallerFilePath] string here = "")
+    internal static byte[] Wav([CallerFilePath] string here = "")
     {
         var b = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(here)!, "..", "CCP.Core.Tests", "Fixtures", "vosk-test.wav"));
         for (int i = 12; i + 8 <= b.Length; i += 8 + BitConverter.ToInt32(b, i + 4))
@@ -164,7 +164,7 @@ public sealed class LockCardVoiceTests
     }
 
     /// <summary>Replays PCM in 50 ms chunks (5x real time), then silence until stopped.</summary>
-    private sealed class WavMicSource(byte[] pcm) : IMicSource
+    internal sealed class WavMicSource(byte[] pcm) : IMicSource
     {
         public bool HasDevice => true;
         public IReadOnlyList<SpeechInputDevice> ListDevices() => new[] { new SpeechInputDevice(-1, "wav") };

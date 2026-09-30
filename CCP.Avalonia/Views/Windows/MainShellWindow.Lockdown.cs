@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>The live shell window, for dialogs raised from static paths (tray).</summary>
-        private static MainShellWindow? Current =>
+        internal static MainShellWindow? Current =>
             (global::Avalonia.Application.Current?.ApplicationLifetime as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
                 ?.MainWindow as MainShellWindow;
     }

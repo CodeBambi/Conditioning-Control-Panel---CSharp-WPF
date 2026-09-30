@@ -35,13 +35,6 @@ namespace ConditioningControlPanel.Services
 
         private GlobalKeyboardHook? _pttHook;
 
-        // The wake-ack line picked once in OnWakeWordHeard. Tier 0 listens BEFORE speaking, so this is
-        // NOT spoken on wake — it is stashed so (a) the primary listen's dots bubble can read the same
-        // words, and (b) the command driver can speak it aloud as the "you called?" re-prompt if you
-        // stay silent. Audio is the matching clip for the active mod (null = text-only).
-        private string? _pendingWakeAckText;
-        private string? _pendingWakeAckAudio;
-
         /// <summary>Whether the user has armed a self-initiated mic mode (and so the mic only opens on demand).</summary>
         public bool UserDrivenVoiceArmed
         {
@@ -148,7 +141,7 @@ namespace ConditioningControlPanel.Services
                 // no-match the wake/PTT turn falls back to a mantra ONLY if on-demand mantras are on.
                 if (allowCommands)
                 {
-                    if (await TryHandleVoiceCommandAsync().ConfigureAwait(false))
+                    if (await VoiceCmds.TryHandleVoiceCommandAsync().ConfigureAwait(false))
                         return;
                     if (App.Settings?.Current?.SpokenMantrasEnabled != true)
                         return; // commands only; no mantra fallback when on-demand mantras are off
@@ -239,7 +232,7 @@ namespace ConditioningControlPanel.Services
                         grammar = ExpandWakeVariants(words);
                         try
                         {
-                            foreach (var alias in VoiceCommandIntents.SelectMany(i => i.Aliases))
+                            foreach (var alias in VoiceCmds.Grammar())
                                 if (!grammar.Contains(alias, StringComparer.OrdinalIgnoreCase)) grammar.Add(alias);
                         }
                         catch { }
@@ -291,101 +284,11 @@ namespace ConditioningControlPanel.Services
         {
             // One-breath chaining: if the wake utterance already carried a command ("hey bambi show me
             // bubbles"), run it directly. That command audio was consumed by the wake recognizer, so a
-            // separate listen pass would miss it — this is the only place we can catch it. When there's no
-            // trailing command (bare "hey bambi", or push-to-talk which passes null) we fall through to the
-            // Tier 0 listen flow below.
-            if (TryHandleInlineCommand(heard)) return;
-
-            // Tier 0 — listen BEFORE speaking, the way Alexa/Google do: on wake they flash a "listening"
-            // cue and open the mic in the same instant; a spoken re-prompt ("you called?") only comes
-            // AFTER you stay silent. So here we DON'T speak the ack — we stash it, pop the dots bubble for
-            // instant "I'm listening" feedback, and open the command mic right away. Because nothing is
-            // speaking, there's no avatar voice to bleed into the open mic, so:
-            //   • "hey bambi, show me bubbles" (one breath) and "hey bambi" … <short pause> … "command"
-            //     both land in the primary listen window and run with no wait.
-            //   • only if you say nothing does the command driver speak the stashed ack and listen again.
-            //
-            // Pick once here (PickVoiceLine locks internally, so off-UI is fine): voiced manifest variant
-            // when available (rotates, avoiding immediate repeats), else a plain per-mod line, text-only.
-            var voiced = App.Bark?.PickVoiceLine("voicecmd_wake");
-            string ack;
-            string? audio = null;
-            if (voiced is { } line && !string.IsNullOrWhiteSpace(line.Text))
-            {
-                ack = line.Text;
-                audio = line.Audio;
-            }
-            else
-            {
-                ack = ModKey() switch
-                {
-                    "bambi" => "mmm? you called for me~",
-                    "circe" => "you called. i'm listening.",
-                    _       => "yes, lovely? i'm right here~",
-                };
-            }
-
-            // Stash for the listen window (dots bubble text) and the on-silence re-prompt (spoken there).
-            _pendingWakeAckText = ack;
-            _pendingWakeAckAudio = audio;
-
-            // Instant visual "I'm listening" — dots, no speech. The listen window re-shows this too, but
-            // popping it now covers the brief funnel hand-off so the cue appears the moment she's woken.
-            DispatcherHelper.RunOnUI(() =>
-            {
-                try { App.AvatarWindow?.ShowListeningBubble(ack); } catch { }
-            });
+            // separate listen pass would miss it. Otherwise the Tier 0 listen flow (Core VoiceCommands):
+            // stash the wake ack, pop the dots, open the command mic at once.
+            if (VoiceCmds.TryHandleInlineCommand(heard, WakeWords())) return;
+            VoiceCmds.PrepareWake();
             RequestVoiceCommand(allowCommands: true);
-        }
-
-        /// <summary>
-        /// Parse a command that rode in on the wake utterance ("hey bambi show me bubbles") and, if one
-        /// fuzzy-matches an intent, run it immediately — no second listen window. Returns true when a
-        /// command was executed. Strips the leading wake phrase (any phonetic variant) first; bare wake
-        /// (no remainder) and unmatched tails return false so the caller runs the normal listen flow.
-        /// </summary>
-        private bool TryHandleInlineCommand(string? heard)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(heard)) return false;
-                var tokens = SpeechService.Normalize(heard).Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (tokens.Length == 0) return false;
-
-                // Drop the wake prefix: pick the longest wake variant whose leading tokens fuzzy-match.
-                int drop = 0;
-                foreach (var v in ExpandWakeVariants(WakeWords()))
-                {
-                    var vt = SpeechService.Normalize(v).Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (vt.Length == 0 || vt.Length > tokens.Length || vt.Length <= drop) continue;
-                    var lead = string.Join(' ', tokens.Take(vt.Length));
-                    if (SpeechService.Similarity(string.Join(' ', vt), lead) >= 0.6) drop = vt.Length;
-                }
-                if (drop == 0) return false;                       // wake prefix not found — let the flow handle it
-                var remainder = string.Join(' ', tokens.Skip(drop)).Trim();
-                if (remainder.Length == 0) return false;           // bare wake, no chained command
-
-                // Fuzzy-match the remainder to an intent (same scoring + guards as the listen path).
-                var (best, bestScore) = MatchVoiceIntent(remainder);
-                if (best == null) return false;
-                // Mantra / "again" need the listen-flow context — defer those to the normal path.
-                if (best.IsMantra || best.IsReplay) return false;
-
-                App.Logger?.Information(
-                    "AutonomyService: inline voice command '{Name}' from wake utterance (remainder '{Rem}', score {Score:0.00})",
-                    best.Name, remainder, bestScore);
-
-                var toRun = best;
-                if (Application.Current?.Dispatcher != null)
-                    _ = Application.Current.Dispatcher.InvokeAsync(() => ExecuteIntentAndConfirm(toRun));
-                if (best.Repeatable && best.Blocked?.Invoke() != true) _lastVoiceIntent = best;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "AutonomyService: TryHandleInlineCommand failed");
-                return false;
-            }
         }
 
         // ── Push-to-talk ──────────────────────────────────────────────────────
