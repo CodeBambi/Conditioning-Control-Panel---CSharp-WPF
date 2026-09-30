@@ -966,3 +966,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   pause, no-videos dialog once per launch, Chaster attention notes (twice per fail, as WPF).
 - Evidence: Core + Avalonia tests incl. attention trackers, fail-proven; live replays -> mercy, 3/3 catch, blurred bars, duck
   100->20->100%. Rows stay stub (grace pause, watchdogs, duration filter, bubble pause). Review: ACCEPT + P3s fixed.
+
+## avalonia-port/bubble-count-live: +785
+- Bubble Count is live: Core BubbleCountScheduler (WPF schedule 1-10/h +-20% min 60 s, 800 ms lead-in, XP 100 x clip length with a
+  3-min cooldown, strict retry + mercy after 3, ambient-bubble pause; WPF delegates interval, XP scaling, target count), armed by
+  CoreEngine; the game plays on the shared LibVLC across screens, the answer window pays 250 x clip length; panic closes all;
+  strict falls open without a panic listener.
+- Evidence: BubbleCountSchedulerTests + BubbleCountGameTests (committed 3 KB clip, runs on CI), fail-proven; live 3 screens,
+  correct answer, strict retry. Rows: win-bubble-count-result wired; feat-bubble-count stub (Bambi Freeze lead-in); win-bubble-count
+  stub (click raises the game over its bubbles). Review: FIX -> fixed.

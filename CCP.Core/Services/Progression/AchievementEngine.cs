@@ -161,6 +161,13 @@ internal sealed class AchievementEngine
         return minutes;
     }
 
+    /// <summary>WPF AchievementService.TrackBubbleCountGameStarted.</summary>
+    public void TrackBubbleCountGameStarted()
+    {
+        Progress.TotalBubbleCountGames++;
+        _isDirty = true;
+    }
+
     /// <summary>WPF TrackAttentionCheckPassed: totals and eyes_front.</summary>
     public void TrackAttentionCheckPassed(bool isVideo = false)
     {

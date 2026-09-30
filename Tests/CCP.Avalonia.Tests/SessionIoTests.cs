@@ -33,7 +33,7 @@ public sealed class SessionIoTests
         var shell = new ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
         shell.Show();
         _ = new ConditioningControlPanel.Avalonia.Views.Windows.BubbleCountWindow("x.mp4",
-            ConditioningControlPanel.Avalonia.Views.Windows.Difficulty.Easy, false, _ => { });
+            ConditioningControlPanel.Services.BubbleCountScheduler.Difficulty.Easy, false, _ => { });
         try
         {
             var log = new SessionLog { SessionId = "s", SessionName = "S", Duration = TimeSpan.FromSeconds(5) };

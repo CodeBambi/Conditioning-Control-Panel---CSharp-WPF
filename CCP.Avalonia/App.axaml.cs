@@ -237,6 +237,7 @@ namespace ConditioningControlPanel.Avalonia
                 CoreEngine.PopQuiz = Views.Windows.PopQuizHost.Instance.Scheduler;
                 // Mandatory video: Core schedules, the overlay plays (WPF App.Video).
                 CoreEngine.Video = Views.Overlays.MandatoryVideoOverlay.Instance.Scheduler;
+                CoreEngine.BubbleCount = Views.Windows.BubbleCountHost.Instance.Scheduler;
 
                 // The ambient flash surface. CoreFlash owns the rhythm; a burst needs any attached
                 // visual to reach Screens, and the main window is the one that always is.
@@ -267,7 +268,19 @@ namespace ConditioningControlPanel.Avalonia
                 {
                     if (desktop.MainWindow is { } host) Views.Overlays.BubbleOverlay.Start(host);
                 };
-                CoreBubbles.StopAction = Views.Overlays.BubbleOverlay.Stop;
+                // WPF BubbleService.PauseAndClear/Resume for the bubble-count game; a Stop cancels the resume.
+                var bubblesPaused = false;
+                CoreBubbles.StopAction = () => { bubblesPaused = false; Views.Overlays.BubbleOverlay.Stop(); };
+                // Posted, so a caller off the UI thread (an unseeded CoreDispatch in tests) is safe.
+                CoreBubbles.PauseAction = () => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (Views.Overlays.BubbleOverlay.IsRunning) { bubblesPaused = true; Views.Overlays.BubbleOverlay.Stop(); }
+                });
+                CoreBubbles.ResumeAction = () => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (bubblesPaused && desktop.MainWindow is { } host) Views.Overlays.BubbleOverlay.Start(host);
+                    bubblesPaused = false;
+                });
                 CoreBubbles.RefreshFrequencyAction = Views.Overlays.BubbleOverlay.RefreshFrequency;
 
                 // Core cannot read the running build's version - the entry assembly is whichever
@@ -391,6 +404,8 @@ namespace ConditioningControlPanel.Avalonia
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+                CoreProgression.TrackBubbleCountGameStartedProvider = () => Achievements?.TrackBubbleCountGameStarted();
+                CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
                 // WPF AchievementService.TrackVideoWatched -> App.Quests.TrackVideoMinutes.
                 CoreProgression.TrackVideoWatchedProvider = sec => Quests?.TrackVideoMinutes(Achievements?.TrackVideoWatched(sec) ?? sec / 60.0);
                 CoreProgression.TrackAttentionCheckProvider = passed =>

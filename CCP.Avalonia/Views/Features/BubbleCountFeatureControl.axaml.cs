@@ -107,17 +107,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             s.BubbleCountEnabled = on;
             CoreSettings.Save();
 
-            // The gate is real; what it gates is not. CoreSession.IsEngineRunning is the seam the
-            // WPF head fills from App.IsEngineRunning, so the "only live-apply while a session is
-            // actually running" rule is now enforced here rather than described in a comment. On
-            // this head it answers false (App.axaml.cs seeds no session engine), so the body never
-            // runs - and it would have nothing to run anyway.
-            if (CoreSession.IsEngineRunning)
-            {
-                // ponytail: WPF calls App.BubbleCount.Start() / Stop() here. BubbleCountService
-                // (ConditioningControlPanel/Services/BubbleCountService.cs) is still head-side -
-                // it owns the challenge window - so there is no portable call to make yet.
-            }
+            // WPF live-apply: start/stop the schedule only while a session runs.
+            CoreEngine.ApplyLive("bubblecount", on);
         }
 
         private void SliderFreq_Changed(object? sender, RangeBaseValueChangedEventArgs e)
@@ -128,8 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             TxtFreq.Text = v.ToString();
             if (s.BubbleCountFrequency == v) return;
             s.BubbleCountFrequency = v;
-            // ponytail: WPF then calls App.BubbleCount.RefreshSchedule() so a live schedule picks
-            // the new frequency up - BubbleCountService, still in the WPF head.
+            CoreEngine.BubbleCount?.RefreshSchedule();
             CoreSettings.Save();
         }
 
@@ -189,8 +179,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
         private void BtnTest_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs App.BubbleCount.TriggerGame(forceTest: true) - BubbleCountService
-            // (ConditioningControlPanel/Services/), still in the WPF head.
+            CoreEngine.BubbleCount?.Trigger(forceTest: true);
         }
     }
 }

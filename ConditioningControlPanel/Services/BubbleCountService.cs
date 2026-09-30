@@ -41,9 +41,6 @@ public class BubbleCountService : IDisposable
     private DateTime _lastXpAwardTime = DateTime.MinValue;
     private static readonly TimeSpan GameXpCooldown = TimeSpan.FromMinutes(3);
 
-    /// <summary>Minimum video duration (seconds) for full XP. Shorter videos scale proportionally.</summary>
-    private const double FullXpVideoDurationSeconds = 60.0;
-    
     public bool IsRunning => _isRunning;
     public bool IsBusy => _isBusy;
     
@@ -95,14 +92,8 @@ public class BubbleCountService : IDisposable
         var settings = App.Settings.Current;
         if (!settings.BubbleCountEnabled) return;
         
-        // Frequency is games per hour (1-10)
-        var gamesPerHour = Math.Max(1, Math.Min(10, settings.BubbleCountFrequency));
-        var baseInterval = 3600.0 / gamesPerHour;
-        
-        // Add ±20% variance
-        var variance = baseInterval * 0.2;
-        var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-        interval = Math.Max(60, interval); // Minimum 1 minute between games
+        // Games per hour (1-10), +/-20%, never under a minute - the rule lives in Core.
+        var interval = BubbleCountScheduler.NextIntervalSeconds(settings.BubbleCountFrequency, _random.NextDouble());
         
         _schedulerTimer?.Stop();
         _schedulerTimer = new DispatcherTimer
@@ -439,13 +430,8 @@ public class BubbleCountService : IDisposable
     /// <summary>
     /// Calculate XP scaled by video duration. Videos under 60s give proportionally less XP.
     /// </summary>
-    internal static int ScaleXpByDuration(int baseXp)
-    {
-        var duration = BubbleCountWindow.LastVideoDurationSeconds;
-        if (duration >= FullXpVideoDurationSeconds) return baseXp;
-        var scale = Math.Max(0.1, duration / FullXpVideoDurationSeconds);
-        return Math.Max(1, (int)(baseXp * scale));
-    }
+    internal static int ScaleXpByDuration(int baseXp) =>
+        BubbleCountScheduler.ScaleXpByDuration(baseXp, BubbleCountWindow.LastVideoDurationSeconds);
 
     private void OnGameComplete(bool success)
     {
