@@ -938,3 +938,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   quests; idle loop parks when empty. Card toggles live, N/300 line; header XP tooltip filled on open.
 - Evidence: AmbientBubblesTests (0 alloc/step at 40 bubbles), BubbleOverlayTests, fail-proven; live 3 overlays, pops paid XP;
   0.013 ms/step. Windows popping not run. Rows stay stub (trigger/v2 bubbles, lucky FX, Bubble Count). Review: ACCEPT + notes.
+
+## avalonia-port/video-playback-core: +894
+- Mandatory Video slice 1: Core MandatoryVideoScheduler (WPF interval x0.8-1.2, 60 s floor, shuffled local pick, 1.3 s pre-roll,
+  re-arm on end/Esc, strict keys, secondary-monitor rule, volume, watch credit; WPF delegates). CoreEngine arms it. Avalonia
+  MandatoryVideoOverlay: one LibVLC decoder feeding full-screen topmost windows (shared VlcFrameSink). Safety: a strict video
+  falls open on the panic key/Esc when no global panic listener is live (as Lock Card #875). Empty library keeps re-arming
+  (deviation, logged).
+- Evidence: MandatoryVideoSchedulerTests + overlay tests, fail-proven; live first frame 20-45 ms, 21% of one core at 720p30,
+  Stop clears in 0.3 s. Rows stay stub (blurred background, attention checks, grace pause, watchdogs, ducking). Review: FIX -> fixed.
