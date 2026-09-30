@@ -97,6 +97,12 @@ namespace ConditioningControlPanel
         public static volatile Func<string, string[]?>? PhrasesProvider;
         public static volatile Func<string?>? PinkRushNameProvider;
         public static volatile Func<string?>? PinkRushDescriptionProvider;
+        public static volatile Func<string?>? AttentionCheckMercyMessageProvider;
+        public static volatile Func<string?>? BubbleCountRetryMessageProvider;
+
+        /// <summary>The mod's mercy / bubble-count retry text, or null (callers carry the WPF fallback).</summary>
+        public static string? AttentionCheckMercyMessage { get { try { return AttentionCheckMercyMessageProvider?.Invoke(); } catch { return null; } } }
+        public static string? BubbleCountRetryMessage { get { try { return BubbleCountRetryMessageProvider?.Invoke(); } catch { return null; } } }
         public static volatile Func<(byte R, byte G, byte B)?>? FilterColorRgbProvider;
         public static volatile Func<IReadOnlyDictionary<string, bool>?>? DefaultSubliminalPoolProvider;
         /// <summary>ModService.ReapplyActiveModPools: re-read the active mod's pools (PhrasePoolCustody.Restore after a mid-session switch).</summary>
@@ -232,6 +238,8 @@ namespace ConditioningControlPanel
             AffirmationProvider = mods.GetAffirmation;
             PhrasesProvider = category => mods.GetPhrases(category);
             PinkRushNameProvider = mods.GetPinkRushName;
+            AttentionCheckMercyMessageProvider = mods.GetAttentionCheckMercyMessage;
+            BubbleCountRetryMessageProvider = mods.GetBubbleCountRetryMessage;
             PinkRushDescriptionProvider = mods.GetPinkRushDescription;
             FilterColorRgbProvider = () => mods.GetFilterColorRgb();
             DefaultSubliminalPoolProvider = () => mods.GetDefaultSubliminalPool();

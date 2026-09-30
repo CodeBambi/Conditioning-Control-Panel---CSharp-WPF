@@ -63,6 +63,14 @@ namespace ConditioningControlPanel
             try { TrackVideoWatchedProvider?.Invoke(seconds); } catch { }
         }
 
+        /// <summary>WPF AchievementService.TrackBubbleCountGameStarted.</summary>
+        public static volatile Action? TrackBubbleCountGameStartedProvider;
+        /// <summary>WPF QuestService.TrackBubbleCountCompleted.</summary>
+        public static volatile Action? TrackBubbleCountCompletedProvider;
+
+        public static void TrackBubbleCountGameStarted() { try { TrackBubbleCountGameStartedProvider?.Invoke(); } catch { } }
+        public static void TrackBubbleCountCompleted() { try { TrackBubbleCountCompletedProvider?.Invoke(); } catch { } }
+
         /// <summary>A mandatory video's attention checks passed (true) or failed (false).</summary>
         public static volatile Action<bool>? TrackAttentionCheckProvider;
 

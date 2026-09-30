@@ -191,5 +191,10 @@ namespace ConditioningControlPanel.Services
         public static void Start() { try { StartAction?.Invoke(); } catch { } }
         public static void Stop() { try { StopAction?.Invoke(); } catch { } }
         public static void RefreshFrequency() { try { RefreshFrequencyAction?.Invoke(); } catch { } }
+        /// <summary>WPF BubbleService.PauseAndClear / Resume: a minigame (bubble count) holds the field.
+        /// Resume restarts only what Pause stopped, and never after a Stop.</summary>
+        public static volatile Action? PauseAction, ResumeAction;
+        public static void Pause() { try { PauseAction?.Invoke(); } catch { } }
+        public static void Resume() { try { ResumeAction?.Invoke(); } catch { } }
     }
 }
