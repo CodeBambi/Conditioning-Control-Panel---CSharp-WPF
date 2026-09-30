@@ -1138,3 +1138,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/emidesk-ring: +310
 - Core EmiCodexChapters (WPF EmiCodex delegates); the Avalonia Codex reads the shipped chapters and keeps its bookmark; EmiDesk summon count
   and placement through EmiState. Fail-proven tests. Ring/Book/Options and the Codex opener stay stub.
+
+## avalonia-port/launcher-core: +999
+- Launcher slice 1: Core LauncherCards + rules (WPF builds tiles from them); Avalonia LauncherWindow with the openable cards, the CC Labs
+  door and WPF's close rule. Fail-proven tests; Keincheck live. Rows missing -> stub.

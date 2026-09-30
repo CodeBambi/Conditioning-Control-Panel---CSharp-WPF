@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Services.Launcher;
 public static partial class LauncherHost
 {
     /// <summary>The longest the window may hold its exit beat before it hides, in ms.</summary>
-    public const int MaxHideDelayMs = 1500;
+    public const int MaxHideDelayMs = LauncherRules.MaxHideDelayMs;
 
     private static Window? _window;
     private static DispatcherTimer? _returnPoll;
@@ -46,10 +46,10 @@ public static partial class LauncherHost
         set => _hideDelayMs = ClampHideDelay(value);
     }
 
-    public static int ClampHideDelay(int ms) => Math.Clamp(ms, 0, MaxHideDelayMs);
+    public static int ClampHideDelay(int ms) => LauncherRules.ClampHideDelay(ms);
 
     /// <summary>How long the launcher takes to fade to nothing before it hides, in ms.</summary>
-    public const int FadeOutMs = 220;
+    public const int FadeOutMs = LauncherRules.FadeOutMs;
 
     /// <summary>
     /// The window's fade-out, registered by the window itself. Called with the step that hides
@@ -62,7 +62,7 @@ public static partial class LauncherHost
     /// The fade is the tail of an exit beat, never added after it: with a 450 ms beat and a 220 ms
     /// fade, the fade starts at 230. A beat shorter than the fade starts fading at once.
     /// </summary>
-    public static int FadeLeadMs(int delayMs) => Math.Max(0, ClampHideDelay(delayMs) - FadeOutMs);
+    public static int FadeLeadMs(int delayMs) => LauncherRules.FadeLeadMs(delayMs);
 
     private static DateTime _beatArmedUntil = DateTime.MinValue;
 
@@ -307,7 +307,8 @@ public static partial class LauncherHost
         var entry = LauncherCatalogue.Find(id);
         if (entry == null) return false;
 
-        if (entry.NeedsAccount)
+        var step = LauncherRules.Game(entry.NeedsAccount, entry.Locked, App.MainWindowRef?.LeashBlocksGames == true);
+        if (step == LauncherGameStep.SignIn)
         {
             // Account-bound entries use the launcher sign-in flow; the free demo is exempt.
             // Otherwise the caller shows the launcher, whose tile carries the same account rule.
@@ -320,7 +321,7 @@ public static partial class LauncherHost
             return false;
         }
 
-        if (entry.Locked)
+        if (step == LauncherGameStep.Refuse)
         {
             // The host owns the refusal toast; the launcher stays up behind it.
             LauncherCatalogue.TryLaunch(entry.Id);
@@ -329,7 +330,7 @@ public static partial class LauncherHost
 
         // A leash punishment pending: every game tile leads to the gate first. The panel comes
         // up and the gate lands there (MainWindow.Leash.cs); Panic and Cut leash are on it.
-        if (App.MainWindowRef?.LeashBlocksGames == true)
+        if (step == LauncherGameStep.Leash)
         {
             Log.Information("[Launcher] {Id} waits: a leash punishment is pending", entry.Id);
             OpenPanel(null, () => App.MainWindowRef?.PresentLeashGateFromLauncher());
@@ -378,23 +379,22 @@ public static partial class LauncherHost
     /// </summary>
     public static void RequestClose()
     {
-        if (App.Lockdown?.IsActive == true)
+        var mw = App.MainWindowRef;
+        var outcome = LauncherRules.Close(App.Lockdown?.IsActive == true,
+            App.IsEngineRunning || App.IsSessionRunning || LauncherCatalogue.AnyActive,
+            mw is { IsVisible: true }, mw != null);
+        if (outcome == LauncherCloseOutcome.Veto)
         {
-            try { App.Lockdown.NotifyEscapeAttempt(Possession.EscapeKinds.Close); } catch { }
+            try { App.Lockdown?.NotifyEscapeAttempt(Possession.EscapeKinds.Close); } catch { }
             return;
         }
-
-        var mw = App.MainWindowRef;
-        bool somethingRunning = App.IsEngineRunning || App.IsSessionRunning || LauncherCatalogue.AnyActive;
-        bool panelOnScreen = mw is { IsVisible: true };
-
-        if (somethingRunning || panelOnScreen || mw == null)
+        if (outcome == LauncherCloseOutcome.Hide)
         {
             Hide();
             return;
         }
 
-        try { mw.RequestExit(); }
+        try { mw!.RequestExit(); }
         catch (Exception ex) { Log.Error(ex, "[Launcher] RequestExit failed"); }
     }
 
