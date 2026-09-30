@@ -131,7 +131,7 @@ public class NatashaDodgeTests
     [Fact]
     public void Both_switch_strings_are_in_every_language()
     {
-        var dir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
         Assert.Equal(9, files.Length);
         foreach (var file in files)
