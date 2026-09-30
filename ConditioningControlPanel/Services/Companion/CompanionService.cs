@@ -328,14 +328,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void OnAttentionCheckFailed()
         {
-            if (ActivePerk != CompanionBonusType.StrictModeBonus)
+            if (App.Settings?.Current is not { } s || !CompanionPerks.ApplyAttentionFailPenalty(s))
                 return;
 
             var progress = ActiveProgress;
             var penalty = 25.0;
-
-            // Can't go below 0 XP
-            progress.CurrentXP = Math.Max(0, progress.CurrentXP - penalty);
             App.Settings?.Save();
 
             App.Logger?.Information("Trainer penalty: -{Penalty} XP for attention check fail. Current XP: {XP:F1}",

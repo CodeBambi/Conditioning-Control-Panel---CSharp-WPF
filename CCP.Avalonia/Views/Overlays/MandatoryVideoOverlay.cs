@@ -30,10 +30,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// (VideoBlurredBackgroundEnabled), with the attention targets on top. One decoder on the shared
     /// LibVLC feeds every screen (WPF ran one muted decoder per secondary), with audio at
     /// master x video volume; other apps are ducked while it plays (AudioDuckingEnabled).
-    /// ponytail: missing against WPF - the Esc grace pause and its overlays, the
-    /// safety/max-length/vout/wedge watchdogs, pausing the bubbles (bubble files are another branch's),
-    /// the toy-button/gaze/haptics attention inputs, no-activate z-order, and the remote-media offer
-    /// after the "no videos" dialog.
+    /// The Esc grace pause (WPF #735) draws its Paused/Resume card inside each video window, not as a
+    /// separate topmost window; the clip guards (Core <see cref="MandatoryVideoScheduler.Guard"/>) run
+    /// on a 1 s UI timer: a dead (8 s) or lost (5 s without frames) output replays the clip once, as
+    /// WPF's vout heal, but on the same shared LibVLC (docs/avalonia-decisions.md). Ambient bubbles
+    /// are paused by the Core scheduler.
+    /// ponytail: missing against WPF - the off-thread UI-wedge watchdog and the LibVLC retire/quarantine
+    /// (a Stop that hangs in native code still hangs the UI thread), the toy-button/gaze/haptics
+    /// attention inputs, no-activate z-order, and the remote-media offer after the "no videos" dialog.
     /// </summary>
     internal sealed class MandatoryVideoOverlay : IMandatoryVideoHost
     {
@@ -46,7 +50,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         }
 
         /// <summary>One screen's window: blurred fill + scrim, the clip, and the attention plane.</summary>
-        internal sealed record Surface(Window Window, Image Fill, Border Scrim, Image Video, Canvas Layer);
+        internal sealed record Surface(Window Window, Image Fill, Border Scrim, Image Video, Canvas Layer, Border Grace, TextBlock Countdown);
 
         private readonly List<Surface> _surfaces = new();
         private readonly List<Window> _messages = new();
@@ -56,8 +60,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private Media? _media;
         private VlcFrameSink? _sink;
         private WriteableBitmap? _fill;
-        private bool _closing, _didDuck, _attention;
+        private bool _closing, _didDuck, _attention, _gracePaused, _graceConsumed;
         private long _watchedMs;
+        /// <summary>Stopwatch timestamp of the last frame shown (tests age it to fake a lost output).</summary>
+        internal long FrameTs;
+        private bool _healUsed, _strict;
+        private string _path = "";
+        private readonly Stopwatch _sinceFrame = new();
+        private DateTime _lastGraceUtc, _gracePausedAt;
+        private DispatcherTimer? _graceTimer, _guard;
         private readonly Stopwatch _sinceShow = new();
 
         private MandatoryVideoOverlay() => Scheduler = new MandatoryVideoScheduler(this);
@@ -79,11 +90,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         public void Show(string path, bool strict) => Dispatcher.UIThread.Invoke(() =>
         {
+            _healUsed = false;   // WPF PlayVideo: one output heal per clip; the heal's replay keeps it spent
+            Play(path, strict);
+        });
+
+        private void Play(string path, bool strict)
+        {
             if (_surfaces.Count > 0) CloseAll();
+            (_path, _strict) = (path, strict);
             _sinceShow.Restart();
+            _sinceFrame.Reset();
             FirstFrameMs = -1;
             _watchedMs = 0;
             FillMs = FillCount = 0;
+            _graceConsumed = false;   // WPF PlayVideo: one grace pause per clip, replays included
 
             var s = CoreSettings.Current;
             var host = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
@@ -124,9 +144,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 }
             }, () =>
             {
+                FrameTs = Stopwatch.GetTimestamp();
                 if (FirstFrameMs < 0)
                 {
                     FirstFrameMs = _sinceShow.ElapsedMilliseconds;
+                    if (!_gracePaused) _sinceFrame.Start();   // WPF arms the length/max timers once playing
                     Log.Information("VideoService: first frame after {Ms} ms", FirstFrameMs);
                 }
                 var fill = _surfaces.Any(x => x.Fill.IsVisible);
@@ -148,13 +170,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             {
                 var len = _player?.Length ?? 0;
                 if (len > 0) Interlocked.Exchange(ref _watchedMs, len);
-                Dispatcher.UIThread.Post(Scheduler.Ended);   // never tear down on LibVLC's own thread
+                Dispatcher.UIThread.Post(() =>   // never tear down on LibVLC's own thread
+                {
+                    // WPF OnEnded: a clip that really played to its end earns Circe's "video" note.
+                    if (Scheduler.IsPlaying && FirstFrameMs >= 0) App.ChasterNote("video");
+                    Scheduler.Ended();
+                });
             };
             _player.EncounteredError += (_, _) => Dispatcher.UIThread.Post(Scheduler.End);
             _media = new Media(vlc, path, FromType.FromPath);
             _player.Play(_media);
+            _guard = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _guard.Tick += (_, _) => GuardTick();
+            _guard.Start();
             if (_attention) DispatcherTimer.RunOnce(SetupAttention, TimeSpan.FromSeconds(2));   // WPF: Task.Delay(2000)
-        });
+        }
 
         private static List<global::Avalonia.Platform.Screen?> Targets(Window? host, bool fillAll)
         {
@@ -178,6 +208,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var scrim = new Border { Background = new SolidColorBrush(Color.FromArgb(90, 0, 0, 0)), IsVisible = false };
             var video = new Image { Stretch = Stretch.Uniform };
             var layer = new Canvas { ClipToBounds = true };
+            var (grace, countdown) = GraceCard();
             var w = new Window
             {
                 Title = "CCP Video",
@@ -186,12 +217,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 ShowInTaskbar = false,
                 CanResize = false,
                 Background = Brushes.Black,
-                Content = new Panel { ClipToBounds = true, Children = { fill, scrim, video, layer } },
+                Content = new Panel { ClipToBounds = true, Children = { fill, scrim, video, layer, grace } },
             };
             Place(w, screen);
             w.KeyDown += (_, e) =>
             {
                 var s = CoreSettings.Current;
+                var live = s.PanicKeyEnabled && PanicListenerLive();
+                if (MandatoryVideoScheduler.GraceKey(strict, e.Key.ToString(), s.PanicKeyEnabled, s.PanicKey, live) is { } fromPanic
+                    && TryGracePause(fromPanic))
+                {
+                    e.Handled = true;
+                    return;
+                }
                 switch (MandatoryVideoScheduler.KeyAction(strict, e.Key.ToString(), e.KeyModifiers.HasFlag(KeyModifiers.Alt), s.PanicKeyEnabled, s.PanicKey,
                     s.PanicKeyEnabled && PanicListenerLive()))
                 {
@@ -206,7 +244,131 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             w.Show();
             w.WindowState = WindowState.FullScreen;
             w.Activate();
-            return new Surface(w, fill, scrim, video, layer);
+            return new Surface(w, fill, scrim, video, layer, grace, countdown);
+        }
+
+        /// <summary>WPF GracePauseOverlayWindow's card: 360x200, centred, #1A1A2E with a 2 px pink edge,
+        /// the pause glyph, "Paused", a pink Resume pill (0.85 on hover, 0.7 pressed) and the countdown.</summary>
+        private (Border, TextBlock) GraceCard()
+        {
+            var pink = new SolidColorBrush(Color.Parse("#FF69B4"));
+            var countdown = new TextBlock { FontSize = 13, Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xA8, 0xC8)), HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
+            var resume = new Border
+            {
+                Background = pink,
+                CornerRadius = new CornerRadius(20),
+                Padding = new Thickness(26, 8),
+                HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                Child = new TextBlock { Text = "▶  " + Loc.Get("btn_video_grace_resume"), FontSize = 16, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White },
+            };
+            resume.PointerEntered += (_, _) => resume.Opacity = 0.85;
+            resume.PointerExited += (_, _) => resume.Opacity = 1;
+            resume.PointerPressed += (_, e) => { e.Handled = true; resume.Opacity = 0.7; };
+            resume.PointerReleased += (_, e) => { e.Handled = true; resume.Opacity = 1; ResumeFromGrace("resume button"); };
+            var card = new Border
+            {
+                Width = 360,
+                Height = 200,
+                HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center,
+                VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+                Background = new SolidColorBrush(Color.Parse("#1A1A2E")),
+                BorderBrush = pink,
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(16),
+                Padding = new Thickness(24, 18),
+                BoxShadow = BoxShadows.Parse("0 0 24 0 #BF000000"),
+                IsVisible = false,
+                Child = new StackPanel
+                {
+                    VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+                    Children =
+                    {
+                        new TextBlock { Text = "⏸", FontSize = 40, Foreground = pink, HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 2) },
+                        new TextBlock { Text = Loc.Get("video_grace_paused_title"), FontSize = 24, FontWeight = FontWeight.Bold, Foreground = Brushes.White, HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 12) },
+                        resume,
+                        countdown,
+                    },
+                },
+            };
+            return (card, countdown);
+        }
+
+        // ---- grace pause (WPF TryGracePauseFromPanic / DoGracePause / ResumeFromGrace, #735) ----
+
+        internal bool GracePaused => _gracePaused;
+
+        /// <summary>The first Esc/panic press of a clip pauses it behind the card for up to 60 s; the
+        /// panic key only when panic does not override everything (PanicOverridesAll off).</summary>
+        internal bool TryGracePause(bool fromPanicKey)
+        {
+            if (!ConditioningControlPanel.Services.Safety.PanicPolicy.AllowGracePause(fromPanicKey,
+                    ConditioningControlPanel.Services.Safety.PanicPolicy.OverrideEnabled(CoreSettings.Current))) return false;
+            var now = DateTime.UtcNow;
+            var since = _lastGraceUtc == default ? double.MaxValue : (now - _lastGraceUtc).TotalMilliseconds;
+            var d = MandatoryVideoScheduler.EvaluateGrace(Scheduler.IsPlaying && _player != null, _closing, _gracePaused, _graceConsumed, since);
+            if (d == GraceDecision.ConsumedDedup) return true;
+            if (d != GraceDecision.Pause) return false;
+            _gracePaused = true;
+            _lastGraceUtc = _gracePausedAt = now;
+            _player?.SetPause(true);
+            _sinceShow.Stop();
+            _sinceFrame.Stop();   // freezes the attention clock and the clip guards (WPF re-phases both)
+            foreach (var x in _surfaces) { x.Layer.IsHitTestVisible = false; x.Grace.IsVisible = true; }
+            SetCountdown(MandatoryVideoScheduler.GraceWindowSeconds);
+            _graceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _graceTimer.Tick += (_, _) =>
+            {
+                var left = MandatoryVideoScheduler.GraceSecondsRemaining((DateTime.UtcNow - _gracePausedAt).TotalSeconds);
+                if (left <= 0) ResumeFromGrace("auto-resume");
+                else SetCountdown(left);
+            };
+            _graceTimer.Start();
+            Log.Information("VideoService: grace pause engaged ({Window}s window)", MandatoryVideoScheduler.GraceWindowSeconds);
+            return true;
+        }
+
+        private void SetCountdown(int left)
+        {
+            foreach (var x in _surfaces) x.Countdown.Text = Loc.GetF("video_grace_auto_resume_in", left);
+        }
+
+        internal void ResumeFromGrace(string reason)
+        {
+            if (!_gracePaused) return;
+            _gracePaused = false;
+            _graceConsumed = true;   // spent whether it ended by hand or by timeout
+            _graceTimer?.Stop();
+            _graceTimer = null;
+            foreach (var x in _surfaces) { x.Grace.IsVisible = false; x.Layer.IsHitTestVisible = true; }
+            _sinceShow.Start();
+            if (FirstFrameMs >= 0) _sinceFrame.Start();
+            FrameTs = Stopwatch.GetTimestamp();
+            _player?.SetPause(false);
+            Log.Information("VideoService: grace pause released ({Reason}) after {Sec:F1}s", reason, (DateTime.UtcNow - _gracePausedAt).TotalSeconds);
+        }
+
+        /// <summary>WPF safety/fallback/max-length timers and the vout watchdog, as one tick: a clip
+        /// that shows no frame, stalls, overruns or passes the user's max ends like a dismiss.</summary>
+        internal void GuardTick()
+        {
+            if (_gracePaused || _surfaces.Count == 0 || !Scheduler.IsPlaying) return;
+            var framed = FirstFrameMs >= 0;
+            var why = MandatoryVideoScheduler.Guard(Elapsed, framed ? _sinceFrame.Elapsed.TotalSeconds : Elapsed, framed,
+                (_player?.VideoTrackCount ?? -1) != 0, (_player?.Length ?? 0) / 1000.0,
+                Stopwatch.GetElapsedTime(FrameTs).TotalSeconds, CoreSettings.Current.VideoMaxDurationSeconds);
+            if (why == null) return;
+            if (MandatoryVideoScheduler.GuardHeals(why, _healUsed))
+            {
+                // WPF DispatchVoutHeal(retry): the same clip once more, same strictness.
+                Log.Warning("VideoService: clip guard fired ({Why}) after {Sec:F1}s - replaying the clip once", why, Elapsed);
+                Scheduler.NoteReplay();
+                Play(_path, _strict);
+                _healUsed = true;
+                return;
+            }
+            Log.Warning("VideoService: clip guard fired ({Why}) after {Sec:F1}s - ending the clip", why, Elapsed);
+            Scheduler.End();
         }
 
         private static void Place(Window w, global::Avalonia.Platform.Screen? screen)
@@ -287,6 +449,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             w.RequestAnimationFrame(now =>
             {
                 if (!_attention || _surfaces.Count == 0 || _surfaces[0].Window != w) return;
+                if (_gracePaused) { _lastFrame = null; NextFrame(); return; }   // targets hold still, expiry clock stopped
                 Step(Elapsed, _lastFrame is { } l ? Math.Clamp((now - l).TotalSeconds, 0, 0.25) : 1 / 60.0);
                 _lastFrame = now;
                 NextFrame();
@@ -519,7 +682,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _closing = true;
             try
             {
-                _attention = false;
+                _attention = _gracePaused = false;
+                _graceTimer?.Stop();
+                _guard?.Stop();
+                _graceTimer = _guard = null;
                 _spawnTimes.Clear();
                 _targets.Clear();
                 // Stop joins the decoder thread, so after it no callback touches the frame buffer.
