@@ -653,8 +653,8 @@ public class BubbleService : IDisposable
     {
         switch (Chaster.NatashasFavourite.RowFor(bubble.IsNatasha, bubble.NatashaCause))
         {
-            case Chaster.NatashasFavourite.EventId: App.Chaster?.NoteAt("natasha", bubble.CenterPx); break;
-            case Chaster.NatashasFavourite.HeldEventId: App.Chaster?.NoteAt("natasha_held", bubble.CenterPx); break;
+            case Chaster.NatashasFavourite.EventId: App.Chaster?.NoteAt("natasha", new Chaster.ScreenPoint(bubble.CenterPx.X, bubble.CenterPx.Y)); break;
+            case Chaster.NatashasFavourite.HeldEventId: App.Chaster?.NoteAt("natasha_held", new Chaster.ScreenPoint(bubble.CenterPx.X, bubble.CenterPx.Y)); break;
         }
     }
 

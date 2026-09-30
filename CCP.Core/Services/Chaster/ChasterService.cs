@@ -43,6 +43,9 @@ public static class LockRelock
     }
 }
 
+/// <summary>A screen point in physical desktop px; each head converts from its own point type.</summary>
+public readonly record struct ScreenPoint(double X, double Y);
+
 public sealed record ChasterStoredTokens(string AccessToken, string RefreshToken, DateTime ExpiresAtUtc);
 
 /// <summary>Where the link's tokens live. The app's one is DPAPI on disk; tests use memory.</summary>
@@ -127,7 +130,7 @@ public sealed partial class ChasterService : IDisposable
     /// point (physical desktop px) of the thing that caused it when the caller named one: the
     /// popped bubble, the flash that showed. Null for everything else (the pop then lands at the
     /// cursor). A separate event so the older listeners keep their signature.</summary>
-    public event Action<string, TabBooking, System.Windows.Point?>? BookedAt;
+    public event Action<string, TabBooking, ScreenPoint?>? BookedAt;
 
     /// <summary>Linked, unlinked, or the link died. Raised on whatever thread found out.</summary>
     public event Action? LinkChanged;
@@ -145,7 +148,7 @@ public sealed partial class ChasterService : IDisposable
         _tab = LoadTab();
         // The file on disk is not trusted, from the very first read (security pass 3).
         if (CircesTab.Sanitise(_tab, (_options() ?? ChasterOptions.Off).Caps))
-            App.Logger?.Warning("[Chaster] the tab file held numbers outside its limits; clamped at load");
+            Serilog.Log.Warning("[Chaster] the tab file held numbers outside its limits; clamped at load");
     }
 
     public bool IsLinked => _tokens.Read() is { RefreshToken.Length: > 0 };
@@ -227,7 +230,7 @@ public sealed partial class ChasterService : IDisposable
     /// <summary><see cref="Note"/> with the screen point (physical px) of what caused it, so the
     /// "+3:00" pops there rather than on the rail. <paramref name="unprompted"/> marks a booking
     /// no act of the player's caused (a red flash's ring ran out): see <see cref="TabBooking.Unprompted"/>.</summary>
-    public TabBooking NoteAt(string eventId, System.Windows.Point? originPx, int units = 1, bool unprompted = false)
+    public TabBooking NoteAt(string eventId, ScreenPoint? originPx, int units = 1, bool unprompted = false)
     {
         if (!Active(out var options)) return new(0, options.Paused ? TabRefusal.Paused : TabRefusal.Nothing);
         // The first finished session after coming back forgives half of what being away cost,
@@ -357,7 +360,7 @@ public sealed partial class ChasterService : IDisposable
         return Math.Max(0, RemoteDailySeconds - used);
     }
 
-    private void RaiseBooked(string eventId, TabBooking booking, System.Windows.Point? originPx)
+    private void RaiseBooked(string eventId, TabBooking booking, ScreenPoint? originPx)
     {
         Booked?.Invoke(eventId, booking);
         BookedAt?.Invoke(eventId, booking, originPx);
@@ -365,7 +368,7 @@ public sealed partial class ChasterService : IDisposable
 
     // heats: false for a booking heat can never price (a size the caller named), so it is not
     // counted toward heat either and the mood never shows a factor nothing pays.
-    private TabBooking BookSeconds(string eventId, int seconds, System.Windows.Point? originPx = null, bool heats = true,
+    private TabBooking BookSeconds(string eventId, int seconds, ScreenPoint? originPx = null, bool heats = true,
         bool unprompted = false)
     {
         if (seconds == 0) return new(0, TabRefusal.Nothing);
@@ -434,14 +437,14 @@ public sealed partial class ChasterService : IDisposable
                 if (CircesTab.Sanitise(_tab, options.Caps))
                 {
                     SaveTab();
-                    App.Logger?.Warning("[Chaster] the tab file held numbers outside its limits; clamped");
+                    Serilog.Log.Warning("[Chaster] the tab file held numbers outside its limits; clamped");
                 }
                 // An add from last time that was never answered: counted as landed, never resent.
                 var doubted = CircesTab.ResolvePending(_tab, _utcNow());
                 if (doubted > 0)
                 {
                     SaveTab();
-                    App.Logger?.Information("[Chaster] an unanswered push of {Seconds}s is counted as landed", doubted);
+                    Serilog.Log.Information("[Chaster] an unanswered push of {Seconds}s is counted as landed", doubted);
                 }
                 // A wearer link can only add. canRemove stays false until a link exists that can.
                 // Never more than the daily limit reaches the lock in one local day, however big
@@ -463,7 +466,7 @@ public sealed partial class ChasterService : IDisposable
             // A push onto a lock whose timer has run out locks it again from now (LockRelock).
             if (await LockRanOutAsync(lockId!, options.RelockPastEnd, ct).ConfigureAwait(false))
             {
-                App.Logger?.Information("[Chaster] the chosen lock's timer has run out; the tab waits");
+                Serilog.Log.Information("[Chaster] the chosen lock's timer has run out; the tab waits");
                 return SettleOutcome.LockRanOut;
             }
 
@@ -494,7 +497,7 @@ public sealed partial class ChasterService : IDisposable
                 SaveTab();
             }
             if (!added.Ok) return Failed(added.Status);
-            App.Logger?.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
+            Serilog.Log.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
             LadderPushLanded();
             try { PushLanded?.Invoke(plan.Seconds); } catch (Exception ex) { Diag.Swallowed(ex, "chaster push landed listener"); }
             return SettleOutcome.Pushed;
@@ -632,7 +635,7 @@ public sealed partial class ChasterService : IDisposable
     {
         if (ForgetTokens(generation) == null && generation != null) return;
         ForgetProfile();
-        App.Logger?.Information("[Chaster] the link expired; the tab is kept");
+        Serilog.Log.Information("[Chaster] the link expired; the tab is kept");
         LinkChanged?.Invoke();
     }
 

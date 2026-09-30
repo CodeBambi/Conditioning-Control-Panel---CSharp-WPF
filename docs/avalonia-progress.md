@@ -922,3 +922,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   unless the account already answered; witnessed flag saved.
 - Evidence: DescentFuseLiveTests (5, fail-proven); live T-8m sandbox: gold corner, spark 1.25, zero opened the show, surfaces
   cleared. Rows stay stub (chrome dim, phase lines, rail chip, stage visual, ceremony/migration). Review: ACCEPT + P3s fixed.
+
+## avalonia-port/chaster-service-core: +239
+- ChasterService moved to Core (git mv; Core ScreenPoint replaces the WPF Point in NoteAt/BookedAt, converted at the WPF call
+  sites; CreateForApp + DEBUG demo in head-side ChasterServiceApp; ChasterLadderApi in Core with injected identity/URL;
+  FixedTimeEquals for the state check). Avalonia SecretChasterTokenStore reads/writes WPF's chaster_auth.dat shape via SecretStore.
+- WPF source-scan tests (ChasterHooks, Circe, Natasha, ChasterTab*) read all product roots / moved languages and web assets.
+- Evidence: ChasterServiceTests (63) on Linux + token-store tests, fail-proven; scan paths proven by script. No UI yet (no
+  door: ChasterRailChip unported). Review: FIX -> fixed.

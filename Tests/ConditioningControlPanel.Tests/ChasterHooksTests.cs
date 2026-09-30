@@ -59,11 +59,8 @@ public class ChasterHooksTests
     public void Every_row_on_the_page_is_wired_to_something_or_listed_as_owed()
     {
         var app = Path.Combine(RepoRoot(), "ConditioningControlPanel");
-        var source = string.Join("\n", Directory.EnumerateFiles(app, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
-                     && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)
-                     && !f.EndsWith("TabPrices.cs", StringComparison.Ordinal))
-            .Select(File.ReadAllText));
+        // Every product root: the service's own bookings live in CCP.Core since chaster-service-core.
+        var source = string.Join("\n", SourceRoots.EnumerateProductSources("*.cs").Select(File.ReadAllText));
 
         // QuestRow picks its row with a ternary, so inside the hooks file the bare id counts.
         var hooks = File.ReadAllText(Path.Combine(app, "Services", "Chaster", "ChasterHooks.cs"));

@@ -68,7 +68,8 @@ public sealed partial class ChasterService
                 var query = context.Request.QueryString;
                 error = query["error"];
                 code = query["code"];
-                var stateOk = SecurityHelper.SecureCompare(state, query["state"] ?? "");
+                var stateOk = System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.UTF8.GetBytes(state), System.Text.Encoding.UTF8.GetBytes(query["state"] ?? ""));
                 await RespondAsync(context, stateOk && string.IsNullOrEmpty(error) && !string.IsNullOrEmpty(code)).ConfigureAwait(false);
                 // A knock with the wrong state is a stale tab from an earlier try, or some other
                 // program on this machine. It gets the "not linked" page and the wait goes on;
@@ -88,7 +89,7 @@ public sealed partial class ChasterService
                 _ = _client.RevokeAsync(old.RefreshToken);
             // Being away only counts from the day the account was linked.
             lock (_gate) { _tab.LastSeenDay = CircesTab.DayKey(_localNow()); SaveTab(); }
-            App.Logger?.Information("[Chaster] linked (offline token: {Offline})", tokens.Value.RefreshExpiresIn == 0);
+            Serilog.Log.Information("[Chaster] linked (offline token: {Offline})", tokens.Value.RefreshExpiresIn == 0);
             ForgetProfile();
             LinkChanged?.Invoke();
             _ = EnsureProfileAsync();

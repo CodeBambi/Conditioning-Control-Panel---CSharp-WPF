@@ -223,14 +223,14 @@ public class ChasterLadderTests : IDisposable
     [Fact]
     public void The_demo_board_is_ten_mixed_rows_and_the_player_at_twenty_three()
     {
-        var off = ChasterService.DemoRaffle.Board(false);
+        var off = ChasterServiceApp.DemoRaffle.Board(false);
         Assert.Equal(10, off.Rows.Count);
         Assert.Contains(off.Rows, r => r.Named);
         Assert.Contains(off.Rows, r => !r.Named);
         var mine = ChasterLadder.OwnRowBelow(off)!;
         Assert.Equal(23, mine.Rank);
         Assert.False(mine.Named);
-        var on = ChasterLadder.OwnRowBelow(ChasterService.DemoRaffle.Board(true))!;
+        var on = ChasterLadder.OwnRowBelow(ChasterServiceApp.DemoRaffle.Board(true))!;
         Assert.Equal("You", on.Name);
         Assert.True(on.Named);
     }
