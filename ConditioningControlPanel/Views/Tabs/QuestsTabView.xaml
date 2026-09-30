@@ -431,7 +431,7 @@
                                 </Grid>
                                 <Canvas x:Name="StreakCalendarCanvas" x:FieldModifier="internal" Height="50" ClipToBounds="True"
                                        SizeChanged="StreakCalendarCanvas_SizeChanged"/>
-                                <TextBlock x:Name="TxtFixStreakStatus" x:FieldModifier="internal" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="11"
+                                <helpers:EmojiTextBlock x:Name="TxtFixStreakStatus" x:FieldModifier="internal" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="11"
                                            TextAlignment="Center" Margin="0,5,0,0" Visibility="Collapsed"/>
                             </StackPanel>
                         </Border>

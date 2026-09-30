@@ -180,6 +180,19 @@ namespace ConditioningControlPanel.Features
             if (s == null) return;
 
             var on = ChkStrict.IsChecked ?? false;
+
+            // Lockdown greys this toggle; the rule is checked here too so nothing slips past it.
+            if (Services.LockdownStrictHold.RefusesNow(on))
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _isLoading = true;
+                    ChkStrict.IsChecked = s.StrictLockEnabled;
+                    _isLoading = false;
+                }));
+                return;
+            }
+
             if (on)
             {
                 var owner = Application.Current.MainWindow;

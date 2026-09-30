@@ -11,6 +11,7 @@ export const TICK_MS = 250;
 
 /** "9:07" style, or "0:09.4" under ten seconds. */
 export function formatClock(ms) {
+  if (ms === Infinity) return 'Untimed';
   const left = Math.max(0, ms);
   const total = Math.floor(left / 1000);
   const min = Math.floor(total / 60);
@@ -20,14 +21,18 @@ export function formatClock(ms) {
 }
 
 export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () => Date.now() } = {}) {
-  const left = { w: perSideMs, b: perSideMs };
+  const untimed = perSideMs === 0;
+  const initial = untimed ? Infinity : perSideMs;
+  const left = { w: initial, b: initial };
   let active = null;
   let since = 0;
+  let turnStartedMs = 0;
   let timer = null;
   let flagged = null;
+  let pausedAt = null;   // a local pause (Esc): the running side is not charged until resume()
 
   function drain() {
-    if (!active) return;
+    if (!active || untimed || pausedAt !== null) return;
     const t = now();
     left[active] = Math.max(0, left[active] - (t - since));
     since = t;
@@ -40,7 +45,7 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
   }
 
   function snapshot() {
-    return { w: left.w, b: left.b, total: perSideMs, active };
+    return { w: left.w, b: left.b, total: perSideMs, active, ...(untimed ? { untimed: true } : {}) };
   }
 
   function tick() {
@@ -51,13 +56,18 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
   function start(side) {
     if (flagged) return;
     drain();
+    if (flagged) return;
+    const started = now();
+    if (active !== side) turnStartedMs = started;
     active = side;
-    since = now();
+    since = started;
+    if (untimed) { if (onTick) onTick(snapshot()); return; }
     if (!timer) { timer = setInterval(tick, TICK_MS); timer.unref?.(); } // unref: node tests never hang on a clock
   }
 
   function stop() {
     drain();
+    pausedAt = null;
     active = null;
     if (timer) { clearInterval(timer); timer = null; }
   }
@@ -68,6 +78,27 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
     /** Hand the move over: charge the mover, run the other side's clock. */
     press(next) { start(next); },
     snapshot,
+    // Reading presentation age never drains, pauses, or otherwise changes a clock.
+    turnElapsedMs: () => active ? Math.max(0, (pausedAt ?? now()) - turnStartedMs) : 0,
+    /** Hold the running side's time (a local game only; an online clock belongs to the server). */
+    pause() {
+      if (!active || pausedAt !== null) return false;
+      drain();
+      pausedAt = now();
+      if (timer) { clearInterval(timer); timer = null; }
+      return true;
+    },
+    resume() {
+      if (pausedAt === null) return false;
+      const t = now();
+      turnStartedMs += t - pausedAt;
+      pausedAt = null;
+      since = t;
+      if (active && !untimed && !timer) { timer = setInterval(tick, TICK_MS); timer.unref?.(); }
+      if (onTick) onTick(snapshot());
+      return true;
+    },
+    isPaused: () => pausedAt !== null,
     remaining(side) { drain(); return left[side]; },
     flagged: () => flagged,
     isRunning: () => active !== null,
@@ -77,19 +108,29 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
      * game is over by then and nothing is owed.
      */
     credit(side, ms) {
-      if (flagged || !(ms > 0)) return;
+      if (untimed || flagged || !(ms > 0)) return;
       drain();
       left[side] = Math.min(perSideMs, left[side] + ms);
     },
     /** Only for tests: charge a side without waiting in real time. */
     debit(side, ms) {
+      if (untimed) return;
       drain();
       left[side] = Math.max(0, left[side] - ms);
       if (left[side] === 0 && !flagged) { flagged = side; const s = side; stop(); if (onFlag) onFlag(s); }
     },
+    /** Restore a local saved clock. Starting the seat begins counting again. */
+    restore(saved) {
+      stop();
+      flagged = null;
+      for (const side of ['w', 'b']) {
+        const value = saved?.[side];
+        left[side] = untimed ? Infinity : (Number.isFinite(value) ? Math.min(perSideMs, Math.max(0, value)) : perSideMs);
+      }
+    },
     reset() {
       stop();
-      left.w = perSideMs; left.b = perSideMs; flagged = null;
+      left.w = initial; left.b = initial; flagged = null;
     },
   };
 }

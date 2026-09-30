@@ -568,7 +568,7 @@ namespace ConditioningControlPanel.Services
 
         public ProfileSyncService()
         {
-            _httpClient = new HttpClient
+            _httpClient = new HttpClient(new ServerClockHandler())
             {
                 Timeout = TimeSpan.FromSeconds(30)
             };
@@ -1558,6 +1558,29 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static readonly TimeSpan SyncCooldown = TimeSpan.FromSeconds(30);
 
+        // Failure backoff state (see SyncFailureBackoff). Touched only inside _syncGate.
+        private int _syncBackoffFailures;
+        private DateTime? _syncBlockedUntilUtc;
+        private string? _syncBackoffToken;
+        private TimeSpan _syncBackoffOffset;
+        private int _syncSuccesses;   // syncs that reached the server; see SyncBeforeRetryAsync
+
+        /// <summary>
+        /// Arm the failure backoff. Keyed to the auth token and clock offset this attempt used, so a
+        /// sign-in, a 401 heal or a learned server clock opens the gate again at once. Pass
+        /// <paramref name="tokenUsed"/> when the token may have changed since the request went out.
+        /// </summary>
+        private void NoteSyncFailureForBackoff(int? status, string? tokenUsed = null)
+        {
+            _syncBackoffFailures++;
+            var wait = SyncFailureBackoff.Delay(_syncBackoffFailures);
+            _syncBlockedUntilUtc = DateTime.UtcNow + wait;
+            _syncBackoffToken = tokenUsed ?? App.Settings?.Current?.AuthToken;
+            _syncBackoffOffset = ServerClock.Offset;
+            App.Logger?.Warning("Profile sync backing off {Seconds:F0}s after failure #{Count} (status {Status})",
+                wait.TotalSeconds, _syncBackoffFailures, status?.ToString() ?? "none");
+        }
+
         public async Task<bool> SyncProfileAsync()
         {
             // Skip if offline mode is enabled
@@ -1581,6 +1604,8 @@ namespace ConditioningControlPanel.Services
             }
 
             var syncSucceeded = false;
+            // Set by the cooldown and backoff skips below: no request went out, so nothing failed.
+            var skipped = false;
 
             // Progression as it stood before this call could rewrite it, plus a label for the log
             // line. Declared out here so the finally can compare against it on EVERY exit path —
@@ -1597,6 +1622,17 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("Profile sync skipped - cooldown active ({Remaining}s remaining)",
                     Math.Ceiling((SyncCooldown - (DateTime.Now - LastSyncTime.Value)).TotalSeconds));
+                skipped = true;
+                return false;
+            }
+
+            // Failure backoff: a refused sync used to leave the door open for every caller at once.
+            if (SyncFailureBackoff.ShouldSkip(DateTime.UtcNow, _syncBlockedUntilUtc, _syncBackoffToken,
+                    App.Settings?.Current?.AuthToken, _syncBackoffOffset, ServerClock.Offset))
+            {
+                App.Logger?.Debug("Profile sync skipped - backing off after {Failures} failure(s), {Remaining}s left",
+                    _syncBackoffFailures, Math.Ceiling((_syncBlockedUntilUtc!.Value - DateTime.UtcNow).TotalSeconds));
+                skipped = true;
                 return false;
             }
 
@@ -1862,6 +1898,28 @@ namespace ConditioningControlPanel.Services
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
 
+                    // A 403 for clock skew: the signature was right, our timestamp was not. The
+                    // handler has already read the Date header; the body's server_time (#233) is
+                    // the second source. Re-sign with the corrected clock and try ONCE; anything
+                    // still refused falls through to the backoff below.
+                    if (v2Response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                    {
+                        string? refusal = null;
+                        try { refusal = await v2Response.Content.ReadAsStringAsync(); } catch { /* status alone */ }
+                        var reason = ServerClock.ParseRefusal(refusal, out var serverTime);
+                        if (serverTime != null) ServerClock.Observe(serverTime, DateTimeOffset.UtcNow);
+                        if (string.Equals(reason, "clock_skew", StringComparison.OrdinalIgnoreCase))
+                        {
+                            App.Logger?.Warning("V2 Profile sync refused for clock skew; re-signing with server offset {Seconds:F0}s and retrying once",
+                                ServerClock.Offset.TotalSeconds);
+                            var retry = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
+                            AddAuthHeader(retry);
+                            retry.Content = new StringContent(v2Body, Encoding.UTF8, "application/json");
+                            if (SignRequest(retry, v2Body))
+                                v2Response = await _httpClient.SendAsync(retry);
+                        }
+                    }
+
                     if (!v2Response.IsSuccessStatusCode)
                     {
                         // Contract D: merged tombstone. Not a rejection of the DATA, so the
@@ -1886,6 +1944,9 @@ namespace ConditioningControlPanel.Services
                             // data — the exact loss the deferral exists to prevent.
                             return false;
                         }
+                        // The token this attempt was refused with: a 401 heal below may store a
+                        // new one, and the backoff must not hold the new one to the old refusal.
+                        var tokenUsed = App.Settings?.Current?.AuthToken;
                         await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
                         // Status + size only: the error body echoes fields from the profile we
@@ -1893,6 +1954,7 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)",
                             (int)v2Response.StatusCode, error?.Length ?? 0);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
+                        NoteSyncFailureForBackoff((int)v2Response.StatusCode, tokenUsed);
                         // Settle a deferred streak break only on a DEFINITIVE rejection (4xx) —
                         // retrying cannot change those answers. A 5xx is transient like the 429
                         // above: leave it to the retry/timeout window rather than deciding the
@@ -2699,6 +2761,10 @@ namespace ConditioningControlPanel.Services
                 else
                     App.Logger?.Error(ex, "Failed to sync profile to cloud");
                 LastSyncError = ex.Message;
+                // HttpClient.Timeout is a TaskCanceledException wrapping a TimeoutException: a proxy
+                // that hangs, not the app shutting down, so it backs off like any other failure.
+                if (!IsExpectedCancellation(ex) || ex.InnerException is TimeoutException)
+                    NoteSyncFailureForBackoff(null);
                 // Mobile streak parity: the cloud is unreachable, so a deferred streak break
                 // gets the pre-parity behavior now instead of waiting out the full timeout.
                 App.Achievements?.Progress?.ResolveDeferredStreakBreak("sync failed");
@@ -2710,13 +2776,16 @@ namespace ConditioningControlPanel.Services
                 // Track sync health — only count actual failures, not skips (cooldown, gate, offline)
                 if (syncSucceeded)
                 {
+                    _syncSuccesses++;
+                    _syncBackoffFailures = 0;
+                    _syncBlockedUntilUtc = null;
                     if (ConsecutiveSyncFailures > 0)
                     {
                         ConsecutiveSyncFailures = 0;
                         SyncHealthChanged?.Invoke(this, 0);
                     }
                 }
-                else if (LastSyncError != null)
+                else if (!skipped && LastSyncError != null)
                 {
                     ConsecutiveSyncFailures++;
                     SyncHealthChanged?.Invoke(this, ConsecutiveSyncFailures);
@@ -4002,7 +4071,28 @@ namespace ConditioningControlPanel.Services
         /// Server validates cost, prerequisites, and deducts points.
         /// Returns (success, error) — on success, updates local SkillPoints and UnlockedSkills from server response.
         /// </summary>
-        public async Task<(bool success, string? error)> PurchaseSkillAsync(string skillId)
+        public Task<(bool success, string? error)> PurchaseSkillAsync(string skillId)
+            => PurchaseSkillAsync(skillId, afterSync: false);
+
+        /// <summary>
+        /// One real sync before a balance refusal is asked again (#1300). Waits for a sync already
+        /// running (the level up fires one; if it landed, the server has heard), and inside the 30 s
+        /// cooldown, which the server enforces too, waits out the rest of it once. True only when a
+        /// sync reached the server.
+        /// </summary>
+        private async Task<bool> SyncBeforeRetryAsync()
+        {
+            var landed = _syncSuccesses;
+            if (!await _syncGate.WaitAsync(SyncCooldown)) return false;
+            _syncGate.Release();
+            if (_syncSuccesses != landed || await SyncProfileAsync()) return true;
+            var left = LastSyncTime.HasValue ? SyncCooldown - (DateTime.Now - LastSyncTime.Value) : TimeSpan.Zero;
+            if (left <= TimeSpan.Zero || left > SyncCooldown) return false;
+            await Task.Delay(left + TimeSpan.FromMilliseconds(250));
+            return await SyncProfileAsync();
+        }
+
+        private async Task<(bool success, string? error)> PurchaseSkillAsync(string skillId, bool afterSync)
         {
             var settings = App.Settings?.Current;
             var unifiedId = settings?.UnifiedId;
@@ -4096,6 +4186,21 @@ namespace ConditioningControlPanel.Services
                     var refusedSkill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
                     if (refusedSkill != null && settings != null)
                     {
+                        // First refusal: sync once so the server credits the level-ups and bubble
+                        // milestones it has not seen yet, then ask again (#1300). Only a refusal
+                        // that survives the sync lowers the wallet.
+                        var step = SparklePoints.AfterBalanceRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost, afterSync);
+                        if (step == SparklePoints.RefusalStep.SyncAndRetry)
+                        {
+                            if (await SyncBeforeRetryAsync())
+                            {
+                                App.Logger?.Information("Skill purchase: balance refusal at {Server} vs local {Local}, synced, asking again",
+                                    result.SkillPoints, settings.SkillPoints);
+                                return await PurchaseSkillAsync(skillId, afterSync: true);
+                            }
+                            // No sync reached the server: keep the wallet, the next sync settles it.
+                            return (false, result.Error ?? "Purchase failed");
+                        }
                         var adopted = SparklePoints.AdoptAfterRefusal(settings.SkillPoints, result.SkillPoints, refusedSkill.Cost);
                         if (adopted.HasValue)
                         {
@@ -4548,7 +4653,7 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+            var timestamp = ServerClock.UtcNow.ToUnixTimeSeconds().ToString(); // server-corrected: a skewed PC clock 403s every sync
             var payload = $"{timestamp}:{body}";
 
             // Key derived from unified_id + embedded app key
@@ -4569,6 +4674,9 @@ namespace ConditioningControlPanel.Services
 
         private long _lastSettingsBackupTicks = 0;
         private static readonly long SettingsBackupDebounceTicks = TimeSpan.FromMinutes(5).Ticks;
+        private int _backupRefusedTooLarge;   // 1 after a 413: automatic backups stop for the session
+        private int _loggedBackupOversize;    // log the largest settings once, not every five minutes
+        private int _loggedBackupTrim;
 
         /// <summary>
         /// Properties to exclude from settings backup (server-authoritative or identity fields).
@@ -4593,7 +4701,28 @@ namespace ConditioningControlPanel.Services
             nameof(AppSettings.CustomAssetsPath),
             nameof(AppSettings.DiscordWebhookUrl),
             nameof(AppSettings.LastSeenUtc), // Local-only greeting timestamp — must never leave the device.
+            // Documented local only: a restore on another PC must not switch presence sharing on.
+            nameof(AppSettings.FriendsPresenceShared),
+            nameof(AppSettings.ModPersonalityPreset),
         };
+
+        /// <summary>
+        /// Every Chaster setting (the master switch, the prices, the lock, both limits and their
+        /// waiting raises, pause, relock, consent, the ladder name). Device-local like the link itself:
+        /// a cloud restore must never switch the tab on, add prices, or land a limit raise without its
+        /// 24 hour wait. Found by name so a new Chaster* setting is covered the day it is added.
+        /// </summary>
+        internal static readonly System.Reflection.PropertyInfo[] ChasterLocalProperties =
+            typeof(AppSettings).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                .Where(p => p.Name.StartsWith("Chaster", StringComparison.Ordinal)
+                            && p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0
+                            && !Attribute.IsDefined(p, typeof(JsonIgnoreAttribute)))
+                .ToArray();
+
+        /// <summary>True when a backup must not carry this property.</summary>
+        internal static bool IsExcludedFromBackup(string name) =>
+            ExcludedBackupProperties.Contains(name)
+            || (name != null && name.StartsWith("Chaster", StringComparison.OrdinalIgnoreCase));
 
         /// <summary>
         /// The other half of <see cref="ExcludedBackupProperties"/>. A backup never carries these,
@@ -4611,6 +4740,22 @@ namespace ConditioningControlPanel.Services
             restored.CustomAssetsPath = current.CustomAssetsPath;
             restored.DiscordWebhookUrl = current.DiscordWebhookUrl;
             restored.LastSeenUtc = current.LastSeenUtc;
+            restored.FriendsPresenceShared = current.FriendsPresenceShared;
+            restored.ModPersonalityPreset = current.ModPersonalityPreset; // the setter copies
+            // A backup over budget leaves out the per-file asset lists (SettingsBackupBudget), so
+            // an empty list in the restore may just mean "not carried": keep this PC's own.
+            if (restored.DisabledAssetPaths.Count == 0 && current.DisabledAssetPaths.Count > 0)
+                restored.DisabledAssetPaths = new HashSet<string>(current.DisabledAssetPaths);
+            if (restored.ActiveAssetPaths.Count == 0 && current.ActiveAssetPaths.Count > 0)
+                restored.ActiveAssetPaths = new HashSet<string>(current.ActiveAssetPaths);
+            if (restored.AssetPresets.Count == 0 && current.AssetPresets.Count > 0)
+                restored.AssetPresets = new List<AssetPreset>(current.AssetPresets);
+            foreach (var p in ChasterLocalProperties)
+            {
+                var v = p.GetValue(current);
+                if (v is List<string> list) v = new List<string>(list);
+                p.SetValue(restored, v);
+            }
         }
 
         /// <summary>
@@ -4630,6 +4775,12 @@ namespace ConditioningControlPanel.Services
             if (!force && App.Settings?.RestoredFromBackup == true)
             {
                 App.Logger?.Debug("Settings cloud backup skipped — local settings came from a daily backup and have not been reconciled yet");
+                return false;
+            }
+
+            if (!force && Interlocked.CompareExchange(ref _backupRefusedTooLarge, 0, 0) == 1)
+            {
+                App.Logger?.Debug("Settings backup skipped (server refused the last one as too large)");
                 return false;
             }
 
@@ -4677,30 +4828,36 @@ namespace ConditioningControlPanel.Services
                 var fullJson = JsonConvert.SerializeObject(settings, Formatting.None);
                 var obj = Newtonsoft.Json.Linq.JObject.Parse(fullJson);
 
-                foreach (var prop in ExcludedBackupProperties)
+                foreach (var key in obj.Properties().Select(p => p.Name).ToList())
                 {
-                    // Remove by JSON property name (which may differ from C# property name)
-                    // Find the matching key case-insensitively
-                    var key = obj.Properties()
-                        .FirstOrDefault(p => string.Equals(p.Name, prop, StringComparison.OrdinalIgnoreCase))?.Name;
-                    if (key != null) obj.Remove(key);
+                    // JSON names may differ in case from the C# names; match case-insensitively.
+                    if (IsExcludedFromBackup(key)) obj.Remove(key);
                 }
 
-                var strippedJson = obj.ToString(Formatting.None);
-
-                // Gzip compress
-                byte[] compressedBytes;
-                using (var output = new MemoryStream())
+                // Gzip + base64 under the server's 1 MB body limit. The unbounded per-file asset
+                // lists are trimmed first; still too big and the backup is skipped rather than sent
+                // to earn a 413 every five minutes (see SettingsBackupBudget).
+                var encoded = SettingsBackupBudget.Encode(obj);
+                if (!encoded.Fits)
                 {
-                    using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+                    if (Interlocked.Exchange(ref _loggedBackupOversize, 1) == 0)
                     {
-                        var jsonBytes = Encoding.UTF8.GetBytes(strippedJson);
-                        await gzip.WriteAsync(jsonBytes, 0, jsonBytes.Length);
+                        var largest = string.Join(", ", SettingsBackupBudget.LargestProperties(obj)
+                            .Select(x => $"{x.Name}={x.Bytes}"));
+                        App.Logger?.Warning("Settings backup skipped: {Size} bytes encoded is over the {Max} budget even after trimming [{Trimmed}]. Largest: {Largest}",
+                            encoded.Base64.Length, SettingsBackupBudget.MaxEncodedBytes,
+                            string.Join(",", encoded.Trimmed), largest);
                     }
-                    compressedBytes = output.ToArray();
+                    return false;
+                }
+                if (encoded.Trimmed.Count > 0 && Interlocked.Exchange(ref _loggedBackupTrim, 1) == 0)
+                {
+                    App.Logger?.Information("Settings backup trimmed to fit: left out {Trimmed}",
+                        string.Join(",", encoded.Trimmed));
                 }
 
-                var base64Data = Convert.ToBase64String(compressedBytes);
+                var compressedBytes = encoded.Compressed;
+                var base64Data = encoded.Base64;
 
                 var requestData = new
                 {
@@ -4722,6 +4879,14 @@ namespace ConditioningControlPanel.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     if (await MergedAccountRecovery.TryHandleAsync(response)) return false;
+                    if ((int)response.StatusCode == 413)
+                    {
+                        // The same body will be refused again: stop for this session.
+                        Interlocked.Exchange(ref _backupRefusedTooLarge, 1);
+                        App.Logger?.Warning("Settings backup refused as too large (413, {Size} bytes encoded); no more automatic backups this session",
+                            base64Data.Length);
+                        return false;
+                    }
                     await HandleUnauthorizedAsync(response);
                     var error = await response.Content.ReadAsStringAsync();
                     App.Logger?.Warning("Settings backup failed: {Status} - {Error}", response.StatusCode, error);
@@ -5008,9 +5173,34 @@ namespace ConditioningControlPanel.Services
         /// no-op. Nothing is lost in any ordering, because both choices are pure functions of a
         /// lifetime XP total that never moves.</para>
         /// </summary>
+        /// <summary>A server-recorded Cycle choice owes Cycle I and the lasting XP bonus. Only ever
+        /// raises (a Restore echo or a missing choice changes nothing). True when it wrote.</summary>
+        internal static bool EnsureCycleBonus(AppSettings settings, string? serverChoice)
+        {
+            if (serverChoice != DescentMigrationChoices.Cycle) return false;
+            var changed = false;
+            if (settings.DescentCycle < 1) { settings.DescentCycle = 1; changed = true; }
+            if (settings.DescentCycleXpBonus < DescentMigration.CycleXpBonus)
+            {
+                settings.DescentCycleXpBonus = DescentMigration.CycleXpBonus;
+                changed = true;
+            }
+            if (changed)
+                App.Logger?.Information("[Descent] Restored the Cycle bonus from the server's record of the choice.");
+            return changed;
+        }
+
         private static void HandleDescentMigrationAck(AppSettings settings, V2DescentMigration? block)
         {
             if (block?.Completed != true) return;
+
+            // THE CYCLE BONUS FOLLOWS THE ACCOUNT, NOT THE PC. ApplyChoice writes it on the machine
+            // that took the ceremony, and nothing else ever did: a second PC, a reinstall, or a
+            // settings file replaced by another account (support ticket, 2026-09-24) kept the
+            // choice on the server and lost the permanent +10% XP. The ack rides every sync, so
+            // it heals here, before the "already settled" return.
+            if (EnsureCycleBonus(settings, block.Choice)) App.Settings?.Save();
+
             if (settings.DescentMigrationCompleted) return;   // already settled; idempotent
 
             // Prefer the server's echo of the choice; fall back to what we submitted. They can

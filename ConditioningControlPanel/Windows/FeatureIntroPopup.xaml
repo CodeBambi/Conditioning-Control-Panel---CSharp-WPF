@@ -12,7 +12,7 @@
         PreviewKeyDown="Window_PreviewKeyDown"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
-    <Border x:Name="CardBorder" Background="#F0151530" CornerRadius="14"
+    <Border x:Name="CardBorder" Background="#FF151528" CornerRadius="14"
             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
             Margin="10">
         <Border.Effect>
@@ -45,7 +45,7 @@
                     <TextBlock x:Name="RailGlyph"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Margin="0,0,0,30"
-                               FontSize="64" TextAlignment="Center"/>
+                               FontSize="64" TextAlignment="Center" Foreground="#E4E4F0"/>
 
                     <TextBlock x:Name="TxtRailTitle" VerticalAlignment="Bottom"
                                Margin="12,0,12,18"
@@ -77,15 +77,16 @@
                 </Button.Style>
             </Button>
 
-            <StackPanel Grid.Column="1" Margin="24,22,24,20" VerticalAlignment="Center">
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="590">
+            <StackPanel Margin="24,22,24,20" VerticalAlignment="Center">
                 <TextBlock x:Name="TxtTitle"
                            Foreground="{DynamicResource PinkBrush}"
-                           FontWeight="Bold" FontSize="21"
+                           FontWeight="Bold" FontSize="23"
                            TextWrapping="Wrap"
                            Margin="0,0,0,4"/>
 
                 <TextBlock x:Name="TxtTagline"
-                           Foreground="#CCD5D5E5" FontSize="13"
+                           Foreground="#E4E4F0" FontSize="14" LineHeight="21"
                            TextWrapping="Wrap"
                            Margin="0,0,0,16"/>
 
@@ -93,7 +94,7 @@
                      same accent-glyph row layout ProgramsIntroPopup authors statically. -->
                 <StackPanel x:Name="BulletsHost" Margin="0,0,0,6"/>
 
-                <TextBlock x:Name="TxtFooter" Foreground="#99AAAABB" FontSize="12"
+                <TextBlock x:Name="TxtFooter" Foreground="#C9C9DC" FontSize="13"
                            TextWrapping="Wrap" LineHeight="18"
                            Margin="0,4,0,16"/>
 
@@ -166,6 +167,7 @@
                     </Button>
                 </StackPanel>
             </StackPanel>
+            </ScrollViewer>
         </Grid>
     </Border>
 </Window>

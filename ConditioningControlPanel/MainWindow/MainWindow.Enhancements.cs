@@ -199,7 +199,7 @@ namespace ConditioningControlPanel
 
             // Title section
             var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 15) };
-            titleStack.Children.Add(new TextBlock
+            titleStack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "✨ " + (App.Mods?.GetEnhancementTreeTitle() ?? Loc.Get("label_enhancement_tree_title")),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
@@ -235,7 +235,7 @@ namespace ConditioningControlPanel
                     Margin = new Thickness(0, 6, 0, 0),
                     HorizontalAlignment = HorizontalAlignment.Left
                 };
-                certifiedChip.Child = new TextBlock
+                certifiedChip.Child = new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = "🎓 " + Loc.Get("skill_certified_data_bimbo_name"),
                     Foreground = new SolidColorBrush(Color.FromRgb(255, 200, 80)),
@@ -245,6 +245,48 @@ namespace ConditioningControlPanel
                 titleStack.Children.Add(certifiedChip);
             }
             mainStack.Children.Add(titleStack);
+
+            // Active Bonuses, straight under the title. They used to sit at the very bottom of
+            // this column, below the stats and the analytics card, and the column is capped
+            // (MaxHeight 430 on a fixed-height canvas), so with five bonuses up at the default
+            // window size the chips fell off the bottom edge and only showed if you knew to
+            // scroll inside the card (ticket 2026-09-24). Up here the WrapPanel always has
+            // room to wrap every chip onto its own row before anything else is drawn.
+            var breakdown = App.SkillTree?.GetMultiplierBreakdown() ?? new List<(string, double)>();
+            if (breakdown.Count > 1) // Only show if there are bonuses beyond base
+            {
+                mainStack.Children.Add(new TextBlock
+                {
+                    Text = Loc.Get("label_active_bonuses"),
+                    Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                    FontSize = 11,
+                    Margin = new Thickness(0, 0, 0, 6)
+                });
+
+                var bonusesWrap = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 9) };
+                foreach (var (source, value) in breakdown)
+                {
+                    if (source == "Base") continue; // Don't show base multiplier
+
+                    var chip = new Border
+                    {
+                        Background = new SolidColorBrush(Color.FromRgb(60, 40, 80)),
+                        CornerRadius = new CornerRadius(12),
+                        Padding = new Thickness(8, 3, 8, 3),
+                        Margin = new Thickness(0, 0, 6, 6)
+                    };
+
+                    chip.Child = new TextBlock
+                    {
+                        Text = $"{App.Mods?.MakeModAware(source) ?? source}: +{value:P0}",
+                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
+                        FontSize = 11
+                    };
+
+                    bonusesWrap.Children.Add(chip);
+                }
+                mainStack.Children.Add(bonusesWrap);
+            }
 
             // Sparkle Points display
             var pointsBorder = new Border
@@ -259,7 +301,7 @@ namespace ConditioningControlPanel
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
-            pointsStack.Children.Add(new TextBlock
+            pointsStack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "💎",
                 FontSize = 24,
@@ -362,7 +404,7 @@ namespace ConditioningControlPanel
                 FontSize = 10,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            ditzyButtonStack.Children.Add(new TextBlock
+            ditzyButtonStack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "📊 ",
                 FontSize = 12,
@@ -401,7 +443,7 @@ namespace ConditioningControlPanel
                 mainStack.Children.Add(ditzyButton);
 
             // Stats title
-            detailedStatsStack.Children.Add(new TextBlock
+            detailedStatsStack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
             {
                 Text = "📊 " + (App.Mods?.GetStatsTitle() ?? "Ditzy Data Stats"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
@@ -575,44 +617,6 @@ namespace ConditioningControlPanel
 
             statsBorder.Child = statsStack;
             mainStack.Children.Add(statsBorder);
-
-            // Active Bonuses Section
-            var breakdown = App.SkillTree?.GetMultiplierBreakdown() ?? new List<(string, double)>();
-            if (breakdown.Count > 1) // Only show if there are bonuses beyond base
-            {
-                var bonusesTitle = new TextBlock
-                {
-                    Text = "Active Bonuses:",
-                    Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
-                    FontSize = 11,
-                    Margin = new Thickness(0, 15, 0, 8)
-                };
-                mainStack.Children.Add(bonusesTitle);
-
-                var bonusesWrap = new WrapPanel { Orientation = Orientation.Horizontal };
-                foreach (var (source, value) in breakdown)
-                {
-                    if (source == "Base") continue; // Don't show base multiplier
-
-                    var chip = new Border
-                    {
-                        Background = new SolidColorBrush(Color.FromRgb(60, 40, 80)),
-                        CornerRadius = new CornerRadius(12),
-                        Padding = new Thickness(10, 5, 10, 5),
-                        Margin = new Thickness(0, 0, 8, 8)
-                    };
-
-                    chip.Child = new TextBlock
-                    {
-                        Text = $"{source}: +{value:P0}",
-                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
-                        FontSize = 11
-                    };
-
-                    bonusesWrap.Children.Add(chip);
-                }
-                mainStack.Children.Add(bonusesWrap);
-            }
 
             // The header column can outgrow the fixed-height canvas (stats + analytics
             // expanders), and the tree only scrolls horizontally — so the header scrolls
@@ -1972,7 +1976,7 @@ namespace ConditioningControlPanel
 
             if (isUnlocked)
             {
-                stack.Children.Add(new TextBlock
+                stack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = $"💎{skill.Cost} {Loc.Get("label_skill_owned")}",
                     Foreground = new SolidColorBrush(Color.FromRgb(180, 130, 255)),
@@ -1986,7 +1990,7 @@ namespace ConditioningControlPanel
                     ? Color.FromRgb(255, 215, 0)
                     : Color.FromRgb(120, 120, 120);
 
-                stack.Children.Add(new TextBlock
+                stack.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
                 {
                     Text = $"💎 {skill.Cost}",
                     Foreground = new SolidColorBrush(costColor),
@@ -2194,6 +2198,14 @@ namespace ConditioningControlPanel
             });
         }
 
+        // The ONE lucky toast window, realized on the first proc and reused for every proc after it
+        // (ccp-bugs #1312). Hidden between procs, never closed until the panel closes.
+        private Border? _luckyBorder;
+        private TextBlock? _luckyTitle;
+        private TextBlock? _luckyMultiplier;
+        private DropShadowEffect? _luckyGlow;
+        private DispatcherTimer? _luckyHoldTimer;
+
         private void OnLuckyProc(object? sender, LuckyProcEventArgs e)
         {
             // Perk-announcement opt-out (meadow, 2026-08-18). The roll already happened and the
@@ -2206,110 +2218,144 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Close previous lucky popup if still showing
-                    try { _luckyProcPopup?.Close(); } catch { }
+                    // ccp-bugs #1312: a game surface owns the screen (the Back Room's prize shows fire
+                    // bursts of procs), so the toast stays down; and any proc that lands while the
+                    // toast is up refreshes it instead of building another layered window.
+                    var decision = Services.UI.LuckyToastRule.Decide(
+                        App.PerkNotificationsSuppressed,
+                        AnyGameSurfaceOwnsTheScreen(),
+                        _luckyProcPopup?.IsVisible == true);
+                    if (decision == Services.UI.LuckyToastRule.Decision.Skip) return;
 
+                    var popup = EnsureLuckyToast();
                     var isGold = e.ProcType.Contains("Flash");
                     var glowColor = isGold
                         ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00)
                         : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4);
+                    _luckyBorder!.BorderBrush = new SolidColorBrush(glowColor);
+                    _luckyGlow!.Color = glowColor;
+                    _luckyTitle!.Foreground = new SolidColorBrush(glowColor);
+                    _luckyMultiplier!.Text = $"{e.Multiplier}x XP!";
 
-                    var border = new Border
+                    // Cancel a fade-out in flight and hold at full opacity again.
+                    popup.BeginAnimation(Window.OpacityProperty, null);
+                    if (decision == Services.UI.LuckyToastRule.Decision.Show)
                     {
-                        Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE0, 0x15, 0x15, 0x30)),
-                        CornerRadius = new CornerRadius(12),
-                        BorderBrush = new SolidColorBrush(glowColor),
-                        BorderThickness = new Thickness(2),
-                        Padding = new Thickness(20, 12, 20, 12),
-                        Effect = new DropShadowEffect
-                        {
-                            Color = glowColor,
-                            BlurRadius = 30,
-                            ShadowDepth = 0,
-                            Opacity = 0.8
-                        }
-                    };
-
-                    var stack = new StackPanel { Orientation = Orientation.Vertical, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
-                    stack.Children.Add(new TextBlock
+                        popup.Opacity = 0;
+                        popup.Show();
+                        popup.BeginAnimation(Window.OpacityProperty,
+                            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)));
+                    }
+                    else
                     {
-                        Text = "LUCKY!",
-                        Foreground = new SolidColorBrush(glowColor),
-                        FontWeight = FontWeights.Bold,
-                        FontSize = 22,
-                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center
-                    });
-                    stack.Children.Add(new TextBlock
-                    {
-                        Text = $"{e.Multiplier}x XP!",
-                        Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xB6, 0xC1)),
-                        FontSize = 14,
-                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                        Margin = new Thickness(0, 4, 0, 0)
-                    });
+                        popup.Opacity = 1;
+                    }
+                    PlaceLuckyToast(popup);
 
-                    border.Child = stack;
-
-                    var popup = new Window
-                    {
-                        WindowStyle = WindowStyle.None,
-                        AllowsTransparency = true,
-                        Background = System.Windows.Media.Brushes.Transparent,
-                        Topmost = true,
-                        ShowInTaskbar = false,
-                        ShowActivated = false,
-                        SizeToContent = SizeToContent.WidthAndHeight,
-                        Content = border
-                    };
-
-                    // Position at top-center of primary screen
-                    popup.Loaded += (s, args) =>
-                    {
-                        try
-                        {
-                            var workArea = SystemParameters.WorkArea;
-                            popup.Left = workArea.Left + (workArea.Width - popup.ActualWidth) / 2;
-                            popup.Top = workArea.Top + 40;
-                        }
-                        catch { }
-                    };
-
-                    _luckyProcPopup = popup;
-
-                    // Fade in
-                    popup.Opacity = 0;
-                    popup.Show();
-
-                    var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200));
-                    popup.BeginAnimation(Window.OpacityProperty, fadeIn);
-
-                    // Auto-close after 3 seconds with fade-out
-                    var closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-                    closeTimer.Tick += (s, args) =>
-                    {
-                        closeTimer.Stop();
-                        try
-                        {
-                            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
-                            fadeOut.Completed += (s2, args2) =>
-                            {
-                                try { popup.Close(); } catch { }
-                                if (_luckyProcPopup == popup) _luckyProcPopup = null;
-                            };
-                            popup.BeginAnimation(Window.OpacityProperty, fadeOut);
-                        }
-                        catch
-                        {
-                            try { popup.Close(); } catch { }
-                        }
-                    };
-                    closeTimer.Start();
+                    _luckyHoldTimer!.Stop();
+                    _luckyHoldTimer.Start();
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Debug("Lucky proc popup failed: {Error}", ex.Message);
                 }
             });
+        }
+
+        /// <summary>Builds the toast window once. Every later proc reuses it.</summary>
+        private Window EnsureLuckyToast()
+        {
+            if (_luckyProcPopup != null) return _luckyProcPopup;
+
+            _luckyGlow = new DropShadowEffect { BlurRadius = 30, ShadowDepth = 0, Opacity = 0.8 };
+            _luckyTitle = new TextBlock
+            {
+                Text = "LUCKY!",
+                FontWeight = FontWeights.Bold,
+                FontSize = 22,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+            };
+            _luckyMultiplier = new TextBlock
+            {
+                Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xB6, 0xC1)),
+                FontSize = 14,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            var stack = new StackPanel { Orientation = Orientation.Vertical, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
+            stack.Children.Add(_luckyTitle);
+            stack.Children.Add(_luckyMultiplier);
+
+            _luckyBorder = new Border
+            {
+                Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE0, 0x15, 0x15, 0x30)),
+                CornerRadius = new CornerRadius(12),
+                BorderThickness = new Thickness(2),
+                Padding = new Thickness(20, 12, 20, 12),
+                Effect = _luckyGlow,
+                Child = stack
+            };
+
+            var popup = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Topmost = true,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                Focusable = false,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                Content = _luckyBorder
+            };
+            popup.SizeChanged += (_, _) => PlaceLuckyToast(popup);
+
+            // Hold 3 s after the LAST proc, then fade out and HIDE (never close: the window is reused).
+            _luckyHoldTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _luckyHoldTimer.Tick += (_, _) =>
+            {
+                _luckyHoldTimer.Stop();
+                try
+                {
+                    var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
+                    fadeOut.Completed += (_, _) =>
+                    {
+                        // A proc that landed during the fade restarted the hold: leave it up.
+                        if (_luckyHoldTimer.IsEnabled) return;
+                        try { popup.BeginAnimation(Window.OpacityProperty, null); popup.Hide(); } catch { }
+                    };
+                    popup.BeginAnimation(Window.OpacityProperty, fadeOut);
+                }
+                catch
+                {
+                    try { popup.Hide(); } catch { }
+                }
+            };
+
+            _luckyProcPopup = popup;
+            return popup;
+        }
+
+        /// <summary>Top-centre of the primary work area.</summary>
+        private static void PlaceLuckyToast(Window popup)
+        {
+            try
+            {
+                var workArea = SystemParameters.WorkArea;
+                if (popup.ActualWidth > 0)
+                    popup.Left = workArea.Left + (workArea.Width - popup.ActualWidth) / 2;
+                popup.Top = workArea.Top + 40;
+            }
+            catch { }
+        }
+
+        /// <summary>Real close of the reused toast, from the panel's shutdown path: a hidden window
+        /// still counts against OnLastWindowClose.</summary>
+        private void CloseLuckyToast()
+        {
+            try { _luckyHoldTimer?.Stop(); } catch { }
+            try { _luckyProcPopup?.Close(); } catch { }
+            _luckyProcPopup = null;
         }
 
         #endregion

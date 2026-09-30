@@ -179,8 +179,8 @@ const SCORES = {
     }
     return notes;
   },
-  /** THE WORD's bed: the whisper shimmer under a spoken subliminal word (the speech is another lane's
-   *  speechSynthesis call, never made here). 0.9 s of breathy filtered noise with a gentle downward filter
+  /** THE WORD's bed: the whisper shimmer under a spoken subliminal word (the word itself is the host's
+   *  recorded clip, never made here). 0.9 s of breathy filtered noise with a gentle downward filter
    *  sweep and one faint high sine. `index` 0..2 puts the second and third words of a chain a whole tone up. */
   word({ index = 0, level = 1 } = {}) {
     const i = clamp(Math.floor(num(index, 0)), 0, 2), up = SEMI(2 * i), lv = clamp(num(level, 1), 0, 1);

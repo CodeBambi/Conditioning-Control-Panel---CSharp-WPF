@@ -63,9 +63,9 @@ function lathe(points, segments = 40) {
 
 /** Every number the silicone and its contact patch are made of. */
 export const SKIN_TUNING = Object.freeze({
-  roughness: 0.33,
-  clearcoat: 0.42,          // was 0.6: a hard gloss over a dark body is a shell
-  clearcoatRoughness: 0.28,
+  roughness: 0.43,
+  clearcoat: 0.26,          // was 0.6: a hard gloss over a dark body is a shell
+  clearcoatRoughness: 0.38,
   sheen: 0.72,
   sheenRoughness: 0.52,
   // Fake subsurface. Not transmission and not thickness: those two are what
@@ -222,7 +222,6 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
   const glb = new Map();          // "type:side" -> art from a supplied glb
   const bySquare = new Map();     // square -> piece object
   let wobble = 0;
-  let clock = 0;
 
   const artKey = (type, side) => type + ':' + side;
   const artFor = (type, side) => glb.get(artKey(type, side)) || null;
@@ -273,6 +272,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     root.userData = {
       type, side, material: mat, materials: mats,
       scaleBase: art ? art.height : HEIGHT[type],
+      artSource: art?.source || 'placeholder',
       phase: Math.random() * Math.PI * 2,
     };
     if (jiggle) jiggle.attach(root);
@@ -298,9 +298,11 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
 
   /** Position map: { e1: {type:'k', side:'w'}, ... }. Rebuilds only what moved. */
   function setPosition(map) {
+    const replacements = new Map();
     for (const [sq, piece] of [...bySquare]) {
       const want = map[sq];
       if (!want || want.type !== piece.userData.type || want.side !== piece.userData.side) {
+        if (want?.side === piece.userData.side) replacements.set(sq, piece);
         group.remove(piece);
         bySquare.delete(sq);
       }
@@ -310,6 +312,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
       const { type, side } = map[sq];
       const piece = build(type, side);
       place(piece, sq);
+      if (replacements.has(sq)) hooks.onReplaced?.(replacements.get(sq), piece);
       group.add(piece);
       bySquare.set(sq, piece);
     }
@@ -332,7 +335,8 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     const was = piece.position.clone();
     place(piece, to);
     bySquare.set(to, piece);
-    if (hooks.onMoved) hooks.onMoved(piece, was);
+    if (hooks.onMoved) hooks.onMoved(piece, was, squareToWorld(from, 0));
+    jiggle?.follow?.(piece);
     return piece;
   }
 
@@ -373,17 +377,10 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     }
   }
 
-  function update(dt) {
-    clock += dt;
+  function update() {
+    // Idle life bends the body in jiggle.js. Root transforms belong to moves,
+    // captures and poses, so every resting base stays planted on its square.
     updateContacts();
-    if (wobble <= 0.001) return;
-    for (const piece of bySquare.values()) {
-      if (piece.userData.held || piece.userData.busy) continue;
-      const ph = piece.userData.phase;
-      piece.rotation.z = Math.sin(clock * 1.7 + ph) * 0.055 * wobble;
-      piece.rotation.x = Math.sin(clock * 1.3 + ph * 1.7) * 0.04 * wobble;
-      piece.position.y = Math.abs(Math.sin(clock * 0.9 + ph)) * 0.025 * wobble;
-    }
   }
 
   // --- optional glb art ------------------------------------------------------
@@ -400,6 +397,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
    *   -> { geometry, trims: [{geometry, material}], height }
    */
   async function loadArt(url) {
+    url += '?v=sculpted-0927';
     const head = await fetch(url, { method: 'HEAD' });
     if (!head.ok) return null;
     if (!loader) {
@@ -422,6 +420,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     let height = 0;
     for (const m of meshes) if (m.geometry.boundingBox) height = Math.max(height, m.geometry.boundingBox.max.y);
     return {
+      source: url,
       geometry: meshes[body].geometry,
       trims: meshes.filter((_, i) => i !== body),
       height: height > 0.05 ? height : 1,

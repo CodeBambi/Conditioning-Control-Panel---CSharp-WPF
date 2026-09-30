@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -142,6 +142,22 @@ namespace ConditioningControlPanel.Models
         DriftBounce,
         Pendulum,
         Mix
+    }
+
+    /// <summary>
+    /// How a flash leaves when it is clicked or popped (owner, 2026-09-28; Mix is the default).
+    /// Compositor flashes only; a timed-out flash keeps its soft fade and an owned Shatter still
+    /// wins. None is the old plain cut. See Services/Flash/FlashExit.cs.
+    /// </summary>
+    public enum FlashExitStyle
+    {
+        Mix,
+        Pop,
+        TvOff,
+        Spiral,
+        Melt,
+        Glitch,
+        None
     }
 
     /// <summary>
@@ -344,13 +360,27 @@ namespace ConditioningControlPanel.Models
 
         private int _selectedAvatarSet = 0; // 0 = auto (use max unlocked)
         /// <summary>
-        /// User's selected avatar set (1-6). 0 means auto-select highest unlocked.
+        /// User's selected avatar set. 0 means auto-select highest unlocked.
         /// </summary>
         public int SelectedAvatarSet
         {
             get => _selectedAvatarSet;
-            set { _selectedAvatarSet = Math.Clamp(value, 0, 7); OnPropertyChanged(); }
+            set
+            {
+                _selectedAvatarSet = Math.Clamp(value, 0,
+                    Services.Companion.CompanionExperience.IsV2Enabled ? int.MaxValue : 7);
+                OnPropertyChanged();
+            }
         }
+
+        // Retired with tube EMI (companion pivot, 2026-09-25). Kept only so settings files that
+        // carry these keys still load; nothing reads or writes them.
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
+        public bool CompanionEmiPreviewChoiceMade { get; set; }
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
+        public bool CompanionEmiFixedVoiceApplied { get; set; }
+        [Obsolete("Tube EMI was retired as the companion (2026-09-25).")]
+        public int CompanionEmiVoiceRevision { get; set; }
 
         private bool _welcomed = false;
         public bool Welcomed
@@ -1098,6 +1128,26 @@ namespace ConditioningControlPanel.Models
         {
             get => _flashGazeDisabledByDecoupling;
             set { _flashGazeDisabledByDecoupling = value; OnPropertyChanged(); }
+        }
+
+        private FlashExitStyle _flashExitStyle = FlashExitStyle.Mix;
+        /// <summary>How a clicked or popped flash leaves (compositor path). Mix by default. See FlashExit.</summary>
+        [JsonProperty("FlashExitStyle")]
+        public FlashExitStyle FlashExitStyle
+        {
+            get => _flashExitStyle;
+            set { _flashExitStyle = value; OnPropertyChanged(); }
+        }
+
+        private bool _flashStayUntilPopped = false;
+        /// <summary>
+        /// Ambient flashes stay on screen until clicked (or popped by a stare), up to a 10-minute
+        /// safety lifetime and 40 on screen. Needs <see cref="FlashClickable"/>. See FlashStayRule.
+        /// </summary>
+        public bool FlashStayUntilPopped
+        {
+            get => _flashStayUntilPopped;
+            set { _flashStayUntilPopped = value; OnPropertyChanged(); }
         }
 
         private bool _corruptionMode = false; // Hydra effect
@@ -2263,6 +2313,55 @@ namespace ConditioningControlPanel.Models
         {
             get => _assetPresets;
             set { _assetPresets = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modDefaultSettingsPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the settings preset (Preset.Id) to load each time that mod is switched to,
+        /// picked in the Customise window. "" = the user chose "Keep current" on purpose; a missing
+        /// key = never chosen. Local only. See Services/ModPresetDefaults.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModDefaultSettingsPreset
+        {
+            get => _modDefaultSettingsPreset;
+            set { _modDefaultSettingsPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modDefaultAssetPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Per mod id, the asset preset (AssetPreset.Id) to apply on switching to it. Same rules.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModDefaultAssetPreset
+        {
+            get => _modDefaultAssetPreset;
+            set { _modDefaultAssetPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, int> _modAvatarSet = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the companion look (avatar set or portrait skin) last switched to in that
+        /// mod, put back when the mod is switched to again. A missing key = never switched there;
+        /// <see cref="SelectedAvatarSet"/> is the fallback. Local only. See
+        /// Services/Companion/ModAvatarLooks.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, int> ModAvatarSet
+        {
+            get => _modAvatarSet;
+            set { _modAvatarSet = new Dictionary<string, int>(value ?? new Dictionary<string, int>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, string> _modPersonalityPreset = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Per mod id, the companion personality (PersonalityPreset.Id) last picked in that mod,
+        /// put back when the mod is switched to again. A missing key = never picked there; the
+        /// mod's own default applies. Local only. See Services/Companion/ModPersonalityPicks.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> ModPersonalityPreset
+        {
+            get => _modPersonalityPreset;
+            set { _modPersonalityPreset = new Dictionary<string, string>(value ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); OnPropertyChanged(); }
         }
 
         private string? _currentAssetPresetId = null;
@@ -4718,8 +4817,8 @@ namespace ConditioningControlPanel.Models
             { "EMPTY", true },
             { "MINDLESS", true },
             { "OBEDIENT", true },
-            { "PRETTY", true },
-            { "PINK", true },
+            { "RELAX", true },
+            { "SINK", true },
             { "DROP", true }
         };
         public Dictionary<string, bool> BouncingTextPool
@@ -4974,6 +5073,20 @@ namespace ConditioningControlPanel.Models
             set { _brainDrainMeltEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _brainDrainKeepPicturesClear = false;
+        /// <summary>
+        /// Brain Drain blurs everything EXCEPT the app's own pictures: flashes, videos, lock cards,
+        /// subliminals and bubbles stay sharp over the blurred desktop. The blur window is tucked
+        /// under the lowest CCP window in the topmost band (OverlayService, BrainDrainKeepClear).
+        /// Off by default so the classic look does not change under anyone.
+        /// </summary>
+        [JsonProperty]
+        public bool BrainDrainKeepPicturesClear
+        {
+            get => _brainDrainKeepPicturesClear;
+            set { _brainDrainKeepPicturesClear = value; OnPropertyChanged(); }
+        }
+
         private bool _allowOverlayCapture = false;
         /// <summary>
         /// Opt-in: let the Brain Drain screen effect appear in screenshots, recordings and screen
@@ -5123,6 +5236,19 @@ namespace ConditioningControlPanel.Models
             set { _friendsPresenceShared = value; OnPropertyChanged(); }
         }
 
+        private bool _friendNotificationsEnabled = true;
+        /// <summary>
+        /// FRIENDS (2026-09-27): corner notices for pokes, knocks and requests. On by default; the
+        /// bell in the drawer foot flips it. Off keeps the Inbox rows and the cue. Not on the profile
+        /// sync; rides the cloud settings backup like any other preference.
+        /// </summary>
+        [JsonProperty]
+        public bool FriendNotificationsEnabled
+        {
+            get => _friendNotificationsEnabled;
+            set { _friendNotificationsEnabled = value; OnPropertyChanged(); }
+        }
+
         // ---- CHASTER: Circe's tab (Services/Chaster) ----
         // Device-local on purpose, like the link itself: none of these ride the cloud profile.
         private bool _chasterTabEnabled;
@@ -5166,6 +5292,30 @@ namespace ConditioningControlPanel.Models
         {
             get => _chasterPrices;
             set { _chasterPrices = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, int> _chasterPriceOverrides = new();
+
+        /// <summary>The player's own figures for price rows, id to unsigned seconds (TabPriceEdit).
+        /// Empty = the table's defaults. Set on the tab page only while no lock runs; read through
+        /// TabPriceEdit, which keeps each row's sign and clamps the size.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, int> ChasterPriceOverrides
+        {
+            get => _chasterPriceOverrides;
+            set { _chasterPriceOverrides = value ?? new Dictionary<string, int>(); OnPropertyChanged(); }
+        }
+
+        private bool _chasterFlashDodge;
+
+        /// <summary>Natasha's favourite on flashes. Off (the default): flashes are never red, only
+        /// bubbles are. On: about one flash in ten is red with a 4 s ring; dismiss or fling it in
+        /// time and nothing books, let the ring empty and it is +5:00.</summary>
+        [JsonProperty]
+        public bool ChasterFlashDodge
+        {
+            get => _chasterFlashDodge;
+            set { _chasterFlashDodge = value; OnPropertyChanged(); }
         }
 
         private int _chasterDailyLimitMinutes = 180;
@@ -5262,6 +5412,31 @@ namespace ConditioningControlPanel.Models
             set { _chasterRelockPastEnd = value; OnPropertyChanged(); }
         }
 
+        private bool _chasterRafflePostDays;
+
+        /// <summary>Opt-in (owner, 2026-09-26): "Post my days in Discord" for the Locktober raffle.
+        /// On = the bot's daily digest lists this account's display name, yesterday's CCP-added
+        /// time, the month's total and days counted, and the ticket list shows the name. Off = never
+        /// in the digest, and only a per-month label on the ticket list. Off by default.</summary>
+        [JsonProperty]
+        public bool ChasterRafflePostDays
+        {
+            get => _chasterRafflePostDays;
+            set { _chasterRafflePostDays = value; OnPropertyChanged(); }
+        }
+
+        private bool _chasterLadderShowName;
+
+        /// <summary>Opt-in (owner, 2026-09-26): show the account's display name on the month's top
+        /// ten, the pinned scrap beside the raffle (brag rights only). Off = the server shows a label
+        /// it makes up per month. Off by default; separate from <see cref="ChasterRafflePostDays"/>.</summary>
+        [JsonProperty]
+        public bool ChasterLadderShowName
+        {
+            get => _chasterLadderShowName;
+            set { _chasterLadderShowName = value; OnPropertyChanged(); }
+        }
+
         // ---- THE BACK ROOM: media source and its own three audio levels (CONTRACT 10.14) ----
         // These are the room's own switches, shown in the room's Options and not in Settings, the same
         // way BackRoomTunnel and BackRoomMelt are. They are deliberately NOT the app-wide MediaSource /
@@ -5353,6 +5528,31 @@ namespace ConditioningControlPanel.Models
         {
             get => _backRoomMusicVolume;
             set { _backRoomMusicVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        private int _breakoutSubVolume = 100, _breakoutSfxVolume = 100, _breakoutMusicVolume = 15;
+        /// <summary>Standalone Breakout's own voice level (0-100), separate from the Back Room's (owner, 2026-09-27).</summary>
+        [JsonProperty]
+        public int BreakoutSubVolume
+        {
+            get => _breakoutSubVolume;
+            set { _breakoutSubVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        /// <summary>Standalone Breakout's own sound effects level (0-100).</summary>
+        [JsonProperty]
+        public int BreakoutSfxVolume
+        {
+            get => _breakoutSfxVolume;
+            set { _breakoutSfxVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        /// <summary>Standalone Breakout's own music level (0-100). Default 15, the level the page scales its bed from.</summary>
+        [JsonProperty]
+        public int BreakoutMusicVolume
+        {
+            get => _breakoutMusicVolume;
+            set { _breakoutMusicVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
         private bool _videoForceHardwareDecoding = false;
@@ -5782,6 +5982,14 @@ namespace ConditioningControlPanel.Models
 
         #region Companion Leveling System (v5.3)
 
+        private CompanionBonusType? _companionPerk;
+        /// <summary>Independent preview perk. Null inherits the current bundle until first use.</summary>
+        public CompanionBonusType? CompanionPerk
+        {
+            get => _companionPerk;
+            set { _companionPerk = value.HasValue && Enum.IsDefined(value.Value) ? value : null; OnPropertyChanged(); }
+        }
+
         private int _activeCompanionId = 0;
         /// <summary>
         /// Currently active companion (0=OG Bambi Sprite, 1=Cult Bunny, 2=Brain Parasite, 3=Bambi Trainer).
@@ -6088,11 +6296,13 @@ namespace ConditioningControlPanel.Models
             set { _randomBubbleEnabled = value; OnPropertyChanged(); }
         }
 
-        // Fresh-install list: the neutral CCP Default triggers plus the two phrases from the old
-        // default list that carried no theme, so Trigger Mode still ships a usable spread.
+        // Fresh-install list: the neutral CCP Default triggers plus two more classic neutral phrases,
+        // so Trigger Mode still ships a usable spread. Not "SNAP AND FORGET": that is a BambiSleep
+        // trigger with its own Bambi-voiced clip in Resources\sub_audio, which Trigger Mode plays by
+        // exact name, so a fresh CCP Default install spoke in Bambi's voice (pivot audit 2026-09-25).
         private List<string> _customTriggers = new(BuiltInMods.CCPDefault.CustomTriggers ?? new List<string>())
         {
-            "SNAP AND FORGET",
+            "LET GO",
             "SAFE AND SECURE"
         };
         /// <summary>
@@ -8058,6 +8268,103 @@ namespace ConditioningControlPanel.Models
             set { _goonLastOpponentJson = value ?? ""; OnPropertyChanged(); }
         }
 
+        private string _goonMediaFlavour = "";
+        /// <summary>
+        /// The Goon Game's picture flavour (trance, pink, frills, shiny, censored, mine), or ""
+        /// when the player never picked. A non-empty pick IS the player's opt-in to online
+        /// pictures for this game only; the app-wide MediaSource is not read. Written by
+        /// GoonHostService from the page's media-flavour frame, echoed in init.
+        /// </summary>
+        [JsonProperty("goonMediaFlavour")]
+        public string GoonMediaFlavour
+        {
+            get => _goonMediaFlavour;
+            set { _goonMediaFlavour = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _goonMediaCustom = "";
+        /// <summary>
+        /// The page's per-flavour niche edits, as a JSON object string
+        /// { flavourId: { on:[], off:[], added:[] } }. Opaque to the host beyond a size cap
+        /// and a parse check; the page owns its shape. "" = no edits.
+        /// </summary>
+        [JsonProperty("goonMediaCustom")]
+        public string GoonMediaCustom
+        {
+            get => _goonMediaCustom;
+            set { _goonMediaCustom = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _goonMediaSubs = "";
+        /// <summary>
+        /// The last validated niche list the page computed for the pick (comma-joined, max 8),
+        /// so a returning player's pictures start at page ready before the page says anything.
+        /// </summary>
+        [JsonProperty("goonMediaSubs")]
+        public string GoonMediaSubs
+        {
+            get => _goonMediaSubs;
+            set { _goonMediaSubs = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _goonMediaOnline = true;
+        /// <summary>
+        /// Online pictures for the Goon Game. Off = the host fetches nothing and posts
+        /// online-media state 'off'. Default on, but nothing is fetched until a flavour is picked.
+        /// </summary>
+        [JsonProperty("goonMediaOnline")]
+        public bool GoonMediaOnline
+        {
+            get => _goonMediaOnline;
+            set { _goonMediaOnline = value; OnPropertyChanged(); }
+        }
+
+        // ---- Piece by Piece pictures (2026-09-28) ----
+        // The chess game's Distraction pictures: the Goon Game's flavour model, host-owned.
+
+        private string _pbpMediaFlavour = "";
+        /// <summary>
+        /// Piece by Piece's picture flavour (trance, pink, frills, shiny, censored, mine), or ""
+        /// when never picked. Remembered as a preselection only: a pick counts as the online
+        /// opt-in for the window it was made in, unless the app-wide online source is already
+        /// consented (MediaSource not local and HasRemoteMediaConsent).
+        /// </summary>
+        [JsonProperty("pbpMediaFlavour")]
+        public string PbpMediaFlavour
+        {
+            get => _pbpMediaFlavour;
+            set { _pbpMediaFlavour = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _pbpMediaCustom = "";
+        /// <summary>The chess page's per-flavour niche edits as a JSON object string, same shape
+        /// and caps as <see cref="GoonMediaCustom"/>. "" = no edits.</summary>
+        [JsonProperty("pbpMediaCustom")]
+        public string PbpMediaCustom
+        {
+            get => _pbpMediaCustom;
+            set { _pbpMediaCustom = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _pbpMediaSubs = "";
+        /// <summary>The validated niche list the page computed for the pick (comma-joined, max 8).</summary>
+        [JsonProperty("pbpMediaSubs")]
+        public string PbpMediaSubs
+        {
+            get => _pbpMediaSubs;
+            set { _pbpMediaSubs = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _pbpMediaOnline = true;
+        /// <summary>Online pictures for Piece by Piece. Off ("Own pictures only") = the host fetches
+        /// nothing and the Distraction effects draw from the player's own library, as before.</summary>
+        [JsonProperty("pbpMediaOnline")]
+        public bool PbpMediaOnline
+        {
+            get => _pbpMediaOnline;
+            set { _pbpMediaOnline = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region The Arcademy (webview mini-game hub)
@@ -8727,6 +9034,9 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        /// <summary>Swap open and toggle gestures on Home feature tiles only.</summary>
+        public bool DashboardInvertClicks { get; set; }
+
         /// <summary>
         /// The Home dashboard's browser card is folded shut: the header strip stays, everything
         /// below it (the Deeper toolbar, the audio row and the WebView2) is collapsed and the card
@@ -9081,6 +9391,51 @@ namespace ConditioningControlPanel.Models
         {
             get => _deeperPlayerWindowHeight;
             set { _deeperPlayerWindowHeight = value; OnPropertyChanged(); }
+        }
+
+        private bool _companionAsksEnabled = true;
+        /// <summary>The companion now and then asks a question with a few answer buttons.</summary>
+        [JsonProperty]
+        public bool CompanionAsksEnabled
+        {
+            get => _companionAsksEnabled;
+            set { _companionAsksEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>Video titles the user said they loved on an ask card (offered first).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskLovedVideos { get; set; } = new();
+
+        /// <summary>Video titles the user called "meh" on an ask card (never offered again).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskMehVideos { get; set; } = new();
+
+        /// <summary>Get-to-know topics already answered (colour, time, drop).</summary>
+        [JsonProperty]
+        public List<string> CompanionAskKnownTopics { get; set; } = new();
+
+        #endregion
+
+        #region Leash intro
+
+        private bool _leashIntroSeenHolder;
+        /// <summary>The leash explainer has been shown before a first offer and the offer went out.
+        /// Until then an offer opens the explainer first (LeashIntroRule).</summary>
+        [JsonProperty]
+        public bool LeashIntroSeenHolder
+        {
+            get => _leashIntroSeenHolder;
+            set { _leashIntroSeenHolder = value; OnPropertyChanged(); }
+        }
+
+        private bool _leashIntroSeenLeashed;
+        /// <summary>The leash explainer has been shown inside an ask card and the ask was answered.
+        /// Until then the ask card carries the explainer and holds "Put it on" for a moment.</summary>
+        [JsonProperty]
+        public bool LeashIntroSeenLeashed
+        {
+            get => _leashIntroSeenLeashed;
+            set { _leashIntroSeenLeashed = value; OnPropertyChanged(); }
         }
 
         #endregion

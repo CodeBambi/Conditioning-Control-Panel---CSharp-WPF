@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.Lab.GazeMinigame.GazeMinigameWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         Title="Gaze Minigame"
         Width="1100" Height="720"
@@ -138,7 +139,7 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Text="👁 FOCUS ON" Foreground="#FF69B4" FontWeight="Bold" FontSize="13"/>
+                                <helpers:EmojiTextBlock Text="👁 FOCUS ON" Foreground="#FF69B4" FontWeight="Bold" FontSize="13"/>
                                 <TextBlock Text="   the one set to stare at" Foreground="#9A7488" FontSize="11" VerticalAlignment="Center"/>
                             </StackPanel>
                             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -162,7 +163,7 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Text="🚫 IGNORE" Foreground="#FF8080" FontWeight="Bold" FontSize="13"/>
+                                <helpers:EmojiTextBlock Text="🚫 IGNORE" Foreground="#FF8080" FontWeight="Bold" FontSize="13"/>
                                 <TextBlock Text="   distractions to look away from" Foreground="#9A7070" FontSize="11" VerticalAlignment="Center"/>
                             </StackPanel>
                             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">

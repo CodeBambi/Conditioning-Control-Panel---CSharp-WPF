@@ -389,8 +389,8 @@ shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      second of the records office at night with a wall panel
                      ajar). An OVERLAY, never a screen (module-local stage +
                      one Esc rung, traps 48/50), z 48 so EMI's layer paints
-                     over the black for free. Fires on the tenth hole of the
-                     LAST card and sets `annexRevealSeen` - the only gate the
+                     over the black for free. Fires at the 75% total-star
+                     threshold and sets `annexRevealSeen` - the only gate the
                      ajar panel on the records wall reads
 shell/capsule.js THE TIME CAPSULE: the trophy case exhibit in the entrance hall
                  - one framed screenshot of the February 2026 dashboard under a
@@ -913,7 +913,7 @@ table, see §7) or the shell renders raw keys for the settings
 page's `label_key` / `hint_key`. Impulse Control exports its table as data
 (`impulse-control/lex.js` `IC_LEX`) - copy the values, do not re-word them.
 
-**THE ANNEX.** The gate is two steps: `annexRevealSeen` (set by `shell/annexreveal.js`)
+**THE ANNEX.** Access requires 75% of all current card stars (75/100 for ten cards), including partial cards. `core/annex-progress.js` owns this rule and folds pending ceremony mints without double counting. Existing access is retained. The gate is two steps: `annexRevealSeen` (set by `shell/annexreveal.js`)
 arms the ajar panel on the Records Office wall, and only picking that panel opens the lab.
 The lab is a SCREEN, not an overlay - `showAnnex()` mints it with narrow caps only
 (`t`, `lite`, `subject`, `annexState`/`saveAnnex`, `liveFile`, `fetchStats`, `onExit`).
@@ -3922,3 +3922,8 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
 - **Nothing consumes `arcademy-fx`.** The engine narrates every primitive on that event and
   only `arcademy-log` is read (by `boot.js`). It is the obvious hook for a future telemetry
   or "what did the engine just do" debug overlay.
+
+## Annex camera lifecycle (2026-09-22)
+- Camera tiles move out of their wall root into the painted feed layer. Motion classes must follow the tiles. Reduced motion uses a static cast and a one-second clock, with no frame loop. Normal camera updates cap at 30 Hz.
+- Stop/destroy cancels camera timers and frames. Leaving monitors or opening the laptop stops the wall. Mask decoding is cached per lab visit; late completion must check that its feed layer still belongs to the current monitor slide.
+- Regression checks: `node --experimental-vm-modules --test Tests/arcademy/annex.test.mjs` from the repo root.

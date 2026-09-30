@@ -15,13 +15,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
     /// <summary>
     /// Z2 — Talk to her, wired to <see cref="CompanionBrain"/>.
     ///
-    /// <para><b>The AI badge invariant, and why this zone can honour it without a flag on the
-    /// turn.</b> <see cref="CompanionBrain.ChatAsync"/> appends an
-    /// <see cref="TurnKind.AssistantChat"/> turn on exactly one path: a reply that came back with
-    /// <c>IsAiGenerated == true</c>. A refusal, a canned fallback, a transport failure and a login
-    /// hint all roll the user's turn back out and append nothing. So every AssistantChat turn in the
-    /// log is genuine model output, and the badge can key off the kind. If that ever stops being
-    /// true the badge becomes a lie, which is why it is stated here as loudly as this.</para>
+    /// <para>Assistant turns can be genuine model output or an explicitly attributed app reply.
+    /// Only model output wears the AI badge. Refusals and transport failures stay off the thread.</para>
     ///
     /// <para><b>Bark echoes.</b> <see cref="TurnKind.BarkEcho"/> turns render as the italic
     /// whisper bubble — her recorded voice, visualised, so the one-mouth design is visible on the
@@ -274,8 +269,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                         _ => CompanionBubbleKind.Her
                     },
                     text: text,
-                    // Only an AssistantChat turn is a genuine completion — see the class remarks.
-                    isAi: turn.Kind == TurnKind.AssistantChat,
+                    // App capability responses keep their provenance after a session reload.
+                    isAi: turn.Kind == TurnKind.AssistantChat && !turn.IsApplicationReply,
                     timestamp: RelativeTime(turn.Utc),
                     linkTitle: link?.Title,
                     openLink: link is { } hit ? CompanionLinkLauncher.CommandFor(hit.Url) : null));
@@ -413,7 +408,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// </summary>
         private static void ShowNonThreadReply(AiReplyResult? result)
         {
-            if (result == null || result.IsAiGenerated) return;
+            if (result == null || result.IsAiGenerated || result.IsApplicationReply) return;
 
             CompanionRuntimeContext.Guarded(() =>
             {

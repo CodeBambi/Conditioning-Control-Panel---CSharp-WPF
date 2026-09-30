@@ -13,9 +13,10 @@ using Newtonsoft.Json.Linq;
 namespace ConditioningControlPanel.Services.BackRoom;
 
 /// <summary>
-/// THE SPOKEN WORD (CONTRACT 10.21). The slot's subliminal beat used to be spoken by the browser's
-/// own speechSynthesis, which is a placeholder voice on whatever the WebView happened to have. The
-/// host now owns the line, in one order:
+/// THE SPOKEN WORD (CONTRACT 10.21). The host owns the line, and only RECORDED audio ever speaks it
+/// (owner, 2026-09-25, NO SYNTHETIC SPEECH): no Windows speech, no browser voice. On 6.10.3 the
+/// Windows speech rung picked a voice in the machine's own language, so players heard English words
+/// read in German or French. The order is:
 /// <list type="number">
 /// <item><b>clip</b>: the player's OWN audio for that phrase. An enabled keyword trigger whose
 /// <see cref="KeywordTrigger.Keyword"/> is the phrase and that carries a PlayAudio action (or the
@@ -23,12 +24,11 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// is the active mod's <c>resources/sounds/flashes_audio</c> then <c>Resources/sub_audio</c> - the same
 /// precedence the subliminal whisper already uses, so the room speaks in the voice the app does.</item>
 /// <item><b>preset</b>: a bundled Back Room word clip, <c>Resources/Audio/backroom/words/words.json</c>
-/// (normalised phrase -&gt; file name). Ships empty; the owner generates the files.</item>
-/// <item><b>tts</b>: Windows speech, rendered to a wav here and played like any other clip. No package:
-/// <c>Windows.Media.SpeechSynthesis</c> comes with the project's own <c>net8.0-windows10.0.19041.0</c>.</item>
-/// <item><b>none</b>: the page keeps its speechSynthesis as the last fallback (the phone playtest, where
-/// there is no host at all, and any path that threw here).</item>
+/// (normalised phrase -&gt; file name): the neutral Circe recordings.</item>
+/// <item><b>none</b>: nothing has a recording, so the word stays SILENT. The page still draws it.</item>
 /// </list>
+/// <para><c>NoSyntheticSpeechTests</c> fails the build if a text-to-voice engine reappears anywhere in
+/// the client.</para>
 ///
 /// <para>Everything plays through <see cref="AudioService.PlayOneShot"/>, so the room lands on the
 /// device the audio picker chose and at the whisper's own volume curve.</para>
@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Services.BackRoom;
 /// <para>The reversal easter egg is REAL here: the decoded samples are written back to front, which is
 /// the thing the page could only fake by spelling the word backwards.</para>
 ///
-/// <para>Does file I/O and speech synthesis: the bridge calls it off the UI thread.</para>
+/// <para>Does file I/O and audio decoding: the bridge calls it off the UI thread.</para>
 /// </summary>
 internal sealed class BackRoomVoice : IBackRoomVoice
 {
@@ -48,38 +48,34 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     private static readonly Regex SafeFileName = new("^[a-z0-9][a-z0-9_.-]{0,63}$", RegexOptions.CultureInvariant);
     private static readonly Regex NotWord = new(@"[^\p{L}\p{N}]+", RegexOptions.CultureInvariant);
 
-    /// <summary>Longer than any word the deal can hold; a pasted paragraph is not synthesised.</summary>
+    /// <summary>Longer than any word the deal can hold; a pasted paragraph is never looked up.</summary>
     internal const int MaxTextLength = 200;
     /// <summary>A reversal decodes the whole clip into memory; 60 s of stereo 48 kHz floats is the cap.</summary>
     internal const int MaxReverseSamples = 60 * 48000 * 2;
 
-    /// <summary>Soft and slow, the subliminal whisper's pace rather than an announcer's.</summary>
-    internal const double TtsRate = 0.75, TtsPitch = 0.9;
-
     private readonly Func<string, string?> _clip;
     private readonly Func<string, string?> _preset;
-    private readonly Func<string, string?> _tts;
     private readonly Func<string, string?> _reverse;
     private readonly Func<string, int> _durationMs;
     private readonly Func<string, bool> _play;
     private readonly Action _stop;
     private readonly Action<string>? _log;
 
-    /// <summary>The app's live sources.</summary>
+    /// <summary>The app's live sources. No synthetic speech (owner, 2026-09-25): a word with no
+    /// recorded clip stays silent.</summary>
     public BackRoomVoice()
-        : this(FindPlayerClip, FindPresetClip, RenderTts, ReverseToCache, ProbeDurationMs, PlayThroughApp, StopApp,
+        : this(FindPlayerClip, FindPresetClip, ReverseToCache, ProbeDurationMs, PlayThroughApp, StopApp,
                msg => App.Logger?.Debug("BackRoomVoice: {Msg}", msg))
     {
     }
 
     /// <summary>Seams for the suite: every source and sink the chain reads is passed in.</summary>
-    internal BackRoomVoice(Func<string, string?> clip, Func<string, string?> preset, Func<string, string?> tts,
+    internal BackRoomVoice(Func<string, string?> clip, Func<string, string?> preset,
         Func<string, string?> reverse, Func<string, int> durationMs, Func<string, bool> play, Action stop,
         Action<string>? log = null)
     {
         _clip = clip;
         _preset = preset;
-        _tts = tts;
         _reverse = reverse;
         _durationMs = durationMs;
         _play = play;
@@ -99,16 +95,16 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     /// ("Let Go!" -&gt; <c>let-go</c>, so the file is <c>let-go.mp3</c>).</summary>
     internal static string Slug(string? text) => Normalize(text).Replace(' ', '-');
 
-    /// <summary>Which of the four sources owns this phrase, and the file behind it. Pure given the
-    /// lookups, so the suite can hold the order without touching the audio stack.</summary>
+    /// <summary>Which recording owns this phrase, and the file behind it: the player's clip, then the
+    /// bundled preset, else "none" (silent). Pure given the lookups, so the suite can hold the order
+    /// without touching the audio stack.</summary>
     internal static (string Source, string? Path) Resolve(string text,
-        Func<string, string?> clip, Func<string, string?> preset, Func<string, string?> tts)
+        Func<string, string?> clip, Func<string, string?> preset)
     {
         var key = Normalize(text);
         if (key.Length == 0) return ("none", null);
         if (Try(clip, text) is { } c) return ("clip", c);
         if (Try(preset, key) is { } p) return ("preset", p);
-        if (Try(tts, text) is { } t) return ("tts", t);
         return ("none", null);
 
         static string? Try(Func<string, string?> f, string arg)
@@ -123,7 +119,7 @@ internal sealed class BackRoomVoice : IBackRoomVoice
         try
         {
             if (string.IsNullOrWhiteSpace(text) || text.Length > MaxTextLength) return new("none", 0);
-            var (source, path) = Resolve(text, _clip, _preset, _tts);
+            var (source, path) = Resolve(text, _clip, _preset);
             if (path == null) return new("none", 0);
 
             if (reversed)
@@ -138,8 +134,7 @@ internal sealed class BackRoomVoice : IBackRoomVoice
             int ms = 0;
             try { ms = _durationMs(path); } catch { ms = 0; }
 
-            // A muted app still owns the word: the source is reported so the page stays quiet
-            // instead of shouting the browser voice over a deliberate mute.
+            // A muted app still owns the word: the source is reported with no duration.
             bool played;
             try { played = _play(path); }
             catch (Exception ex) { _log?.Invoke("play failed (" + ex.GetType().Name + ")"); played = false; }
@@ -255,7 +250,15 @@ internal sealed class BackRoomVoice : IBackRoomVoice
         return map;
     }
 
-    /// <summary>The bundled clip for an already normalised phrase, or null.</summary>
+    /// <summary>The recorded neutral (Circe) clip for a phrase, or null. The main app's
+    /// subliminals and triggers use it for mods that may not borrow the Bambi clips (CCP Default,
+    /// Locked), so those mods speak with a real voice instead of staying silent.</summary>
+    public static string? FindNeutralClip(string? phrase)
+    {
+        var key = Normalize(phrase);
+        return key.Length == 0 ? null : FindPresetClip(key);
+    }
+
     private static string? FindPresetClip(string key)
     {
         if (!Manifest().TryGetValue(key, out var name)) return null;
@@ -263,10 +266,10 @@ internal sealed class BackRoomVoice : IBackRoomVoice
         return File.Exists(path) ? path : null;
     }
 
-    // ============================ 3. Windows speech ============================
+    // ============================ 3. the render cache ============================
 
-    /// <summary>Rendered wavs (and reversals) live here, keyed by content, so the second time a word
-    /// comes up it starts on the frame the zoom does.</summary>
+    /// <summary>Reversed clips live here, keyed by content, so the second time a reversed word comes
+    /// up it starts on the frame the zoom does.</summary>
     internal static string CacheRoot()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-backroom-voice");
@@ -278,59 +281,6 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     {
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(of))).ToLowerInvariant()[..24];
         return Path.Combine(CacheRoot(), kind + "-" + hash + ".wav");
-    }
-
-    /// <summary>Windows speech to a wav in the cache. Soft, slow and female-leaning when the machine has
-    /// such a voice; whatever the default is otherwise. Null when the machine has no speech at all.</summary>
-    private static string? RenderTts(string text)
-    {
-        var target = CachePath("tts", TtsRate.ToString("0.00", CultureInfo.InvariantCulture) + "|" + text);
-        if (File.Exists(target)) return target;
-        try
-        {
-            using var synth = new Windows.Media.SpeechSynthesis.SpeechSynthesizer();
-            var voice = PickVoice();
-            if (voice != null) synth.Voice = voice;
-            try { synth.Options.SpeakingRate = TtsRate; synth.Options.AudioPitch = TtsPitch; }
-            catch (Exception ex) { App.Logger?.Debug("BackRoomVoice: voice options refused ({Type})", ex.GetType().Name); }
-
-            using var stream = synth.SynthesizeTextToStreamAsync(text).AsTask().GetAwaiter().GetResult();
-            var size = (uint)stream.Size;
-            if (size == 0) return null;
-            using var input = stream.GetInputStreamAt(0);
-            using var reader = new Windows.Storage.Streams.DataReader(input);
-            reader.LoadAsync(size).AsTask().GetAwaiter().GetResult();
-            var bytes = new byte[size];
-            reader.ReadBytes(bytes);
-            File.WriteAllBytes(target, bytes);
-            return target;
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Debug("BackRoomVoice: tts unavailable ({Type})", ex.GetType().Name);
-            return null;
-        }
-    }
-
-    /// <summary>A female voice in the machine's own language first, then any female one, then null
-    /// (which leaves the system default). Voice names are not logged.</summary>
-    private static Windows.Media.SpeechSynthesis.VoiceInformation? PickVoice()
-    {
-        try
-        {
-            var all = Windows.Media.SpeechSynthesis.SpeechSynthesizer.AllVoices;
-            if (all == null || all.Count == 0) return null;
-            var tag = Windows.Media.SpeechSynthesis.SpeechSynthesizer.DefaultVoice?.Language ?? "en";
-            var lang = tag.Split('-')[0];
-            var female = all.Where(v => v.Gender == Windows.Media.SpeechSynthesis.VoiceGender.Female).ToList();
-            return female.FirstOrDefault(v => v.Language?.StartsWith(lang, StringComparison.OrdinalIgnoreCase) == true)
-                   ?? female.FirstOrDefault();
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Debug("BackRoomVoice: voice list unavailable ({Type})", ex.GetType().Name);
-            return null;
-        }
     }
 
     // ============================ the easter egg: real backwards audio ============================
@@ -390,8 +340,7 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     private static AudioPlaybackHandle? _handle;
 
     /// <summary>Through <see cref="AudioService.PlayOneShot"/>, at the room's OWN subliminal level and on
-    /// the device the audio picker chose. A new word cuts the one before it, which is what the page's
-    /// <c>speechSynthesis.cancel()</c> did.
+    /// the device the audio picker chose. A new word cuts the one before it.
     ///
     /// <para>This used to be <c>MasterVolume x SubAudioVolume</c>, and that was the only piece of Back Room
     /// audio that followed the app: everything else in the room is Web Audio inside WebView2 and never saw
@@ -404,7 +353,7 @@ internal sealed class BackRoomVoice : IBackRoomVoice
     {
         StopApp();
         var settings = App.Settings?.Current;
-        var sub = (settings?.BackRoomSubVolume ?? 100) / 100.0f;
+        var sub = BackRoomHostService.SubVolume(settings, BackRoomHostService.IsBreakoutActive) / 100.0f;
         var volume = (float)Math.Pow(Math.Clamp(sub, 0f, 1f), 1.5);
         if (volume <= 0f) return false;   // a deliberate mute: the host still owns the word, it is just silent
         var handle = App.Audio?.PlayOneShot(path, volume, "br-word");

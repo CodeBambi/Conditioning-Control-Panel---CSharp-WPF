@@ -34,7 +34,7 @@ public class FriendsPollRuleTests
     }
 }
 
-public class FriendsServiceTests
+public partial class FriendsServiceTests
 {
     private sealed class FakeApi : IFriendsApi
     {
@@ -105,6 +105,33 @@ public class FriendsServiceTests
         await svc.TickAsync();
         await svc.TickAsync();
         Assert.Equal(new[] { "a", "b", "c" }, got);
+    }
+
+    [Fact]
+    public async Task RequestsAlreadyWaitingAtStartStaySilentNewOnesRaiseOnce()
+    {
+        var (svc, api, _) = Make();
+        var arrived = new List<string>();
+        var gone = new List<string>();
+        svc.RequestArrived += r => arrived.Add(r.Id);
+        svc.RequestGone += id => gone.Add(id);
+        FriendsSnapshot WithIncoming(params string[] ids) => Snap() with
+        {
+            Incoming = ids.Select(i => new FriendRequest(i, "n", null, null, T0)).ToList(),
+        };
+
+        api.State = WithIncoming("old");
+        await svc.RefreshAsync();
+        Assert.Empty(arrived);
+
+        api.State = WithIncoming("old", "new");
+        await svc.RefreshAsync();
+        await svc.RefreshAsync();
+        Assert.Equal(new[] { "new" }, arrived);
+
+        api.State = WithIncoming("new");
+        await svc.RefreshAsync();
+        Assert.Equal(new[] { "old" }, gone);
     }
 
     [Fact]

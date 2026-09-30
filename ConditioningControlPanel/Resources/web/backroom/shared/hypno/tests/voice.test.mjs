@@ -57,7 +57,7 @@ function harness(voice) {
 const wordsOf = (c) => c.debug().voice;
 
 /* ------------------------------------------------------------------ the adapter */
-test('no host: createVoice is null, so the caller stays on speechSynthesis', () => {
+test('no host: createVoice is null, so every word stays silent', () => {
   assert.equal(createVoice({ hosted: false }), null);
   assert.equal(createVoice({ hosted: true, bridge: {} }), null, 'a bridge with no request() is no host either');
 });
@@ -87,7 +87,7 @@ test('readAck: only the four sources survive, none forces a zero duration, a wil
 });
 
 /* ------------------------------------------------------------------ callout.word with a host */
-test('a host that speaks keeps the page quiet; an ack of none sends the word back to speechSynthesis', async () => {
+test('a host that speaks keeps the page quiet; an ack of none stays silent', async () => {
   const sp = fakeSpeech();
   try {
     const said = [];
@@ -100,23 +100,22 @@ test('a host that speaks keeps the page quiet; an ack of none sends the word bac
 
     c.word('SINK', { seed: 7 });
     await new Promise((r) => setTimeout(r, 0));
-    assert.equal(sp.spoken.length, 1, 'none means the page says it itself');
-    assert.equal(sp.spoken[0].text, 'SINK');
+    assert.equal(sp.spoken.length, 0, 'none stays silent: no browser voice');
     c.dispose();
   } finally { sp.restore(); }
 });
 
-test('a host that throws or rejects falls back to speechSynthesis rather than going silent', async () => {
+test('a host that throws or rejects stays silent, never a browser voice', async () => {
   const sp = fakeSpeech();
   try {
     const a = harness({ available: true, speak() { throw new Error('gone'); }, stop() {} });
     a.word('DROP', { seed: 1 });
-    assert.equal(sp.spoken.length, 1, 'a throw is spoken on this very frame');
+    assert.equal(sp.spoken.length, 0, 'a throw stays silent');
     a.dispose();
     const b = harness({ available: true, speak() { return Promise.reject(new Error('gone')); }, stop() {} });
     b.word('RELAX', { seed: 1 });
     await new Promise((r) => setTimeout(r, 0));
-    assert.equal(sp.spoken.length, 2, 'a rejection is spoken once it settles');
+    assert.equal(sp.spoken.length, 0, 'a rejection stays silent');
     b.dispose();
   } finally { sp.restore(); }
 });

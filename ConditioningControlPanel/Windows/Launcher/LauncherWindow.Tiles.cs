@@ -53,8 +53,7 @@ public partial class LauncherWindow
 
     private Border CreateTile(LauncherEntry entry)
     {
-        // Signed out, every tile asks for an account first; the tier lock only shows once there
-        // is an account to hold a tier, and never on a mystery card.
+        // Account requirements belong to the entry; the free demo is also playable signed out.
         bool needsAccount = entry.NeedsAccount;
         bool revealed = entry.Revealed;
         bool locked = !needsAccount && revealed && entry.Locked;
@@ -108,6 +107,12 @@ public partial class LauncherWindow
             try { art = ModResourceResolver.ResolveImageDecoded(entry.ArtPath, 640); }
             catch (Exception ex) { Log.Debug(ex, "[Launcher] art {Path} failed", entry.ArtPath); }
         }
+        art ??= entry.Id switch
+        {
+            "breakoutdemo" => BreakoutCardArt.Demo,
+            "breakout" => BreakoutCardArt.Full,
+            _ => null,
+        };
         if (!revealed)
         {
             BuildMysteryPlate(artHost, hue);
@@ -145,6 +150,15 @@ public partial class LauncherWindow
         });
         if (needsAccount) plate.Children.Add(BuildSignInPill());
         else if (locked) plate.Children.Add(BuildPrimePill());
+        if (OpenTablesBadgeFor(entry, revealed && !needsAccount) is { } openBadge) plate.Children.Add(openBadge);
+
+        if (entry.IsNew && revealed)
+        {
+            var badge = BuildPill("exclusives_badge_new", null,
+                (Brush)FindResource("AccentGradientBrush"), Brushes.White);
+            badge.Margin = new Thickness(12, needsAccount || locked ? 40 : 10, 0, 0);
+            plate.Children.Add(badge);
+        }
 
         var shortcutBtn = new Button
         {

@@ -20,73 +20,64 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.10.3";
+        public const string AppVersion = "7.0.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.10.3 - Let the games begin
+        public const string CurrentPatchNotes = @"v7.0.1 - Stay Tuned
 
-NEW IN 6.10.3
-- the launcher plays a tune. moving across the tiles picks out a little melody instead of the same note over and over, and no two sweeps of the grid come out the same.
-- a speaker button in the launcher title bar turns the launcher's own sounds off. a session or a game behind it keeps its voice, and the master volume is still behind the Media button.
+[a quick fix on top of 7.0.0]
 
-NEW IN 6.10.2
-- the v2 flashes and bubbles can be bought where you use them: a Get it row in the Flashes and Bubble Pop options, 30 Sparkle Points each, no trip to the Back Room needed.
-- pendulum flashes each hang from their own nail instead of swinging as one stack, the v2 marker no longer covers the light or the question mark on a tile, and the motion picker is readable on every skin.
-- the Deeper library fills from every door. it used to open blank from the dashboard tile and from Ctrl+K. editor rules that sit past the end of a clip can be seen and clicked.
-- a game goes fullscreen on the monitor it is on, not always the main one.
-- two escapes inside Racing Thoughts, Goon or the Graded Intake close the game, not the whole app.
-- leaving Down the Rabbit Hole early still books the run: Sparks are paid for the time you played, and it counts as a run after a minute. picture flashes inside it reach your toy again, and the achievement share prompt waits in the Inbox instead of landing over the two doors.
-- Settings, Account grows a Reconnect Patreon button when this PC has lost touch with Patreon, so a paid tier that reads as locked is one click to fix.
-- Ctrl+K understands more of the words people actually type, the ramp link chips say Master volume and Whisper volume, and Brain Drain blur goes all the way down to 0.
-- the online niche box says why it refused a name, instead of doing nothing.
-- voice control finds a speech model that Windows unzipped two folders deep, and there is a button that opens the models folder.
-- media history keeps online items, with Copy link and Go to source.
-- the companion picks up the new persona after a mod switch, and the prompt editor starts from the persona you are wearing.
+NEW IN 7.0.1
 
-CC LABS
-- the app now opens on a launcher, with the panel on one side and the games on the other: the Back Room, Down the Rabbit Hole, the Arcademy, Goon and the Graded Intake. you sign in there first, since every game wants an account, though the Back Room is happy with a free one.
-- the Media button sets your media once for everything, whether that is your own library, online niches or a mix, and holds your asset presets and the master volume too.
-- the mod you are wearing sits in the title bar, so you can swap one for another without going through the panel.
+LAG AND FLICKER
+the Awareness and Listening pages no longer flip between a wide and a compact layout over and over. that flip was what made the whole app lag when you opened them. the Awareness privacy card also no longer rebuilds itself every second and a half.
 
-THE BACK ROOM
-- a casino behind the panel that also plays on your phone at cclabs.app, with five tables to lose your evening at: Daily Daze, three Candy slots, Soft Hand and Velvet Vortex.
-- it runs on Sparkle Points, which you earn on every level up and every 100 bubbles you pop, and which the house tends to give back.
-- EMI works the counter, where she trades them for things you cannot get anywhere else, and the shelf keeps growing.
-- the pictures on the walls come from your library or your niches, following whatever you picked in the launcher.
-- click once and the room takes the mouse, so you look around by moving it. escape gives it back. walk up to a table and it tells you what it is and how to sit.
-- there is a list of tables behind a pill now, instead of the map. pick one and you walk to it.
-- the slot will keep spinning for free when you are out of Sparkles. nothing is paid out, everything still happens.
-- a door in the west wall opens on the Annex, which has the racing cabinet in it and two doors that do not open yet.
+GOON GAME
+the game no longer closes itself when a busy moment makes the picture pause for a few seconds. it waits longer and only steps in when it is really stuck.
 
-FLASHES AND BUBBLES
-- online pictures that move now move. flashes and bubble faces play the real thing instead of a frozen first frame.
-- a picture on a bubble sits inside the glass and fades into it at the edge.
-- flashes stop drawing from the first page they ever loaded, so a niche you turn off actually goes away.
+AI AND VIDEOS
+when the AI names a video that is not in your library, nothing random plays any more.
 
-???
-- one card is a question mark, because something is waiting at the counter.
+EVERYTHING ELSE
+the rest is 7.0.0: Breakout, Piece by Piece, Circe's Tab, the Locktober raffle, Stakes, Friends and the Leash. if you are coming from 6.11.5, read the 7.0.0 notes on the release page.
 
-DEEPER
-- the editor has proper chrome and a quality of life pass, the player has keys, and the library finally has filters.
+v7.0.0 - Stay Tuned
 
-EMI
-- she has new lines on the marquee between announcements, and Circe speaks gender neutral.
+[Task impossible. We should continue]
 
-FIXES
-- clicking a file in the Deeper library opens it in the editor again.
-- the launcher fits all of its cards on the screen, and the way back to it is spelled out now, in the title bar and in the tray.
-- the launcher cards are landscape, so the art is shown whole instead of cropped at the sides, the Arcademy has a picture on it instead of a star, and every card's title sits on the same line.
-- the card table hands your Sparkle total back when it is done with it, instead of leaving it reading zero until the next hand.
-- every table draws its own way out, the card table says so when you lose, and reduced motion no longer swallows the payout.
-- the pictures on the walls run at their own speed rather than a third of it.
-- the streak and perfect week cards show their art again, and every help card marks its key words and says where Sparkle Points come from.
-- a blank second account from a mobile sign in is recovered rather than kept, free quests stop asking for premium, the nav rail no longer sticks open, and the Arcademy annex opens like it should.
-- the Graded Intake pass is weekly and says so, with unlimited runs at tier 2.
+BREAKOUT
+a brick breaker that starts grey and earns its colour, brick by brick, until the whole screen breaks out with your pictures and music, and every bounce lands on the beat. eight Story levels with an ending, Endless boards with portals, and the first three levels are free for everyone.
 
-full nerd changelog in pull requests 1107 through 1500.";
+PIECE BY PIECE
+chess where the pieces have real personality and every capture plays back like a comic strip. play the computer at five levels, from beginner to properly hard, or invite a friend online, and switch on Distraction if you want the board to fight for your attention, all of it free for everyone.
+
+CIRCE'S TAB
+link your Chaster lock and CCP keeps a tab on you, so the slip-ups you choose to count add time and good behaviour takes it off, never past your daily limit. Circe has moods, red bubbles make you choose between popping and resisting, and panic never adds a second.
+
+THE LOCKTOBER RAFFLE
+every October day CCP adds time to your lock counts, and 25 days with 31 hours in total put you in the draw, with the winner picked live on stream.
+
+STAKES
+play online chess and Goon Game for lock time or Sparkle Points, always against the house and never against the other player.
+
+FRIENDS AND THE LEASH
+a friend list on the launcher, where you can poke friends, invite them into a game or send them something to watch. hand one friend your leash and they can send you tasks, rewards and punishments from a set list, while you can cut it any time and panic always works.
+
+GOON GAME
+see who is hosting and join in one click, with nothing to set up, since it plays from online pictures.
+
+ALSO
+- CCP opens on a launcher, with every game one click away.
+- the companion is rebuilt, with its own page, a memory and shorter replies.
+- flashes can stay until you pop them, and Brain Drain can keep your pictures sharp.
+- a tier bought on the website, PayPal included, unlocks straight away.
+- nine languages throughout, and a long list of fixes.
+- a phone update follows, so your level and Sparkle Points match everywhere.
+
+Welcome to v7";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

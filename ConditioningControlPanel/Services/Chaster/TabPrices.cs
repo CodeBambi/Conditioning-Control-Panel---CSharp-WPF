@@ -31,38 +31,58 @@ public static class TabPrices
         // Booked by the service itself on the day the player comes back (CircesMisses), never
         // through Resolve: 5:00 is only the first day's figure, the one the page shows.
         new TabPrice(CircesMisses.EventId, CircesMisses.FirstDaySeconds, TabPriceGate.Free),
-        new TabPrice("typo", 15, TabPriceGate.Free, PerUnit: true),
-        new TabPrice("lockcard", -30, TabPriceGate.Free),
-        new TabPrice("attention", 120, TabPriceGate.Free),
-        // About one bubble in ten and one flash in ten wears red; that bubble popped, or that
-        // flash seen, is 3:00. The roll and the cue live in NatashasFavourite.
+        new TabPrice("typo", 30, TabPriceGate.Free, PerUnit: true),
+        new TabPrice("lockcard", -60, TabPriceGate.Free),
+        new TabPrice("attention", 300, TabPriceGate.Free),
+        // About one bubble in ten and one flash in ten wears red; that bubble popped by the
+        // player, or that flash seen, is 5:00. Held until the ring fills, the bubble is 1:00
+        // off instead. The roll, the hold and the cue live in NatashasFavourite.
         new TabPrice(NatashasFavourite.EventId, NatashasFavourite.Seconds, TabPriceGate.Free),
-        new TabPrice("mantra", 10, TabPriceGate.Free, PerUnit: true),
+        new TabPrice(NatashasFavourite.HeldEventId, NatashasFavourite.HeldSeconds, TabPriceGate.Free),
+        new TabPrice("mantra", 30, TabPriceGate.Free, PerUnit: true),
         new TabPrice("session", -600, TabPriceGate.Free),
         new TabPrice("quest", -300, TabPriceGate.Free),
         new TabPrice("quest_weekly", -1200, TabPriceGate.Free),
         new TabPrice("video", -300, TabPriceGate.Free),
         new TabPrice("levelup", -900, TabPriceGate.Free),
         new TabPrice("program_done", -600, TabPriceGate.Free),
-        new TabPrice("program_skipped", 900, TabPriceGate.Free),
-        new TabPrice("remote_media", 30, TabPriceGate.Tier1),
-        new TabPrice("remote_video", 120, TabPriceGate.Tier1),
+        new TabPrice("program_skipped", 1800, TabPriceGate.Free),
+        // A whole day's verdict (TabDayEnd): booked by the service when the day is over.
+        new TabPrice(TabDayEnd.IdleEventId, TabDayEnd.IdleSeconds, TabPriceGate.Free),
+        new TabPrice(TabDayEnd.DailiesEventId, TabDayEnd.PerDailySeconds, TabPriceGate.Free, PerUnit: true),
+        new TabPrice(TabDayEnd.StreakEventId, TabDayEnd.StreakSeconds, TabPriceGate.Free),
+        new TabPrice("remote_media", 60, TabPriceGate.Tier1),
+        new TabPrice("remote_video", 300, TabPriceGate.Tier1),
         new TabPrice("escape", 180, TabPriceGate.Tier1),
-        new TabPrice("watcher", 300, TabPriceGate.Tier1),
+        new TabPrice("watcher", 600, TabPriceGate.Tier1),
         // The Back Room
-        new TabPrice("melt", 120, TabPriceGate.Free),
+        new TabPrice("melt", 300, TabPriceGate.Free),
         // The games
-        new TabPrice("bubbles", 60, TabPriceGate.Tier2),
-        new TabPrice("ball", 20, TabPriceGate.Tier2),
+        new TabPrice("bubbles", 120, TabPriceGate.Tier2),
+        new TabPrice("ball", 60, TabPriceGate.Tier2),
         new TabPrice("wall", -120, TabPriceGate.Tier2),
-        new TabPrice("padlock", 30, TabPriceGate.Sparkles),
-        new TabPrice("crash", 5, TabPriceGate.Sparkles),
+        new TabPrice("padlock", 120, TabPriceGate.Sparkles),
+        new TabPrice("crash", 30, TabPriceGate.Sparkles),
+        // The leash (Leash CONTRACT). The friend who holds it picks the size (15:00 / 30:00 /
+        // 60:00 punishments at Strict, 15:00 / 30:00 credits); the figure here is the smallest.
+        // Both book through NoteSeconds, so the player's own switches and limits still decide.
+        new TabPrice("leash", 900, TabPriceGate.Free),
+        new TabPrice("leash_credit", -900, TabPriceGate.Free),
+        // PvP stakes (chess, the Goon Game). A TIME stake that is lost books its own size (15:00 or
+        // 30:00) through NoteSeconds; picking a time stake is the consent and switches this row
+        // on. Leaving a match mid-way never reaches it: the server voids that match.
+        new TabPrice(Stakes.StakeRules.LossRowId, 900, TabPriceGate.Free),
     };
 
     /// <summary>The way out never costs. These ids are refused even if a settings file names
     /// them, so no preset, mod or hand edit can put a price on leaving.</summary>
+    /// <summary>Rows that change other prices instead of booking their own (heat). They have
+    /// no figure, so the table above does not list them; they are switched on like any row.</summary>
+    public static readonly IReadOnlySet<string> Modifiers =
+        new HashSet<string>(StringComparer.Ordinal) { TabDayEnd.HeatId };
+
     public static readonly IReadOnlySet<string> NeverPriced =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "panic", "emergency_exit", "safeword", "unlink" };
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "panic", "emergency_exit", "safeword", "unlink", "leash_cut" };
 
     /// <summary>Rows that may book only so many times in one local day (security pass 2,
     /// 2026-09-24). A Lockdown escape attempt is 3:00, and the player trying to get out is the
@@ -78,12 +98,16 @@ public static class TabPrices
     /// <summary>The seconds to book for one event, or 0 when it books nothing: unknown id, a
     /// row the player has not switched on, or a way-out id. <paramref name="units"/> only counts
     /// on per-unit rows.</summary>
-    public static int Resolve(string id, ISet<string>? enabledIds, int units = 1)
+    public static int Resolve(string id, ISet<string>? enabledIds, int units = 1,
+        IReadOnlyDictionary<string, int>? overrides = null)
     {
         if (string.IsNullOrEmpty(id) || NeverPriced.Contains(id)) return 0;
         var price = Find(id);
         if (price == null || enabledIds == null || !enabledIds.Contains(id)) return 0;
         var n = price.PerUnit ? Math.Clamp(units, 0, 1000) : 1;
-        return (int)Math.Clamp((long)price.Seconds * n, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds);
+        // The player's own figure (TabPriceEdit) replaces the default, sign kept and size
+        // clamped; the day and backlog limits still apply when it books.
+        var seconds = TabPriceEdit.Effective(price, overrides);
+        return (int)Math.Clamp((long)seconds * n, -TabLimits.MaxDailySeconds, TabLimits.MaxDailySeconds);
     }
 }

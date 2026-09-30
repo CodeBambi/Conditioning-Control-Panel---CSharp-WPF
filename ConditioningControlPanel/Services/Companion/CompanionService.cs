@@ -1,3 +1,4 @@
+using ConditioningControlPanel.Services.Companion;
 using System;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
@@ -97,6 +98,7 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _drainTimer;
         private const double DRAIN_XP_PER_TICK = 3.0;
         private const double DRAIN_INTERVAL_SECONDS = 2.0;
+        private DateTime? _lastDrainSaveUtc; // see DrainSaveThrottle (#1311)
 
         // Active time tracking
         private DateTime _lastActiveTimeUpdate = DateTime.Now;
@@ -122,8 +124,26 @@ namespace ConditioningControlPanel.Services
         public CompanionProgress ActiveProgress =>
             GetProgress(ActiveCompanion);
 
+        public CompanionBonusType ActivePerk => CompanionPerks.Resolve(
+            App.Settings?.Current?.CompanionPerk, ActiveCompanionDef.BonusType, CompanionExperience.IsV2Enabled);
+
+        public bool SetPerk(CompanionBonusType perk)
+        {
+            if (!CompanionExperience.IsV2Enabled || !Enum.IsDefined(perk) || App.Settings?.Current == null
+                || !CompanionPerks.CanSelect(perk, App.Settings.Current.PlayerLevel)) return false;
+            App.Settings.Current.CompanionPerk = perk;
+            App.Settings.Save();
+            UpdateDrainTimer();
+            return true;
+        }
+
         public CompanionService()
         {
+            if (CompanionExperience.IsV2Enabled && App.Settings?.Current is { CompanionPerk: null } settings)
+            {
+                settings.CompanionPerk = ActiveCompanionDef.BonusType;
+                App.Settings.Save();
+            }
             // Start active time tracking
             _activeTimeTimer = new DispatcherTimer
             {
@@ -205,10 +225,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public double CalculateXPModifier(XPSource source, XPContext context)
         {
-            var companion = ActiveCompanionDef;
             double modifier = 1.0;
 
-            switch (companion.BonusType)
+            switch (ActivePerk)
             {
                 case CompanionBonusType.PinkFilterBonus:
                     // OG: Bonus based on pink filter opacity (0-50%)
@@ -309,7 +328,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void OnAttentionCheckFailed()
         {
-            if (ActiveCompanionDef.BonusType != CompanionBonusType.StrictModeBonus)
+            if (ActivePerk != CompanionBonusType.StrictModeBonus)
                 return;
 
             var progress = ActiveProgress;
@@ -360,7 +379,7 @@ namespace ConditioningControlPanel.Services
             _drainTimer?.Stop();
             _drainTimer = null;
 
-            if (ActiveCompanionDef.BonusType == CompanionBonusType.XPDrain)
+            if (ActivePerk == CompanionBonusType.XPDrain)
             {
                 _drainTimer = new DispatcherTimer
                 {
@@ -376,6 +395,7 @@ namespace ConditioningControlPanel.Services
 
         private void OnDrainTick(object? sender, EventArgs e)
         {
+            if (ActivePerk != CompanionBonusType.XPDrain) return;
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
@@ -384,7 +404,15 @@ namespace ConditioningControlPanel.Services
                 return;
 
             settings.PlayerXP = Math.Max(0, settings.PlayerXP - DRAIN_XP_PER_TICK);
-            App.Settings?.Save();
+
+            // #1311: the write is throttled, not the drain. Saving on every 2 s tick fsynced the
+            // whole settings file every 2 s all session long.
+            var now = DateTime.UtcNow;
+            if (DrainSaveThrottle.ShouldSave(_lastDrainSaveUtc, now, reachedZero: settings.PlayerXP <= 0))
+            {
+                _lastDrainSaveUtc = now;
+                App.Settings?.Save();
+            }
 
             XPDrained?.Invoke(this, DRAIN_XP_PER_TICK);
 

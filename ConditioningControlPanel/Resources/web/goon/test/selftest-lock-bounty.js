@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { rollLockBounty, lockPrize } from '../core/lockBounty.js';
+import { PointsLedger } from '../core/points.js';
+assert.equal(rollLockBounty(0, () => 0), 40);
+assert.equal(rollLockBounty(0, () => 1), 80);
+assert.equal(rollLockBounty(-150, () => 0), 80);
+assert.equal(rollLockBounty(-500, () => 1), 120);
+assert.equal(lockPrize(100, 1), 92);
+assert.equal(lockPrize(100, 100), 0);
+assert.equal(lockPrize(100, -2), 100);
+const ledger = new PointsLedger();
+ledger.lockBounty(92);
+assert.equal(ledger.total, 92);
+assert.equal(ledger.ownPts, 92);
+console.log('lock bounty: 9 checks passed');

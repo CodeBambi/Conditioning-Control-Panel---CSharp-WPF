@@ -37,6 +37,7 @@ export const SORT_CSS = `
   color:#EDEBFF;font-family:var(--body,system-ui,sans-serif);
   --sort-pink:#FF69B4;
   --sort-gold:#FFC94A;
+  --sort-mint:#5FFFD0;
   --sort-navy:#1A1A2E;
   --sort-panel:#252542;
   --sort-line:rgba(237,235,255,.14);
@@ -199,6 +200,16 @@ export const SORT_CSS = `
   filter:drop-shadow(0 0 14px rgba(255,240,184,.85))}
 .g-sort-ringbox[data-ripe="ripe"] .g-sort-ring-bloom{stroke:var(--sort-gold);opacity:.32}
 .g-sort-ringbox[data-ripe="just"] .g-sort-ring-bloom{stroke:#FFF0B8;opacity:.38}
+/* QUICK (#1291): the first half second of a ring pays like the gold arc. A
+   mint flash, one 500ms settle on the box, then it hands back to fresh. */
+.g-sort-ringbox[data-ripe="quick"] .g-sort-ring-arc{stroke:var(--sort-mint);
+  stroke-width:6.5;
+  filter:drop-shadow(0 0 10px rgba(95,255,208,.7))}
+.g-sort-ringbox[data-ripe="quick"] .g-sort-ring-bloom{stroke:var(--sort-mint);opacity:.34}
+.g-sort-ringbox[data-ripe="quick"]{animation:g-sort-quick 500ms ease-out 1}
+@keyframes g-sort-quick{
+  0%{transform:scale(1.035)}
+  100%{transform:scale(1)}}
 /* the ripe pulse: one composited transform on the whole box */
 .g-sort-ringbox[data-ripe="ripe"],
 .g-sort-ringbox[data-ripe="just"]{animation:g-sort-ripe 700ms ease-in-out infinite}
@@ -369,6 +380,7 @@ export const SORT_CSS = `
 .g-sort[data-reduced="1"] .g-sort-ringbox .g-sort-ring-arc{opacity:.45}
 .g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="ripe"] .g-sort-ring-arc{opacity:.8}
 .g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="just"] .g-sort-ring-arc{opacity:1}
+.g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="quick"] .g-sort-ring-arc{opacity:.8}
 /* the pulses are MOTION and stop; the colour and width steps are STATES and
    stay. Every pulse selector is repeated so the (0,3,0)+ compounds above are
    outranked here by specificity or, at worst, by source order. */
@@ -376,6 +388,7 @@ export const SORT_CSS = `
 .g-sort[data-reduced="1"] .g-sort-ringbox.is-closing,
 .g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="ripe"],
 .g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="just"],
+.g-sort[data-reduced="1"] .g-sort-ringbox[data-ripe="quick"],
 .g-sort[data-reduced="1"] .g-sort-ringbox.is-closing[data-ripe="ripe"],
 .g-sort[data-reduced="1"] .g-sort-ringbox.is-closing[data-ripe="just"]{animation:none}
 .g-sort[data-reduced="1"] .g-sort-ring-bloom{transition:none;opacity:.16}
@@ -395,6 +408,7 @@ export const SORT_CSS = `
      selectors tie the FX rules' specificity and this block is later in source */
   .g-sort-ringbox,.g-sort-ringbox.is-closing,
   .g-sort-ringbox[data-ripe="ripe"],.g-sort-ringbox[data-ripe="just"],
+  .g-sort-ringbox[data-ripe="quick"],
   .g-sort-ringbox.is-closing[data-ripe="ripe"],
   .g-sort-ringbox.is-closing[data-ripe="just"]{animation:none}
 }

@@ -215,7 +215,13 @@ namespace ConditioningControlPanel.Services
             {
                 ShowCornerGif(session.Settings);
             }
-            
+
+            // The session owns Mind Wipe, like every other feature it prescribes (#1304). The
+            // engine starts ahead of the session with the user's GLOBAL Mind Wipe, and
+            // StartSession below returns early on a running service, so a session without Mind
+            // Wipe played the global one anyway and a session with it never escalated.
+            App.MindWipe?.Stop();
+
             // Start Mind Wipe if enabled (escalating frequency)
             if (session.Settings.MindWipeEnabled)
             {
@@ -250,7 +256,7 @@ namespace ConditioningControlPanel.Services
 
             // Fire started event
             SessionStarted?.Invoke(this, EventArgs.Empty);
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Session);
+            App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Session);
 
             // EMI Desk: reset the per-session latches, then announce.
             _emiRampStep = 0;
@@ -394,7 +400,7 @@ namespace ConditioningControlPanel.Services
             
             // Fire events
             SessionStopped?.Invoke(this, EventArgs.Empty);
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
+            App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Session);
 
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
@@ -1376,8 +1382,12 @@ namespace ConditioningControlPanel.Services
                 current.SubliminalOpacity = settings.SubliminalOpacity;
                 current.SubliminalDuration = settings.SubliminalFrames;
 
-                // Override the subliminal pool with session phrases
-                if (settings.SubliminalPhrases.Count > 0)
+                // Override the subliminal pool with session phrases (built-ins read neutral
+                // words under CCP Default, see PresetNaming.SessionWords)
+                var subliminalWords = _currentSession != null && ReferenceEquals(settings, _currentSession.Settings)
+                    ? PresetNaming.SubliminalWords(_currentSession)
+                    : settings.SubliminalPhrases;
+                if (subliminalWords.Count > 0)
                 {
                     // Disable all existing phrases
                     var keys = current.SubliminalPool.Keys.ToList();
@@ -1387,14 +1397,14 @@ namespace ConditioningControlPanel.Services
                     }
 
                     // Add/enable session phrases (mod-aware: transform triggers for active mod)
-                    foreach (var phrase in settings.SubliminalPhrases)
+                    foreach (var phrase in subliminalWords)
                     {
                         var modePhrase = App.Mods?.MakeModAware(phrase) ?? phrase;
                         current.SubliminalPool[modePhrase] = true;
                     }
 
                     App.Logger?.Information("Session: Using subliminal phrases: {Phrases}",
-                        string.Join(", ", settings.SubliminalPhrases));
+                        string.Join(", ", subliminalWords));
                 }
 
                 if (settings.SubliminalStartMinute == 0)
@@ -1439,8 +1449,11 @@ namespace ConditioningControlPanel.Services
                 current.BouncingTextSize = settings.BouncingTextSize;
                 current.BouncingTextOpacity = settings.BouncingTextOpacity;
 
-                // Override the bouncing text pool with session phrases
-                if (settings.BouncingTextPhrases.Count > 0)
+                // Override the bouncing text pool with session phrases (mod-aware like above)
+                var bouncingWords = _currentSession != null && ReferenceEquals(settings, _currentSession.Settings)
+                    ? PresetNaming.BouncingWords(_currentSession)
+                    : settings.BouncingTextPhrases;
+                if (bouncingWords.Count > 0)
                 {
                     // Disable all existing phrases
                     var keys = current.BouncingTextPool.Keys.ToList();
@@ -1450,7 +1463,7 @@ namespace ConditioningControlPanel.Services
                     }
                     
                     // Add/enable session phrases
-                    foreach (var phrase in settings.BouncingTextPhrases)
+                    foreach (var phrase in bouncingWords)
                     {
                         current.BouncingTextPool[phrase] = true;
                     }

@@ -63,24 +63,15 @@ namespace ConditioningControlPanel.Services
     public sealed record BillboardRack(IReadOnlyList<int> Slots, int NextCard, int NextSlot, int ChangedSlot);
 
     /// <summary>
-    /// The rack that takes the space when the dashboard's browser card is folded shut (owner ask
-    /// 2026-09-12, reshaped after the first desk pass: one huge card blew a square logo up into a
-    /// blurry giant, so it is a 2x2 grid of small cards now).
-    ///
-    /// <para>Four cards on screen at once out of a roster of six, and every twelve seconds ONE
-    /// slot swaps to the card that has been off screen longest. Same manners as the doors it is
-    /// modelled on: nothing opens by itself, nothing blocks, the pointer on the rack stops the
-    /// clock, and the dashboard works exactly the same with the whole thing ignored.</para>
-    ///
-    /// <para>Everything here is pure so the roster and the walk are unit tested without a window.
-    /// <c>MainWindow.DashboardBillboard.cs</c> owns the cards, the timer and the paint.</para>
+    /// Roster and navigation for the dashboard slideshow. The generalized rack walk also
+    /// supports multiple slots; the Home view requests one full-size slide.
     /// </summary>
     public static class DashboardBillboard
     {
         /// <summary>How long a slot holds before the rack swaps it.</summary>
         public const int RotateSeconds = 12;
 
-        /// <summary>Cards on screen at once: a 2x2 grid.</summary>
+        /// <summary>Legacy rack width. The slideshow explicitly requests one slot.</summary>
         public const int RackSlots = 4;
 
         /// <summary>Where a poster's pack URI is rooted.</summary>
@@ -141,6 +132,13 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>The pack URI for a card's art.</summary>
         public static string PosterUri(BillboardCard card) => PackRoot + card.Poster;
+
+        /// <summary>Manual slide navigation wraps in both directions.</summary>
+        public static int SlideIndex(int current, int direction, int count)
+        {
+            if (count <= 0) return 0;
+            return (int)(((long)ClampIndex(current, count) + direction % count + count) % count);
+        }
 
         /// <summary>The card at an index, or the first one when the index has drifted.</summary>
         public static BillboardCard CardAt(int index) => Cards[ClampIndex(index, Cards.Length)];

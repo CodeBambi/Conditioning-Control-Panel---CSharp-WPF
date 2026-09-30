@@ -65,9 +65,22 @@ public static partial class EmiChannels
     /// channel closes, so ten seconds here against <see cref="ChannelLife"/> reads as a natural
     /// ~10 s on / ~10 s off rotation. The EMI_DESK_IDLE_MS QA override (see <see cref="EmiDebug"/>)
     /// still wins when present.
+    ///
+    /// <para>2026-09-25 (owner): slowed to a 30-60 s draw. At 10 s on / 10 s off the glass held
+    /// her face half the time, and every beat that reads "she is alive" (blink, sway, fidgets,
+    /// gaze, the screen beat itself) is gated off while a channel is up, so an untouched desk
+    /// looked dead. The draw is fresh after every close so the rotation never ticks like a clock.</para>
     /// </summary>
-    public static TimeSpan IdleBeforeFlip =>
-        EmiDebug.IdleMs is int ms ? TimeSpan.FromMilliseconds(ms) : TimeSpan.FromSeconds(10);
+    public static readonly TimeSpan IdleBeforeFlipMin = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan IdleBeforeFlipMax = TimeSpan.FromSeconds(60);
+
+    /// <summary>The idle time before the NEXT flip: a fresh draw between the two bounds.</summary>
+    public static TimeSpan NextIdleBeforeFlip(Random rng)
+    {
+        if (EmiDebug.IdleMs is int ms) return TimeSpan.FromMilliseconds(ms);
+        double span = (IdleBeforeFlipMax - IdleBeforeFlipMin).TotalMilliseconds;
+        return IdleBeforeFlipMin + TimeSpan.FromMilliseconds(rng.NextDouble() * span);
+    }
 
     /// <summary>The glitch flip's length: three to four torn frames.</summary>
     public const int GlitchMs = 220;

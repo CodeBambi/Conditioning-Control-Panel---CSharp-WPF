@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Tests;
 /// online pill. The drawer is realized on the shared STA thread; nothing touches the network.
 /// </summary>
 [Collection(CompanionWpfRenderCollection.Name)]
-public class FriendsDrawerTests
+public partial class FriendsDrawerTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
@@ -44,6 +44,9 @@ public class FriendsDrawerTests
     {
         PresenceAsk.Asked = () => true;
         PresenceAsk.MarkAsked = () => { };
+        Outside.Clear();
+        FriendsDrawer.Outside = (text, _) => Outside.Add(text);
+        ResetDrawerExtras();
         var d = new FriendsDrawer(svc) { MeName = () => "cb", MeTier = () => 0 };
         d.Render();
         return d;
@@ -102,6 +105,14 @@ public class FriendsDrawerTests
         var keys = new List<string>();
         foreach (var id in PokeSet.All) keys.Add("friends_poke_" + id);
         foreach (var id in InviteDestination.All) keys.Add("friends_invite_" + id);
+        foreach (var r in Enum.GetValues<ActResult>()) keys.Add(FriendsDrawerRules.ActResultKey(r));
+        keys.AddRange(new[]
+        {
+            "friends_request_accept", "friends_request_decline", "friends_removed_done", "friends_blocked_done",
+            "friends_squelch_done", "friends_unsquelch_done", "friends_notice_hours", "friends_land_waiting_many", "friends_land_waiting_open",
+            "friends_land_goon_failed", "friends_land_goon_no_code", "friends_land_goon_busy",
+            "profile_friends_where_title", "profile_friends_where_body",
+        });
         foreach (var id in WatchRef.Flavours) keys.Add("friends_flavour_" + id);
         foreach (var a in Enum.GetValues<PresenceActivity>()) keys.Add(FriendsDrawerRules.ActivityKey(a));
         foreach (var r in Enum.GetValues<SendResult>()) keys.Add(FriendsDrawerRules.SendResultKey(r));
@@ -134,9 +145,10 @@ public class FriendsDrawerTests
         WpfRenderHarness.OnStaThread(() =>
         {
             var d = NewDrawer(new FakeFriends(Sample()));
-            Assert.Equal(new[] { "friends_section_online", "friends_section_offline", "friends_section_requests" }, d.SectionKeys);
-            // Online by name, offline by who was here last, then incoming before outgoing.
-            Assert.Equal(new[] { "kit", "sam", "robin", "noor", "in:dee", "out:ash" }, d.RowIds);
+            // Requests sit above the offline list: they are something to answer.
+            Assert.Equal(new[] { "friends_section_online", "friends_section_requests", "friends_section_offline" }, d.SectionKeys);
+            // Online by name, then incoming before outgoing, then offline by who was here last.
+            Assert.Equal(new[] { "kit", "sam", "in:dee", "out:ash", "robin", "noor" }, d.RowIds);
 
             var sam = d.RowFor("sam")!;
             Assert.NotNull(Find(sam, "friends-lock"));
@@ -146,6 +158,21 @@ public class FriendsDrawerTests
             Assert.NotNull(Find(d.RowFor("out:ash")!, "friends-cancel"));
 
             Layout(d);
+        });
+    }
+
+    /// <summary>Bug hunt 2026-09-29 (TAB-8): Escape in the drawer closes a box, the picker or the
+    /// drawer, so with the panic key on Escape (a fresh install) that press is the drawer's, not
+    /// a panic press. Every row inside it is in the surface.</summary>
+    [Fact]
+    public void Escape_in_the_drawer_belongs_to_the_drawer_not_the_panic_key()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var d = NewDrawer(new FakeFriends(Sample()));
+            Assert.True(ConditioningControlPanel.Services.Safety.EscapeClaim.InASurface(d));
+            Assert.True(ConditioningControlPanel.Services.Safety.EscapeClaim.InASurface(d.RowFor("sam")!));
+            Assert.False(ConditioningControlPanel.Services.Safety.EscapeClaim.InASurface(new Button()));
         });
     }
 
@@ -197,23 +224,144 @@ public class FriendsDrawerTests
         WpfRenderHarness.OnStaThread(() =>
         {
             var goon = InviteCodes.GoonCode;
-            var remote = InviteCodes.RemoteCode;
+            var canHost = InviteCodes.CanHostGoon;
             try
             {
                 InviteCodes.GoonCode = () => null;
-                InviteCodes.RemoteCode = () => "RC-1234";
+                InviteCodes.CanHostGoon = () => true;
                 var d = NewDrawer(new FakeFriends(Sample()));
                 d.OpenPickerFor("sam", "invite");
                 var row = d.RowFor("sam")!;
-                Assert.False(((Button)Find(row, "friends-invite:goon")!).IsEnabled);
-                Assert.True(((Button)Find(row, "friends-invite:remote")!).IsEnabled);
+                // No room yet, but a host can open one from the tile itself.
+                Assert.True(((Button)Find(row, "friends-invite:goon")!).IsEnabled);
+                // Remote was dropped (owner, 2026-09-28): no tile at all.
+                Assert.Null(Find(row, "friends-invite:remote"));
                 Assert.True(((Button)Find(row, "friends-invite:backroom")!).IsEnabled);
                 Assert.True(((Button)Find(row, "friends-invite:ramp")!).IsEnabled);
+
+                // An account that cannot host gets the tile disabled with the reason.
+                InviteCodes.CanHostGoon = () => false;
+                var d2 = NewDrawer(new FakeFriends(Sample()));
+                d2.OpenPickerFor("sam", "invite");
+                var tile = (Button)Find(d2.RowFor("sam")!, "friends-invite:goon")!;
+                Assert.False(tile.IsEnabled);
+                Assert.Equal(Loc.Get("friends_invite_goon_prime"), tile.ToolTip);
             }
             finally
             {
                 InviteCodes.GoonCode = goon;
-                InviteCodes.RemoteCode = remote;
+                InviteCodes.CanHostGoon = canHost;
+            }
+        });
+    }
+
+    [Fact]
+    public void Chess_invite_opens_the_board_on_a_challenge_then_sends_its_id()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var challenge = InviteCodes.ChallengeFriend;
+            try
+            {
+                var asked = new List<string>();
+                InviteCodes.ChallengeFriend = (id, _) => { asked.Add(id); return Task.FromResult<string?>("c_0123456789abcdef"); };
+                var svc = new FakeFriends(Sample()) { NextSend = SendResult.Sent };
+                var d = NewDrawer(svc);
+                d.OpenPickerFor("sam", "invite");
+                Assert.True(((Button)Find(d.RowFor("sam")!, "friends-invite:chess")!).IsEnabled);
+                Assert.Equal(SendResult.Sent, d.InviteToChessAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(new[] { "sam" }, asked);
+                Assert.Equal(("sam", "chess", "c_0123456789abcdef"), svc.Invites.Single());
+
+                // No challenge from the board: nothing is sent, and the row says why.
+                InviteCodes.ChallengeFriend = (_, _) => Task.FromResult<string?>(null);
+                Assert.Null(d.InviteToChessAsync("sam").GetAwaiter().GetResult());
+                Assert.Single(svc.Invites);
+                Assert.Equal(Loc.Get("friends_invite_chess_failed"), d.ResultTextFor("sam"));
+            }
+            finally { InviteCodes.ChallengeFriend = challenge; }
+        });
+    }
+
+    [Fact]
+    public void Chess_invite_code_is_a_challenge_id_and_nothing_else()
+    {
+        Assert.True(InviteDestination.IsValid(InviteDestination.Chess));
+        Assert.True(InviteDestination.IsChallengeId("c_0123456789abcdef"));
+        Assert.False(InviteDestination.IsChallengeId("c_0123456789ABCDEF"));
+        Assert.False(InviteDestination.IsChallengeId("c_0123"));
+        Assert.False(InviteDestination.IsChallengeId("ABC123"));
+        Assert.False(InviteDestination.IsChallengeId(null));
+    }
+
+    [Fact]
+    public void Goon_invite_opens_a_room_then_sends_its_code()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var goon = InviteCodes.GoonCode;
+            var canHost = InviteCodes.CanHostGoon;
+            var open = InviteCodes.OpenGoonRoom;
+            try
+            {
+                int opens = 0;
+                InviteCodes.GoonCode = () => null;
+                InviteCodes.CanHostGoon = () => true;
+                InviteCodes.OpenGoonRoom = _ => { opens++; return Task.FromResult<(string?, bool)>(("7QK4RM", false)); };
+                var svc = new FakeFriends(Sample()) { NextSend = SendResult.Sent };
+                var d = NewDrawer(svc);
+                var r = d.InviteToGoonAsync("sam").GetAwaiter().GetResult();
+                Assert.Equal(SendResult.Sent, r);
+                Assert.Equal(1, opens);
+                Assert.Equal(("sam", "goon", "7QK4RM"), svc.Invites.Single());
+
+                // A room already waiting is sent as is, no second room.
+                InviteCodes.GoonCode = () => "ABC123";
+                d.InviteToGoonAsync("kit").GetAwaiter().GetResult();
+                Assert.Equal(1, opens);
+                Assert.Equal(("kit", "goon", "ABC123"), svc.Invites.Last());
+            }
+            finally
+            {
+                InviteCodes.GoonCode = goon;
+                InviteCodes.CanHostGoon = canHost;
+                InviteCodes.OpenGoonRoom = open;
+            }
+        });
+    }
+
+    [Fact]
+    public void Goon_invite_mid_match_or_failed_open_sends_nothing_and_says_why()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var goon = InviteCodes.GoonCode;
+            var canHost = InviteCodes.CanHostGoon;
+            var open = InviteCodes.OpenGoonRoom;
+            try
+            {
+                InviteCodes.GoonCode = () => null;
+                InviteCodes.CanHostGoon = () => true;
+                InviteCodes.OpenGoonRoom = _ => Task.FromResult<(string?, bool)>((null, true));
+                var svc = new FakeFriends(Sample());
+                var d = NewDrawer(svc);
+                Assert.Null(d.InviteToGoonAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(Loc.Get("friends_invite_goon_busy"), d.ResultTextFor("sam"));
+
+                InviteCodes.OpenGoonRoom = _ => Task.FromResult<(string?, bool)>((null, false));
+                Assert.Null(d.InviteToGoonAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(Loc.Get("friends_invite_goon_failed"), d.ResultTextFor("sam"));
+
+                InviteCodes.CanHostGoon = () => false;
+                Assert.Null(d.InviteToGoonAsync("sam").GetAwaiter().GetResult());
+                Assert.Equal(Loc.Get("friends_invite_goon_prime"), d.ResultTextFor("sam"));
+                Assert.Empty(svc.Invites);
+            }
+            finally
+            {
+                InviteCodes.GoonCode = goon;
+                InviteCodes.CanHostGoon = canHost;
+                InviteCodes.OpenGoonRoom = open;
             }
         });
     }
@@ -319,20 +467,39 @@ public class FriendsDrawerTests
         public event Action<FriendsSnapshot>? SnapshotChanged;
         public event Action<InboxItem>? Delivered { add { } remove { } }
         public event Action<SendKind, Friend>? Sent { add { } remove { } }
+        public event Action<FriendRequest>? RequestArrived { add { } remove { } }
+        public event Action<string>? RequestGone { add { } remove { } }
         public Task RefreshAsync() => Task.CompletedTask;
         public Task<SendResult> PokeAsync(string friendId, string pokeId) { Pokes.Add((friendId, pokeId)); return Task.FromResult(NextSend); }
-        public Task<SendResult> InviteAsync(string friendId, string destination, string? code) => Task.FromResult(NextSend);
+        public List<(string, string, string?)> Invites { get; } = new();
+        public Task<SendResult> InviteAsync(string friendId, string destination, string? code)
+        {
+            Invites.Add((friendId, destination, code));
+            return Task.FromResult(NextSend);
+        }
         public Task<SendResult> SendWatchAsync(string friendId, WatchRef watch) { Watches.Add(watch); return Task.FromResult(NextSend); }
         public Task<AddResult> AddByCodeAsync(string code) { Adds.Add(code); return Task.FromResult(NextAdd); }
-        public Task AcceptAsync(string requesterId) => Task.CompletedTask;
-        public Task DeclineAsync(string requesterId) => Task.CompletedTask;
-        public Task CancelRequestAsync(string targetId) => Task.CompletedTask;
-        public Task RemoveAsync(string friendId) => Task.CompletedTask;
-        public Task BlockAsync(string friendId) => Task.CompletedTask;
-        public Task UnblockAsync(string friendId) => Task.CompletedTask;
-        public Task SetSquelchAsync(string friendId, bool on) => Task.CompletedTask;
-        public Task ReportAsync(string friendId, string reason) => Task.CompletedTask;
+        /// <summary>What every list change answers; each call is recorded as "op:id".</summary>
+        public ActResult NextAct { get; set; } = ActResult.Done;
+        public List<string> Acts { get; } = new();
+        private Task<ActResult> Act(string op, string id) { Acts.Add(op + ":" + id); return Task.FromResult(NextAct); }
+        public Task<ActResult> AcceptAsync(string requesterId) => Act("accept", requesterId);
+        public Task<ActResult> DeclineAsync(string requesterId) => Act("decline", requesterId);
+        public Task<ActResult> CancelRequestAsync(string targetId) => Act("cancel", targetId);
+        public Task<ActResult> RemoveAsync(string friendId) => Act("remove", friendId);
+        public Task<ActResult> BlockAsync(string friendId) => Act("block", friendId);
+        public Task<ActResult> UnblockAsync(string friendId) => Act("unblock", friendId);
+        public Task<ActResult> SetSquelchAsync(string friendId, bool on) => Act(on ? "squelch" : "unsquelch", friendId);
+        public Task<ActResult> ReportAsync(string friendId, string reason) => Act("report_" + reason, friendId);
         public void SetActivity(PresenceActivity activity) { }
         public void SetDrawerOpen(bool open) { }
+
+        // ---- receipts (lane F1): the sender's trails and the recipient's reports ----
+        public Dictionary<string, SentTrail> Trails { get; } = new();
+        public SentTrail? LastSentTo(string friendId) => Trails.TryGetValue(friendId, out var t) ? t : null;
+        public event Action? SentTrailsChanged;
+        public void MoveTrail(SentTrail t) { Trails[t.FriendId] = t; SentTrailsChanged?.Invoke(); }
+        public List<ReceiptReport> Reports { get; } = new();
+        public void ReportReceipt(ReceiptReport report) => Reports.Add(report);
     }
 }

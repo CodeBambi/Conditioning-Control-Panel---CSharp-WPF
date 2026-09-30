@@ -289,11 +289,11 @@ public class FavoritesRailArtTests
     {
         var xaml = RailXaml();
         var scrollerEnds = xaml.IndexOf("</ScrollViewer>", StringComparison.Ordinal);
-        var hint = xaml.IndexOf("rail_gesture_hint", StringComparison.Ordinal);
+        var hint = xaml.IndexOf("ClickChoiceAnchor", StringComparison.Ordinal);
 
-        Assert.True(hint > 0, "the rail markup no longer shows rail_gesture_hint");
+        Assert.True(hint > 0, "the rail markup no longer shows the click choice");
         Assert.True(scrollerEnds > 0 && hint > scrollerEnds,
-            "rail_gesture_hint sits inside the rail's ScrollViewer, so a full column scrolls it away");
+            "the click choice sits inside the rail's ScrollViewer, so a full column scrolls it away");
     }
 
     [Fact]
@@ -344,62 +344,48 @@ public class FavoritesRailArtTests
         // It explains the column, so it is not a first-run nudge that gets retired and not a
         // thing to collapse when the lists are empty (that is when it is most wanted).
         var xaml = RailXaml();
-        var hint = xaml.IndexOf("rail_gesture_hint", StringComparison.Ordinal);
+        var hint = xaml.IndexOf("ClickChoiceAnchor", StringComparison.Ordinal);
         var block = xaml.Substring(hint, Math.Min(400, xaml.Length - hint));
         Assert.DoesNotContain("Visibility", block, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void The_gesture_line_is_translated_everywhere()
+    public void The_click_choice_is_translated_everywhere()
     {
         foreach (var language in CompanionLocMasters.Languages)
+        foreach (var key in new[] { "dash_click_choice", "dash_click_default", "dash_click_swapped", "dash_click_invert", "dash_click_pages_pin" })
         {
             var file = CompanionLocMasters.For(language);
-            Assert.True(file.TryGetValue("rail_gesture_hint", out var line),
-                        "rail_gesture_hint is missing from " + language + ".json");
-            Assert.False(string.IsNullOrWhiteSpace(line), "rail_gesture_hint is empty in " + language + ".json");
+            Assert.True(file.TryGetValue(key, out var line), key + " missing from " + language);
+            Assert.False(string.IsNullOrWhiteSpace(line));
             Assert.DoesNotContain("!", line, StringComparison.Ordinal);
-            Assert.DoesNotContain("\u2014", line, StringComparison.Ordinal);  // em-dash
-            Assert.DoesNotContain("\u2013", line, StringComparison.Ordinal);  // en-dash
+            Assert.DoesNotContain("\u2014", line, StringComparison.Ordinal);
+            Assert.DoesNotContain("\u2013", line, StringComparison.Ordinal);
         }
     }
 
     [Fact]
-    public void The_gesture_line_says_what_the_code_does()
+    public void Both_gesture_choices_keep_rail_pinning_distinct()
     {
-        // Right-click means two things on this dashboard and the line has to keep them apart.
-        // On a mosaic TILE it toggles the feature (FeatureCard.OnRightClick raises
-        // ToggleRequestedEvent), which is what dash_toggle_hint already says; on a rail CHIP or a
-        // side rail ROW it pins or unpins (AttachPinMenu's ContextMenu). Left-click opens in both
-        // places. The owner asked for this with the buttons the other way round, so the EN line
-        // has to agree with the code and not with the ask.
-        var card = File.ReadAllText(Path.Combine(AppDir(), "Features", "FeatureCard.xaml.cs"));
-        Assert.Contains("private void OnRightClick(", card, StringComparison.Ordinal);
-        Assert.Contains("RaiseEvent(new RoutedEventArgs(ToggleRequestedEvent, this));", card, StringComparison.Ordinal);
-
         var rail = File.ReadAllText(Path.Combine(AppDir(), "MainWindow", "MainWindow.FavoritesRail.cs"));
         Assert.Contains("chip.Click += (_, _) => OpenDestination(entry);", rail, StringComparison.Ordinal);
         Assert.Contains("AttachPinMenu(chip, entry.Id", rail, StringComparison.Ordinal);
+        var en = CompanionLocMasters.For("en");
+        Assert.StartsWith("Left-click opens", en["dash_click_default"], StringComparison.Ordinal);
+        Assert.StartsWith("Right-click opens", en["dash_click_swapped"], StringComparison.Ordinal);
+        Assert.Contains("Right-click a rail shortcut to pin", en["dash_click_pages_pin"], StringComparison.Ordinal);
+        Assert.Contains("Page links still open with left-click", en["dash_click_pages_pin"], StringComparison.Ordinal);
+    }
 
-        var line = CompanionLocMasters.For("en")["rail_gesture_hint"];
-        var sentences = line.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(3, sentences.Length);
-
-        // One: left-click opens.
-        Assert.StartsWith("Left-click", sentences[0], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("open", sentences[0], StringComparison.OrdinalIgnoreCase);
-
-        // Two: right-click a TILE switches the feature on or off, in dash_toggle_hint's words.
-        Assert.StartsWith("Right-click", sentences[1], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("tile", sentences[1], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("switch", sentences[1], StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("pin", sentences[1], StringComparison.OrdinalIgnoreCase);
-
-        // Three: right-click HERE or on the side rail pins, and says nothing about switching.
-        Assert.StartsWith("Right-click", sentences[2], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("side rail", sentences[2], StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("pin", sentences[2], StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("switch", sentences[2], StringComparison.OrdinalIgnoreCase);
+    [Fact]
+    public void Click_preference_defaults_to_existing_behavior_and_survives_save()
+    {
+        var settings = new ConditioningControlPanel.Models.AppSettings();
+        Assert.False(settings.DashboardInvertClicks);
+        settings.DashboardInvertClicks = true;
+        var saved = Newtonsoft.Json.JsonConvert.SerializeObject(settings);
+        var restored = Newtonsoft.Json.JsonConvert.DeserializeObject<ConditioningControlPanel.Models.AppSettings>(saved);
+        Assert.True(restored!.DashboardInvertClicks);
     }
 
     [Fact]

@@ -266,6 +266,91 @@ public class PanicPolicyTests
             overrideAll: OverrideEnabled(fresh)));
     }
 
+    /// <summary>Bug hunt 2026-09-29 (DESK-1): the global hook's "dismiss this video" route must not
+    /// swallow a panic press. On the default install an Escape over an unfocused mandatory video
+    /// closed only the video; the engine, flashes, bubbles and Brain Drain kept running.</summary>
+    [Theory]
+    //          video  card   palette panicOn key       lockdown -> video route?
+    [InlineData(true,  false, false,  true,  "Escape", false,    false)] // default install: the panic owns it
+    [InlineData(true,  false, false,  true,  "Escape", true,     true)]  // Lockdown blocks the panic: the video keeps ESC
+    [InlineData(true,  false, false,  true,  "F8",     false,    true)]  // panic on another key: ESC is only the video key
+    [InlineData(true,  false, false,  false, "Escape", false,    true)]  // panic key off
+    [InlineData(true,  true,  false,  true,  "F8",     false,    false)] // a lock card owns ESC first
+    [InlineData(true,  false, true,   true,  "F8",     false,    false)] // the palette owns ESC first
+    [InlineData(false, false, false,  true,  "F8",     false,    false)] // no non-strict video up
+    public void AnEscapeOverAnUnfocusedVideo_IsAPanicPress_WhenEscapeIsThePanicKey(
+        bool video, bool card, bool palette, bool panicOn, string key, bool lockdown, bool expected)
+    {
+        Assert.Equal(expected, EscapeDismissesVideo(video, card, palette, panicOn, key, lockdown));
+        var fresh = new AppSettings();
+        Assert.False(EscapeDismissesVideo(true, false, false, fresh.PanicKeyEnabled, fresh.PanicKey, false));
+    }
+
+    // ---- 4b. an Escape a surface takes (bug hunt 2026-09-29, TAB-8 / DESK-3) ----
+
+    /// <summary>Escape in Circe's Tab price box ("Esc drops it") was a full panic on a fresh
+    /// install: the session paused, the ten minute safety hold armed, and a second Escape inside
+    /// 2 s quit CCP. With a surface that drops or closes on Escape holding the keyboard, the press
+    /// is that surface's and never reaches the panic handler.</summary>
+    [Fact]
+    public void AnEscapeInTheFocusedPriceBox_IsNotAPanicPress_OnAFreshInstall()
+    {
+        var fresh = new AppSettings();
+        Assert.True(SurfaceTakesEscape(fresh.PanicKeyEnabled, fresh.PanicKey, lockCardOpen: false,
+            ccpInFront: true, surfaceHasTheKeyboard: true, takenPressOnItsWay: false));
+    }
+
+    [Theory]
+    //          panicOn key         card   front  kbd    onItsWay -> the surface's?
+    [InlineData(true,  "Escape",   false, true,  true,  false,    true)]
+    [InlineData(true,  " escape ", false, true,  true,  false,    true)]
+    [InlineData(true,  "F8",       false, true,  true,  false,    false)] // rebound panic: F8 stays a real panic, Esc is only Esc
+    [InlineData(false, "Escape",   false, true,  true,  false,    false)] // panic key off: nothing to take it from
+    [InlineData(true,  "Escape",   true,  true,  true,  false,    false)] // a Lock Card outranks every hand-off
+    [InlineData(true,  "Escape",   false, false, true,  false,    false)] // the press goes to another app: a panic
+    [InlineData(true,  "Escape",   false, true,  false, false,    false)] // no surface has the keyboard: a panic
+    [InlineData(true,  "Escape",   false, true,  true,  true,     false)] // the last taken press has not landed (a stalled UI): a panic
+    public void ASurfaceTakesAnEscape_OnlyWhenThePressIsItsOwn(
+        bool panicOn, string key, bool card, bool front, bool keyboard, bool onItsWay, bool expected)
+        => Assert.Equal(expected, SurfaceTakesEscape(panicOn, key, card, front, keyboard, onItsWay));
+
+    /// <summary>A taken press covers itself and nothing else: while it is on its way to the surface
+    /// the next Escape is a panic, once it lands the surface may take the next one, and a press that
+    /// never landed lapses so the surfaces cannot be switched off by it.</summary>
+    [Fact]
+    public void ATakenPress_CoversOnlyItself()
+    {
+        var t0 = new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+        EscapeClaim.Taken();
+        Assert.False(EscapeClaim.OnItsWay(t0));
+        EscapeClaim.Claimed(t0);
+        Assert.True(EscapeClaim.OnItsWay(t0.AddMilliseconds(150)));
+        EscapeClaim.Taken();
+        Assert.False(EscapeClaim.OnItsWay(t0.AddMilliseconds(200)));
+        EscapeClaim.Claimed(t0);
+        Assert.True(EscapeClaim.OnItsWay(t0 + EscapeClaim.OnItsWayFor - TimeSpan.FromMilliseconds(1)));
+        Assert.False(EscapeClaim.OnItsWay(t0 + EscapeClaim.OnItsWayFor));
+        Assert.False(EscapeClaim.OnItsWay(t0.AddSeconds(-1))); // a clock step backwards never holds it
+        EscapeClaim.Taken();
+    }
+
+    /// <summary>The hook asks the surfaces after the held-key filter and before the panic check:
+    /// every down reaches the held-key filter first, so a press a surface takes still counts as the
+    /// key going down and its repeats are swallowed, never fresh panic presses (DESK-5).</summary>
+    [Fact]
+    public void TheHookAsksTheSurfacesAfterTheHeldKeyFilterAndBeforeThePanic()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private void OnGlobalKeyPressed(Key key)", StringComparison.Ordinal);
+        Assert.True(start >= 0, "OnGlobalKeyPressed was renamed - update this test with it");
+        var held = source.IndexOf("if (LeashHoldSwallows(key)) return;", start, StringComparison.Ordinal);
+        var taken = source.IndexOf("EscapeTakenBySurface(settings)) return;", start, StringComparison.Ordinal);
+        var panic = source.IndexOf("if (settings.PanicKeyEnabled)", start, StringComparison.Ordinal);
+        Assert.True(held > start && taken > held && panic > taken,
+            $"order in OnGlobalKeyPressed: held-key filter {held}, surface claim {taken}, panic {panic}");
+    }
+
     // ---- 5. the optional pause key ----
 
     [Fact]
@@ -507,7 +592,9 @@ public class PanicPolicyTests
     [InlineData("chaos", "App.Chaos?.IsDescending == true")]
     [InlineData("dtrh", "Chaos.DtrhHostService.IsActive")]
     [InlineData("arcademy", "Arcademy.ArcademyHostService.IsActive")]
-    [InlineData("backroom", "BackRoom.BackRoomHostService.IsActive")]
+    [InlineData("backroom", "BackRoom.BackRoomHostService.IsRoomActive")]
+    [InlineData("breakoutdemo", "BackRoom.BackRoomHostService.IsBreakoutDemoActive")]
+    [InlineData("breakout", "BackRoom.BackRoomHostService.IsBreakoutFullActive")]
     [InlineData("fyp", "Fyp.FypHostService.IsActive")]
     [InlineData("justdrop", "JustDrop.JustDropHostService.IsActive")]
     // Sep 19 2026: the four the two hand-written copies of this list had missed, which is how
@@ -576,5 +663,132 @@ public class PanicPolicyTests
         Assert.True(start >= 0, "the legacy game-surface rung is gone - update this test with it");
         var end = source.IndexOf("#735", start, StringComparison.Ordinal);
         return end > start ? source[start..end] : source[start..];
+    }
+
+    // ---- Racing Thoughts pauses on Escape (owner, 2026-09-25) ----
+
+    private static readonly DateTime T0 = new(2026, 9, 25, 18, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void RaceInFront_FirstEscape_IsThePause()
+        => Assert.True(GameClaimsEscapeAsPause("Escape", gameInFront: true, engineRunning: false,
+            lockCardOpen: false, lastClaimUtc: null, nowUtc: T0));
+
+    [Fact]
+    public void SecondEscapeWithinTwoSeconds_IsAFullPanic()
+        => Assert.False(GameClaimsEscapeAsPause("Escape", true, false, false, T0, T0.AddSeconds(1.5)));
+
+    [Fact]
+    public void EscapeAfterTheWindow_IsThePauseAgain()
+        => Assert.True(GameClaimsEscapeAsPause("Escape", true, false, false, T0, T0.AddSeconds(5)));
+
+    [Theory]
+    [InlineData("F8", true, false, false)]      // a rebound panic key is always a panic
+    [InlineData("Escape", false, false, false)] // the race is not the window in front
+    [InlineData("Escape", true, true, false)]   // a session is running: its effects must stop
+    [InlineData("Escape", true, false, true)]   // a Lock Card outranks everything
+    [InlineData(null, true, false, false)]
+    public void EverythingElse_StaysAPanic(string? key, bool inFront, bool engineRunning, bool lockCard)
+        => Assert.False(GameClaimsEscapeAsPause(key, inFront, engineRunning, lockCard, null, T0));
+
+    // ---- Piece by Piece rides the same rule (owner, 2026-09-29) ----
+    // Without it the first Escape of a chess game closed the board, so its pause card was unreachable
+    // with the default panic key. The board's own half (the pause goes quiet, Escape on the card
+    // leaves) is pinned by piecebypiece/smoke/pause-hush-smoke.mjs.
+
+    [Fact]
+    public void ChessInFront_IsAGameInFrontForTheEscapePause()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private bool TryRacePauseOnEscape()", StringComparison.Ordinal);
+        Assert.True(start >= 0, "TryRacePauseOnEscape was renamed - update this test with it");
+        var end = source.IndexOf("        /// <summary>", start, StringComparison.Ordinal);
+        var body = end > start ? source[start..end] : source[start..];
+        Assert.Contains("PieceByPieceHostService.IsInFront", body);
+        Assert.Contains("CaucusHostService.IsInFront", body);
+    }
+
+    // ---- The game in front is handed the Escape it kept (chess 6.11.5, Breakout and the race 7.0) ----
+    // Each game pauses on its own keydown, which never comes while its WebView2 is out of keyboard
+    // focus (the title bar clicked): the panel kept the press, so nothing paused and nothing panicked.
+    // The pages' half (played once, dropped when the real key came too) is pinned by
+    // piecebypiece/smoke/host-escape-smoke.mjs and backroom/stations/breakout/host-escape.test.js.
+
+    [Fact]
+    public void BoardKeptTheEscape_ThePageIsHandedIt()
+        => Assert.Equal(KeptEscapePage.Board, KeptEscapeGoesTo(true, false, false, true, true, false, false));
+
+    [Fact]
+    public void BreakoutKeptTheEscape_ThePageIsHandedIt()
+        => Assert.Equal(KeptEscapePage.Breakout, KeptEscapeGoesTo(true, false, false, false, false, true, true));
+
+    [Fact]
+    public void RaceKeptTheEscape_ThePageIsHandedIt()
+        => Assert.Equal(KeptEscapePage.Race, KeptEscapeGoesTo(true, true, true, false, false, false, false));
+
+    [Theory]
+    //          claimed raceF  raceR  boardF boardR brkF   brkR
+    [InlineData(false, false, false, true, true, false, false)]  // not kept: a full panic, which closes the game
+    [InlineData(false, false, false, false, false, true, true)]  // not kept, Breakout: same
+    [InlineData(true, true, false, true, true, false, false)]    // the race wins a tie, and is still booting
+    [InlineData(true, false, false, false, true, false, true)]   // nothing is in front
+    [InlineData(true, false, false, true, false, false, false)]  // the board is booting: the frame would land after ready
+    [InlineData(true, false, false, false, false, true, false)]  // Breakout is booting
+    [InlineData(true, true, false, false, false, false, false)]  // the race is booting or on its way out
+    public void EverythingElse_HandsNoPageAnything(bool claimed, bool raceInFront, bool raceReady,
+        bool boardInFront, bool boardReady, bool breakoutInFront, bool breakoutReady)
+        => Assert.Equal(KeptEscapePage.None, KeptEscapeGoesTo(claimed, raceInFront, raceReady,
+            boardInFront, boardReady, breakoutInFront, breakoutReady));
+
+    [Fact]
+    public void TheRaceWinsATie_AsTheClaimsLogLineReads()
+        => Assert.Equal(KeptEscapePage.Race, KeptEscapeGoesTo(true, true, true, true, true, true, true));
+
+    [Fact]
+    public void TheKeptEscape_IsPostedOnlyOnceThePressWasKept()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private bool TryRacePauseOnEscape()", StringComparison.Ordinal);
+        Assert.True(start >= 0, "TryRacePauseOnEscape was renamed - update this test with it");
+        var end = source.IndexOf("private void HandlePanicKeyPress()", start, StringComparison.Ordinal);
+        var body = end > start ? source[start..end] : source[start..];
+        var kept = body.IndexOf("_lastRaceEscapeClaimUtc = now;", StringComparison.Ordinal);
+        var gate = body.IndexOf("PanicPolicy.KeptEscapeGoesTo(claim", StringComparison.Ordinal);
+        Assert.True(kept >= 0 && gate > kept, "a page must be handed the press only once it was kept");
+        foreach (var post in new[] { "CaucusHostService.PostKeptEscape()", "PieceByPieceHostService.PostKeptEscape()",
+                     "BackRoomHostService.PostKeptEscape()" })
+            Assert.True(body.IndexOf(post, StringComparison.Ordinal) > gate, post + " must sit behind KeptEscapeGoesTo");
+        Assert.Contains("PieceByPieceHostService.IsReady", body);
+        Assert.Contains("CaucusHostService.IsReady", body);
+        Assert.Contains("BackRoomHostService.IsBreakoutReady", body);
+    }
+
+    [Fact]
+    public void BreakoutInFront_IsAGameInFrontForTheEscapePause()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var start = source.IndexOf("private bool TryRacePauseOnEscape()", StringComparison.Ordinal);
+        var end = source.IndexOf("private void HandlePanicKeyPress()", start, StringComparison.Ordinal);
+        var body = source[start..end];
+        Assert.Contains("BackRoomHostService.IsBreakoutInFront", body);
+        Assert.Contains("gameInFront: raceInFront || boardInFront || breakoutInFront", body);
+    }
+
+    [Fact]
+    public void ThePageListensForTheFrameTheHostPosts()
+    {
+        var page = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "web",
+            "piecebypiece", "ui", "host-escape.js"));
+        Assert.Contains("export const HOST_ESCAPE = '"
+            + ConditioningControlPanel.Services.PieceByPiece.PieceByPieceHostService.KeptEscapeType + "';", page);
+        // The page drops the frame when a real Escape came this long before it. The panel never keeps
+        // two presses closer than GamePauseDoubleTap, so a longer look-back could eat the next press.
+        var m = System.Text.RegularExpressions.Regex.Match(page, @"export const LOOK_BACK_MS = (\d+);");
+        Assert.True(m.Success, "LOOK_BACK_MS moved - update this test with it");
+        Assert.True(int.Parse(m.Groups[1].Value) < GamePauseDoubleTap.TotalMilliseconds,
+            "the page's look-back must stay inside the panel's double tap");
     }
 }

@@ -35,6 +35,13 @@ namespace ConditioningControlPanel.Controls
         private readonly Border _stamp;
         private readonly TextBlock _stampFigure;
 
+        // Circe's verdict under the total. Picked once per verdict, so a repaint of the same bill
+        // keeps the same line (CirceLines never repeats a moment's line twice in a row).
+        private readonly StackPanel _verdict;
+        private readonly TextBlock _verdictText;
+        private CirceMoment? _verdictMoment;
+        private string? _verdictKey;
+
         public ChasterReceiptView()
         {
             _date.FontFamily = Mono;
@@ -66,6 +73,21 @@ namespace ConditioningControlPanel.Controls
                 RenderTransform = new RotateTransform(-5),
             };
 
+            _verdictText = new TextBlock
+            {
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                FontStyle = FontStyles.Italic,
+                Foreground = Ink,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0),
+                MaxWidth = 300,
+            };
+            _verdict = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
+            _verdict.Children.Add(CirceSays.Face(24));
+            _verdict.Children.Add(_verdictText);
+
             var head = new TextBlock
             {
                 FontFamily = Mono,
@@ -84,6 +106,7 @@ namespace ConditioningControlPanel.Controls
             body.Children.Add(Tear());
             body.Children.Add(_totals);
             body.Children.Add(_stamp);
+            body.Children.Add(_verdict);
 
             Content = new Border
             {
@@ -118,6 +141,7 @@ namespace ConditioningControlPanel.Controls
                 empty.SetBinding(TextBlock.TextProperty, Bound("chaster_bill_empty"));
                 _lines.Children.Add(empty);
                 _stamp.Visibility = Visibility.Collapsed;
+                _verdict.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -134,7 +158,19 @@ namespace ConditioningControlPanel.Controls
 
             _stamp.Visibility = Visibility.Visible;
             _stampFigure.Text = Loc.Get("chaster_bill_stamp") + " " + CircesTab.Format(bill.NetSeconds);
+
+            var moment = CirceLines.Verdict(bill.NetSeconds);
+            if (moment != _verdictMoment || _verdictKey == null)
+            {
+                _verdictMoment = moment;
+                _verdictKey = CirceLines.Shared.Pick(moment, DateTime.UtcNow); // the bill always wins
+            }
+            _verdictText.Text = _verdictKey == null ? string.Empty : Loc.Get(_verdictKey);
+            _verdict.Visibility = _verdictKey == null ? Visibility.Collapsed : Visibility.Visible;
         }
+
+        /// <summary>Circe's verdict line as painted, for the tests.</summary>
+        internal string VerdictText => _verdict.Visibility == Visibility.Visible ? _verdictText.Text : string.Empty;
 
         private static Grid Row(string name, string figure, Brush figureInk, bool small = false)
         {

@@ -48,6 +48,7 @@ namespace ConditioningControlPanel
                 if (chaster is null) return;
 
                 chaster.BookedAt += OnChasterBooked;
+                InitializeCirceLines(); // MainWindow.CirceLines.cs
                 Closed += (_, _) =>
                 {
                     try { chaster.BookedAt -= OnChasterBooked; } catch (Exception ex) { Diag.Swallowed(ex); }
@@ -93,7 +94,7 @@ namespace ConditioningControlPanel
                     // reads as one number settling rather than as a stutter.
                     if (look is { } merged)
                     {
-                        _chasterPop?.Retitle(merged.Text, merged.Colour);
+                        _chasterPop?.Retitle(merged.Text, merged.Colour, merged.Source);
                         _chasterFlash?.Retitle(merged.Text, merged.Colour);
                     }
                     else

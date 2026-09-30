@@ -60,6 +60,10 @@ public enum ChasterStatus
     /// <summary>The call went out and no answer came back. For a read that is an outage like
     /// any other; for a write nobody knows whether it landed, so it must not simply go again.</summary>
     TimedOut,
+    /// <summary>api.chaster.app refused this access token (401). Not a dead link on its own: the
+    /// caller refreshes once and tries again, and only the broker's own "link_expired" on
+    /// /chaster/refresh ever drops the link.</summary>
+    Unauthorized,
 }
 
 public readonly record struct ChasterResult<T>(ChasterStatus Status, T? Value)
@@ -143,7 +147,7 @@ public sealed class ChasterClient : IDisposable
             return (IReadOnlyList<ChasterLock>)all
                 .Where(l => !string.IsNullOrEmpty(l.Id) && !string.Equals(l.Role, "keyholder", StringComparison.OrdinalIgnoreCase))
                 .ToList();
-        }, ct).ConfigureAwait(false);
+        }, ct, api: true).ConfigureAwait(false);
     }
 
     /// <summary>The linked account's name and picture (scope <c>profile</c>). Read-only.</summary>
@@ -151,7 +155,7 @@ public sealed class ChasterClient : IDisposable
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/auth/profile");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        var result = await SendAsync(req, ParseProfile, ct).ConfigureAwait(false);
+        var result = await SendAsync(req, ParseProfile, ct, api: true).ConfigureAwait(false);
         // A 200 with no username in it is a body we cannot use: same as an outage, try later.
         return result.Ok && result.Value == null ? new(ChasterStatus.Unavailable, null) : result;
     }
@@ -229,7 +233,7 @@ public sealed class ChasterClient : IDisposable
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{ApiBase}/locks/{lockId}/update-time");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         req.Content = new StringContent(JsonConvert.SerializeObject(new { duration = seconds }), Encoding.UTF8, "application/json");
-        return await SendAsync(req, _ => true, ct).ConfigureAwait(false);
+        return await SendAsync(req, _ => true, ct, api: true, write: true).ConfigureAwait(false);
     }
 
     private async Task<ChasterResult<ChasterTokens>> PostProxyAsync(string path, object body, CancellationToken ct)
@@ -245,12 +249,13 @@ public sealed class ChasterClient : IDisposable
         return result;
     }
 
-    private async Task<ChasterResult<T>> SendAsync<T>(HttpRequestMessage req, Func<string, T?> read, CancellationToken ct)
+    private async Task<ChasterResult<T>> SendAsync<T>(HttpRequestMessage req, Func<string, T?> read, CancellationToken ct,
+        bool api = false, bool write = false)
     {
         try
         {
             using var res = await _http.SendAsync(req, ct).ConfigureAwait(false);
-            var status = Map(res.StatusCode);
+            var status = api ? MapApi(res.StatusCode, write) : Map(res.StatusCode);
             if (status != ChasterStatus.Ok)
             {
                 App.Logger?.Debug("[Chaster] {Path} answered {Code}", req.RequestUri?.AbsolutePath.Split('/').ElementAtOrDefault(1), (int)res.StatusCode);
@@ -266,12 +271,34 @@ public sealed class ChasterClient : IDisposable
             Diag.Swallowed(ex, "chaster call timed out");
             return new(ChasterStatus.TimedOut, default);
         }
+        catch (HttpRequestException ex) when (write && !NeverSent(ex))
+        {
+            // The connection was up: the add may have reached Chaster before it broke.
+            Diag.Swallowed(ex, "chaster write broke mid-flight, reads as timed out");
+            return new(ChasterStatus.TimedOut, default);
+        }
         catch (Exception ex) when (ex is HttpRequestException or JsonException)
         {
             Diag.Swallowed(ex, "chaster call failed, reads as unavailable");
             return new(ChasterStatus.Unavailable, default);
         }
     }
+
+    /// <summary>Only a failure to connect at all (or to find the host) proves a request never left.
+    /// Anything later (a reset, a half-read answer) may have landed.</summary>
+    public static bool NeverSent(HttpRequestException ex) =>
+        ex.HttpRequestError is HttpRequestError.ConnectionError or HttpRequestError.NameResolutionError;
+
+    /// <summary>An api.chaster.app answer. A 401 is only this access token being refused
+    /// (<see cref="ChasterStatus.Unauthorized"/>), never a dead link. For a write, a 502 or a 504
+    /// came from a gateway that may already have passed the add on, so it is a doubt
+    /// (<see cref="ChasterStatus.TimedOut"/>), never a clean "try again".</summary>
+    public static ChasterStatus MapApi(HttpStatusCode code, bool write) => (int)code switch
+    {
+        401 => ChasterStatus.Unauthorized,
+        502 or 504 when write => ChasterStatus.TimedOut,
+        _ => Map(code),
+    };
 
     /// <summary>410 is the proxy's "that state is spent": for the caller, the same as a dead link.</summary>
     public static ChasterStatus Map(HttpStatusCode code) => (int)code switch

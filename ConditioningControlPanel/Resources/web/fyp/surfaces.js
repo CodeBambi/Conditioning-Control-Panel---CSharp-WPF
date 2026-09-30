@@ -75,6 +75,7 @@ function clampVolume(v) {
 function createVideoSurface(cut, ctx) {
   const el = document.createElement('div');
   el.className = 'surface';
+  el.dataset.assetId = cut.asset.id || '';
   const video = document.createElement('video');
   video.src = cut.asset.url;
   video.preload = 'auto';
@@ -236,6 +237,7 @@ function createVideoSurface(cut, ctx) {
 function createGifSurface(cut, ctx) {
   const el = document.createElement('div');
   el.className = 'surface';
+  el.dataset.assetId = cut.asset.id || '';
   const img = document.createElement('img');
   img.src = cut.asset.url;
   img.draggable = false;

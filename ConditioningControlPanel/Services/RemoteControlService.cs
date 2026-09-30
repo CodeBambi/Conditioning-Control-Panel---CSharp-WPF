@@ -64,6 +64,14 @@ namespace ConditioningControlPanel.Services
         private static readonly Random _pinRng = new();
 
         public bool IsActive { get; private set; }
+
+        /// <summary>When the last Remote session ended (UTC). Circe's tab keeps counting bookings
+        /// toward the Remote cap for a short grace after it (ChasterService.RemoteGrace).</summary>
+        public DateTime? LastEndedUtc { get; private set; }
+
+        // The controller switched the panic key off during this session. Restored (and saved) when
+        // the session ends, so a crash or a quit after the session cannot leave it off on disk.
+        private bool _remoteDisabledPanic;
         public string? SessionCode { get; private set; }
         public string? ConnectPin { get; private set; }
         public string? Tier { get; private set; }
@@ -185,7 +193,7 @@ namespace ConditioningControlPanel.Services
                 ConnectPin = pin;
                 Tier = tier;
                 IsActive = true;
-                App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
+                App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
                 _consecutivePollFailures = 0;
                 _consecutivePollSuccesses = 0;
                 _totalCommandsReceived = 0;
@@ -320,6 +328,32 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Debug("[RemoteControl] Session stopped");
         }
 
+        /// <summary>
+        /// Ends the session HERE first and tells the server after, without waiting on it. The leash
+        /// cut (Services/Leash/LeashCutSafety.cs) needs the controller gone the instant the user
+        /// cuts, not after a 15 s network timeout. Safe to call when no session runs. UI thread.
+        /// </summary>
+        public void EndSessionNow()
+        {
+            if (!IsActive) return;
+            var unifiedId = App.UnifiedUserId;
+            CleanupSession();
+            App.Logger?.Information("[RemoteControl] Session ended locally (leash cut)");
+            if (string.IsNullOrEmpty(unifiedId)) return;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var body = JsonConvert.SerializeObject(new { unified_id = unifiedId });
+                    using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/stop", body);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "[RemoteControl] Stop request after a local end failed");
+                }
+            });
+        }
+
         private void CleanupSession()
         {
             _pollTimer?.Stop();
@@ -334,6 +368,7 @@ namespace ConditioningControlPanel.Services
             _lastOptInTags = null;
             _lastOptInStatus = null;
             IsActive = false;
+            LastEndedUtc = DateTime.UtcNow;
             SessionCode = null;
             ConnectPin = null;
             Tier = null;
@@ -364,7 +399,20 @@ namespace ConditioningControlPanel.Services
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
             }
 
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
+            // StopAllRemoteEffects turns the key back on in memory; if the controller had turned it
+            // off, that off was saved, so save the restored value too.
+            if (_remoteDisabledPanic)
+            {
+                _remoteDisabledPanic = false;
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.PanicKeyEnabled = true;
+                    App.Settings.Save();
+                    SyncPanicKeyUi();
+                }
+            }
+
+            App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
             SessionEnded?.Invoke(this, EventArgs.Empty);
         }
 
@@ -1119,6 +1167,19 @@ namespace ConditioningControlPanel.Services
         {
             _lastCommandStatus = "ok";
             _lastCommandReason = null;
+
+            // The Leash (owner, 2026-09-26): a leashed account keeps its way out. From ANY remote
+            // session, Strict Lock never goes on, the panic key never goes off, and a session start
+            // loses its strict_lock flag. See Services/Leash/LeashGuard.cs (LeashRemoteRule).
+            var leashVerdict = Leash.LeashRemoteRule.Screen(
+                action, Leash.LeashRemoteRule.AsksStrictLock(parameters), Leash.LeashGuard.Check());
+            if (leashVerdict == Leash.LeashRemoteVerdict.Refuse)
+            {
+                ReportCommandRefused(action, "not while on a leash");
+                return;
+            }
+            if (leashVerdict == Leash.LeashRemoteVerdict.StripStrict)
+                App.Logger?.Information("[RemoteControl] start_session asked for strict lock; dropped, the account is leashed");
             DispatcherHelper.RunOnUISync(() =>
             {
                 try
@@ -1378,7 +1439,9 @@ namespace ConditioningControlPanel.Services
                             {
                                 MainWindowRef.StartSessionFromRemote(session);
                             }
-                            if (parameters?["strict_lock"]?.Value<bool>() == true)
+                            // The same reading the leash screen used: one check, never a looser second one.
+                            if (leashVerdict != Leash.LeashRemoteVerdict.StripStrict
+                                && Leash.LeashRemoteRule.AsksStrictLock(parameters))
                             {
                                 if (App.Settings?.Current != null)
                                 {
@@ -1422,6 +1485,7 @@ namespace ConditioningControlPanel.Services
                         case "disable_panic":
                             if (App.Settings?.Current != null)
                             {
+                                if (App.Settings.Current.PanicKeyEnabled) _remoteDisabledPanic = true;
                                 App.Settings.Current.PanicKeyEnabled = false;
                                 App.Settings.Save();
                                 SyncPanicKeyUi();

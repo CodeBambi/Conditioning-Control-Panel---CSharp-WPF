@@ -60,6 +60,8 @@ import { createOnlineMatch, createRemoteClock, parseUci, toUci, ABANDON_MS } fro
 import { createServerLobby, POLL_MS, CHALLENGE_TICKS } from '../net/lobbyServer.js';
 import { createDriverSwitch } from '../net/online.js';
 import { createHotseat } from '../game/hotseat.js';
+import { requestRematch } from '../net/rematch.js';
+import { presentationRate } from '../board/captures.js';
 
 let passed = 0;
 const failures = [];
@@ -371,6 +373,7 @@ function harness(opts = {}) {
 
   local += 4000;
   eq('the side to move is charged for the think', clock.remaining('w'), 296000);
+  eq('online turn age derives from server time', clock.turnElapsedMs(), 4000);
   eq('the side waiting is not', clock.remaining('b'), 300000);
   eq('the offset was fixed at the sync, not recomputed since', clock.offset(), SERVER_EPOCH);
   eq('so our reading of the server clock moved with us', clock.serverNow(), SERVER_EPOCH + 4000);
@@ -379,6 +382,7 @@ function harness(opts = {}) {
   local += 6000;
   clock.sync({ w_ms: 290000, b_ms: 300000, turn: 'w', server_now_ms: SERVER_EPOCH + 10000, turn_started_ms: SERVER_EPOCH, total_ms: 300000 });
   eq('a fresh sync agrees with the derivation', clock.remaining('w'), 290000);
+  eq('same-turn polling does not restart the turn age', clock.turnElapsedMs(), 10000);
   eq('and a falling balance in one turn identifies a discounting server', clock.discountMode(), { mode: 'now', measured: true });
 
   // Now the local clock jumps forward on its own (a suspend/resume, an NTP
@@ -387,6 +391,7 @@ function harness(opts = {}) {
   ok('a local jump does show, between syncs', clock.remaining('w') < 290000);
   clock.sync({ w_ms: 289000, b_ms: 300000, turn: 'w', server_now_ms: SERVER_EPOCH + 11000, turn_started_ms: SERVER_EPOCH, total_ms: 300000 });
   eq('and the next sync corrects it completely', clock.remaining('w'), 289000);
+  eq('reconnect corrects age against the same server turn start', clock.turnElapsedMs(), 11000);
 
   clock.sync({ w_ms: 500, b_ms: 1000, turn: 'w', server_now_ms: SERVER_EPOCH + 50000, turn_started_ms: SERVER_EPOCH + 40000 });
   eq('a clock cannot go below zero', (() => { local += 900; return clock.remaining('w'); })(), 0);
@@ -394,6 +399,7 @@ function harness(opts = {}) {
 
   clock.stop();
   eq('stopping freezes the numbers', clock.snapshot().active, null);
+  eq('a stopped online game has no active turn age', clock.turnElapsedMs(), 0);
   const frozen = clock.remaining('b');
   local += 20000;
   eq('and they stay frozen', clock.remaining('b'), frozen);
@@ -422,6 +428,24 @@ function harness(opts = {}) {
   // Only a server_now_ms, which is what a quiet long poll answers with.
   clock.noteServerNow(SERVER_EPOCH + 10000);
   eq('a bare server_now_ms keeps the offset honest', clock.remaining('w'), 290000);
+  eq('an empty poll keeps the turn age', clock.turnElapsedMs(), 10000);
+}
+
+// Joining an existing turn starts at its true age, even on a different local clock.
+{
+  let local = 987654;
+  const clock = createRemoteClock({ now: () => local });
+  eq('an unsynced online clock has no current turn', clock.turnElapsedMs(), 0);
+  clock.sync({ w_ms: 300000, b_ms: 283000, turn: 'b', server_now_ms: SERVER_EPOCH + 17000, turn_started_ms: SERVER_EPOCH });
+  eq('late join observes the existing turn age', clock.turnElapsedMs(), 17000);
+  local += 2000;
+  clock.noteServerNow(SERVER_EPOCH + 19000);
+  eq('late join progresses through an empty poll', clock.turnElapsedMs(), 19000);
+  clock.sync({ w_ms: 300000, b_ms: 281000, turn: 'w', turn_started_ms: SERVER_EPOCH + 19000 });
+  eq('a server move starts the next turn without a local reset', clock.turnElapsedMs(), 0);
+  local += 700;
+  eq('new server turn age advances', clock.turnElapsedMs(), 700);
+  clock.stop();
 }
 
 /* ---------------------------------------------------------------------------
@@ -767,11 +791,13 @@ function lobbyServerFixture() {
         : json(200, { ok: true, waiting: true, queued_ms: 100 });
     }
     if (route === `${api.BASE}/challenge`) {
+      st.challengeBody = body;
       if (body.target === 'p_gonegonegone') return json(404, { error: 'no_such_player' });
       st.outgoing = [{ challenge_id: 'c_mine', to: lobby[0], time_control: { initial_ms: 600000, increment_ms: 0 }, status: 'pending' }];
       return json(200, { ok: true, challenge_id: 'c_mine', expires_in_sec: 300 });
     }
     if (route === `${api.BASE}/challenge/c_theirs/accept`) return json(200, { ok: true, match_id: 'm_accepted', color: 'b' });
+    if (route === `${api.BASE}/challenge/c_0123456789abcdef/accept`) return json(200, { ok: true, match_id: 'm_friend', color: 'b' });
     if (route.startsWith(`${api.BASE}/challenge/`) && route.endsWith('/decline')) return json(200, { ok: true, declined: true });
     if (route.startsWith(`${api.BASE}/match/`)) {
       const id = route.split('/')[4];
@@ -818,11 +844,11 @@ function lobbyServerFixture() {
   await lobby.debug.refresh();
   eq('and not offered again on the next poll', offers.length, 1);
 
-  const m = offers[0].accept();
-  ok('accept answers synchronously, as door.js requires', !!m && typeof m === 'object');
-  eq('with the opponent already named', m.opponent.name, 'velvet');
-  await m.ready;
-  eq('and the match filled in behind it', [m.id, m.side, m.clockMs], ['m_accepted', 'b', 600000]);
+  const accepting = offers[0].accept();
+  ok('accept waits for server consent and seat assignment', typeof accepting?.then === 'function');
+  const m = await accepting;
+  eq('with the confirmed opponent named', m.opponent.name, 'velvet');
+  eq('and the confirmed match assigned', [m.id, m.side, m.clockMs], ['m_accepted', 'b', 600000]);
   eq('the page heard about it too', seenOnline.length, 1);
 
   // Quick match: waiting, then paired, resolved through the poll.
@@ -855,10 +881,47 @@ function lobbyServerFixture() {
   eq('a challenge resolves with a Match', cm.id, 'm_fromchallenge');
   eq('and the SIDE came from the match, not from a guess', cm.side, 'b');
 
+  // A rematch is a new accepted challenge. The server may choose either seat.
+  const replay = requestRematch(lobby, cm);
+  await settle(6);
+  eq('rematch requests swapped sides', fx.st.challengeBody.color, 'w');
+  eq('rematch keeps the previous time control', fx.st.challengeBody.time_control, cm.state.time_control);
+  fx.st.outgoing = [{ challenge_id: 'c_mine', status: 'accepted', match_id: 'm_rematch' }];
+  await lobby.debug.refresh();
+  const fresh = await replay;
+  eq('rematch gets a fresh id and the server seat', [fresh.id, fresh.side], ['m_rematch', 'b']);
+  const stale = requestRematch(lobby, cm).then(() => null, err => err.message);
+  await settle(6);
+  fx.st.outgoing = [{ challenge_id: 'c_mine', status: 'accepted', match_id: cm.id }];
+  await lobby.debug.refresh();
+  eq('a finished match id cannot be recycled', await stale, 'not ready');
+  const missingSeat = requestRematch(lobby, cm).then(() => null, err => err.message);
+  await settle(6);
+  fx.st.matchYou = null;
+  fx.st.outgoing = [{ challenge_id: 'c_mine', status: 'accepted', match_id: 'm_unknown' }];
+  await lobby.debug.refresh();
+  eq('a rematch never guesses the side when the server omits it', await missingSeat, 'not ready');
+  fx.st.matchYou = 'b';
+
   // A player who is not there any more.
   let gone = null;
   try { await lobby.challenge('p_gonegonegone'); } catch (e) { gone = e.message; }
   eq('challenging a ghost rejects with the door\'s own word', gone, 'left');
+
+  // The friends drawer: the challenge id is handed out the moment the server mints it...
+  let minted = null;
+  const toFriend = lobby.challenge('u_friend0001', { onChallengeId: (id) => { minted = id; } });
+  toFriend.catch(() => {});
+  for (let i = 0; i < 20 && !minted; i++) await new Promise((r) => setTimeout(r, 5));
+  eq('a friend challenge hands its id to the drawer', minted, 'c_mine');
+  eq('...and names the friend as the target', fx.st.challengeBody.target, 'u_friend0001');
+  lobby.cancel();
+  // ...and the friend takes it up by id, straight into a Match.
+  const fm = await lobby.acceptChallenge('c_0123456789abcdef');
+  eq('a friend invite accepts by challenge id', fm.id, 'm_friend');
+  let junk = null;
+  try { await lobby.acceptChallenge('not-a-challenge'); } catch (e) { junk = e.message; }
+  eq('a malformed challenge id is refused', junk, 'left');
 
   lobby.dispose();
   eq('a page with no host and no account gets no server lobby', createServerLobby({ api }), null);
@@ -1026,6 +1089,14 @@ function lobbyServerFixture() {
 }
 
 /* ------------------------------------------------------------------------- */
+
+for (const [left, expected] of [[900000, 1], [29999, 1.8], [9999, 2.8]]) {
+  const snapshot = { w: left, b: 900000, total: 900000 };
+  eq(`presentation pace at ${left} ms`, presentationRate({ snapshot: () => snapshot }), expected);
+  eq('presentation never changes clock balances', snapshot.w, left);
+}
+eq('untimed games keep full performances', presentationRate({ snapshot: () => ({ w: 0, b: 0, total: 0 }) }), 1);
+eq('previews keep full performances', presentationRate(null), 1);
 
 api.setTransport(null);
 

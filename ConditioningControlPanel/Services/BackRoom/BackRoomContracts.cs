@@ -156,8 +156,8 @@ public interface IBackRoomMedia
 /// <c>clip</c>   the player's own audio for that phrase (a trigger's PlayAudio action, the active mod's
 ///               flashes_audio, or Resources/sub_audio);
 /// <c>preset</c> a bundled Back Room word clip (Resources/Audio/backroom/words/words.json);
-/// <c>tts</c>    rendered here by Windows speech;
-/// <c>none</c>   nothing played, so the page falls back to its own speechSynthesis.
+/// <c>none</c>   no recording for the phrase, so the word stays silent (no synthetic speech, owner
+///               2026-09-25; the page only draws it).
 /// </param>
 /// <param name="DurationMs">How long the audio runs, 0 when nothing played. The page holds the next
 /// word of a chain until this has elapsed (callout.js WORD_GAP_MS is the floor).</param>
@@ -165,8 +165,8 @@ public sealed record BackRoomVoiceAck(string Source, int DurationMs);
 
 /// <summary>
 /// The spoken subliminal word (<c>BackRoomVoice.cs</c>). One voice per room; a new
-/// <see cref="Speak"/> cuts the previous line, exactly as the page's speechSynthesis did.
-/// Never throws: everything it cannot do acks <c>none</c> and the page speaks for itself.
+/// <see cref="Speak"/> cuts the previous line.
+/// Never throws: everything it cannot do acks <c>none</c> and the word stays silent.
 /// </summary>
 public interface IBackRoomVoice
 {

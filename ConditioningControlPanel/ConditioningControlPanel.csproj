@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.10.3</Version>
+    <Version>7.0.1</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -269,6 +269,7 @@
     <Resource Include="Resources\february_drone.png" />
     <Resource Include="Resources\logo.png" />
     <Resource Include="Resources\logo2.png" />
+    <Resource Include="Resources\branding\ccp-logo.jpg" />
     <!-- Weekly Intake Pass card art, one per niche (see Services\Quiz\IntakeNiche.cs).
          These must stay listed explicitly: there is no Resources\**\*.png glob, and a missing
          entry makes the pack:// URI fail at RUNTIME while the build still succeeds. -->
@@ -558,9 +559,10 @@
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
-    <!-- Breakout (stations\breakout) is web first and not in this release: its row is out of
-         stations.json and its folder rides this exclude, so neither the room nor the installer
-         carries it. Restore both when the cabinet ships. -->
+    <!-- Breakout ships in the desktop. Exclude only its tests, notes and browser showcases;
+         the direct play page, engine and ending assets must reach both output and publish. -->
+    <!-- Piece by Piece: its node smokes, the dev pages (only ever opened with ?media=fixture
+         from a checkout), its design notes and the node-only package.json. -->
     <ArcademyHarnessExclude>
       Resources\web\arcademy\annex\demo.html;
       Resources\web\arcademy\vn\demo.html;
@@ -570,7 +572,14 @@
       Resources\web\backroom\smoke\**\*;
       Resources\web\backroom\**\tests\**\*;
       Resources\web\backroom\shared\hypno\tests\**\*;
-      Resources\web\backroom\stations\breakout\**\*;
+      Resources\web\backroom\stations\breakout\**\*.test.js;
+      Resources\web\backroom\stations\breakout\**\*.md;
+      Resources\web\backroom\stations\breakout\dev.html;
+      Resources\web\backroom\stations\breakout\showcase*;
+      Resources\web\piecebypiece\smoke\**\*;
+      Resources\web\piecebypiece\dev\**\*;
+      Resources\web\piecebypiece\**\*.md;
+      Resources\web\piecebypiece\package.json;
       Resources\web\dtrh\tests\**\*
     </ArcademyHarnessExclude>
     <!-- Remix engine (Resources\web\remix, vendored from cclabs-site/remix for the Jackpot Remix
@@ -591,7 +600,14 @@
       $(MSBuildProjectDirectory)\Resources\web\backroom\smoke\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\**\tests\**\*;
       $(MSBuildProjectDirectory)\Resources\web\backroom\shared\hypno\tests\**\*;
-      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*.test.js;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\**\*.md;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\dev.html;
+      $(MSBuildProjectDirectory)\Resources\web\backroom\stations\breakout\showcase*;
+      $(MSBuildProjectDirectory)\Resources\web\piecebypiece\smoke\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\piecebypiece\dev\**\*;
+      $(MSBuildProjectDirectory)\Resources\web\piecebypiece\**\*.md;
+      $(MSBuildProjectDirectory)\Resources\web\piecebypiece\package.json;
       $(MSBuildProjectDirectory)\Resources\web\dtrh\tests\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>

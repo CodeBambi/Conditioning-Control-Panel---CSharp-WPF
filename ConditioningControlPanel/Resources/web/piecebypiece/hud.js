@@ -1,3 +1,7 @@
+import { identity, onIdentity } from './bridge.js';
+import { presentation, setPresentation, onPresentation } from './game/preferences.js';
+import { attachPictures } from './ui/pictures.js';
+
 /* ============================================================================
  * hud.js - the screen furniture: two clocks, one status line, the tally, and
  * the meter drawn as the frame of the screen warming.
@@ -109,6 +113,13 @@ export function createHud(opts = {}) {
     dots: pick('hud-dots'),
     chip: { w: pick('chip-w'), b: pick('chip-b') },
     tally: { w: pick('tally-w'), b: pick('tally-b') },
+    names: { w: pick('name-w'), b: pick('name-b') },
+    tags: { w: pick('turn-w'), b: pick('turn-b') },
+    captures: { w: pick('captured-w'), b: pick('captured-b') },
+    focus: pick('piece-focus'),
+    intensity: pick('game-intensity'),
+    intensityMeter: pick('intensity-meter'),
+    intensityLabel: pick('intensity-label'),
     // the online block; every node optional, a page without it is a quieter HUD
     online: {
       root: pick('hud-online'),
@@ -125,6 +136,8 @@ export function createHud(opts = {}) {
     },
   };
 
+  if (el.status) el.status.dataset.hudOwned = 'true';
+  let deal = null;
   let active = 'w';         // whose clock is running
   let over = null;          // the gameover payload, once it lands
   let meter = 0;
@@ -149,20 +162,20 @@ export function createHud(opts = {}) {
 
   /* ---- the sliding light -------------------------------------------------- */
 
-  /** Put the line and the status column under whichever chip is on the move. */
-  function place(instant) {
-    const chip = el.chip[active];
-    if (!chip) return;
-    const y = chip.offsetTop + chip.offsetHeight;
-    const set = (node, dy) => {
-      if (!node) return;
-      if (instant) node.style.transition = 'none';
-      node.style.transform = 'translateY(' + Math.round(y + dy) + 'px)';
-      if (instant) { void node.offsetWidth; node.style.transition = ''; }
-    };
-    set(el.line, T.gapLine);
-    set(el.col, T.gapStatus);
+  // The turn changes inside fixed cards, so controls never move under a pointer.
+  function place() {
     if (el.line) el.line.classList.toggle('on', !over);
+  }
+
+  function paintNames() {
+    const own = identity().displayName || window.PBP?.settings?.playerName;
+    const seat = deal?.match?.side || (game?.seats?.length === 1 ? game.seats[0] : null);
+    for (const side of ['w', 'b']) {
+      const supplied = deal?.players?.[side];
+      const name = typeof supplied === 'string' ? supplied : supplied?.name;
+      const label = name || (online && side === seat ? own : online ? deal?.match?.opponent?.name : '') || (side === 'w' ? 'White' : 'Black');
+      if (el.names[side]) { el.names[side].textContent = label; el.names[side].title = label; }
+    }
   }
 
   function setActive(side, instant) {
@@ -181,6 +194,11 @@ export function createHud(opts = {}) {
     try { if (game && game.rules && game.rules.inCheck() && !over) checked = game.rules.turn(); } catch { checked = null; }
     for (const s of ['w', 'b']) {
       if (el.chip[s]) el.chip[s].classList.toggle('check', s === checked);
+      if (el.tags[s]) el.tags[s].textContent = over ? '' : s === checked ? 'In check' : s === active ? 'To move' : '';
+    }
+    if (!over && el.status) {
+      const name = el.names[active]?.textContent || sideWord(active);
+      el.status.textContent = checked ? name + ' is in check' : name + ' to move';
     }
   }
 
@@ -196,7 +214,7 @@ export function createHud(opts = {}) {
   /** Under 30 s the mover's digits go red; the chip shivers on each tick. */
   function paintLow(snap) {
     const left = snap && typeof snap[active] === 'number' ? snap[active] : null;
-    const low = left != null && left < T.lowMs && !over;
+    const low = !snap?.untimed && left != null && Number.isFinite(left) && left < T.lowMs && !over;
     for (const s of ['w', 'b']) {
       if (el.chip[s]) el.chip[s].classList.toggle('low', low && s === active);
     }
@@ -211,8 +229,17 @@ export function createHud(opts = {}) {
     if (!game || !game.rules) return;
     let position;
     try { position = game.rules.position(); } catch { return; }
+    const history = game.rules.chess?.history({ verbose: true }) || [];
+    const glyph = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛' };
     for (const s of ['w', 'b']) {
       if (el.tally[s]) el.tally[s].textContent = tallyWord(position, s);
+      const taken = history.filter(m => m.color === s && m.captured).map(m => m.captured);
+      if (el.captures[s]) {
+        el.captures[s].textContent = taken.map(t => glyph[t] || '').join('');
+        const label = taken.length ? 'Captured: ' + taken.map(t => NAMES[t]).join(', ') : 'No captures';
+        el.captures[s].setAttribute('aria-label', label);
+        el.captures[s].title = label;
+      }
     }
   }
 
@@ -220,6 +247,8 @@ export function createHud(opts = {}) {
 
   function setMeter(v) {
     meter = clamp01(v);
+    if (el.intensityMeter) el.intensityMeter.value = meter;
+    if (el.intensityLabel) el.intensityLabel.textContent = meter < .25 ? 'Calm' : meter < .55 ? 'Building' : meter < .8 ? 'Intense' : 'Full tilt';
     const still = reducedMotion();
     // the host can turn reduced motion on after boot, so this is re-read rather
     // than remembered; the class is what stops the light sliding
@@ -264,7 +293,7 @@ export function createHud(opts = {}) {
   function noteText() {
     if (flash) return flash;
     if (drawOffer() === 'me') return 'draw offered';
-    if (away) return 'he seems to have left';
+    if (away) return 'Opponent disconnected';
     return '';
   }
 
@@ -304,6 +333,7 @@ export function createHud(opts = {}) {
 
   /** A new deal. The mode on the `local` event is the word; the getter is the fallback. */
   function newDeal(p) {
+    if (p) deal = p;
     let isOnline = false;
     try { isOnline = !!(game && game.isOnline); } catch { isOnline = false; }
     if (p && typeof p.mode === 'string') isOnline = p.mode === 'online';
@@ -312,7 +342,10 @@ export function createHud(opts = {}) {
     away = false;
     flash = '';
     stopAsking();
+    paintNames();
+    paintCheck();
     paintOnline();
+    paintMenu();
   }
 
   const click = (node, fn) => {
@@ -339,10 +372,89 @@ export function createHud(opts = {}) {
   click(el.online.accept, () => { verb('acceptDraw'); paintOnline(); });
   click(el.online.decline, () => { verb('declineDraw'); paintOnline(); });
 
+  const seenNotices = new Set();
+  on('notice', p => {
+    const message = typeof p?.text === 'string' ? p.text : '';
+    const node = pick('game-notice');
+    if (!node || !message || seenNotices.has(message)) return;
+    seenNotices.add(message); node.textContent = message; node.hidden = false;
+    later(() => { node.hidden = true; }, 6000);
+  });
+  on('local', () => { seenNotices.clear(); const node = pick('game-notice'); if (node) node.hidden = true; });
+  const options = pick('game-options');
+  const panel = pick('game-options-panel');
+  const sound = pick('game-sound');
+  const motion = pick('game-reduced');
+  const closeOptions = () => { if (panel) panel.hidden = true; options?.setAttribute('aria-expanded', 'false'); };
+  click(options, () => {
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    options.setAttribute('aria-expanded', String(!panel.hidden));
+  });
+  for (const button of root.querySelectorAll('[data-experience]')) click(button, () => setPresentation({ experience: button.dataset.experience }));
+  const menuButton = pick('game-menu');
+  function paintMenu() {
+    if (menuButton) { menuButton.textContent = deal?.mode === 'solo' ? 'Save and menu' : 'Menu'; menuButton.disabled = online && !over; }
+    const note = pick('game-menu-note');
+    if (note) note.hidden = !online || !!over;
+  }
+  click(menuButton, () => { if (online && !over) return; closeOptions(); bus?.emit('menu-request'); });
+  const soundChange = () => setPresentation({ volume: sound.checked ? .6 : 0 });
+  const motionChange = () => setPresentation({ reducedMotion: motion.checked });
+  const follow = pick('game-follow');
+  const replays = pick('game-replays');
+  const followChange = () => setPresentation({ followCam: follow.checked });
+  const replaysChange = () => setPresentation({ replays: replays.checked });
+  follow?.addEventListener('change', followChange);
+  replays?.addEventListener('change', replaysChange);
+  undom.push(() => { follow?.removeEventListener('change', followChange); replays?.removeEventListener('change', replaysChange); });
+  for (const button of root.querySelectorAll('[data-turncard]')) click(button, () => setPresentation({ turnCard: button.dataset.turncard }));
+  sound?.addEventListener('change', soundChange);
+  motion?.addEventListener('change', motionChange);
+  undom.push(() => { sound?.removeEventListener('change', soundChange); motion?.removeEventListener('change', motionChange); });
+  const outside = e => { if (!panel?.hidden && !e.target.closest('.game-settings')) closeOptions(); };
+  const optionKey = e => {
+    if (e.key !== 'Escape' || panel?.hidden) return;
+    e.preventDefault(); e.stopPropagation(); closeOptions(); options?.focus();
+    // the panel has already spent this press as the game's pause, so the game pauses too
+    window.PBP?.escapePause?.();
+  };
+  document.addEventListener('keydown', optionKey);
+  undom.push(() => document.removeEventListener('keydown', optionKey));
+  document.addEventListener('pointerdown', outside);
+  undom.push(() => document.removeEventListener('pointerdown', outside));
+  const pictures = attachPictures(pick('game-pictures'));
+  undom.push(() => pictures?.dispose?.());
+  const preferenceOff = onPresentation(p => {
+    if (el.intensity) el.intensity.hidden = p.experience !== 'distraction';
+    pictures?.setVisible?.(p.experience === 'distraction');
+    for (const button of root.querySelectorAll('[data-experience]')) button.setAttribute('aria-pressed', String(button.dataset.experience === p.experience));
+    const copy = pick('experience-description');
+    if (copy) copy.textContent = p.experience === 'classic' ? 'The board, animated captures and sound.' : 'Media and effects build as the match progresses.';
+    if (sound) { sound.checked = p.volume > 0; sound.disabled = p.soundLocked; }
+    if (motion) { motion.checked = p.reducedMotion; motion.disabled = p.motionLocked; }
+    // Reduced motion keeps the camera at the seat and drops the replay; the boxes say so.
+    if (follow) { follow.checked = p.followCam && !p.reducedMotion; follow.disabled = p.reducedMotion; }
+    if (replays) { replays.checked = p.replays && !p.reducedMotion; replays.disabled = p.reducedMotion; }
+    for (const button of root.querySelectorAll('[data-turncard]')) button.setAttribute('aria-pressed', String(button.dataset.turncard === p.turnCard));
+    const note = pick('game-preference-note');
+    if (note) { note.hidden = !p.motionLocked && !p.soundLocked; note.textContent = 'App and system preferences stay in effect.'; }
+    setMeter(p.experience === 'classic' ? 0 : meter);
+  });
+  unbind.push(preferenceOff);
+  on('local', closeOptions);
+
   /* ---- wiring ------------------------------------------------------------- */
 
+  unbind.push(onIdentity(() => { paintNames(); paintCheck(); }));
+  on('piece-focus', (p) => {
+    if (!el.focus) return;
+    const names = { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' };
+    el.focus.textContent = p?.square ? (names[p.piece] || 'Piece') + ' · ' + p.square + (p.selected ? ' · Choose a highlighted square' : '') : 'Click a piece, then a square. Or drag.';
+    el.focus.classList.toggle('selected', !!p?.selected);
+  });
   on('clock', (snap) => {
-    if (snap && snap.active && snap.active !== active && !over) setActive(snap.active);
+    if (snap && snap.active && snap.active !== active && !over) { setActive(snap.active); paintCheck(); }
     paintLow(snap);
   });
   on('turn', (p) => {
@@ -372,6 +484,8 @@ export function createHud(opts = {}) {
       el.chip[s].classList.remove('low', 'check', 'shiver', 'shiver-hard');
     }
     if (el.line) el.line.classList.remove('on');
+    for (const tag of Object.values(el.tags)) if (tag) tag.textContent = '';
+    paintMenu();
     stopAsking();
     paintOnline();
   });
@@ -417,6 +531,7 @@ export function createHud(opts = {}) {
   newDeal(null);
 
   function dispose() {
+    if (el.status) delete el.status.dataset.hudOwned;
     if (moves) { try { moves.dispose(); } catch { /* already gone */ } moves = null; }
     for (const off of unbind) { try { off(); } catch { /* already gone */ } }
     unbind.length = 0;

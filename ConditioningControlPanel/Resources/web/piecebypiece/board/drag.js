@@ -87,6 +87,14 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   const at = { x: 0, y: 0 };   // last pointer position, in client pixels
 
   // --- the hand with nothing in it -------------------------------------------
+  let focusKey = '';
+  function describe(piece, selected = false) {
+    const data = piece?.userData;
+    const key = data?.square ? data.type + data.square + selected : '';
+    if (key === focusKey) return;
+    focusKey = key;
+    bus.emit('piece-focus', data?.square ? { piece: data.type, square: data.square, selected } : null);
+  }
   let hoverPiece = null;       // the man under the cursor, when he is yours
   let pointerIn = false;
   let pointerMoved = true;
@@ -241,11 +249,14 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   /** One raycast a frame: who is under the cursor, and what the cursor says. */
   function look() {
     let piece = null;
+    let inspect = null;
     if (pointerIn) {
       const found = pieceUnder(null);
+      inspect = found?.piece;
       const sq = found && found.piece.userData.square;
       if (sq && game.canPick(sq)) piece = found.piece;
     }
+    describe(selected || inspect, !!selected);
     if (piece !== hoverPiece) {
       if (hoverPiece) {
         hoverPiece.userData.hover = false;
@@ -273,6 +284,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     if (selected && selected !== piece) clearSelection(false);
     selected = piece;
     selSquare = square;
+    describe(piece, true);
     const moves = readMoves(square);
     selLegal = moves.squares;
     selTakes = moves.captures;
@@ -288,6 +300,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   function clearSelection(repaint = true) {
     if (!selected) return;
     const piece = selected;
+    describe(null);
     selected = null; selSquare = null; selLegal = []; selTakes = new Set(); selHover = null;
     wantLift(piece, piece === hoverPiece && !reducedMotion() ? T.hoverLift : 0);
     if (repaint) paint();
@@ -311,7 +324,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   }
 
   function onDown(ev) {
-    if (held || suspended || ev.button > 0) return;
+    if (held || suspended || ev.button > 0 || window.PBP?.door?.isUp?.()) return;
     pointerIn = true;
     const found = pieceUnder(ev);
     const square = found ? null : squareUnder(ev);
@@ -334,6 +347,8 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     if (!piece || !piece.userData.square) return;
     const sq = piece.userData.square;
     if (!game.canPick(sq)) return;
+    anim.skip();
+    describe(piece, true);
 
     held = piece;
     from = sq;
@@ -426,6 +441,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     // fly it down from where it was being held.
     const played = to && to !== start ? play(start, to) : null;
     if (played) {
+      describe(null);
       bus.emit('drop', { ok: true });
     } else {
       anim.springBack(piece);
@@ -465,12 +481,13 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   }
 
   function onKey(ev) {
-    if (ev.ctrlKey || ev.altKey || ev.metaKey || typing() || suspended) return;
+    if (ev.ctrlKey || ev.altKey || ev.metaKey || typing() || suspended || window.PBP?.door?.isUp?.()) return;
     // Take the last ply back, with nothing in hand. Backspace is the one every
     // player tries first; z is there for the hand that never leaves the board.
     if (!held && (ev.key === 'Backspace' || ev.key === 'z' || ev.key === 'Z')) {
       ev.preventDefault();
       if (!game.takeBack) return;
+      if (window.PBP?.isPaused?.()) return;   // the pause card holds the game (bug hunt 2026-09-29, CHESS-10)
       clearSelection();
       if (!game.takeBack()) cue('boing');   // nothing to take back, or too soon
       return;
@@ -549,6 +566,8 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     selection: () => selSquare,
     /** Let go of him, from anywhere. */
     deselect: () => clearSelection(),
+    /** Esc mid-drag: a man in hand springs back to his square, a waiting one is let go. */
+    drop() { onCancel(); clearSelection(); },
     // The height of the plane the cursor is dragging along. The screenshot
     // harness aims its release with this, because board level is no longer
     // where the held man is.

@@ -9,7 +9,7 @@
  *
  * The four messages the board itself needs:
  *
- *   host -> page   { type: 'pbp:settings', videoHoldSec, reducedMotion }   once
+ *   host -> page   { type: 'pbp:settings', videoHoldSec, reducedMotion, whispers }   once
  *   page -> host   { type: 'pbp:media-request', kinds: [...], count }
  *   host -> page   { type: 'pbp:media', images: [...], gifs: [...], videos: [...] }
  *   page -> host   { type: 'pbp:exit' }
@@ -17,6 +17,11 @@
  * plus the shell conventions the host also speaks: `ready` (which is what
  * makes it flush its queued settings frame), a `heartbeat` every couple of
  * seconds, and a `pong` answer to its `ping`.
+ *
+ * An Escape the panel kept as the game's pause is handed over as well, and
+ * played once as the page's own Escape (ui/host-escape.js):
+ *
+ *   host -> page   { type: 'pbp:escape' }
  *
  * ONLINE PLAY adds three more, and they are a set: one that hands the page an
  * identity, and a request/reply pair that carries HTTP for it.
@@ -57,6 +62,12 @@ const listeners = [];     // fn(msg)
 const internals = [];     // fn(msg), bridge-owned, never buffered - see the pump
 const preBuffer = [];     // messages that arrived before any listener existed
 let heartbeat = 0;        // setInterval handle, 0 when not beating
+// The host sends these once per boot, right at `ready`, and boot.js says ready before the HUD
+// (Options > Pictures) and the ramp's media pool have landed from their async imports. The
+// pre-buffer only holds frames while NO listener exists, so the latest of each is kept here and
+// handed to a listener that joins late (bug hunt 2026-09-29, CHESS-9).
+const REPLAYED = new Set(['pbp:settings', 'pbp:media-state']);
+const lastFrames = new Map();   // type -> the latest delivered frame of a REPLAYED type
 
 if (webview) {
   webview.addEventListener('message', (e) => {
@@ -76,6 +87,7 @@ if (webview) {
 }
 
 function deliver(m) {
+  if (REPLAYED.has(m.type)) lastFrames.set(m.type, m);
   for (const fn of listeners) {
     try { fn(m); } catch (err) { console.warn('[pbp] host message handler threw', err); }
   }
@@ -92,7 +104,8 @@ export function postToHost(msg) {
 
 /**
  * Listen for host -> page messages. Returns an unsubscribe function.
- * The first listener to register drains anything that arrived before it.
+ * The first listener to register drains anything that arrived before it; a
+ * later one is handed the latest pbp:settings and pbp:media-state, if any.
  */
 export function onHostMessage(fn) {
   if (typeof fn !== 'function') return () => {};
@@ -100,11 +113,21 @@ export function onHostMessage(fn) {
   if (preBuffer.length) {
     const queued = preBuffer.splice(0, preBuffer.length);
     for (const m of queued) deliver(m);
+  } else {
+    for (const m of [...lastFrames.values()]) {
+      try { fn(m); } catch (err) { console.warn('[pbp] host message handler threw', err); }
+    }
   }
   return () => {
     const i = listeners.indexOf(fn);
     if (i >= 0) listeners.splice(i, 1);
   };
+}
+
+/** The latest pbp:settings or pbp:media-state the host sent, or null. For a module that
+ *  listens on the webview itself (ramp/media.js) and so cannot be handed the replay. */
+export function lastHostFrame(type) {
+  return lastFrames.get(type) || null;
 }
 
 /**

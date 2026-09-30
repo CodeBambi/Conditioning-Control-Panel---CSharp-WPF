@@ -21,6 +21,9 @@
     <!--
         THE WIDGET SURFACE.
 
+        Do not set Window.Visibility in XAML. That queues a native hide which can run after
+        BeginPresentation shows a newly constructed Emi. A new Window already starts hidden.
+
         The window is deliberately BIGGER than EMI: `OverlayPad` DIPs of fully transparent air on
         every side, so the summon smoke, the sparkle scatter and (later) her speech bubble have
         room to fly outside her silhouette without a second window. Empty air is `Background`-less

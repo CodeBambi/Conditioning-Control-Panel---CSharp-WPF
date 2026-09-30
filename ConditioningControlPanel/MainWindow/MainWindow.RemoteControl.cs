@@ -1115,7 +1115,7 @@ namespace ConditioningControlPanel
                     var session = _sessionEngine.CurrentSession;
                     var phaseIndex = _sessionEngine.CurrentPhaseIndex;
                     var phaseName = session.Phases != null && phaseIndex >= 0 && phaseIndex < session.Phases.Count
-                        ? session.Phases[phaseIndex].Name : "";
+                        ? session.GetModeAwarePhaseName(session.Phases[phaseIndex]) : "";
 
                     return new Services.SessionProgressInfo
                     {
@@ -1178,7 +1178,7 @@ namespace ConditioningControlPanel
 
                     var phaseIndex = _sessionEngine.CurrentPhaseIndex;
                     if (session.Phases != null && phaseIndex >= 0 && phaseIndex < session.Phases.Count)
-                        TxtRemoteSessionPhase.Text = session.Phases[phaseIndex].Name;
+                        TxtRemoteSessionPhase.Text = session.GetModeAwarePhaseName(session.Phases[phaseIndex]);
                     else
                         TxtRemoteSessionPhase.Text = "";
                 }

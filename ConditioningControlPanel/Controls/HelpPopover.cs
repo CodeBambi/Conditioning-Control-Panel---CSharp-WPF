@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
+using ConditioningControlPanel.Controls.HelpLoops;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -22,10 +23,10 @@ namespace ConditioningControlPanel.Controls
     /// <see cref="HelpTooltipBuilder.BuildPanel"/> produces, hosted in a styled
     /// border that matches HelpTooltipStyle (rounded corners, pink border, shadow).
     ///
-    /// When the topic ships a tutorial clip (<see cref="HelpContent.HasClip"/>), a
-    /// static poster + play button is rendered at the TOP of the card; clicking it
-    /// opens the existing <see cref="HelpVideoWindow"/>. No LibVLC is instantiated
-    /// inside the popover.
+    /// When the topic has a drawn help loop (<see cref="HelpLoopRegistry"/>), the loop and
+    /// its step chips sit at the TOP of the card; it ticks only while the card is open
+    /// (the view unhooks when the popup hides). Otherwise, when the topic ships a
+    /// tutorial clip (<see cref="HelpContent.HasClip"/>), a muted looping preview does.
     ///
     /// Usage:  HelpPopover.Attach(button, content);   // idempotent per button
     ///         HelpPopover.Clear(button);             // detach
@@ -59,6 +60,7 @@ namespace ConditioningControlPanel.Controls
         private FrameworkElement? _childRoot;   // popup child root (mouse target)
         private Window? _hostWindow;             // window we watch while open
         private InlineLoopVideo? _inlineVideo;   // muted looping preview (clip topics only)
+        private HelpLoopView? _loopView;         // drawn loop (topics with a registered scene)
         private bool _pinned;
         private bool _contentBuilt;
 
@@ -133,7 +135,8 @@ namespace ConditioningControlPanel.Controls
 
             // Card body: optional video poster on top, then the rich text panel.
             var body = new StackPanel();
-            if (_content.HasClip) body.Children.Add(BuildVideoPoster(pink));
+            if (HelpLoopRegistry.TryGet(_content.SectionId, out var scene)) body.Children.Add(BuildLoop(scene, pink));
+            else if (_content.HasClip) body.Children.Add(BuildVideoPoster(pink));
             body.Children.Add(HelpTooltipBuilder.BuildPanel(_content, _button));
 
             var card = new Border
@@ -166,6 +169,29 @@ namespace ConditioningControlPanel.Controls
 
             _childRoot = shadowHost;
             _popup.Child = shadowHost;
+        }
+
+        /// <summary>
+        /// The drawn help loop for this topic (native WPF, see <see cref="HelpLoopView"/>) with its
+        /// step chips under it. Replaces both the clip and the caption bar: the steps say the same
+        /// thing, and they light as the loop reaches them.
+        /// </summary>
+        private FrameworkElement BuildLoop(HelpLoopScene scene, Brush pink)
+        {
+            _loopView = new HelpLoopView(scene);
+            var frame = new Border
+            {
+                Margin = new Thickness(12, 12, 12, 0),
+                CornerRadius = new CornerRadius(8),
+                BorderBrush = pink,
+                BorderThickness = new Thickness(1),
+                Background = new SolidColorBrush(Color.FromRgb(0x0b, 0x09, 0x14)),
+                Child = _loopView
+            };
+            var panel = new StackPanel();
+            panel.Children.Add(frame);
+            panel.Children.Add(new HelpLoopSteps(_loopView));
+            return panel;
         }
 
         /// <summary>
@@ -376,6 +402,7 @@ namespace ConditioningControlPanel.Controls
             }
             _inlineVideo?.Dispose();
             _inlineVideo = null;
+            _loopView = null;
             _popup.Child = null;
         }
 

@@ -1,0 +1,400 @@
+/* ============================================================================
+ * ui/startGuide.css - "How to win": title + three cards over the countdown.
+ *
+ * Every scene is a CSS loop. The BASE styles are the static poses (bubble
+ * whole, item beside the opponent, bars at their final lengths, crown landed):
+ * reduced motion and the lite perf tier only switch the animations off, so a
+ * still card still tells the same story. The loops park under the heat
+ * governor through --gg-deco-play like every other decoration on the page.
+ *
+ * IN: the title thuds, the cards rise one after another (--i is the card index,
+ * --gg-guide-at is written by ui/startGuide.js and leaves room for the VS slam).
+ * OUT: the countdown screen's own router leave takes everything together.
+ * ==========================================================================*/
+
+.gg-guide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: clamp(0.7rem, 2.4vh, 1.5rem);
+  padding: 3vh 4vw 15vh;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.gg-guide-title {
+  margin: 0;
+  font-size: clamp(1.9rem, 4.8vw, 3.4rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  animation: ggGuideTitleIn .42s cubic-bezier(.2, 1.5, .4, 1) both;
+  animation-delay: var(--gg-guide-at, 0ms);
+}
+@keyframes ggGuideTitleIn {
+  0% { opacity: 0; transform: scale(1.6) translateY(-10px); filter: blur(6px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+
+.gg-guide-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.7rem, 1.6vw, 1.3rem);
+  width: min(100%, 1040px);
+}
+
+.gg-guide-card {
+  --acc: var(--gg-pink);
+  --acc-rgb: var(--gg-pink-rgb);
+  position: relative;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.85rem 0.9rem 0.95rem;
+  border-radius: var(--gg-radius-card);
+  background: var(--gg-card-bg);
+  border: var(--gg-card-border);
+  box-shadow: var(--gg-card-glow), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  animation: ggGuideCardIn .5s cubic-bezier(.2, 1.5, .4, 1) both;
+  animation-delay: calc(var(--gg-guide-at, 0ms) + var(--i, 0) * 140ms + 120ms);
+}
+.gg-guide-card::before {
+  content: '';
+  position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--acc), transparent);
+  opacity: 0.9;
+}
+.gg-guide-card--throw { --acc: var(--gg-violet); --acc-rgb: var(--gg-violet-rgb); }
+.gg-guide-card--duel { --acc: var(--gg-gold); --acc-rgb: 255, 212, 94; }
+@keyframes ggGuideCardIn {
+  0% { opacity: 0; transform: translateY(26px) scale(.92); }
+  100% { opacity: 1; transform: none; }
+}
+
+.gg-guide-card-title {
+  margin: 0;
+  font-size: clamp(1rem, 1.7vw, 1.25rem);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--gg-text);
+}
+.gg-guide-card-line {
+  margin: 0;
+  font-size: clamp(0.8rem, 1.25vw, 0.95rem);
+  line-height: 1.3;
+  color: var(--gg-text-2, rgba(255, 255, 255, 0.72));
+}
+
+/* --------------------------------------------------------------- the stage */
+.gsc {
+  position: relative;
+  height: clamp(84px, 13vh, 120px);
+  border-radius: var(--gg-radius-plate);
+  background:
+    radial-gradient(70% 90% at 50% 100%, rgba(var(--acc-rgb), 0.16), transparent 70%),
+    var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  overflow: hidden;
+}
+.gsc i, .gsc b { position: absolute; display: block; }
+.gsc b { font-weight: 900; font-style: normal; }
+.gsc * { animation-play-state: var(--gg-deco-play); }
+
+/* ---------------------------------------------------------- 1. pop + click */
+.gsc-bubble-wrap { position: absolute; left: 27%; top: 50%; width: 0; height: 0; }
+.gsc-bubble {
+  width: 46px; height: 46px; left: -23px; top: -23px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  background: radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.6), rgba(255, 105, 180, 0.38) 42%, rgba(179, 136, 255, 0.18) 68%, transparent 72%);
+  box-shadow: 0 0 18px rgba(255, 105, 180, 0.3);
+  animation: ggGuideBubble 3.2s ease-in-out infinite;
+}
+@keyframes ggGuideBubble {
+  0% { transform: scale(.2) translateY(14px); opacity: 0; }
+  18% { transform: scale(1) translateY(0); opacity: 1; }
+  48% { transform: scale(1.05) translateY(-4px); opacity: 1; }
+  56% { transform: scale(1.02) translateY(-3px); opacity: 1; }
+  60% { transform: scale(1.45) translateY(-3px); opacity: 0; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+.gsc-spark {
+  width: 6px; height: 6px; left: -3px; top: -3px;
+  border-radius: 50%;
+  background: var(--gg-pink);
+  box-shadow: 0 0 8px var(--gg-pink);
+  opacity: 0;
+  animation: ggGuideSpark 3.2s ease-out infinite;
+}
+@keyframes ggGuideSpark {
+  0%, 57% { transform: rotate(var(--a)) translateX(4px) scale(1); opacity: 0; }
+  60% { opacity: 1; }
+  86%, 100% { transform: rotate(var(--a)) translateX(34px) scale(.3); opacity: 0; }
+}
+.gsc-tile-wrap { position: absolute; left: 70%; top: 50%; width: 0; height: 0; }
+.gsc-tile {
+  width: 46px; height: 34px; left: -23px; top: -17px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet));
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  animation: ggGuideTile 3.2s ease-in-out infinite;
+}
+.gsc-tile::after {
+  /* the "picture": a tiny sun and a hill */
+  content: '';
+  position: absolute; left: 8px; top: 7px; width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 8px 12px 0 6px rgba(255, 255, 255, 0.35);
+}
+@keyframes ggGuideTile {
+  0%, 66% { transform: scale(1); }
+  70% { transform: scale(.86) rotate(-3deg); }
+  78%, 100% { transform: scale(1); }
+}
+.gsc-click {
+  width: 30px; height: 30px; left: -15px; top: -15px;
+  border-radius: 50%;
+  border: 2px solid var(--gg-gold);
+  opacity: 0;
+  animation: ggGuideClick 3.2s ease-out infinite;
+}
+@keyframes ggGuideClick {
+  0%, 66% { transform: scale(.3); opacity: 0; }
+  70% { transform: scale(.6); opacity: .95; }
+  86%, 100% { transform: scale(1.8); opacity: 0; }
+}
+.gsc-plus {
+  left: 10px; top: -34px;
+  font-size: 0.95rem;
+  color: var(--gg-gold);
+  text-shadow: 0 0 10px rgba(255, 212, 94, 0.6);
+  transform: translateY(-6px);
+  animation: ggGuidePlus 3.2s ease-out infinite;
+}
+@keyframes ggGuidePlus {
+  0%, 70% { transform: translateY(10px) scale(.7); opacity: 0; }
+  76% { transform: translateY(-2px) scale(1.1); opacity: 1; }
+  100% { transform: translateY(-24px) scale(1); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------- 2. throw */
+.gsc-track { position: absolute; left: 12%; right: 30%; top: 50%; height: 0; }
+.gsc-arc {
+  position: absolute; left: 76%; top: 0; width: 0; height: 0;
+  animation: ggGuideArcX 3s linear infinite;
+}
+@keyframes ggGuideArcX {
+  0%, 12% { left: 0%; }
+  58% { left: 100%; }
+  100% { left: 100%; }
+}
+.gsc-item {
+  width: 28px; height: 28px; left: -14px; top: -14px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--gg-gold), var(--gg-pink));
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 14px rgba(255, 212, 94, 0.45);
+  animation: ggGuideArcY 3s linear infinite;
+}
+.gsc-item::after {
+  content: '';
+  position: absolute; left: 8px; top: 8px; width: 9px; height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+}
+@keyframes ggGuideArcY {
+  0% { transform: translateY(0) rotate(0deg) scale(.6); opacity: 0; }
+  12% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+  35% { transform: translateY(-34px) rotate(180deg) scale(1.05); animation-timing-function: ease-in; opacity: 1; }
+  58% { transform: translateY(0) rotate(360deg) scale(1); opacity: 1; }
+  64% { transform: translateY(0) rotate(360deg) scale(1.3); opacity: 0; }
+  100% { transform: translateY(0) scale(1.3); opacity: 0; }
+}
+.gsc-ava-wrap { position: absolute; left: 78%; top: 50%; width: 0; height: 0; }
+.gsc-ava {
+  width: 44px; height: 44px; left: -22px; top: -22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--gg-violet), #7c4dff);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 16px rgba(179, 136, 255, 0.4);
+  animation: ggGuideAva 3s ease-out infinite;
+}
+.gsc-ava::before {
+  /* eyes */
+  content: '';
+  position: absolute; left: 13px; top: 15px; width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 10px 0 0 #fff;
+}
+.gsc-ava::after {
+  /* a small mouth */
+  content: '';
+  position: absolute; left: 17px; top: 26px; width: 7px; height: 4px;
+  border-radius: 0 0 6px 6px;
+  background: rgba(255, 255, 255, 0.85);
+}
+@keyframes ggGuideAva {
+  0%, 57% { transform: scale(1); }
+  61% { transform: scale(.86, 1.12) translateX(3px); }
+  70% { transform: scale(1.06, .96); }
+  78%, 100% { transform: scale(1); }
+}
+.gsc-impact {
+  width: 44px; height: 44px; left: -22px; top: -22px;
+  border-radius: 50%;
+  border: 2px solid var(--gg-gold);
+  opacity: 0;
+  animation: ggGuideImpact 3s ease-out infinite;
+}
+@keyframes ggGuideImpact {
+  0%, 57% { transform: scale(.5); opacity: 0; }
+  60% { transform: scale(.8); opacity: .95; }
+  84%, 100% { transform: scale(2); opacity: 0; }
+}
+.gsc-bonus {
+  left: 14px; top: -42px;
+  padding: 0 0.45em;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #2a1230;
+  background: var(--gg-gold);
+  border-radius: var(--gg-radius-pill);
+  box-shadow: 0 0 12px rgba(255, 212, 94, 0.55);
+  animation: ggGuideBonus 3s ease-out infinite;
+}
+@keyframes ggGuideBonus {
+  0%, 60% { transform: translateY(12px) scale(.6); opacity: 0; }
+  67% { transform: translateY(0) scale(1.1); opacity: 1; }
+  74% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-20px) scale(1); opacity: 0; }
+}
+
+/* ----------------------------------------------------------------- 3. duel */
+.gsc-lane {
+  position: absolute; left: 8%; right: 8%; height: 30%;
+  display: flex; align-items: center; gap: 0.45rem;
+}
+.gsc-lane--you { top: 16%; }
+.gsc-lane--them { top: 54%; }
+.gsc-lane-name {
+  flex: 0 0 3.2em;
+  font-size: 0.68rem; font-weight: 800;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--gg-text-3, rgba(255, 255, 255, 0.55));
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.gsc-lane-track {
+  position: relative; flex: 1; height: 10px;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.gsc-bar {
+  left: 0; top: 0; height: 100%; width: 86%;
+  border-radius: var(--gg-radius-pill);
+  background: linear-gradient(90deg, var(--gg-pink-hover), var(--gg-pink));
+  box-shadow: 0 0 10px rgba(255, 105, 180, 0.5);
+  animation: ggGuideBarYou 3.4s ease-in-out infinite;
+}
+.gsc-lane--them .gsc-bar {
+  width: 64%;
+  background: linear-gradient(90deg, #7c4dff, var(--gg-violet));
+  box-shadow: 0 0 10px rgba(179, 136, 255, 0.45);
+  animation-name: ggGuideBarThem;
+}
+@keyframes ggGuideBarYou {
+  0% { width: 6%; } 12% { width: 22%; } 34% { width: 38%; } 52% { width: 50%; }
+  70% { width: 86%; } 88% { width: 86%; } 100% { width: 6%; }
+}
+@keyframes ggGuideBarThem {
+  0% { width: 6%; } 12% { width: 28%; } 34% { width: 46%; } 52% { width: 60%; }
+  70% { width: 64%; } 88% { width: 64%; } 100% { width: 6%; }
+}
+.gsc-crown {
+  right: 14%; top: 4%;
+  width: 22px; height: 16px;
+  color: var(--gg-gold);
+  filter: drop-shadow(0 0 8px rgba(255, 212, 94, 0.7));
+  animation: ggGuideCrown 3.4s ease-out infinite;
+}
+.gsc-crown svg { display: block; }
+@keyframes ggGuideCrown {
+  0%, 68% { transform: translateY(-30px) scale(.6) rotate(-12deg); opacity: 0; }
+  76% { transform: translateY(0) scale(1.2) rotate(0deg); opacity: 1; }
+  81% { transform: translateY(0) scale(.94); }
+  86%, 92% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-10px) scale(1); opacity: 0; }
+}
+
+/* --------------------------------------------------- the countdown numeral */
+/* With the guide up the shared-clock readout moves to the foot, still big
+   enough to read from across the room, still the same thud. The names stay
+   where they were; the guide's padding keeps out of their row. */
+.gg-count.has-guide .gg-count-num {
+  position: absolute; left: 0; right: 0; bottom: 1.5vh;
+  text-align: center;
+  font-size: clamp(2.8rem, 8vw, 5.6rem);
+}
+.gg-count.has-guide .gg-count-num.is-go { font-size: clamp(2.6rem, 7vw, 5rem); }
+.gg-count.has-guide .gg-count-ring { width: clamp(6rem, 18vw, 12rem); top: auto; bottom: 1.5vh; transform-origin: 50% 50%; }
+
+/* ------------------------------------------------------ the options sheet */
+.gg-guide-sheet {
+  position: fixed; inset: 0;
+  z-index: 58; /* over the HUD and the drawer, UNDER MERCY (--gg-mercy-z 60) */
+  display: flex; align-items: center; justify-content: center;
+  padding: 2vh 3vw;
+  background: var(--gg-scrim);
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.gg-guide-sheet.is-in { opacity: 1; }
+.gg-guide-sheet.is-leaving { opacity: 0; pointer-events: none; }
+.gg-guide-sheet-panel {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  width: min(1040px, 100%);
+}
+.gg-guide-sheet .gg-guide {
+  position: static; inset: auto;
+  padding: 0; pointer-events: auto;
+  width: 100%;
+}
+.gg-guide-sheet .gg-guide-title, .gg-guide-sheet .gg-guide-card { animation-delay: calc(var(--i, 0) * 90ms); }
+.gg-guide-done { min-width: 10rem; }
+
+/* ---------------------------------------------------------- narrow windows */
+@media (max-width: 800px) {
+  /* one column of compact cards: scene left, the two lines stacked on the right */
+  .gg-guide { gap: 0.5rem; padding: 2vh 3vw 12vh; }
+  .gg-guide-title { font-size: clamp(1.4rem, 5vw, 2rem); }
+  .gg-guide-cards { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; width: min(100%, 560px); }
+  .gg-guide-card {
+    display: grid; grid-template-columns: 40% 1fr; grid-template-rows: auto auto;
+    align-items: center; column-gap: 0.7rem; row-gap: 0.15rem;
+    padding: 0.5rem 0.7rem;
+  }
+  .gg-guide-card .gsc { grid-row: 1 / 3; height: 64px; }
+  .gg-guide-card-title { font-size: 0.95rem; align-self: end; }
+  .gg-guide-card-line { font-size: 0.78rem; align-self: start; }
+  .gg-count.has-guide .gg-count-num { font-size: clamp(2.2rem, 7vw, 3.6rem); bottom: 1vh; }
+}
+
+/* --------------------------------------------------------- the still rails */
+html[data-gg-motion="reduced"] .gg-guide,
+html[data-gg-motion="reduced"] .gg-guide *,
+html[data-gg-perf="lite"] .gg-guide,
+html[data-gg-perf="lite"] .gg-guide *,
+html[data-gg-motion="reduced"] .gg-guide-sheet,
+html[data-gg-perf="lite"] .gg-guide-sheet {
+  animation: none !important;
+  transition: none !important;
+}
+html[data-gg-motion="reduced"] .gg-guide-sheet:not(.is-leaving),
+html[data-gg-perf="lite"] .gg-guide-sheet:not(.is-leaving) { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-guide, .gg-guide *, .gg-guide-sheet { animation: none !important; transition: none !important; }
+  .gg-guide-sheet:not(.is-leaving) { opacity: 1; }
+}

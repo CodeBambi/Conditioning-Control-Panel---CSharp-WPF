@@ -15,9 +15,15 @@ import { createDrag } from './board/drag.js';
 import { createGlyphs } from './board/glyphs.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
+import { createSolo } from './game/solo.js';
+import { createTurnHandoff } from './ui/turn-handoff.js';
+import { createDirector } from './board/director.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
+import { createPauseHush } from './ui/pause-hush.js';
+import { createHostEscape, HOST_ESCAPE } from './ui/host-escape.js';
+import { presentation } from './game/preferences.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -36,6 +42,10 @@ function fail(message) {
 }
 
 function main() {
+  // The panel keeps a first Escape as the game's pause and hands it over as pbp:escape: with this page out
+  // of keyboard focus the real key never lands here (ui/host-escape.js). Made first, so it hears every real
+  // Escape before any part of the page keeps one for itself (the promotion picker, the door).
+  const hostEscape = createHostEscape();
   const bus = createBus();
   let view;
   try {
@@ -79,6 +89,7 @@ function main() {
     auto: Number(params.get('auto')) || 0,
   });
   const game = createDriverSwitch(hotseat);
+  anim.setClock?.(() => game.clock);
 
   const drag = createDrag({ view, pieces, anim, bus, game, jiggle });
   board.drag = drag;
@@ -86,7 +97,17 @@ function main() {
   // `ramp` is filled in once the effects layer has attached. It is on the
   // object from the start so a reader never has to care whether that has
   // happened yet: it is simply null until it has.
-  window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: false } };
+  // reducedMotion starts from the player's saved choice: preferences.js ran before PBP existed, so its
+  // own first write went nowhere, and every mover reads PBP.settings.
+  window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: presentation().reducedMotion } };
+  board.turnHandoff = createTurnHandoff({ bus, game, board, menuOpen: () => !!window.PBP.door?.isUp() });
+  { const dispose = view.dispose; view.dispose = () => { board.turnHandoff.dispose(); dispose(); }; }
+  // The follow camera and the capture replay (board/director.js). It blends on top
+  // of the rig after the rig has placed the camera, and draws its panels over the
+  // finished frame, so nothing below it has to know it exists.
+  board.director = createDirector({ view, anim, bus, game, root: dom.stage });
+  { const base = view.update; view.update = (dt) => { base(dt); board.director.update(dt); }; }
+  { const dispose = view.dispose; view.dispose = () => { board.director.dispose(); dispose(); }; }
   /**
    * Deal an online game onto this board. The front door calls it with the Match
    * its lobby handed back; everything after that - the seat, the clocks, the
@@ -94,9 +115,18 @@ function main() {
    * know the game changed hands.
    */
   window.PBP.startOnline = (match) => startOnlineMatch({ bus, board, hud: dom.hud, game, match });
+  // The friends drawer: challenge a friend, or take a friend's challenge up. Heard here, early,
+  // because the frame can land before the door exists; it waits for the door.
+  onHostMessage((m) => {
+    if (!m || m.type !== 'pbp:friend') return;
+    Promise.resolve(window.PBP.doorReady).then((door) => { if (door && door.friend) door.friend(m); }).catch(() => {});
+  });
   onHostMessage((m) => {
     if (m.type !== 'pbp:settings') return;
-    const { type, ...values } = m;   // the envelope's own key is not a setting
+    // The envelope's own key is not a setting, and reducedMotion belongs to preferences.js: it folds the
+    // host's value in with the saved choice and the OS (they can only add reduction). Copying the raw host
+    // value here wrote a false over a ticked "Reduce motion" on every launch.
+    const { type, reducedMotion, ...values } = m;
     Object.assign(window.PBP.settings, values);
   });
   // The host names the player from the account (pbp:identity, displayName),
@@ -121,6 +151,8 @@ function main() {
   // --- J: the feel (outline, dust, sound) ---
   // Settings are merged, never replaced: the host bridge may have filled some.
   window.PBP.settings = Object.assign({ outline: true, sfxVolume: 0.6 }, window.PBP.settings || {});
+  jiggle.bindBus(bus);
+  { const dispose = view.dispose; view.dispose = () => { jiggle.dispose(); dispose(); }; }
   anim.bindBus(bus, (v) => view.projectPoint(v));   // anim.js speaks `land` and `sunk`
   // Loaded late and guarded, so a missing module never holds the game. The
   // per-frame updates ride on view.render, which the loop calls last, after
@@ -133,8 +165,14 @@ function main() {
   const renderBase = view.render;
   view.render = () => {
     for (const fn of feelLate) fn(feelDt);
-    renderBase();
+    if (board.juice) { board.juice.update(feelDt); board.juice.render(renderBase); }
+    else renderBase();
   };
+  import('./board/juice.js').then(m => {
+    board.juice = m.createJuice({ bus, camera: view.camera });
+    const dispose = view.dispose;
+    view.dispose = () => { board.juice.dispose(); dispose(); };
+  }).catch(e => console.warn('[pbp] impact camera missing', e));
   import('./board/outline.js').then((m) => {
     board.outline = m.createOutline({ group: view.pieceGroup, bus });
     feelLate.push((dt) => board.outline.update(dt, view.camera, view.renderer));
@@ -145,6 +183,8 @@ function main() {
   }).catch((e) => console.warn('[pbp] dust missing', e));
   Promise.all([import('./audio/sfx.js'), import('./board/scene.js')]).then(([m, sc]) => {
     board.sfx = m.createSfx({ bus, game, group: view.pieceGroup, squareOf: sc.worldToSquare, root: dom.fx });
+    feelLate.push(() => board.sfx.update());
+    const dispose = view.dispose; view.dispose = () => { board.sfx.dispose(); dispose(); };
   }).catch((e) => console.warn('[pbp] sfx missing', e));
   // --- end J ---
   // --- K: a room to reflect, and where he just came from ---
@@ -237,18 +277,73 @@ function main() {
     board.motes = m.createMotes({ scene: view.scene });
     feelLate.push((dt) => board.motes.update(dt, view.camera, view.renderer));
   }).catch((e) => console.warn('[pbp] motes missing', e));
+  import('./board/turn-spiral.js').then(m => {
+    board.turnSpiral = m.createTurnSpiral({ view, game, bus, menuOpen: () => !!window.PBP.door?.isUp() || !!window.PBP.isPaused?.() || !!window.PBP.isReturning?.() });
+    feelLate.push(dt => board.turnSpiral.update(dt));
+    const dispose = view.dispose;
+    view.dispose = () => { board.turnSpiral.dispose(); dispose(); };
+  }).catch(e => console.warn('[pbp] turn spiral missing', e));
   // --- end T ---
-  // Esc closes the board - but never mid-drag, where it is "put the piece back".
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
+  // Esc on the menu closes the board; Esc in a game pauses it (owner, 2026-09-27). Mid-drag it also puts the
+  // piece back, and never closes the board. A local game holds its clock and the computer's reply; an online
+  // clock belongs to the server, so the card says it keeps running.
+  // The pause is also the first half of a panic press (the panel lets the board keep a first Escape as its
+  // pause; a second within 2 s closes it), so it goes quiet at once (ui/pause-hush.js), and an Escape on the
+  // pause card LEAVES, whatever the gap: Esc, Esc is always the way out. Resume is the focused button.
+  const pauseCard = document.createElement('div');
+  pauseCard.className = 'pbp-pause';
+  pauseCard.hidden = true;
+  pauseCard.setAttribute('role', 'dialog');
+  pauseCard.setAttribute('aria-modal', 'true');
+  pauseCard.innerHTML = '<div class="pbp-pause-card"><h2>PAUSED</h2><p class="pbp-pause-note" hidden>Online game: the clock keeps running.</p>'
+    + '<button type="button" data-pause="resume">Resume</button><button type="button" data-pause="leave">Leave the board</button></div>';
+  document.body.appendChild(pauseCard);
+  let pausedGame = false;
+  const onlineSeat = () => !!(window.PBP.game?.current && typeof window.PBP.game.current.offerDraw === 'function');
+  function setGamePaused(p) {
+    if (p === pausedGame) return;
+    pausedGame = p;
+    pauseCard.hidden = !p;
+    const online = onlineSeat();
+    pauseCard.querySelector('.pbp-pause-note').hidden = !online;
+    if (!online) { const clock = window.PBP.game?.clock; if (p) clock?.pause?.(); else clock?.resume?.(); }
+    pauseHush.set(p);
+    if (p) pauseCard.querySelector('[data-pause="resume"]').focus();
+  }
+  const pauseHush = createPauseHush({ board, ramp: () => window.PBP.ramp, isPaused: () => pausedGame });
+  window.PBP.pause = setGamePaused;
+  bus.on('gameover', () => setGamePaused(false));   // the result card owns the screen now
+  window.PBP.isPaused = () => pausedGame;
+  window.PBP.isReturning = () => pauseHush.returning();   // a resume's effects are still on their way back
+  pauseCard.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pause]');
+    if (!b) return;
+    if (b.dataset.pause === 'resume') setGamePaused(false);
+    else postToHost({ type: 'pbp:exit' });   // leave hushed, the window closes
   });
+  const inGameNow = () => !window.PBP.door?.isUp() && window.PBP.game && !window.PBP.game.isOver();
+  // The panel has already spent a first Escape as the game's pause (not a panic), so a part of the page that
+  // keeps the key for itself (the Options panel, the promotion picker) pauses the game through this too, or
+  // nothing pauses at all (bug hunt 2026-09-29, CHESS-1).
+  window.PBP.escapePause = () => { if (!pausedGame && inGameNow()) setGamePaused(true); };
+  window.addEventListener('keydown', (e) => {
+    // A held Escape is one press (the panel counts it once too); its key repeats must not leave the pause.
+    if (e.key !== 'Escape' || e.repeat) return;
+    if (pausedGame) { postToHost({ type: 'pbp:exit' }); return; }   // still hushed: nothing comes back on the way out
+    if (drag.isDragging()) { drag.drop(); window.PBP.escapePause(); return; }
+    const inGame = inGameNow();
+    if (inGame) setGamePaused(true);
+    else postToHost({ type: 'pbp:exit' });
+  });
+  // The kept press plays through the listener above (and every other Escape listener), once.
+  onHostMessage((m) => { if (m.type === HOST_ESCAPE) hostEscape.kept(); });
   // --- Q: a capture animation is never a hostage ---
   // A tap on the board or a Space/Enter while the bishop is mid-whip lands
   // everything at once: no animation debt, the next move is already yours.
   window.addEventListener('keydown', (e) => {
     if ((e.key === ' ' || e.key === 'Enter') && anim.whipping && anim.whipping()) { anim.skip(); e.preventDefault(); }
   });
-  dom.canvas.addEventListener('pointerdown', () => { if (anim.whipping && anim.whipping()) anim.skip(); }, { capture: true });
+
   // --- end Q ---
   signalReady();
 
@@ -259,10 +354,13 @@ function main() {
     view.update(dt);
     pieces.update(dt);
     anim.update(dt);
+    if (!pausedGame) board.turnHandoff.update(dt);   // no turn card comes in under the pause card (CHESS-3)
     drag.update(dt);
     jiggle.update(dt);   // last: it reads what everything else just decided
-    if (window.PBP.game && window.PBP.game.update) window.PBP.game.update(dt);
+    // A paused local game holds the computer's reply too; an online seat keeps talking to the server.
+    if (window.PBP.game && window.PBP.game.update && (!pausedGame || onlineSeat())) window.PBP.game.update(dt);
     view.render();
+    board.director.afterRender(dt);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -278,11 +376,19 @@ function main() {
   // landed (net/lobbyServer.js, another lane's), else the mock, and ?lobby=mock
   // asks for the mock on purpose.
   const dealAtOnce = params.has('hotseat') || Number(params.get('auto')) > 0 || params.get('door') === '0';
-  function startGame({ mode = 'hotseat', match = null } = {}) {
+  function startGame({ mode = 'hotseat', match = null, options = {}, restore = null } = {}) {
     window.PBP.match = match;                         // the online lane reads this
     // an online seat is built and switched in by net/online.js; the hotseat's
     // reset-and-start is not what it wants
     if (mode === 'online' && match) { window.PBP.startOnline(match); return; }
+    if (mode === 'solo') {
+      const solo = createSolo({ bus, board, hud: dom.hud, options, restore });
+      game.switchTo(solo);
+      bus.emit('newgame', { ply: solo.plies() });
+      bus.emit('local', { sides: solo.seats, mode, me: solo.seats[0], players: { [solo.seats[0]]: window.PBP.settings.playerName || 'You', [solo.seats[0] === 'w' ? 'b' : 'w']: solo.record().opponent } });
+      solo.start();
+      return;
+    }
     // A finished online seat may still be in the chair from the last game
     // (it stays for the end card). Reset-and-start against it would resync
     // the finished match and fire its gameover a second time, so the hotseat

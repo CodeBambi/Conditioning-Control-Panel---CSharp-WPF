@@ -53,7 +53,7 @@ export function mount(container, ctx) {
     autocapitalize: 'characters',
     spellcheck: 'false',
     maxlength: '32',            // paste room; normalization trims it back to six
-    'aria-label': 'invite code, six characters',
+    'aria-label': S.aria.inviteCodeSix,
   });
 
   const error = el('p', { class: 'gg-inline-error', hidden: true });

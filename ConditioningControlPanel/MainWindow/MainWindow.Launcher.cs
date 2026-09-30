@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services;
@@ -32,6 +33,65 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Warning(ex, "[Launcher] MinimizeToTray failed; hiding directly"); Hide(); }
             // Whatever a fade left behind, the next show (the tray, a remote, a game) is opaque.
             RestoreRootOpacity();
+        }
+
+        /// <summary>True only inside <see cref="ShowHiddenForBoot"/>'s Show call: WPF reports the
+        /// panel visible there while nobody can see it, so windows that follow the panel (the
+        /// companion tube) stay where they are.</summary>
+        internal bool BuildingHiddenForBoot { get; private set; }
+
+        /// <summary>
+        /// The boot for a launcher or game surface (LauncherBoot.PanelStartsHidden). WPF's Show runs
+        /// as on every boot, because the panel's Loaded work (tray, engine autostart, companion,
+        /// startup ladder) runs inside it and a window never shown is never loaded. For that one
+        /// call the window is cloaked (DWM composes nothing), kept off the taskbar and not
+        /// activated, then hidden and uncloaked. The launcher is the first window on screen; the
+        /// tray, Open panel and a --panel handoff bring the panel up as before.
+        /// </summary>
+        internal void ShowHiddenForBoot()
+        {
+            bool activated = ShowActivated, inTaskbar = ShowInTaskbar;
+            IntPtr hwnd = IntPtr.Zero;
+            void Cloak(object? sender, EventArgs e)
+            {
+                hwnd = new WindowInteropHelper(this).Handle;
+                SetBootCloak(hwnd, true);
+            }
+
+            // The cloak has to be on before Show asks Windows to show the window: at once when the
+            // handle already exists, else the moment WPF creates it.
+            if (new WindowInteropHelper(this).Handle != IntPtr.Zero) Cloak(this, EventArgs.Empty);
+            else SourceInitialized += Cloak;
+            ShowActivated = false;
+            ShowInTaskbar = false;
+            BuildingHiddenForBoot = true;
+            try { Show(); }
+            finally
+            {
+                BuildingHiddenForBoot = false;
+                SourceInitialized -= Cloak;
+                ShowActivated = activated;
+                try { Hide(); }
+                finally
+                {
+                    ShowInTaskbar = inTaskbar;
+                    SetBootCloak(hwnd, false);
+                }
+            }
+        }
+
+        private const int DwmwaCloak = 13;
+
+        // DwmSetWindowAttribute is declared once for the whole window, in MainWindow.xaml.cs.
+        private static void SetBootCloak(IntPtr hwnd, bool cloaked)
+        {
+            if (hwnd == IntPtr.Zero) return;
+            try
+            {
+                int value = cloaked ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DwmwaCloak, ref value, sizeof(int));
+            }
+            catch (Exception ex) { App.Logger?.Debug(ex, "[Launcher] boot cloak {On} failed", cloaked); }
         }
 
         // ---- the crossfade with the launcher ----

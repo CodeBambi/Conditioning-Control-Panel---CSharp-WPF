@@ -39,6 +39,7 @@ public static class TabMenuCopy
         ["melt"] = "features/backroom.png",
         ["bubbles"] = "features/Bubble_pop.png",
         ["natasha"] = "features/Bubble_pop.png",
+        [NatashasFavourite.HeldEventId] = "features/Bubble_pop.png",
         ["ball"] = "features/arcademy.png",
         ["wall"] = "features/arcademy.png",
         ["padlock"] = "features/race.png",
@@ -48,6 +49,12 @@ public static class TabMenuCopy
         ["quest_weekly"] = "features/vault.png",
         ["video"] = "features/mandatory_videos.png",
         ["levelup"] = "features/4new.png",
+        ["leash"] = "features/remote_control.png",
+        ["leash_credit"] = "features/remote_control.png",
+        [Stakes.StakeRules.LossRowId] = "features/piecebypiece.png",
+        [TabDayEnd.IdleEventId] = "features/spiral_overlay.png",
+        [TabDayEnd.DailiesEventId] = "features/free_today_stamp.png",
+        [TabDayEnd.StreakEventId] = "features/spiral_overlay.png",
         [JackpotId] = "features/backroom.png",
     };
 
@@ -61,6 +68,13 @@ public static class TabMenuCopy
         ["program_skipped"] = "program",
         ["remote_video"] = "remote_media",
         ["natasha"] = "bubbles",
+        [NatashasFavourite.HeldEventId] = "bubbles",
+        ["leash"] = "detention",
+        ["leash_credit"] = "pardon",
+        [Stakes.StakeRules.LossRowId] = "goon",
+        [TabDayEnd.IdleEventId] = "session",
+        [TabDayEnd.DailiesEventId] = "quest",
+        [TabDayEnd.StreakEventId] = "session",
     };
 
     /// <summary>The scene id the trailers page mounts for a row: its own id unless it shares one.</summary>
@@ -82,6 +96,52 @@ public static class TabMenuCopy
         var key = ShortKey(id);
         var text = loc(key);
         return string.IsNullOrEmpty(text) || text == key ? id : text;
+    }
+
+    /// <summary>Rows whose size is picked somewhere else, so no one figure can be printed for
+    /// them: "misses" doubles day by day, the leash holder and a stake name their own size, and
+    /// heat only scales the others. Their copy and their scenes keep their own figures.</summary>
+    private static readonly HashSet<string> NoFixedFigure = new(StringComparer.Ordinal)
+    {
+        CircesMisses.EventId, "leash", "leash_credit", Stakes.StakeRules.LossRowId, TabDayEnd.HeatId,
+    };
+
+    /// <summary>Does the row book one known figure (the one on its stamp).</summary>
+    public static bool HasFixedFigure(string? id) =>
+        !string.IsNullOrEmpty(id) && TabPrices.Find(id) != null && !NoFixedFigure.Contains(id);
+
+    /// <summary>The row's explanation with its live figure in it. The copy says "{0}" where the
+    /// figure goes (tester feedback 2026-09-29: the words said one time and the stamp another),
+    /// so the words can never disagree with the stamp again. A translation without the mark is
+    /// shown as it is.</summary>
+    public static string Why(string id, Func<string, string?> loc, int seconds)
+    {
+        var key = WhyKey(id);
+        var text = loc(key);
+        if (string.IsNullOrEmpty(text) || text == key) return "";
+        return text.Replace("{0}", CircesTab.Format(seconds, signed: false));
+    }
+
+    /// <summary>The figures a row's scene shows, unsigned seconds: the row's own on its side (a
+    /// cost is "add", an earn-back "sub") and, for a scene two rows share, the other row's on
+    /// the other side. Null keeps the scene's own figure. <paramref name="seconds"/> is the
+    /// signed figure each row books right now.</summary>
+    public static (int? Add, int? Sub) SceneFigures(string id, Func<string, int> seconds)
+    {
+        int? add = null, sub = null;
+        void Take(string rowId)
+        {
+            if (!HasFixedFigure(rowId)) return;
+            var s = seconds(rowId);
+            if (s > 0) add ??= s;
+            else if (s < 0) sub ??= -s;
+        }
+        if (!HasFixedFigure(id)) return (null, null);
+        Take(id);
+        var scene = VignetteFor(id);
+        foreach (var price in TabPrices.All)
+            if (price.Id != id && VignetteFor(price.Id) == scene) Take(price.Id);
+        return (add, sub);
     }
 
     /// <summary>The tier badge a gate wears: 0 for none (free rows and Sparkles rows, which have

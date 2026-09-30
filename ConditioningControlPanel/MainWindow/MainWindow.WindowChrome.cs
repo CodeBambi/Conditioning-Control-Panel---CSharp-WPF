@@ -125,6 +125,8 @@ namespace ConditioningControlPanel
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            Services.FirstShow.FirstShowService.Stop();
+
             // Lockdown mode: block all close attempts
             if (App.Lockdown?.IsActive == true)
             {
@@ -268,6 +270,7 @@ namespace ConditioningControlPanel
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
                 _avatarTubeWindow?.CloseSafe();
+                CloseLuckyToast();   // reused and hidden between procs (#1312), so close it for real
 
                 // Close any quiz windows (topmost/fullscreen, would keep app alive)
                 try

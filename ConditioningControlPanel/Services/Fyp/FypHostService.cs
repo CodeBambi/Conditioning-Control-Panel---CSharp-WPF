@@ -316,6 +316,13 @@ internal static class FypHostService
                 ApplySetting((string?)o["key"], o["value"]);
                 break;
             }
+            case "file-menu":
+            {
+                // Right-click on a library item. The id is resolved and checked host-side.
+                var id = (string?)o["id"];
+                _host?.Window?.Dispatcher.BeginInvoke(new Action(() => FypFileMenu.Show(id)));
+                break;
+            }
             case "calibrate":
             {
                 _host?.Window?.Dispatcher.BeginInvoke(new Action(RunGazeCalibration));

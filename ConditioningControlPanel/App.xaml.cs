@@ -565,6 +565,24 @@ namespace ConditioningControlPanel
         public static Services.Friends.IFriendsService? Friends { get; private set; }
         private static Services.Friends.FriendsService? _friendsService;
 
+        /// <summary>The friends feed ("What happened"): the lines App.Friends raises, per account, kept on disk.</summary>
+        public static Services.Friends.FriendsFeed? FriendsFeed { get; private set; }
+
+        /// <summary>THE LEASH (2026-09-26): rides the friends poll. Null until startup builds it
+        /// and after exit; every caller guards with <c>App.Leash?.</c>. The UI reaches it through
+        /// <c>Controls.Leash.LeashLocator</c>, which this wiring sets once both lanes merge.</summary>
+        public static Services.Leash.ILeashService? Leash { get; private set; }
+        private static Services.Leash.LeashService? _leashService;
+
+        /// <summary>Starts and tracks the leash gate's tasks (lock cards, sessions, bubbles, a watch).</summary>
+        public static Services.Leash.LeashTaskRunner? LeashRunner { get; private set; }
+        private static Services.Leash.AppLeashTaskHost? _leashTaskHost;
+
+        /// <summary>The account went on or off a leash (true = leashed). Raised on the UI thread.
+        /// MainWindow keeps the tray icon, and with it the tray "Cut leash", up off this:
+        /// <c>App.LeashedChanged += _ => _trayIcon?.SyncLeashIcon();</c> (cutsafety lane).</summary>
+        public static event Action<bool>? LeashedChanged;
+
         /// <summary>
         /// THE DESCENT — reader for the server's `descent` block (the vat, the stage
         /// ladder, the relapse bonus). Nullable and normally EMPTY: the server ships
@@ -732,7 +750,22 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Unified user ID that links Patreon and Discord accounts together
         /// </summary>
-        public static string? UnifiedUserId { get; set; }
+        private static string? _unifiedUserId;
+        public static event EventHandler? UnifiedIdentityChanged;
+        public static string? UnifiedUserId
+        {
+            get => _unifiedUserId;
+            set
+            {
+                if (string.Equals(_unifiedUserId, value, StringComparison.Ordinal)) return;
+                _unifiedUserId = value;
+                foreach (EventHandler handler in UnifiedIdentityChanged?.GetInvocationList() ?? Array.Empty<Delegate>())
+                {
+                    try { handler(null, EventArgs.Empty); }
+                    catch (Exception ex) { Logger?.Debug("Identity observer failed ({Kind})", ex.GetType().Name); }
+                }
+            }
+        }
 
         /// <summary>
         /// Snapshot of the UnifiedUserId as restored from settings at startup, captured
@@ -1326,8 +1359,22 @@ namespace ConditioningControlPanel
             _hangStressTimer = timer;   // root it so it isn't collected
         }
 
+#if DEBUG
+        private bool _firstShowPreview;
+#endif
         protected override void OnStartup(StartupEventArgs e)
         {
+#if DEBUG
+            if (e.Args.Contains("--first-show-preview"))
+            {
+                _firstShowPreview = true;
+                base.OnStartup(e);
+                IsUnattendedRig = true;
+                EmiDesk = new Services.EmiDesk.EmiDeskService();
+                Services.FirstShow.FirstShowService.Open(preview: true);
+                return;
+            }
+#endif
             // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
             // (`--write-hang-dump <pid> <path>`). Write the minidump from this healthy process
             // and exit before touching the splash, the single-instance mutex, or any service.
@@ -2164,6 +2211,7 @@ namespace ConditioningControlPanel
             {
                 Brain = new Services.Companion.Brain.CompanionBrain(Ai);
                 Brain.AttachBarkSource(Bark);
+                Services.Companion.Asks.CompanionAskService.Instance.Start();
                 Logger?.Information("CompanionBrain initialized (enabled={Enabled}, restored={Restored} turns)",
                     Services.Companion.Brain.CompanionBrain.IsEnabled, Brain.RestoredTurnCount);
             }
@@ -2316,10 +2364,42 @@ namespace ConditioningControlPanel
             {
                 _friendsService = Services.Friends.FriendsService.CreateForApp();
                 Friends = _friendsService;
+                try { FriendsFeed = Services.Friends.FriendsFeed.CreateForApp(_friendsService); } catch (Exception exFeed) { Logger?.Debug("Friends feed failed to start: {E}", exFeed.Message); }
                 ProfileSync.ProfileLoaded += (_, _) => _friendsService?.Kick();
                 _friendsService.Start();
             }
             catch (Exception ex) { Logger?.Warning("Friends service failed to start: {E}", ex.Message); }
+            // THE LEASH: no timer of its own. The friends poll carries its report out and its
+            // block back, and runs every 20 s while leashed or holding anyone.
+            try
+            {
+                if (_friendsService != null)
+                {
+                    var friends = _friendsService;
+                    _leashService = Services.Leash.LeashService.CreateForApp(() => friends.Kick());
+                    Leash = _leashService;
+                    friends.LeashReportProvider = _leashService.BuildReportJson;
+                    friends.LeashActive = () => _leashService?.Active == true;
+                    friends.LeashBlockArrived += _leashService.ApplyBlock;
+                    Services.Leash.LeashGuard.IsLeashed = () => App.Leash?.Snapshot.Me != null;
+                    _leashService.LeashedChanged += on =>
+                    {
+                        try { LeashedChanged?.Invoke(on); }
+                        catch (Exception exLc) { Logger?.Debug(exLc, "Leash tray sync failed"); }
+                    };
+
+                    _leashTaskHost = new Services.Leash.AppLeashTaskHost();
+                    LeashRunner = new Services.Leash.LeashTaskRunner(_leashTaskHost);
+                    LeashRunner.AssignmentWatched += aid => _leashService?.NoteAssignmentWatched(aid);
+                    Controls.Leash.LeashLocator.Service = () => App.Leash;
+                    Controls.Leash.LeashLocator.Runner = () => App.LeashRunner;
+                    Controls.Leash.LeashLocator.LocalReport = () => _leashService?.LastReport;
+                    Controls.Leash.LeashExplainHost.Presenter = role =>
+                        Controls.Leash.Explain.LeashExplainer.Show(null,
+                            Controls.Leash.Explain.LeashExplainer.SideFor(role.ToString()));
+                }
+            }
+            catch (Exception ex) { Logger?.Warning("Leash service failed to start: {E}", ex.Message); }
             // Constructing it costs nothing and issues no request: it fetches only when a
             // surface asks. The ungated 60s background poll that used to start here was
             // retired in the Redis bandwidth pass (2026-09-15) - the cross-device XP adopt
@@ -2689,12 +2769,12 @@ namespace ConditioningControlPanel
 
             splash?.SetProgress(0.95, "Opening main window...");
 
-            // Show main window — wrapped in try-catch to ensure splash closes on failure
+            // Build the main window, wrapped in try-catch to ensure splash closes on failure. It is
+            // shown below, once the boot surface is known.
             MainWindow mainWindow;
             try
             {
                 mainWindow = new MainWindow();
-                mainWindow.Show();
             }
             catch (Exception ex)
             {
@@ -2728,6 +2808,29 @@ namespace ConditioningControlPanel
                 Boot = Services.Launcher.BootDecision.PanelFirst;
             }
             Logger?.Information("[Launcher] boot surface {Surface} game {GameId}", Boot.Surface, Boot.GameId);
+
+            // Show the main window. A boot into the launcher or a game builds the panel without
+            // putting it on screen, so the launcher is the first window the player sees; the panel
+            // used to flash up here and vanish a pump later, in RouteBootSurface.
+            bool panelHidden = Services.Launcher.LauncherBoot.PanelStartsHidden(Boot, Lockdown?.IsActive == true);
+            // Held BEFORE the hidden show: the panel's Loaded work and the dashboard's first
+            // visibility run inside it and ask the ladder for their cards (Today's Free Feature,
+            // a fast server announcement). Held from RouteBootSurface only, a pump later, they
+            // opened owned by a panel nobody could see, on top of the launcher.
+            if (panelHidden) Services.Launcher.LauncherHost.HoldStartupLadder();
+            try
+            {
+                if (panelHidden) mainWindow.ShowHiddenForBoot();
+                else mainWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to show main window");
+                try { splash?.CloseImmediate(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                _splash = null;
+                throw; // Re-throw to let DispatcherUnhandledException show the error
+            }
+            Logger?.Information("[Launcher] panel shown at boot: {Shown}", !panelHidden);
 
             // HANG HUNT: `--stress` drives the layered-window subsystems (bubbles, flash, shared-host
             // create/close) at max rate to provoke the recurring render-thread deadlock quickly, so the
@@ -3109,13 +3212,29 @@ namespace ConditioningControlPanel
             // splash closes. Topmost-pulse is the standard WPF workaround for
             // ForegroundLockTimeout blocking Activate(). The after-close callback
             // fires on the SPLASH thread, so marshal back to the main dispatcher.
-            ForceWindowToFront(mainWindow);
-            splash?.FadeOutAndClose(() => Dispatcher.BeginInvoke(new Action(() =>
+            // A panel built hidden for the launcher is left alone unless it has been opened since:
+            // activating a hidden window would take the focus off the launcher, so the launcher
+            // gets the same treatment instead once the splash is gone.
+            if (!panelHidden) ForceWindowToFront(mainWindow);
+            void CloseSplash()
             {
-                try { ForceWindowToFront(mainWindow); }
-                catch (Exception ex) { Logger?.Debug("Post-splash ForceWindowToFront failed: {Error}", ex.Message); }
-            })));
-            _splash = null;
+                splash?.FadeOutAndClose(() => Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        if (!panelHidden || mainWindow.IsVisible) ForceWindowToFront(mainWindow);
+                        else if (Services.Launcher.LauncherHost.WindowRef is { IsVisible: true } launcher)
+                            ForceWindowToFront(launcher);
+                    }
+                    catch (Exception ex) { Logger?.Debug("Post-splash ForceWindowToFront failed: {Error}", ex.Message); }
+                })));
+                _splash = null;
+            }
+            // A boot with the panel hidden keeps the splash up until the launcher (or the game) is
+            // on screen: the splash holds the foreground, so the launcher can take it as the splash
+            // fades. Closed first, the foreground went to another app and the launcher came up
+            // behind it.
+            if (!panelHidden) CloseSplash();
 
             // First dispatcher pump = startup is over: from here on, single-instance acks must
             // come from the dispatcher itself so a wedged message loop is detected again.
@@ -3123,6 +3242,7 @@ namespace ConditioningControlPanel
             {
                 _startupPhase = false;
                 if (Boot.Surface != Services.Launcher.BootSurface.Panel) RouteBootSurface(mainWindow);
+                if (panelHidden) CloseSplash();
             }));
 
             // Age verification gate - the LEFTOVER population only.
@@ -3329,9 +3449,9 @@ namespace ConditioningControlPanel
         // documented workaround — it bypasses the lock without leaving the
         // window stuck on top.
         /// <summary>
-        /// Boot into the launcher or a game: tuck the freshly shown panel into the tray (no
-        /// balloon, nobody has seen it yet) and bring the decided surface up. Any failure leaves
-        /// the panel where it is, which is the classic app.
+        /// Boot into the launcher or a game: tuck the panel into the tray (no balloon, nobody has
+        /// seen it: it was built hidden, see MainWindow.ShowHiddenForBoot) and bring the decided
+        /// surface up. Any failure puts the panel on screen, which is the classic app.
         /// </summary>
         private static void RouteBootSurface(MainWindow mainWindow)
         {
@@ -4160,7 +4280,7 @@ namespace ConditioningControlPanel
                 // rotation touches nothing of the user's, so it is a line, not a dialog.
                 var template = Loc.Get("wb_season_line");
                 if (string.IsNullOrWhiteSpace(template) || template == "wb_season_line")
-                    template = "The monthly leaderboard rotated to season {0} while you were away. Your level, your XP and everything you unlocked carried over.";
+                    template = "The monthly board rolled over to {0} while you were away. Your level, XP and everything you unlocked stayed.";
 
                 try { return string.Format(template, current); }
                 catch (FormatException) { return template; }
@@ -5505,6 +5625,13 @@ Application State:
 
         protected override void OnExit(ExitEventArgs e)
         {
+#if DEBUG
+            if (_firstShowPreview)
+            {
+                base.OnExit(e);
+                return;
+            }
+#endif
             Logger?.Information("Application shutting down...");
 
             // EMI Desk (MOMENTS 4.B / 3.8): the wordless flinch. appClosing is a HOLD with no pool
@@ -5656,6 +5783,10 @@ Application State:
             Patreon?.Dispose();
             Update?.Dispose();
             ProfileSync?.Dispose();
+            try { LeashRunner?.Cancel(); _leashTaskHost?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "Leash dispose failed"); }
+            LeashRunner = null;
+            Leash = null;
+            _leashService = null;
             _friendsService?.Dispose();
             Friends = null;
             Leaderboard?.Dispose();

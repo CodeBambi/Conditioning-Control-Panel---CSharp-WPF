@@ -91,6 +91,34 @@ internal static class CaucusHostService
     /// <summary>True while the race window is open.</summary>
     public static bool IsActive => _host != null;
 
+    /// <summary>The race window is up AND in front: the panic key's Escape is the race's pause then
+    /// (PanicPolicy.GameClaimsEscapeAsPause).</summary>
+    public static bool IsInFront => _host?.IsForeground == true;
+
+    /// <summary>True once the race page has said <c>ready</c> and is not on its way out.</summary>
+    public static bool IsReady => _host?.IsReady == true && !_exiting;
+
+    /// <summary>The frame that hands the race an Escape the panel kept as its pause. The page
+    /// listens for this exact name (race/hostEscape.js).</summary>
+    internal const string KeptEscapeType = "kept-escape";
+
+    /// <summary>
+    /// Hand the race an Escape the panel kept as its pause. The race pauses (its Brake) on its own
+    /// keydown, which never comes while its WebView2 is out of keyboard focus (the title bar
+    /// clicked); the page plays this once as its own Escape unless the real key reached it too.
+    /// MainWindow asks PanicPolicy.KeptEscapeGoesTo first. The page gets the keyboard back as well,
+    /// so Enter works on the pause card without a click.
+    /// </summary>
+    public static void PostKeptEscape()
+    {
+        try
+        {
+            _host?.Post(new { type = KeptEscapeType });
+            _host?.FocusWeb();
+        }
+        catch (Exception ex) { App.Logger?.Debug("Caucus: kept Escape post failed: {E}", ex.Message); }
+    }
+
     /// <summary>Open the race window (idempotent - refocuses if already open).</summary>
     /// <param name="devTrackPath">The `--race-track` dev arg's file, or null in a normal launch.</param>
     /// <param name="openCloud">The `--race-cloud` dev arg: open the BambiCloud window on its own.</param>
@@ -192,7 +220,7 @@ internal static class CaucusHostService
             if (_devTrackLog) ArmDevTrackDrive();
             if (_devOpenCloud) DevAfter(3, () => OpenCloudWindow());
             App.Logger?.Information("CaucusHostService: launched");
-            App.Friends?.SetActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Race);
+            App.Friends?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Race);
         }
         catch (Exception ex)
         {
@@ -341,7 +369,14 @@ internal static class CaucusHostService
             case "cloud-open":
                 // `url` is optional: the levels panel names the track's own page, and a page
                 // that does not send one just gets the site's front door.
-                OpenCloudWindow((string?)o["url"]);
+                // `front` is the page's fallback when a play press did not start their player:
+                // the window comes forward so the player can press play over there by hand.
+                OpenCloudWindow((string?)o["url"], background: (bool?)o["front"] != true);
+                break;
+            case "cloud-start":
+                // The game's play button on a BambiCloud level: their player starts the track,
+                // and the cloud-play it reports starts the run (OnCloudPlay).
+                StartCloudTrack();
                 break;
             case "exit":       // page-initiated: it winds itself down, then exit-done
                 _exiting = true;
@@ -683,7 +718,8 @@ internal static class CaucusHostService
             _meta = null;
             _exiting = false;
             App.Logger?.Information("CaucusHostService: closed");
-            App.Friends?.SetActivity(returnToRoom != null ? ConditioningControlPanel.Services.Friends.PresenceActivity.BackRoom : ConditioningControlPanel.Services.Friends.PresenceActivity.Panel);
+            // The stack puts back whatever was open under the race (the room when it came from there).
+            App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Race);
             returnToRoom?.Invoke();
         }
         finally { _disposing = false; }
@@ -1072,7 +1108,7 @@ internal static class CaucusHostService
         _host?.Post(new { type = "race-ownership", tracks = owned });
     }
 
-    private static void OpenCloudWindow(string? url = null)
+    private static void OpenCloudWindow(string? url = null, bool background = false)
     {
         if (!RacingAccess.CanOpenCloud(url)) { RefuseCloudTrack(); return; }
         var disp = Application.Current?.Dispatcher;
@@ -1087,7 +1123,15 @@ internal static class CaucusHostService
                     _cloud.Message += OnCloudMessage;
                     _cloud.Hidden += OnCloudHidden;
                 }
-                _cloud.ShowOrFocus(RaceCloudWindow.IsSiteUri(url) ? url : null);
+                var landing = RaceCloudWindow.IsSiteUri(url) ? url : null;
+                if (background)
+                {
+                    // Behind the game (owner, 2026-09-25): the level page loads out of the way and
+                    // the race keeps the keyboard; the game's play button starts it.
+                    _cloud.ShowInBackground(landing);
+                    _host?.FocusWeb();
+                }
+                else _cloud.ShowOrFocus(landing);
             }
             catch (Exception ex)
             {
@@ -1103,6 +1147,30 @@ internal static class CaucusHostService
     {
         if (_clock is CloudTrackClock) return;
         PostProgress("cancelled", 0, "", force: true);
+    }
+
+    /// <summary>cloud-start: press play over there for the player, a press of the game's own play
+    /// button. The track it starts meets RacingAccess in OnCloudTrack like any other (a refused
+    /// source is paused there), and the window is opened behind the game if it does not exist.</summary>
+    private static void StartCloudTrack()
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        QueueSession(() =>
+        {
+            try
+            {
+                if (_cloud == null)
+                {
+                    _cloud = new RaceCloudWindow();
+                    _cloud.Message += OnCloudMessage;
+                    _cloud.Hidden += OnCloudHidden;
+                }
+                _cloud.RequestStart();
+                _host?.FocusWeb();
+            }
+            catch (Exception ex) { App.Logger?.Warning("RaceHost.cloud-start: {E}", ex.Message); }
+        });
     }
 
     /// <summary>Every cloud-* frame the watcher posts, on the UI thread.</summary>
@@ -1184,7 +1252,12 @@ internal static class CaucusHostService
         if (_cloudTrackRefused || !RacingAccess.CanLaunch) { SetCloudPaused(true); return; }
         if (_cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) return;
         _cloudClock.Update(_cloudClock.PositionSec, true, _cloudClock.DurationSec);
-        if (!RunLifecycle.IsActive) PostTrack(new { type = "cloud-run" });
+        if (!RunLifecycle.IsActive)
+        {
+            PostTrack(new { type = "cloud-run" });
+            // a play pressed over there hands the keyboard back to the race
+            QueueSession(() => _host?.FocusWeb());
+        }
         StartTrackClock();
         PostClock();
     }

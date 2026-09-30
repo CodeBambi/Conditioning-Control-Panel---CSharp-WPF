@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Services.Chaster;
+using ConditioningControlPanel.Services.Safety;
 using ConditioningControlPanel.Views.Tabs;
 using Xunit;
 
@@ -51,8 +52,25 @@ public class ChasterTabRenderTests
         Assert.Equal("bubbles", TabMenuCopy.VignetteFor("natasha"));
         Assert.Equal("escape", TabMenuCopy.VignetteFor("escape"));
         // the mount script never lets a quote through to the page
-        Assert.Equal("window.__mount && window.__mount('typo')", ChasterTrailerView.MountScript("typo"));
-        Assert.DoesNotContain("'", ChasterTrailerView.MountScript("a'b").Replace("__mount('", "").Replace("')", ""));
+        Assert.Equal("window.__mount && window.__mount('typo',null,null)", ChasterTrailerView.MountScript("typo"));
+        Assert.Equal("window.__mount && window.__mount('typo',30,60)", ChasterTrailerView.MountScript("typo", 30, 60));
+        Assert.DoesNotContain("'", ChasterTrailerView.MountScript("a'b").Replace("__mount('", "").Replace("',null,null)", ""));
+    }
+
+    [Fact]
+    public void Preview_has_a_loaded_warmup_host_and_reparents_into_the_hover_plate()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            Assert.Same(tab.TrailerWarmHost, tab.TrailerWeb.Parent);
+            Assert.Equal(Visibility.Hidden, tab.TrailerWarmHost.Visibility);
+            tab.OpenTrailer(new ToggleButton { Tag = "natasha" });
+            Assert.Same(tab.TrailerPlate, tab.TrailerWeb.Parent);
+            Assert.Equal(Visibility.Collapsed, tab.TrailerWeb.Visibility);
+            Assert.Equal("natasha", tab.TrailerId);
+            tab.HideTrailer();
+        });
     }
 
     private static void Realize(FrameworkElement element, double width, double height)
@@ -137,6 +155,46 @@ public class ChasterTabRenderTests
                 Assert.Equal(wantsSign, Descendants(row).OfType<TierBadge>().Any());
             }
         });
+    }
+
+    /// <summary>TAB-13: a where line longer than its column ends in "..." inside the column, with the
+    /// whole line on hover. The horizontal row around it measured it at unlimited width, so the
+    /// trimming never engaged and the column cut it hard (German "Mantras, pro Wiederholung").</summary>
+    [Fact]
+    public void A_long_where_line_trims_inside_its_column_and_shows_whole_on_hover()
+    {
+        var loc = Localization.LocalizationManager.Instance;
+        var previous = loc.CurrentLanguage;
+        try
+        {
+            loc.SetLanguage("de");
+            WpfRenderHarness.OnStaThread(() =>
+            {
+                var tab = new ChasterTabView();
+                tab.LinkedPanel.Visibility = Visibility.Visible;
+                tab.BuildMenu();
+                Realize(tab, 1000, 2400);
+
+                var squeezed = new List<string>();
+                foreach (var row in Rows(tab))
+                {
+                    var id = (string)row.Tag;
+                    var text = Localization.Loc.Get(TabMenuCopy.WhereKey(id));
+                    var where = Descendants(row).OfType<TextBlock>().First(t => t.Text == text);
+                    var words = (FrameworkElement)VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(where));
+                    // the line's own width, measured on a twin: the row's line is capped by now
+                    var twin = new TextBlock { Text = text, FontSize = where.FontSize, FontFamily = where.FontFamily, FontWeight = where.FontWeight };
+                    twin.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    if (twin.DesiredSize.Width > words.ActualWidth) squeezed.Add(id);
+                    Assert.True(where.ActualWidth <= words.ActualWidth + 0.5,
+                        $"{id}: the where line is {where.ActualWidth:0} wide in a {words.ActualWidth:0} column");
+                    Assert.Equal(text, where.ToolTip as string);
+                }
+                // the row the hunt saw cut, or this proves nothing
+                Assert.Contains("mantra", squeezed);
+            });
+        }
+        finally { loc.SetLanguage(previous); }
     }
 
     [Fact]
@@ -353,6 +411,123 @@ public class ChasterTabRenderTests
         });
     }
 
+    /// <summary>Bug hunt 2026-09-29 (TAB-10): the rubber stamp sat over the end of the tag's own
+    /// line ("on its way to the lo" with the rest under UNPAID; the backlog split lost "0 later").
+    /// For every stamp word in every language and every line the tag can show, the stamp, tilt
+    /// included, stays clear of the line's box and reaches no higher than the empty foot of the
+    /// amount's line.</summary>
+    [Fact]
+    public void The_paper_tag_stamp_never_covers_the_tags_own_line()
+    {
+        var langs = new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" }
+            .Select(lang => Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(System.IO.Path.Combine(
+                RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json"))))
+            .ToList();
+        var words = langs.SelectMany(json => new[] { "chaster_tag_unpaid", "chaster_tag_clear", "chaster_tag_credit" }
+            .Select(k => (string)json[k]!)).ToList();
+        var lines = langs.SelectMany(json => new[] { "chaster_tag_lands", "chaster_tag_credit_lands", "chaster_tag_paused",
+                "chaster_tag_nolock", "chaster_tag_tomorrow", "chaster_tag_split" }
+            .Select(k => ((string)json[k]!).Replace("{0}", "15:00").Replace("{1}", "45:00"))).ToList();
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            tab.LinkedPanel.Visibility = Visibility.Visible;
+            tab.PaperTag.Visibility = Visibility.Visible;
+            Realize(tab, 1000, 1400);
+            tab.RefreshTag(750);
+            foreach (var word in words)
+            foreach (var line in lines)
+            {
+                tab.TxtTagStamp.Text = word;
+                tab.TxtTagLands.Text = line;
+                tab.UpdateLayout();
+                var lands = tab.TxtTagLands.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TxtTagLands.RenderSize));
+                var amount = tab.TxtTagAmount.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TxtTagAmount.RenderSize));
+                var stamp = tab.TagStamp.TransformToAncestor(tab.PaperTag).TransformBounds(new Rect(tab.TagStamp.RenderSize));
+                Assert.True(lands.Height > 0 && stamp.Width > 0, "the tag's line or stamp did not lay out");
+                Assert.True(stamp.Left >= lands.Right - 0.5 || stamp.Top >= lands.Bottom - 0.5,
+                    $"{word} stamp ({stamp.Left:0.0},{stamp.Top:0.0}) covers '{line}' (right {lands.Right:0.0}, bottom {lands.Bottom:0.0})");
+                Assert.True(stamp.Top >= amount.Bottom - 6.5,
+                    $"{word} stamp top {stamp.Top:0.0} reaches the amount (bottom {amount.Bottom:0.0}) beside '{line}'");
+            }
+        });
+    }
+
+    [Fact]
+    public void Clicking_the_figure_opens_a_box_only_on_rows_with_one_fixed_figure()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            tab.LinkedPanel.Visibility = Visibility.Visible;
+            tab.BuildMenu();
+            Realize(tab, 1000, 2400);
+
+            // no account linked: no lock runs, so a figure can move
+            Assert.True(tab.BeginPriceEdit("typo"));
+            Assert.Equal("typo", tab.EditingPriceId);
+            Assert.Equal(Visibility.Collapsed, tab.StampFor("typo")!.Visibility);
+            tab.CancelPriceEdit();
+            Assert.Null(tab.EditingPriceId);
+            Assert.Equal(Visibility.Visible, tab.StampFor("typo")!.Visibility);
+            Assert.Contains("+0:30", tab.StampFor("typo")!.Text);
+
+            // sizes picked elsewhere never open a box; the way out has no stamp at all
+            Assert.False(tab.BeginPriceEdit("leash"));
+            Assert.False(tab.BeginPriceEdit(CircesMisses.EventId));
+            Assert.False(tab.BeginPriceEdit(TabDayEnd.StreakEventId));
+            Assert.Null(tab.StampFor("panic"));
+            Assert.Null(tab.EditingPriceId);
+        });
+    }
+
+    /// <summary>Bug hunt 2026-09-29 (TAB-8 / DESK-3): "Esc drops it". The panic key is Escape on a
+    /// fresh install and the global hook sees every Escape, so the open box is a surface that takes
+    /// its own Escape: the press drops the edit and never reaches the panic (no session pause, no
+    /// safety hold, no step toward quitting). The row's stamp, outside the box, takes nothing.</summary>
+    [Fact]
+    public void Escape_in_the_open_price_box_belongs_to_the_box_not_the_panic_key()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var tab = new ChasterTabView();
+            tab.LinkedPanel.Visibility = Visibility.Visible;
+            tab.BuildMenu();
+            Realize(tab, 1000, 2400);
+
+            var stamp = tab.StampFor("typo")!;
+            Assert.False(EscapeClaim.InASurface(stamp));
+            Assert.True(tab.BeginPriceEdit("typo"));
+            var box = ((Grid)stamp.Parent).Children.OfType<TextBox>().Single();
+            Assert.True(EscapeClaim.InASurface(box));
+
+            var fresh = new ConditioningControlPanel.Models.AppSettings();
+            Assert.True(PanicPolicy.SurfaceTakesEscape(fresh.PanicKeyEnabled, fresh.PanicKey, lockCardOpen: false,
+                ccpInFront: true, surfaceHasTheKeyboard: EscapeClaim.InASurface(box), takenPressOnItsWay: false));
+            // with the box gone the next Escape is a panic again
+            tab.CancelPriceEdit();
+            Assert.False(EscapeClaim.InASurface(stamp));
+        });
+    }
+
+    [Fact]
+    public void Only_an_element_inside_a_marked_surface_has_its_escape()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var inner = new TextBox();
+            var surface = new Border { Child = new StackPanel { Children = { inner } } };
+            var elsewhere = new TextBox();
+            _ = new Grid { Children = { surface, elsewhere } };
+            Assert.False(EscapeClaim.InASurface(inner));
+            EscapeClaim.Mark(surface);
+            Assert.True(EscapeClaim.InASurface(inner));
+            Assert.True(EscapeClaim.InASurface(surface));
+            Assert.False(EscapeClaim.InASurface(elsewhere));
+            Assert.False(EscapeClaim.InASurface(null));
+        });
+    }
+
     [Fact]
     public void The_trailer_dresses_itself_for_the_row_it_is_aimed_at_and_closes_clean()
     {
@@ -368,7 +543,9 @@ public class ChasterTabRenderTests
             // A popup with no window behind it may not open for real; the aim and the dressing must hold anyway.
             Assert.Equal("escape", tab.TrailerId);
             Assert.Equal(Localization.Loc.Get(TabMenuCopy.FlavourKey("escape")), tab.TxtTrailerFlavour.Text);
-            Assert.Equal(Localization.Loc.Get(TabMenuCopy.WhyKey("escape")), tab.TxtTrailerWhy.Text);
+            // the words carry the figure the row books, never a figure of their own
+            Assert.Equal(Localization.Loc.Get(TabMenuCopy.WhyKey("escape")).Replace("{0}", "3:00"), tab.TxtTrailerWhy.Text);
+            Assert.Contains("3:00", tab.TxtTrailerWhy.Text);
             Assert.NotNull(tab.TrailerArt.Source);
             Assert.Equal(Visibility.Collapsed, tab.TrailerWeb.Visibility); // no browser in the harness: the still picture is the trailer
             Assert.IsType<TierBadge>(tab.TrailerBadgeHost.Child); // Lockdown is tier 1

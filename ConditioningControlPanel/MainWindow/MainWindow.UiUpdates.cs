@@ -184,6 +184,10 @@ namespace ConditioningControlPanel
             // Refresh bonus chips with updated names
             RefreshXPBarBonuses();
 
+            // The side rail's labels, which are plain {loc:Str} bindings and never saw a mod.
+            try { ApplyModToNavRailLabels(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Nav rail mod labels failed"); }
+
             // Also refresh rank title
             UpdateLevelDisplay();
 
@@ -902,9 +906,8 @@ namespace ConditioningControlPanel
 
                 // Tier 2 entitlement. HasLabAccess is the single truth and already covers every
                 // entitlement source (live tier, whitelist, SubscribeStar T2, and the 14-day grace
-                // over a server-linked T2 login). It matters twice over here, because the one thing
-                // this flag still drives is DESTRUCTIVE (it force-clears AllowAiToControlEffects and
-                // SAVES), so a stale-negative would wipe a legit user's setting.
+                // over a server-linked T2 login). Below it only paints: nothing here writes a
+                // setting from an entitlement read any more (#1307).
                 //
                 // TOMBSTONE (UX restructure, Phase 6): this used to also raise LabSmokescreen, the
                 // opaque overlay draped over the whole Lab tab. That overlay WAS the Tier 2 gate for
@@ -918,43 +921,33 @@ namespace ConditioningControlPanel
                 var labUnlocked = App.Patreon?.HasLabAccess == true;
 
                 // AI effect control is Tier 2 wherever it is drawn. Since Phase 5 of the UX
-                // restructure the switch lives on the COMPANION door (Z7b, AiPermissionsGrid) — so
-                // this block is now only half the story:
+                // restructure the switch lives on the COMPANION door (Z7b, AiPermissionsGrid).
                 //
-                //   * the REPAIR is here, and stays destructive on purpose: a setting must not
-                //     outlive the entitlement that allowed it, so a lapsed T2 has
-                //     AllowAiToControlEffects force-cleared and SAVED. HasLabAccess is the single
-                //     truth precisely because of that write (a stale negative would wipe a legit
-                //     user's setting);
-                //   * the GATE is on the card — TierGate.RequiresLab paints a lockband and
-                //     ChkCapEffects_Changed refuses the write. A repair is not a gate: without the
-                //     card's own check a Free account could tick the box and keep it until the next
-                //     refresh ran.
+                // #1307 (after #1048): this block used to be a destructive REPAIR that cleared and
+                // SAVED AllowAiToControlEffects whenever Lab access read false. Entitlement reads
+                // are not reliable enough to write settings from: EntitlementResolved flips even
+                // when validation threw, and a Discord / SubscribeStar / whitelisted patron can read
+                // false for a moment. So the saved switch is the user's choice and is never written
+                // here. The tier gate is at the point of use (AiEffectControlGate.IsOn: setting AND
+                // Lab access), so a lapsed account gets no effects while keeping its choice for
+                // when it comes back.
                 //
-                // ApplyTierGate is called for both verdicts, not just the locked one: this method is
-                // also how a freshly validated T2 account gets its lockband taken away.
-                //
-                // #1048: the repair now also waits for the entitlement to be RESOLVED. MainWindow
-                // comes up while PatreonService.InitializeAsync is still in flight, and until it
-                // answers, HasLabAccess is false because nothing is known yet - not because the
-                // account lapsed. Reading that blank as a lapse force-cleared and SAVED the switch
-                // on every single launch, which is exactly the "AI Effect Control turns itself off
-                // every restart" report. UpdateUnlockablesVisibility is re-run when validation
-                // lands (MainWindow.Patreon.cs) and on every XP refresh, so a genuine lapse is
-                // still repaired moments later - just never against an unknown.
-                var entitlementKnown = App.Patreon?.EntitlementResolved == true;
-                if (!labUnlocked && entitlementKnown)
+                // What stays here is display only: the switch shows the EFFECTIVE value (unticked
+                // while locked) and the panel follows it. _isLoading keeps ChkCapEffects_Changed
+                // from treating that repaint as a user click, which would write the setting.
+                // Painting both verdicts is how a freshly validated T2 account gets its tick back.
+                var effectsOn = ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOn(App.Settings?.Current?.CompanionPrompt, labUnlocked);
                 {
-                    var cp = App.Settings?.Current?.CompanionPrompt;
-                    if (cp != null && cp.AllowAiToControlEffects)
+                    var wasLoading = _isLoading;
+                    _isLoading = true;
+                    try
                     {
-                        cp.AllowAiToControlEffects = false;
-                        App.Settings?.Save();
+                        if (CompanionTab.ChkCapEffects != null && CompanionTab.ChkCapEffects.IsChecked != effectsOn)
+                            CompanionTab.ChkCapEffects.IsChecked = effectsOn;
+                        if (CompanionTab.EffectPermsPanel != null)
+                            CompanionTab.EffectPermsPanel.Visibility = effectsOn ? Visibility.Visible : Visibility.Collapsed;
                     }
-                    if (CompanionTab.ChkCapEffects != null && CompanionTab.ChkCapEffects.IsChecked == true)
-                        CompanionTab.ChkCapEffects.IsChecked = false;
-                    if (CompanionTab.EffectPermsPanel != null)
-                        CompanionTab.EffectPermsPanel.Visibility = Visibility.Collapsed;
+                    finally { _isLoading = wasLoading; }
                 }
                 CompanionTab.AiPermissions?.ApplyTierGate();
 
@@ -1249,6 +1242,8 @@ namespace ConditioningControlPanel
                     }
                 }
             }
+
+            if (!MotionFx.AllowTransitions) return;
 
             // Visual feedback - quick pulse effect
             if (SettingsTab.ImgLogo != null)
@@ -2485,7 +2480,7 @@ namespace ConditioningControlPanel
                 // Stop keyboard hook when panic key is disabled (privacy improvement)
                 // But keep it running if keyword triggers need it
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
                 App.Settings.Current.PanicKeyEnabled = false;
                 App.Settings?.Save();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");

@@ -53,6 +53,19 @@ public class MemoryStoreTests : IDisposable
 
     private static DateTime Now => new(2026, 8, 6, 12, 0, 0, DateTimeKind.Utc);
 
+    [Fact]
+    public void RelevantFact_OutranksUnrelatedFact_WithoutDisplacingPinnedOrBoundaries()
+    {
+        var store = NewStore(() => Now);
+        var unrelated = store.AddFact("Enjoys loud music", MemoryFactKind.Preference, 1);
+        var relevant = store.AddFact("Prefers jasmine tea", MemoryFactKind.Preference, 0.1);
+        Assert.Equal(relevant.Id, store.RankFacts(store.GetFacts(), "Which tea suits me?")[0].Id);
+        store.UpdateFact(unrelated.Id, pinned: true);
+        Assert.Equal(unrelated.Id, store.RankFacts(store.GetFacts(), "Which tea suits me?")[0].Id);
+        store.AddFact("Never mention work", MemoryFactKind.Boundary, 0.1);
+        Assert.Contains("Boundary (honor this): Never mention work", store.GetInjectionBlock(40, "tea"));
+    }
+
     // ================= schema round trip =================
 
     [Fact]

@@ -281,6 +281,8 @@ namespace ConditioningControlPanel
                                                 Key.K, ModifierKeys.Control));
                 CommandBindings.Add(new CommandBinding(SettingsPaletteWindow.OpenPaletteCommand,
                     (_, ce) => { SettingsPaletteWindow.Toggle(this); ce.Handled = true; }));
+                // Mouse back / forward and Alt+Left / Alt+Right between tabs.
+                InitializeTabHistoryInput();
                 HookFocusGazeService();
                 HookBlinkTrainerService();
                 // Tooltip hygiene: start tracking before the user can hover anything, so no tooltip
@@ -356,6 +358,7 @@ namespace ConditioningControlPanel
             _keyboardHook = new GlobalKeyboardHook();
             App.PanicHook = _keyboardHook;   // #875: lock cards ask this whether a panic escape really exists
             _keyboardHook.KeyPressed += OnGlobalKeyPressed;
+            _keyboardHook.KeyReleased += OnLeashKeyReleased;
             _keyboardHook.KeyPressedWithVkCode += (key, vkCode) => App.KeywordTriggers?.OnKeyPressed(key, vkCode);
             App.KeywordTriggers?.SetSessionActiveCallback(() => _sessionEngine?.IsRunning == true);
             if (App.Settings.Current.KeywordTriggersEnabled && KeywordTriggerService.HasAccess())
@@ -438,6 +441,10 @@ namespace ConditioningControlPanel
             // open spiral. MainWindow.SpiralRoom.cs. Three subscriptions and one Collapsed write on
             // an account with neither, which is every install today.
             InitializeSpiralRoom();
+
+            // The leash: the punishment gate, the ask card, the snap and the tug wobble.
+            // MainWindow.Leash.cs. Quiet until a leash service is wired and has something to say.
+            InitializeLeash();
 
             // Subscribe to quest events
             if (App.Quests != null)
@@ -538,16 +545,7 @@ namespace ConditioningControlPanel
             // picker - is reached by exactly the same population as before. The wizard itself
             // owns what used to be four separate modals: the age check, the welcome card, the first-run mod
             // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
-            // "choose a content folder" MessageBox. No tour starts from it: EMI offers the walk once, later.
-            // ASK EMI WAVE 1: read LastSeenVersion HERE, before anything on this launch stamps it.
-            // ShowWhatsNewIfNeeded (the first statement of the else branch, a few lines down) writes
-            // the current version into that setting synchronously, minutes before the knock's own
-            // dispatcher item runs. A late read would therefore see this build's own stamp and
-            // classify every single upgrader as somebody who is owed nothing - which is the same
-            // shape as the bug that showed every fresh install a migration notice for a move it
-            // never witnessed. One string, captured once, handed to the knock at the far end.
-            var knockSeenVersion = App.Settings?.Current?.LastSeenVersion ?? string.Empty;
-
+            // "choose a content folder" MessageBox. The narrated show follows the wizard.
             if (FirstRunWizard.ShouldRunAndClaim())
             {
                 // EMI Desk (MOMENTS 4.B): a HOLD, never a line. The wizard owns the screen on a
@@ -564,6 +562,12 @@ namespace ConditioningControlPanel
                         try
                         {
                             FirstRunWizard.Run(owner as MainWindow ?? this);
+                            if (App.Settings?.Current?.HasAcceptedAgeVerification == true
+                                && !Dispatcher.HasShutdownStarted)
+                            {
+                                EnqueueStartupModal("first-show", 25,
+                                    _ => Services.FirstShow.FirstShowService.Open(this));
+                            }
                         }
                         finally
                         {
@@ -593,13 +597,7 @@ namespace ConditioningControlPanel
                         FirstRunWizard.AbortUngatedLaunch("the ladder gave up on the wizard", handBack: false);
                     });
 
-                // THE KNOCK (Ask EMI wave 1). The far side of the wizard, on both paths: the
-                // population this is FOR is the one that pressed "explore on my own", and the
-                // hand-back path is a launch where nothing was ever shown and she is exactly as
-                // welcome. Every remaining gate - the wizard, an update dialog, a session, a
-                // tutorial overlay, a minimised window, the setting, whether she is already out
-                // - lives in EmiKnockMachine.MayKnock, so this is one call and no policy.
-                QueueEmiKnock(knockSeenVersion);
+                // The narrated show replaces the automatic tab walkthrough offer.
             }
             else
             {
@@ -610,29 +608,8 @@ namespace ConditioningControlPanel
                 ShowWhatsNewIfNeeded();
                 TryPresentSeasonRecap();
 
-                // Upgraders into the modular build get the SAME picker, once, at priority 50 -
-                // behind What's New and the recap by construction rather than by a 1500 ms delay
-                // followed by a 600-iteration poll over three flags. ModPickerDialog.ShowIfNeeded
-                // keeps every one of its own guards (ModPickerShown / offline offers / full
-                // install), so the population offered the picker has not changed.
-                EnqueueStartupModal("mod-picker", 50, owner =>
-                {
-                    try
-                    {
-                        // Pre-ticks the card for the mod they were already running, so one press
-                        // restores what the installer removed.
-                        ModPickerDialog.ShowIfNeeded(owner as MainWindow ?? this, preselectActiveMod: true);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning(ex, "Failed to offer the mod picker to an upgrading install");
-                    }
-                });
-
-                // THE KNOCK (Ask EMI wave 1), the upgrader's half. Same call, same gates; the
-                // snapshot taken before ShowWhatsNewIfNeeded ran is what makes this population
-                // legible at all by the time we get here.
-                QueueEmiKnock(knockSeenVersion);
+                // Mod selection stays in the first-run wizard and the Mod Manager.
+                // Returning users no longer receive the standalone mod popup or tab tour offer.
             }
 
             // The title bar's Inbox glyph. Nothing to show yet - it stays collapsed until the
@@ -884,8 +861,17 @@ namespace ConditioningControlPanel
             // are side-effect free — deliberately NOT SettingsPaletteWindow.TryConsumeEscape(), which
             // CLOSES the palette just by asking and would burn the grace window HandlePanicKeyPress
             // depends on.
-            if (key == Key.Escape && App.Video?.WantsGlobalEscape == true
-                && !LockCardWindow.IsAnyOpen() && !SettingsPaletteWindow.IsOpen)
+            //
+            // When Escape IS the panic key and the panic can run, the press is a panic press and
+            // falls through to HandlePanicKeyPress, whose stop pass closes the video as well
+            // (PanicPolicy.EscapeDismissesVideo, bug hunt 2026-09-29 DESK-1).
+            if (key == Key.Escape && Services.Safety.PanicPolicy.EscapeDismissesVideo(
+                    videoWantsEscape: App.Video?.WantsGlobalEscape == true,
+                    lockCardOpen: LockCardWindow.IsAnyOpen(),
+                    paletteOpen: SettingsPaletteWindow.IsOpen,
+                    panicKeyEnabled: App.Settings?.Current?.PanicKeyEnabled == true,
+                    panicKey: App.Settings?.Current?.PanicKey,
+                    lockdownActive: App.Lockdown?.IsActive == true))
             {
                 // Never run teardown inside the WH_KEYBOARD_LL callback — it is delivered on this
                 // thread's message pump and must return well inside LowLevelHooksTimeout. Same
@@ -898,9 +884,13 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Lockdown mode: block all key handling (panic key, etc.)
+            // Lockdown mode: block all key handling (panic key, etc.), except the leash's own way
+            // out: panic always works on a leash, Lockdown or not.
             if (App.Lockdown?.IsActive == true)
+            {
+                if (Controls.Leash.LeashSurfaces.IsLeashed && !LeashHoldSwallows(key)) LeashPanicKeyWhilePanicOff(key);
                 return;
+            }
 
             // Track Alt+Tab for achievement (Player 2 Disconnected)
             if (key == Key.Tab && (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt)))
@@ -952,6 +942,14 @@ namespace ConditioningControlPanel
             
             // Check if panic key is enabled and pressed
             var settings = App.Settings.Current;
+            // A held panic key is ONE press, leashed or not: its repeats are swallowed here, or two of
+            // them would quit the app (bug hunt 2026-09-29, DESK-5). While leashed, five seconds of it
+            // asks to cut. Every down comes through here first, a press a surface takes included.
+            if (LeashHoldSwallows(key)) return;
+            // An Escape aimed at a CCP surface that drops or closes on it (Circe's Tab price box, the
+            // friends drawer, the dashboard's click-choice popup) is that surface's, not a panic press
+            // (bug hunt 2026-09-29, TAB-8 / DESK-3). Decided here, before the key reaches any window.
+            if (key == Key.Escape && EscapeTakenBySurface(settings)) return;
             if (settings.PanicKeyEnabled)
             {
                 var panicKey = settings.PanicKey;
@@ -975,6 +973,7 @@ namespace ConditioningControlPanel
                     return;
                 }
             }
+            else if (LeashPanicKeyWhilePanicOff(key)) return;
 
             // Optional Pause key (v6.8.5). PanicOverridesAll took the #735 "someone walked in"
             // grace pause off the panic key; this is where it lives now, for the people who liked
@@ -991,6 +990,40 @@ namespace ConditioningControlPanel
                     try { App.Video?.TryGracePauseFromPanic(fromPanicKey: false); }
                     catch (Exception ex) { App.Logger?.Warning("Pause key: grace pause failed: {Error}", ex.Message); }
                 });
+            }
+        }
+
+        /// <summary>
+        /// Runs inside the hook callback on the UI thread, before the key is posted, so it only reads
+        /// state: the element with the keyboard now is the one this press lands on. True = the
+        /// surface's own Escape handler drops or closes it and nothing a panic arms is armed
+        /// (PanicPolicy.SurfaceTakesEscape).
+        /// </summary>
+        private static bool EscapeTakenBySurface(AppSettings settings)
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                var fg = GetForegroundWindow();
+                uint fgPid = 0;
+                if (fg != IntPtr.Zero) GetWindowThreadProcessId(fg, out fgPid);
+                if (!Services.Safety.PanicPolicy.SurfaceTakesEscape(
+                        panicKeyEnabled: settings.PanicKeyEnabled,
+                        panicKey: settings.PanicKey,
+                        lockCardOpen: LockCardWindow.IsAnyOpen(),
+                        ccpInFront: fgPid != 0 && fgPid == (uint)Environment.ProcessId,
+                        surfaceHasTheKeyboard: Services.Safety.EscapeClaim.KeyboardInASurface(),
+                        takenPressOnItsWay: Services.Safety.EscapeClaim.OnItsWay(now)))
+                    return false;
+                Services.Safety.EscapeClaim.Claimed(now);
+                VideoDiag.Log("PANIC", "Escape left to the surface with the keyboard (it drops an edit or closes a popup) - not a panic press");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // A panic press must never be lost to this question.
+                App.Logger?.Warning("Escape claim check failed: {Error}", ex.Message);
+                return false;
             }
         }
 
@@ -1455,8 +1488,80 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnFirstShowReplay_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (SettingsTab.BrowserContainer != null)
+                SettingsTab.BrowserContainer.Visibility = Visibility.Visible;
+            Services.FirstShow.FirstShowService.Open(this);
+        }
+
+        /// <summary>When Racing Thoughts last kept an Escape as its pause; see <see cref="TryRacePauseOnEscape"/>.</summary>
+        private DateTime? _lastRaceEscapeClaimUtc;
+
+        /// <summary>
+        /// Escape in front of Racing Thoughts is its pause, not a panic (owner, 2026-09-25). The race
+        /// page hears the same key and brakes on its own; this only keeps the panic pass from closing
+        /// the game under it. Every condition is in <see cref="Services.Safety.PanicPolicy.GameClaimsEscapeAsPause"/>,
+        /// including the one that matters most: a second Escape within 2 s is a full panic.
+        ///
+        /// <para>Piece by Piece rides the same rule (owner, 2026-09-29): without it the first Escape of a
+        /// chess game closed the board, so its own pause card could never be reached. The board's pause
+        /// goes quiet at once (ui/pause-hush.js) and an Escape on the pause card leaves.</para>
+        ///
+        /// <para>Breakout rides it too (tester report, 2026-09-30: Escape closed the whole game window).
+        /// The first Escape pauses it; an Escape on its pause card leaves.</para>
+        /// </summary>
+        private bool TryRacePauseOnEscape()
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                bool raceInFront = Services.Chaos.CaucusHostService.IsInFront;
+                bool boardInFront = Services.PieceByPiece.PieceByPieceHostService.IsInFront;
+                bool breakoutInFront = Services.BackRoom.BackRoomHostService.IsBreakoutInFront;
+                bool claim = Services.Safety.PanicPolicy.GameClaimsEscapeAsPause(
+                    App.Settings?.Current?.PanicKey,
+                    gameInFront: raceInFront || boardInFront || breakoutInFront,
+                    engineRunning: _isRunning,
+                    lockCardOpen: LockCardWindow.IsAnyOpen(),
+                    lastClaimUtc: _lastRaceEscapeClaimUtc,
+                    nowUtc: now);
+                if (!claim) { _lastRaceEscapeClaimUtc = null; return false; }
+                _lastRaceEscapeClaimUtc = now;
+                VideoDiag.Log("PANIC", $"Escape kept by {(raceInFront ? "Racing Thoughts" : boardInFront ? "Piece by Piece" : "Breakout")} as its pause (again within 2 s = full panic)");
+                // Each game pauses on its own keydown, which never comes while its WebView2 is out of
+                // keyboard focus, so the game in front is handed the kept press too; the page drops it
+                // when the real key reached it as well (host-escape.js).
+                switch (Services.Safety.PanicPolicy.KeptEscapeGoesTo(claim,
+                            raceInFront, raceReady: Services.Chaos.CaucusHostService.IsReady,
+                            boardInFront, boardReady: Services.PieceByPiece.PieceByPieceHostService.IsReady,
+                            breakoutInFront, breakoutReady: Services.BackRoom.BackRoomHostService.IsBreakoutReady))
+                {
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Race:
+                        Services.Chaos.CaucusHostService.PostKeptEscape(); break;
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Board:
+                        Services.PieceByPiece.PieceByPieceHostService.PostKeptEscape(); break;
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Breakout:
+                        Services.BackRoom.BackRoomHostService.PostKeptEscape(); break;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // A probe that throws must never eat a panic press.
+                App.Logger?.Warning("PANIC: race pause probe failed: {Error}", ex.Message);
+                return false;
+            }
+        }
+
         private void HandlePanicKeyPress()
         {
+            // Racing Thoughts' pause, BEFORE everything below: a pause is not a panic, so it must not
+            // arm EMI's silence, the Chaster safety hold or the stop pass.
+            if (TryRacePauseOnEscape()) return;
+            Services.FirstShow.FirstShowService.Stop();
+
             // EMI Desk (MOMENTS 4.B): FIRST LINE, before any of the ladder below. panicPressed is a
             // HOLD with a five-minute silence tail, and it has to be armed even if something further
             // down this method throws - the whole point is that she says nothing after a panic.
@@ -1465,6 +1570,10 @@ namespace ConditioningControlPanel
             // Circe's tab: the way out never costs. Armed up here because most of the ladder below
             // returns early into a game's own panic rung, and the hold has to cover those too.
             try { App.Chaster?.NoteSafetyExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
+            // A leash video window goes down with a panic like everything else (panic always works);
+            // the punishment stays pending and the gate stands back for ten minutes.
+            try { LeashOnPanicPress(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
 
@@ -1790,6 +1899,7 @@ namespace ConditioningControlPanel
                 App.Video?.ForceCleanup(synchronous: true);
                 BubbleCountWindow.ForceCloseAll();
                 BubbleCountResultWindow.ForceCloseAll();
+                Controls.Leash.LeashPunishWindow.CloseNow();
 
                 // Give LibVLC a moment to release native resources
                 Thread.Sleep(100);
@@ -2020,7 +2130,7 @@ namespace ConditioningControlPanel
                 if (!confirmed) return false;
 
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
                 App.Settings.Current.PanicKeyEnabled = false;
                 App.Settings?.Save();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");
@@ -2107,7 +2217,7 @@ namespace ConditioningControlPanel
             else
             {
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");
             }
 
@@ -2181,8 +2291,9 @@ namespace ConditioningControlPanel
                                      || App.Settings?.Current?.IsSissyMode == true;
                 var logoFile = useNeutralLogo ? "logo2.png" : "logo.png";
                 var image = Services.ModResourceResolver.ResolveImage(logoFile);
-                if (image != null)
-                    SettingsTab.ImgLogo.Source = image;
+                SettingsTab.ImgLogo.SetArtwork(image);
+                ApplyLogoDrift();
+                ApplyLogoSheenTimer();
                 App.Logger?.Debug("Logo loaded: {Logo}", logoFile);
             }
             catch (Exception ex)
@@ -2724,6 +2835,7 @@ namespace ConditioningControlPanel
                 // brush itself, so replacing the brush would repaint nothing.
                 var playHeroMap = new (string resourcePath, ImageBrush? brush, int decodeWidth, string surfaceId)[]
                 {
+                    ("features/goon_game_tile.png",     PlayTab?.PlayGoonHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512, ModArtFramingRegistry.SurfacePlayCard),
                     ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512, ModArtFramingRegistry.SurfacePlayCard),
@@ -3008,6 +3120,18 @@ namespace ConditioningControlPanel
             App.Settings.Current.ModChosen = true;
             App.Settings.Save();
 
+            // audio-base is fetched only for the mod that plays it, so a switch to Bambi Sleep
+            // asks for it now instead of at the next launch. No-op when stamped, full install,
+            // debugger or offline; de-duped inside RequestPackAsync.
+            if (Services.ModAudioPolicy.UsesBaselineVoicePack(App.Mods.ActiveModId) && App.ReleaseContent != null)
+            {
+                var releaseContent = App.ReleaseContent;
+                _ = System.Threading.Tasks.Task.Run(() => releaseContent.EnsureBaselineAsync());
+            }
+
+            // Themed awareness presets show only under their own mods: rebuild the card grid.
+            App.KeywordPresets?.NotifyVisibilityChanged();
+
             InitializeModSelector();
             LoadLogo();
             LoadTakeoverImage();
@@ -3042,6 +3166,13 @@ namespace ConditioningControlPanel
 
             RefreshHypnotubeLinksUI();
             _avatarTubeWindow?.UpdateQuickMenuState();
+
+            // The personality picked in this mod comes back, like the look does (tester, 6.11.3).
+            try { App.Personality?.RestoreForActiveMod(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Mod switch: personality restore failed"); }
+
+            // Last: the user's per-mod default presets (Customise window), if they picked any.
+            ApplyModDefaultPresets(App.Mods.ActiveModId);
 
             App.Logger?.Information("Mod changed to {ModId}", App.Mods.ActiveModId);
         }
@@ -3918,6 +4049,7 @@ namespace ConditioningControlPanel
         private const int WM_ENTERSIZEMOVE = 0x0231;
         private const int WM_EXITSIZEMOVE = 0x0232;
         private const int WM_DPICHANGED_MAIN = 0x02E0;
+        private const int WM_SIZE_MAIN = 0x0005;
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct POINT { public int X; public int Y; }
@@ -3958,7 +4090,17 @@ namespace ConditioningControlPanel
                     Services.UI.DisplayChangeCoordinator.EndInteractiveMove();
                     App.AvatarWindow?.NotifyParentInteractiveMove(false);
                     RunWorkAreaFitDeferredByMove();
+                    QueueLayoutDriftCheck("move-end");
                 }
+                catch { /* never let a hook throw */ }
+                return IntPtr.Zero;
+            }
+            if (msg == WM_SIZE_MAIN)
+            {
+                // Any resize, from any source (the tube's make-room posts SWP_ASYNCWINDOWPOS from its
+                // own thread): check afterwards that WPF's layout still covers the window. Coalesced
+                // and skipped mid-drag - see MainWindow.WorkAreaFit.cs, LAYOUT DRIFT.
+                try { QueueLayoutDriftCheck("size"); }
                 catch { /* never let a hook throw */ }
                 return IntPtr.Zero;
             }

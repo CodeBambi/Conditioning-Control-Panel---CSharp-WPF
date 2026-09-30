@@ -133,7 +133,8 @@ namespace ConditioningControlPanel
             TxtNotes.Text = _content.PatchNotes;
 
             TxtTour.Text = Str("wb_tour", "Show me around (60 seconds)");
-            TxtTour.Visibility = _content.TourAction != null ? Visibility.Visible : Visibility.Collapsed;
+            TxtTour.Visibility = WhatsNewDialog.UpgradeTourOffered && _content.TourAction != null
+                ? Visibility.Visible : Visibility.Collapsed;
 
             // ---- season ----
             if (!string.IsNullOrWhiteSpace(_content.SeasonLine))

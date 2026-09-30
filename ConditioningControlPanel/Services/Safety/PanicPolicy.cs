@@ -58,6 +58,55 @@ namespace ConditioningControlPanel.Services.Safety
             return overrideAll ? Rung.StopEverything : Rung.RunLadder;
         }
 
+        /// <summary>How long after a game kept an Escape as its pause the next Escape is a full panic.</summary>
+        internal static readonly TimeSpan GamePauseDoubleTap = TimeSpan.FromSeconds(2);
+
+        /// <summary>
+        /// Racing Thoughts pauses on Escape (owner, 2026-09-25: "pressing esc immediately closes the
+        /// racing game, we should have a pause with esc"). Escape is the race's Brake, and with the
+        /// override on, the same key as the default panic closed the whole game on the first tap.
+        ///
+        /// <para>The press is left to the game ONLY when all of this holds, so panic stays panic
+        /// everywhere else: the panic key is Escape (a rebound key is always a real panic), the
+        /// race window is the one in front (the player is looking at it), no session is running
+        /// (no flashes or spiral in front of it that a pause would leave up), no Lock Card is
+        /// open, and the previous claim was not inside <see cref="GamePauseDoubleTap"/>: a quick
+        /// second Escape is a full panic, so getting out is still two taps away at most.</para>
+        /// </summary>
+        internal static bool GameClaimsEscapeAsPause(string? panicKey, bool gameInFront, bool engineRunning,
+            bool lockCardOpen, DateTime? lastClaimUtc, DateTime nowUtc)
+        {
+            if (!string.Equals(panicKey?.Trim(), "Escape", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!gameInFront || engineRunning || lockCardOpen) return false;
+            if (lastClaimUtc is { } last && nowUtc - last < GamePauseDoubleTap && nowUtc >= last) return false;
+            return true;
+        }
+
+        /// <summary>Which game page an Escape the panel kept as its pause is handed to.</summary>
+        internal enum KeptEscapePage { None, Race, Board, Breakout }
+
+        /// <summary>
+        /// Where an Escape a game kept as its pause is handed as well. Each of these games pauses on
+        /// its own keydown, and while its WebView2 is out of keyboard focus (the title bar clicked)
+        /// that keydown never comes: the press was kept, so nothing paused and nothing panicked.
+        /// Only once a press was kept (a full panic closes the game), only to the game in front, and
+        /// only to a page that is up: frames posted before its ready are queued, and an Escape
+        /// pressed during the boot must not pause or close the game seconds later. Each page drops
+        /// the frame when the real key reached it too (host-escape.js), so a focused game still
+        /// handles the press once. The race wins a tie, as the claim's log line reads.
+        /// </summary>
+        internal static KeptEscapePage KeptEscapeGoesTo(bool claimed,
+            bool raceInFront, bool raceReady,
+            bool boardInFront, bool boardReady,
+            bool breakoutInFront, bool breakoutReady)
+        {
+            if (!claimed) return KeptEscapePage.None;
+            if (raceInFront) return raceReady ? KeptEscapePage.Race : KeptEscapePage.None;
+            if (boardInFront) return boardReady ? KeptEscapePage.Board : KeptEscapePage.None;
+            if (breakoutInFront) return breakoutReady ? KeptEscapePage.Breakout : KeptEscapePage.None;
+            return KeptEscapePage.None;
+        }
+
         /// <summary>Reads the master switch off settings, defaulting to ON when settings are missing
         /// (a panic with no settings loaded should still stop everything).</summary>
         internal static bool OverrideEnabled(AppSettings? settings) => settings?.PanicOverridesAll != false;
@@ -124,6 +173,41 @@ namespace ConditioningControlPanel.Services.Safety
         /// </summary>
         internal static bool EscapeIsThePanicKey(bool panicKeyEnabled, string? panicKey)
             => panicKeyEnabled && string.Equals(panicKey?.Trim(), "Escape", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Whether a plain Escape from the global hook takes the focus-independent "dismiss this
+        /// video" route (d00a9ef2c) instead of reaching the panic handler. The panic wins whenever
+        /// Escape IS the panic key and the panic can run: its stop pass closes the video too, and the
+        /// safety hold, the leash's panic and stayed flashes all hang off that press. Before this,
+        /// the default install's Escape over an unfocused video closed only the video and left the
+        /// engine, flashes, bubbles and Brain Drain running (bug hunt 2026-09-29, DESK-1). A lock
+        /// card or the palette owns Escape first; a Lockdown blocks the panic key, so there the
+        /// video keeps its Escape.
+        /// </summary>
+        internal static bool EscapeDismissesVideo(bool videoWantsEscape, bool lockCardOpen, bool paletteOpen,
+            bool panicKeyEnabled, string? panicKey, bool lockdownActive)
+        {
+            if (!videoWantsEscape || lockCardOpen || paletteOpen) return false;
+            return !EscapeIsThePanicKey(panicKeyEnabled, panicKey) || lockdownActive;
+        }
+
+        /// <summary>
+        /// Whether a CCP surface that drops or closes on Escape takes this press instead of the panic
+        /// (bug hunt 2026-09-29, TAB-8 / DESK-3): Escape in Circe's Tab price box ("Esc drops it")
+        /// also paused the session, armed the ten minute safety hold, and a second one inside 2 s
+        /// quit CCP. Asked by the global hook before the key reaches any window, so the element with
+        /// the keyboard is the one the press lands on, and a press it takes arms nothing a panic arms.
+        ///
+        /// <para>Only while Escape IS the panic key (a rebound key is always a real panic), never
+        /// while a Lock Card is open (it outranks every hand-off), only when the press goes to a CCP
+        /// window, and one press at a time: while a taken press has not reached its surface yet (a
+        /// stalled UI), the next Escape is a real panic. Decided per press, so the Escape after the
+        /// one that dropped the edit is a panic again.</para>
+        /// </summary>
+        internal static bool SurfaceTakesEscape(bool panicKeyEnabled, string? panicKey, bool lockCardOpen,
+            bool ccpInFront, bool surfaceHasTheKeyboard, bool takenPressOnItsWay)
+            => EscapeIsThePanicKey(panicKeyEnabled, panicKey) && !lockCardOpen && ccpInFront
+               && surfaceHasTheKeyboard && !takenPressOnItsWay;
 
         /// <summary>
         /// True when <paramref name="pressed"/> is the user's optional pause-key binding. An unset

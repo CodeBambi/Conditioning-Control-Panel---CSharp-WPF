@@ -24,16 +24,16 @@
  *                                      longer than WORD_MS holds the next onset back, up to MAX_WORD_HOLD_MS). A creeping
  *                                      tunnel (moments.tunnel -> fx-tunnel) breathes once for the chain: in 500 ms
  *                                      to 0.6, held to the last onset, out 500 ms. Each word: 'clicker' cue, SPOKEN BY
- *                                      THE HOST (voice.js -> word.speak: the player's own clip for that phrase, a
- *                                      bundled one, or Windows speech, on the app's audio device). Only an ack of
- *                                      'none' - or no host at all, the phone playtest - falls back to speechSynthesis
- *                                      (rate 0.85, pitch 0.8). The 'word' cue under it.
+ *                                      THE HOST (voice.js -> word.speak: the player's own clip for that phrase or a
+ *                                      bundled recording, on the app's audio device). An ack of 'none' - or no host at
+ *                                      all, the phone playtest - leaves the word SILENT: no synthetic speech anywhere
+ *                                      (owner, 2026-09-25). The 'word' cue under it.
  *                                      1 in 100 per word (the page's own seeded rng, never the payout): the word is
- *                                      reversed, mirrored and spoken as its reversed spelling at rate 0.7.
+ *                                      reversed and mirrored; the host plays its recording backwards.
  *                                      Returns { done: Promise } resolving after the last word fades.
  *   .settle()                          a dead spin: a 600 ms light band sweeps the station at 20%, the 'settle' cue,
  *                                      and EMI shrugs / winks with one of eight rotating barks (br_emi_dead_1..8).
- *   .cancel()                          Law VI: suspend or leave drops text, words, tunnel and speech at once
+ *   .cancel()                          Law VI: suspend or leave drops text, words, tunnel and the host line at once
  *   .dispose()
  *   .debug()                           { shown, words, tunnel, cues, barks, speech, voice } for the tests and the smokes
  *
@@ -245,19 +245,13 @@ function createCues(log) {
 }
 
 /* ------------------------------------------------------------------ speech */
+// No synthetic speech (owner, 2026-09-25): the page never touches the browser's speech engine,
+// not even to cancel it. A word with no recorded clip from the host stays silent; the log still
+// records that it was asked. NoSyntheticSpeechTests (C#) scans this tree for the API names.
 function speak(text, rate, log) {
-  try {
-    const S = globalThis.speechSynthesis, U = globalThis.SpeechSynthesisUtterance;
-    if (!S || typeof U !== 'function') { log.push({ text, rate, spoken: false }); return false; }
-    S.cancel();
-    const u = new U(String(text));
-    u.rate = rate; u.pitch = SPEECH.pitch;
-    S.speak(u);
-    log.push({ text, rate, spoken: true });
-    return true;
-  } catch (e) { log.push({ text, rate, spoken: false }); return false; }
+  log.push({ text, rate, spoken: false });
+  return false;
 }
-function hush() { try { const S = globalThis.speechSynthesis; if (S && typeof S.cancel === 'function') S.cancel(); } catch (e) { /* noop */ } }
 
 /* ------------------------------------------------------------------ the DOM */
 const CSS = `
@@ -304,7 +298,7 @@ function stopAnim(a) { if (a) { try { a.cancel(); } catch (e) { /* noop */ } } }
  * @param {string} [o.font]        the cabinet's display font stack; else the bundled rounded display stack
  * @param {number} [o.seed]        default seed for .word() when a call gives none
  * @param {Object} [o.cues]        { play(cue, opts) } to use instead of the kit adapter (tests)
- * @param {Object|null} [o.voice]  the host voice (voice.js). Omitted = the real one; null forces speechSynthesis (tests)
+ * @param {Object|null} [o.voice]  the host voice (voice.js). Omitted = the real one; null = no host, every word silent (tests)
  */
 export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, moments = null, emi = null, font = '', seed, cues = null, voice } = {}) {
   const shown = [], words = [], tunnelLog = [], cueLog = [], barks = [], speechLog = [], voiceLog = [];
@@ -317,7 +311,7 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
   try { doc?.fonts?.load('700 48px \"Back Room Rounded\"')?.catch(() => {}); } catch {}
   const timers = new Set(), anims = new Set();
   let layer = null, textEl = null, wordEls = [], tunnelTimer = 0, tunnelPosted = 0, barkAt = 0, disposed = false;
-  // The host voice when there is a host; null (or an explicit null) leaves every word on speechSynthesis.
+  // The host voice when there is a host; null (or an explicit null) leaves every word silent.
   const speaker = voice === undefined ? createVoice() : voice;
   const hosted = !!(speaker && speaker.available === true && typeof speaker.speak === 'function');
   let chainHoldUntil = 0;   // a host clip longer than WORD_MS pushes the next onset out to here
@@ -478,13 +472,12 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
 
   /** Law VI everywhere: the host line stops with the page one. */
   function hushAll() {
-    hush();
     if (hosted && typeof speaker.stop === 'function') { try { speaker.stop(); } catch (e) { /* noop */ } }
   }
   /**
-   * Say one word. Hosted, the app owns the line (its own clip, a bundled one, or Windows speech) and the
-   * page stays quiet unless the ack comes back 'none'; unhosted, speechSynthesis speaks on this very frame
-   * exactly as it always did. An ack whose durationMs runs past WORD_MS holds the next word of the chain.
+   * Say one word. Hosted, the app owns the line (the player's clip or a bundled recording); an ack of
+   * 'none', a throw, or no host at all leaves the word silent. An ack whose durationMs runs past WORD_MS
+   * holds the next word of the chain.
    */
   function speakWord(w, planSeed) {
     const rate = w.reversed ? SPEECH.reversedRate : SPEECH.rate;
@@ -500,8 +493,8 @@ export function createCallout({ mount = null, lex = (_, f) => f, ctx = null, mom
       const source = ack && typeof ack.source === 'string' ? ack.source : 'none';
       const ms = ack && Number.isFinite(ack.durationMs) ? Math.max(0, ack.durationMs) : 0;
       entry.source = source; entry.durationMs = ms;
-      // Only silence sends the word back to the browser voice. 'clip', 'preset' and 'tts' all mean the
-      // host is already saying it, reversed audio included, so speaking here would double it up.
+      // 'none' is logged and stays silent. Any other source means the host is playing a recording,
+      // reversed audio included.
       if (source === 'none') { speak(w.spoken, rate, speechLog); return; }
       if (ms > WORD_MS) chainHoldUntil = Math.max(chainHoldUntil, at + Math.min(ms, MAX_WORD_HOLD_MS));
     }).catch(() => { if (!disposed) { entry.source = 'none'; speak(w.spoken, rate, speechLog); } });

@@ -31,7 +31,7 @@ public partial class ChaosHubWindow
 
         var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Right };
 
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(new ConditioningControlPanel.Helpers.EmojiTextBlock
         {
             Text = "🔒 " + def.Text,
             Foreground = new SolidColorBrush(Color.FromArgb(0xB0, accent.R, accent.G, accent.B)),

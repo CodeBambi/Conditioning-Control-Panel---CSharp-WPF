@@ -43,6 +43,7 @@ public class BouncingTextService : IDisposable
         public double SquashTimer = -1; // seconds since last wall hit; <0 = idle
         public bool SquashAxisX;      // true = hit a vertical wall (X velocity reversed)
         public double BurstTimer = -1;  // seconds since last corner hit; <0 = idle
+        public double OverX, OverY;     // drawn reach past the measured box (last frame's transform)
     }
 
     private readonly List<Logo> _logos = new();
@@ -421,6 +422,7 @@ public class BouncingTextService : IDisposable
         {
             var l = _logos[i];
             var (sx, sy, angle) = ComputeEffectTransform(l, settings);
+            (l.OverX, l.OverY) = BounceOverhang.Of(l.TextWidth, l.TextHeight, sx, sy, angle);
             foreach (var window in _windows)
             {
                 window.UpdatePosition(i, l.PosX, l.PosY);
@@ -443,34 +445,43 @@ public class BouncingTextService : IDisposable
         double textRight = l.PosX + l.TextWidth;
         double textBottom = l.PosY + l.TextHeight;
 
+        // The walls sit INSIDE the screen by how far the effect transform (drawn about the
+        // text's centre) reaches past the measured box, so the whole drawn line stays on screen.
+        // A wall that moves in under a line already heading away (breathing) nudges it back
+        // without counting as a bounce.
+        double overX = BounceOverhang.Capped(l.OverX, _maxX - _minX, l.TextWidth);
+        double overY = BounceOverhang.Capped(l.OverY, _maxY - _minY, l.TextHeight);
+        double wallL = _minX + overX, wallR = _maxX - overX;
+        double wallT = _minY + overY, wallB = _maxY - overY;
+
         // Bounce off LEFT edge (text's left edge hits screen's left edge)
-        if (l.PosX <= _minX)
+        if (l.PosX <= wallL)
         {
-            l.PosX = _minX;
+            l.PosX = wallL;
+            bouncedX = l.VelX < 0;
             l.VelX = Math.Abs(l.VelX);
-            bouncedX = true;
         }
         // Bounce off RIGHT edge (text's right edge hits screen's right edge)
-        else if (textRight >= _maxX)
+        else if (textRight >= wallR)
         {
-            l.PosX = _maxX - l.TextWidth;
+            l.PosX = wallR - l.TextWidth;
+            bouncedX = l.VelX > 0;
             l.VelX = -Math.Abs(l.VelX);
-            bouncedX = true;
         }
 
         // Bounce off TOP edge (text's top edge hits screen's top edge)
-        if (l.PosY <= _minY)
+        if (l.PosY <= wallT)
         {
-            l.PosY = _minY;
+            l.PosY = wallT;
+            bouncedY = l.VelY < 0;
             l.VelY = Math.Abs(l.VelY);
-            bouncedY = true;
         }
         // Bounce off BOTTOM edge (text's bottom edge hits screen's bottom edge)
-        else if (textBottom >= _maxY)
+        else if (textBottom >= wallB)
         {
-            l.PosY = _maxY - l.TextHeight;
+            l.PosY = wallB - l.TextHeight;
+            bouncedY = l.VelY > 0;
             l.VelY = -Math.Abs(l.VelY);
-            bouncedY = true;
         }
 
         bool bounced = bouncedX || bouncedY;

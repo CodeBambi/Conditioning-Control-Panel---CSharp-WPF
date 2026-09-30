@@ -43,7 +43,7 @@ namespace ConditioningControlPanel
     /// starved in this app), and every path is guarded so an explainer can never be the reason a
     /// tab fails to open.
     /// </summary>
-    public partial class FeatureIntroPopup : Window
+    public partial class FeatureIntroPopup : Window, Services.Startup.IPassiveStartupSurface
     {
         private Action? _onAction;
 
@@ -321,9 +321,9 @@ namespace ConditioningControlPanel
                 {
                     Text = text,
                     Foreground = Brushes.White,
-                    FontSize = 13.5,
+                    FontSize = 15,
                     TextWrapping = TextWrapping.Wrap,
-                    LineHeight = 20
+                    LineHeight = 23
                 };
                 Grid.SetColumn(body, 1);
                 row.Children.Add(body);

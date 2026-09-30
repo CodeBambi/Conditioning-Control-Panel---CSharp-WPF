@@ -35,7 +35,8 @@ namespace ConditioningControlPanel.Services
         {
             var modPresets = GetActiveModPersonalities();
             fromMod = modPresets != null && modPresets.Count > 0;
-            return fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+            var presets = fromMod ? modPresets! : PersonalityPresets.GetAllBuiltIn();
+            return presets;
         }
 
         /// <summary>
@@ -98,6 +99,7 @@ namespace ConditioningControlPanel.Services
                     Id = d.Id,
                     Name = d.Name,
                     Description = d.Description ?? "",
+                    SampleLines = d.SampleLines,
                     IsBuiltIn = true,
                     RequiresPremium = false,
                     PromptSettings = cps
@@ -113,8 +115,15 @@ namespace ConditioningControlPanel.Services
         {
             var presets = new List<PersonalityPreset>();
 
-            // Built-in presets first (mod-supplied if the active mod defines personalities)
-            presets.AddRange(GetBuiltInPresetsForActiveMod());
+            // Built-in presets first (mod-supplied if the active mod defines personalities).
+            // On the stock set in the neutral context the niche personas stay off the list; the
+            // one the user already has selected, if any, stays so nothing vanishes under them.
+            // GetActivePreset / GetPresetById still resolve every id, so a hidden pick keeps working.
+            var builtIn = GetBuiltInPresetsForActiveMod(out var fromMod);
+            presets.AddRange(fromMod
+                ? builtIn
+                : PersonalityPresets.ForPicker(builtIn, IsNeutralContext(),
+                    App.Settings?.Current?.ActivePersonalityPresetId));
 
             // Add user-created presets
             var userPresets = App.Settings?.Current?.UserPersonalityPresets;
@@ -179,6 +188,10 @@ namespace ConditioningControlPanel.Services
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.ActivePersonalityPresetId = presetId;
+                // Every caller here is an explicit pick (Customise, companion room, chat command,
+                // studio), so it is remembered for the mod it was made in (ModPersonalityPicks).
+                Companion.ModPersonalityPicks.Store(App.Settings.Current.ModPersonalityPreset,
+                    App.Mods?.ActiveModId, presetId);
 
                 // Picking a preset is the user saying "this one, now" — so it has to win over any
                 // community/asset/hand-edited prompt still holding the single wire slot, otherwise
@@ -198,12 +211,36 @@ namespace ConditioningControlPanel.Services
 
                 if (cleared)
                     App.Logger?.Information("PersonalityService: Preset {Id} took over from the active custom prompt", presetId);
-                App.Logger?.Information("PersonalityService: Switched to preset: {Name} ({Id})", preset.Name, presetId);
+                App.Logger?.Information("PersonalityService: Changed active preset");
                 PersonalityChanged?.Invoke(this, preset);
                 return true;
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// After a mod switch: puts back the personality last picked in the now-active mod, the
+        /// way the look comes back (tester, 6.11.3). Not a pick, so nothing is stored, and a
+        /// custom prompt override is left alone. With nothing stored the mod's own default
+        /// applies, exactly as before. Returns true when it switched.
+        /// </summary>
+        public bool RestoreForActiveMod()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return false;
+            var id = Companion.ModPersonalityPicks.ForModSwitch(s.ModPersonalityPreset, App.Mods?.ActiveModId,
+                s.ActivePersonalityPresetId, pid => GetPresetById(pid) != null);
+            var preset = id == null ? null : GetPresetById(id);
+            if (preset == null) return false;
+
+            s.ActivePersonalityPresetId = preset.Id;
+            // A different voice from here on: fence the older replies off the wire, as a pick does.
+            s.PersonaVoiceFenceUtc = DateTime.UtcNow;
+            App.Settings!.Save();
+            App.Logger?.Information("PersonalityService: mod switch restored the personality picked there");
+            PersonalityChanged?.Invoke(this, preset);
+            return true;
         }
 
         /// <summary>

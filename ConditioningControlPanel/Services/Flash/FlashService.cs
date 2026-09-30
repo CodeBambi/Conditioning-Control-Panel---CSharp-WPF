@@ -75,6 +75,22 @@ namespace ConditioningControlPanel.Services
         internal static int ResolveFlashCap(bool useLayer, bool useHost)
             => (useLayer || useHost) ? MAX_CONCURRENT_FLASH_HOST : MAX_CONCURRENT_FLASH;
 
+        /// <summary>Can the mouse click or fling a flash drawn this way? The shared solid-mode host
+        /// is click-through by design (gaze-pop and linger only). One truth for the spawn, the red
+        /// roll and "stay until popped".</summary>
+        internal static bool MouseClickable(bool clickable, bool solidHost) => clickable && !solidHost;
+
+        /// <summary>Does a flash spawned now stay until popped? See <see cref="FlashStayRule"/>.</summary>
+        private static bool StayUntilPopped(AppSettings settings, bool pointFired)
+            => StayUntilPopped(settings, pointFired, UseCompositor);
+
+        /// <summary>Pure half of the stay decision. Only a flash the mouse can pop stays: in Solid
+        /// mode with the compositor off the shared host is click-through, so there a flash keeps
+        /// its normal lifetime and cap instead of sitting ten minutes out of reach.</summary>
+        internal static bool StayUntilPopped(AppSettings settings, bool pointFired, bool compositor)
+            => FlashStayRule.Applies(settings.FlashStayUntilPopped,
+                MouseClickable(settings.FlashClickable, solidHost: !compositor && settings.FlashSolidMode), pointFired);
+
         /// <summary>
         /// Floor for an animated flash's per-frame delay, in milliseconds. A 4x multiplier on a GIF
         /// that already carries a 10-20ms frame time would otherwise ask the heartbeat for a new
@@ -159,6 +175,15 @@ namespace ConditioningControlPanel.Services
         // asset-manager toggle moves that count, so one int compare per draw is enough to notice a
         // pool that predates the user's latest selection — see PruneDeselectedFromPools.
         private int _poolDisabledStamp = -1;
+        // One shuffled cycle per local source, shared by flashes and the chaos overlays, so a big
+        // folder is walked in full before anything repeats (#627). Guarded by _lockObj.
+        private ShuffleBag<string>? _diskBag;
+        private ShuffleBag<(string PackId, PackFileEntry File)>? _packBag;
+        private ShuffleBag<string> DiskBag => _diskBag ??= new ShuffleBag<string>(p => p, _random);
+        private ShuffleBag<(string PackId, PackFileEntry File)> PackBag =>
+            _packBag ??= new ShuffleBag<(string PackId, PackFileEntry File)>(PackEntryKey, _random);
+        private static string PackEntryKey((string PackId, PackFileEntry File) p) =>
+            $"pack:{p.PackId}/{(string.IsNullOrEmpty(p.File?.ObfuscatedName) ? p.File?.OriginalName : p.File!.ObfuscatedName)}";
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
         // Last flash voice-line pool size written to the log, so BuildVoiceLinePool only speaks up
         // when the number CHANGES (#1099). Guarded by _lockObj, like _soundQueue.
@@ -658,6 +683,19 @@ namespace ConditioningControlPanel.Services
             {
                 Services.UI.DoNotDisturbGuard.LogSuppressionThrottled("flash");
                 return;
+            }
+
+            // Stay until popped: while the screen is full, skip the whole tick (picture AND
+            // whisper). The scheduler reschedules on its own, so this is a wait, not a stop.
+            var stay = App.Settings.Current;
+            if (StayUntilPopped(stay, pointFired: false))
+            {
+                bool layer = UseCompositor;
+                int cap = FlashStayRule.Cap(ResolveFlashCap(layer, !layer && stay.FlashSolidMode), true,
+                    sharedHost: layer || stay.FlashSolidMode);
+                int active;
+                lock (_lockObj) active = _activeWindows.Count;
+                if (FlashStayRule.ScreenFull(true, active, cap)) return;
             }
 
             _isBusy = true;
@@ -1516,7 +1554,12 @@ namespace ConditioningControlPanel.Services
             {
                 lifetimeMs = overrideLifetimeMs.Value;
             }
-            
+
+            // Stay until popped: an ambient flash (and its hydra children) lives until clicked,
+            // capped by the safety lifetime. Point-fired flashes keep their authored timing.
+            if (StayUntilPopped(settings, pointFired: oneShotGen != null))
+                lifetimeMs = FlashStayRule.SafetyLifetimeMs;
+
             // For one-shot mode, schedule cleanup of one-shot state after all windows should be done fading
             if (_oneShotActive && !isMultiplication)
             {
@@ -1638,7 +1681,8 @@ namespace ConditioningControlPanel.Services
             // Prevent memory explosion / compositor backup from too many concurrent flash windows.
             // Only the classic layered-window path carries that risk; compositor/solid flashes are
             // cheap shared-host items, so they get the higher cap (see MAX_CONCURRENT_FLASH_HOST).
-            int cap = ResolveFlashCap(useLayer, useHost);
+            int cap = FlashStayRule.Cap(ResolveFlashCap(useLayer, useHost),
+                StayUntilPopped(settings, pointFired: oneShotGen != null), sharedHost: useLayer || useHost);
             lock (_lockObj)
             {
                 if (_activeWindows.Count >= cap) return;
@@ -1710,7 +1754,7 @@ namespace ConditioningControlPanel.Services
                 // The shared host is fully click-through (pops on it would need the global mouse
                 // hook, like bubbles) — solid-mode flashes are gaze-pop/linger only by design.
                 window.PreviewV2 = imageData.PreviewV2;
-                window.IsClickable = (settings.FlashClickable || window.PreviewV2) && !useHost;
+                window.IsClickable = MouseClickable(settings.FlashClickable || window.PreviewV2, useHost);
                 window.Background = System.Windows.Media.Brushes.Black;
                 window.IsFadingOut = false;
                 window.LifetimeCts = windowCts;
@@ -1800,14 +1844,24 @@ namespace ConditioningControlPanel.Services
                 var isLucky = multiplier > 1;
                 window.IsLucky = isLucky;
 
-                // Natasha's favourite: about one flash in ten wears red and is 3:00 on the tab
-                // when it shows. Never a hydra copy, a remix mirror, a v2 preview or a picture a
-                // bubble delivered (that bubble had its own roll), and only while the row can charge.
+                // Natasha's favourite: with the dodge setting on (ChasterFlashDodge, off by
+                // default: off means no red flashes at all), about one flash in ten wears red and
+                // shows a 4 s ring; +5:00 only if the ring empties before a click or a fling.
+                // Never a hydra copy, a remix mirror, a v2 preview or a picture a bubble delivered
+                // (that bubble had its own roll), never a flash nobody can click or fling (set just
+                // above), never to someone away from the keyboard, and only while the row can charge.
                 var natasha = hydraGeneration == 0 && !imageData.RemixMirror && !imageData.PreviewV2
                     && imageData.BubbleOriginPx == null
+                    && Chaster.NatashasFavourite.FlashMayRoll(settings.ChasterFlashDodge, window.IsClickable, ActivityTracker.GetIdleSeconds())
                     && App.Chaster?.CanBook(Chaster.NatashasFavourite.EventId) == true
                     && Chaster.NatashasFavourite.Roll(_random);
                 window.IsNatasha = natasha;
+                if (natasha)
+                {
+                    // One deadline for the ring on every render path and for the booking.
+                    window.NatashaDodgeUntilMs = Environment.TickCount64 + Chaster.NatashasFavourite.DodgeMs;
+                    window.BoostLifetime(Chaster.NatashasFavourite.DodgeMinLifetimeMs);
+                }
                 var natashaGlow = natasha && PerformanceProfile.AllowGlow(perfTier);
 
                 if (isLucky)
@@ -1956,6 +2010,13 @@ namespace ConditioningControlPanel.Services
                     };
                 }
 
+                if (natasha && !useLayer && content != null)
+                {
+                    var ring = BuildDodgeRing();
+                    content = new Grid { Children = { content, ring } };
+                    window.NatashaDodgeRing = ring;
+                }
+
                 if (useLayer)
                 {
                     // Convert frames + spawn the layer item; the heartbeat drives it from here
@@ -2055,15 +2116,9 @@ namespace ConditioningControlPanel.Services
                     _activeWindows.Add(window);
                 }
 
-                // Natasha's favourite: the red one showed. +3:00 on the tab (inert unless the row is on).
-                // The pop lands on the flash itself (physical px: this rect is in the monitor's DIPs,
-                // the same convention the shared host's Place uses).
-                if (natasha)
-                {
-                    var popDpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
-                    App.Chaster?.NoteAt("natasha", new System.Windows.Point(
-                        (window.Left + window.Width / 2) * popDpi, (window.Top + window.Height / 2) * popDpi));
-                }
+                // Natasha's favourite: the red one showed, and its ring is running. Nothing books
+                // now; the ring's end decides.
+                if (natasha) StartNatashaDodge(window, monitor);
             }
             catch (Exception ex)
             {
@@ -2261,6 +2316,21 @@ namespace ConditioningControlPanel.Services
         /// returns a done, shardless state, and this hands back the same null either way.
         /// UI thread (every SafeCloseFlashWindow caller is), so _random needs no guard.
         /// </summary>
+        // The last style Mix dealt, so two pops in a row never leave the same way. UI thread only.
+        private FlashExitStyle? _lastExitStyle;
+
+        /// <summary>
+        /// The leave animation for a popped compositor flash, or null for the plain cut
+        /// (FlashExitStyle.None). Owned Shatter is decided first and wins. See FlashExit.
+        /// </summary>
+        private FlashExitState? BuildExit()
+        {
+            var setting = App.Settings?.Current?.FlashExitStyle ?? FlashExitStyle.Mix;
+            if (FlashExit.Pick(setting, _lastExitStyle, _random) is not { } style) return null;
+            _lastExitStyle = style;
+            return FlashExit.Begin(style, MotionFx.Level, _random.Next());
+        }
+
         private FlashShatterState? BuildShatter(FlashWindow window, Compositor.FlashLayer.FlashItem item)
         {
             if (!window.PreviewV2 && (App.Settings?.Current?.FlashShatterEnabled != true || !OwnsFlashV2())) return null;
@@ -2475,6 +2545,7 @@ namespace ConditioningControlPanel.Services
                             paddingPx, cornerRadiusPx, skGlowColor, glowSigmaPx,
                             glowOpacity, luckyPulse, motionState);
                         window.LayerItem.NatashaCue = window.IsNatasha;
+                        window.LayerItem.DodgeUntilMs = window.NatashaDodged ? 0 : window.NatashaDodgeUntilMs;
                         if (imageData.BubbleOriginPx is { } origin)
                         {
                             window.LayerItem.BubbleOriginPx = origin;
@@ -2672,6 +2743,82 @@ namespace ConditioningControlPanel.Services
             {
                 OnFlashClicked(window, App.Settings.Current);
             }
+            else if (outcome == FlashDragOutcome.Fling && window.IsNatasha && !window.NatashaDodged && !window.IsFadingOut)
+            {
+                // Natasha's red flash flung away in time: dodged. The walls open so it flies off
+                // the screen, and it fades out a moment later. Nothing books.
+                window.NatashaDodged = true;
+                if (window.LayerItem != null) window.LayerItem.DodgeUntilMs = 0;
+                motion.BoundsX -= motion.BoundsW; motion.BoundsY -= motion.BoundsH;
+                motion.BoundsW *= 3; motion.BoundsH *= 3;
+                try { window.LifetimeCts?.CancelAfter(700); } catch (Exception ex) { Diag.Swallowed(ex); }
+            }
+        }
+
+        /// <summary>
+        /// Natasha's red flash: when its ring empties, +5:00 goes on the tab, unless a click, a
+        /// stare or a fling dismissed it first (or the app cleared it: panic, stop). Booked where
+        /// the flash is (physical px: the rect is in the monitor's DIPs, the shared host's
+        /// convention).
+        /// </summary>
+        private void StartNatashaDodge(FlashWindow window, MonitorInfo monitor)
+        {
+            var timer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(Math.Max(1, window.NatashaDodgeUntilMs - Environment.TickCount64)),
+            };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                try
+                {
+                    bool up;
+                    lock (_lockObj) { up = _activeWindows.Contains(window) && !window.IsFadingOut; }
+                    if (window.NatashaDodgeRing != null) window.NatashaDodgeRing.Visibility = Visibility.Collapsed;
+                    if (window.LayerItem != null) window.LayerItem.DodgeUntilMs = 0;
+                    if (!Chaster.NatashasFavourite.DodgeBooks(up, window.NatashaDodged)) return;
+                    var dpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
+                    // Unprompted: the player did nothing, so Circe does not say they popped it.
+                    App.Chaster?.NoteAt("natasha", new System.Windows.Point(
+                        (window.Left + window.Width / 2) * dpi, (window.Top + window.Height / 2) * dpi), unprompted: true);
+                }
+                catch (Exception ex) { Diag.Swallowed(ex, "natasha dodge"); }
+            };
+            timer.Start();
+        }
+
+        /// <summary>The per-window and Canvas-host ring: a small red dial in the flash's top-right
+        /// corner that drains over <see cref="Chaster.NatashasFavourite.DodgeMs"/>. The dash
+        /// offset runs one dash length, which takes the visible arc from full to nothing.</summary>
+        private static FrameworkElement BuildDodgeRing()
+        {
+            const double d = 34, t = 4;
+            var red = System.Windows.Media.Color.FromRgb(Chaster.NatashasFavourite.R, Chaster.NatashasFavourite.G, Chaster.NatashasFavourite.B);
+            var dash = Math.PI * (d - t) / t;   // the circumference, in stroke widths
+            var arc = new System.Windows.Shapes.Ellipse
+            {
+                Width = d, Height = d,
+                Stroke = new SolidColorBrush(red),
+                StrokeThickness = t,
+                StrokeDashArray = new DoubleCollection { dash, dash },
+                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+                RenderTransform = new RotateTransform(-90),
+            };
+            arc.BeginAnimation(System.Windows.Shapes.Shape.StrokeDashOffsetProperty,
+                new DoubleAnimation(0, dash, TimeSpan.FromMilliseconds(Chaster.NatashasFavourite.DodgeMs)));
+            return new Grid
+            {
+                Width = d, Height = d,
+                Margin = new Thickness(10),
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                VerticalAlignment = System.Windows.VerticalAlignment.Top,
+                IsHitTestVisible = false,
+                Children =
+                {
+                    new System.Windows.Shapes.Ellipse { Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x99, 0x10, 0x06, 0x0C)) },
+                    arc,
+                },
+            };
         }
 
         /// <summary>Point a fling's walls at the work area of the monitor under this point.</summary>
@@ -3618,12 +3765,9 @@ namespace ConditioningControlPanel.Services
                         usePackImage = true;
                     }
 
-                    if (usePackImage && _packImageList.Count > 0)
+                    if (usePackImage && PackBag.TryNext(_packImageList, out var packImage))
                     {
-                        // Randomly select a pack image (true random, not sequential)
-                        var index = _random.Next(_packImageList.Count);
-                        var packImage = _packImageList[index];
-                        // Decrypt pack image to temp file
+                        // Next pack entry of the shuffled cycle (#627). Decrypt it to a temp file.
                         var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
                         if (!string.IsNullOrEmpty(tempPath))
                         {
@@ -3635,12 +3779,10 @@ namespace ConditioningControlPanel.Services
                         // If decryption failed, try regular list
                     }
 
-                    if (_imageList.Count > 0)
-                    {
-                        // Randomly select an image (true random, not sequential)
-                        var index = _random.Next(_imageList.Count);
-                        result.Add(_imageList[index]);
-                    }
+                    // Next disk image of the shuffled cycle: the whole folder comes up before
+                    // anything repeats (#627).
+                    if (DiskBag.TryNext(_imageList, out var diskImage))
+                        result.Add(diskImage);
                 }
                 return result;
             }
@@ -3656,9 +3798,9 @@ namespace ConditioningControlPanel.Services
         /// This is what lets the Chaos "glitch" wash and "cascade" gif-rain match the user's live
         /// preset — previously they re-listed the raw images folder (ChaosImagePool), which ignored
         /// both disabled assets and content packs, so they silently drew nothing for pack/curated
-        /// users while flashes worked. Picks are DISTINCT (unlike the flash pipeline's independent,
-        /// with-replacement picks): a single wash/rain that repeats the same image 2-3x looks broken,
-        /// so dedup on the source identity here. May do disk I/O (pack decrypt, one per chosen pack
+        /// users while flashes worked. Picks are DISTINCT: a single wash/rain that repeats the same
+        /// image 2-3x looks broken, so dedup on the source identity here. Draws come off the same
+        /// shuffle bags as the flashes (#627), so the two surfaces share one walk of the library. May do disk I/O (pack decrypt, one per chosen pack
         /// image) — call OFF the UI thread when requesting more than a couple.
         ///
         /// Draws from the REMOTE still pool too, on the same terms as the flashes themselves
@@ -3703,8 +3845,8 @@ namespace ConditioningControlPanel.Services
                 int poolSize = localPool + remoteReady;
                 int want = Math.Min(count, poolSize);
                 bool haveLocal = localPool > 0;
-                var chosenDisk = new HashSet<int>();
-                var chosenPack = new HashSet<int>();
+                var chosenDisk = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var chosenPack = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var chosenRemote = new HashSet<string>(StringComparer.Ordinal);
                 var result = new List<string>(want);
                 int guard = 0, maxGuard = poolSize * 8 + 16;   // backstop vs. random-collision / decrypt-fail retries
@@ -3743,11 +3885,13 @@ namespace ConditioningControlPanel.Services
                     else if (_packImageList.Count > 0)
                         usePackImage = true;
 
+                    // Both local pools deal from the same shuffled cycles as the flashes (#627), so a
+                    // wash walks the library instead of re-rolling it. A cycle boundary inside one
+                    // batch can hand back an entry this batch already has: the key sets skip it.
                     if (usePackImage && _packImageList.Count > 0)
                     {
-                        var index = _random.Next(_packImageList.Count);
-                        if (!chosenPack.Add(index)) continue;   // already drew this pack entry
-                        var packImage = _packImageList[index];
+                        if (!PackBag.TryNext(_packImageList, out var packImage)) continue;
+                        if (!chosenPack.Add(PackEntryKey(packImage))) continue;   // already drew this pack entry
                         var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
                         if (!string.IsNullOrEmpty(tempPath))
                         {
@@ -3756,11 +3900,10 @@ namespace ConditioningControlPanel.Services
                         }
                         // decrypt failed → index stays marked chosen so we don't retry a broken entry
                     }
-                    else if (_imageList.Count > 0)
+                    else if (DiskBag.TryNext(_imageList, out var diskImage))
                     {
-                        var index = _random.Next(_imageList.Count);
-                        if (!chosenDisk.Add(index)) continue;   // already drew this disk image
-                        result.Add(_imageList[index]);
+                        if (!chosenDisk.Add(diskImage)) continue;   // already drew this disk image
+                        result.Add(diskImage);
                     }
                 }
                 return result;
@@ -4543,12 +4686,17 @@ namespace ConditioningControlPanel.Services
             var blockedCount = 0;
             var sanitizeFailedCount = 0;
 
+            // Windows treats a three-letter search extension as a prefix ("*.jpe" also returns
+            // x.jpeg, "*.tif" x.tiff), which listed those files twice and drew them at double
+            // weight (#627). Keep a file only on the pass for its own extension, and only once.
+            var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var ext in extensions)
             {
                 // Scan subfolders to support user-organized categories
                 // Note: Directory.GetFiles is case-insensitive on Windows NTFS
                 foreach (var file in Directory.GetFiles(folder, $"*{ext}", SearchOption.AllDirectories))
                 {
+                    if (!MediaListing.Keep(file, ext, listed)) continue;
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
                     var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
                     var isInUserAssets = SecurityHelper.IsPathSafe(file, App.UserDataPath);
@@ -4686,7 +4834,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 audioFile = new AudioFileReader(path);
-                sound = new WaveOutEvent();
+                sound = WaveOutTeardown.NewWaveOut();   // reports out off the dispatcher (#1295)
                 App.Audio?.ApplyPreferredDevice(sound);
 
                 // Apply volume curve (gentler, minimum 5%). #1099: the 5% is a floor on the CURVE,
@@ -4722,16 +4870,8 @@ namespace ConditioningControlPanel.Services
 
         private void StopCurrentSound()
         {
-            try
-            {
-                _currentSound?.Stop();
-                _currentSound?.Dispose();
-                _currentAudioFile?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Error stopping flash sound: {Error}", ex.Message);
-            }
+            // Engine stop calls this first, on the UI thread (#1295): no waveOutReset here.
+            WaveOutTeardown.Release(_currentSound, _currentAudioFile, "flash-sound");
 
             _currentSound = null;
             _currentAudioFile = null;
@@ -4915,7 +5055,9 @@ namespace ConditioningControlPanel.Services
                         var item = window.LayerItem;
                         window.LayerItem = null;
                         var shatter = shatterThis ? BuildShatter(window, item) : null;
+                        var exit = shatter == null && shatterThis ? BuildExit() : null;
                         if (shatter != null) _flashLayer?.BeginShatter(item, shatter);
+                        else if (exit != null) _flashLayer?.BeginExit(item, exit);
                         else _flashLayer?.Remove(item);
                     }
                     // Dropped with the item: a dead pendulum must not keep reserving its pivot
@@ -5310,6 +5452,9 @@ namespace ConditioningControlPanel.Services
             // CTS can never re-fire, leaving it immortal on screen. Don't revive
             // a window that is already on its way out. (#384)
             if (IsFadingOut || LifetimeCts == null || LifetimeCts.IsCancellationRequested) return;
+            // A boost only ever lengthens: a stay-until-popped flash already has minutes left,
+            // and "extraMs from now" would cut it down to a few seconds.
+            if (DateTime.Now.AddMilliseconds(extraMs) <= ExpiresAt) return;
             try
             {
                 LifetimeCts.CancelAfter(extraMs);
@@ -5325,8 +5470,14 @@ namespace ConditioningControlPanel.Services
         /// Whether this flash triggered a lucky proc (golden glow effect)
         /// </summary>
         public bool IsLucky { get; set; }
-        /// <summary>Natasha's favourite: wears the red cue and booked 3:00 when it showed.</summary>
+        /// <summary>Natasha's favourite: wears the red cue and runs the dodge ring.</summary>
         public bool IsNatasha { get; set; }
+        /// <summary>Environment.TickCount64 when the red flash's ring empties.</summary>
+        public long NatashaDodgeUntilMs { get; set; }
+        /// <summary>A fling threw the red flash away before its ring emptied.</summary>
+        public bool NatashaDodged { get; set; }
+        /// <summary>The WPF ring (per-window and Canvas host), hidden when the ring ends.</summary>
+        public FrameworkElement? NatashaDodgeRing { get; set; }
 
         /// <summary>
         /// Drives a subtle inflate effect on the flash content during Focus

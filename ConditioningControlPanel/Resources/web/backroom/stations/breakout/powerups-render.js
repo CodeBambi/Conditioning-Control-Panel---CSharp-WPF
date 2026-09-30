@@ -51,7 +51,8 @@ export function drawPowerups(g,s){
   for(const d of p.drops)drawDrop(g,d,s,still);
   g.save();g.lineCap='round';
   // Bolts: a long soft tail, a fat coloured body, a white core and a hot head. Passes, so the styles change per pass, not per bolt.
-  const bolt=(len,w,c,a)=>{g.strokeStyle=c;g.lineWidth=w;g.globalAlpha=a;for(const b of p.shots){g.beginPath();g.moveTo(b.x,b.y);g.lineTo(b.x,b.y+len);g.stroke();}};
+  const tail=(b,back,side=0)=>{const vx=b.vx||0,vy=b.vy??-780,speed=Math.hypot(vx,vy)||780;return {x:b.x-(vx*back+vy*side)/speed,y:b.y+(-vy*back+vx*side)/speed};};
+  const bolt=(len,w,c,a)=>{g.strokeStyle=c;g.lineWidth=w;g.globalAlpha=a;for(const b of p.shots){g.beginPath();g.moveTo(b.x,b.y);const end=tail(b,len);g.lineTo(end.x,end.y);g.stroke();}};
   if(p.shots.length){
     g.globalCompositeOperation='lighter';bolt(still?40:64,11,COLORS.laser,.16);bolt(still?30:42,7,COLORS.laser,.22);
     if(!still){
@@ -59,12 +60,13 @@ export function drawPowerups(g,s){
       g.fillStyle='#ffd9ef';
       for(const b of p.shots)for(let j=0;j<4;j++){
         const f=(time*5+j*.25+b.x*.013)%1;
-        g.globalAlpha=.8*(1-f);disc(g,b.x+Math.sin(j*9.1+b.x+f*7)*(2+7*f),b.y+12+f*54,2.1*(1-f*.7));
+        const spark=tail(b,12+f*54,Math.sin(j*9.1+b.x+f*7)*(2+7*f));
+        g.globalAlpha=.8*(1-f);disc(g,spark.x,spark.y,2.1*(1-f*.7));
       }
-      g.fillStyle=COLORS.laser;g.globalAlpha=.4;for(const b of p.shots)disc(g,b.x,b.y+2,8+Math.sin(time*40+b.x)*1.2);
+      g.fillStyle=COLORS.laser;g.globalAlpha=.4;for(const b of p.shots){const point=tail(b,2);disc(g,point.x,point.y,8+Math.sin(time*40+b.x)*1.2);}
     }
     g.globalCompositeOperation='source-over';bolt(26,6,COLORS.laser,.95);bolt(19,2.6,'#fff',.95);
-    g.fillStyle='#fff';g.globalAlpha=1;for(const b of p.shots)disc(g,b.x,b.y+1,3.2);
+    g.fillStyle='#fff';g.globalAlpha=1;for(const b of p.shots){const point=tail(b,1);disc(g,point.x,point.y,3.2);}
   }
   if(p.laser>0){
     const m=still?0:Math.min(1,(p.muzzle||0)/MUZZLE_S);                  // 1 on the volley, 0 a tenth of a second later

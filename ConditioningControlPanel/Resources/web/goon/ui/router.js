@@ -19,7 +19,17 @@
  * wedging on a half-built screen.
  *
  * No DOM at import — createRouter() is what first touches document.
+ *
+ * TRANSITIONS (2026-09-23 juice pass): nothing appears or vanishes in one frame.
+ * The outgoing section keeps its nodes for EXIT_MS while it fades and lifts
+ * away (inert, click-through), and the incoming one cascades its children in
+ * (ui/juiceDom.js staggerIn). The leaving section is torn down on a timer, and
+ * re-showing it (or dispose) finishes the exit at once, so a quick bounce
+ * between two screens never shows two copies of one. Reduced motion: fades.
+ * A section can opt out of the cascade with data-gg-no-stagger.
  * ==========================================================================*/
+
+import { EXIT_MS, OUT_EASE, isCalm, play, staggerIn } from './juiceDom.js';
 
 /** Screen name -> the section id index.html already ships. */
 export const SCREEN_IDS = Object.freeze({
@@ -222,7 +232,61 @@ export function createRouter({ screens = {}, ctx = null, logger = null } = {}) {
     try { doc?.documentElement?.setAttribute('data-gg-screen', name || 'none'); } catch (_e) { /* ignore */ }
   }
 
-  function tearDown() {
+  /* ---- exits: section -> {timer, anim} while its old nodes fade away ---- */
+  const leaving = new Map();
+
+  function finishLeave(node) {
+    const rec = leaving.get(node);
+    if (!rec) return;
+    leaving.delete(node);
+    try { clearTimeout(rec.timer); } catch (_e) { /* ignore */ }
+    try { rec.anim?.cancel?.(); } catch (_e) { /* ignore */ }
+    try {
+      node.classList?.remove?.('is-leaving');
+      node.removeAttribute?.('inert');
+      node.removeAttribute?.('aria-hidden');
+      node.replaceChildren();
+      node.hidden = true;
+    } catch (_e) { /* ignore */ }
+  }
+
+  function leave(node) {
+    if (!node) return;
+    finishLeave(node);
+    // No WAAPI (node self-tests, a stub DOM): the old instant swap.
+    if (typeof node.animate !== 'function') {
+      try { node.replaceChildren(); node.hidden = true; } catch (_e) { /* ignore */ }
+      return;
+    }
+    try {
+      node.classList?.add?.('is-leaving');
+      node.setAttribute?.('inert', '');
+      node.setAttribute?.('aria-hidden', 'true');
+    } catch (_e) { /* ignore */ }
+    const frames = isCalm()
+      ? [{ opacity: 1 }, { opacity: 0 }]
+      : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-10px) scale(.975)' }];
+    const anim = play(node, frames, { duration: EXIT_MS, easing: OUT_EASE, fill: 'forwards' });
+    const timer = setTimeout(() => finishLeave(node), EXIT_MS + 30);
+    leaving.set(node, { timer, anim });
+  }
+
+  function enter(section, name) {
+    if (!section || typeof section.animate !== 'function') return;
+    try {
+      section.classList?.add?.('is-entering');
+      setTimeout(() => { try { section.classList?.remove?.('is-entering'); } catch (_e) { /* ignore */ } }, 700);
+    } catch (_e) { /* ignore */ }
+    play(section, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out', fill: 'backwards' });
+    if (section.hasAttribute?.('data-gg-no-stagger') || name === 'countdown') return;
+    // Cascade the screen's pieces in. A screen that is one card wrapping the
+    // rest cascades the card's own children instead, capped at twelve.
+    let kids = Array.from(section.children || []);
+    if (kids.length === 1 && kids[0].children && kids[0].children.length > 1) kids = Array.from(kids[0].children);
+    staggerIn(kids.slice(0, 12), { start: 60 });
+  }
+
+  function tearDown(animate) {
     const handle = currentHandle;
     const node = currentEl;
     currentHandle = null;
@@ -232,7 +296,8 @@ export function createRouter({ screens = {}, ctx = null, logger = null } = {}) {
       try { handle.unmount(); } catch (e) { logger?.error?.('[GG ui] unmount threw: ' + ((e && e.stack) || e)); }
     }
     if (node) {
-      try { node.replaceChildren(); node.hidden = true; } catch (_e) { /* ignore */ }
+      if (animate) leave(node);
+      else { try { finishLeave(node); node.replaceChildren(); node.hidden = true; } catch (_e) { /* ignore */ } }
     }
   }
 
@@ -260,13 +325,16 @@ export function createRouter({ screens = {}, ctx = null, logger = null } = {}) {
         return null;
       }
 
-      tearDown();
+      // Re-showing the same screen remounts it in place, so it does not also
+      // fade out a copy of itself.
+      tearDown(currentEl !== section);
+      finishLeave(section);
 
       // Belt and braces: any other section left visible by a crash is hidden.
       for (const other of Object.keys(SCREEN_IDS)) {
         if (other === name) continue;
         const n = sectionFor(other);
-        if (n && !n.hidden) { n.hidden = true; n.replaceChildren(); }
+        if (n && !n.hidden && !leaving.has(n)) { n.hidden = true; n.replaceChildren(); }
       }
 
       currentName = name;
@@ -285,6 +353,7 @@ export function createRouter({ screens = {}, ctx = null, logger = null } = {}) {
         logger?.error?.('[GG ui] mount("' + name + '") threw: ' + ((e && e.stack) || e));
         currentHandle = null;
       }
+      enter(section, name);
       for (const fn of Array.from(listeners)) { try { fn(name); } catch (_e) { /* ignore */ } }
       return currentHandle;
     },
@@ -292,16 +361,20 @@ export function createRouter({ screens = {}, ctx = null, logger = null } = {}) {
     /** Live phase: no screen at all — the HUD and the fx layers own the view. */
     hide() {
       if (!doc) return;
-      tearDown();
+      tearDown(true);
       for (const other of Object.keys(SCREEN_IDS)) {
         const n = sectionFor(other);
-        if (n) { n.hidden = true; n.replaceChildren(); }
+        if (n && !leaving.has(n)) { n.hidden = true; n.replaceChildren(); }
       }
       markScreen('none');
       for (const fn of Array.from(listeners)) { try { fn(null); } catch (_e) { /* ignore */ } }
     },
 
-    dispose() { tearDown(); listeners.clear(); },
+    dispose() {
+      tearDown(false);
+      for (const n of Array.from(leaving.keys())) finishLeave(n);
+      listeners.clear();
+    },
   };
   return api;
 }
