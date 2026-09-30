@@ -2668,7 +2668,8 @@ namespace ConditioningControlPanel
             Services.Companion.Brain.MemoryStore.SignalMirrorFactory = store =>
             {
                 var writer = new Services.Companion.Brain.MemorySignalWriter(store);
-                writer.Start();
+                try { writer.Start(); }
+                catch { writer.Dispose(); throw; }   // a half-started writer keeps its subscriptions otherwise
                 return writer;
             };
             Services.Companion.Brain.MemoryStore.WireDeferredSignalsHook = signals =>
@@ -2703,6 +2704,7 @@ namespace ConditioningControlPanel
             Services.Companion.Brain.CompanionBrain.ClearLegacyLocalHistoryHook = () => (Ai as AiServiceStrategy)?.ClearLocalHistory();
             Services.Companion.Brain.CompanionBrain.MemoryRecalled = LocalAiService.SignalPersistentMemoryRecalled;
             Services.Companion.Brain.CompanionBrain.ActivitiesProvider = Services.Companion.CompanionActivities.Current;
+            Services.Companion.ConversationDelivery.AskCardsShown = () => true;   // ChatInput.cs OfferForRequest
 
             // CompanionBrain sits between every caller and the AI strategy: it owns conversation
             // state so providers stay dumb transports. Constructed unconditionally (it reads the
