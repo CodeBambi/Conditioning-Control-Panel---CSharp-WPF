@@ -3,6 +3,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView">
     <UserControl.Resources>
         <ControlTheme x:Key="CirceCta" TargetType="Button">
@@ -52,10 +53,14 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <Border x:Name="AccountStrip" VerticalAlignment="Center" IsVisible="False" Margin="0,0,10,0"
                         Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
-                        BorderThickness="1.5" CornerRadius="19" Height="38" Padding="10,0,6,0"
+                        BorderThickness="1.5" CornerRadius="19" Height="38" Padding="6,0,6,0"
                         ToolTip.Tip="{loc:Str chaster_account_strip_tip}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str chaster_account_linked}" FontSize="12" Foreground="#5FFFD0" VerticalAlignment="Center"/>
+                        <!-- Whose account (WPF ChasterTabView.xaml:331): picture + username, letter + "Chaster" until they arrive. -->
+                        <fx:ChasterAccountBadge x:Name="AccountBadge" AvatarSize="24" VerticalAlignment="Center"
+                                                TextElement.FontFamily="Fredoka, Segoe UI" TextElement.FontSize="13" TextElement.FontWeight="Bold"
+                                                TextElement.Foreground="{DynamicResource TextLightBrush}"/>
+                        <TextBlock Text="{loc:Str chaster_account_linked}" FontSize="12" Margin="6,0,0,0" Foreground="#5FFFD0" VerticalAlignment="Center"/>
                         <Rectangle Width="1" Height="16" Fill="{DynamicResource GlassBorderBrush}" Margin="10,0" VerticalAlignment="Center"/>
                         <Button x:Name="BtnChasterSite" Theme="{StaticResource CirceLink}" VerticalAlignment="Center" Click="BtnChasterSite_Click">
                             <Border Height="26" CornerRadius="13" Padding="8,0,10,0" Background="#26FFFFFF" BorderBrush="#40FFFFFF" BorderThickness="1">

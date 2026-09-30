@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -30,15 +31,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// view - it is the thing that runs when the web view cannot - so nothing here talks to
     /// <c>controls:WebHost</c>. Deviations, all forced:</para>
     /// <list type="bullet">
-    ///   <item>The whole <c>EmiCodex</c> service stays in the WPF head (it is built on
-    ///     Microsoft.Web.WebView2), so <see cref="Codex"/> below stubs three of the four calls this
-    ///     window makes, sample chapters included. The fourth - opening the manual - is not stubbed:
-    ///     its WPF body is a ShellExecute, which is xdg-open here, and it ports verbatim. Every
-    ///     layout path - headers, blurb, steps, figure captions, callouts, limits, the margin line -
-    ///     is the real one.</item>
-    ///   <item>The <c>CodexChapter</c>/<c>CodexBlock</c>/<c>CodexMargin</c> records are copied from
-    ///     Services/EmiDesk/EmiCodex.cs minus their <c>[JsonProperty]</c> attributes: this head
-    ///     never deserialises them, and Newtonsoft is a Core reference, not one of ours.</item>
+    ///   <item>The WebView2 half of <c>EmiCodex</c> stays in the WPF head; the chapter reader,
+    ///     the models and the bookmark are Core <c>EmiCodexChapters</c>, which both heads call.</item>
     ///   <item><c>ScrollToTop()</c> -&gt; <c>ScrollToHome()</c>; <c>FontStyles</c>/<c>FontWeights</c>
     ///     -&gt; <c>FontStyle</c>/<c>FontWeight</c>; <c>Brush</c> -&gt; <c>IBrush</c>.</item>
     ///   <item>The defaulted <c>why</c> parameter is split into two constructors: a defaulted one is
@@ -421,15 +415,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <summary>
     /// The four things this window asks of the book, and nothing else.
     ///
-    /// ponytail: needs Services/EmiDesk/EmiCodex (WPF head), wired when it moves to Core. It cannot
-    /// come over as-is - it is built on Microsoft.Web.WebView2 and System.Windows - so the reader
-    /// gets a stub of its surface rather than a rewrite of its innards. The sample chapters are
-    /// placeholder data, and exist so the render proof exercises every block type the reader draws.
+    /// The chapter reader and bookmark are Core (<see cref="EmiCodexChapters"/>); the manual
+    /// opener ports verbatim.
     /// </summary>
     internal static class Codex
     {
         /// <summary>The website manual. Same constant as EmiCodex.ManualUrl.</summary>
-        internal const string ManualUrl = "https://cclabs.app/guide.html";
+        internal const string ManualUrl = EmiCodexChapters.ManualUrl;
 
         /// <summary>A localised string that can never throw and never comes back blank. Copied from
         /// EmiCodex.SafeLoc: the reader runs on paths where no language file has loaded yet.</summary>
@@ -443,63 +435,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch { return fallback; }
         }
 
-        /// <summary>ponytail: needs EmiCodex.ReadChapters (reads Resources/web/codex/chapters/*.json
-        /// through the head's own paths), wired when it moves to Core. Placeholder chapters until
-        /// then - two volumes, every block type once.</summary>
-        internal static IReadOnlyList<CodexChapter> ReadChapters() => new List<CodexChapter>
-        {
-            new()
-            {
-                Id = "what-this-is",
-                Volume = 1,
-                Order = 1,
-                Title = "What this is",
-                Blurb = "The book, as plain text. Same words, no pictures.",
-                Blocks = new List<CodexBlock>
-                {
-                    new() { Type = "p", Text = "Everything the illustrated book says is here too. The drawings are CSS inside the page and cannot be redrawn out here, so where a figure stood you get its caption instead." },
-                    new() { Type = "steps", Items = new List<string> { "Pick a chapter on the left.", "Read it on the right.", "The manual on the web is one click away, at the bottom." } },
-                    new() { Type = "figure", Kind = "stack-drop", Caption = "Figure: the fail-soft ladder, four rungs, all landing here." },
-                    new() { Type = "callout", Text = "A bookmark that points at a chapter which no longer exists is not an error. It falls through to the first chapter there is." },
-                    new() { Type = "limit", Text = "This reader draws no figures and runs no demos. Losing the drawing is acceptable; losing the sentence is not." },
-                },
-                Margin = new CodexMargin { T = "you got the paperback edition. still mine.", Face = "^_^" },
-            },
-            new()
-            {
-                Id = "how-to-read-it",
-                Volume = 1,
-                Order = 2,
-                Title = "How to read it",
-                Blurb = "One chapter is one screen. Volumes group them.",
-                Blocks = new List<CodexBlock>
-                {
-                    new() { Type = "p", Text = "Volume headers are rows in the same list, so the contents needs no grouping machinery. They are not selectable: clicking one steps onto the chapter beneath it." },
-                },
-            },
-            new()
-            {
-                Id = "when-it-breaks",
-                Volume = 2,
-                Order = 1,
-                Title = "When it breaks",
-                Blurb = "There is no state in which the book is an empty hole.",
-                Blocks = new List<CodexBlock>
-                {
-                    new() { Type = "p", Text = "No runtime, no bundle, a navigation that failed, a browser process that died - four faults, one reader. The line under the heading is the only thing that changes between them." },
-                },
-                Margin = new CodexMargin { T = "if this page is blank, something is very wrong.", Face = ">_<" },
-            },
-        };
+        /// <summary>WPF EmiCodex.ChaptersDir: <c>{exe}/Resources/web/codex/chapters</c>, linked from
+        /// Assets/web/codex by the csproj.</summary>
+        internal static string ChaptersDir =>
+            System.IO.Path.Combine(AppContext.BaseDirectory, "Resources", "web", "codex", "chapters");
 
-        /// <summary>ponytail: needs EmiCodex.Bookmark (persisted last chapter), wired when it moves
-        /// to Core. Null means "start at the first chapter", which is the same fallback the
-        /// original takes for a stale bookmark.</summary>
-        internal static string? Bookmark => null;
+        internal static IReadOnlyList<CodexChapter> ReadChapters() => EmiCodexChapters.Read(ChaptersDir);
 
-        /// <summary>ponytail: needs EmiCodex.NoteChapter (persists the bookmark), wired when it
-        /// moves to Core.</summary>
-        internal static void NoteChapter(string? chapterId) { _ = chapterId; }
+        internal static string? Bookmark => EmiCodexChapters.Bookmark;
+
+        internal static void NoteChapter(string? chapterId) => EmiCodexChapters.NoteChapter(chapterId);
 
         /// <summary>
         /// <c>EmiCodex.OpenManualInBrowser</c>, which is portable in full: WPF's
@@ -512,55 +457,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try { Platform.ExternalOpener.Open(ManualUrl); }
             catch (Exception ex) { Log.Warning(ex, "[EmiCodex] could not open the manual in a browser"); }
         }
-    }
-
-    /// <summary>
-    /// ONE BLOCK OF A CHAPTER. Copied from Services/EmiDesk/EmiCodex.cs without its
-    /// <c>[JsonProperty]</c> attributes - this head never deserialises one. Every field is optional
-    /// on purpose: a chapter from a later wave with a block type this build has never heard of must
-    /// still READ, not throw.
-    /// </summary>
-    internal sealed class CodexBlock
-    {
-        /// <summary>p | steps | figure | callout | limit. Anything else renders as a paragraph.</summary>
-        public string? Type { get; set; }
-
-        public string? Text { get; set; }
-
-        /// <summary>The ordered lines of a <c>steps</c> block.</summary>
-        public List<string>? Items { get; set; }
-
-        /// <summary>The figure vocabulary word (stack-drop, pulse, layers...). CSS only, never art.</summary>
-        public string? Kind { get; set; }
-
-        public string? Caption { get; set; }
-    }
-
-    /// <summary>EMI in the margin: exactly one reaction per chapter, never an explanation.</summary>
-    internal sealed class CodexMargin
-    {
-        public string? T { get; set; }
-        public string? Face { get; set; }
-    }
-
-    /// <summary>One chapter = one screen, as it is written in
-    /// <c>Resources/web/codex/chapters/&lt;id&gt;.json</c>.</summary>
-    internal sealed class CodexChapter
-    {
-        public string? Id { get; set; }
-        public int Volume { get; set; }
-        public int Order { get; set; }
-        public string? Title { get; set; }
-        public string? Blurb { get; set; }
-        public string? Target { get; set; }
-        public string? Tour { get; set; }
-        public CodexMargin? Margin { get; set; }
-        public List<CodexBlock>? Blocks { get; set; }
-
-        /// <summary>A title that is always safe to put on a list row.</summary>
-        public string DisplayTitle =>
-            !string.IsNullOrWhiteSpace(Title) ? Title!.Trim()
-            : !string.IsNullOrWhiteSpace(Id) ? Id!.Replace('-', ' ')
-            : "untitled";
     }
 }

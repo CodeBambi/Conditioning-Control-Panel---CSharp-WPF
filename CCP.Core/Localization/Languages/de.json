@@ -745,6 +745,7 @@
   "tooltip_change_camera_shortcut": "Klicken, um das Kamera-Tastenkürzel zu ändern",
   "camera_shortcut_toast_started": "Kamera-Tracking gestartet",
   "camera_shortcut_toast_stopped": "Kamera-Tracking gestoppt",
+  "panic_camera_stopped": "Kamera gestoppt. Starte das Tracking, um fortzufahren.",
   "btn_confirm": "Bestätigen",
   "btn_save": "Speichern",
   "btn_close": "Schließen",

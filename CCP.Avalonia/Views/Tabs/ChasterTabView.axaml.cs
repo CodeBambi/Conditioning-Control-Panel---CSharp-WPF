@@ -4,7 +4,7 @@
 // the link flow (:830-863) on the Core loopback OAuth, the lock pick (:962-1053) and the fact cap.
 // ponytail: Circe's mood is a line (WPF chaster_mood_peek wording), not the CircesMoodMeter heat
 // row, and CirceSays lines are not shown. The ground (spiral/glow/ambient), hero art, paper tag,
-// calendar, LockTitle letters, the account badge, the numbers, the receipt, limits, menu,
+// calendar, LockTitle letters, the numbers, the receipt, limits, menu,
 // presets, ladder, trailer and all Fx (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
 // bursts included) are later slices. Unlink, the switch + consent and pause are real (slice 2).
 using System;

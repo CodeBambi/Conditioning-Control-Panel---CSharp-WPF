@@ -89,13 +89,30 @@ namespace ConditioningControlPanel.Avalonia.Platform
         private Thread? _wedged;
         private readonly BlinkDetector _blink = new();
         private int _busy;
+        /// <summary>Bumped by every Stop (and so by panic). A start that began before it never publishes
+        /// its camera: it releases it instead. Guarded by <see cref="_gate"/> with the publish.</summary>
+        private int _gen;
+        private readonly object _gate = new();
 
         /// <summary>Off the UI thread, as WPF StartWebcamOffUiThreadAsync: model load and camera
         /// negotiation can take seconds.</summary>
-        public Task<bool> StartAsync() => Task.Run(Start);
-        public Task StopAsync() => Task.Run(Stop);
+        public Task<bool> StartAsync()
+        {
+            int gen = Volatile.Read(ref _gen);
+            Interlocked.Increment(ref _queued);   // counts as starting before the pool picks it up
+            return Task.Run(() => { try { return Start(gen); } finally { Interlocked.Decrement(ref _queued); } });
+        }
+        private int _queued;
+        /// <summary>The generation is bumped before the hop, so a start in flight cannot publish its
+        /// camera even if it finishes before the queued Stop runs.</summary>
+        public Task StopAsync() { lock (_gate) _gen++; return Task.Run(Stop); }
 
-        public bool Start()
+        /// <summary>A Start is between its consent check and publishing (camera open / model load).</summary>
+        internal bool IsStarting => Volatile.Read(ref _busy) != 0 || Volatile.Read(ref _queued) != 0;
+
+        public bool Start() => Start(Volatile.Read(ref _gen));
+
+        private bool Start(int gen)
         {
             if (IsRunning) return true;
             if (Interlocked.Exchange(ref _busy, 1) != 0) return false;
@@ -141,7 +158,18 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 }
                 _blink.Reset();
                 run.Thread = new Thread(() => Loop(run)) { IsBackground = true, Name = "WebcamCapture", Priority = ThreadPriority.BelowNormal };
-                _run = run;
+                bool stale;
+                lock (_gate)
+                {
+                    stale = gen != _gen;
+                    if (!stale) _run = run;
+                }
+                if (stale)
+                {
+                    LastError = "Webcam tracking was stopped before the camera finished opening.";
+                    run.Release();   // outside _gate: a slow driver close must not block Stop/StopAsync
+                    return false;
+                }
                 run.Thread.Start();
                 Log.Information("[Webcam] tracking started");
                 return true;
@@ -160,6 +188,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             Views.Overlays.BlinkTrainerSession.Stop();
             Instance.Stop();
+            WebcamCalibrationData.DeleteIfExists();   // WPF ClearCalibration (WebcamTrackingService.cs:1112)
             var s = CoreSettings.Current;
             s.WebcamConsentGiven = false;
             s.WebcamConsentVersion = "";
@@ -173,7 +202,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         public void Stop()
         {
-            var run = Interlocked.Exchange(ref _run, null);
+            Run? run;
+            lock (_gate) { _gen++; run = Interlocked.Exchange(ref _run, null); }
             if (run == null) return;
             run.Stop = true;
             // WPF Stop: bounded join; a wedged driver must not hang the caller forever. The loop

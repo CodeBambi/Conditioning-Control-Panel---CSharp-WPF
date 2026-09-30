@@ -85,6 +85,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public static DateTime? StartedAt { get; private set; }
         public static TimeSpan? Duration { get; private set; }
         internal static IReadOnlyList<OverlayWindow> Windows => Overlays;
+        /// <summary>Tests shorten it to prove the auto-stop.</summary>
+        internal static DispatcherTimer? DurationTimer => _duration;
 
         public static TimeSpan Remaining
         {
@@ -120,9 +122,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
                 _pool = pool;
                 _last = null;
-                // WPF: Closing += Stop. Avalonia exits on the last window close, and these are windows.
+                // WPF LabTab.cs:1000: Closing += Stop - Closing, not Closed, so a close cancelled to the tray still stops it.
                 _owner = TopLevel.GetTopLevel(host) as Window;
-                if (_owner != null) _owner.Closed += OnOwnerClosed;
+                if (_owner != null) _owner.Closing += OnOwnerClosing;
                 WebcamTracker.Instance.OnBlink += HandleBlink;
                 Duration = TimeSpan.FromMinutes(Math.Clamp(s.BlinkTrainerDurationMinutes, 1, 180));
                 StartedAt = DateTime.UtcNow;
@@ -172,11 +174,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             try { StateChanged?.Invoke(); } catch (Exception ex) { Log.Warning(ex, "BlinkTrainer StateChanged handler threw"); }
         }
 
-        private static void OnOwnerClosed(object? sender, EventArgs e) => Stop();
+        private static void OnOwnerClosing(object? sender, WindowClosingEventArgs e) => Stop();
 
         private static void Cleanup()
         {
-            if (_owner != null) { _owner.Closed -= OnOwnerClosed; _owner = null; }
+            if (_owner != null) { _owner.Closing -= OnOwnerClosing; _owner = null; }
             WebcamTracker.Instance.OnBlink -= HandleBlink;
             _duration?.Stop();
             _duration = null;
@@ -198,7 +200,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             if (!IsRunning) return;
             ShowRandom();
-            _ = CoreHaptics.Service?.BlinkPulseAsync();   // gates itself (enabled, Blink on, connected)
+            // WPF TriggerBlinkHaptic: off the UI thread, never blocking blink handling; gates itself.
+            if (CoreHaptics.Service is { } haptics)
+                _ = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    try { await haptics.BlinkPulseAsync(); }
+                    catch (Exception ex) { Log.Debug(ex, "BlinkTrainer: blink haptic failed"); }
+                });
             try { App.Quests?.TrackBlinkTrainerBlink(); } catch (Exception ex) { Log.Debug("blink quest credit: {E}", ex.Message); }
         }
 

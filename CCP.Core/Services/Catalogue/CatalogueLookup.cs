@@ -35,7 +35,10 @@ namespace ConditioningControlPanel.Services
     /// <remarks>Core since catalogue U2; WPF's <c>CatalogueLookupService</c> is a thin subclass.</remarks>
     public class CatalogueLookup
     {
-        private const string CclabsBaseUrl = "https://app.cclabs.app";
+        /// <summary>Where lookups go, or null for "no network": CatalogueClient.ResolveBaseUrl, the Core
+        /// LoopbackUrl rule (loopback CCP_CATALOGUE_BASE_URL only; a CCP_USERDATA_DIR sandbox without one
+        /// never reaches the real server).</summary>
+        private readonly string? CclabsBaseUrl;
 
         // One client per process, as in WPF; a test handler gets its own.
         private static HttpClient? _shared;
@@ -49,8 +52,20 @@ namespace ConditioningControlPanel.Services
         /// <param name="handler">Test seam; null is the real network.</param>
         public CatalogueLookup(Func<string?> libraryFolder, string appVersion,
             Func<Func<bool>, Task<bool>>? onUiThread = null, HttpMessageHandler? handler = null)
+            : this(libraryFolder, appVersion, onUiThread, handler,
+                Environment.GetEnvironmentVariable("CCP_CATALOGUE_BASE_URL"),
+                !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")),
+                trustHandler: true) { }
+
+        /// <param name="trustHandler">A test handler with no explicit environment keeps the real base URL (it
+        /// never leaves the process), as CatalogueClient does; the sandbox tests pass false.</param>
+        internal CatalogueLookup(Func<string?> libraryFolder, string appVersion,
+            Func<Func<bool>, Task<bool>>? onUiThread, HttpMessageHandler? handler,
+            string? overrideUrl, bool sandboxed, bool trustHandler = false)
         {
             (_libraryFolder, _onUiThread) = (libraryFolder, onUiThread);
+            CclabsBaseUrl = handler != null && trustHandler ? CatalogueClient.RealBaseUrl
+                : CatalogueClient.ResolveBaseUrl(overrideUrl, sandboxed);
             _http = handler != null ? BuildHttpClient(new HttpClient(handler), appVersion)
                 : _shared ??= BuildHttpClient(new HttpClient(), appVersion);
         }
@@ -82,6 +97,12 @@ namespace ConditioningControlPanel.Services
             // don't want in app logs that ship in bug reports. Video ID is the
             // identifying handle we care about.
             var videoId = Helpers.HtUrlHelper.TryExtractHtVideoId(url) ?? "?";
+
+            if (CclabsBaseUrl == null)
+            {
+                Log.Warning("[CatalogueLookupService] Sandboxed without a loopback CCP_CATALOGUE_BASE_URL: no network");
+                return new LookupResult.NetworkError();
+            }
 
             try
             {
@@ -192,6 +213,14 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrWhiteSpace(entry.FileUrl))
             {
                 Log.Warning("[CatalogueLookupService] Entry {Id} has empty FileUrl", entry.Id);
+                return new DownloadResult.NetworkError();
+            }
+            // The server hands back an absolute FileUrl, so the base-URL rule has to hold here too: no
+            // network in a bare sandbox, and under a loopback override the bundle must be loopback as well.
+            if (CclabsBaseUrl == null
+                || (CclabsBaseUrl != CatalogueClient.RealBaseUrl && !LoopbackUrl.IsHonoured(entry.FileUrl, out _)))
+            {
+                Log.Warning("[CatalogueLookupService] Download refused outside the catalogue base-URL rule entry={Id}", entry.Id);
                 return new DownloadResult.NetworkError();
             }
 

@@ -3246,6 +3246,7 @@
   "tooltip_change_camera_shortcut": "Click to change the camera shortcut",
   "camera_shortcut_toast_started": "Camera tracking started",
   "camera_shortcut_toast_stopped": "Camera tracking stopped",
+  "panic_camera_stopped": "Camera stopped. Start tracking to resume.",
   "dialog_chat_shortcut_capture_title": "Set Chat Shortcut",
   "dialog_chat_shortcut_capture_prompt": "Press the key combination you want to use to open the chat input.",
   "dialog_chat_shortcut_capture_hint": "Use any modifier (Ctrl/Alt/Shift) plus a key. Esc cancels.",
