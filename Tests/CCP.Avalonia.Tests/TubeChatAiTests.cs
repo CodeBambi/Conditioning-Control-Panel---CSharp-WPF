@@ -94,7 +94,7 @@ public sealed class TubeChatAiTests
             global::ConditioningControlPanel.Avalonia.App.Ai?.Dispose();
             global::ConditioningControlPanel.Avalonia.App.Ai = previousAi;
             CoreAccount.UnifiedUserId = null;
-            CoreSettings.ServiceProvider = null;
+            service.SaveImmediate(); CoreSettings.ServiceProvider = null;
         }
     });
 }

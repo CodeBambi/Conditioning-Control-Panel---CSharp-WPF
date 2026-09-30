@@ -71,7 +71,7 @@ public sealed class FirstRunFolderPickerTests
         finally
         {
             wizard?.Close();
-            CoreSettings.ServiceProvider = null;
+            service.SaveImmediate(); CoreSettings.ServiceProvider = null;
         }
     });
 
