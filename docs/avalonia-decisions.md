@@ -167,3 +167,8 @@ Remote Control – escape integrity. A remote controller may never remove the su
 - Choice: the mic is never opened without a consumer. The master Start button still runs the WPF arming rules (premium/voice free-day bar, speech check, consent, wake word on by default) and saves the settings, but the hero never claims "She's listening": it stays "Mic off" and says `sl_voice_not_on_this_build` ("Voice commands aren't available on this build yet, so the mic stays closed..."). The Test button says the same. Stop/revoke always work and also cut any lock-card capture. When VoiceCommands is ported, start the wake loop from Core `VoiceInputRules.ModesToRun` and restore WPF's green status.
 - Test: `Tests/CCP.Avalonia.Tests/SheListeningTests.cs` (fail-proven: removing the premium bar or restoring "The mic is open" fails it).
 - Advisor: supervisor.
+
+## 2026-09-30: Panic vs Takeover (avalonia-port/autonomy-core)
+Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays off until the user starts it again). The saved AutonomyModeEnabled switch is not changed. This matches WPF's real behaviour: every WPF panic path runs App.KillAllAudio() -> Autonomy.Stop(), and does so before RunPanicStopTail samples autonomyWasRunning, so its 'restart autonomy after skipping current action' branch never runs. Lockdown still ignores panic.
+- Test: `Tests/CCP.Avalonia.Tests/TakeoverTests.cs`.
+- Advisor: oracle-deep.

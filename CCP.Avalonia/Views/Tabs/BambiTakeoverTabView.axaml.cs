@@ -52,13 +52,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
 
-            // ponytail: needs ConditioningControlPanel/Services/AutonomyService.cs (start/stop,
-            // TestTrigger, TestVoiceCommand).
-            BtnAutonomyStartStop.Click += (_, _) => { };   // mw.BtnAutonomyStartStop_Click(...)
-            BtnForceStartAutonomy.Click += (_, _) => { };  // mw.BtnForceStartAutonomy_Click(...)
-            BtnGateUnlock.Click += (s, e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(s, e);
-            BtnTestAutonomy.Click += (_, _) => { };        // mw.BtnTestAutonomy_Click(...)
-            BtnTestVoice.Click += (_, _) => { };           // mw.BtnTestVoice_Click(...)
+            BtnAutonomyStartStop.Click += BtnAutonomyStartStop_Click;
+            // ponytail: Force Start is a hidden debug button on WPF too (bypasses every gate); not ported.
+            BtnGateUnlock.Click += (s, e) => Shell?.BtnGateUnlock_Click(s, e);
+            BtnTestAutonomy.Click += (_, _) => Shell?.TestAutonomy();
+            // ponytail: needs AutonomyService.VoiceCommands / MantraVoice (slice 2).
+            BtnTestVoice.Click += (_, _) => { };
             BtnOpenDeviceSettings.Click += BtnOpenDeviceSettings_Click;
             BtnWallpaperFolder.Click += BtnWallpaperFolder_Click;
 
@@ -178,8 +177,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var s = CoreSettings.Current;
 
                 ChkAutonomyEnabled.IsChecked = s.AutonomyModeEnabled;
-                // ponytail: WPF also calls UpdateAutonomyButtonState here (MainWindow.Autonomy.cs);
-                // it reads AutonomyService's live state, which is not on this head.
 
                 // Clamp persisted values into the bars' ranges BEFORE assigning: an out-of-range
                 // stored value (old-version scale, cloud-restored settings) would silently snap the
@@ -299,8 +296,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtAutonomyInterval.Text = $"{(int)e.NewValue}s";
             if (_isLoading) return;
             CoreSettings.Current.AutonomyRandomIntervalSeconds = (int)e.NewValue;
-            // ponytail: WPF also calls App.Autonomy.RefreshRandomTimer() so a running takeover picks
-            // the new interval up mid-session. Needs ConditioningControlPanel/Services/AutonomyService.cs.
+            Shell?.Autonomy.RefreshRandomTimer();
             CoreSettings.Save();
         }
 
@@ -328,7 +324,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (_isLoading) return;
             CoreSettings.Current.AutonomyIdleTriggerEnabled = ChkAutonomyIdle.IsChecked ?? false;
-            // ponytail: WPF also calls App.Autonomy.RefreshIdleTimer() (Services/AutonomyService.cs).
+            Shell?.Autonomy.RefreshIdleTimer();
             CoreSettings.Save();
         }
 
@@ -336,7 +332,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (_isLoading) return;
             CoreSettings.Current.AutonomyRandomTriggerEnabled = ChkAutonomyRandom.IsChecked ?? false;
-            // ponytail: WPF also calls App.Autonomy.RefreshRandomTimer() (Services/AutonomyService.cs).
+            Shell?.Autonomy.RefreshRandomTimer();
             CoreSettings.Save();
         }
 
@@ -438,18 +434,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 s.AutonomyConsentGiven = true;
             }
 
-            s.AutonomyModeEnabled = enabled;
-            CoreSettings.Save();
+            // WPF: Lockdown refuses a running stop (#514), no premium saves but does not start.
+            var shown = Shell?.SetAutonomyEnabled(enabled) ?? enabled;
+            if (Shell == null) { s.AutonomyModeEnabled = enabled; CoreSettings.Save(); }
             _isLoading = true;
-            ChkAutonomyEnabled.IsChecked = enabled;
+            ChkAutonomyEnabled.IsChecked = shown;
             _isLoading = false;
-            // ponytail: WPF then starts or stops App.Autonomy behind the Patreon / daily-free
-            // check, and refuses a STOP while Lockdown is active (#514). Needs
-            // Services/AutonomyService.cs and Services/LockdownService.cs, neither on this head
-            // and neither seamed. Note which way that refusal cuts: it holds Takeover ON, so its
-            // absence is permissive rather than dangerous - the user can always turn her off here,
-            // which is the safe direction to be wrong in.
-            Log.Information("Autonomy Mode toggled: {Enabled} (setting only - no service on this head)", enabled);
+        }
+
+        private Windows.MainShellWindow? Shell => TopLevel.GetTopLevel(this) as Windows.MainShellWindow;
+
+        /// <summary>WPF BtnAutonomyStartStop_Click: its own consent text (MainWindow.Autonomy.cs:143), then the toggle.</summary>
+        private async void BtnAutonomyStartStop_Click(object? sender, RoutedEventArgs e)
+        {
+            var s = CoreSettings.Current;
+            var turningOn = !s.AutonomyModeEnabled;
+            if (turningOn && !s.AutonomyConsentGiven)
+            {
+                var owner = TopLevel.GetTopLevel(this) as Window;
+                if (owner == null || !await Dialogs.MessageDialog.ConfirmAsync(owner, "Autonomy Mode Consent",
+                        "AUTONOMY MODE\n\n" +
+                        "This feature allows the companion to autonomously trigger effects:\n" +
+                        "• Flash images\n" +
+                        "• Videos (skippable unless you enable Strict Videos)\n" +
+                        "• Subliminal messages\n" +
+                        "• Make comments\n\n" +
+                        "She will act on her own schedule based on your intensity setting.\n" +
+                        "You can stop her at any time by clicking the Stop button.\n\n" +
+                        "Do you consent to enabling Autonomy Mode?"))
+                    return;
+                s.AutonomyConsentGiven = true;
+            }
+            var shown = Shell?.SetAutonomyEnabled(turningOn) ?? false;
+            _isLoading = true;
+            ChkAutonomyEnabled.IsChecked = shown;
+            _isLoading = false;
         }
 
         /// <summary>

@@ -1038,3 +1038,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   The mic never opens on this head (no voice-command consumer yet); armed shows an honest "not on this build" status (decision logged).
 - Evidence: VoiceInputRulesTests + Vosk WAV test + SheListeningTests (fakes/WAV only, never the real mic), fail-proven. Rows stay stub
   (blocker: AutonomyService.VoiceCommands). Review: ACCEPT.
+
+## avalonia-port/autonomy-core: +928
+- Takeover decisions moved to Core AutonomyScheduler (gate with takeover free day re-checked before every action, cooldown, busy retry,
+  jitter x time-of-day, idle trigger, mood/intensity weighted pick, announce roll + delay, stop generation); WPF AutonomyService
+  delegates (mantra check order kept: no speech probe without mic consent). Avalonia runs Takeover (switch/Start-Stop, Lockdown hold
+  with WPF message only, resume opt-in, state hero) with Flash/Subliminal/LockCard/Video/Bubbles/BouncingText. Panic stops Takeover:
+  confirmed as WPF's real behaviour (oracle-deep, logged).
+- Evidence: AutonomySchedulerTests (fake clock: entitlement, stop generation, busy, weighted pick, idle) + TakeoverTests, fail-proven;
+  live Start -> three actions -> Stop. Rows stay stub (other actions, banner/countdown/audio, voice commands). Review: ACCEPT + notes.
