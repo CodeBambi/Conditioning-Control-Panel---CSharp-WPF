@@ -1078,3 +1078,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   WebcamTrackingService delegates (-330 lines, same capture thread, no new allocations). Capture stack decided (oracle): OpenCvSharp4
   + OnnxRuntime on both heads.
 - Evidence: WebcamPipelineTests (9, synthetic streams, fail-proven); no camera opened. Row shell-webcam stub. Review: ACCEPT.
+
+## avalonia-port/test-flakes: +69
+- Three order/timing flakes fixed at the root: {loc:Str} bindings no longer overwrite text set from code on a language switch (a real
+  product bug; WPF semantics), HoverPop's test steps an injectable clock instead of sampling wall time, and tests flush their private
+  settings service so a queued save cannot land in the next test.
+- Evidence: full CCP.Avalonia.Tests 5 runs in a row green; each fix fail-proven (language switch keeps code text, untouched labels
+  still re-localize).
