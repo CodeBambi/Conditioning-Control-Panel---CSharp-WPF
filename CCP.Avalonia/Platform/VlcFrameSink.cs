@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Avalonia;
@@ -25,7 +26,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         private IntPtr _buffer;
         private int _width, _height, _blitQueued, _frames;
         private bool _freed;
-        private byte[] _row = Array.Empty<byte>();
+        private readonly Action _blit;
 
         /// <param name="bitmapChanged">UI thread: a new bitmap (first frame or a size change) to show.</param>
         /// <param name="frame">UI thread: the bitmap holds a new frame (invalidate what shows it).</param>
@@ -34,6 +35,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             _media = media;
             _bitmapChanged = bitmapChanged;
             _frame = frame;
+            _blit = Blit;   // cached: Display runs per decoded frame
             player.SetVideoFormatCallbacks(Format, (ref IntPtr _) => { });
             player.SetVideoCallbacks(LockPicture, null, Display);
         }
@@ -79,7 +81,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             // One pending blit at a time: a slow UI thread drops frames rather than queueing them.
             if (Interlocked.Exchange(ref _blitQueued, 1) == 0)
-                Dispatcher.UIThread.Post(Blit, DispatcherPriority.Render);
+                Dispatcher.UIThread.Post(_blit, DispatcherPriority.Render);
         }
 
         private void Blit()
@@ -96,16 +98,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 }
                 using var fb = Bitmap.Lock();
                 var rowBytes = _width * 4;
-                if (_row.Length != rowBytes) _row = new byte[rowBytes];
+                // One native-to-native copy per row (no managed staging row). Refs from raw
+                // addresses so no unsafe context is needed.
                 for (var y = 0; y < _height; y++)
-                {
-                    Marshal.Copy(_buffer + y * rowBytes, _row, 0, rowBytes);
-                    Marshal.Copy(_row, 0, fb.Address + y * fb.RowBytes, rowBytes);
-                }
+                    Unsafe.CopyBlockUnaligned(ref At(fb.Address + y * fb.RowBytes), ref At(_buffer + y * rowBytes), (uint)rowBytes);
             }
             Interlocked.Increment(ref _frames);
             _frame();
         }
+
+        private static ref byte At(IntPtr p) => ref Unsafe.AddByteOffset(ref Unsafe.NullRef<byte>(), p);
 
         /// <summary>Free the buffer and bitmap. Call after <c>MediaPlayer.Stop</c>, which joins the
         /// decoder thread, so no callback touches the buffer afterwards.</summary>

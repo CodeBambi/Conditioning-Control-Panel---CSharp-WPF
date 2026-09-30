@@ -33,6 +33,10 @@ namespace ConditioningControlPanel.Services
     /// ponytail: local library only - content-pack and remote clips, the duration filter
     /// (MetadataCache), attention checks, grace pause, cascade/feed/DND/browser-media defers and the
     /// interaction queue are WPF-head services; add each here when it reaches Core.
+    /// <para><b>Deliberate deviation:</b> a scheduled tick that finds an empty library re-arms the
+    /// schedule. WPF returns from ContinueTriggerVideo (:2424) without ScheduleNext, so its schedule
+    /// silently dies until the engine restarts; here a video added mid-session still plays
+    /// (docs/avalonia-decisions.md).</para>
     /// </summary>
     public sealed class MandatoryVideoScheduler
     {
@@ -81,9 +85,14 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>WPF SetupStrictHandlers minus the grace pause. Strict: the panic key, Alt+F4 and the
-        /// System key do nothing. Otherwise Esc dismisses (the run goes on) and the panic key force-stops.</summary>
-        public static VideoKeyAction KeyAction(bool strict, string key, bool alt, bool panicEnabled, string? panicKey)
+        /// System key do nothing - but only while a global panic listener is live to stop the video
+        /// (<paramref name="panicListenerLive"/>: panic enabled AND its listener bound). Without one, the panic key and Esc force-stop it:
+        /// strict must never trap the user behind a topmost full-screen window (LockCardWindow #875).
+        /// Otherwise Esc dismisses (the run goes on) and the panic key force-stops.</summary>
+        public static VideoKeyAction KeyAction(bool strict, string key, bool alt, bool panicEnabled, string? panicKey, bool panicListenerLive = true)
         {
+            if (strict && !panicListenerLive && (key == "Escape" || key == panicKey))
+                return VideoKeyAction.ForceStop;
             if (strict)
                 return key == panicKey || key == "System" || (key == "F4" && alt) ? VideoKeyAction.Swallow : VideoKeyAction.None;
             if (key == "Escape") return VideoKeyAction.Dismiss;

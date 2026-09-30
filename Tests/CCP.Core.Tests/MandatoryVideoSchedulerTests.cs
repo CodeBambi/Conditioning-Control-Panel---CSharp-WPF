@@ -125,6 +125,14 @@ public sealed class MandatoryVideoSchedulerTests
     public void Strict_keys(bool strict, string key, bool alt, VideoKeyAction expected) =>
         Assert.Equal(expected, MandatoryVideoScheduler.KeyAction(strict, key, alt, panicEnabled: true, panicKey: "F12"));
 
+    // #875: no live global panic listener -> strict must not trap; panic key and Esc force-stop.
+    [Theory]
+    [InlineData("F12", VideoKeyAction.ForceStop)]
+    [InlineData("Escape", VideoKeyAction.ForceStop)]
+    [InlineData("F4", VideoKeyAction.None)]
+    public void Strict_without_a_live_panic_listener_falls_open(string key, VideoKeyAction expected) =>
+        Assert.Equal(expected, MandatoryVideoScheduler.KeyAction(true, key, false, panicEnabled: true, panicKey: "F12", panicListenerLive: false));
+
     [Fact]
     public void Pure_rules_match_WPF()
     {

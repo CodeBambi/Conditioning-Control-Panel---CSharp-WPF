@@ -44,6 +44,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         private MandatoryVideoOverlay() => Scheduler = new MandatoryVideoScheduler(this);
 
+        /// <summary>The global panic listener can stop a video right now (LockCardWindow #875's
+        /// PanicHookIsInstalled). Tests swap it.</summary>
+        internal static Func<bool> PanicListenerLive = () => X11PanicKey.IsListening && X11PanicKey.BoundKeycode != 0;
+
         internal IReadOnlyList<Window> Windows => _windows;
         internal VlcFrameSink? Sink => _sink;
         /// <summary>Milliseconds from Show to the first frame on screen; -1 until then.</summary>
@@ -128,7 +132,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             w.KeyDown += (_, e) =>
             {
                 var s = CoreSettings.Current;
-                switch (MandatoryVideoScheduler.KeyAction(strict, e.Key.ToString(), e.KeyModifiers.HasFlag(KeyModifiers.Alt), s.PanicKeyEnabled, s.PanicKey))
+                switch (MandatoryVideoScheduler.KeyAction(strict, e.Key.ToString(), e.KeyModifiers.HasFlag(KeyModifiers.Alt), s.PanicKeyEnabled, s.PanicKey,
+                    s.PanicKeyEnabled && PanicListenerLive()))
                 {
                     case VideoKeyAction.Dismiss: e.Handled = true; Scheduler.End(); break;
                     case VideoKeyAction.ForceStop: e.Handled = true; Scheduler.ForceCleanup(); break;

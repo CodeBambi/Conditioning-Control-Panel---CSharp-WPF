@@ -46,6 +46,7 @@ public sealed class MandatoryVideoOverlayTests
             var o = MandatoryVideoOverlay.Instance;
             var v = new ConditioningControlPanel.Services.MandatoryVideoScheduler(o, library: () => new[] { clip });
             var real = o.Scheduler;
+            var listener = MandatoryVideoOverlay.PanicListenerLive;
             o.Scheduler = v;
             try
             {
@@ -70,7 +71,9 @@ public sealed class MandatoryVideoOverlayTests
                         return w;
                     }
 
-                    // Strict: a close and the panic key are refused.
+                    // Strict with a live global panic listener: a close and the panic key are
+                    // refused here (the global path stops it).
+                    MandatoryVideoOverlay.PanicListenerLive = () => true;
                     var w = await Open(strict: true);
                     w.Close();
                     w.KeyPress(Key.F12, RawInputModifiers.None, PhysicalKey.F12, "");
@@ -78,6 +81,13 @@ public sealed class MandatoryVideoOverlayTests
                     v.Stop();                                           // engine stop / panic
                     Assert.Empty(o.Windows);
                     Assert.False(w.IsVisible);
+
+                    // Strict with NO live listener (#875): the panic key must escape, not trap.
+                    MandatoryVideoOverlay.PanicListenerLive = () => false;
+                    w = await Open(strict: true);
+                    w.KeyPress(Key.F12, RawInputModifiers.None, PhysicalKey.F12, "");
+                    Assert.False(v.IsPlaying, "no listener: the panic key force-stops a strict video");
+                    Assert.Empty(o.Windows);
 
                     // Non-strict: Esc dismisses and the watched seconds are credited.
                     credited = 0;
@@ -94,6 +104,7 @@ public sealed class MandatoryVideoOverlayTests
             {
                 v.Stop();
                 o.Scheduler = real;
+                MandatoryVideoOverlay.PanicListenerLive = listener;
                 CoreProgression.TrackVideoWatchedProvider = null;
                 (s.PanicKeyEnabled, s.PanicKey) = panic;
             }
