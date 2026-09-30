@@ -26,8 +26,19 @@ export function finishSculptSurface(geometry) {
   const read = attr => Float32Array.from({ length: count * 3 }, (_, i) =>
     [attr.getX, attr.getY, attr.getZ][i % 3].call(attr, Math.floor(i / 3)));
   const sourceNormal = read(normal), sourceColor = read(color);
+  // Cream has warm ordered channels; both body palettes have blue above green.
+  // Classify from the source once so cleanup never grows a patch into the body.
+  const cream = Array.from({ length: count }, (_, i) => {
+    const p = i * 3;
+    return sourceColor[p] >= sourceColor[p + 1] && sourceColor[p + 1] >= sourceColor[p + 2] && sourceColor[p + 1] > .1;
+  });
+  const creamIndices = cream.flatMap((painted, i) => painted ? [i * 3] : []);
+  const creamBase = [0, 1, 2].map(channel => {
+    const values = creamIndices.map(p => sourceColor[p + channel]).sort((a, b) => a - b);
+    return values[Math.floor(values.length / 2)] || 0;
+  });
   let normals = sourceNormal, colors = sourceColor;
-  for (let pass = 0; pass < 2; pass++) {
+  for (let pass = 0; pass < 4; pass++) {
     const nextNormal = normals.slice(), nextColor = colors.slice();
     for (let i = 0; i < count; i++) {
       const p = i * 3;
@@ -38,12 +49,15 @@ export function finishSculptSurface(geometry) {
         const dot = sourceNormal[p] * sourceNormal[q] + sourceNormal[p + 1] * sourceNormal[q + 1] + sourceNormal[p + 2] * sourceNormal[q + 2];
         // Preserve a sculpted crease. Use the original normals on both passes
         // so the filter cannot creep across an edge it softened previously.
-        if (dot < .75) continue;
-        nx += normals[q]; ny += normals[q + 1]; nz += normals[q + 2];
+        if (pass < 2 && dot >= .75) {
+          nx += normals[q]; ny += normals[q + 1]; nz += normals[q + 2];
+        }
+        if (cream[i] !== cream[j]) continue;
         const distance = Math.hypot(sourceColor[p] - sourceColor[q], sourceColor[p + 1] - sourceColor[q + 1], sourceColor[p + 2] - sourceColor[q + 2]);
-        // White cuffs and contrasting paint are design, not surface noise.
-        if (distance >= .14) continue;
-        const w = 1 - distance / .14;
+        // The cream's baked dark speckles exceed the body filter's threshold.
+        // They are paint, so a geometric crease need not preserve that noise.
+        if (!cream[i] && (pass >= 2 || dot < .75 || distance >= .14)) continue;
+        const w = cream[i] ? 1 : 1 - distance / .14;
         red += colors[q] * w; green += colors[q + 1] * w; blue += colors[q + 2] * w; weight += w;
       }
       const length = Math.hypot(nx, ny, nz) || 1;
@@ -59,7 +73,9 @@ export function finishSculptSurface(geometry) {
     const nz = sourceNormal[p + 2] * .35 + normals[p + 2] * .65;
     const length = Math.hypot(nx, ny, nz) || 1;
     normal.setXYZ(i, nx / length, ny / length, nz / length);
-    color.setXYZ(i, colors[p], colors[p + 1], colors[p + 2]);
+    // Real lights still shade the cream relief. Keep a quarter of its baked
+    // variation so the pale areas read as clean paint, with their hue intact.
+    color.setXYZ(i, ...[0, 1, 2].map(k => cream[i] ? creamBase[k] * .75 + colors[p + k] * .25 : colors[p + k]));
   }
   normal.needsUpdate = true;
   color.needsUpdate = true;

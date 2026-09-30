@@ -5,6 +5,7 @@ import { finishSculptSurface, sculptOutlineGeometry } from '../board/sculpt-fini
 
 const root = new URL('../assets/pieces/', import.meta.url);
 let checked = 0;
+let creamChecked = 0;
 for (const file of readdirSync(root).filter(name => name.endsWith('.glb'))) {
   const bytes = readFileSync(new URL(file, root));
   const jsonLength = bytes.readUInt32LE(12);
@@ -28,10 +29,25 @@ for (const file of readdirSync(root).filter(name => name.endsWith('.glb'))) {
   assert.deepEqual(geometry.attributes.position.array, before.attributes.position.array, file + ': silhouette preserved');
   assert.deepEqual(geometry.index.array, before.index.array, file + ': topology preserved');
   assert.deepEqual(sculptOutlineGeometry(geometry).attributes.normal.array, before.attributes.normal.array, file + ': outline preserves geometric normals');
+  const cream = [];
   for (let i = 0; i < geometry.attributes.normal.count; i++) {
     const n = geometry.attributes.normal;
     assert.ok(Math.abs(Math.hypot(n.getX(i), n.getY(i), n.getZ(i)) - 1) < .00001, file + ': unit lighting normal');
     assert.equal(geometry.attributes.color.getW(i), before.attributes.color.getW(i), file + ': alpha preserved');
+    const c = before.attributes.color;
+    if (c.getX(i) >= c.getY(i) && c.getY(i) >= c.getZ(i) && c.getY(i) > .1) cream.push(i);
+  }
+  if (cream.length) {
+    const range = colors => {
+      const light = cream.map(i => (colors.getX(i) + colors.getY(i) + colors.getZ(i)) / 3);
+      return Math.max(...light) - Math.min(...light);
+    };
+    assert.ok(range(geometry.attributes.color) <= range(before.attributes.color) * .3 + .0001, file + ': cream baked shading reduced by at least 70%');
+    for (const i of cream) {
+      const c = geometry.attributes.color;
+      assert.ok(c.getX(i) >= c.getY(i) && c.getY(i) >= c.getZ(i), file + ': cream hue remains warm');
+    }
+    creamChecked++;
   }
   const finished = geometry.attributes.normal.array.slice();
   finishSculptSurface(geometry);
@@ -52,4 +68,4 @@ const metal = seam.clone();
 metal.deleteAttribute('color');
 finishSculptSurface(metal);
 assert.equal(sculptOutlineGeometry(metal), metal, 'unpainted jewellery bypasses the finish');
-console.log(`Sculpt finish: ${checked} shipped sculpts, shape, outline, alpha, paint boundaries and repeat-load checks passed.`);
+console.log(`Sculpt finish: ${checked} shipped sculpts, ${creamChecked} cream finishes, shape, outline, alpha, paint boundaries and repeat-load checks passed.`);
