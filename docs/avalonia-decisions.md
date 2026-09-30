@@ -177,3 +177,13 @@ Panic ↔ mic: panic aborts in-flight speech capture/command chain (SpeechEngine
 Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays off until the user starts it again). The saved AutonomyModeEnabled switch is not changed. This matches WPF's real behaviour: every WPF panic path runs App.KillAllAudio() -> Autonomy.Stop(), and does so before RunPanicStopTail samples autonomyWasRunning, so its 'restart autonomy after skipping current action' branch never runs. Lockdown still ignores panic.
 - Test: `Tests/CCP.Avalonia.Tests/TakeoverTests.cs`.
 - Advisor: oracle-deep.
+
+## 2026-09-30: webcam capture and face tracking on Avalonia
+- Question: which capture stack for webcam tracking on the Avalonia head (Linux-first, also Windows)?
+- Options: (a) LibVLC v4l2 callbacks (already bundled) + OnnxRuntime without OpenCV; (b) OpenCvSharp4 on both heads.
+- Choice: (b). OpenCvSharp4 4.9.x + OpenCvSharp4.official.runtime.linux-x64 (V4L2) on Linux, OpenCvSharp4.runtime.win on Windows;
+  Microsoft.ML.OnnxRuntime 1.20.x CPU natives on both. Frames stay in memory, never on disk, never on the network. Flatpak uses
+  --device=all for now (the PipeWire camera portal is deferred: it needs a GStreamer pipewiresrc source). Native floor glibc >= 2.35
+  (Ubuntu 22.04 build); if OpenCV fails to load, the feature is disabled with a message, never a crash. The LibVLC v4l2 source is a
+  documented fallback behind an IFrameSource seam. Check ldd of libOpenCvSharpExtern.so before shipping.
+- Advisor: oracle.
