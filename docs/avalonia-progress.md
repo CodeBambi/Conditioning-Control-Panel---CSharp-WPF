@@ -1097,3 +1097,26 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   (CompanionAskService + Ask* moved to Core behind 7 seams WPF seeds); a card is promised only when one can be built; busy = session,
   video, lock card, bubble count, pop quiz; the ask timer stops on exit on both heads.
 - Evidence: TubeChatParityTests (loopback fake, protocol 2, fail-proven x9); live ask cards reached the tube. Rows stay stub. Review: FIX -> fixed.
+
+## avalonia-port/companion-brain-signals: +222
+- CompanionBrain slice 3: MemorySignalWriter moved to Core (head sources via SourcesHook/DeferredSourcesHook, WPF wiring unchanged);
+  Core MandatoryVideoScheduler.VideoStarted; Avalonia seeds SignalMirrorFactory (profile, level-ups, feature use, video starts, chat turns).
+- Evidence: MemorySignalSeedTests + VideoStarted test, fail-proven x3; live memory.json profile. Row stays stub (bark echo, mantra/drain/wipe).
+
+## avalonia-port/inbox-flyout: +612
+- InboxItem/StartupQueueCore moved to Core; new Core StartupInbox (WPF StartupPresenter delegates). Avalonia StartupLadder parks passive
+  cards (programs intro, wardrobe toasts) through the Core quiet rule; shell badge (99+, hidden at 0) opens InboxFlyout.
+- Evidence: InboxFlyoutTests (3, fail-proven); render-all. ctrl-inbox-flyout wired, shell-inbox stub.
+
+## avalonia-port/chaos-hub-state: +272
+- Chaos slice 1: ChaosMetaStore + ChaosRanks moved to Core (WPF ChaosMeta delegates). Avalonia slot picker shows real saves/ranks/locks,
+  erase with WPF confirm, persists the chosen slot; hub balances/rank/stats read the active save; overlay uses the Core ranks.
+- Evidence: ChaosMetaStoreTests (incl. legacy migration), ChaosHubStateTests, fail-proven. Rows stay stub (no opener, shelves, ChaosModeService, waves).
+
+## avalonia-port/blink-trainer-session: +777
+- Webcam slice 3 part 1: Blink Trainer session on Avalonia (click-through overlay per screen, swap per blink, looped video, auto-stop,
+  haptic, quest credit), tab Start/Stop/countdown/preview, CoreWebcam seeded (Devices Start tracking/Privacy/Revoke). Merge with part 2.
+
+## avalonia-port/blink-trainer-session-safety: +338
+- Blink Trainer review fixes (revoke deletes calibration, close-to-tray stop, panic during start, cached preview pool, haptic off-thread) and
+  the oracle-deep decision: every panic and the tray Stop everything also stop the camera (consent kept, notice shown). Fail-proven.

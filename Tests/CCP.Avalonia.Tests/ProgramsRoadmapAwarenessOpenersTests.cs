@@ -28,6 +28,8 @@ public sealed class ProgramsRoadmapAwarenessOpenersTests
                 .UseSkia()
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                 .SetupWithoutStarting();
+        // Another test's first run can leave the quiet window open; these openers assume it is shut.
+        global::ConditioningControlPanel.Avalonia.Platform.StartupLadder.ResetForTests();
         var opened = new List<Window>();
         using var hook = Window.WindowOpenedEvent.AddClassHandler<Window>((w, _) => opened.Add(w));
         try { body(opened); }

@@ -57,10 +57,10 @@ public static class ChaosRanks
 
     /// <summary>The hover SPECIFICS for any rank gate: exact rank, exact descent count, live
     /// progress. Rides under the mystery lines so locks stay studyable without losing voice.</summary>
-    public static string RankSpecifics(ChaosRank needed)
+    /// <paramref name="have"/> is the live save's RunsCompleted (the WPF head passes ChaosMeta.State's).
+    public static string RankSpecifics(ChaosRank needed, int have)
     {
         int need = Thresholds[Math.Clamp((int)needed, 0, Thresholds.Length - 1)];
-        int have = ChaosMeta.State.RunsCompleted;
         return $"unlocks at {Name(needed)}: {need} descents finished. you've finished {have}.";
     }
 

@@ -70,6 +70,9 @@ namespace ConditioningControlPanel.Services
         /// guidance dialog). Raised on the UI thread.</summary>
         public event Action? NoVideos;
 
+        /// <summary>A clip is on screen (WPF VideoService.VideoStarted, VideoService.cs:3370).</summary>
+        public event Action? VideoStarted;
+
         /// <summary>Replays forced this run (WPF _penalties); reset by <see cref="End"/>.</summary>
         public int Penalties { get; private set; }
         /// <summary>This clip's attention spawns and catches (WPF _spawned / _hits).</summary>
@@ -314,6 +317,8 @@ namespace ConditioningControlPanel.Services
                 CoreBubbles.Pause();   // WPF StartVideoPlayback: App.Bubbles?.PauseAndClear(), until the run ends
                 try { _host.Show(path, strict); }
                 catch (Exception ex) { Log.Error(ex, "VideoService: show failed"); End(); return; }
+                try { VideoStarted?.Invoke(); }
+                catch (Exception ex) { Log.Debug("VideoStarted handler failed: {Error}", ex.Message); }
                 // WPF VideoService.cs:3372: background vibe and the clip's funscript, once on screen.
                 _ = CoreHaptics.Service?.StartVideoBackgroundVibeAsync();
                 try { CoreHaptics.Service?.FunScript.OnVideoStarted(path); }

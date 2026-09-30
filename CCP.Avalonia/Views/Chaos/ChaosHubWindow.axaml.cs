@@ -13,6 +13,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using ConditioningControlPanel.Services.Chaos;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Chaos
@@ -25,7 +26,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///
     /// PORTED from ConditioningControlPanel/Chaos/ChaosHubWindow.xaml.cs. What changed and why:
     ///
-    ///  - Every shelf, tile, mantra, diary entry and bench row is built from the sample data at
+    ///  - Balances, rank and lifetime stats read the active slot via Core ChaosMetaStore/ChaosRanks.
+    ///    Every shelf, tile, mantra, diary entry and bench row is built from the sample data at
     ///    the bottom of this file instead of <c>ChaosMeta</c> / <c>ChaosUpgrades</c> /
     ///    <c>ChaosLifetimeBoons</c> / <c>ChaosBoonPool</c> / <c>ChaosBubbleVariants</c> /
     ///    <c>ChaosArt</c>, which are WPF-head services. The samples deliberately hit EVERY visual
@@ -34,7 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///    / hazy), so the render proves the builders rather than one branch of them.
     ///    ponytail: needs the Chaos services. Every one of them is under
     ///    ConditioningControlPanel/Services/Chaos/ - ChaosUpgrades.cs (<c>ChaosMeta</c>),
-    ///    ChaosMetaStore.cs, ChaosLifetimeBoons.cs, ChaosBubbleVariants.cs, ChaosRanks.cs,
+    ///    ChaosLifetimeBoons.cs, ChaosBubbleVariants.cs,
     ///    ChaosLessons.cs, ChaosModeService.cs, ChaosRevealService.cs - except <c>ChaosArt</c>,
     ///    which is ConditioningControlPanel/Services/Chaos/ChaosArt.cs but returns
     ///    <c>System.Windows.Media.ImageSource</c>, so only its path half can ever move. The
@@ -104,6 +106,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         public ChaosHubWindow()
         {
+            Live = ChaosMetaStore.Load();
             AvaloniaXamlLoader.Load(this);
 
             _dollhouseView = Part<Grid>("DollhouseView");
@@ -321,15 +324,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         private void RefreshTopBar()
         {
-            AnimateBalance(_txtSparks, _shownSparks, Sample.Sparks);
-            AnimateBalance(_txtGold, _shownGold, Sample.Gold);
-            _shownSparks = Sample.Sparks;
-            _shownGold = Sample.Gold;
-            _txtRank.Text = Sample.Rank;
+            AnimateBalance(_txtSparks, _shownSparks, Live.Sparks);
+            AnimateBalance(_txtGold, _shownGold, Live.Gold);
+            _shownSparks = Live.Sparks;
+            _shownGold = Live.Gold;
+            _txtRank.Text = LiveRank;
             // mirror onto the main-menu chips (plain text; the animated balance lives on the top bar)
-            _menuRank.Text = Sample.Rank;
-            _menuSparks.Text = Sample.Sparks.ToString("N0");
-            _menuGold.Text = Sample.Gold.ToString("N0");
+            _menuRank.Text = LiveRank;
+            _menuSparks.Text = Live.Sparks.ToString("N0");
+            _menuGold.Text = Live.Gold.ToString("N0");
             RefreshTabBadges();   // every balance change re-counts what the shelves can sell
         }
 
@@ -369,19 +372,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// boon level-ups — the same gates the shelf buttons enforce.</summary>
         private static int CountAffordableToybox()
         {
-            int n = Sample.Habits.Count(u => !u.Owned && Sample.Sparks >= u.Cost);
+            int n = Sample.Habits.Count(u => !u.Owned && Live.Sparks >= u.Cost);
             foreach (var b in Sample.Boons)
             {
                 if (b.RankLocked) continue;
-                if (b.Level <= 0) { if (Sample.Sparks >= b.UnlockCost) n++; }
-                else if (b.Level < b.MaxLevel && Sample.Sparks >= b.UpgradeCost) n++;
+                if (b.Level <= 0) { if (Live.Sparks >= b.UnlockCost) n++; }
+                else if (b.Level < b.MaxLevel && Live.Sparks >= b.UpgradeCost) n++;
             }
             return n;
         }
 
         /// <summary>Gold purchases buyable this instant at her bench (rank + reveal gated).</summary>
         private static int CountAffordableBench() =>
-            Sample.Bench.Count(i => !i.Owned && !i.RankShort && !i.Hazy && Sample.Gold >= i.Cost);
+            Sample.Bench.Count(i => !i.Owned && !i.RankShort && !i.Hazy && Live.Gold >= i.Cost);
 
         /// <summary>Roll a top-bar balance from its last shown value to the new one (~500ms) so
         /// spending visibly *costs* — first paint just snaps. WPF layered a soft tick cue under
@@ -422,13 +425,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         private void RefreshStats()
         {
-            _stSparks.Text = Sample.Sparks.ToString("N0");
-            _stRuns.Text = Sample.RunsCompleted.ToString("N0");
-            _stTimeUnder.Text = FormatPlaytime(Sample.TotalRunSeconds);
-            _stBestScore.Text = Sample.BestScore.ToString("N0");
-            _stBestCombo.Text = Sample.BestCombo.ToString("N0");
-            _stDefused.Text = Sample.TotalDefused.ToString("N0");
-            _stTimeHeld.Text = FormatPlaytime(Sample.TotalChannelSeconds);
+            _stSparks.Text = Live.Sparks.ToString("N0");
+            _stRuns.Text = Live.RunsCompleted.ToString("N0");
+            _stTimeUnder.Text = FormatPlaytime(Live.TotalRunSeconds);
+            _stBestScore.Text = Live.BestScore.ToString("N0");
+            _stBestCombo.Text = Live.BestCombo.ToString("N0");
+            _stDefused.Text = Live.TotalDefused.ToString("N0");
+            _stTimeHeld.Text = FormatPlaytime(Live.TotalChannelSeconds);
         }
 
         private static string FormatPlaytime(double seconds)
@@ -468,7 +471,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private Border BuildUpgradeRow(SampleHabit u)
         {
             bool owned = u.Owned;
-            bool afford = Sample.Sparks >= u.Cost;
+            bool afford = Live.Sparks >= u.Cost;
             bool on = owned && u.On;
             var accent = BranchColor(u.Branch);
 
@@ -726,13 +729,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 }
                 else
                 {
-                    right.Children.Add(BuyButton($"Unlock  ✦{b.UnlockCost}", b.Id, Sample.Sparks >= b.UnlockCost, BoonUnlock_Click));
+                    right.Children.Add(BuyButton($"Unlock  ✦{b.UnlockCost}", b.Id, Live.Sparks >= b.UnlockCost, BoonUnlock_Click));
                 }
             }
             else if (maxed)
                 right.Children.Add(new TextBlock { Text = "MAX  ✓", Foreground = new SolidColorBrush(Color.FromRgb(0x5A, 0xE0, 0x96)), FontSize = 13, FontWeight = FontWeight.Bold, HorizontalAlignment = HorizontalAlignment.Right });
             else
-                right.Children.Add(BuyButton($"deepen  ✦{b.UpgradeCost}", b.Id, Sample.Sparks >= b.UpgradeCost, BoonUpgrade_Click));
+                right.Children.Add(BuyButton($"deepen  ✦{b.UpgradeCost}", b.Id, Live.Sparks >= b.UpgradeCost, BoonUpgrade_Click));
 
             Grid.SetColumn(right, 2);
             grid.Children.Add(right);
@@ -1088,7 +1091,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         private static TextBlock GoldBalanceLine() => new()
         {
-            Text = $"you're carrying 🪙 {Sample.Gold:N0}",
+            Text = $"you're carrying 🪙 {Live.Gold:N0}",
             Foreground = new SolidColorBrush(Color.FromRgb(0xE8, 0xB4, 0x43)),
             FontSize = 11, FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(0, 0, 0, 8),
@@ -1146,7 +1149,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             }
             else
             {
-                bool afford = Sample.Gold >= item.Cost;
+                bool afford = Live.Gold >= item.Cost;
                 // Stays clickable when short — her one gift rides on a short first-pocket buy.
                 var buy = new Button
                 {
@@ -1951,28 +1954,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             foreach (var t in grp.Children.OfType<ToggleButton>()) t.IsChecked = t.Tag?.ToString() == tag;
         }
 
-        /// <summary>WPF: <c>ChaosRanks.RankLockedTip</c> / <c>ChaosRanks.RankSpecifics(rank)</c>.
-        /// Both are shipped COPY plus the rank threshold table, i.e. content rather than
-        /// behaviour, so they are reproduced verbatim here instead of approximated - the two
-        /// strings that stood here before were invented and read nothing like hers.
-        /// ponytail: the only head-side part left is the live descent count -
-        /// <c>ChaosMeta.State.RunsCompleted</c> in
-        /// ConditioningControlPanel/Services/Chaos/ChaosUpgrades.cs; <see cref="Sample"/>'s
-        /// stands in, and the swap is one expression.</summary>
-        private const string RankLockedTip = "she'll sell this to someone deeper.";
+        /// <summary>The active save slot's meta (WPF: <c>ChaosMeta.State</c>), re-read from Core's
+        /// <see cref="ChaosMetaStore"/> each time the hub opens. Balances, rank and lifetime stats
+        /// are real; the shelves below are still <see cref="Sample"/>.</summary>
+        internal static ChaosMetaState Live = new();
 
-        /// <summary><c>ChaosRanks.Thresholds</c>, verbatim: lifetime completed descents per rank.
-        /// Keyed by the capitalized rank word because that is what <c>SampleBoon.RankFloor</c>
-        /// carries here (the head passes the <c>ChaosRank</c> enum and calls <c>Name()</c>).</summary>
-        private static readonly Dictionary<string, int> RankThresholds = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Curious"] = 0, ["Tempted"] = 3, ["Slipping"] = 10,
-            ["Entranced"] = 25, ["Devoted"] = 50, ["Claimed"] = 100,
-        };
+        private static string LiveRank => ChaosRanks.Name(ChaosRanks.For(Live.RunsCompleted));
 
+        private const string RankLockedTip = ChaosRanks.RankLockedTip;
+
+        /// <summary><c>SampleBoon.RankFloor</c> carries the capitalized rank word; Core takes the enum.</summary>
         private static string RankSpecifics(string rank) =>
-            $"unlocks at {rank}: {(RankThresholds.TryGetValue(rank, out var need) ? need : 0)} descents "
-            + $"finished. you've finished {Sample.RunsCompleted}.";
+            ChaosRanks.RankSpecifics(Enum.TryParse<ChaosRank>(rank, true, out var r) ? r : ChaosRank.Curious,
+                                     Live.RunsCompleted);
 
         // ============================ sample data ============================
         // Everything below stands in for the Chaos services. It is deliberately shaped to hit
@@ -1999,15 +1993,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// untrained, and one charm behind the rank wall.</summary>
         private static class Sample
         {
-            public const string Rank = "Slipping";
-            public const int Sparks = 1820;
-            public const int Gold = 640;
-            public const int RunsCompleted = 14;
-            public const double TotalRunSeconds = 4_930;
-            public const long BestScore = 12_400;
-            public const int BestCombo = 37;
-            public const int TotalDefused = 268;
-            public const double TotalChannelSeconds = 1_190;
             public static readonly bool ExtremeUnlocked = false;
 
             public static string? StartMantra = "soft_focus";

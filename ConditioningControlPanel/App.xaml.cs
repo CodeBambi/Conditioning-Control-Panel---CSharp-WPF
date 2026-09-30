@@ -612,6 +612,40 @@ namespace ConditioningControlPanel
         /// <c>CoreTutorial.Step</c>. The follow-up actions are pre-bound to their own step, so a
         /// Core-side card can invoke them without ever naming <c>TutorialStep</c>.</para>
         /// </summary>
+        /// <summary>MemorySignalWriter moved to Core; these are its WPF WireProgression / WireFeatureUsage /
+        /// WireRelationship bodies verbatim (the settings mirror stayed in the writer, over CoreSettings).</summary>
+        private static void WireMemorySignalSources(Services.Companion.Brain.MemorySignalWriter w)
+        {
+            // PlayerLevel is also a watched setting, but LevelUp is the moment the number becomes
+            // interesting and the settings notification is not guaranteed to precede it.
+            if (Progression != null)
+                w.Wire<EventHandler<int>>(h => Progression.LevelUp += h, h => Progression.LevelUp -= h, (_, _) => w.SafeRefresh());
+
+            if (Flash != null)
+                w.Wire<EventHandler>(h => Flash.FlashDisplayed += h, h => Flash.FlashDisplayed -= h,
+                    (_, _) => w.NoteFeatureUse(Services.Companion.Brain.MemorySignalWriter.FeatureFlash));
+            if (Video != null)
+                w.Wire<EventHandler>(h => Video.VideoStarted += h, h => Video.VideoStarted -= h,
+                    (_, _) => w.NoteFeatureUse(Services.Companion.Brain.MemorySignalWriter.FeatureVideo));
+            if (Subliminal != null)
+                w.Wire<EventHandler>(h => Subliminal.SubliminalDisplayed += h, h => Subliminal.SubliminalDisplayed -= h,
+                    (_, _) => w.NoteFeatureUse(Services.Companion.Brain.MemorySignalWriter.FeatureSubliminal));
+            if (BrainDrain != null)
+                w.Wire<EventHandler>(h => BrainDrain.BrainDrainTriggered += h, h => BrainDrain.BrainDrainTriggered -= h,
+                    (_, _) => w.NoteFeatureUse(Services.Companion.Brain.MemorySignalWriter.FeatureBrainDrain));
+            if (MindWipe != null)
+                w.Wire<EventHandler>(h => MindWipe.MindWipeTriggered += h, h => MindWipe.MindWipeTriggered -= h,
+                    (_, _) => w.NoteFeatureUse(Services.Companion.Brain.MemorySignalWriter.FeatureMindWipe));
+            if (Bubbles != null)
+                w.Wire<Action>(h => Bubbles.OnBubblePopped += h, h => Bubbles.OnBubblePopped -= h,
+                    () => w.NoteFeatureUse(Services.Companion.Brain.MemorySignalWriter.FeatureBubbles));
+
+            // UserMessageSent is the app's "the user just talked to her" signal (BarkService uses it too).
+            if (Companion != null)
+                w.Wire<EventHandler>(h => Companion.UserMessageSent += h, h => Companion.UserMessageSent -= h,
+                    (_, _) => w.NoteChatTurn(Mods?.ActiveModId));
+        }
+
         /// <summary>CompanionAskService moved to Core; these are the head pieces it used to read
         /// off App directly (bodies verbatim from its WPF IsBusy / Show / Say / Answer / Sources).</summary>
         private static void SeedAskSeams()
@@ -2700,6 +2734,15 @@ namespace ConditioningControlPanel
                 try { writer.Start(); }
                 catch { writer.Dispose(); throw; }   // a half-started writer keeps its subscriptions otherwise
                 return writer;
+            };
+            // MemorySignalWriter moved to Core; its App.* sources are seeded here unchanged.
+            Services.Companion.Brain.MemorySignalWriter.SourcesHook = WireMemorySignalSources;
+            Services.Companion.Brain.MemorySignalWriter.DeferredSourcesHook = w =>
+            {
+                if (Mantra == null) return false;
+                w.Wire<Action>(h => Mantra.MantraCompleted += h, h => Mantra.MantraCompleted -= h,
+                    () => w.NoteFeatureUse(Services.Companion.Brain.MemorySignalWriter.FeatureMantra));
+                return true;
             };
             Services.Companion.Brain.MemoryStore.WireDeferredSignalsHook = signals =>
                 (signals as Services.Companion.Brain.MemorySignalWriter)?.WireDeferredSources();

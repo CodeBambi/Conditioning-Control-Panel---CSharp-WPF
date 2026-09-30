@@ -487,6 +487,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 return;
             }
 
+            // The far side of the first run (WPF FirstRunWizard.xaml.cs:502): ten minutes in which
+            // passive surfaces go to the Inbox instead of popping.
+            Platform.StartupLadder.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10));
+
             if (wizard.StartTourRequested)
             {
                 // The SHORT WALK, not the door-by-door tour: seven cards, about ninety seconds,

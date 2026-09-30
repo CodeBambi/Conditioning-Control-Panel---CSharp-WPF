@@ -66,6 +66,7 @@ here record where and why the port chose something, and who advised.
 | 2026-09-29 | Where publish settings live | csproj; publish profiles | `CCP.Avalonia/Properties/PublishProfiles/{win-x64,linux-x64}.pubxml`; the csproj stays RID-less so test projects referencing it avoid NETSDK1151/1191 | oracle-deep |
 | 2026-09-29 | Second-instance signal on Avalonia | WPF named events (Windows only); named pipe on both OSes | Same mutex name as WPF; show/ack over a named pipe, since named EventWaitHandles are unsupported on Unix | worker |
 | 2026-09-29 | Linux package shape | AppImage; Flatpak bundles WPE; tarball + Flatpak + AUR | Tarball `ConditioningControlPanel/` with the Vosk model, `.desktop` and icon; app id `io.github.CodeBambi.ConditioningControlPanel`; Flatpak on GNOME 50 (has webkit2gtk-4.1, libsecret) bundles libVLC only - WebHost needs the GTK3 NativeControlHost engine, not WPE. CONFLICT: docs/avalonia-linux-install.md asks to bundle wpewebkit/wpebackend-fdo/libwpe; the Flatpak row stays blocked until the first flatpak-builder run shows whether any web surface needs WPE, then bundle it or amend the brief with the user; WM_CLASS = app id (X11PlatformOptions.WmClass) matching StartupWMClass; AUR `-bin` depends on system vlc/webkit/WPE | worker |
+| 2026-09-30 | MemorySignalWriter head sources | Core writer reads App.* via one seam per service; new Core events per feature; one SourcesHook the head seeds | `SourcesHook`/`DeferredSourcesHook` (WPF seeds its original bodies verbatim); settings mirror in Core over CoreSettings; Avalonia raises `App.FeatureUsed` from its flash/subliminal/bubble surfaces and Core `MandatoryVideoScheduler.VideoStarted` (mirrors WPF VideoService.VideoStarted) | worker |
 
 ## 2026-09-29: flashing line after moving the window on KDE
 - Question: the user saw a thin purple line flash where the window's top edge had been after moving it. Can the app fix it?
@@ -188,6 +189,40 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   documented fallback behind an IFrameSource seam. Check ldd of libOpenCvSharpExtern.so before shipping.
 - Advisor: oracle.
 
+## 2026-09-30: what drives the Avalonia Inbox
+- Question: the brief said the title-bar Inbox is driven by the friends Core service (slice 1). It is not: WPF's badge and
+  InboxFlyout bind App.StartupLadder (Services/Startup/StartupPresenter.cs), whose rows are parked by the quiet-window rule.
+- Options: (a) move the whole StartupPresenter (modal ladder, pump, quiet watch) to Core; (b) move only InboxItem + StartupQueueCore
+  (pure) and extract the Inbox half into Core StartupInbox, WPF's presenter delegating; the head gets a small passive-route presenter.
+- Choice: (b) (supervisor). Platform.StartupLadder routes through StartupQueueCore.Route with session/tour/first-launch inputs;
+  programs intro and wardrobe toasts post to it. The modal ladder and the other WPF posters stay out; listed on shell-inbox.
+## 2026-09-30: Blink Trainer session on Avalonia (webcam slice 3)
+- Question: how much of BlinkTrainerService/calibration fits this slice, and where does the session live?
+- Choice: the session is head code (`Views/Overlays/BlinkTrainerSession.cs`, overlay windows are head-only); the pure parts
+  moved to Core (`BlinkTrainerAssetPool` by git mv, `BlinkTrainerState.TileGrid`, WPF delegates). Overlays use the pink-filter
+  refusals (click-through + transparency or nothing). The start goes through `StartEffect` so the Wayland panic shortcut is
+  bound first; the session `Generation` is read before the tracker start is awaited, so a Stop/panic during the tracker start
+  or the pending bind cancels it. Panic, the shell's Closing (so a close cancelled to the tray too, as WPF LabTab.cs:1000),
+  app exit and consent revoke stop the session. Calibration, quick recal and tracker test are NOT in this slice: all three need the gaze-projection feed
+  (WPF WebcamCalibrationWindow ~2.1k LOC + gaze maths) that WebcamTracker does not emit; their buttons stay disabled with a
+  reason. `CoreWebcam.IsAvailable` is seeded true, and revoke keeps all four promises in one place (`WebcamTracker.RevokeConsent`: stop, delete the calibration file via
+  `WebcamCalibrationData.DeleteIfExists`, clear consent, turn the webcam features off).
+  Deviations: GIF/animated webp show their first frame; mix mode buckets only already-seen images; no explicit tracking-monitor
+  pick (placement = DualMonitorEnabled ? all : primary); no stage video preview; no SeasonRecap credit.
+- Advisor: supervisor (progress update), worker.
+
+## 2026-09-30: panic and the camera (Avalonia only, deliberate WPF deviation)
+- Question: should a panic press stop webcam tracking? WPF leaves the camera running.
+- Choice (C): every panic press, including Lock Card presses that do not advance the exit ladder and a press consumed as a video
+  grace pause, stops tracking after the audio and overlay teardown, fire-and-forget (Stop can block up to 5 s, so never awaited
+  on the panic path). Consent, calibration, device choice and settings are kept; status chips follow the tracker's StateChanged.
+  The notice "Camera stopped. Start tracking to resume." (`panic_camera_stopped`, all languages) shows when a camera was on or
+  starting. The Blink Trainer session stops with it, and the tracker's stop generation keeps an in-flight Start from publishing
+  its camera afterwards. A palette-claimed Escape is not a panic (PanicPolicy.DismissSettingsPalette) and does not stop it.
+- Rationale: Panic is the get-me-out control; a camera left running is the most visible privacy leak; attention checks skip when
+  tracking is off (AttentionCheckService.cs:247), session/autonomy don't depend on the webcam, no StrictLock/Lockdown escape rule
+  uses gaze; cost is a manual restart, made expected by the notice.
+- Advisor: oracle-deep.
 ## 2026-09-30: Chaster booked figure on Avalonia
 - Question: WPF shows a booked price first as ChasterBookedPop (a topmost window at the cause or cursor) and only falls back to
   the rail-padlock adorner. Which does the Avalonia head show?
