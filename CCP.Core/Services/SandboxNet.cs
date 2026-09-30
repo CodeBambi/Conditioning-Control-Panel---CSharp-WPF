@@ -40,12 +40,12 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>True when <paramref name="uri"/> may be opened (WebView, browser, media): always
-        /// outside a sandbox; inside one only loopback, local files, about: and data:.</summary>
+        /// outside a sandbox; inside one only loopback, local (non-UNC) files, about: and data:.</summary>
         public static bool Allows(Uri? uri) => Allows(uri, Active);
 
         internal static bool Allows(Uri? uri, bool sandboxed) =>
             !sandboxed || uri is { IsAbsoluteUri: true }
-                && (uri.Scheme is "about" or "data" || uri.IsFile || IsLoopbackLiteral(uri));
+                && (uri.Scheme is "about" or "data" || (uri.IsFile && !uri.IsUnc) || IsLoopbackLiteral(uri));
 
         /// <summary>A literal loopback IP or "localhost" as typed. Not Uri.IsLoopback alone: .NET also calls the bare
         /// name "loopback" loopback, and that name is resolved by DNS/hosts like any other.</summary>

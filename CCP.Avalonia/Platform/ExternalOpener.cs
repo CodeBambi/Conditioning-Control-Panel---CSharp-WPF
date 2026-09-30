@@ -24,12 +24,17 @@ namespace ConditioningControlPanel.Avalonia.Platform
             return true;
         };
 
-        /// <summary>Local paths are always allowed; anything else only by <see cref="SandboxNet.Allows"/>.</summary>
-        internal static bool Allowed(string? target)
+        /// <summary>Outside a sandbox everything non-empty goes to the shell, as before. Inside one: local paths, and
+        /// URIs by <see cref="SandboxNet.Allows"/>; never a UNC path or file://host (that is a network share).</summary>
+        internal static bool Allowed(string? target) => Allowed(target, SandboxNet.Active);
+
+        internal static bool Allowed(string? target, bool sandboxed)
         {
             if (string.IsNullOrWhiteSpace(target)) return false;
-            if (Path.IsPathRooted(target) && !target.Contains("://")) return true;
-            if (Uri.TryCreate(target, UriKind.Absolute, out var uri) && SandboxNet.Allows(uri)) return true;
+            if (!sandboxed) return true;
+            var unc = target.StartsWith(@"\\", StringComparison.Ordinal) || target.StartsWith("//", StringComparison.Ordinal);
+            if (!unc && Path.IsPathRooted(target) && !target.Contains("://")) return true;
+            if (!unc && Uri.TryCreate(target, UriKind.Absolute, out var uri) && SandboxNet.Allows(uri, sandboxed)) return true;
             // Host only: a signed URL's query string must not reach the log.
             Log.Warning("Sandbox: refused to open {Host}", Uri.TryCreate(target, UriKind.Absolute, out var u) ? u.Host : "(not a URL)");
             return false;

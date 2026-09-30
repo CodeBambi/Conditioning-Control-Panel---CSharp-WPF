@@ -220,7 +220,7 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   SocketsHttpHandler (incl. UrlSafety's ConnectCallback handler, ServerClockHandler) and ClientWebSocket therefore gets
   "connection refused" before any DNS or connect to the real host (UrlSafety's DNS pre-flight is skipped in a sandbox); honoured LoopbackUrl overrides still work. Re-grep found no
   product code that sets UseProxy or its own Proxy; `SandboxNetTests.NoProductCodeOptsOutOfTheDefaultProxy` fails if one appears.
-  Non-HTTP egress asks `SandboxNet.Allows(uri)` (loopback, file:, about:, data: only in a sandbox): Avalonia `WebHost` (source and
+  Non-HTTP egress asks `SandboxNet.Allows(uri)` (loopback, non-UNC file:, about:, data: only in a sandbox; ExternalOpener also refuses UNC paths there and leaves production launches to the shell as before): Avalonia `WebHost` (source and
   every navigation), and every link/file/folder launch in the head goes through `Platform/ExternalOpener` (refusals logged;
   HyperlinkButton NavigateUri via `Controls/SafeHyperlinkButton`); `SandboxNetTests.EveryLaunchGoesThroughExternalOpener` fails on a bypass. LibVLC plays FromPath only (no network MRLs). Production
   (no CCP_USERDATA_DIR) never installs it.

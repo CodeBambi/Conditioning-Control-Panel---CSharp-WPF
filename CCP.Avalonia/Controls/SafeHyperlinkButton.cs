@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Platform;
 
@@ -20,7 +21,14 @@ namespace ConditioningControlPanel.Avalonia.Controls
             NavigateUri = null;
             try { base.OnClick(); }
             finally { NavigateUri = uri; }
-            if (uri is not null) _ = ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), uri.IsAbsoluteUri ? uri.AbsoluteUri : uri.OriginalString);
+            if (uri is not null) _ = OpenAsync(uri);
+        }
+
+        private async Task OpenAsync(Uri uri)
+        {
+            // IsVisited as the base sets it: only once the link actually opened.
+            if (await ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), uri.IsAbsoluteUri ? uri.AbsoluteUri : uri.OriginalString))
+                SetCurrentValue(IsVisitedProperty, true);
         }
     }
 }

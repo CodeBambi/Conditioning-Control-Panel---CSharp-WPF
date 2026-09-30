@@ -41,15 +41,18 @@ public sealed class SandboxNetTests
     [MemberData(nameof(Shapes))]
     public async Task EveryHandlerShapeFailsClosedAtTheDeadLoopbackPort(string shape)
     {
-        using var client = shape switch
+        foreach (var url in new[] { Remote, "https://sandbox-probe.invalid/v1/ping" })   // https: the CONNECT tunnel too
         {
-            "HttpClient" => new HttpClient(),
-            "HttpClientHandler" => new HttpClient(new HttpClientHandler()),
-            "SocketsHttpHandler" => new HttpClient(new SocketsHttpHandler()),
-            _ => new HttpClient(new ServerClockHandler()),
-        };
-        var ex = await Assert.ThrowsAnyAsync<Exception>(() => client.GetAsync(Remote));
-        Assert.True(Refused(ex), ex.ToString());
+            using var client = shape switch
+            {
+                "HttpClient" => new HttpClient(),
+                "HttpClientHandler" => new HttpClient(new HttpClientHandler()),
+                "SocketsHttpHandler" => new HttpClient(new SocketsHttpHandler()),
+                _ => new HttpClient(new ServerClockHandler()),
+            };
+            var ex = await Assert.ThrowsAnyAsync<Exception>(() => client.GetAsync(url));
+            Assert.True(Refused(ex), url + ": " + ex);
+        }
     }
 
     [Fact]
@@ -93,6 +96,7 @@ public sealed class SandboxNetTests
     [InlineData("http://127.0.0.1:3001/auth", true, true)]
     [InlineData("about:blank", true, true)]
     [InlineData("file:///tmp/page.html", true, true)]
+    [InlineData("file://server/share/page.html", true, false)]   // UNC: a network share
     [InlineData("https://codebambi-proxy.vercel.app/", false, true)]   // production unchanged
     public void AllowsNonHttpEgressOnlyToLoopbackInASandbox(string url, bool sandboxed, bool allowed) =>
         Assert.Equal(allowed, SandboxNet.Allows(new Uri(url), sandboxed));
@@ -141,7 +145,8 @@ public sealed class SandboxNetTests
     [Fact]
     public void EveryLaunchGoesThroughExternalOpener()
     {
-        var launch = new Regex(@"UseShellExecute\s*=\s*true|\.Launch(Uri|File|FileInfo|DirectoryInfo)Async\b|""xdg-open""|new\s+HyperlinkButton\b");
+        // Any UseShellExecute that is not a literal false, any desktop opener binary in any form, any Launcher call.
+        var launch = new Regex(@"UseShellExecute\s*=(?!\s*false\b)|\.Launch(Uri|File|FileInfo|DirectoryInfo)Async\b|\b(xdg-open|gio|kde-open\d*|gnome-open)\b|new\s+HyperlinkButton\b");
         var hits = Scan(new[] { "CCP.Avalonia" }, "*.cs", launch, l => l.Contains("\"runas\""))
             .Concat(Scan(new[] { "CCP.Avalonia" }, "*.axaml", new Regex(@"<HyperlinkButton\b")))   // SafeHyperlinkButton instead
             .Where(h => !h.Contains($"{Path.DirectorySeparatorChar}ExternalOpener.cs:"))
