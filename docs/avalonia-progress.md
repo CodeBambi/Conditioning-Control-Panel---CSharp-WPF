@@ -1055,3 +1055,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   fails closed), one ModerationCounter with cooldown, no chat text logged. WPF prompt tests seed CoreMods.Service again.
 - Evidence: AiServiceProxyTests (5), TubeChatAiTests, BambiSpriteCoreModsTests, fail-proven; live signed out: 0 proxy requests.
   Rows stay stub (CompanionBrain default route, thinking animation, warning dialog, local providers). Review: FIX -> fixed.
+
+## avalonia-port/companion-brain-core: +380
+- CompanionBrain slice 1: CompanionBrain, PromptAssembler, MemoryStore, CompanionSessionStore, ChatSession, CompanionTurn,
+  ConversationRecall, ExplicitMemory, CompanionMemoryMaintenance, ConversationDelivery, ConversationRelationship moved to Core (git mv;
+  head-only deps are static seams WPF seeds before building the brain; no-settings reads keep WPF's false default). Avalonia App.Brain;
+  tube chat routes through it while UseCompanionBrain is on (WPF ChatInput.cs:772); ask cards off until the card UI exists.
+- Evidence: TubeChatBrainTests (loopback fake, protocol 2) + ConversationDeliveryCardTests, fail-proven; live signed out: 0 requests,
+  no chat text logged or stored. Row feat-companion-brain stub. Plan: ~/ccp-port/briefs/companion-brain-plan.md. Review: FIX -> fixed.
