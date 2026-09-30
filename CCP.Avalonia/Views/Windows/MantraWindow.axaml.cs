@@ -26,6 +26,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    shared ~16ms <c>DispatcherTimer</c> (ChaosHudWindow is the worked example in this head).
     ///    Letter-pulse's target is a <c>Run</c>, not a <c>Visual</c>; the stepped colour hop in
     ///    <see cref="UpdateHighlights"/> is its replacement.
+    ///  - Opened with no running session (the render proof), it starts one with MantraDefaultCount;
+    ///    WPF assumes the opener did. A failed StartMantraSession is logged, not shown in a MessageBox.
     ///  - Timers and the drone are also stopped in <c>OnClosed</c>, because --render-all closes the
     ///    window externally.
     ///  - <c>DataObject.AddPastingHandler</c> -> <c>TextBox.PastingFromClipboardEvent</c>;
@@ -43,10 +45,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // Drone audio (WPF: two SignalGenerators; here one looping synthesised layer)
         /// <summary>Opens the looping drone file. Tests swap it; null when libvlc did not load.</summary>
         internal static Func<string, Platform.LayeredAudio.ILayerPlayer?> DroneOpener =
-            path => Platform.LibVlcAudio.Shared is { } vlc ? new Platform.LayeredAudio.VlcLayerPlayer(vlc, path) : null;
+            path => Platform.LibVlcAudio.Shared is { } vlc ? new Platform.LayeredAudio.VlcLayerPlayer(vlc, path, startMuted: true) : null;
         private Platform.LayeredAudio.ILayerPlayer? _drone;
         private float _droneTargetGain = 0.05f;
         private float _droneCurrentGain = 0.05f;
+        private bool _droneRamped;   // WPF applies MantraDroneVolume only from the first ramp step
 
         // Per-character highlight state
         private readonly List<Run> _mantraRuns = new();
@@ -238,6 +241,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_drone != null && Math.Abs(_droneCurrentGain - _droneTargetGain) > 0.001f)
             {
                 _droneCurrentGain += (_droneTargetGain - _droneCurrentGain) * 0.02f;
+                _droneRamped = true;
                 ApplyDroneVolume();
             }
         }
@@ -433,11 +437,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        /// <summary>WPF: fundamental gain = current x MantraDroneVolume%; the file's peak is 1.4 x the fundamental's.</summary>
+        /// <summary>WPF: the drone opens at a raw 0.05 (StartDrone) and only the ramp multiplies in
+        /// MantraDroneVolume% (FloatTimer_Tick). The file's peak is 1.4 x the fundamental's.</summary>
         private void ApplyDroneVolume()
         {
             if (_drone == null) return;
-            var masterVol = CoreSettings.Current.MantraDroneVolume / 100.0;
+            var masterVol = _droneRamped ? CoreSettings.Current.MantraDroneVolume / 100.0 : 1.0;
             _drone.Volume = Platform.ToneWav.VlcVolume(_droneCurrentGain * masterVol * Platform.ToneWav.DronePeak);
         }
 

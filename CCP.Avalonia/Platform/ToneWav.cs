@@ -7,8 +7,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
     /// <summary>
     /// The mantra window's synthesised sounds as WAV files, because this head's audio path (LibVLC)
     /// plays files, not NAudio SignalGenerators. Sine waves at full scale; the caller sets the gain.
-    /// Written once per process into a private temp directory.
-    /// ponytail: the directory is not deleted on exit (a few small files); clean up if it ever matters.
+    /// Written once per process into a private temp directory, deleted on exit (<see cref="DeleteFiles"/>).
     /// </summary>
     internal static class ToneWav
     {
@@ -32,12 +31,22 @@ namespace ConditioningControlPanel.Avalonia.Platform
         /// <summary>Linear sample gain -> LibVLC's cubic 0..100 volume, as LibVlcAudio maps it.</summary>
         internal static int VlcVolume(double gain) => (int)Math.Round(Math.Cbrt(Math.Clamp(gain, 0, 1)) * 100);
 
+        /// <summary>App exit: remove the temp directory, if one was made. Best effort.</summary>
+        internal static void DeleteFiles()
+        {
+            if (!Dir.IsValueCreated) return;
+            lock (Dir)
+                try { Directory.Delete(Dir.Value, true); }
+                catch (Exception ex) { Serilog.Log.Debug(ex, "ToneWav: temp cleanup"); }
+        }
+
         private static string Write(string name, double seconds, Func<double, double> wave)
         {
             var path = Path.Combine(Dir.Value, name);
             lock (Dir)
             {
                 if (File.Exists(path)) return path;
+                Directory.CreateDirectory(Dir.Value);   // DeleteFiles may have run
                 var n = (int)(Rate * seconds);
                 using var w = new BinaryWriter(File.Create(path));
                 w.Write("RIFF"u8); w.Write(36 + n * 2); w.Write("WAVE"u8);

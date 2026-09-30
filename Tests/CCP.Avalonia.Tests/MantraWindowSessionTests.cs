@@ -41,7 +41,7 @@ public sealed class MantraWindowSessionTests
 
         var dir = Directory.CreateTempSubdirectory("ccp-mantra-test-").FullName;
         var (play, opener, xp0) = (CoreAudio.PlayOneShotProvider, MantraWindow.DroneOpener, CoreProgression.AddXPProvider);
-        var (factory, sources) = (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook);
+        var (factory, sources, sent) = (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook, CompanionBrain.UserMessageSent);
         var tones = new List<string>();
         var xp = new List<double>();
         var drone = new FakeDrone();
@@ -61,7 +61,7 @@ public sealed class MantraWindowSessionTests
             win.Show();
             Dispatcher.UIThread.RunJobs();
             Assert.Equal("/1", win.FindControl<TextBlock>("TxtTarget")!.Text);
-            Assert.Equal(28, Assert.Single(drone.Volumes));   // WPF 0.05 idle gain x 30% drone volume
+            Assert.Equal(41, Assert.Single(drone.Volumes));   // WPF StartDrone: raw 0.05, MantraDroneVolume not applied until the ramp
             var box = win.FindControl<TextBox>("TxtInput")!;
             box.Focus();
 
@@ -77,6 +77,8 @@ public sealed class MantraWindowSessionTests
 
             var ramp = typeof(MantraWindow).GetMethod("FloatTimer_Tick", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
             for (var i = 0; i < 200; i++) ramp.Invoke(win, new object?[] { null, EventArgs.Empty });
+            // First ramp step: (0.05 + (0.0733 - 0.05) x 0.02) x 30% drone volume -> 28 (cubic), then up with the streak.
+            Assert.Equal(28, drone.Volumes[1]);
             Assert.True(drone.Volumes[^1] > 28, "the drone did not ramp up with the streak");
 
             win.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
@@ -91,9 +93,44 @@ public sealed class MantraWindowSessionTests
         {
             win?.Close();
             (CoreAudio.PlayOneShotProvider, MantraWindow.DroneOpener, CoreProgression.AddXPProvider) = (play, opener, xp0);
-            (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook) = (factory, sources);
+            (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook, CompanionBrain.UserMessageSent) = (factory, sources, sent);
+            AvApp.StopMantra(Array.Empty<Window>());   // deletes ToneWav's temp folder
             Directory.Delete(dir, true);
         }
+        return Task.CompletedTask;
+    });
+
+    /// <summary>Tray Exit / any shutdown runs App.StopMantra from OnDesktopExit: the Mantra Lab closes, its
+    /// drone is disposed, the session ends and the synthesised WAVs are deleted.</summary>
+    [Fact]
+    public Task ExitClosesTheWindowStopsTheDroneAndDeletesTheWavs() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<AvApp>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+
+        var opener = MantraWindow.DroneOpener;
+        var drone = new FakeDrone();
+        string? wav = null;
+        MantraWindow.DroneOpener = p => { wav = p; return drone; };
+        try
+        {
+            AvApp.Mantra.StartSession(3);
+            var win = new MantraWindow();
+            win.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(File.Exists(wav));
+
+            AvApp.StopMantra(new Window[] { win });
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(win.IsVisible);
+            Assert.True(drone.Disposed);
+            Assert.False(AvApp.Mantra.IsActive);
+            Assert.False(Directory.Exists(Path.GetDirectoryName(wav)));
+        }
+        finally { MantraWindow.DroneOpener = opener; }
         return Task.CompletedTask;
     });
 }

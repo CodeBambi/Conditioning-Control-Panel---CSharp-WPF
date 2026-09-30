@@ -765,6 +765,17 @@ namespace ConditioningControlPanel.Avalonia
             return media;
         }
 
+        /// <summary>Exit path (tray Exit and every other shutdown): close any MantraWindow, whose OnClosed
+        /// stops the drone and ends the session, end the service as WPF App.OnExit's Mantra?.Dispose(),
+        /// and delete the synthesised WAVs.</summary>
+        internal static void StopMantra(System.Collections.Generic.IEnumerable<global::Avalonia.Controls.Window> windows)
+        {
+            foreach (var w in windows.OfType<Views.Windows.MantraWindow>().ToList())
+                try { w.Close(); } catch (Exception ex) { Serilog.Log.Debug(ex, "MantraWindow close on exit"); }
+            Mantra.Dispose();
+            Platform.ToneWav.DeleteFiles();
+        }
+
         private void OnDesktopExit(object? sender, ControlledApplicationLifetimeExitEventArgs e)
         {
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
@@ -775,6 +786,9 @@ namespace ConditioningControlPanel.Avalonia
             try { CoreHaptics.Service?.ShutdownStop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Haptics shutdown stop failed"); }
 
             try { (((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!).MainWindow as Views.Windows.MainShellWindow)?.Tray?.Dispose(); } catch { }
+
+            // Before libvlc goes: close the Mantra Lab (stops and disposes its drone), then its temp WAVs.
+            try { StopMantra(((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!).Windows); } catch { }
 
             // Restore any app we ducked; a pending Unduck would otherwise die with the process.
             try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }
