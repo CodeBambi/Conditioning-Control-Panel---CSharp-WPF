@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -89,8 +90,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private volatile bool _isProcessing;
         private volatile bool _isUserQueued;
 
-        private BarkService? _barks;
-        private Action<BarkRule, string>? _barkHandler;
+        private Action? _detachBarks;
 
         private bool _memoryRecallSignaled;
         private bool _disposed;
@@ -100,7 +100,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         // out from under them would be the more surprising bug of the two.
         private readonly bool _ownsMemory;
 
-        internal Func<IReadOnlyList<CompanionActivity>> Activities { get; set; } = CompanionActivities.Current;
+        internal Func<IReadOnlyList<CompanionActivity>> Activities { get; set; } =
+            () => ActivitiesProvider?.Invoke() ?? Array.Empty<CompanionActivity>();
 
         private static readonly Random _random = new();
 
@@ -118,13 +119,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _preview = preview ?? (() => CompanionExperience.IsV2Enabled);
-            _contextStamp = contextStamp ?? (() => string.Join("|", App.UnifiedUserId,
-                App.Settings?.Current?.PersonaIdentityFenceUtc?.Ticks,
-                App.Settings?.Current?.PersonaVoiceFenceUtc?.Ticks));
+            _contextStamp = contextStamp ?? (() => string.Join("|", CoreAccount.UnifiedUserId,
+                CoreSettings.Current.PersonaIdentityFenceUtc?.Ticks,
+                CoreSettings.Current.PersonaVoiceFenceUtc?.Ticks));
             _executeCommands = executeCommands ?? ExecuteAcceptedCommands;
             _scheduleEffects = scheduleEffects ?? ScheduleEffects;
             _ownsMemory = memory == null;
-            _accountIdentity = accountIdentity ?? (() => App.UnifiedUserId);
+            _accountIdentity = accountIdentity ?? (() => CoreAccount.UnifiedUserId);
             _accountDirectory = accountDirectory;
             _currentAccount = _accountIdentity();
             _accountScoped = _preview() && memory == null && store == null && assembler == null;
@@ -144,7 +145,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (snapshot.Turns.Count > 0)
             {
                 Session.Restore(snapshot.Turns);
-                App.Logger?.Information(
+                Log.Information(
                     "CompanionBrain: session restored ({Count} turn(s), imported={Imported})",
                     snapshot.Turns.Count, snapshot.ImportedFromLegacy);
             }
@@ -159,7 +160,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             try { return BambiSprite.StableMediaTitles(); }
             catch (Exception ex)
             {
-                App.Logger?.Debug("CompanionBrain: media title lookup failed: {Error}", ex.Message);
+                Log.Debug("CompanionBrain: media title lookup failed: {Error}", ex.Message);
                 return Array.Empty<string>();
             }
         }
@@ -168,7 +169,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// Master routing switch. False = today's legacy stateless behaviour on every call site.
         /// Read at each call site rather than cached so flipping it takes effect immediately.
         /// </summary>
-        public static bool IsEnabled => App.Settings?.Current?.UseCompanionBrain != false;
+        public static bool IsEnabled => CoreSettings.Current.UseCompanionBrain != false;
 
         /// <summary>
         /// The routing predicate EVERY call site should use, so the kill switch and the
@@ -262,7 +263,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             // piling up requests behind the semaphore.
             if (_isUserQueued)
             {
-                App.Logger?.Debug("CompanionBrain: user send dropped (one already queued)");
+                Log.Debug("CompanionBrain: user send dropped (one already queued)");
                 return _preview() ? AiReplyResult.Failed(AiFailureKind.Busy, true)
                     : new AiReplyResult(GetThinkingPhrase(), IsAiGenerated: false, Refusal: null);
             }
@@ -307,8 +308,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             // timing and MemorySignalWriter's relationship counter are unchanged. Call sites
             // that do NOT reach here (legacy stateless path, no-AI preset path) still raise it
             // themselves — see AvatarTubeWindow.SendChatMessageAsync.
-            try { App.Companion?.NotifyUserMessageSent(); }
-            catch (Exception ex) { App.Logger?.Debug("CompanionBrain: user-message signal failed: {Error}", ex.Message); }
+            try { UserMessageSent?.Invoke(); }
+            catch (Exception ex) { Log.Debug("CompanionBrain: user-message signal failed: {Error}", ex.Message); }
             try
             {
                 var request = _assembler.BuildRequest(AiPurpose.Chat, Session, input);
@@ -394,7 +395,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     Session.Append(CompanionTurn.Create(TurnKind.AssistantChat, result.Text) with
                     { ActivityIds = delivery.Ids, IsApplicationReply = result.IsApplicationReply });
                     if (_preview() && !result.IsApplicationReply && Memory is MemoryStore relationshipStore)
-                        relationshipStore.NoteChatTurn(App.Mods?.ActiveModId);
+                        relationshipStore.NoteChatTurn(CoreMods.ActiveModId);
                     if (_preview() && !result.IsApplicationReply) _maintenance?.Accept(userTurn);
                     _conversationRevision++;
                     ApplyPreviewCommands(result, cancellationToken);
@@ -413,7 +414,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             catch (Exception ex)
             {
                 Session.Remove(userTurn);
-                App.Logger?.Warning("CompanionBrain: chat turn failed ({ErrorType})", ex.GetType().Name);
+                Log.Warning("CompanionBrain: chat turn failed ({ErrorType})", ex.GetType().Name);
                 return _preview() ? AiReplyResult.Failed(AiFailureKind.Unavailable, true)
                     : new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
             }
@@ -447,13 +448,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             if (_isProcessing || _isUserQueued || (_preview() && _maintenance?.PendingJob.IsCompleted == false))
             {
-                App.Logger?.Debug("CompanionBrain: ambient reaction dropped (busy)");
+                Log.Debug("CompanionBrain: ambient reaction dropped (busy)");
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
             }
 
             if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
             {
-                App.Logger?.Debug("CompanionBrain: ambient reaction dropped (gate held)");
+                Log.Debug("CompanionBrain: ambient reaction dropped (gate held)");
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
             }
 
@@ -511,7 +512,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "CompanionBrain: ambient reaction failed");
+                Log.Warning(ex, "CompanionBrain: ambient reaction failed");
                 Session.Remove(eventTurn);
                 return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
             }
@@ -539,55 +540,63 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     try { _executeCommands(result.ProposedCommands); }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning("CompanionBrain: accepted effects failed ({ErrorType})", ex.GetType().Name);
+                        Log.Warning("CompanionBrain: accepted effects failed ({ErrorType})", ex.GetType().Name);
                     }
                 }
             }
             try { _scheduleEffects(Execute); }
             catch (Exception ex)
             {
-                App.Logger?.Warning("CompanionBrain: effect scheduling failed ({ErrorType})", ex.GetType().Name);
+                Log.Warning("CompanionBrain: effect scheduling failed ({ErrorType})", ex.GetType().Name);
             }
         }
 
+        // Head seams (the brain moved to Core; each head seeds what it has, unseeded is a no-op).
+        /// <summary>Companion achievements EMIT hook (WPF App.Companion.NotifyUserMessageSent).</summary>
+        public static volatile Action? UserMessageSent;
+        /// <summary>Runs accepted AI commands (WPF App.Commands batch). Unseeded: nothing runs.</summary>
+        public static volatile Action<IReadOnlyList<Models.AiCommandData>>? CommandExecutor;
+        /// <summary>Queues effects onto the UI thread (WPF dispatcher). Unseeded: runs inline.</summary>
+        public static volatile Action<Action>? EffectScheduler;
+        /// <summary>Clears the legacy stateless path's local history (WPF AiServiceStrategy).</summary>
+        public static volatile Action? ClearLegacyLocalHistoryHook;
+        /// <summary>she_remembers signal (WPF LocalAiService.SignalPersistentMemoryRecalled).</summary>
+        public static volatile Action? MemoryRecalled;
+        /// <summary>The capability list offered to the model (WPF CompanionActivities.Current).</summary>
+        internal static volatile Func<IReadOnlyList<CompanionActivity>>? ActivitiesProvider;
+
         private static void ScheduleEffects(Action execute)
         {
-            // Effect implementations synchronously dispatch to WPF. Queue onto that thread before
-            // taking the lock, so a simultaneous UI forget action cannot deadlock the reply worker.
-            var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.CheckAccess()) execute();
-            else dispatcher.BeginInvoke(execute, System.Windows.Threading.DispatcherPriority.Normal);
+            if (EffectScheduler is { } schedule) schedule(execute);
+            else execute();
         }
 
         private static void ExecuteAcceptedCommands(IReadOnlyList<Models.AiCommandData> commands)
         {
-            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow || App.Commands == null) return;
-            App.Commands.BeginBatch();
-            foreach (var command in commands) App.Commands.ExecuteCommand(command);
+            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOnNow) return;
+            CommandExecutor?.Invoke(commands);
         }
 
         // ===================== barks =====================
 
         /// <summary>
-        /// Subscribes to <see cref="BarkService.BarkSpoken"/> so the LLM knows what her recorded voice
+        /// Subscribes to the head's bark source (WPF BarkService.BarkSpoken) so the LLM knows what her recorded voice
         /// just said. Called from <c>App.OnStartup</c> once both services exist. Idempotent.
         /// </summary>
-        public void AttachBarkSource(BarkService? barks)
+        public void AttachBarkSource(Action<Action<BarkRule, string>> subscribe, Action<Action<BarkRule, string>> unsubscribe)
         {
-            if (barks == null || ReferenceEquals(barks, _barks)) return;
             DetachBarkSource();
-
-            _barks = barks;
-            _barkHandler = OnBarkSpoken;
-            barks.BarkSpoken += _barkHandler;
+            Action<BarkRule, string> handler = OnBarkSpoken;
+            subscribe(handler);
+            _detachBarks = () => unsubscribe(handler);
         }
 
         /// <summary>Unsubscribes from the bark source. Safe to call when never attached.</summary>
         public void DetachBarkSource()
         {
-            if (_barks != null && _barkHandler != null) _barks.BarkSpoken -= _barkHandler;
-            _barks = null;
-            _barkHandler = null;
+            var detach = _detachBarks;
+            _detachBarks = null;
+            detach?.Invoke();
         }
 
         private void OnBarkSpoken(BarkRule rule, string line)
@@ -597,7 +606,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (string.IsNullOrWhiteSpace(line)) return;
                 // Neutral speaker label when the mod stack is not up. House style is singular
                 // they, so an unmodded install never puts a gender on the wire.
-                var speaker = App.Mods?.GetCompanionName() ?? "they";
+                var speaker = CoreMods.Service?.GetCompanionName() ?? "they";
                 // BarkEchoes are flavor: capped at 5 per window and never persisted (they replay from
                 // bark_rules.json anyway, and they say nothing about the user).
                 Session.Append(TurnKind.BarkEcho, CompanionTurn.FormatBarkEcho(speaker, line),
@@ -605,14 +614,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("CompanionBrain: bark echo failed: {Error}", ex.Message);
+                Log.Debug("CompanionBrain: bark echo failed: {Error}", ex.Message);
             }
         }
 
         /// <summary>The active companion's display name, or null when the mod stack isn't up (tests).</summary>
         private static string? ActiveSpeakerName()
         {
-            try { return App.Mods?.GetCompanionName(); }
+            try { return CoreMods.Service?.GetCompanionName(); }
             catch { return null; }
         }
 
@@ -635,7 +644,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             var purged = Session.RemoveAll(t => t.Kind == TurnKind.BarkEcho);
             if (purged > 0)
-                App.Logger?.Information(
+                Log.Information(
                     "CompanionBrain: mod switch purged {Count} stale bark echo(es) from the window", purged);
 
             if (!string.IsNullOrWhiteSpace(newCompanionName))
@@ -711,11 +720,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
 
                 if (noted.Count > 0)
-                    App.Logger?.Debug("CompanionBrain: banned {Count} just-recommended title(s) for 24h", noted.Count);
+                    Log.Debug("CompanionBrain: banned {Count} just-recommended title(s) for 24h", noted.Count);
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("CompanionBrain: recommendation scan failed: {Error}", ex.Message);
+                Log.Debug("CompanionBrain: recommendation scan failed: {Error}", ex.Message);
             }
         }
 
@@ -741,7 +750,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             {
                 ForgetThreadCore();
             }
-            App.Logger?.Information("CompanionBrain: conversation thread dropped");
+            Log.Information("CompanionBrain: conversation thread dropped");
         }
 
         private void ForgetThreadCore()
@@ -792,10 +801,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (Memory is MemoryStore store)
             {
                 try { store.ForgetChatDerived(); }
-                catch (Exception ex) { App.Logger?.Debug("CompanionBrain: chat-derived wipe failed: {Error}", ex.Message); }
+                catch (Exception ex) { Log.Debug("CompanionBrain: chat-derived wipe failed: {Error}", ex.Message); }
             }
 
-            App.Logger?.Information("CompanionBrain: conversation wiped");
+            Log.Information("CompanionBrain: conversation wiped");
         }
 
         /// <summary>
@@ -809,8 +818,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         private static void ClearLegacyLocalHistory()
         {
-            try { (App.Ai as AiServiceStrategy)?.ClearLocalHistory(); }
-            catch (Exception ex) { App.Logger?.Debug("CompanionBrain: legacy local history clear failed: {Error}", ex.Message); }
+            try { ClearLegacyLocalHistoryHook?.Invoke(); }
+            catch (Exception ex) { Log.Debug("CompanionBrain: legacy local history clear failed: {Error}", ex.Message); }
         }
 
         /// <summary>
@@ -822,7 +831,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             ForgetConversation();
             Memory.Wipe();
-            App.Logger?.Information("CompanionBrain: memory wiped");
+            Log.Information("CompanionBrain: memory wiped");
         }
 
         /// <summary>Writes the current dialogue synchronously — used on shutdown.</summary>
@@ -846,7 +855,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     lock (_conversationMutation)
                         if (revision == _conversationRevision) _store.Save(dialogue);
                 }
-                catch (Exception ex) { App.Logger?.Debug("CompanionBrain: persist failed: {Error}", ex.Message); }
+                catch (Exception ex) { Log.Debug("CompanionBrain: persist failed: {Error}", ex.Message); }
             });
         }
 
@@ -861,19 +870,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             if (_memoryRecallSignaled || Session.RestoredTurnCount <= 0) return;
             _memoryRecallSignaled = true;
-            LocalAiService.SignalPersistentMemoryRecalled();
+            MemoryRecalled?.Invoke();
         }
 
         private static string GetThinkingPhrase()
         {
-            var pool = App.Mods?.GetPhrases("Thinking");
+            var pool = CoreMods.GetPhrases("Thinking");
             if (pool == null || pool.Length == 0) return "Hmm... still thinking.";
             return pool[_random.Next(pool.Length)];
         }
 
         private static string GetFallbackPhrase()
         {
-            var pool = App.Mods?.GetPhrases("Idle");
+            var pool = CoreMods.GetPhrases("Idle");
             if (pool == null || pool.Length == 0) return "...";
             return pool[_random.Next(pool.Length)];
         }
@@ -894,7 +903,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (_ownsMemory)
             {
                 try { (Memory as IDisposable)?.Dispose(); }
-                catch (Exception ex) { App.Logger?.Debug("CompanionBrain: memory dispose failed: {Error}", ex.Message); }
+                catch (Exception ex) { Log.Debug("CompanionBrain: memory dispose failed: {Error}", ex.Message); }
             }
 
             _gate.Dispose();

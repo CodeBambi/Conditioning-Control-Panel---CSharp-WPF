@@ -106,6 +106,12 @@ namespace ConditioningControlPanel.Avalonia
         /// Settable so a test can hand in a fake-endpoint instance.</summary>
         internal static AiService? Ai { get; set; } = new();
 
+        /// <summary>The companion's conversational spine (WPF App.Brain, App.xaml.cs:2690): the same Core
+        /// CompanionBrain over <see cref="Ai"/>, so history and memory live where WPF keeps them
+        /// (CorePaths.UserData/companion). Null when construction failed or on the headless render path,
+        /// which sends through the stateless call exactly as WPF's kill-switch-off path.</summary>
+        internal static ConditioningControlPanel.Services.Companion.Brain.CompanionBrain? Brain { get; set; }
+
         /// <summary>The release-content pack service (WPF App.ReleaseContent), or null on the headless render path.</summary>
         internal static ReleaseContentService? ReleaseContent { get; private set; }
 
@@ -409,6 +415,10 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Debug("ModerationCounter.LoadFromDisk failed: {Error}", ex.Message); }
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
+                // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
+                // echo, command executor, activities and signal mirror stay unseeded (head services not here).
+                try { if (Ai != null) Brain = new ConditioningControlPanel.Services.Companion.Brain.CompanionBrain(Ai); }
+                catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
                 //
                 // CoreModerationLog's record half stays unseeded, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes
@@ -695,6 +705,7 @@ namespace ConditioningControlPanel.Avalonia
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
+            try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
 

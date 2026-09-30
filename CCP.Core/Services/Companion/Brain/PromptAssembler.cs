@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -223,7 +224,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _memory = memory ?? throw new ArgumentNullException(nameof(memory));
             _rollingContext = rollingContext ?? (() => null);
             _preview = preview ?? (() => CompanionExperience.IsV2Enabled);
-            _chatMemoryEnabled = chatMemoryEnabled ?? (() => App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false);
+            _chatMemoryEnabled = chatMemoryEnabled ?? (() => CoreSettings.Current.CompanionPrompt?.ChatMemoryEnabled != false);
             _recommendations = recommendations ?? new RecentRecommendations();
             _systemPromptProvider = systemPromptProvider ?? DefaultSystemPrompt;
             _localClock = localClock ?? (() => DateTime.Now);
@@ -235,13 +236,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         private static DateTime? DefaultPersonaFence()
         {
-            try { return App.Settings?.Current?.PersonaVoiceFenceUtc; }
+            try { return CoreSettings.Current.PersonaVoiceFenceUtc; }
             catch { return null; }
         }
 
         private static DateTime? DefaultIdentityFence()
         {
-            try { return App.Settings?.Current?.PersonaIdentityFenceUtc; }
+            try { return CoreSettings.Current.PersonaIdentityFenceUtc; }
             catch { return null; }
         }
 
@@ -250,7 +251,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             try { return Companion.CompanionLinkIndex.CurrentEntries(); }
             catch (Exception ex)
             {
-                App.Logger?.Debug("PromptAssembler: link pool unavailable: {Error}", ex.Message);
+                Log.Debug("PromptAssembler: link pool unavailable: {Error}", ex.Message);
                 return Array.Empty<(string, string)>();
             }
         }
@@ -263,7 +264,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // A prompt build failure must not take chat down; the providers' own legacy paths
                 // would have thrown here too, so degrade to an empty system prompt and let the
                 // moderation spine and the provider fallbacks handle the rest.
-                App.Logger?.Warning(ex, "PromptAssembler: system prompt build failed");
+                Log.Warning(ex, "PromptAssembler: system prompt build failed");
                 return string.Empty;
             }
         }
@@ -298,7 +299,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             messages.AddRange(ChatSession.ToMessages(SanitizeAssistantHistory(StripLeakedInstructionText(window))));
             ShedHistoryToContextFit(messages);
 
-            App.Logger?.Debug(
+            Log.Debug(
                 "[AI-PROMPT] purpose={Purpose} prefix_tok~{PrefixTokens} tail_tok~{TailTokens} window={Window}",
                 purpose, ChatSession.ApproxTokens(prefix), ChatSession.ApproxTokens(tail), window.Count);
 
@@ -368,7 +369,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             if (log && !stamp.Equals(_lastFenceLog))
             {
                 _lastFenceLog = stamp;
-                App.Logger?.Information(
+                Log.Information(
                     "[AI-PROMPT] persona fence dropped {Dropped} pre-switch assistant turn(s) and cut {Cut} turn(s) from before a companion change",
                     dropped, cut);
             }
@@ -396,7 +397,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             if (messages.Count != before)
             {
-                App.Logger?.Information(
+                Log.Information(
                     "[AI-PROMPT] context-fit shed {Shed} oldest history message(s) ({Before}→{After}) to stay under ~{Budget} real tokens",
                     before - messages.Count, before, messages.Count, ContextFitTokenBudget);
             }
@@ -406,7 +407,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // Nothing left to shed: the system prompt alone brushes the model's window. The
                 // provider-side compressor may fire and gut it from the middle — this line is the
                 // only client-side witness. Shrink the preset / knowledge base / media list.
-                App.Logger?.Warning(
+                Log.Warning(
                     "[AI-PROMPT] request still ~{Tokens} est. real tokens after shedding all history " +
                     "(budget {Budget}) — the system prompt alone risks provider-side middle-out truncation",
                     Estimate(), ContextFitTokenBudget);
@@ -466,7 +467,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             IEnumerable<string> known = _recommendations.Current();
             try { known = known.Concat((_linkPool() ?? Array.Empty<(string Title, string Url)>()).Select(e => e.Title)); }
-            catch (Exception ex) { App.Logger?.Debug("PromptAssembler: link pool for repeat hint failed: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Debug("PromptAssembler: link pool for repeat hint failed: {Error}", ex.Message); }
             return JustSuggestedLine(window, known.ToList());
         }
 
@@ -541,14 +542,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
 
                 if (sanitized == null) return window;
-                App.Logger?.Information(
+                Log.Information(
                     "[AI-LINK] wire history hygiene rewrote {Count} off-pool title(s) across {Turns} turn(s)",
                     changedTitles, changedTurns);
                 return sanitized;
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("PromptAssembler: history hygiene failed: {Error}", ex.Message);
+                Log.Debug("PromptAssembler: history hygiene failed: {Error}", ex.Message);
                 return window;
             }
         }
@@ -589,7 +590,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 {
                     floor = TailHeader + "\n" + pinned + "\n" + instruction;
                 }
-                App.Logger?.Warning(
+                Log.Warning(
                     "[AI-PROMPT] system prompt over the {Ceiling}-char proxy cap (prefix={Prefix} chars) — tail reduced to the purpose instruction",
                     SystemMessageCharCeiling, prefix.Length);
                 return WarnIfOversize(prefix + "\n\n" + floor);
@@ -601,7 +602,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 lines.RemoveAt(lines.Count - 2);
 
             var trimmed = string.Join("\n", lines);
-            App.Logger?.Warning(
+            Log.Warning(
                 "[AI-PROMPT] system prompt trimmed to fit the {Ceiling}-char proxy cap (tail {Before}→{After} chars)",
                 SystemMessageCharCeiling, tail.Length, trimmed.Length);
             return WarnIfOversize(prefix + "\n\n" + trimmed);
@@ -631,17 +632,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         internal static bool ClaimOversizeNotice() => Interlocked.Exchange(ref _oversizeNoticeRaised, 1) == 0;
 
         /// <summary>
-        /// Test seam for the surface the notice is raised on. Null in production, where the surface
-        /// is <c>Application.Current?.Dispatcher</c>. A test host has no Application, so without
-        /// this the guard-before-latch ordering below could only be observed as "nothing happened".
+        /// The surface the notice is raised on: returns a UI-thread toast for the message, or null
+        /// while there is none (before the Application exists, after shutdown began). Each head
+        /// seeds it; unseeded (tests, LinuxSmoke) means no surface, so the notice is never spent.
         /// </summary>
-        internal static Func<System.Windows.Threading.Dispatcher?>? NoticeDispatcherForTests;
+        public static volatile Func<Action<string>?>? NoticeSurface;
 
         private static string WarnIfOversize(string systemPrompt)
         {
             if (systemPrompt.Length > SystemMessageCharCeiling)
             {
-                App.Logger?.Warning(
+                Log.Warning(
                     "[AI-PROMPT] system prompt is {Chars} chars — the cloud proxy rejects anything over 10000 with input_too_large; " +
                     "trim the knowledge base or the mod's video list",
                     systemPrompt.Length);
@@ -671,30 +672,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // Application.Current exists (a startup ambient call) or after shutdown began;
                 // burning the session's single notice on one of those would leave the user with the
                 // degraded companion and no explanation at all.
-                var dispatcher = NoticeDispatcherForTests != null
-                    ? NoticeDispatcherForTests()
-                    : System.Windows.Application.Current?.Dispatcher;
-                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                var show = NoticeSurface?.Invoke();
+                if (show == null) return;
                 if (!ClaimOversizeNotice()) return;
-
-                dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        App.Notifications?.Show(
-                            Localization.Loc.Get(OversizeNoticeLocKey),
-                            NotificationType.Warning,
-                            TimeSpan.FromSeconds(12));
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Debug("PromptAssembler: oversize notice failed to show: {Error}", ex.Message);
-                    }
-                }));
+                show(Localization.Loc.Get(OversizeNoticeLocKey));
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("PromptAssembler: oversize notice dispatch failed: {Error}", ex.Message);
+                Log.Debug("PromptAssembler: oversize notice dispatch failed: {Error}", ex.Message);
             }
         }
 
@@ -723,7 +708,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                         if (!string.IsNullOrWhiteSpace(s)) return s.Trim().Length > 40 ? s.Trim()[..40] : s.Trim();
                     }
                 }
-                var fallback = App.Settings?.Current?.UserDisplayName?.Trim();
+                var fallback = CoreSettings.Current.UserDisplayName?.Trim();
                 return string.IsNullOrWhiteSpace(fallback) ? null : (fallback.Length > 40 ? fallback[..40] : fallback);
             }
             catch { return null; }
@@ -740,7 +725,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (!string.IsNullOrWhiteSpace(summary)) lines.Add(summary!);
                 if (_memory is MemoryStore relationshipStore)
                 {
-                    var context = ConversationRelationship.PromptContext(relationshipStore.Relationships, App.Mods?.ActiveModId);
+                    var context = ConversationRelationship.PromptContext(relationshipStore.Relationships, CoreMods.ActiveModId);
                     if (context != null) lines.Add(context);
                 }
             }
@@ -781,7 +766,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             {
                 string? lockdown = null;
                 try { lockdown = _lockdownContext(); }
-                catch (Exception ex) { App.Logger?.Debug("PromptAssembler: lockdown context threw: {Error}", ex.Message); }
+                catch (Exception ex) { Log.Debug("PromptAssembler: lockdown context threw: {Error}", ex.Message); }
                 if (!string.IsNullOrWhiteSpace(lockdown)) lines.Add(lockdown!);
             }
 
@@ -867,11 +852,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// Reads the live lockdown state, or null when none is running. Every read is guarded: this runs
         /// on the chat path, and a prompt that throws is a chat that does not answer.
         /// </summary>
+        /// <summary>
+        /// The possession ladder (head-side, WPF PossessionDirector): the running rung (0..4, null while
+        /// not haunting) and the escape-attempt count. Unseeded means no haunt, zero attempts.
+        /// </summary>
+        public static volatile Func<(int? Rung, int EscapeAttempts)>? PossessionState;
+
         private static string? DefaultLockdownContext()
         {
             try
             {
-                var lockdown = App.Lockdown;
+                var lockdown = LockdownService.Current;
                 if (lockdown == null || !lockdown.IsActive) return null;
 
                 int minutes = (int)Math.Round(lockdown.Remaining.TotalMinutes, MidpointRounding.AwayFromZero);
@@ -880,31 +871,30 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // LockdownPossessionEnabled off there is a timer and no ladder, and telling the model
                 // about a rung nothing is climbing invites her to narrate effects that never happen.
                 string? rung = null, intensity = null;
-                var director = App.Possession;
-                if (director != null && director.IsHaunting)
+                var possession = PossessionState?.Invoke() ?? (null, 0);
+                if (possession.Rung is int current)
                 {
-                    rung = RungName(director.CurrentRung);
-                    intensity = IntensityName(App.Settings?.Current?.LockdownPossessionIntensity ?? 1);
+                    rung = RungName(current);
+                    intensity = IntensityName(CoreSettings.Current.LockdownPossessionIntensity);
                 }
 
                 return BuildLockdownContext(minutes, rung, intensity,
-                    Services.Possession.PossessionRemember.EscapeAttempts);
+                    possession.EscapeAttempts);
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("PromptAssembler: lockdown context unavailable: {Error}", ex.Message);
+                Log.Debug("PromptAssembler: lockdown context unavailable: {Error}", ex.Message);
                 return null;
             }
         }
 
         /// <summary>The ladder rung, in the words POSSESSION.md uses for it.</summary>
-        internal static string RungName(Services.Possession.PossessionRung rung) => rung switch
+        internal static string RungName(int rung) => rung switch
         {
-            Services.Possession.PossessionRung.Settle => "Settle",
-            Services.Possession.PossessionRung.Drift => "Drift",
-            Services.Possession.PossessionRung.Melt => "Melt",
-            Services.Possession.PossessionRung.Collapse => "Collapse",
-            Services.Possession.PossessionRung.ItKnows => "It knows",
+            1 => "Drift",
+            2 => "Melt",
+            3 => "Collapse",
+            4 => "It knows",
             _ => "Settle"
         };
 

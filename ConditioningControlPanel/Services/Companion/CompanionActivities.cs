@@ -6,13 +6,6 @@ using ConditioningControlPanel.Services.Launcher;
 
 namespace ConditioningControlPanel.Services.Companion;
 
-internal sealed record CompanionActivity(string Id, string Label, string Description,
-    Func<bool> CheckAccess, Func<bool> Open)
-{
-    internal bool Allowed { get { try { return CheckAccess(); } catch { return false; } } }
-    internal bool TryOpen() => Allowed && Open();
-}
-
 /// <summary>Small, current capability list. Launcher delegates own tier, passes and prize unlocks.</summary>
 internal static class CompanionActivities
 {
