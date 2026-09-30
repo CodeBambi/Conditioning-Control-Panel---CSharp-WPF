@@ -1130,3 +1130,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - MantraService moved to Core (WPF seeds XP/quest/Chaster seams); Avalonia MantraWindow on App.Mantra with synthesised tones and a LibVLC
   drone at WPF's volumes; exit cleanup; mantra favourite in memory signals.
 - Evidence: MantraServiceTests, MantraWindowSessionTests, fail-proven. win-mantra stays stub (no opener, animations).
+
+## avalonia-port/webhost-live-url: +240
+- WebHost live URL (CurrentUrl, NavigationCompleted, always-navigate Navigate); site buttons/Reload navigate; the HT catalogue lookup fires on
+  completion at WPF's point; CatalogueLookup obeys the sandbox/loopback rule. Fail-proven tests; completion not seen live (no web engine here).

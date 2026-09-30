@@ -34,15 +34,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <c>RoutingStrategies.Tunnel</c>.
     ///  - <c>WindowChromeHelper.ApplyDarkTitleBar</c> is a Win32 head service and is dropped:
     ///    the window has no system decorations to darken.
-    ///  - The remote thumbnail is not fetched (see <see cref="BuildThumbnail"/>); the placeholder
-    ///    tile the WPF original also shows is what draws.
+    ///  - The remote thumbnail is not fetched (see <see cref="BuildThumbnail"/>), so every row draws
+    ///    the placeholder tile. WPF shows the server's http(s) thumbnail_url image
+    ///    (CataloguePickerDialog.xaml.cs:214-230) and only falls back to the placeholder without one:
+    ///    a visible regression, not parity.
     ///  - <see cref="CatalogueEntry"/> is the Core record (CCP.Core/Services/Catalogue/CatalogueLookup.cs).
     ///
     /// <para>Opened by <c>MainShellWindow.OpenCataloguePickerDialog</c> (MainShellWindow.DeeperTab.cs),
     /// the "pick one" action on the lookup toast; the selection is downloaded through Core
-    /// <c>CatalogueLookup</c> and opened in the player. The lookup fires from NavigateBrowser with the
-    /// requested URL only: WebHost exposes no live URL, so on this head no in-page HT navigation
-    /// reaches it yet.</para>
+    /// <c>CatalogueLookup</c> and opened in the player. The lookup fires from WebHost's
+    /// NavigationCompleted with the live URL (MainShellWindow.OnBrowserNavigationCompleted), as WPF
+    /// does at MainWindow.Browser.cs:158.</para>
     /// </summary>
     public partial class CataloguePickerDialog : Window
     {
@@ -230,12 +232,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         }
 
         // Build the 80x50 thumbnail tile. The WPF original decoded an http(s)
-        // ThumbnailPath straight into a BitmapImage, which downloads on the UI
-        // thread; Avalonia's Bitmap takes a stream, so the fetch needs an HTTP
-        // client this view is not allowed to reach for yet.
-        // ponytail: needs an image-fetch service, wired when it moves to Core.
-        // The placeholder below is what the WPF version also shows for the
-        // storage-path case, so nothing regresses in the meantime.
+        // ThumbnailPath straight into a BitmapImage (CataloguePickerDialog.xaml.cs:214-230),
+        // which downloads it; Avalonia's Bitmap takes a stream, so this head would need its
+        // own fetch, and none exists yet.
+        // ponytail: always the placeholder, which WPF draws only when the server sent no
+        // http(s) thumbnail_url - so real rows lose their image here. Add a fetch that follows
+        // the catalogue base-URL rule (CatalogueClient.ResolveBaseUrl) when thumbnails matter.
         private Control BuildThumbnail(CatalogueEntry entry)
         {
             var container = new Border
