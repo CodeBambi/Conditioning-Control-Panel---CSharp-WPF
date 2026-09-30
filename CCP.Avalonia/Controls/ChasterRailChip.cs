@@ -1,10 +1,13 @@
 // PORTED from ConditioningControlPanel/Controls/ChasterRailChip.cs: the padlock at the foot of the
 // rail with the lock's clock under it; opens Circe's tab; dimmed, never hidden, while unlinked.
-// ponytail: no hover PEEK (WPF FillPeek), idle breath/swing (StartIdle), mood-pip pop or Pulse
-// (the booked flash is not on this head); the glow is a static BoxShadow.
+// The hover peek (WPF FillPeek :546) and the glow following the ring colour (:429) are real.
+// ponytail: no peek spring-in (:516), idle breath/swing (StartIdle), mood-pip pop or Pulse
+// (the booked flash is not on this head); the glow's colour follows, its opacity does not breathe.
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -41,6 +44,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private static readonly Color CreditMint = Color.FromRgb(0x5F, 0xFF, 0xD0);
         private static readonly IBrush Keyline = new SolidColorBrush(Color.FromRgb(0x17, 0x12, 0x2A));
         private static readonly FontFamily Mono = new("Consolas, Courier New");
+        private static readonly FontFamily Display = new("Fredoka, Segoe UI");
+        private static readonly Color DebtRed = Color.FromRgb(0xFF, 0x6B, 0x8A);
+        private static readonly Color PeekMuted = Color.FromRgb(0xB8, 0xB0, 0xCC);
 
         /// <summary>WPF CircesMoodMeter.ColourOf, shared with the tab's mood line.</summary>
         internal static Color MoodColour(MoodLevel level) => level switch
@@ -66,6 +72,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private readonly Border _moodPip;
         private DispatcherTimer? _tick;
         private ChasterService? _wired;
+        private readonly Popup _peek;
+        private readonly TextBlock _peekTitle, _peekLead, _peekEnds, _peekPending, _peekMood, _peekNote;
+        private readonly StackPanel _peekNumber = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
 
         public ChasterRailChip()
         {
@@ -139,14 +148,158 @@ namespace ConditioningControlPanel.Avalonia.Controls
             };
             Children.Add(_moodPip);
 
+            // ---- the peek ----
+            _peekTitle = new TextBlock
+            {
+                FontFamily = Display, FontSize = 14, FontWeight = FontWeight.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xB8, 0xDC)),
+                TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 380,
+            };
+            _peekLead = new TextBlock { FontSize = 13, Margin = new Thickness(2, -4, 0, 6), Foreground = new SolidColorBrush(PeekMuted) };
+            _peekEnds = new TextBlock { FontSize = 13, Foreground = new SolidColorBrush(Color.FromRgb(0xE8, 0xE0, 0xF4)) };
+            _peekPending = new TextBlock
+            {
+                FontFamily = Display, FontSize = 16, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 4, 0, 0), Foreground = new SolidColorBrush(DebtRed),
+            };
+            _peekMood = new TextBlock { FontFamily = Display, FontSize = 14, FontWeight = FontWeight.Bold, Margin = new Thickness(0, 4, 0, 0), Foreground = _moodBrush };
+            _peekNote = new TextBlock
+            {
+                FontSize = 12, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap, MaxWidth = 380, Foreground = new SolidColorBrush(PeekMuted),
+            };
+            var rim = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative), EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops = { new GradientStop(Color.FromRgb(0xFF, 0x69, 0xB4), 0), new GradientStop(Color.FromRgb(0xB9, 0x9C, 0xFF), 1) },
+            };
+            var paper = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative), EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops = { new GradientStop(Color.FromArgb(0xF4, 0x2A, 0x16, 0x3C), 0), new GradientStop(Color.FromArgb(0xF4, 0x14, 0x10, 0x26), 1) },
+            };
+            _peek = new Popup
+            {
+                PlacementTarget = this, Placement = PlacementMode.Right, VerticalOffset = -40, HorizontalOffset = 6,
+                IsLightDismissEnabled = false, Focusable = false, IsHitTestVisible = false,
+                Child = new Border
+                {
+                    Background = paper, BorderBrush = rim, BorderThickness = new Thickness(1.5), CornerRadius = new CornerRadius(18),
+                    Padding = new Thickness(22, 14, 26, 16), Margin = new Thickness(6, 16, 24, 24), IsHitTestVisible = false,
+                    BoxShadow = BoxShadows.Parse("0 0 22 0 #73FF69B4"),
+                    Child = new StackPanel { Children = { _peekTitle, _peekNumber, _peekLead, _peekEnds, _peekPending, _peekMood, _peekNote } },
+                },
+            };
+            Children.Add(_peek);
+
+            PointerEntered += (_, _) => OpenPeek();
+            PointerExited += (_, _) => ClosePeek();
             PointerReleased += (_, e) =>
             {
                 if (e.InitialPressMouseButton != MouseButton.Left) return;
+                ClosePeek();
                 (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab(TabKey);
             };
             AttachedToVisualTree += (_, _) => Wire();
-            DetachedFromVisualTree += (_, _) => Unwire();
+            DetachedFromVisualTree += (_, _) => { ClosePeek(); Unwire(); };
         }
+
+        /// <summary>The hover card. Exposed for tests.</summary>
+        internal Popup Peek => _peek;
+        internal string PeekText => string.Join("|", new[] { _peekTitle }.Concat(_peekNumber.Children.OfType<TextBlock>())
+            .Concat(new[] { _peekLead, _peekEnds, _peekPending, _peekMood, _peekNote }).Where(t => t.IsVisible && !string.IsNullOrEmpty(t.Text)).Select(t => t.Text));
+        internal Color GlowColour => _ring.BoxShadow.Count > 0 ? _ring.BoxShadow[0].Color : default;
+
+        private void OpenPeek()
+        {
+            try
+            {
+                FillPeek();
+                _peek.IsOpen = true;
+                if (_tick != null && _tick.Interval != TimeSpan.FromSeconds(1)) _tick.Interval = TimeSpan.FromSeconds(1);
+            }
+            catch (Exception ex) { Serilog.Log.Debug("[Chaster] rail chip peek: {E}", ex.Message); }
+        }
+
+        private void ClosePeek()
+        {
+            try { _peek.IsOpen = false; } catch { }
+        }
+
+        /// <summary>WPF FillPeek (:546): everything the old tooltip said, the time left as the big thing.</summary>
+        internal void FillPeek()
+        {
+            var chaster = ChasterHead.Service;
+            var now = DateTime.UtcNow;
+            _peekNumber.Children.Clear();
+            _peekEnds.Text = _peekPending.Text = _peekNote.Text = _peekLead.Text = _peekMood.Text = string.Empty;
+            if (chaster == null || !chaster.IsLinked)
+            {
+                _peekTitle.Text = Loc.Get("chaster_title");
+                BigWord(Loc.Get("chaster_hero_title"), Color.FromRgb(0xFF, 0x9A, 0xCB));
+                _peekNote.Text = Loc.Get("chaster_chip_unlinked");
+                Collapse();
+                return;
+            }
+            var snapshot = chaster.Lock;
+            var balance = chaster.BalanceSeconds;
+            _peekTitle.Text = snapshot == null ? Loc.Get("chaster_title")
+                : string.IsNullOrWhiteSpace(snapshot.Title) ? Loc.Get("chaster_lock_untitled") : snapshot.Title!;
+            var hold = chaster.SafetyHoldRemaining;
+            if (snapshot == null)
+            {
+                BigWord(Loc.Get(chaster.LockLookup == LockLookup.Ambiguous ? "chaster_pill_pick" : "chaster_pill_nolock"), Color.FromRgb(0xE0, 0xB0, 0x52));
+                _peekNote.Text = chaster.LockLookup switch
+                {
+                    LockLookup.Ambiguous => Loc.Get("chaster_lock_pick"),
+                    LockLookup.Away => Loc.Get("chaster_chip_away_tip"),
+                    _ => Loc.Get("chaster_lock_none"),
+                };
+            }
+            else if (snapshot.TimerHidden)
+            {
+                BigWord(Loc.Get("chaster_pill_hidden"), Grey);
+                _peekNote.Text = Loc.Get("chaster_chip_hidden_tip");
+            }
+            else if (LiveLockClock.Remaining(snapshot, balance, now) is { } left)
+            {
+                if (left <= TimeSpan.Zero) BigWord(Loc.Get("chaster_clock_ready"), CreditMint);
+                else
+                {
+                    var ink = new SolidColorBrush(snapshot.IsFrozen ? Ice : Color.FromRgb(0xFF, 0xF0, 0xF8));
+                    var unitInk = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0xCB));
+                    foreach (var (value, unit) in LiveLockClock.Parts(left))
+                    {
+                        _peekNumber.Children.Add(new TextBlock { Text = value, FontFamily = Display, FontSize = 64, FontWeight = FontWeight.Bold, Foreground = ink, VerticalAlignment = VerticalAlignment.Bottom });
+                        _peekNumber.Children.Add(new TextBlock
+                        {
+                            Text = Loc.Get("chaster_unit_" + unit), FontFamily = Display, FontSize = 24, FontWeight = FontWeight.SemiBold,
+                            Foreground = unitInk, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(2, 0, 12, 12),
+                        });
+                    }
+                    _peekLead.Text = Loc.Get("chaster_peek_left");
+                }
+                if (LiveLockClock.EndsAt(snapshot, balance, now) is { } ends)
+                    _peekEnds.Text = Loc.GetF("chaster_chip_ends", ends.ToLocalTime().ToString("ddd d MMM HH:mm"));
+                if (snapshot.IsFrozen) _peekNote.Text = Loc.Get("chaster_chip_frozen_tip");
+                else if (chaster.LockLookup == LockLookup.Away) _peekNote.Text = Loc.Get("chaster_chip_away_tip");
+            }
+            else BigWord(Loc.Get("chaster_pill_hidden"), Grey);
+
+            if (LiveLockClock.PendingAdd(balance) > 0) _peekPending.Text = Loc.GetF("chaster_peek_pending", CircesTab.Format(balance));
+            if (chaster.Mood is { } mood) _peekMood.Text = Loc.GetF("chaster_mood_peek", Loc.Get(mood.WordKey), mood.FactorText);
+            if (chaster.IsPaused) _peekNote.Text = Loc.Get("chaster_chip_paused_tip");
+            if (hold > TimeSpan.Zero) _peekNote.Text = Loc.GetF("chaster_chip_hold_tip", LockClockText.HoldClock(hold));
+            Collapse();
+        }
+
+        private void Collapse()
+        {
+            foreach (var t in new[] { _peekLead, _peekEnds, _peekPending, _peekMood, _peekNote })
+                t.IsVisible = !string.IsNullOrEmpty(t.Text);
+        }
+
+        private void BigWord(string word, Color ink) => _peekNumber.Children.Add(new TextBlock
+        {
+            Text = word, FontFamily = Display, FontSize = 44, FontWeight = FontWeight.Bold, Foreground = new SolidColorBrush(ink),
+        });
 
         internal string ClockText => _clock.IsVisible ? _clock.Text ?? "" : "";
 
@@ -215,6 +368,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 _bodyBottom.Color = ink;
                 _bodyTop.Color = Color.FromRgb((byte)(ink.R + (255 - ink.R) * 0.55), (byte)(ink.G + (255 - ink.G) * 0.55), (byte)(ink.B + (255 - ink.B) * 0.55));
                 _ringBrush.Color = ring;
+                _ring.BoxShadow = new BoxShadows(new BoxShadow { Blur = 12, Color = Color.FromArgb(0x8C, ring.R, ring.G, ring.B) });
                 // A safety hold is not a lock state: the shackle keeps what the lookup said.
                 _shackle.Data = clock.State is LockClockState.Locked or LockClockState.Frozen or LockClockState.Hidden
                     or LockClockState.Away or LockClockState.Held or LockClockState.Paused ? ShackleShut : ShackleOpen;
@@ -222,7 +376,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
                 if (_tick != null)
                 {
-                    var want = clock.State == LockClockState.Held || LiveLockClock.Ticks(snapshot) ? TimeSpan.FromSeconds(1) : TimeSpan.FromMinutes(1);
+                    var want = clock.State == LockClockState.Held || LiveLockClock.Ticks(snapshot) || _peek.IsOpen ? TimeSpan.FromSeconds(1) : TimeSpan.FromMinutes(1);
                     if (_tick.Interval != want) _tick.Interval = want;
                 }
 
@@ -235,6 +389,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 var mood = chaster?.Mood;
                 if (mood is { } m) _moodBrush.Color = MoodColour(m.Level);
                 _moodPip.IsVisible = mood is { Level: not MoodLevel.Calm };
+                if (_peek.IsOpen) FillPeek();
             }
             catch (Exception ex) { Serilog.Log.Debug("[Chaster] rail chip paint: {E}", ex.Message); }
         }

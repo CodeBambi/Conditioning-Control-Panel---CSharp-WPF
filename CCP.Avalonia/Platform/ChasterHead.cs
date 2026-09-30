@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -47,6 +48,44 @@ internal static class ChasterHead
             new SecretChasterTokenStore(),
             Path.Combine(CorePaths.UserData, "chaster_tab.json"),
             options);
+    }
+
+    /// <summary>WPF ChasterHooks.Attach, for the events this head raises: quests (and the dailies
+    /// board) and level-ups. Every call is inert until the tab is on and the row is priced.
+    /// ponytail: no program_done / program_skipped (ProgramService is not constructed on this head)
+    /// and no escape (Lockdown is WPF-only); hook them here when those services arrive.</summary>
+    /// Returns the detach (the static LevelUp outlives any one service); a second Attach of the same service is a no-op,
+    /// as WPF's _attached guard makes it.
+    internal static Action Attach(ChasterService chaster, QuestService? quests)
+    {
+        if (!Attached.Add(chaster)) return () => { };
+        EventHandler<QuestCompletedEventArgs>? done = null, board = null;
+        EventHandler? refreshed = null;
+        if (quests != null)
+        {
+            quests.QuestCompleted += done = (_, e) => Safe(() => chaster.Note(e.QuestType == Models.QuestType.Weekly ? "quest_weekly" : "quest"));
+            quests.QuestCompleted += board = (_, _) => Safe(() => chaster.NoteQuestBoard(OpenDailies(quests)));
+            quests.QuestsRefreshed += refreshed = (_, _) => Safe(() => chaster.NoteQuestBoard(OpenDailies(quests)));
+            Safe(() => chaster.NoteQuestBoard(OpenDailies(quests)));
+        }
+        Action<int> levelUp = _ => Safe(() => chaster.Note("levelup"));
+        ProgressionBank.LevelUp += levelUp;
+        return () =>
+        {
+            ProgressionBank.LevelUp -= levelUp;
+            if (quests != null) { quests.QuestCompleted -= done; quests.QuestCompleted -= board; quests.QuestsRefreshed -= refreshed; }
+            Attached.Remove(chaster);
+        };
+    }
+
+    private static readonly HashSet<ChasterService> Attached = new();
+
+    private static int OpenDailies(QuestService quests) => quests.Progress?.DailyQuests?.Count(q => q != null && !q.IsCompleted) ?? 0;
+
+    private static void Safe(Action book)
+    {
+        try { book(); }
+        catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] hook"); }
     }
 
     /// <summary>Where calls go: the loopback override, else nowhere in a sandbox (null), else

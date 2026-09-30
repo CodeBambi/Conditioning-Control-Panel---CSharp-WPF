@@ -49,9 +49,10 @@
             <Grid Grid.Row="0" Margin="4,0,4,14">
                 <TextBlock Text="{loc:Str chaster_title}" FontFamily="Fredoka, Segoe UI" FontSize="28"
                            FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
-                <Border x:Name="AccountStrip" HorizontalAlignment="Right" VerticalAlignment="Center" IsVisible="False"
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Border x:Name="AccountStrip" VerticalAlignment="Center" IsVisible="False" Margin="0,0,10,0"
                         Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
-                        BorderThickness="1.5" CornerRadius="19" Height="38" Padding="10,0"
+                        BorderThickness="1.5" CornerRadius="19" Height="38" Padding="10,0,6,0"
                         ToolTip.Tip="{loc:Str chaster_account_strip_tip}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str chaster_account_linked}" FontSize="12" Foreground="#5FFFD0" VerticalAlignment="Center"/>
@@ -71,8 +72,42 @@
                                 </StackPanel>
                             </Border>
                         </Button>
+                        <Border BorderBrush="#99FF6B8A" BorderThickness="1" CornerRadius="13" Height="26" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <Button x:Name="BtnAccountUnlink" Theme="{StaticResource CirceLink}" Padding="10,2" VerticalAlignment="Center" Click="BtnUnlink_Click">
+                                <TextBlock Text="{loc:Str chaster_unlink}" Foreground="#FF8FA3" FontWeight="SemiBold"/>
+                            </Button>
+                        </Border>
                     </StackPanel>
                 </Border>
+                <!-- Pause: nothing books, nothing is pushed, until it is pressed again. -->
+                <Border x:Name="PausePill" VerticalAlignment="Center" IsVisible="False" Margin="0,0,10,0"
+                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                        BorderThickness="1.5" CornerRadius="19" Height="38">
+                    <Button x:Name="BtnPause" Theme="{StaticResource CirceLink}" Padding="14,0" VerticalAlignment="Stretch" Click="BtnPause_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Canvas Width="10" Height="12" VerticalAlignment="Center" Margin="0,0,7,0">
+                                <Rectangle x:Name="PauseBarA" Width="3" Height="12" RadiusX="1" RadiusY="1" Fill="{DynamicResource TextLightBrush}"/>
+                                <Rectangle x:Name="PauseBarB" Canvas.Left="7" Width="3" Height="12" RadiusX="1" RadiusY="1" Fill="{DynamicResource TextLightBrush}"/>
+                                <Path x:Name="PlayArrow" Data="M0,0 L10,6 L0,12 Z" Fill="#E0B052" IsVisible="False"/>
+                            </Canvas>
+                            <TextBlock x:Name="TxtPause" FontFamily="Fredoka, Segoe UI" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </Border>
+                <!-- The master switch as a glass pill. Its rim takes the tab's red while it runs. -->
+                <Border x:Name="SwitchPill" VerticalAlignment="Center" IsVisible="False"
+                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                        BorderThickness="1.5" CornerRadius="19" Height="38" Padding="16,0,6,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str chaster_tab_switch}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtSwitchState" FontFamily="Fredoka, Segoe UI" FontSize="13" FontWeight="Bold"
+                                   Margin="8,0,10,0" VerticalAlignment="Center"/>
+                        <CheckBox x:Name="ChkTab" Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  IsCheckedChanged="ChkTab_Changed"/>
+                    </StackPanel>
+                </Border>
+                </StackPanel>
             </Grid>
 
             <!-- 1. THE LOCK -->
@@ -120,6 +155,45 @@
                                    HorizontalAlignment="Left" Foreground="{DynamicResource TextMutedBrush}" Margin="2,10,0,0"/>
                         <TextBlock x:Name="TxtLinkNote" IsVisible="False" TextWrapping="Wrap" FontSize="12" Foreground="#FFC98A" Margin="2,8,0,0"/>
                     </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- The first switch-on, and only the first: four facts, one button. -->
+            <Border x:Name="ConsentCard" Grid.Row="2" IsVisible="False" Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="#FF6B8A" BorderThickness="1.5" CornerRadius="18" Padding="22,18" Margin="0,0,0,14">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str chaster_consent_title}" FontFamily="Fredoka, Segoe UI" FontSize="18"
+                               FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}" Margin="0,0,0,12"/>
+                    <UniformGrid Columns="4" Margin="0,0,-10,0">
+                        <Border Theme="{StaticResource CirceFact}">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtFactCap2" Text="3:00:00" FontFamily="Fredoka, Segoe UI" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextLightBrush}"/>
+                                <TextBlock Text="{loc:Str chaster_fact_cap}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Theme="{StaticResource CirceFact}">
+                            <StackPanel>
+                                <TextBlock Text="&#x21BA;" FontFamily="Fredoka, Segoe UI" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextLightBrush}"/>
+                                <TextBlock Text="{loc:Str chaster_fact_floor}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Theme="{StaticResource CirceFact}">
+                            <StackPanel>
+                                <TextBlock Text="PANIC" FontFamily="Fredoka, Segoe UI" FontSize="22" FontWeight="Bold" Foreground="#FF6B8A"/>
+                                <TextBlock Text="{loc:Str chaster_fact_panic}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Theme="{StaticResource CirceFact}">
+                            <StackPanel>
+                                <TextBlock Text="LIVE" FontFamily="Fredoka, Segoe UI" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextLightBrush}"/>
+                                <TextBlock Text="{loc:Str chaster_fact_push}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+                    <Button x:Name="BtnConsentOk" Theme="{StaticResource CirceCta}" HorizontalAlignment="Left" Height="46"
+                            Margin="0,14,0,0" Click="BtnConsentOk_Click">
+                        <TextBlock Text="{loc:Str chaster_consent_ok}" FontSize="16"/>
+                    </Button>
                 </StackPanel>
             </Border>
 

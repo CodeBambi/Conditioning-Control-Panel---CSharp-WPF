@@ -306,11 +306,14 @@ namespace ConditioningControlPanel.Avalonia
                 // After the version seed: installing / loading a mod checks its MinAppVersion.
                 StartMods();
                 // WPF App.xaml.cs:2513 (App.Chaster). After the version seed: it is the User-Agent.
-                // ponytail: no StartSettle / ChasterHooks yet (WPF :3149-3150) - this slice only reads the lock.
                 try
                 {
                     Platform.ChasterHead.Service = Platform.ChasterHead.Create(
                         Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.ChasterHead.EnvVar));
+                    // WPF :3149-3150: the daily settle (a minute in, then every ten) and the hooks.
+                    // A sandbox settles only against its loopback fake: ChasterHead routes fail closed.
+                    Platform.ChasterHead.Service.StartSettle();
+                    Platform.ChasterHead.Attach(Platform.ChasterHead.Service, Quests);
                 }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Chaster] service could not be built"); }
                 // WPF App.xaml.cs:2940-2968. EnsureBaselineAsync keeps WPF's rules: no-op on a full

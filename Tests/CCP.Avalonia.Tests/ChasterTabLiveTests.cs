@@ -124,6 +124,7 @@ public sealed class ChasterTabLiveTests
             ChasterHead.Service = null;
             chaster.Dispose();
             s.ChasterLockId = oldLock;
+            CoreSettings.ServiceProvider = null;
             new SecretChasterTokenStore().Clear();
             try { Directory.Delete(dir, true); } catch { }
         }
