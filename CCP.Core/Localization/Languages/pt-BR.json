@@ -5583,7 +5583,7 @@
   "lockdown_ee_button": "SAÍDA DE EMERGÊNCIA",
   "lockdown_ee_sub": "aperte se você quer sair",
   "lockdown_ee_tooltip": "Abre a saída. Atravessar ainda é com você.",
-  "lockdown_ee_phrase_steps_fmt": "Os jogos de saída ainda não estão nesta versão. A saída: toque nos dígitos do timer 5 vezes, depois digite \"let me out\" e pressione Enter. Tempo restante: {0}",
+  "lockdown_ee_phrase_steps_fmt": "Os jogos de saída ainda não estão nesta versão. A saída: toque nos dígitos do timer 5 vezes, cada toque em menos de um segundo, depois digite \"let me out\" e pressione Enter. Tempo restante: {0}",
   "lockdown_badge_label": "CONFINAMENTO",
   "lockdown_badge_end": "Encerrar",
   "lockdown_badge_tooltip": "Lockdown em andamento. Clique para abrir a aba Lockdown.",

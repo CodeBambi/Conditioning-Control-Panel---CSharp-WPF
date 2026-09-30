@@ -323,9 +323,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// LockdownTabView.axaml:498, which Avalonia cannot x:Name (AVLN2000) but which this file
         /// can reach through the owning Border and swap for a mutable instance, then step off one
         /// ~16ms DispatcherTimer (ChaosHudWindow is the worked example - Animation.RunAsync throws
-        /// on a code-held Effect). What is missing is the CALLER: nothing on this head shows the
-        /// active panel for a real reason, because there is no running lockdown to show it for
-        /// (see the placeholder in the ctor). A breath started by nobody is not worth the clock.
+        /// on a code-held Effect). Not built yet: ShowLockdownState is the caller it
+        /// would hang off (a real lockdown shows the active panel now); the breath itself is unported.
         /// POSSESSION.md: photosafe means no flicker, not no colour, so the resting glow already
         /// in the XAML is the correct photosafe state, which is why an unstarted pulse is a safe
         /// stub rather than a missing one.
@@ -353,7 +352,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (Lockdown is not { IsActive: true } ld) return;
             try { ld.NotifyEscapeAttempt(EscapeKinds.EmergencyExit); } catch (Exception ex) { Log.Debug(ex, "EmergencyExit tripwire"); }
             try { Platform.ChasterHead.Service?.NoteSafetyExit(); } catch (Exception ex) { Log.Debug(ex, "EmergencyExit chaster hold"); }
-            TxtEmergencyExitNotice.Text = Loc.GetF("lockdown_ee_phrase_steps_fmt", Clock(ld.Remaining));
+            // The real time left even under HideLockdownTimer: this notice is the way out, it must not hide it.
+            TxtEmergencyExitNotice.Text = Loc.GetF("lockdown_ee_phrase_steps_fmt", SessionClockLabel.LockdownClock(ld.Remaining, false));
             TxtEmergencyExitNotice.IsVisible = true;
         }
     }

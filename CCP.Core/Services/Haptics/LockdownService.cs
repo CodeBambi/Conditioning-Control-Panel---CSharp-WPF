@@ -27,6 +27,10 @@ public class LockdownService : IDisposable
     /// and the Settings ▸ Devices checkbox, MainWindow.SyncNoPanicState). Run on the UI thread.</summary>
     public static Action? PanicKeyUiSync { get; set; }
 
+    /// <summary>The lockdown clock. UTC, not local: a DST fall-back or a clock set back must never
+    /// lengthen a lockdown (WPF used DateTime.Now; docs/avalonia-decisions.md). Tests swap it.</summary>
+    internal Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
+
     private bool _isActive;
     /// <summary>When the CURRENT stretch of clock started. <see cref="RestartTimer"/> rebases it, so
     /// the countdown and the Possession ladder both rewind with the Emergency Exit's sendback.</summary>
@@ -86,7 +90,7 @@ public class LockdownService : IDisposable
         get
         {
             if (!_isActive || _duration <= TimeSpan.Zero) return 0;
-            var f = (DateTime.Now - _activatedAt).TotalSeconds / _duration.TotalSeconds;
+            var f = (UtcNow() - _activatedAt).TotalSeconds / _duration.TotalSeconds;
             return f < 0 ? 0 : f > 1 ? 1 : f;
         }
     }
@@ -136,7 +140,7 @@ public class LockdownService : IDisposable
         get
         {
             if (!_isActive) return TimeSpan.Zero;
-            var elapsed = DateTime.Now - _activatedAt;
+            var elapsed = UtcNow() - _activatedAt;
             var remaining = _duration - elapsed;
             return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
         }
@@ -168,7 +172,7 @@ public class LockdownService : IDisposable
         SyncPanicKeyUi();
 
         _duration = duration;
-        _activatedAt = DateTime.Now;
+        _activatedAt = UtcNow();
         _startedAt = _activatedAt;
         _isActive = true;
         _escapeRepeats.Clear();
@@ -211,7 +215,7 @@ public class LockdownService : IDisposable
         // From _startedAt, NOT _activatedAt: RestartTimer rebases _activatedAt, so measuring from
         // it would report only the time since the last sendback and no amount of sitting through
         // Emergency Exit restarts could ever earn the long-lockdown achievement.
-        LastActiveDuration = DateTime.Now - _startedAt;
+        LastActiveDuration = UtcNow() - _startedAt;
         _isActive = false;
 
         Log.Information("Lockdown deactivated after {Minutes:F1} minutes", LastActiveDuration.TotalMinutes);
@@ -309,7 +313,7 @@ public class LockdownService : IDisposable
     public void RestartTimer(string reason)
     {
         if (!_isActive) return;
-        _activatedAt = DateTime.Now;
+        _activatedAt = UtcNow();
         RestartCount++;
         Log.Information("Lockdown timer restarted to {Minutes} minutes (reason {Reason}, restart #{Count})",
             _duration.TotalMinutes, reason, RestartCount);

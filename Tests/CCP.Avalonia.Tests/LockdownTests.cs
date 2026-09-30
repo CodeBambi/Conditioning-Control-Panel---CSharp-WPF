@@ -203,6 +203,75 @@ public sealed class LockdownTests
     }
 
     [Fact]
+    public async Task TheSlabTripsTheWireHoldsChasterAndShowsTheRealTimeEvenWhenTheTimerIsHidden()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            Arm(forceStrict: true, disablePanic: true);
+            CoreSettings.Current.HideLockdownTimer = true;
+            var ld = LockdownService.Current = new LockdownService();
+            var chaster = ConditioningControlPanel.Avalonia.Platform.ChasterHead.Service =
+                ConditioningControlPanel.Avalonia.Platform.ChasterHead.Create("sandbox", null);
+            var holds = 0;
+            chaster.LockChanged += () => holds++;
+            string? kind = null;
+            ld.EscapeAttempted += a => kind = a.Kind;
+            var tab = new LockdownTabView();
+            var win = new Window { Content = tab };
+            win.Show();
+            try
+            {
+                ld.Activate(TimeSpan.FromMinutes(30));
+                Dispatcher.UIThread.RunJobs();
+                tab.BtnEmergencyExit.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(ConditioningControlPanel.Services.Possession.EscapeKinds.EmergencyExit, kind);
+                Assert.Equal(1, holds);
+                Assert.Contains("29:5", tab.TxtEmergencyExitNotice.Text);   // 29:5x, never "••:••"
+                Assert.DoesNotContain(SessionClockLabel.HiddenLockdownClock, tab.TxtEmergencyExitNotice.Text);
+                Assert.True(ld.IsActive);
+            }
+            finally
+            {
+                ld.Dispose();
+                LockdownService.Current = null;
+                ConditioningControlPanel.Avalonia.Platform.ChasterHead.Service = null;
+                CoreSettings.Current.HideLockdownTimer = false;
+                win.Close();
+            }
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public void RemainingFollowsAMonotonicUtcClockNotTheWallClock()
+    {
+        Arm(forceStrict: false, disablePanic: false);
+        var now = new DateTime(2026, 10, 25, 0, 30, 0, DateTimeKind.Utc);   // the EU fall-back night
+        using var ld = new LockdownService { UtcNow = () => now };
+        ld.Activate(TimeSpan.FromMinutes(30));
+        now = now.AddMinutes(10);
+        Assert.Equal(TimeSpan.FromMinutes(20), ld.Remaining);   // local time went back an hour; UTC did not
+        ld.Deactivate();
+        Assert.Equal(TimeSpan.FromMinutes(10), ld.LastActiveDuration);
+    }
+
+    [Fact]
+    public async Task TheTimerRunningOutEndsTheLockdown()
+    {
+        Arm(forceStrict: true, disablePanic: true);
+        var now = DateTime.UtcNow;
+        using var ld = new LockdownService { UtcNow = () => now };
+        ld.Activate(TimeSpan.FromMinutes(5));
+        now = now.AddMinutes(6);
+        for (var i = 0; i < 40 && ld.IsActive; i++) await Task.Delay(100);   // the 1 s countdown tick
+        Assert.False(ld.IsActive);
+        Assert.True(CoreSettings.Current.PanicKeyEnabled);
+        Assert.False(CoreSettings.Current.StrictLockEnabled);
+    }
+
+    [Fact]
     public void AKilledLockdownGetsThePanicKeyAndStrictLockBackOnTheNextStart()
     {
         Arm(forceStrict: true, disablePanic: true);

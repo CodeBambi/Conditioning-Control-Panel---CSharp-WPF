@@ -9,18 +9,10 @@
 //   signpost, not a control: it navigates to the Lockdown page and cannot end anything. ShowTab is
 //   real here, so the badge in the title bar now leads somewhere instead of swallowing the click.
 //
-//   THE LOCKDOWN LIFECYCLE IS HARD-BLOCKED, and not on a service move. InitializeLockdown,
-//   BtnActivateLockdown_Click, OnLockdownActivated/Deactivated/Tick, the exit-phrase path and
-//   PreviewShowLockdownActivePanel need ConditioningControlPanel/Services/LockdownService plus the
-//   low-level keyboard hook (_keyboardHook.SuppressSystemKeys) - a Win32 WH_KEYBOARD_LL hook whose
-//   whole job is suppressing Win/Alt-Tab. There is no cross-platform twin of that, so it is a
-//   per-platform reimplementation (CLAUDE.md bucket E), not a port.
-//   SetLockdownBadge and FormatLockdownClock would compile here today - they are Named<Border> +
-//   TimeSpan.ToString - but they exist only to be driven by OnLockdownTick, so restoring them
-//   would add a clock nothing winds. Left named rather than half-built.
-//   ApplyLockdownTheme / RestoreLockdownTheme / PlayLockdownActivationAnimation repaint the whole
-//   window's brushes from code; on this head those are theme resources, and repainting them for a
-//   lockdown that cannot start would be motion with no cause.
+//   THE LOCKDOWN LIFECYCLE lives on this head in LockdownTabView.axaml.cs (Activate, panel swap,
+//   clock, exit phrase) and MainShellWindow.Lockdown.cs (refusals), driven by Core LockdownService.
+//   Still absent: the title-bar badge + SetLockdownBadge, Apply/RestoreLockdownTheme,
+//   PlayLockdownActivationAnimation and the system-key hook (Win32 WH_KEYBOARD_LL, bucket E).
 //
 //   THE POP-QUIZ AND GRADED-INTAKE EDITORS ARE NOT THIS FILE'S ANY MORE. WPF's MainWindow owned
 //   ChkPopQuizEnabled_Changed / SliderPopQuizFrequency_ValueChanged / BtnTestPopQuiz_Click because

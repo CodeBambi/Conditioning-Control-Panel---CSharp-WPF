@@ -5583,7 +5583,7 @@
   "lockdown_ee_button": "NOTAUSGANG",
   "lockdown_ee_sub": "drück ihn, wenn du raus willst",
   "lockdown_ee_tooltip": "Öffnet den Weg nach draußen. Hindurch musst du trotzdem selbst.",
-  "lockdown_ee_phrase_steps_fmt": "Die Ausgangsspiele gibt es in diesem Build noch nicht. Der Weg hinaus: tippe 5-mal auf die Timer-Ziffern, dann schreibe \"let me out\" und drücke Enter. Verbleibend: {0}",
+  "lockdown_ee_phrase_steps_fmt": "Die Ausgangsspiele gibt es in diesem Build noch nicht. Der Weg hinaus: tippe 5-mal auf die Timer-Ziffern, jeweils innerhalb einer Sekunde, dann schreibe \"let me out\" und drücke Enter. Verbleibend: {0}",
   "lockdown_badge_label": "LOCKDOWN",
   "lockdown_badge_end": "Beenden",
   "lockdown_badge_tooltip": "Lockdown läuft. Klick, um den Lockdown-Tab zu öffnen.",
