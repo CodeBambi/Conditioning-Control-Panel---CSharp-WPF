@@ -43,9 +43,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static readonly List<Screen> Targets = new();
         private static DispatcherTimer? _spawnTimer;
         private static bool _running;
-        private static int _gen;
         private static TimeSpan? _lastStep;
-        private static readonly Action<TimeSpan> FrameCallback = OnFrame;
+        private static bool _pending;   // a frame is requested; the loop idles while the field is empty
         internal static Bitmap? Image;
 
         /// <summary>The "N/300 today" line listens to this (WPF AmbientXpBudgetChanged).</summary>
@@ -58,6 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static int _statN, _statBubbles;
 
         public static bool IsRunning => _running;
+        internal static bool IsFrameOwner(BubbleOverlayWindow w) => Windows.Count > 0 && Windows[0] == w;
 
         public static void Start(Visual host)
         {
@@ -84,13 +84,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 Targets.Add(sc);
             }
             _running = true;
-            _gen++;
             _lastStep = null;
             _spawnTimer = new DispatcherTimer { Interval = AmbientBubbleField.SpawnInterval(s.BubblesFrequency) };
             _spawnTimer.Tick += (_, _) => Spawn();
             _spawnTimer.Start();
-            Spawn();   // WPF: first bubble immediately
-            Windows[0].RequestAnimationFrame(FrameCallback);
+            Spawn();   // WPF: first bubble immediately (and wakes the frame loop)
             if (Stats) StatClock.Restart();
             Log.Information("BubbleService started - {Freq} bubbles/min", s.BubblesFrequency);
         }
@@ -98,6 +96,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public static void Stop()
         {
             _running = false;
+            _pending = false;
             _spawnTimer?.Stop();
             _spawnTimer = null;
             Field.Bubbles.Clear();   // WPF PopAllBubbles: force-destroy, no animation
@@ -123,6 +122,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var clickable = !CoreSession.IsSessionRunning || s.BubblesClickable;
             var mod = (CoreMods.ActiveModTokenProvider?.Invoke() as ModManifest)?.BubbleScale;
             Field.Bubbles.Add(AmbientBubble.Spawn(Field.Random, i, a.X, a.Y, a.Width, a.Height, Windows[i].Scaling, s, mod, clickable));
+            RequestFrame();
+        }
+
+        /// <summary>WPF StartAnimationDriver/StopAnimationTimerIfIdle: one chain, parked while empty.</summary>
+        private static void RequestFrame()
+        {
+            if (_pending || !_running || Windows.Count == 0) return;
+            _pending = true;
+            Windows[0].RequestAnimationFrame(Windows[0].FrameCallback);
         }
 
         /// <summary>WPF AwardAmbientPop, head half: sound, XP, quest credit.</summary>
@@ -143,18 +151,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             try { App.Quests?.TrackBubblePopped(); } catch (Exception ex) { Log.Debug("bubble quest credit: {E}", ex.Message); }
         }
 
-        private static void OnFrame(TimeSpan now)
+        internal static void OnFrame(TimeSpan now)
         {
+            _pending = false;
             if (!_running || Windows.Count == 0) return;
-            Windows[0].RequestAnimationFrame(FrameCallback);
             // WPF OnAnimationRenderTick: one logical step per >= 30 ms, re-based to the real frame
             // time so a late frame drops rather than bursting catch-up steps.
-            if (_lastStep is { } last && (now - last).TotalMilliseconds < AmbientBubbleField.StepMs) return;
-            _lastStep = now;
-            var t0 = Stats ? Stopwatch.GetTimestamp() : 0;
-            Field.Step();
-            foreach (var w in Windows) w.Sync();
-            if (Stats) Sample(Stopwatch.GetElapsedTime(t0).TotalMilliseconds);
+            if (_lastStep is not { } last || (now - last).TotalMilliseconds >= AmbientBubbleField.StepMs)
+            {
+                _lastStep = now;
+                var t0 = Stats ? Stopwatch.GetTimestamp() : 0;
+                Field.Step();
+                foreach (var w in Windows) w.Sync();
+                if (Stats) Sample(Stopwatch.GetElapsedTime(t0).TotalMilliseconds);
+                if (Field.Bubbles.Count == 0) { _lastStep = null; return; }   // idle until the next spawn
+            }
+            RequestFrame();
         }
 
         private static void Sample(double ms)
@@ -185,6 +197,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         internal readonly double Scaling;
         internal readonly PixelRect[] Rects = new PixelRect[64];
         private int _lastCount = -1;
+        /// <summary>Cached (no per-frame closure); a closed window's late frame is ignored.</summary>
+        internal readonly Action<TimeSpan> FrameCallback;
 
         /// <summary>--render-all only: two bubbles on a grey backdrop (the proof PNG has no desktop).</summary>
         internal BubbleOverlayWindow() : this(0, new PixelRect(0, 0, 1280, 720), 1)
@@ -213,6 +227,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             ShowActivated = false;
             CanResize = false;
             Content = new Layer(this);
+            FrameCallback = now => { if (BubbleOverlay.IsFrameOwner(this)) BubbleOverlay.OnFrame(now); };
             PointerPressed += OnPressed;
         }
 
@@ -241,9 +256,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 Rects[n++] = new PixelRect((int)(b.X * Scaling) - Bounds.X, (int)(b.Y * Scaling) - Bounds.Y,
                     (int)(b.Size * Scaling), (int)(b.Size * Scaling));
             }
-            X11Overlay.SetInputRects(this, Rects, n);
             var drawn = HasBubbles();
-            if (drawn || _lastCount != 0) (Content as Control)?.InvalidateVisual();
+            if (!drawn && _lastCount == 0) return;   // stayed empty: region already empty, nothing to repaint
+            X11Overlay.SetInputRects(this, Rects, n);
+            (Content as Control)?.InvalidateVisual();
             _lastCount = drawn ? 1 : 0;
         }
 

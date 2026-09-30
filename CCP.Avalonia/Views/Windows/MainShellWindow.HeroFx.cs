@@ -49,6 +49,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Closed += (_, _) => { ProgressionBank.Awarded -= awarded; ProgressionBank.LevelUp -= levelUp; };
             if (Named<Border>("XPBar")?.Parent is Control track)
                 track.SizeChanged += (_, _) => FillXpBar(animate: false);
+            // WPF XPBarTrack_ToolTipOpening (MainWindow.UiUpdates.cs:2897): the ambient-bubble daily
+            // budget, computed on open so it is never stale; read-only.
+            if (Named<Border>("XPBarTrack") is { } xpTrack)
+                xpTrack.AddHandler(ToolTip.ToolTipOpeningEvent, (_, _) => ToolTip.SetTip(xpTrack,
+                    ConditioningControlPanel.Localization.Loc.GetF("label_ambient_bubble_xp_budget",
+                        Services.AmbientBubbleXp.PaidToday(CoreSettings.Current), Services.AmbientBubbleXp.DailyXpCap)));
             UpdateLevelDisplay();
         }
 

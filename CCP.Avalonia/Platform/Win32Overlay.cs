@@ -69,6 +69,36 @@ internal static class Win32Overlay
             && SetLayeredWindowAttributes(hwnd, 0, (byte)Math.Round(Math.Clamp(alpha, 0, 1) * 255), LwaAlpha);
     }
 
+    [StructLayout(LayoutKind.Sequential)] private struct PointI { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct RectI { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out PointI p);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RectI r);
+
+    /// <summary>Is the window-relative px point inside any of the first <paramref name="count"/> rects?</summary>
+    internal static bool Hits(global::Avalonia.PixelRect[] rects, int count, int x, int y)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            var r = rects[i];   // half-open, like a Win32 RECT (PixelRect.Contains includes the far edge)
+            if (x >= r.X && x < r.X + r.Width && y >= r.Y && y < r.Y + r.Height) return true;
+        }
+        return false;
+    }
+
+    /// <summary>The Windows form of an X11 input region. DirectComposition windows have no per-pixel
+    /// hit-test and HTTRANSPARENT only passes clicks within the same thread, so a caller that re-sends
+    /// its rects every step gets WS_EX_TRANSPARENT toggled by the cursor: input only while the pointer
+    /// is over a rect, click-through everywhere else - the same answer WPF's per-pixel layered bubble
+    /// windows gave. Only a changed state touches the window style.</summary>
+    internal static bool SetInputRects(TopLevel window, IntPtr hwnd, global::Avalonia.PixelRect[] rects, int count)
+    {
+        if (!OperatingSystem.IsWindows() || !GetCursorPos(out var p) || !GetWindowRect(hwnd, out var r)) return false;
+        var through = !Hits(rects, count, p.X - r.Left, p.Y - r.Top);
+        var box = Track(window);
+        if (box.Value == through && (GetWindowLong(hwnd, GwlExStyle) & WsExTransparent) != 0 == through) return true;
+        return SetClickThrough(window, hwnd, through);
+    }
+
     private static StrongBox<bool> Track(TopLevel window) => Wanted.GetValue(window, w =>
     {
         var box = new StrongBox<bool>();

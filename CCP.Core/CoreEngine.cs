@@ -44,8 +44,8 @@ namespace ConditioningControlPanel
             bool audioOnly = s.AudioOnlySession;
             if (!audioOnly) CoreFlash.Start();   // it checks FlashEnabled itself
             if (!audioOnly && s.SubliminalEnabled) CoreSubliminal.Start();
+            if (!audioOnly && s.BubblesEnabled) CoreBubbles.Start();   // WPF StartStop.cs:339
             if (!audioOnly && s.LockCardEnabled) LockCardScheduler.Instance.Start();
-            if (!audioOnly && s.BubblesEnabled) CoreBubbles.Start();   // WPF StartStop.cs:337
             if (!audioOnly && s.PopQuizEnabled) PopQuiz?.Start();   // WPF StartStop.cs:393
             if (!audioOnly && s.BouncingTextEnabled) CoreBouncingText.Start();
             else CoreBouncingText.Stop();   // WPF: clean up any leftover state
@@ -63,8 +63,8 @@ namespace ConditioningControlPanel
             _stopInProgress = true;
             try
             {
-                CoreBubbles.Stop();   // WPF StartStop.cs:473, before video
                 CoreFlash.Stop();
+                CoreBubbles.Stop();   // WPF StartStop.cs:473, before video
                 CoreBouncingText.Stop();
                 CoreSubliminal.Stop();
                 LockCardScheduler.Instance.Stop();

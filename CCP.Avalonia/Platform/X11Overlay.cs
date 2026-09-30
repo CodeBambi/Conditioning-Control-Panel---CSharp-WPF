@@ -164,6 +164,7 @@ internal static class X11Overlay
     /// one XFixes request, not garbage.</summary>
     internal static bool SetInputRects(TopLevel window, PixelRect[] rects, int count)
     {
+        if (TryGet(window, OverlayBackend.Win32, out var hwnd)) return Win32Overlay.SetInputRects(window, hwnd, rects, count);
         if (!TryGetXid(window, out var xid)) return false;
         lock (Gate)
         {
