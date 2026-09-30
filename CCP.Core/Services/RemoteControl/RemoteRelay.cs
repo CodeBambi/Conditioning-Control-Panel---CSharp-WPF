@@ -277,6 +277,10 @@ namespace ConditioningControlPanel.Services
             CommandReceived?.Invoke(this, action);
         }
 
+        /// <summary>WPF PushStatusNowAsync: a settings change (share avatar) reaches the controller now,
+        /// not at the next ~15 s push. No-op without a session.</summary>
+        public Task PushStatusNowAsync() => IsActive ? SendStatusAsync(null, null) : Task.CompletedTask;
+
         private async Task SendStatusAsync(string? lastId, string? lastAction)
         {
             if (Now() < _statusBackoffUntil) return;
@@ -321,20 +325,17 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
-    /// The safety screen every remote command passes before it runs. The panic key can never be
-    /// switched off from afar (this head's rule, stricter than WPF, whose full tier could), and under
-    /// Lockdown nothing remote may touch what Lockdown pinned or refuses locally: strict lock, the panic
-    /// key, Stop, Pause, panic. Strict lock itself stays the same setting, so every strict surface keeps
-    /// its own fall-open when no global panic listener is live.
+    /// Escape integrity (docs/avalonia-decisions.md, 2026-09-30): a controller may never remove the
+    /// subject's last means of escape. disable_panic is always refused (WPF saved it); under Lockdown
+    /// enable_strict_lock is refused. Verbs that only reduce restraint run as on WPF and never touch the
+    /// Lockdown timer; Lockdown restores the pre-lockdown settings when it ends. Strict lock stays the
+    /// same setting, so every strict surface keeps its own fall-open.
     /// </summary>
     public static class RemoteCommandGate
     {
-        private static readonly HashSet<string> LockdownPinned = new()
-        { "enable_strict_lock", "disable_strict_lock", "enable_panic", "stop_session", "pause_session", "trigger_panic" };
-
         public static string? Screen(string action, bool lockdownActive) =>
-            action == "disable_panic" ? "the panic key stays on"
-            : lockdownActive && LockdownPinned.Contains(action) ? "not during Lockdown"
+            action == "disable_panic" ? "the panic key can only be turned off locally"
+            : lockdownActive && action == "enable_strict_lock" ? "not during Lockdown"
             : null;
     }
 }

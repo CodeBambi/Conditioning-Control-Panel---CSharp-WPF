@@ -88,8 +88,8 @@ namespace ConditioningControlPanel.Services
                 CoreFlash.Stop(); CoreSubliminal.Stop(); CoreBubbles.Stop(); CoreBouncingText.Stop();
                 CoreEngine.Video?.Stop(); CoreEngine.BubbleCount?.Stop(); LockCardScheduler.Instance.Stop();
             }
-            // Lockdown pinned these without saving; leave them to it (RemoteCommandGate keeps panic out too).
-            if (LockdownService.Current?.IsActive == true) return;
+            // As WPF, Lockdown or not: this only reduces restraint, and LockdownService.Deactivate restores
+            // the pre-lockdown values when the timer ends.
             var s = CoreSettings.Current;
             if (s.StrictLockEnabled || !s.PanicKeyEnabled)
             {

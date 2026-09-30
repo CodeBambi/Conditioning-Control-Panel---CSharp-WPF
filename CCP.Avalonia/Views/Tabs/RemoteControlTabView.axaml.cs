@@ -91,7 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                    "All media content shown comes from YOUR local files and settings.\n" +
                    "You assume full responsibility for this interaction.\n" +
                    "You can stop the session at ANY time by clicking \"Stop Session\" or closing the app.\n" +
-                   "Your panic key always stays on, and a controller can never override Lockdown.\n" +
+                   "A controller can never turn your panic key off.\n" +
                    "The session stays active as long as the app is running. If the app closes without stopping the session, it expires within 4 hours.";
         }
 
@@ -250,17 +250,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CoreSettings.Save();
         }
 
-        // Settings half of MainWindow.RemoteControl.cs:309. The other half pushes the new value to a
-        // LIVE controller within one poll instead of ~15s; that needs App.RemoteControl
-        // (ConditioningControlPanel/Services/RemoteControlService.cs), and no session can exist on
-        // this head, so the privacy setting is stored honestly and no push is being skipped.
-        private void ChkRemoteShareAvatar_Changed(object? sender, RoutedEventArgs e)
+        // MainWindow.RemoteControl.cs:305: save, then push to a live controller now instead of in ~15 s.
+        private async void ChkRemoteShareAvatar_Changed(object? sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             var want = ChkRemoteShareAvatar.IsChecked ?? false;
             if (CoreSettings.Current.RemoteShareAvatar == want) return;
             CoreSettings.Current.RemoteShareAvatar = want;
             CoreSettings.Save();
+            await Relay.Value.PushStatusNowAsync();
         }
 
         // View half of MainWindow.RemoteControl.cs:647 - reveal the opt-in form, then pre-populate.

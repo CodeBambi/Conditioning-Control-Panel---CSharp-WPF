@@ -41,8 +41,9 @@ public sealed class RemoteControlTabTests
                 Assert.Equal(1, refusals);
                 Assert.False(RemoteControlTabView.Relay.Value.IsActive);
 
-                Assert.DoesNotContain("panic", RemoteControlTabView.Waiver("full").Split("Your panic key")[0], System.StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("panic", RemoteControlTabView.Waiver("full").Split("A controller can never turn your panic key off.")[0], System.StringComparison.OrdinalIgnoreCase);
                 Assert.Contains("strict lock", RemoteControlTabView.Waiver("full"));
+                Assert.Contains("A controller can never turn your panic key off.", RemoteControlTabView.Waiver("light"));
                 Assert.DoesNotContain("videos", RemoteControlTabView.Waiver("light"));
 
                 var qr = RemoteControlTabView.QrCode(RemoteRelay.PairingUrl("ABC123", "0420"));

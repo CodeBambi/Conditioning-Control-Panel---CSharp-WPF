@@ -83,19 +83,55 @@ public sealed class RemoteRelayTests
         var status = f.Seen.Last(s => s.Path == "/v2/remote/status").Body["last_executed"]!;
         Assert.Equal("disable_panic", (string?)status["action"]);
         Assert.Equal("fail", (string?)status["status"]);
-        Assert.Equal("the panic key stays on", (string?)status["reason"]);
+        Assert.Equal("the panic key can only be turned off locally", (string?)status["reason"]);
     }
 
     [Fact]
-    public void Lockdown_refuses_every_verb_that_touches_what_it_pinned()
+    public void Lockdown_refuses_only_enable_strict_lock()
     {
-        foreach (var a in new[] { "enable_strict_lock", "disable_strict_lock", "enable_panic", "stop_session", "pause_session", "trigger_panic" })
-        {
-            Assert.Null(RemoteCommandGate.Screen(a, lockdownActive: false));
-            Assert.Equal("not during Lockdown", RemoteCommandGate.Screen(a, lockdownActive: true));
-        }
-        Assert.Null(RemoteCommandGate.Screen("start_flash", lockdownActive: true));
+        Assert.Null(RemoteCommandGate.Screen("enable_strict_lock", lockdownActive: false));
+        Assert.Equal("not during Lockdown", RemoteCommandGate.Screen("enable_strict_lock", lockdownActive: true));
+        foreach (var a in new[] { "disable_strict_lock", "enable_panic", "stop_session", "pause_session", "trigger_panic", "start_flash" })
+            Assert.Null(RemoteCommandGate.Screen(a, lockdownActive: true));
         Assert.NotNull(RemoteCommandGate.Screen("disable_panic", lockdownActive: false));
+        Assert.NotNull(RemoteCommandGate.Screen("disable_panic", lockdownActive: true));
+    }
+
+    [Fact]
+    public void Restraint_reducing_verbs_run_under_Lockdown_keep_its_timer_and_it_still_restores_on_end()
+    {
+        var s = CoreSettings.Current;
+        var saved = (s.StrictLockEnabled, s.PanicKeyEnabled, s.LockdownForceStrictLock, s.LockdownDisablePanicKey);
+        var prev = LockdownService.Current;
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            (s.StrictLockEnabled, s.PanicKeyEnabled, s.LockdownForceStrictLock, s.LockdownDisablePanicKey) = (false, true, true, true);
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Assert.True(s.StrictLockEnabled);
+            Assert.False(s.PanicKeyEnabled);
+            Assert.Null(RemoteCommands.Execute("trigger_panic", null));
+            Assert.True(s.PanicKeyEnabled);       // WPF StopAllRemoteEffects, Lockdown or not
+            Assert.False(s.StrictLockEnabled);
+            (s.StrictLockEnabled, s.PanicKeyEnabled) = (true, false);
+            Assert.Null(RemoteCommands.Execute("enable_panic", null));
+            Assert.Null(RemoteCommands.Execute("disable_strict_lock", null));
+            Assert.True(s.PanicKeyEnabled);
+            Assert.False(s.StrictLockEnabled);
+            Assert.True(ld.IsActive);             // the timer was not ended
+            Assert.Equal(0, ld.RestartCount);     // nor restarted
+            s.PanicKeyEnabled = false;            // whatever the controller left behind...
+            ld.Deactivate();
+            Assert.True(s.PanicKeyEnabled);       // ...Lockdown restores the pre-lockdown values
+            Assert.False(s.StrictLockEnabled);
+        }
+        finally
+        {
+            ld.Deactivate();
+            ld.Dispose();
+            LockdownService.Current = prev;
+            (s.StrictLockEnabled, s.PanicKeyEnabled, s.LockdownForceStrictLock, s.LockdownDisablePanicKey) = saved;
+        }
     }
 
     [Fact]

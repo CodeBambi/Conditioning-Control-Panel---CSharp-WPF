@@ -150,3 +150,7 @@ here record where and why the port chose something, and who advised.
 - Also under this rule: the Emergency Exit notice always states the real time left, even with HideLockdownTimer (the notice is the way out; hiding its clock would hide the exit).
 - Tests: `LockdownTests.RemainingFollowsAMonotonicUtcClockNotTheWallClock`, `TheSlabTripsTheWireHoldsChasterAndShowsTheRealTimeEvenWhenTheTimerIsHidden`, `TheTimerRunningOutEndsTheLockdown` (fail-proven); WPF source pins in LockdownEmergencyExitTests updated.
 - Advisor: reviewer (lockdown-core review).
+
+## 2026-09-30: Remote Control – escape integrity (avalonia-port/remote-control-core)
+Remote Control – escape integrity. A remote controller may never remove the subject's last means of escape. 1. disable_panic is always refused and reported to the controller as refused; the panic key can be disabled only locally, through Lockdown; the consent waiver must not list 'disable panic key'. Deviation from WPF (RemoteControlService disable_panic): WPF saves the change, it outlives disconnect and restart, and the client doesn't enforce the tier. 2. While Lockdown is active, enable_strict_lock is refused; commands that only reduce restraint (stop_session, pause, trigger_panic, enable_panic, disable_strict_lock) run exactly as on WPF, don't end the Lockdown timer, and Lockdown restores the user's earlier settings when it ends.
+- Advisor: oracle-deep.
