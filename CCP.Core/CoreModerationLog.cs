@@ -22,6 +22,23 @@ namespace ConditioningControlPanel
     {
         public static volatile Func<ModerationLog?>? InstanceProvider;
 
+        /// <summary>The app's guard and its one escalating counter (App.ModerationGuard / App.ModerationCounter).</summary>
+        public static volatile Func<IModerationGuard?>? GuardProvider;
+        public static volatile Func<IModerationCounter?>? CounterProvider;
+        private static readonly Lazy<IModerationGuard> StockGuard = new(() => new ModerationGuard());
+
+        /// <summary>Never null: unseeded (or a throwing provider) falls back to the stock guard, so AI
+        /// moderation fails closed rather than silently switching off.</summary>
+        public static IModerationGuard Guard
+        {
+            get { try { return GuardProvider?.Invoke() ?? StockGuard.Value; } catch { return StockGuard.Value; } }
+        }
+
+        public static IModerationCounter? Counter
+        {
+            get { try { return CounterProvider?.Invoke(); } catch { return null; } }
+        }
+
         /// <summary>Records a moderation hit. <paramref name="source"/> is input/output/memory.</summary>
         public static void Record(ProhibitedCategory category, string source, string modelHint)
         {

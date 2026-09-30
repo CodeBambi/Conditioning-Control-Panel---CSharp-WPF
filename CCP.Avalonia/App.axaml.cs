@@ -101,6 +101,11 @@ namespace ConditioningControlPanel.Avalonia
         internal static CatalogueClient Catalogue { get; set; } = new(
             () => CoreSettings.Current.AuthToken, () => CoreAccount.UnifiedUserId, CoreReleaseContent.AppVersion);
 
+        /// <summary>The cloud companion AI (WPF App.Ai), the same Core AiService. Its base URL follows
+        /// AiService.ResolveBaseUrl: a sandbox without a loopback CCP_AI_BASE_URL never sends.
+        /// Settable so a test can hand in a fake-endpoint instance.</summary>
+        internal static AiService? Ai { get; set; } = new();
+
         /// <summary>The release-content pack service (WPF App.ReleaseContent), or null on the headless render path.</summary>
         internal static ReleaseContentService? ReleaseContent { get; private set; }
 
@@ -396,7 +401,16 @@ namespace ConditioningControlPanel.Avalonia
                 CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;
                 Sessions = new SessionRunner(new SessionLogService());
                 //
-                // CoreModerationLog stays unseeded too, and NOT because a log is unavailable here
+                // The one escalating moderation counter (WPF App.xaml.cs:2653), filed under CorePaths.UserData
+                // for the same reason the log below is not seeded: ApplicationData is a second tree here.
+                var moderationCounter = new ConditioningControlPanel.Services.Moderation.ModerationCounter(
+                    System.IO.Path.Combine(CorePaths.UserData, "moderation-counter.json"));
+                try { moderationCounter.LoadFromDisk(); }
+                catch (Exception ex) { Serilog.Log.Debug("ModerationCounter.LoadFromDisk failed: {Error}", ex.Message); }
+                CoreModerationLog.CounterProvider = () => moderationCounter;
+                CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
+                //
+                // CoreModerationLog's record half stays unseeded, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes
                 // SpecialFolder.ApplicationData (~/.config on Linux) while this head's user data
                 // lives under CorePaths.UserData (~/.local/share), so seeding it would scatter the

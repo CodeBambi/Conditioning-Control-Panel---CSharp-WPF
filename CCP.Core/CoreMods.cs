@@ -88,6 +88,8 @@ namespace ConditioningControlPanel
         /// <summary>The complete active package for consumers that need its built-in/custom
         /// classification. Unseeded means no mod layer, not the installed-mod list's vanilla
         /// fallback.</summary>
+        /// <summary>The attached ModService itself (WPF App.Mods), for Core code that reads more than the providers carry.</summary>
+        public static Services.ModService? Service { get; private set; }
         public static volatile Func<ModPackage?>? ActiveModPackageProvider;
         public static volatile Func<string?>? ActiveModIdProvider;
         public static volatile Func<IReadOnlyDictionary<string, ModPackage>?>? InstalledModsProvider;
@@ -225,6 +227,7 @@ namespace ConditioningControlPanel
         /// </summary>
         public static void Attach(Services.ModService mods)
         {
+            Service = mods;
             ActiveModTokenProvider = () => mods.ActiveMod?.Manifest;
             ActiveModPackageProvider = () => mods.ActiveMod;
             PetNameOverrideProvider = mods.GetPetNameOverride;

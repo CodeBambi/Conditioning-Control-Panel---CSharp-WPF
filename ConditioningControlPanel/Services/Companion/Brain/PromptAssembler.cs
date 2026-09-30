@@ -108,7 +108,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// <summary>The proxy's actual reject threshold (input_too_large above this). The 9000
         /// ceiling is our soft budget; the gap between them is what lets a pinned anti-repeat
         /// line survive on prompts whose prefix alone busts the soft cap.</summary>
-        public const int ProxyHardRejectCap = 9900;
+        public const int ProxyHardRejectCap = AiService.ProxyHardRejectCap;
 
         /// <summary>
         /// The anti-repeat rule ambient calls carry. Together with

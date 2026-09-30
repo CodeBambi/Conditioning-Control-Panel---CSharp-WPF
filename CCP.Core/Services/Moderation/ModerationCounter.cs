@@ -105,6 +105,10 @@ namespace ConditioningControlPanel.Services.Moderation
             _persistencePath = Path.Combine(dir, "moderation-counter.json");
         }
 
+        /// <summary>A head whose user data is not under ApplicationData (Avalonia: CorePaths.UserData)
+        /// names the file itself, so a CCP_USERDATA_DIR sandbox keeps it inside the sandbox.</summary>
+        public ModerationCounter(string persistencePath) => _persistencePath = persistencePath;
+
         public void RecordHit(ProhibitedCategory category, string source)
         {
             bool fireWarning = false;

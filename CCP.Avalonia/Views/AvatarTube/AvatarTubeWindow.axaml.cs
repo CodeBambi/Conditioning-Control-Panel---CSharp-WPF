@@ -230,8 +230,14 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             var showLog = this.FindControl<MenuItem>("MenuItemShowChatHistory");
             if (showLog != null) showLog.Click += (_, _) => ShowChatHistory();
             else Log.Warning("AvatarTubeWindow: MenuItemShowChatHistory not found; chat log unreachable from the menu");
-            _btnSendChat.Click += (_, _) => SendChat();
-            _txtUserInput.KeyDown += (_, e) => { if (e.Key == Key.Enter) SendChat(); };
+            _btnSendChat.Click += (_, _) => _ = SendChatAsync();
+            _txtUserInput.KeyDown += (_, e) => { if (e.Key == Key.Enter) _ = SendChatAsync(); };
+            // WPF WireModerationCounter (AvatarTubeWindow.xaml.cs:374), cooldown half.
+            if (CoreModerationLog.Counter is { } counter)
+            {
+                counter.CooldownStarted += end => Dispatcher.UIThread.Post(() => OnCooldownStarted(end));
+                counter.CooldownEnded += () => Dispatcher.UIThread.Post(OnCooldownEnded);
+            }
 
             _avatarBorder.PointerPressed += OnAvatarPointerPressed;
             this.FindControl<Border>("BtnPrevAvatar")!.PointerPressed += (_, _) => SelectAvatarSet(-1);
@@ -471,14 +477,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             var remaining = _cooldownEndsAt.Value - DateTime.UtcNow;
             if (remaining.TotalSeconds <= 0)
             {
-                // ponytail: the CLASS is not the blocker - ModerationCounter and its
-                // CooldownStarted / CooldownEnded events are in
-                // CCP.Core/Services/Moderation/ModerationCounter.cs already. What is missing is the
-                // app's SINGLE instance (App.ModerationCounter, built in App.xaml.cs) and a seam
-                // for it: a second instance here would keep a second sliding window and split the
-                // persisted moderation-counter.json, letting a cooldown be dodged by opening the
-                // tube - which is exactly why CoreModerationLog exists rather than a `new`. So the
-                // cooldown is ended locally instead of by probing GetState().
+                // WPF probes the counter so it raises CooldownEnded; ending it here too is idempotent.
+                if (CoreModerationLog.Counter?.GetState().CooldownActive == true) return;
                 OnCooldownEnded();
                 return;
             }
@@ -1146,7 +1146,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     _isShowingAiBubble = true;
 
                     StartBubbleHideTimer(text);
-                    Log.Debug("Companion says ({Chars} chars, ai={Ai}): {Text}", text.Length, aiGenerated, text);
+                    Log.Debug("Companion says ({Chars} chars, ai={Ai})", text.Length, aiGenerated);   // never the text
                 }
                 catch (Exception ex) { Log.Warning(ex, "AvatarTube GigglePriority failed"); }
             });
@@ -1410,21 +1410,67 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // AvatarBounceHost's RenderTransform, not an Animation.
         }
 
-        /// <summary>Send whatever is in the input box to the companion.</summary>
-        private void SendChat()
+        /// <summary>
+        /// WPF SendChatMessageAsync (AvatarTubeWindow.ChatInput.cs:747), the stateless path: cooldown gate,
+        /// then App.Ai's GetBambiReplyExAsync, which runs ModerationGuard on the input before anything
+        /// leaves and on the reply before it is shown. A refused input never enters the chat log (P2/H5).
+        /// <para>ponytail: WPF routes through CompanionBrain (history, memory, asks) while UseCompanionBrain
+        /// is on, its default; the brain is still head-side, so every send here takes WPF's kill-switch-off
+        /// path. Also missing: the thinking animation, the double bounce, the season-recap/achievement
+        /// hooks and the enabled-phrases filter (App.CompanionPhrases).</para>
+        /// </summary>
+        internal async System.Threading.Tasks.Task SendChatAsync()
         {
-            var input = _txtUserInput.Text;
-            if (string.IsNullOrWhiteSpace(input)) return;
-            AddToChatHistory(input, isUser: true);
+            var input = _txtUserInput.Text?.Trim();
+            if (string.IsNullOrEmpty(input)) return;
+            if (CoreModerationLog.Counter?.GetState().CooldownActive == true)
+            {
+                Log.Information("AvatarTubeWindow: chat send swallowed (cooldown active)");
+                return;
+            }
             _txtUserInput.Text = string.Empty;
-            // ponytail: needs ConditioningControlPanel/AvatarTube/AvatarTubeWindow.ChatInput.cs
-            // (the moderation guard, the AI request, the typewriter reply and TTS) plus
-            // the app's single App.ModerationCounter instance for the cooldown CooldownTick above
-            // paints - the counter CLASS is in Core, the instance and its seam are not; see that
-            // method. Nothing is INFERRED here, so nothing leaves the process and there is no
-            // request for the guard to refuse; the user's line lands in the local log and that is
-            // the whole of what this does. CoreModerationLog is the seam for the RECORD half when
-            // there is a request to record - it is not the counter, and cannot gate one.
+            _inputPanel.IsVisible = false;   // WPF ToggleInputPanel
+
+            var ai = App.Ai;
+            if (CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true })
+            {
+                try
+                {
+#pragma warning disable CS0618 // WPF's kill-switch-off path; the brain is not on this head
+                    var result = await ai.GetBambiReplyExAsync(input);
+#pragma warning restore CS0618
+                    if (result.Refusal != null) { ShowModerationRefusalBubble(result.Refusal.Source); return; }
+                    AddToChatHistory(input, isUser: true);
+                    GigglePriority(result.Text, aiGenerated: result.IsAiGenerated);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to get AI reply");
+                    AddToChatHistory(input, isUser: true);
+                    GigglePriority(RandomBambiPhrase(), aiGenerated: false);
+                }
+                return;
+            }
+            // No AI configured / not signed in: a preset phrase, no badge, nothing sent.
+            AddToChatHistory(input, isUser: true);
+            GigglePriority(RandomBambiPhrase(), aiGenerated: false);
+        }
+
+        /// <summary>WPF ShowModerationRefusalBubble (Speech.cs:368): the localized refusal with the POLICY badge.</summary>
+        private void ShowModerationRefusalBubble(ConditioningControlPanel.Services.Moderation.ModerationSource source)
+        {
+            var text = Loc.Get(source == ConditioningControlPanel.Services.Moderation.ModerationSource.Input
+                ? "moderation_input_refusal" : "moderation_output_refusal");
+            GigglePriority(text, playSound: false, aiGenerated: false);   // also lands it in the chat log, as WPF
+            RunOnAvatar(() => { _aiBadge.IsVisible = false; _policyBadge.IsVisible = true; });
+        }
+
+        /// <summary>WPF GetRandomBambiPhrase (Speech.cs:2210) over the mod pools.</summary>
+        private static string RandomBambiPhrase()
+        {
+            var all = (CoreMods.GetPhrases("Generic") ?? Array.Empty<string>())
+                .Concat(CoreMods.GetPhrases("RandomFloating") ?? Array.Empty<string>()).ToArray();
+            return all.Length == 0 ? "*giggles*" : all[Random.Shared.Next(all.Length)];
         }
 
         /// <summary>Step through the unlocked avatar sets with the title-box arrows.</summary>

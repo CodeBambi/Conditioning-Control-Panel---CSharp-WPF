@@ -1,3 +1,4 @@
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +16,29 @@ namespace ConditioningControlPanel.Services
         /// Fired when the active personality changes.
         /// </summary>
         public event EventHandler<PersonalityPreset>? PersonalityChanged;
+
+        /// <summary>Stateless reader for Core callers (BambiSprite); the head's App.Personality raises the event.</summary>
+        internal static readonly PersonalityService Shared = new();
+
+        /// <summary>Moved from CommunityPromptService (which forwards here) so this class could live in Core.</summary>
+        public static bool ClearCustomPromptOverride(AppSettings? settings)
+        {
+            if (settings == null) return false;
+
+            var changed = false;
+            if (settings.ActiveCommunityPromptId != null)
+            {
+                settings.ActiveCommunityPromptId = null;
+                changed = true;
+            }
+            if (settings.CompanionPrompt?.UseCustomPrompt == true)
+            {
+                settings.CompanionPrompt.UseCustomPrompt = false;
+                changed = true;
+            }
+            return changed;
+        }
+
 
         /// <summary>
         /// The built-in preset set for the current context: the active mod's personalities
@@ -48,7 +72,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var modId = App.Mods?.ActiveMod?.Id;
+                var modId = CoreMods.Service?.ActiveMod?.Id;
                 return string.IsNullOrWhiteSpace(modId)
                     || string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
             }
@@ -73,7 +97,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static List<PersonalityPreset>? GetActiveModPersonalities()
         {
-            var mod = App.Mods?.ActiveMod;
+            var mod = CoreMods.Service?.ActiveMod;
             var defs = Companion.ModCompanionContent.GetPersonalities(
                 mod?.Id, mod?.InstalledPath, mod?.Manifest?.Personalities, out _);
             if (defs == null || defs.Count == 0) return null;
@@ -123,10 +147,10 @@ namespace ConditioningControlPanel.Services
             presets.AddRange(fromMod
                 ? builtIn
                 : PersonalityPresets.ForPicker(builtIn, IsNeutralContext(),
-                    App.Settings?.Current?.ActivePersonalityPresetId));
+                    CoreSettings.Service?.Current?.ActivePersonalityPresetId));
 
             // Add user-created presets
-            var userPresets = App.Settings?.Current?.UserPersonalityPresets;
+            var userPresets = CoreSettings.Service?.Current?.UserPersonalityPresets;
             if (userPresets != null)
             {
                 presets.AddRange(userPresets);
@@ -140,7 +164,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public PersonalityPreset GetActivePreset()
         {
-            var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.NeutralDefaultId;
+            var activeId = CoreSettings.Service?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.NeutralDefaultId;
 
             // Try the active context's built-in set (mod personalities if the active mod
             // defines any, else stock presets).
@@ -149,7 +173,7 @@ namespace ConditioningControlPanel.Services
             if (builtIn != null) return builtIn;
 
             // Try to find in user presets
-            var userPreset = App.Settings?.Current?.UserPersonalityPresets?
+            var userPreset = CoreSettings.Service?.Current?.UserPersonalityPresets?
                 .FirstOrDefault(p => p.Id == activeId);
             if (userPreset != null) return userPreset;
 
@@ -180,23 +204,23 @@ namespace ConditioningControlPanel.Services
             var preset = GetPresetById(presetId);
             if (preset == null)
             {
-                App.Logger?.Warning("PersonalityService: Preset not found: {Id}", presetId);
+                Log.Warning("PersonalityService: Preset not found: {Id}", presetId);
                 return false;
             }
 
             // Update settings
-            if (App.Settings?.Current != null)
+            if (CoreSettings.Service?.Current != null)
             {
-                App.Settings.Current.ActivePersonalityPresetId = presetId;
+                CoreSettings.Service!.Current.ActivePersonalityPresetId = presetId;
                 // Every caller here is an explicit pick (Customise, companion room, chat command,
                 // studio), so it is remembered for the mod it was made in (ModPersonalityPicks).
-                Companion.ModPersonalityPicks.Store(App.Settings.Current.ModPersonalityPreset,
-                    App.Mods?.ActiveModId, presetId);
+                Companion.ModPersonalityPicks.Store(CoreSettings.Service!.Current.ModPersonalityPreset,
+                    CoreMods.Service?.ActiveModId, presetId);
 
                 // Picking a preset is the user saying "this one, now" — so it has to win over any
                 // community/asset/hand-edited prompt still holding the single wire slot, otherwise
                 // the chip row and the quick menu confirm a switch that never reached the model.
-                var cleared = CommunityPromptService.ClearCustomPromptOverride(App.Settings.Current);
+                var cleared = ClearCustomPromptOverride(CoreSettings.Service!.Current);
 
                 // ...and it has to win over the chat HISTORY. Her own recent replies are the
                 // strongest few-shot signal a small model has; with a restored ~100-turn session
@@ -205,13 +229,13 @@ namespace ConditioningControlPanel.Services
                 // the SAME preset — clicking it again re-asserts "this voice, now") drops
                 // assistant-authored turns older than this moment from the wire window only:
                 // the persisted session and the visible bubbles keep the full history.
-                App.Settings.Current.PersonaVoiceFenceUtc = DateTime.UtcNow;
+                CoreSettings.Service!.Current.PersonaVoiceFenceUtc = DateTime.UtcNow;
 
-                App.Settings.Save();
+                CoreSettings.Service!.Save();
 
                 if (cleared)
-                    App.Logger?.Information("PersonalityService: Preset {Id} took over from the active custom prompt", presetId);
-                App.Logger?.Information("PersonalityService: Changed active preset");
+                    Log.Information("PersonalityService: Preset {Id} took over from the active custom prompt", presetId);
+                Log.Information("PersonalityService: Changed active preset");
                 PersonalityChanged?.Invoke(this, preset);
                 return true;
             }
@@ -227,9 +251,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool RestoreForActiveMod()
         {
-            var s = App.Settings?.Current;
+            var s = CoreSettings.Service?.Current;
             if (s == null) return false;
-            var id = Companion.ModPersonalityPicks.ForModSwitch(s.ModPersonalityPreset, App.Mods?.ActiveModId,
+            var id = Companion.ModPersonalityPicks.ForModSwitch(s.ModPersonalityPreset, CoreMods.Service?.ActiveModId,
                 s.ActivePersonalityPresetId, pid => GetPresetById(pid) != null);
             var preset = id == null ? null : GetPresetById(id);
             if (preset == null) return false;
@@ -237,8 +261,8 @@ namespace ConditioningControlPanel.Services
             s.ActivePersonalityPresetId = preset.Id;
             // A different voice from here on: fence the older replies off the wire, as a pick does.
             s.PersonaVoiceFenceUtc = DateTime.UtcNow;
-            App.Settings!.Save();
-            App.Logger?.Information("PersonalityService: mod switch restored the personality picked there");
+            CoreSettings.Service!.Save();
+            Log.Information("PersonalityService: mod switch restored the personality picked there");
             PersonalityChanged?.Invoke(this, preset);
             return true;
         }
@@ -253,7 +277,7 @@ namespace ConditioningControlPanel.Services
             if (builtIn != null) return builtIn;
 
             // Check user presets
-            return App.Settings?.Current?.UserPersonalityPresets?
+            return CoreSettings.Service?.Current?.UserPersonalityPresets?
                 .FirstOrDefault(p => p.Id == presetId);
         }
 
@@ -276,10 +300,10 @@ namespace ConditioningControlPanel.Services
             copy.Description = $"Copy of {source.Name}";
 
             // Add to user presets
-            App.Settings?.Current?.UserPersonalityPresets?.Add(copy);
-            App.Settings?.Save();
+            CoreSettings.Service?.Current?.UserPersonalityPresets?.Add(copy);
+            CoreSettings.Service?.Save();
 
-            App.Logger?.Information("PersonalityService: Created user copy: {Name} from {Source}", newName, source.Name);
+            Log.Information("PersonalityService: Created user copy: {Name} from {Source}", newName, source.Name);
             return copy;
         }
 
@@ -290,13 +314,13 @@ namespace ConditioningControlPanel.Services
         {
             if (preset.IsBuiltIn)
             {
-                App.Logger?.Warning("PersonalityService: Cannot save built-in preset");
+                Log.Warning("PersonalityService: Cannot save built-in preset");
                 return;
             }
 
             preset.ModifiedAt = DateTime.Now;
-            App.Settings?.Save();
-            App.Logger?.Information("PersonalityService: Saved user preset: {Name}", preset.Name);
+            CoreSettings.Service?.Save();
+            Log.Information("PersonalityService: Saved user preset: {Name}", preset.Name);
         }
 
         /// <summary>
@@ -306,11 +330,11 @@ namespace ConditioningControlPanel.Services
         {
             if (IsBuiltIn(presetId))
             {
-                App.Logger?.Warning("PersonalityService: Cannot delete built-in preset: {Id}", presetId);
+                Log.Warning("PersonalityService: Cannot delete built-in preset: {Id}", presetId);
                 return false;
             }
 
-            var presets = App.Settings?.Current?.UserPersonalityPresets;
+            var presets = CoreSettings.Service?.Current?.UserPersonalityPresets;
             var preset = presets?.FirstOrDefault(p => p.Id == presetId);
             if (preset != null)
             {
@@ -318,15 +342,15 @@ namespace ConditioningControlPanel.Services
 
                 // If this was the active preset, switch to the context default: neutral when
                 // unmodded, the stock themed default under a themed mod.
-                if (App.Settings?.Current?.ActivePersonalityPresetId == presetId)
+                if (CoreSettings.Service?.Current?.ActivePersonalityPresetId == presetId)
                 {
-                    App.Settings.Current.ActivePersonalityPresetId = IsNeutralContext()
+                    CoreSettings.Service!.Current.ActivePersonalityPresetId = IsNeutralContext()
                         ? PersonalityPresets.NeutralDefaultId
                         : PersonalityPresets.BambiSpriteId;
                 }
 
-                App.Settings?.Save();
-                App.Logger?.Information("PersonalityService: Deleted user preset: {Name}", preset.Name);
+                CoreSettings.Service?.Save();
+                Log.Information("PersonalityService: Deleted user preset: {Name}", preset.Name);
                 return true;
             }
 
@@ -366,7 +390,7 @@ namespace ConditioningControlPanel.Services
             if (settings.SlutModeEnabled)
             {
                 settings.ActivePersonalityPresetId = PersonalityPresets.SlutModeId;
-                App.Logger?.Information("PersonalityService: Migrated SlutModeEnabled=true to Slut Mode preset");
+                Log.Information("PersonalityService: Migrated SlutModeEnabled=true to Slut Mode preset");
             }
 
             // Check if custom prompts were active
@@ -391,10 +415,10 @@ namespace ConditioningControlPanel.Services
                 // Clear the UseCustomPrompt flag
                 settings.CompanionPrompt.UseCustomPrompt = false;
 
-                App.Logger?.Information("PersonalityService: Migrated custom prompt to user preset: {Name}", customPreset.Name);
+                Log.Information("PersonalityService: Migrated custom prompt to user preset: {Name}", customPreset.Name);
             }
 
-            App.Settings?.Save();
+            CoreSettings.Service?.Save();
         }
     }
 }
