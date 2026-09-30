@@ -194,10 +194,20 @@ public sealed class ChasterTab2Tests
         Assert.True(chaster.Note("attention").Booked);   // something owed, so the earn has room
         var booked = new List<string>();
         chaster.Booked += (id, _) => booked.Add(id);
-        ChasterHead.Attach(chaster, null);
-        ProgressionBank.Add(XpCurve.GetXPForLevel(3, XpCurve.EpochOf(s)), "Quest");
-        Assert.Equal(4, s.PlayerLevel);
-        Assert.Contains("levelup", booked);
+        var detach = ChasterHead.Attach(chaster, null);
+        try
+        {
+            // attach-once (WPF's _attached guard): a second call adds no handler
+            var levelUpHandlers = typeof(ProgressionBank).GetField("LevelUp", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            int Count() => ((Delegate?)levelUpHandlers.GetValue(null))?.GetInvocationList().Length ?? 0;
+            var before = Count();
+            ChasterHead.Attach(chaster, null);
+            Assert.Equal(before, Count());
+            ProgressionBank.Add(XpCurve.GetXPForLevel(3, XpCurve.EpochOf(s)), "Quest");
+            Assert.Equal(4, s.PlayerLevel);
+            Assert.Contains("levelup", booked);
+        }
+        finally { detach(); }
         await Task.CompletedTask;
     }));
 }
