@@ -70,5 +70,13 @@ namespace ConditioningControlPanel
 
         public static void TrackBubbleCountGameStarted() { try { TrackBubbleCountGameStartedProvider?.Invoke(); } catch { } }
         public static void TrackBubbleCountCompleted() { try { TrackBubbleCountCompletedProvider?.Invoke(); } catch { } }
+
+        /// <summary>A mandatory video's attention checks passed (true) or failed (false).</summary>
+        public static volatile Action<bool>? TrackAttentionCheckProvider;
+
+        public static void TrackAttentionCheck(bool passed)
+        {
+            try { TrackAttentionCheckProvider?.Invoke(passed); } catch { }
+        }
     }
 }

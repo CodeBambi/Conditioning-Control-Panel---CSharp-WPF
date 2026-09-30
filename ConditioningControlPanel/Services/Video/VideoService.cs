@@ -4045,10 +4045,7 @@ namespace ConditioningControlPanel.Services
         /// aspect differs from the screen's by more than the tolerance. Pure — unit-tested.
         /// </summary>
         internal static bool NeedsBlurFill(double videoAspect, double screenAspect)
-        {
-            if (videoAspect <= 0 || screenAspect <= 0) return false;
-            return Math.Abs(videoAspect / screenAspect - 1.0) > 0.03;
-        }
+            => MandatoryVideoScheduler.NeedsBlurFill(videoAspect, screenAspect);
 
         /// <summary>
         /// Byte size of one BGRA frame of the given geometry, or 0 if the geometry is absurd
@@ -5527,30 +5524,9 @@ namespace ConditioningControlPanel.Services
 
                         _spawned = 0; // Reset spawned counter
                         var dur = _duration > 0 ? _duration : 60;
-                        // Use setting directly as total count (not density)
-                        var maxTargets = Math.Max(1, App.Settings.Current.AttentionDensity);
-                        _total = App.Settings.Current.RandomizeAttentionTargets
-                            ? _random.Next(1, maxTargets + 1)  // Random from 1 to max (inclusive)
-                            : maxTargets;
-
-                        // Generate spawn times with minimum gap to prevent simultaneous targets
-                        var minGap = 3.0; // Minimum 3 seconds between targets
-                        var availableWindow = Math.Max(1, dur - 8); // Stop spawning ~5s before end
-                        for (int i = 0; i < _total; i++)
-                        {
-                            var spawnTime = 3 + _random.NextDouble() * availableWindow;
-                            _spawnTimes.Add(spawnTime);
-                        }
-                        _spawnTimes.Sort();
-
-                        // Ensure minimum gap between targets (adjust times if too close)
-                        for (int i = 1; i < _spawnTimes.Count; i++)
-                        {
-                            if (_spawnTimes[i] - _spawnTimes[i - 1] < minGap)
-                            {
-                                _spawnTimes[i] = _spawnTimes[i - 1] + minGap;
-                            }
-                        }
+                        _total = MandatoryVideoScheduler.AttentionTargetCount(App.Settings.Current.AttentionDensity,
+                            App.Settings.Current.RandomizeAttentionTargets, _random);
+                        _spawnTimes.AddRange(MandatoryVideoScheduler.AttentionSpawnTimes(_total, dur, _random));
 
                         _attentionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
                         _attentionTimer.Tick += CheckSpawnTargets;
@@ -5752,7 +5728,7 @@ namespace ConditioningControlPanel.Services
 
                         _ = App.Haptics?.VideoTargetHitAsync();
                         _hits++;
-                        App.Progression?.AddXP(15, XPSource.Video);
+                        App.Progression?.AddXP(MandatoryVideoScheduler.AttentionHitXp, XPSource.Video);
 
                         // Destroy ALL targets from this spawn (user caught one, clear all on all monitors)
                         lock (_targets)
@@ -5954,22 +5930,18 @@ namespace ConditioningControlPanel.Services
 
             if (settings.AttentionChecksEnabled && _spawned > 0)
             {
-                bool passed = _hits >= _spawned;
+                var verdict = MandatoryVideoScheduler.Evaluate(true, _spawned, _hits, _random.NextDouble());
+                bool passed = verdict != AttentionVerdict.Fail;
                 App.Logger.Information("Attention result: {Hits}/{Spawned} (of {Total} scheduled) = {Result}", _hits, _spawned, _total, passed ? "PASS" : "FAIL");
 
                 if (passed)
                 {
-                    var xpForPlays = (_penalties + 1) * 50;
-                    var bonus = 200;
-                    App.Progression?.AddXP(xpForPlays + bonus, XPSource.Video);
+                    App.Progression?.AddXP(MandatoryVideoScheduler.AttentionPassXp(_penalties), XPSource.Video);
 
                     // Track successful attention check
                     App.Achievements?.TrackAttentionCheckPassed(isVideo: true);
 
-                    if (_random.NextDouble() < 0.1)
-                    {
-                        loop = troll = true;
-                    }
+                    loop = troll = verdict == AttentionVerdict.Troll;
                 }
                 else
                 {

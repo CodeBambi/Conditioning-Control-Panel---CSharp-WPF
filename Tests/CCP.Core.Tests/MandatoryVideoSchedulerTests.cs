@@ -19,6 +19,9 @@ public sealed class MandatoryVideoSchedulerTests
         public double Watched;
         public void Show(string path, bool strict) => Shown.Add((path, strict));
         public double CloseAll() { Closes++; return Watched; }
+        public readonly List<AttentionVerdict> Messages = new();
+        public Action? Then;
+        public void ShowMessage(AttentionVerdict verdict, int ms, Action then) { Messages.Add(verdict); Then = then; }
     }
 
     private static void With(int perHour, bool strict, Action body)
@@ -96,6 +99,124 @@ public sealed class MandatoryVideoSchedulerTests
         Assert.True(v.IsRunning);
         v.Stop();
     });
+
+    [Fact]
+    public void Attention_rules_match_WPF()
+    {
+        var r = new Random(1);
+        var t = MandatoryVideoScheduler.AttentionSpawnTimes(8, 30, r);
+        Assert.Equal(8, t.Count);
+        Assert.True(t[0] >= 3);
+        for (var i = 1; i < t.Count; i++) Assert.True(t[i] - t[i - 1] >= 3 - 1e-9, "3 s apart");
+        Assert.Equal(3, MandatoryVideoScheduler.AttentionTargetCount(3, false, r));
+        Assert.Equal(1, MandatoryVideoScheduler.AttentionTargetCount(0, false, r));
+        Assert.InRange(MandatoryVideoScheduler.AttentionTargetCount(5, true, r), 1, 5);
+        Assert.Equal(AttentionVerdict.None, MandatoryVideoScheduler.Evaluate(true, 0, 0, 0.5));
+        Assert.Equal(AttentionVerdict.None, MandatoryVideoScheduler.Evaluate(false, 3, 0, 0.5));
+        Assert.Equal(AttentionVerdict.Fail, MandatoryVideoScheduler.Evaluate(true, 3, 2, 0.5));
+        Assert.Equal(AttentionVerdict.Pass, MandatoryVideoScheduler.Evaluate(true, 3, 3, 0.5));
+        Assert.Equal(AttentionVerdict.Troll, MandatoryVideoScheduler.Evaluate(true, 3, 3, 0.05));
+        Assert.Equal(250, MandatoryVideoScheduler.AttentionPassXp(0));
+        Assert.Equal(350, MandatoryVideoScheduler.AttentionPassXp(2));
+        Assert.Equal("GOOD\nGIRL", MandatoryVideoScheduler.FormatTriggerText("GOOD GIRL"));
+        Assert.Equal("A B\nC D E", MandatoryVideoScheduler.FormatTriggerText("A B C D E"));
+        Assert.True(MandatoryVideoScheduler.NeedsBlurFill(4 / 3.0, 16 / 9.0));
+        Assert.False(MandatoryVideoScheduler.NeedsBlurFill(16 / 9.0, 16 / 9.0));
+    }
+
+    [Fact]
+    public void A_missed_check_replays_a_fresh_strict_clip_until_mercy_and_a_catch_pays() => With(60, true, () =>
+    {
+        var s = CoreSettings.Current;
+        var (a, m) = (s.AttentionChecksEnabled, s.MercySystemEnabled);
+        (s.AttentionChecksEnabled, s.MercySystemEnabled) = (true, true);
+        var xp = new List<double>(); var checks = new List<bool>();
+        CoreProgression.AddXPProvider = (x, _) => xp.Add(x);
+        CoreProgression.TrackAttentionCheckProvider = checks.Add;
+        try
+        {
+            var clock = new FakeClock(); var host = new Host();
+            var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+            v.Trigger(); clock.Advance(MandatoryVideoScheduler.PreRoll);
+            for (var replay = 1; replay <= 2; replay++)
+            {
+                v.NoteSpawn(); v.NoteSpawn(); v.NoteHit();   // 1 of 2 caught
+                v.Ended();
+                Assert.False(v.IsPlaying);
+                Assert.Equal(AttentionVerdict.Fail, host.Messages[^1]);
+                Assert.Equal(replay, v.Penalties);
+                host.Then!();                                // the 2 s message ends: a fresh clip, same strictness
+                clock.Advance(MandatoryVideoScheduler.PreRoll);
+                Assert.Equal(replay + 1, host.Shown.Count);
+                Assert.True(host.Shown[^1].Strict);
+                Assert.Equal(0, v.AttentionSpawned);
+            }
+            v.NoteSpawn(); v.Ended();                        // third miss: mercy, no replay
+            Assert.Equal(AttentionVerdict.Mercy, host.Messages[^1]);
+            host.Then!();
+            clock.Advance(TimeSpan.FromSeconds(5));
+            Assert.Equal(3, host.Shown.Count);
+            Assert.Equal(0, v.Penalties);
+            Assert.Equal(new[] { false, false, false }, checks);
+
+            xp.Clear(); checks.Clear();
+            for (var i = 0; i < 50 && host.Messages.Count == 3; i++)   // a catch pays, 1 in 10 is trolled
+            {
+                v.Trigger(); clock.Advance(MandatoryVideoScheduler.PreRoll);
+                v.NoteSpawn(); v.NoteHit(); v.Ended();
+            }
+            Assert.Contains(250.0, xp);
+            Assert.Contains(15.0, xp);
+            Assert.All(checks, Assert.True);
+
+            v.Trigger(); clock.Advance(MandatoryVideoScheduler.PreRoll);   // a stop during the message cancels the replay
+            v.NoteSpawn(); v.Ended();
+            var shown = host.Shown.Count;
+            v.Stop(); host.Then!();
+            clock.Advance(TimeSpan.FromHours(1));
+            Assert.Equal(shown, host.Shown.Count);
+        }
+        finally
+        {
+            (s.AttentionChecksEnabled, s.MercySystemEnabled) = (a, m);
+            CoreProgression.AddXPProvider = null;
+            CoreProgression.TrackAttentionCheckProvider = null;
+        }
+    });
+
+    [Fact]
+    public void A_new_clip_during_the_verdict_message_cancels_the_pending_replay() => With(60, false, () =>
+    {
+        var s = CoreSettings.Current;
+        var (a, m) = (s.AttentionChecksEnabled, s.MercySystemEnabled);
+        (s.AttentionChecksEnabled, s.MercySystemEnabled) = (true, true);
+        try
+        {
+            var clock = new FakeClock(); var host = new Host();
+            var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+            v.Trigger(); clock.Advance(MandatoryVideoScheduler.PreRoll);
+            v.NoteSpawn(); v.Ended();                        // missed: the 2 s verdict message is up
+            Assert.True(v.Trigger());                        // the Test button in that gap
+            clock.Advance(MandatoryVideoScheduler.PreRoll);
+            Assert.Equal(2, host.Shown.Count);
+            host.Then!();                                    // the message ends: its replay is stale
+            clock.Advance(TimeSpan.FromSeconds(5));
+            Assert.Equal(2, host.Shown.Count);
+            Assert.True(v.IsPlaying);
+            Assert.Equal(1, v.Penalties);                    // a stale replay would have run AfterEnd (reset to 0)
+        }
+        finally { (s.AttentionChecksEnabled, s.MercySystemEnabled) = (a, m); }
+    });
+
+    [Fact]
+    public void No_videos_is_raised_once_per_launch()
+    {
+        var v = new MandatoryVideoScheduler(new Host(), new FakeClock(), () => Array.Empty<string>());
+        var n = 0;
+        v.NoVideos += () => n++;
+        v.Trigger(); v.Trigger();
+        Assert.Equal(1, n);
+    }
 
     [Fact]
     public void Watch_credit_goes_to_progression_from_one_second()
