@@ -1021,3 +1021,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   says a controller can never turn the panic key off.
 - Evidence: RemoteRelayTests (fake relay) + RemoteControlTabTests, fail-proven; live gate/login dialog/tiers, 0 binding errors. No real
   relay pairing tested. Rows stay stub (controller overlay, session/feature commands, toasts, 409 recovery). Reviews: FIX -> ACCEPT.
+
+## avalonia-port/awareness-observer: +730
+- Legacy Awareness Mode title observer (WindowAwarenessService + AppClusterMap) moved to Core (git mv; WPF builds it with its user32
+  reader and no filter, unchanged). Linux reads _NET_ACTIVE_WINDOW/_NET_WM_NAME (XWayland windows only). Avalonia applies
+  AwarenessPrivacyRules before anything reads the title, logs included (decision logged); entitlement re-checked every tick, lapse
+  stops it; consent-gated start; the tube speaks the preset line only (no AI here, nothing leaves the machine). Fixed null
+  AppClusterMap tables without an override file.
+- Evidence: WindowAwarenessServiceTests (9) + tube reaction test, fail-proven; live test windows only. Rows stay stub (OCR/keyword
+  Awareness tab, v2 observer, privacy view). Review: ACCEPT + notes fixed.
