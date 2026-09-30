@@ -745,6 +745,7 @@
   "tooltip_change_camera_shortcut": "클릭하여 카메라 단축키 변경",
   "camera_shortcut_toast_started": "카메라 추적 시작됨",
   "camera_shortcut_toast_stopped": "카메라 추적 중지됨",
+  "panic_camera_stopped": "카메라가 중지되었습니다. 다시 시작하려면 추적을 시작하세요.",
   "btn_confirm": "확인",
   "btn_save": "저장",
   "btn_close": "닫기",

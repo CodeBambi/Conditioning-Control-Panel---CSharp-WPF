@@ -201,10 +201,25 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
 - Choice: the session is head code (`Views/Overlays/BlinkTrainerSession.cs`, overlay windows are head-only); the pure parts
   moved to Core (`BlinkTrainerAssetPool` by git mv, `BlinkTrainerState.TileGrid`, WPF delegates). Overlays use the pink-filter
   refusals (click-through + transparency or nothing). The start goes through `StartEffect` so the Wayland panic shortcut is
-  bound first; a Stop/panic while the bind is pending cancels it (`Generation`). Panic, owner close, app exit and consent revoke
-  stop the session. Calibration, quick recal and tracker test are NOT in this slice: all three need the gaze-projection feed
+  bound first; the session `Generation` is read before the tracker start is awaited, so a Stop/panic during the tracker start
+  or the pending bind cancels it. Panic, the shell's Closing (so a close cancelled to the tray too, as WPF LabTab.cs:1000),
+  app exit and consent revoke stop the session. Calibration, quick recal and tracker test are NOT in this slice: all three need the gaze-projection feed
   (WPF WebcamCalibrationWindow ~2.1k LOC + gaze maths) that WebcamTracker does not emit; their buttons stay disabled with a
-  reason. `CoreWebcam.IsAvailable` is seeded true, and revoke now keeps all four promises in one place (`WebcamTracker.RevokeConsent`).
+  reason. `CoreWebcam.IsAvailable` is seeded true, and revoke keeps all four promises in one place (`WebcamTracker.RevokeConsent`: stop, delete the calibration file via
+  `WebcamCalibrationData.DeleteIfExists`, clear consent, turn the webcam features off).
   Deviations: GIF/animated webp show their first frame; mix mode buckets only already-seen images; no explicit tracking-monitor
   pick (placement = DualMonitorEnabled ? all : primary); no stage video preview; no SeasonRecap credit.
 - Advisor: supervisor (progress update), worker.
+
+## 2026-09-30: panic and the camera (Avalonia only, deliberate WPF deviation)
+- Question: should a panic press stop webcam tracking? WPF leaves the camera running.
+- Choice (C): every panic press, including Lock Card presses that do not advance the exit ladder and a press consumed as a video
+  grace pause, stops tracking after the audio and overlay teardown, fire-and-forget (Stop can block up to 5 s, so never awaited
+  on the panic path). Consent, calibration, device choice and settings are kept; status chips follow the tracker's StateChanged.
+  The notice "Camera stopped. Start tracking to resume." (`panic_camera_stopped`, all languages) shows when a camera was on or
+  starting. The Blink Trainer session stops with it, and the tracker's stop generation keeps an in-flight Start from publishing
+  its camera afterwards. A palette-claimed Escape is not a panic (PanicPolicy.DismissSettingsPalette) and does not stop it.
+- Rationale: Panic is the get-me-out control; a camera left running is the most visible privacy leak; attention checks skip when
+  tracking is off (AttentionCheckService.cs:247), session/autonomy don't depend on the webcam, no StrictLock/Lockdown escape rule
+  uses gaze; cost is a manual restart, made expected by the notice.
+- Advisor: oracle-deep.

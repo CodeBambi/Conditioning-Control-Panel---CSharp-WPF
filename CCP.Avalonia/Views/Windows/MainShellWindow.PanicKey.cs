@@ -62,7 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 && SettingsPaletteWindow.TryConsumeEscape();
             var rung = PanicPolicy.Decide(lockCardOpen, paletteClaimed, PanicPolicy.OverrideEnabled(s));
             Serilog.Log.Information("Panic key pressed ({Rung})", rung);
-            if (rung == PanicPolicy.Rung.DismissLockCard) StopLockCards();
+            if (rung == PanicPolicy.Rung.DismissLockCard) { StopLockCards(); StopCameraForPanic(); }
             if (!PanicPolicy.StopsSurfaces(rung)) return;
             // WPF #735: with PanicOverridesAll off (RunLadder), the first press over a playing mandatory
             // video grace-pauses it instead (TryGracePause refuses when panic overrides all), and the
@@ -70,6 +70,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (rung == PanicPolicy.Rung.RunLadder && Views.Overlays.MandatoryVideoOverlay.Instance.TryGracePause(fromPanicKey: true))
             {
                 Serilog.Log.Information("Panic press consumed as video grace pause");
+                StopCameraForPanic();
                 return;
             }
             bool wasRunning = CoreEngine.IsRunning;
@@ -83,6 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             StopAutonomyForPanic();   // WPF KillAllAudio -> Autonomy.Stop: panic stops Takeover (decisions 2026-09-30)
             StopEngine();
             StopLockCards();   // WPF StopAdHocEffects: App.LockCard.Stop(dismissOpenCards: true)
+            StopCameraForPanic();
             if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop
 
             if ((now - _lastPanicTime).TotalMilliseconds > 2000) _panicPressCount = 0;
@@ -92,6 +94,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Serilog.Log.Information("Double panic! Exiting application...");
                 RequestExit();
             }
+        }
+
+        /// <summary>Decision C (docs/avalonia-decisions.md, panic and the camera; deliberate WPF deviation):
+        /// every panic press that is not a palette-claimed Escape closes the camera, after the audio and
+        /// overlay teardown. Fire-and-forget: Stop can block up to 5 s on a wedged driver. Consent,
+        /// calibration, device choice and settings are kept. The Blink Trainer session is stopped with
+        /// it (it has nothing to swap on without blinks), which also cancels a queued session start;
+        /// the tracker's own generation stops a start already in flight from publishing its camera.</summary>
+        internal static void StopCameraForPanic()
+        {
+            Views.Overlays.BlinkTrainerSession.Stop();
+            var tracker = Platform.WebcamTracker.Instance;
+            bool on = tracker.IsRunning || tracker.IsStarting;
+            _ = tracker.StopAsync();
+            if (on) App.Notifications.Show(Loc.Get("panic_camera_stopped"), Helpers.NotificationType.Info, TimeSpan.FromSeconds(5));
         }
 
         // ---- Native Wayland windows: the GlobalShortcuts portal, bound only while effects run ----
