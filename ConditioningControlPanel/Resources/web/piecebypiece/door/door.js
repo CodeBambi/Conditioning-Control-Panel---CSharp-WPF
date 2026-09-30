@@ -466,7 +466,7 @@ export function createDoor(opts = {}) {
   function deal(mode, match = null, restore = null) {
     current = { mode, match, options: restore?.options || setup, startedAt: Date.now() - (restore?.durationMs || 0), captures: { w: 0, b: 0 } };
     if (restore) for (const [i, san] of restore.moves.entries()) if (san.includes('x')) current.captures[i % 2 ? 'b' : 'w']++;
-    if (mode === 'online' && match && match.id) stake.begin(match.id);
+    if (mode === 'online' && match && match.id) { stake.begin(match.id); stake.play?.(); }
     hide();
     startGame({ mode, match, options: setup, restore });
   }
