@@ -156,6 +156,7 @@ public sealed class LauncherWindowTests
             LauncherWindow.Open();
             launcher.RequestClose();
             Assert.False(launcher.IsVisible);           // session running: hide, not exit
+            Assert.Same(launcher, LauncherWindow.Instance);   // hidden, not closed
 
             LauncherWindow.Open();
             shell.TrayHostPresent = () => false;
