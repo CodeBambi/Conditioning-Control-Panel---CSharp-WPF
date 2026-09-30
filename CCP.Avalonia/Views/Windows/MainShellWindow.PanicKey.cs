@@ -88,7 +88,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_panicPressCount >= 2)
             {
                 Serilog.Log.Information("Double panic! Exiting application...");
-                RequestExit();
+                ExitWithoutBill();   // WPF MainWindow.xaml.cs:1841 shuts down directly, no bill
             }
         }
 

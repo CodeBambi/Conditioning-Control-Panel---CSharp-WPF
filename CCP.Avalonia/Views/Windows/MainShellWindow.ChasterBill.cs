@@ -21,6 +21,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private bool _exitBillShown;
 
+        /// <summary>One second of the live bill's countdown; the tests drive it instead of waiting.</summary>
+        internal Action? ExitBillTick { get; private set; }
+
+        /// <summary>The exits WPF takes straight to Shutdown (double panic, the declined 18+ gate, an
+        /// ungated first run): no bill, whatever is on the tab.</summary>
+        internal void ExitWithoutBill()
+        {
+            _exitBillShown = true;
+            RequestExit();
+        }
+
         /// <summary>WPF TryShowExitBill: show the bill and hold the exit, or return false when there
         /// is no bill to show. <paramref name="continueExit"/> runs once, when it is dismissed or times out.</summary>
         internal bool TryShowExitBill(Action continueExit)
@@ -65,16 +76,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     if (finished) return;
                     finished = true;
                     timer.Stop();
-                    root.Children.Remove(overlay);
-                    continueExit();
+                    try { root.Children.Remove(overlay); } catch (Exception ex) { Serilog.Log.Debug("[Chaster] bill remove: {E}", ex.Message); }
+                    continueExit();   // always: the exit must never be lost behind the bill
                 }
                 overlay.PointerReleased += (_, _) => Finish();
-                timer.Tick += (_, _) =>
+                void Tick()
                 {
                     left--;
                     if (left <= 0) Finish();
                     else countdown.Text = Loc.GetF("chaster_bill_closing", left);
-                };
+                }
+                timer.Tick += (_, _) => Tick();
+                ExitBillTick = Tick;
 
                 if (AmbientFxCanvas.Env.AllowTransitions)
                 {

@@ -55,12 +55,16 @@ public sealed class ChasterBillTests
         var service = new SettingsService();
         CoreSettings.ServiceProvider = () => service;
         var s = CoreSettings.Current;
+        var (oldLock, oldTab, oldPaused, oldPrices) = (s.ChasterLockId, s.ChasterTabEnabled, s.ChasterPaused, s.ChasterPrices);
+        var (oldGet, oldSet) = (CoreSecrets.RetrieveProvider, CoreSecrets.StoreProvider);
+        var secrets = new Dictionary<string, string?>();   // memory only: never the OS keyring
+        CoreSecrets.RetrieveProvider = n => secrets.GetValueOrDefault(n);
+        CoreSecrets.StoreProvider = (n, v) => secrets[n] = v;
         s.ChasterLockId = "l1";
         s.ChasterTabEnabled = true;
         s.ChasterPaused = false;
         s.ChasterPrices = new List<string> { "attention", "typo" };
         var dir = Directory.CreateTempSubdirectory("ccp-chaster-bill-").FullName;
-        SecretStore.Seed();
         new SecretChasterTokenStore().Write(new ChasterStoredTokens("acc", "ref", DateTime.UtcNow.AddHours(1)));
         var chaster = new ChasterService(new ChasterClient(new FakeChaster()), new SecretChasterTokenStore(), Path.Combine(dir, "chaster_tab.json"),
             () => new ChasterOptions(CoreSettings.Current.ChasterTabEnabled, CoreSettings.Current.ChasterLockId,
@@ -80,7 +84,8 @@ public sealed class ChasterBillTests
             chaster.Dispose();
             new SecretChasterTokenStore().Clear();
             try { Directory.Delete(dir, true); } catch { }
-            s.ChasterTabEnabled = false;
+            (s.ChasterLockId, s.ChasterTabEnabled, s.ChasterPaused, s.ChasterPrices) = (oldLock, oldTab, oldPaused, oldPrices);
+            (CoreSecrets.RetrieveProvider, CoreSecrets.StoreProvider) = (oldGet, oldSet);
             service.SaveImmediate(); CoreSettings.ServiceProvider = null;
         }
     }
@@ -112,6 +117,40 @@ public sealed class ChasterBillTests
         Click(shell, overlay);
         Assert.DoesNotContain(overlay, root.Children);
         Assert.True(closed);                           // the click runs the exit path again, past the bill
+        await Task.CompletedTask;
+    }));
+
+    [Fact]
+    public Task TheBillClosesByItselfAfterItsSeconds() => AvaloniaTestDispatcher.RunAsync(() => Run(async (chaster, shell) =>
+    {
+        chaster.Note("attention");
+        var closed = false;
+        shell.Closed += (_, _) => closed = true;
+        shell.RequestExit();
+        var countdown = shell.Named<Grid>("RootGrid")!.Children.OfType<Grid>().Single(g => g.Name == "ExitBillOverlay")
+            .GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == Loc.GetF("chaster_bill_closing", MainShellWindow.ExitBillSeconds));
+        for (var i = 1; i < MainShellWindow.ExitBillSeconds; i++) shell.ExitBillTick!();   // the timer's seconds, driven, no sleeps
+        Assert.False(closed);
+        Assert.Equal(Loc.GetF("chaster_bill_closing", 1), countdown.Text);
+        shell.ExitBillTick!();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(closed);
+        Assert.DoesNotContain(shell.Named<Grid>("RootGrid")!.Children.OfType<Grid>(), g => g.Name == "ExitBillOverlay");
+        await Task.CompletedTask;
+    }));
+
+    [Fact]
+    public Task DoublePanicExitsAtOnceWithNoBill() => AvaloniaTestDispatcher.RunAsync(() => Run(async (chaster, shell) =>
+    {
+        chaster.Note("attention");                     // a bill that the user's own Exit would show
+        var closed = false;
+        shell.Closed += (_, _) => closed = true;
+        var t0 = new DateTime(2026, 1, 1, 12, 0, 0);
+        shell.HandlePanicKeyPress(t0);
+        shell.HandlePanicKeyPress(t0.AddSeconds(0.5));  // WPF MainWindow.xaml.cs:1841: straight to Shutdown
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(closed);
+        Assert.DoesNotContain(shell.Named<Grid>("RootGrid")!.Children.OfType<Grid>(), g => g.Name == "ExitBillOverlay");
         await Task.CompletedTask;
     }));
 
