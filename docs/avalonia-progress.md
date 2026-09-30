@@ -1047,3 +1047,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   confirmed as WPF's real behaviour (oracle-deep, logged).
 - Evidence: AutonomySchedulerTests (fake clock: entitlement, stop generation, busy, weighted pick, idle) + TakeoverTests, fail-proven;
   live Start -> three actions -> Stop. Rows stay stub (other actions, banner/countdown/audio, voice commands). Review: ACCEPT + notes.
+
+## avalonia-port/companion-ai-core: +603
+- AiService, BambiSprite prompt assembly, PersonalityService (+ModPersonalityPicks, CompanionQuota, CompanionProxyContract, AiTextHygiene,
+  CompanionLinkIndex) moved to Core (git mv; WPF seeds the Core seams in App's static ctor). Avalonia tube chat sends through Core
+  AiService on WPF's brain-off path: moderation on input and output, sign-in + AI access gate, loopback-only CCP_AI_BASE_URL (sandbox
+  fails closed), one ModerationCounter with cooldown, no chat text logged. WPF prompt tests seed CoreMods.Service again.
+- Evidence: AiServiceProxyTests (5), TubeChatAiTests, BambiSpriteCoreModsTests, fail-proven; live signed out: 0 proxy requests.
+  Rows stay stub (CompanionBrain default route, thinking animation, warning dialog, local providers). Review: FIX -> fixed.
