@@ -175,6 +175,15 @@ namespace ConditioningControlPanel.Services
         // asset-manager toggle moves that count, so one int compare per draw is enough to notice a
         // pool that predates the user's latest selection — see PruneDeselectedFromPools.
         private int _poolDisabledStamp = -1;
+        // One shuffled cycle per local source, shared by flashes and the chaos overlays, so a big
+        // folder is walked in full before anything repeats (#627). Guarded by _lockObj.
+        private ShuffleBag<string>? _diskBag;
+        private ShuffleBag<(string PackId, PackFileEntry File)>? _packBag;
+        private ShuffleBag<string> DiskBag => _diskBag ??= new ShuffleBag<string>(p => p, _random);
+        private ShuffleBag<(string PackId, PackFileEntry File)> PackBag =>
+            _packBag ??= new ShuffleBag<(string PackId, PackFileEntry File)>(PackEntryKey, _random);
+        private static string PackEntryKey((string PackId, PackFileEntry File) p) =>
+            $"pack:{p.PackId}/{(string.IsNullOrEmpty(p.File?.ObfuscatedName) ? p.File?.OriginalName : p.File!.ObfuscatedName)}";
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
         // Last flash voice-line pool size written to the log, so BuildVoiceLinePool only speaks up
         // when the number CHANGES (#1099). Guarded by _lockObj, like _soundQueue.
@@ -3756,12 +3765,9 @@ namespace ConditioningControlPanel.Services
                         usePackImage = true;
                     }
 
-                    if (usePackImage && _packImageList.Count > 0)
+                    if (usePackImage && PackBag.TryNext(_packImageList, out var packImage))
                     {
-                        // Randomly select a pack image (true random, not sequential)
-                        var index = _random.Next(_packImageList.Count);
-                        var packImage = _packImageList[index];
-                        // Decrypt pack image to temp file
+                        // Next pack entry of the shuffled cycle (#627). Decrypt it to a temp file.
                         var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
                         if (!string.IsNullOrEmpty(tempPath))
                         {
@@ -3773,12 +3779,10 @@ namespace ConditioningControlPanel.Services
                         // If decryption failed, try regular list
                     }
 
-                    if (_imageList.Count > 0)
-                    {
-                        // Randomly select an image (true random, not sequential)
-                        var index = _random.Next(_imageList.Count);
-                        result.Add(_imageList[index]);
-                    }
+                    // Next disk image of the shuffled cycle: the whole folder comes up before
+                    // anything repeats (#627).
+                    if (DiskBag.TryNext(_imageList, out var diskImage))
+                        result.Add(diskImage);
                 }
                 return result;
             }
@@ -3794,9 +3798,9 @@ namespace ConditioningControlPanel.Services
         /// This is what lets the Chaos "glitch" wash and "cascade" gif-rain match the user's live
         /// preset — previously they re-listed the raw images folder (ChaosImagePool), which ignored
         /// both disabled assets and content packs, so they silently drew nothing for pack/curated
-        /// users while flashes worked. Picks are DISTINCT (unlike the flash pipeline's independent,
-        /// with-replacement picks): a single wash/rain that repeats the same image 2-3x looks broken,
-        /// so dedup on the source identity here. May do disk I/O (pack decrypt, one per chosen pack
+        /// users while flashes worked. Picks are DISTINCT: a single wash/rain that repeats the same
+        /// image 2-3x looks broken, so dedup on the source identity here. Draws come off the same
+        /// shuffle bags as the flashes (#627), so the two surfaces share one walk of the library. May do disk I/O (pack decrypt, one per chosen pack
         /// image) — call OFF the UI thread when requesting more than a couple.
         ///
         /// Draws from the REMOTE still pool too, on the same terms as the flashes themselves
@@ -3841,8 +3845,8 @@ namespace ConditioningControlPanel.Services
                 int poolSize = localPool + remoteReady;
                 int want = Math.Min(count, poolSize);
                 bool haveLocal = localPool > 0;
-                var chosenDisk = new HashSet<int>();
-                var chosenPack = new HashSet<int>();
+                var chosenDisk = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var chosenPack = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var chosenRemote = new HashSet<string>(StringComparer.Ordinal);
                 var result = new List<string>(want);
                 int guard = 0, maxGuard = poolSize * 8 + 16;   // backstop vs. random-collision / decrypt-fail retries
@@ -3881,11 +3885,13 @@ namespace ConditioningControlPanel.Services
                     else if (_packImageList.Count > 0)
                         usePackImage = true;
 
+                    // Both local pools deal from the same shuffled cycles as the flashes (#627), so a
+                    // wash walks the library instead of re-rolling it. A cycle boundary inside one
+                    // batch can hand back an entry this batch already has: the key sets skip it.
                     if (usePackImage && _packImageList.Count > 0)
                     {
-                        var index = _random.Next(_packImageList.Count);
-                        if (!chosenPack.Add(index)) continue;   // already drew this pack entry
-                        var packImage = _packImageList[index];
+                        if (!PackBag.TryNext(_packImageList, out var packImage)) continue;
+                        if (!chosenPack.Add(PackEntryKey(packImage))) continue;   // already drew this pack entry
                         var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
                         if (!string.IsNullOrEmpty(tempPath))
                         {
@@ -3894,11 +3900,10 @@ namespace ConditioningControlPanel.Services
                         }
                         // decrypt failed → index stays marked chosen so we don't retry a broken entry
                     }
-                    else if (_imageList.Count > 0)
+                    else if (DiskBag.TryNext(_imageList, out var diskImage))
                     {
-                        var index = _random.Next(_imageList.Count);
-                        if (!chosenDisk.Add(index)) continue;   // already drew this disk image
-                        result.Add(_imageList[index]);
+                        if (!chosenDisk.Add(diskImage)) continue;   // already drew this disk image
+                        result.Add(diskImage);
                     }
                 }
                 return result;
@@ -4681,12 +4686,17 @@ namespace ConditioningControlPanel.Services
             var blockedCount = 0;
             var sanitizeFailedCount = 0;
 
+            // Windows treats a three-letter search extension as a prefix ("*.jpe" also returns
+            // x.jpeg, "*.tif" x.tiff), which listed those files twice and drew them at double
+            // weight (#627). Keep a file only on the pass for its own extension, and only once.
+            var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var ext in extensions)
             {
                 // Scan subfolders to support user-organized categories
                 // Note: Directory.GetFiles is case-insensitive on Windows NTFS
                 foreach (var file in Directory.GetFiles(folder, $"*{ext}", SearchOption.AllDirectories))
                 {
+                    if (!MediaListing.Keep(file, ext, listed)) continue;
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
                     var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
                     var isInUserAssets = SecurityHelper.IsPathSafe(file, App.UserDataPath);
