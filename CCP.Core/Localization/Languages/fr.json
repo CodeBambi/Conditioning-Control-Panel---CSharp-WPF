@@ -5583,6 +5583,7 @@
   "lockdown_ee_button": "SORTIE DE SECOURS",
   "lockdown_ee_sub": "appuie si tu veux sortir",
   "lockdown_ee_tooltip": "Ouvre la sortie. La franchir reste ton problème.",
+  "lockdown_ee_phrase_steps_fmt": "Les jeux de sortie ne sont pas encore dans cette version. La sortie : touche les chiffres du minuteur 5 fois, puis tape \"let me out\" et appuie sur Entrée. Temps restant : {0}",
   "lockdown_badge_label": "CONFINEMENT",
   "lockdown_badge_end": "Terminer",
   "lockdown_badge_tooltip": "Le Lockdown est en cours. Cliquez pour ouvrir l'onglet Lockdown.",

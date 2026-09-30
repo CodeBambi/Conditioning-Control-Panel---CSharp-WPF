@@ -25,22 +25,7 @@ public enum PossessionIntensity { Gentle = 0, Eerie = 1, FullDoki = 2 }
 /// card falls, a title loses letters, buttons swap).</summary>
 public enum PossessionRole { None = 0, Button, Card, Toggle, Title, Label, TabHeader, Timer, Slider, Combo, Image, Scroll, Progress, TextBox }
 
-/// <summary>Escape-attempt kinds raised through LockdownService.NotifyEscapeAttempt (tripwires).</summary>
-public static class EscapeKinds
-{
-    public const string Close = "close";              // Alt+F4 / window X / OnClosing
-    public const string Minimize = "minimize";        // minimize button (ALLOWED - still a tripwire)
-    public const string SystemKey = "syskey";         // a suppressed Win / Alt+Tab / Ctrl+Esc combo
-    public const string Stop = "stop";                // Stop button, tube quick-menu Stop, voice stop
-    public const string WrongPhrase = "wrong_phrase"; // a wrong secret phrase typed into the timer box
-    public const string Settings = "settings";        // trying to flip a greyed safety toggle
-    public const string EmergencyExit = "emergency_exit"; // pressed the big Emergency Exit button (minigame launched)
-    public const string Starve = "starve";                // switched the LAST running feature off mid-lockdown (the dose went empty)
-}
-
-/// <summary>One escape attempt. Repeat = how many times THIS kind fired during this lockdown (1-based);
-/// Total = every kind combined. The director scales the scare by both.</summary>
-public readonly record struct EscapeAttempt(string Kind, int Repeat, int Total, DateTime At);
+// EscapeKinds and EscapeAttempt live in CCP.Core/Services/Possession/EscapeKinds.cs (LockdownService is Core).
 
 /// <summary>A possessable control the host registered (via the poss:Possession.Role attached property,
 /// or explicit registration). Key is stable across the lockdown (x:Name or a role+index fallback) and

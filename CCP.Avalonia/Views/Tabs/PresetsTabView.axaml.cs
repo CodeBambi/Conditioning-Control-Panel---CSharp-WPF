@@ -376,12 +376,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>WPF LoadPreset: refused mid-session (the chokepoint), apply, save, and stop the
         /// running features the preset cleared (#872). Open editors re-seed from settings INPC.
-        /// ponytail: WPF keeps the strict flags on mid-Lockdown (LockdownStrictHold); no Lockdown
-        /// on this head yet, add it with the Lockdown port.</summary>
+        /// Mid-Lockdown the strict flags stay on (WPF MainWindow.Presets.cs:2217, LockdownStrictHold).</summary>
         internal bool LoadPreset(Preset preset)
         {
             if (Shell?.RefuseActionIfSessionLocked($"load-preset:{preset.Name}") ?? CoreSession.IsSessionRunning) return false;
-            preset.ApplyTo(CoreSettings.Current);
+            var cur = CoreSettings.Current;
+            bool strictBefore = cur.StrictLockEnabled, bubbleStrictBefore = cur.BubbleCountStrictLock;
+            preset.ApplyTo(cur);
+            ConditioningControlPanel.Services.LockdownStrictHold.RestoreAfterApply(cur, strictBefore, bubbleStrictBefore);
             CoreSettings.Save();
             CoreEngine.Reconcile();
             RefreshPresetsList();

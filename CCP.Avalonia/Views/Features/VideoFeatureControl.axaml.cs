@@ -219,6 +219,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             if (_isLoading) return;
             var on = ChkStrict.IsChecked ?? false;
+            // WPF: a Lockdown forcing Strict Lock holds this toggle (#1282, LockdownStrictHold): put the tick back.
+            if (ConditioningControlPanel.Services.LockdownStrictHold.RefusesNow(on))
+            {
+                _isLoading = true;
+                ChkStrict.IsChecked = CoreSettings.Current.StrictLockEnabled;
+                _isLoading = false;
+                return;
+            }
             if (on && TopLevel.GetTopLevel(this) is Window owner)
             {
                 var confirmed = await WarningDialog.ShowDoubleWarningAsync(owner,

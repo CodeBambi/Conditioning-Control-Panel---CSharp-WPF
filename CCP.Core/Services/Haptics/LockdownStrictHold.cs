@@ -20,7 +20,7 @@ public static class LockdownStrictHold
 
     /// <summary><see cref="Holds"/> against the live Lockdown and settings.</summary>
     public static bool HoldsNow
-        => Holds(App.Lockdown?.IsActive == true, App.Settings?.Current?.LockdownForceStrictLock == true);
+        => Holds(LockdownService.Current?.IsActive == true, CoreSettings.Current.LockdownForceStrictLock);
 
     /// <summary><see cref="Refuses"/> against the live Lockdown and settings.</summary>
     public static bool RefusesNow(bool turningOn) => !turningOn && HoldsNow;

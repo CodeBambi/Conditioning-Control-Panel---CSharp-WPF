@@ -5583,6 +5583,7 @@
   "lockdown_ee_button": "SALIDA DE EMERGENCIA",
   "lockdown_ee_sub": "púlsalo si quieres salir",
   "lockdown_ee_tooltip": "Abre la salida. Atravesarla sigue dependiendo de ti.",
+  "lockdown_ee_phrase_steps_fmt": "Los juegos de salida aún no están en esta versión. La salida: toca los dígitos del temporizador 5 veces, luego escribe \"let me out\" y pulsa Enter. Tiempo restante: {0}",
   "lockdown_badge_label": "ENCIERRO",
   "lockdown_badge_end": "Terminar",
   "lockdown_badge_tooltip": "Lockdown está activo. Haz clic para abrir la pestaña Lockdown.",

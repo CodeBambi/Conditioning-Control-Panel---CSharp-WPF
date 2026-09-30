@@ -51,6 +51,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var s = CoreSettings.Current;
             if (CapturingPanicKey || !s.PanicKeyEnabled) return;
+            // WPF MainWindow.xaml.cs:888: Lockdown ignores every GLOBAL key, whatever LockdownDisablePanicKey
+            // says. Only this listener layer: window and TextBox input (the secret phrase) are untouched.
+            if (LockdownActive) { Serilog.Log.Information("Panic key ignored under Lockdown"); return; }
 
             // Same evaluation order as WPF: asking the palette closes it, so never ask with a card up.
             bool lockCardOpen = LockCardWindow.IsAnyOpen();

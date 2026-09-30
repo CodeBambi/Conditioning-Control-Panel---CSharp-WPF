@@ -412,9 +412,8 @@
                                         </StackPanel>
 
                                         <!-- Active Panel (visible when lockdown IS active).
-                                             Authored collapsed, exactly as on WPF; the constructor
-                                             shows it on this head because the host that flips it
-                                             (MainWindow.Lab.cs) has not moved yet. -->
+                                             Authored collapsed, exactly as on WPF; LockdownService's
+                                             Activated / Deactivated events flip it (code-behind). -->
                                         <StackPanel x:Name="LockdownActivePanel" IsVisible="False">
                                             <TextBlock Text="{loc:Str label_lockdown_active}" Foreground="#DC143C" FontWeight="Bold" FontSize="16" Margin="0,0,0,8"/>
                                             <TextBlock x:Name="TxtLockdownTimer" Text="00:00" Foreground="#DC143C" FontWeight="Bold" FontSize="36"
@@ -561,6 +560,11 @@
                                                     </Border>
                                                 </Grid>
                                             </Button>
+
+                                            <!-- No exit games on this head (docs/avalonia-decisions.md,
+                                                 Lockdown / Emergency Exit): the slab says how the phrase works. -->
+                                            <TextBlock x:Name="TxtEmergencyExitNotice" IsVisible="False" TextWrapping="Wrap"
+                                                       Foreground="#FFB0A0" FontSize="12.5" Margin="0,8,0,0"/>
 
                                             <TextBox x:Name="TxtLockdownExit" IsVisible="False"
                                                      Background="#1A0A0A" Foreground="#DC143C" BorderBrush="#DC143C" BorderThickness="1"

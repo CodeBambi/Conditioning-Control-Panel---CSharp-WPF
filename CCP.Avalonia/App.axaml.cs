@@ -207,6 +207,10 @@ namespace ConditioningControlPanel.Avalonia
                 CoreSettings.ServiceProvider = () => Settings;
                 CorePaths.EffectiveAssetsProvider = ResolveEffectiveAssetsPath;
                 LocalizationManager.Instance.SetLanguage(Settings.Current.Language);
+                // WPF App.xaml.cs:3088: a run killed mid-lockdown gets its real panic key and Strict
+                // Lock back from lockdown_recovery.json before anything reads them.
+                LockdownService.RecoverIfNeeded();
+                LockdownService.Current = new LockdownService();
 
                 // Mod art: the same Core chain WPF's ModResourceResolver walks. Answers from the
                 // active mod once StartMods (below) seeds CoreMods; before that every answer is "no override".

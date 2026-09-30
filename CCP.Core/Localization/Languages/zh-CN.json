@@ -6095,6 +6095,7 @@
   "lockdown_ee_button": "紧急出口",
   "lockdown_ee_sub": "想出去就按下它",
   "lockdown_ee_tooltip": "打开出口。能不能走出去还得看你自己。",
+  "lockdown_ee_phrase_steps_fmt": "此版本尚无逃脱游戏。出去的方法：点击计时器数字 5 次，然后输入 \"let me out\" 并按回车。剩余时间：{0}",
   "lockdown_badge_label": "封锁",
   "lockdown_badge_end": "结束",
   "lockdown_badge_tooltip": "封锁进行中。点击打开封锁标签页。",

@@ -1,9 +1,10 @@
 using System;
 using System.IO;
-using System.Windows.Threading;
+using System.Threading;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using ConditioningControlPanel.Services.Possession;
+using Serilog;
 
 namespace ConditioningControlPanel.Services;
 
@@ -18,6 +19,14 @@ namespace ConditioningControlPanel.Services;
 /// </summary>
 public class LockdownService : IDisposable
 {
+    /// <summary>The head's live instance (WPF App.Lockdown, the Avalonia App), for Core rules that read
+    /// "is a lockdown running" (<see cref="LockdownStrictHold.HoldsNow"/>). Null when no head set one.</summary>
+    public static LockdownService? Current { get; set; }
+
+    /// <summary>Pushes a PanicKeyEnabled change made here into the head's UI (WPF: the keyboard hook
+    /// and the Settings ▸ Devices checkbox, MainWindow.SyncNoPanicState). Run on the UI thread.</summary>
+    public static Action? PanicKeyUiSync { get; set; }
+
     private bool _isActive;
     /// <summary>When the CURRENT stretch of clock started. <see cref="RestartTimer"/> rebases it, so
     /// the countdown and the Possession ladder both rewind with the Emergency Exit's sendback.</summary>
@@ -28,13 +37,13 @@ public class LockdownService : IDisposable
     /// the throw_away_the_key achievement has to be able to see that).</summary>
     private DateTime _startedAt;
     private TimeSpan _duration;
-    private DispatcherTimer? _countdownTimer;
+    private Timer? _countdownTimer;
     private bool _preStrictLock;
     private bool _prePanicKeyEnabled;
     private bool _isDisposed;
 
     private static string RecoveryFilePath =>
-        Path.Combine(App.UserDataPath, "lockdown_recovery.json");
+        Path.Combine(CorePaths.UserData, "lockdown_recovery.json");
 
     private sealed class RecoveryState
     {
@@ -91,7 +100,7 @@ public class LockdownService : IDisposable
     public void NotifyEscapeAttempt(string kind)
     {
         if (!_isActive || string.IsNullOrWhiteSpace(kind)) return;
-        if (App.Settings?.Current?.LockdownTripwiresEnabled == false) return;
+        if (!CoreSettings.Current.LockdownTripwiresEnabled) return;
         var now = DateTime.Now;
         if (string.Equals(kind, EscapeKinds.SystemKey, StringComparison.OrdinalIgnoreCase))
         {
@@ -103,11 +112,11 @@ public class LockdownService : IDisposable
         _escapeRepeats[kind] = rep;
         _escapeTotal++;
         var attempt = new EscapeAttempt(kind, rep, _escapeTotal, now);
-        App.Logger?.Debug("Lockdown tripwire: {Kind} x{Repeat} (total {Total})", kind, rep, _escapeTotal);
-        Helpers.DispatcherHelper.RunOnUI(() =>
+        Log.Debug("Lockdown tripwire: {Kind} x{Repeat} (total {Total})", kind, rep, _escapeTotal);
+        CoreDispatch.Post(() =>
         {
             try { EscapeAttempted?.Invoke(attempt); }
-            catch (Exception ex) { App.Logger?.Warning("Lockdown tripwire handler failed: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Warning("Lockdown tripwire handler failed: {Error}", ex.Message); }
         });
     }
 
@@ -137,8 +146,7 @@ public class LockdownService : IDisposable
     {
         if (_isActive) return;
 
-        var settings = App.Settings?.Current;
-        if (settings == null) return;
+        var settings = CoreSettings.Current;
 
         // Save current settings (so we can restore on deactivate)
         _preStrictLock = settings.StrictLockEnabled;
@@ -170,12 +178,11 @@ public class LockdownService : IDisposable
         _lastSysKeyAttempt = DateTime.MinValue;
         RestartCount = 0;
 
-        // Start countdown timer (ticks every second)
-        _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _countdownTimer.Tick += OnCountdownTick;
-        _countdownTimer.Start();
+        // Start countdown timer (ticks every second, on the UI thread as the DispatcherTimer did)
+        _countdownTimer = new Timer(_ => CoreDispatch.Post(() => OnCountdownTick(null, EventArgs.Empty)),
+            null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
 
-        App.Logger?.Information("Lockdown activated for {Duration} minutes", duration.TotalMinutes);
+        Log.Information("Lockdown activated for {Duration} minutes", duration.TotalMinutes);
         LockdownActivated?.Invoke();
     }
 
@@ -184,24 +191,17 @@ public class LockdownService : IDisposable
         if (!_isActive) return;
 
         // Stop timer
-        if (_countdownTimer != null)
-        {
-            _countdownTimer.Stop();
-            _countdownTimer.Tick -= OnCountdownTick;
-            _countdownTimer = null;
-        }
+        _countdownTimer?.Dispose();
+        _countdownTimer = null;
 
         // Restore saved settings. Some other code path may have already called
         // settings.Save() while lockdown was active (persisting the false PanicKeyEnabled),
         // so we explicitly Save here to overwrite that on disk with the real values.
-        var settings = App.Settings?.Current;
-        if (settings != null)
-        {
-            settings.StrictLockEnabled = _preStrictLock;
-            settings.PanicKeyEnabled = _prePanicKeyEnabled;
-            try { App.Settings?.SaveImmediate(); } catch { /* best-effort */ }
-            SyncPanicKeyUi();
-        }
+        var settings = CoreSettings.Current;
+        settings.StrictLockEnabled = _preStrictLock;
+        settings.PanicKeyEnabled = _prePanicKeyEnabled;
+        CoreSettings.SaveImmediate();
+        SyncPanicKeyUi();
 
         DeleteRecoveryFile();
 
@@ -214,7 +214,7 @@ public class LockdownService : IDisposable
         LastActiveDuration = DateTime.Now - _startedAt;
         _isActive = false;
 
-        App.Logger?.Information("Lockdown deactivated after {Minutes:F1} minutes", LastActiveDuration.TotalMinutes);
+        Log.Information("Lockdown deactivated after {Minutes:F1} minutes", LastActiveDuration.TotalMinutes);
         LockdownDeactivated?.Invoke();
     }
 
@@ -231,20 +231,20 @@ public class LockdownService : IDisposable
 
             var json = File.ReadAllText(RecoveryFilePath);
             var state = JsonConvert.DeserializeObject<RecoveryState>(json);
-            if (state != null && App.Settings?.Current != null)
+            if (state != null)
             {
-                App.Settings.Current.StrictLockEnabled = state.StrictLockEnabled;
-                App.Settings.Current.PanicKeyEnabled = state.PanicKeyEnabled;
-                App.Settings.SaveImmediate();
+                CoreSettings.Current.StrictLockEnabled = state.StrictLockEnabled;
+                CoreSettings.Current.PanicKeyEnabled = state.PanicKeyEnabled;
+                CoreSettings.SaveImmediate();
                 SyncPanicKeyUi();
-                App.Logger?.Information(
+                Log.Information(
                     "Lockdown recovery: restored PanicKeyEnabled={Panic}, StrictLockEnabled={Strict} from prior interrupted lockdown",
                     state.PanicKeyEnabled, state.StrictLockEnabled);
             }
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("Lockdown recovery failed: {Error}", ex.Message);
+            Log.Warning("Lockdown recovery failed: {Error}", ex.Message);
         }
         finally
         {
@@ -253,16 +253,15 @@ public class LockdownService : IDisposable
     }
 
     /// <summary>
-    /// Pushes a PanicKeyEnabled change made from here into the UI layer: the global keyboard hook
-    /// and the Settings ▸ Devices checkbox. MainWindow.SyncNoPanicState touches WPF controls, so it
-    /// must run on the UI thread; it is a no-op before MainWindow exists (startup recovery).
+    /// Pushes a PanicKeyEnabled change made from here into the UI layer through
+    /// <see cref="PanicKeyUiSync"/>, on the UI thread; a no-op before the head sets it (startup recovery).
     /// </summary>
     private static void SyncPanicKeyUi()
     {
-        Helpers.DispatcherHelper.RunOnUI(() =>
+        CoreDispatch.Post(() =>
         {
-            try { App.MainWindowRef?.SyncNoPanicState(); }
-            catch (Exception ex) { App.Logger?.Warning("Lockdown panic-key UI sync failed: {Error}", ex.Message); }
+            try { PanicKeyUiSync?.Invoke(); }
+            catch (Exception ex) { Log.Warning("Lockdown panic-key UI sync failed: {Error}", ex.Message); }
         });
     }
 
@@ -280,7 +279,7 @@ public class LockdownService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("Lockdown: failed to write recovery file: {Error}", ex.Message);
+            Log.Warning("Lockdown: failed to write recovery file: {Error}", ex.Message);
         }
     }
 
@@ -312,16 +311,16 @@ public class LockdownService : IDisposable
         if (!_isActive) return;
         _activatedAt = DateTime.Now;
         RestartCount++;
-        App.Logger?.Information("Lockdown timer restarted to {Minutes} minutes (reason {Reason}, restart #{Count})",
+        Log.Information("Lockdown timer restarted to {Minutes} minutes (reason {Reason}, restart #{Count})",
             _duration.TotalMinutes, reason, RestartCount);
-        Helpers.DispatcherHelper.RunOnUI(() =>
+        CoreDispatch.Post(() =>
         {
             // TimerRestarted FIRST. The elapsed fraction is already back at ~0, so a CountdownTick
             // raised ahead of it makes the Possession director walk its ladder down to Settle and
             // bark it, and OnTimerRestarted then resets and barks the same rung a second time.
             // The restart is the news; the tick is only the repaint that follows it.
             try { TimerRestarted?.Invoke(reason ?? ""); }
-            catch (Exception ex) { App.Logger?.Warning("Lockdown TimerRestarted handler failed: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Warning("Lockdown TimerRestarted handler failed: {Error}", ex.Message); }
             try { CountdownTick?.Invoke(Remaining); } catch { }
         });
     }
@@ -335,7 +334,7 @@ public class LockdownService : IDisposable
 
         if (string.Equals(phrase?.Trim(), "let me out", StringComparison.OrdinalIgnoreCase))
         {
-            App.Logger?.Information("Lockdown deactivated via secret exit phrase");
+            Log.Information("Lockdown deactivated via secret exit phrase");
             Deactivate();
             return true;
         }
@@ -345,6 +344,7 @@ public class LockdownService : IDisposable
 
     private void OnCountdownTick(object? sender, EventArgs e)
     {
+        if (!_isActive) return;   // a tick queued before Deactivate disposed the timer
         var remaining = Remaining;
 
         if (remaining <= TimeSpan.Zero)
@@ -373,6 +373,6 @@ public class LockdownService : IDisposable
             Deactivate();
         }
 
-        _countdownTimer?.Stop();
+        _countdownTimer?.Dispose();
     }
 }
