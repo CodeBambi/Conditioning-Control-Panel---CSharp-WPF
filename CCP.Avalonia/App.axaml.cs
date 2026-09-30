@@ -45,6 +45,9 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The Core quest board (WPF App.Quests), built by StartQuests before the shell.</summary>
         internal static QuestService? Quests { get; set; }
 
+        /// <summary>The typed mantra game (WPF App.Mantra, built unconditionally at App.xaml.cs:3260).</summary>
+        internal static MantraService Mantra { get; } = new();
+
         /// <summary>WPF App.xaml.cs:2527-2536 plus the CoreQuests seeds of :398-421. Seeded where this
         /// head has the service; SkillTree (streak shield, perfect-week bonus) and Programs
         /// (TrackVerifier) are WPF-only, so those three stay unseeded: no shield, no bonus, no
@@ -157,8 +160,8 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>
         /// WPF App.xaml.cs SignalMirrorFactory + WireMemorySignalSources: the brain's memory profile gets
         /// level, streak, sessions, archetype (CoreSettings), level-ups, favourite features and per-mod
-        /// chat turns. ponytail: no mantra / brain drain / mind wipe on this head, so those three
-        /// favourites never count; seed DeferredSourcesHook / wire them when those services land.
+        /// chat turns and mantra reps (WPF's DeferredSourcesHook; App.Mantra exists from the start here).
+        /// ponytail: no brain drain / mind wipe on this head, so those two favourites never count.
         /// </summary>
         internal static void SeedMemorySignals()
         {
@@ -173,6 +176,8 @@ namespace ConditioningControlPanel.Avalonia
             {
                 w.Wire<Action<int>>(h => ProgressionBank.LevelUp += h, h => ProgressionBank.LevelUp -= h, _ => w.SafeRefresh());
                 w.Wire<Action<string>>(h => FeatureUsed += h, h => FeatureUsed -= h, f => w.NoteFeatureUse(f));
+                w.Wire<Action>(h => Mantra.MantraCompleted += h, h => Mantra.MantraCompleted -= h,
+                    () => w.NoteFeatureUse(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureMantra));
                 if (CoreEngine.Video is { } video)
                     w.Wire<Action>(h => video.VideoStarted += h, h => video.VideoStarted -= h,
                         () => w.NoteFeatureUse(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureVideo));
@@ -527,6 +532,9 @@ namespace ConditioningControlPanel.Avalonia
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 CoreProgression.TrackBubbleCountGameStartedProvider = () => Achievements?.TrackBubbleCountGameStarted();
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
+                // WPF MantraService's App.Quests / App.Chaster reads (seeded in WPF App.xaml.cs the same way).
+                CoreProgression.TrackMantraCompletedProvider = () => Quests?.TrackMantraCompleted();
+                MantraService.ChasterNote = reps => { try { Platform.ChasterHead.Service?.Note("mantra", reps); } catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] mantra hook"); } };
                 // WPF AchievementService.TrackVideoWatched -> App.Quests.TrackVideoMinutes.
                 CoreProgression.TrackVideoWatchedProvider = sec => Quests?.TrackVideoMinutes(Achievements?.TrackVideoWatched(sec) ?? sec / 60.0);
                 CoreProgression.TrackAttentionCheckProvider = passed =>

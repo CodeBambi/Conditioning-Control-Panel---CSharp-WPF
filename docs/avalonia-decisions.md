@@ -188,3 +188,8 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   (Ubuntu 22.04 build); if OpenCV fails to load, the feature is disabled with a message, never a crash. The LibVLC v4l2 source is a
   documented fallback behind an IFrameSource seam. Check ldd of libOpenCvSharpExtern.so before shipping.
 - Advisor: oracle.
+
+## 2026-09-30: Mantra Lab audio and opener (avalonia-port/mantra-service)
+MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `CoreProgression.AddXP("Mantra")`, new `CoreProgression.TrackMantraCompletedProvider`, `MantraService.ChasterNote`, seeded by both heads). WPF's NAudio SignalGenerators become synthesised 16-bit WAVs (`CCP.Avalonia/Platform/ToneWav.cs`, per-process temp dir): tones through `CoreAudio.PlayOneShot` at WPF's 0.15 gain; the drone (90 Hz + 0.4 x 180 Hz, 10 s of whole cycles) as a looping `LayeredAudio.VlcLayerPlayer` whose volume follows WPF's gain ramp x MantraDroneVolume. No NAudio on Linux. `MainShellWindow.StartMantraSession` is ported with no caller, exactly as WPF (the Mantras card left the Play page 2026-08-12); where the game lives is still an owner call.
+- Test: `Tests/CCP.Core.Tests/MantraServiceTests.cs`, `Tests/CCP.Avalonia.Tests/MantraWindowSessionTests.cs` (fail-proven x7).
+- Advisor: none (worker).

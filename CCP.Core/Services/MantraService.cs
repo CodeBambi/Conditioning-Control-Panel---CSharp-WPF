@@ -3,8 +3,15 @@ using System.Diagnostics;
 
 namespace ConditioningControlPanel.Services
 {
+    /// <summary>
+    /// The typed mantra game's session state (moved from the WPF head). Head services are reached
+    /// through <see cref="CoreProgression"/> (XP, quests) and <see cref="ChasterNote"/>.
+    /// </summary>
     public class MantraService : IDisposable
     {
+        /// <summary>WPF App.Chaster?.Note("mantra", reps): a broken streak's rep count. Head-seeded.</summary>
+        public static volatile Action<int>? ChasterNote;
+
         private readonly Random _random = new();
         private string? _lastMantra;
         private Stopwatch? _mantraTimer;
@@ -54,8 +61,8 @@ namespace ConditioningControlPanel.Services
                 return false;
             _completionsThisMinute++;
 
-            App.Progression?.AddXP(30, XPSource.Mantra);
-            App.Quests?.TrackMantraCompleted();
+            CoreProgression.AddXP(30, "Mantra");
+            CoreProgression.TrackMantraCompleted();
             return true;
         }
 
@@ -83,8 +90,8 @@ namespace ConditioningControlPanel.Services
 
             // XP: 30 base + min(streak*5, 50)
             var bonusXP = Math.Min(Streak * 5, 50);
-            App.Progression?.AddXP(30 + bonusXP, XPSource.Mantra);
-            App.Quests?.TrackMantraCompleted();
+            CoreProgression.AddXP(30 + bonusXP, "Mantra");
+            CoreProgression.TrackMantraCompleted();
 
             if (Completions >= TargetCount)
             {
@@ -107,7 +114,7 @@ namespace ConditioningControlPanel.Services
         {
             if (!IsActive || Streak == 0) return;
             // Circe's tab: a broken streak pays for every rep that was in it.
-            try { App.Chaster?.Note("mantra", Streak); } catch (Exception ex) { Diag.Swallowed(ex, "chaster mantra hook"); }
+            try { ChasterNote?.Invoke(Streak); } catch (Exception ex) { Diag.Swallowed(ex, "chaster mantra hook"); }
             Streak = 0;
             StreakBroken?.Invoke();
             StreakChanged?.Invoke(0);
@@ -123,7 +130,7 @@ namespace ConditioningControlPanel.Services
 
         private void NextMantra()
         {
-            var pool = App.Settings?.Current?.MantraPool;
+            var pool = CoreSettings.Current.MantraPool;
             if (pool == null || pool.Count == 0)
             {
                 CurrentMantra = "I am deeply relaxed";

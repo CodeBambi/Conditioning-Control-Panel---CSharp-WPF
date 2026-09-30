@@ -26,14 +26,8 @@
 //   RefreshPlayIntakeCard   - App.IntakePass.State + IntakePassService.DaysUntilNextPass
 //                             (ConditioningControlPanel/Services/Progression/IntakePassService.cs)
 //                             for the card's four pass states.
-//   StartMantraSession      - App.Mantra.StartSession
-//                             (ConditioningControlPanel/Services/MantraService.cs) and the
-//                             MantraWindow it opens (ConditioningControlPanel/Windows/
-//                             MantraWindow.xaml.cs), neither of which is ported. Note the WPF file's
-//                             own header: this helper has had NO CALLER since the 2026-08-12
-//                             relayout took the Mantras card off the page, and it is kept there
-//                             only because it is the one place that knows the window needs
-//                             StartSession(n) to have run before it loads.
+//   StartMantraSession      - PORTED below (MantraService is in Core). As in WPF it has NO
+//                             CALLER: the 2026-08-12 relayout took the Mantras card off the page.
 //   GoonPerkLockedOpacity   - the 0.42 dim for an unbought Goon perk. A constant with no reader
 //                             until RefreshPlayCards has its two entitlement answers.
 //
@@ -47,7 +41,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // Deliberately empty - see the header. No member of this partial is referenced from
-        // MainShellWindow.axaml.
+        /// <summary>
+        /// WPF MainWindow.PlayTab.cs StartMantraSession: focus a running MantraWindow rather than
+        /// restart it (a second StartSession would wipe the run), else start the session THEN open the
+        /// window, whose Loaded reads CurrentMantra and TargetCount. No caller, as in WPF.
+        /// </summary>
+        internal void StartMantraSession(int targetReps)
+        {
+            try
+            {
+                if (global::Avalonia.Application.Current?.ApplicationLifetime is
+                        global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+                    foreach (var w in desktop.Windows)
+                        if (w is MantraWindow live) { live.Activate(); live.Focus(); return; }
+
+                App.Mantra.StartSession(targetReps);
+                new MantraWindow().Show(this);
+            }
+            catch (System.Exception ex)
+            {
+                // ponytail: WPF also shows a MessageBox here; logged only on this head.
+                Serilog.Log.Error(ex, "StartMantraSession failed");
+            }
+        }
     }
 }

@@ -72,6 +72,10 @@ namespace ConditioningControlPanel
         public static void TrackBubbleCountCompleted() { try { TrackBubbleCountCompletedProvider?.Invoke(); } catch { } }
 
         /// <summary>A mandatory video's attention checks passed (true) or failed (false).</summary>
+        /// <summary>WPF App.Quests?.TrackMantraCompleted(), for <c>MantraService</c>.</summary>
+        public static volatile Action? TrackMantraCompletedProvider;
+        public static void TrackMantraCompleted() { try { TrackMantraCompletedProvider?.Invoke(); } catch { } }
+
         public static volatile Action<bool>? TrackAttentionCheckProvider;
 
         public static void TrackAttentionCheck(bool passed)
