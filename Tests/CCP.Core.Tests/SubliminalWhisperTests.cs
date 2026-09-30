@@ -27,6 +27,13 @@ public sealed class SubliminalWhisperTests
         Assert.True(SubliminalWhisper.IsFreezePhrase("bambi FREEZE"));
     }
 
+    // NTFS (Windows CI) is case-insensitive, so the first name variant already hits and comes back in
+    // the variant's spelling; on Linux the file's own spelling is exact.
+    private static bool PathEq(string expected, string? actual) =>
+        string.Equals(expected, actual, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    private static void Same(string expected, string? actual) =>
+        Assert.True(PathEq(expected, actual), $"expected {expected}, got {actual ?? "null"}");
+
     [Fact]
     public void FindLinkedAudio_mod_then_shared_else_neutral()
     {
@@ -42,19 +49,19 @@ public sealed class SubliminalWhisperTests
             Assert.Null(SubliminalWhisper.ModAudioDir(shared));
 
             // Shared Bambi clips: case variants, then the case-insensitive pass.
-            Assert.Equal(Path.Combine(shared, "BAMBI FREEZE.mp3"),
+            Same(Path.Combine(shared, "BAMBI FREEZE.mp3"),
                 SubliminalWhisper.FindLinkedAudio("Bambi Freeze", null, shared, BuiltInMods.BambiSleepId));
-            Assert.Equal(Path.Combine(shared, "Good Girl.WAV"),
+            Same(Path.Combine(shared, "Good Girl.WAV"),
                 SubliminalWhisper.FindLinkedAudio("GOOD girl", null, shared, BuiltInMods.BambiSleepId));
 
             // The mod's own clip wins.
             File.WriteAllText(Path.Combine(mod, "bambi freeze.ogg"), "");
-            Assert.Equal(Path.Combine(mod, "bambi freeze.ogg"),
+            Same(Path.Combine(mod, "bambi freeze.ogg"),
                 SubliminalWhisper.FindLinkedAudio("Bambi Freeze", mod, shared, BuiltInMods.BambiSleepId));
 
             // CCP Default never borrows the Bambi voice.
-            Assert.NotEqual(Path.Combine(shared, "BAMBI FREEZE.mp3"),
-                SubliminalWhisper.FindLinkedAudio("Bambi Freeze", null, shared, BuiltInMods.CCPDefaultId));
+            Assert.False(PathEq(Path.Combine(shared, "BAMBI FREEZE.mp3"),
+                SubliminalWhisper.FindLinkedAudio("Bambi Freeze", null, shared, BuiltInMods.CCPDefaultId)));
         }
         finally { Directory.Delete(root, true); }
     }
