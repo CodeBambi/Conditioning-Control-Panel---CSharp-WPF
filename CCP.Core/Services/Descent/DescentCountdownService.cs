@@ -414,10 +414,14 @@ namespace ConditioningControlPanel.Services.Descent
         {
             if (_timer != null) return;   // one cadence at every range: nothing to re-arm
 
-            // Normal, not Background (0825 F7): a running session's flash bursts and overlays
-            // starve Background ticks, which stutters the one-second readout and lets zero land
-            // seconds late. Normal is what the rest of the app's user-visible timers use.
-            _timer = new System.Threading.Timer(_ => CoreDispatch.Post(OnTimerTick), null, TickEvery, TickEvery);
+            // Each tick hops to the UI thread (0825 F7: it must not queue behind Background work).
+            // Unlike a DispatcherTimer it does not die with the dispatcher, so a disposed service or a
+            // head with no UI thread drops the tick rather than running it on the pool; both heads
+            // Dispose() this on exit.
+            _timer = new System.Threading.Timer(_ =>
+            {
+                if (!_disposed && CoreDispatch.HasUiThread) CoreDispatch.Post(OnTimerTick);
+            }, null, TickEvery, TickEvery);
         }
 
         internal void OnTimerTick()
@@ -439,7 +443,7 @@ namespace ConditioningControlPanel.Services.Descent
                 var remaining = Remaining ?? TimeSpan.Zero;
 
                 // Re-align to the wall-clock second. TMinus TRUNCATES, so the digit turns over when
-                // `remaining` crosses an integer second; a fixed 1000 ms DispatcherTimer fires at >= its
+                // `remaining` crosses an integer second; a fixed 1000 ms timer fires at >= its
                 // interval and slowly slides off that boundary until a second is visibly skipped.
                 if (_timer != null && remaining > TimeSpan.Zero)
                 {
@@ -545,7 +549,11 @@ namespace ConditioningControlPanel.Services.Descent
                 // OnTimerTick re-offers the current phase on every tick — so the line arrives at
                 // most one tick after the companion does, and never at all if she is switched off.
                 var speak = Speaker;
-                if (speak is null || _spokenPhases.Contains(phase)) return;
+                if (speak is null) return;
+
+                // Marked BEFORE speaking, as WPF did: a line that throws is not retried every tick.
+                // False means nowhere to say it (no companion yet), so it is unmarked for the retry.
+                if (!_spokenPhases.Add(phase)) return;
 
                 // The petname pass by hand. These lines are not localized, so they never pass
                 // through LocalizationManager.Get — which is where the {petname} substitution
@@ -556,8 +564,7 @@ namespace ConditioningControlPanel.Services.Descent
 
                 // playSound:false and aiGenerated:false — scripted copy, no AI badge, and no
                 // chat-suppression window opened on the companion's side.
-                if (!speak(line)) return;
-                _spokenPhases.Add(phase);
+                if (!speak(line)) { _spokenPhases.Remove(phase); return; }
 
                 if (phase == DescentFusePhase.Terminal) _scriptedSilence = true;
             }

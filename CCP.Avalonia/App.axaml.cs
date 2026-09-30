@@ -610,6 +610,7 @@ namespace ConditioningControlPanel.Avalonia
             try { Views.Windows.MainShellWindow.DisposeRoadmapIfCreated(); }
             catch { /* one service cannot prevent the head from exiting */ }
 
+            DescentCountdown?.Dispose();   // its pool timer outlives the dispatcher otherwise
             _desktopDispatch?.Stop();
         }
     }

@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (fuse is null) return;
                 fuse.PhaseChanged += (_, e) => ApplyFusePhase(e.Current);
                 fuse.Tick += (_, remaining) => OnFuseTick(remaining);
-                fuse.ZeroReached += (_, _) => OpenLiveFuseShow();
+                fuse.ZeroReached += (_, _) => _ = OpenLiveFuseShow();
                 ApplyFusePhase(fuse.LastAnnouncedPhase);
             }
             catch (Exception ex) { Log.Debug("[Fuse] Header surfaces could not be wired: {E}", ex.Message); }
@@ -139,15 +139,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF DescentShowDirector live zero: nothing to reveal to an answered account.</summary>
-        private static void OpenLiveFuseShow()
+        internal static DescentFuseWindow? OpenLiveFuseShow()
         {
             var s = CoreSettings.Current;
             if (s.DescentMigrationCompleted || DescentMigrationChoices.IsValid(s.PendingDescentMigrationChoice))
             {
                 Log.Information("[Fuse] Zero, but the question is already answered - no live show.");
-                return;
+                return null;
             }
-            DescentFuseWindow.Open(DescentShowKind.Live);
+            return DescentFuseWindow.Open(DescentShowKind.Live);
         }
     }
 }

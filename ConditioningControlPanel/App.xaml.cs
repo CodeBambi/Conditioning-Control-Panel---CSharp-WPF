@@ -5966,6 +5966,9 @@ Application State:
 
         protected override void OnExit(ExitEventArgs e)
         {
+            // Before anything else: the fuse's pool timer outlives the dispatcher (it moved to Core),
+            // and after shutdown CoreDispatch runs a posted tick in place.
+            try { DescentCountdown?.Dispose(); } catch { /* exit must continue */ }
 #if DEBUG
             if (_firstShowPreview)
             {
