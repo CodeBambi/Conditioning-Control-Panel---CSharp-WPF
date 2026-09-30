@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
+using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
@@ -18,8 +19,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///
     /// <para>ponytail: not here yet, each a named WPF member: the moment bus (<c>Fire</c>, greeting,
     /// backSoon/weekend/bedtime beats, needs EmiLineEngine + EmiState), the nudge machine, the
-    /// knock (<c>TryKnock</c>), the tube hand-off (<c>TubeDeskVisibility</c>), the summon count
-    /// (<c>EmiState.NoteSummon</c>), and the system-wide chord (<c>ApplyHotkey</c>: a modifier
+    /// knock (<c>TryKnock</c>), the tube hand-off (<c>TubeDeskVisibility</c>), and the system-wide chord (<c>ApplyHotkey</c>: a modifier
     /// chord needs XGrabKey, which X11PanicKey's raw-key listener does not cover).</para>
     /// </summary>
     internal sealed class EmiDeskService
@@ -87,8 +87,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 win.RestorePlacement();
                 win.Show();
                 win.RunSummon();
+                bool first = !EmiState.Current.FirstBootSeen;
+                int summons = EmiState.NoteSummon();
                 RaiseOutChanged();
-                Log.Information("[EmiDesk] summoned ({Why})", why ?? "user");
+                Log.Information("[EmiDesk] summoned ({Why}), firstBoot={First}, summon #{N}", why ?? "user", first, summons);
             }
             catch (Exception ex)
             {
