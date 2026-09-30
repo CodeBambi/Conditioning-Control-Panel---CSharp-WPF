@@ -1560,9 +1560,13 @@ svg.campus-plan { position:absolute; inset:0; width:100%; height:100%; display:b
    - at exactly 16:9 the box still fills the frame, so there is no jump - and it
    is only ever the WIDE side. A frame TALLER than 16:9 still slices its left and
    right edges into the horizontal SAFE BAND that campus.js's ROOMS table is
-   drawn against (x 72..1368); nothing about that changes. */
+   drawn against (x 72..1368); nothing about that changes.
+   THE HUB'S PLAN ONLY (`.campus-stage >`). The Annex camera feeds wear
+   `campus-plan` too (for the [data-game] identity fills below), and this rule
+   reached them: every feed slid half a screen left on any 16:9-or-wider
+   window, which is most desktops and every sideways phone. */
 @media (min-aspect-ratio:16/9) {
-  svg.campus-plan {
+  .campus-stage > svg.campus-plan {
     right:auto; width:auto; aspect-ratio:16/9;
     left:50%; transform:translateX(-50%);
   }
@@ -6066,7 +6070,8 @@ html.arc-mobile[data-arc-orient="portrait"] .campus-topright::after {
 html.arc-mobile[data-arc-orient="portrait"] .campus-bellchip { order:9; padding:4px 10px; }
 html.arc-mobile[data-arc-orient="portrait"] .campus-postrow { gap:8px; }
 @media (max-height:700px) {
-  html.arc-mobile[data-arc-orient="portrait"] svg.campus-plan {
+  /* the hub's plan only - an Annex feed is a campus-plan too (see the 16:9 rule) */
+  html.arc-mobile[data-arc-orient="portrait"] .campus-stage > svg.campus-plan {
     top:78px; height:calc(100% - 78px);
   }
 }

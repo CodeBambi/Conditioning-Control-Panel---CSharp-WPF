@@ -65,6 +65,13 @@
   border-radius: 0;
   aspect-ratio: auto;
 }
+/* THE WIDE SHOT'S TEN SCREENS are 53 to 83 stage px across. At that size the
+   OSD, the plan's room names and the laptop's locked card are specks, not
+   words: the pictures and the students stay, the lettering is the close-up's. */
+.al-feeds-wide .cam-osd,
+.al-feeds-wide .campus-rname,
+.al-feeds-wide .campus-rsub,
+.al-feeds-wide .lap-screen > * { display: none; }
 
 /* ------------------------------ hotspots -------------------------------- */
 
@@ -82,11 +89,14 @@
   background: rgba(143, 224, 206, 0.06);
 }
 .arc-reduced .al-hot:hover, .al-lite .al-hot:hover { background: none; }
+/* Centred on its box, but never off the plane: --tag-lo / --tag-hi are the
+   slide px this box leaves on its left and right (lab.js hotspot()), and the
+   percentages are the tag's own width. */
 .al-hot .al-hot-tag {
   position: absolute;
   left: 50%;
   bottom: 6px;
-  transform: translateX(-50%);
+  transform: translateX(clamp(var(--tag-lo, -50%), -50%, calc(var(--tag-hi, 50%) - 100%)));
   padding: 2px 8px;
   background: rgba(5, 10, 9, 0.82);
   color: var(--annex-cold, #8FE0CE);
@@ -99,6 +109,35 @@
   pointer-events: none;
 }
 .al-hot:hover .al-hot-tag, .al-hot:focus-visible .al-hot-tag { opacity: 1; }
+
+/* A HOVER-ONLY AFFORDANCE IS NOT AN AFFORDANCE ON A PHONE (the Records Office
+   paid for this on 2026-08-25, rooms.css; the Annex never got the rule, so on
+   a phone the wide shot was a painting with invisible buttons). On touch every
+   hotspot keeps a quiet resting rim and wears its name; the desktop stays found,
+   not advertised. EVERY NUMBER IS A STAGE PIXEL: a phone fits the plane at
+   about a half sideways and a quarter upright, so the desktop's 2px rim and 12px
+   tag double, and double again upright (the Records Office's own 22/42). The tag
+   may run wider than a narrow box; the clamp above keeps it on the plane. Never
+   clip it to the box: upright, that read "t..." for the stairs. */
+html.arc-mobile .al-hot {
+  box-shadow: inset 0 0 0 5px rgba(143, 224, 206, 0.40),
+              0 0 34px 8px rgba(143, 224, 206, 0.12);
+}
+html.arc-mobile .al-hot .al-hot-tag {
+  opacity: 1;
+  bottom: 10px;
+  padding: 6px 16px;
+  font-size: 22px;
+}
+html.arc-mobile[data-arc-orient="portrait"] .al-hot {
+  box-shadow: inset 0 0 0 10px rgba(143, 224, 206, 0.40),
+              0 0 60px 14px rgba(143, 224, 206, 0.12);
+}
+html.arc-mobile[data-arc-orient="portrait"] .al-hot .al-hot-tag {
+  bottom: 16px;
+  padding: 11px 26px;
+  font-size: 42px;
+}
 
 /* ------------------------------ back pill ------------------------------- */
 
