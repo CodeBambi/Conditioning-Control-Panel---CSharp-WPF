@@ -315,6 +315,37 @@ public sealed class BlinkTrainerSessionTests
     }
 
     [Fact]
+    public void TrayStopEverything_StopsTheCameraAndTheSession()
+    {
+        WithSession((_, _) =>
+        {
+            var host = new Window();
+            Assert.True(WebcamTracker.Instance.Start());
+            Assert.True(BlinkTrainerSession.Start(host));
+            ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.StopEverything();
+            Assert.False(BlinkTrainerSession.IsRunning);
+            Assert.True(WaitUntil(() => !WebcamTracker.Instance.IsRunning));
+            Assert.True(WebcamConsent.IsCurrent(CoreSettings.Current));
+        });
+    }
+
+    [Fact]
+    public void AQueuedStart_CountsAsStarting_BeforeThePoolRunsIt()
+    {
+        WithSession((_, _) =>
+        {
+            var slow = new SlowOpen();
+            WebcamTracker.SourceFactory = () => slow;
+            var start = WebcamTracker.Instance.StartAsync();
+            Assert.True(WebcamTracker.Instance.IsStarting);   // at once: the panic notice reads this
+            WebcamTracker.Instance.Stop();
+            slow.Gate.Set();
+            Assert.False(start.GetAwaiter().GetResult());
+            Assert.False(WebcamTracker.Instance.IsStarting);
+        });
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task StartSession_AStopDuringTheTrackerStart_CancelsTheSession()
     {
         await WithSessionAsync(async (_, made) =>

@@ -96,13 +96,19 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         /// <summary>Off the UI thread, as WPF StartWebcamOffUiThreadAsync: model load and camera
         /// negotiation can take seconds.</summary>
-        public Task<bool> StartAsync() { int gen = Volatile.Read(ref _gen); return Task.Run(() => Start(gen)); }
+        public Task<bool> StartAsync()
+        {
+            int gen = Volatile.Read(ref _gen);
+            Interlocked.Increment(ref _queued);   // counts as starting before the pool picks it up
+            return Task.Run(() => { try { return Start(gen); } finally { Interlocked.Decrement(ref _queued); } });
+        }
+        private int _queued;
         /// <summary>The generation is bumped before the hop, so a start in flight cannot publish its
         /// camera even if it finishes before the queued Stop runs.</summary>
         public Task StopAsync() { lock (_gate) _gen++; return Task.Run(Stop); }
 
         /// <summary>A Start is between its consent check and publishing (camera open / model load).</summary>
-        internal bool IsStarting => Volatile.Read(ref _busy) != 0;
+        internal bool IsStarting => Volatile.Read(ref _busy) != 0 || Volatile.Read(ref _queued) != 0;
 
         public bool Start() => Start(Volatile.Read(ref _gen));
 
@@ -152,15 +158,17 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 }
                 _blink.Reset();
                 run.Thread = new Thread(() => Loop(run)) { IsBackground = true, Name = "WebcamCapture", Priority = ThreadPriority.BelowNormal };
+                bool stale;
                 lock (_gate)
                 {
-                    if (gen != _gen)
-                    {
-                        LastError = "Webcam tracking was stopped before the camera finished opening.";
-                        run.Release();
-                        return false;
-                    }
-                    _run = run;
+                    stale = gen != _gen;
+                    if (!stale) _run = run;
+                }
+                if (stale)
+                {
+                    LastError = "Webcam tracking was stopped before the camera finished opening.";
+                    run.Release();   // outside _gate: a slow driver close must not block Stop/StopAsync
+                    return false;
                 }
                 run.Thread.Start();
                 Log.Information("[Webcam] tracking started");
