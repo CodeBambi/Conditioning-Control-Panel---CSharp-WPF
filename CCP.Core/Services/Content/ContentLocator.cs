@@ -197,8 +197,10 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        // Callers spell paths the Windows way (Resources\Audio\...); off Windows '\' is a file-name
+        // character, so both separators fold to the platform's (a no-op on Windows).
         private static string Normalize(string rel) =>
-            rel.Replace('/', Path.DirectorySeparatorChar)
+            rel.Replace('\\', '/').Replace('/', Path.DirectorySeparatorChar)
                .Trim()
                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 

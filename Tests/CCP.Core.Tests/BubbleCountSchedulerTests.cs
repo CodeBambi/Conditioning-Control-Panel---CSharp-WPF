@@ -64,12 +64,17 @@ public sealed class BubbleCountSchedulerTests
         var held = 0;
         CoreBubbles.PauseAction = () => held++;
         CoreBubbles.ResumeAction = () => held--;
+        var freezes = 0;
+        CoreSubliminal.BambiFreezeProvider = () => freezes++;
         b.Start();
         clock.Advance(TimeSpan.FromSeconds(479));              // 6/h: 480-720 s
         Assert.False(b.IsBusy);
+        Assert.Equal(0, freezes);
         clock.Advance(TimeSpan.FromSeconds(242));
         Assert.True(b.IsBusy);
+        Assert.Equal(1, freezes);                              // WPF :353: Bambi Freeze with the game
         clock.Advance(TimeSpan.FromSeconds(0.8));              // lead-in
+        CoreSubliminal.BambiFreezeProvider = null;
         var game = Assert.Single(host.Shown);
         Assert.Equal(2, game.Difficulty);
         Assert.Equal(1, held);                                 // WPF PauseAndClear: ambient bubbles held
