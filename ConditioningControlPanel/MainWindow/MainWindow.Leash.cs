@@ -386,7 +386,13 @@ namespace ConditioningControlPanel
                 LeashUiRules.PanicSnooze.TotalMinutes, panicRuns);
             _leashSnoozeUntilUtc = DateTime.UtcNow + LeashUiRules.PanicSnooze;
             var linesCard = !panicRuns && (_leashRunner as LeashTaskRunner)?.RunningKind == PunishKind.Lines;
-            try { _leashRunner?.Park(); } catch { }
+            try
+            {
+                // Panic off: the leash's own session stops too, a session the player started does not.
+                if (panicRuns) _leashRunner?.Park();
+                else _leashRunner?.ParkAndStopItsSession();
+            }
+            catch { }
             if (linesCard) { try { LockCardWindow.ForceCloseAll(); } catch { } }
             LeashPunishWindow.CloseNow();
             _leashGate?.StopRunning();
@@ -411,6 +417,16 @@ namespace ConditioningControlPanel
                 catch (Exception ex) { App.Logger?.Warning("Leash: panic-off stop failed: {E}", ex.Message); }
             });
             return true;
+        }
+
+        /// <summary>Stops the running session when it is a leash session (the runner's own; ids
+        /// leash_pink / leash_detention, AppLeashTaskHost.BuildSession). Anything else is left alone.</summary>
+        internal void StopLeashSession()
+        {
+            var id = _sessionEngine?.CurrentSession?.Id;
+            if (id == null || !id.StartsWith("leash_", StringComparison.Ordinal)) return;
+            App.Logger?.Information("Leash: panic press stops the leash's own session ({Id})", id);
+            StopEngineAndSession("Leash");
         }
 
         /// <summary>The global key hook goes quiet only when nothing needs it. While leashed it stays

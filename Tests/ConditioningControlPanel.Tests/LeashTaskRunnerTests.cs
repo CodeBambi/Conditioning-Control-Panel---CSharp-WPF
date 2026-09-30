@@ -37,6 +37,8 @@ public class LeashTaskRunnerTests
             if (SessionStarts) SessionRunning = true;
             return SessionStarts;
         }
+        public int SessionStops;
+        public void StopSession() { SessionStops++; SessionRunning = false; }
 
         public event Action? BubblePopped;
         public bool BubblesWereOff = true;
@@ -223,6 +225,55 @@ public class LeashTaskRunnerTests
         r.Advance(3);
         Assert.False(r.Runner.IsRunning);
         Assert.Equal(LeashTaskStop.ActivityStopped, Assert.Single(r.Stopped).Reason);
+    }
+
+    [Fact]
+    public void Panic_off_stops_the_session_the_leash_started_and_parks()
+    {
+        var r = new Rig();
+        Assert.True(r.Runner.Start(Pun("p2", PunishKind.Pink, 10)));
+        Assert.True(r.Runner.StartedItsSession);
+        for (var i = 0; i < 120; i++) r.Advance(1);
+        r.Runner.ParkAndStopItsSession();
+        Assert.Equal(1, r.Host.SessionStops);
+        Assert.False(r.Host.SessionRunning);
+        Assert.False(r.Runner.IsRunning);
+
+        // Back from the gate later: a fresh leash session, the two minutes kept, and it is the leash's again.
+        Assert.True(r.Runner.Start(Pun("p2", PunishKind.Pink, 10)));
+        Assert.Equal(2, r.Host.Sessions.Count);
+        Assert.Equal(("p2", 2, 10), r.Progress[^1]);
+        Assert.True(r.Runner.StartedItsSession);
+    }
+
+    [Fact]
+    public void Panic_off_never_stops_a_session_the_player_started()
+    {
+        var r = new Rig();
+        r.Host.SessionRunning = true;   // their own session was already on
+        Assert.True(r.Runner.Start(Pun("p3", PunishKind.Detention, 10)));
+        Assert.Empty(r.Host.Sessions);
+        Assert.False(r.Runner.StartedItsSession);
+        r.Advance(30);
+        r.Runner.ParkAndStopItsSession();
+        Assert.Equal(0, r.Host.SessionStops);
+        Assert.True(r.Host.SessionRunning);
+        Assert.False(r.Runner.IsRunning);
+    }
+
+    [Fact]
+    public void A_leash_session_parked_by_a_panic_stays_the_leash_s_when_resumed()
+    {
+        var r = new Rig();
+        Assert.True(r.Runner.Start(Pun("p2", PunishKind.Pink, 10)));
+        r.Advance(30);
+        r.Runner.Park();                 // panic on: the ladder stops sessions itself; the runner only parks
+        Assert.True(r.Host.SessionRunning);
+        Assert.True(r.Runner.Start(Pun("p2", PunishKind.Pink, 10)));
+        Assert.Single(r.Host.Sessions);  // adopted, not started twice
+        Assert.True(r.Runner.StartedItsSession);
+        r.Runner.ParkAndStopItsSession();
+        Assert.Equal(1, r.Host.SessionStops);
     }
 
     [Fact]
