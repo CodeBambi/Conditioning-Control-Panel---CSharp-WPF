@@ -228,7 +228,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtMood.Foreground = new SolidColorBrush(ChasterRailChip.MoodColour(m.Level));
         }
 
-        // ---- the account chip ----
 
         private void PaintChasterChip(ChasterService? chaster)
         {
@@ -244,7 +243,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnChasterSite_Click(object? sender, RoutedEventArgs e)
         {
             var chaster = ChasterHead.Service;
-            _ = OpenAsync(ChasterWebLinks.For(chaster?.IsLinked == true ? chaster.Lock : null));
+            // A sandbox never opens the real chaster.app: the same rule as the consent page.
+            if (ChasterHead.BrowserUrl(ChasterWebLinks.For(chaster?.IsLinked == true ? chaster.Lock : null)) is { } url) _ = OpenAsync(url);
         }
 
         /// <summary>WPF BrowserLauncher.OpenUrlOrPrompt: on failure the link goes to the clipboard.</summary>
