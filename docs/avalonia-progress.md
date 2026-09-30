@@ -1060,7 +1060,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - CompanionBrain slice 1: CompanionBrain, PromptAssembler, MemoryStore, CompanionSessionStore, ChatSession, CompanionTurn,
   ConversationRecall, ExplicitMemory, CompanionMemoryMaintenance, ConversationDelivery, ConversationRelationship moved to Core (git mv;
   head-only deps are static seams WPF seeds before building the brain; no-settings reads keep WPF's false default). Avalonia App.Brain;
-  tube chat routes through it while UseCompanionBrain is on (WPF ChatInput.cs:772); ask cards off until the card UI exists.
+  tube chat routes through it while UseCompanionBrain is on (WPF ChatInput.cs:772); ask cards off in this slice (on since companion-brain-tube, only when a card can follow).
 - Evidence: TubeChatBrainTests (loopback fake, protocol 2) + ConversationDeliveryCardTests, fail-proven; live signed out: 0 requests,
   no chat text logged or stored. Row feat-companion-brain stub. Plan: ~/ccp-port/briefs/companion-brain-plan.md. Review: FIX -> fixed.
 
@@ -1091,3 +1091,9 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   source (OpenCvSharp4 4.13 + OnnxRuntime 1.20.1; Linux natives only on Linux), frames only in memory, consent at start and every frame,
   each session owns and always releases its camera, an abandoned loop blocks a new Start until it exits. Blink Trainer tracker toggle.
 - Evidence: WebcamTrackerTests (fake source), fail-proven; ldd clean; tarball +54.1 MB; live with the device unavailable. Never a real camera.
+
+## avalonia-port/companion-brain-tube: +692
+- CompanionBrain slice 2: WPF thinking bubble (Core ThinkingPhrases) and double bounce; ask cards after a reply and unprompted
+  (CompanionAskService + Ask* moved to Core behind 7 seams WPF seeds); a card is promised only when one can be built; busy = session,
+  video, lock card, bubble count, pop quiz; the ask timer stops on exit on both heads.
+- Evidence: TubeChatParityTests (loopback fake, protocol 2, fail-proven x9); live ask cards reached the tube. Rows stay stub. Review: FIX -> fixed.

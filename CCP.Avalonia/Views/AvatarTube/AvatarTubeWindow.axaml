@@ -152,6 +152,7 @@
                                   HorizontalScrollBarVisibility="Disabled"
                                   MaxHeight="280">
 
+                        <StackPanel>
                         <!-- Speech text with bubbly pink font -->
                         <TextBlock x:Name="TxtSpeech"
                                    Text=""
@@ -165,6 +166,9 @@
                                 <DropShadowEffect Color="Black" BlurRadius="2" OffsetX="1" OffsetY="1" Opacity="0.8"/>
                             </TextBlock.Effect>
                         </TextBlock>
+                        <!-- Ask card answers (AvatarTubeWindow.Chat.cs); empty and hidden otherwise -->
+                        <WrapPanel x:Name="AskButtons" IsVisible="False" Margin="0,10,0,0"/>
+                        </StackPanel>
                     </ScrollViewer>
 
                     <!-- AI-generated content badge (top-left). Visibility is controlled in code-behind

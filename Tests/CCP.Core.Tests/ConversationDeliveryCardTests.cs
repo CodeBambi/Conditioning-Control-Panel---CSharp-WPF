@@ -17,7 +17,7 @@ public sealed class ConversationDeliveryCardTests
         var (provider, shown) = (CoreSettings.ServiceProvider, ConversationDelivery.AskCardsShown);
         try
         {
-            ConversationDelivery.AskCardsShown = () => true;
+            ConversationDelivery.AskCardsShown = _ => true;
             CoreSettings.ServiceProvider = null;
             Assert.False(ConversationDelivery.CardFollows(ask));   // no settings => false, as WPF
 
@@ -26,7 +26,7 @@ public sealed class ConversationDeliveryCardTests
             service.Current.CompanionAsksEnabled = true;
             Assert.True(ConversationDelivery.CardFollows(ask));
 
-            ConversationDelivery.AskCardsShown = null;              // Avalonia: no card shown yet
+            ConversationDelivery.AskCardsShown = null;              // a head that shows no card
             Assert.False(ConversationDelivery.CardFollows(ask));
         }
         finally { (CoreSettings.ServiceProvider, ConversationDelivery.AskCardsShown) = (provider, shown); }

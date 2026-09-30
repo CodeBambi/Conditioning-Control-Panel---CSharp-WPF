@@ -57,13 +57,13 @@ internal static class ConversationDelivery
 
     /// <summary>True when an ask card will follow this reply: the model must not pick for it.</summary>
     internal static bool CardFollows(string input) =>
-        AskCardsShown?.Invoke() == true
+        AskCardsShown?.Invoke(input) == true
         && CoreSettings.Service?.Current?.CompanionAsksEnabled == true   // no settings => false, as WPF's App.Settings?.Current?
         && (WantsMedia(input) || WantsActivity(input));
 
-    /// <summary>True when this head actually shows the ask card after a reply (WPF: CompanionAskService.OfferForRequest,
-    /// seeded by App.xaml.cs). Unseeded (Avalonia until OfferForRequest is ported) the model is never told a card follows.</summary>
-    internal static volatile Func<bool>? AskCardsShown;
+    /// <summary>True when this head actually shows an ask card after a reply to this input (WPF: always, via
+    /// CompanionAskService.OfferForRequest; Avalonia: only when it can build one). Unseeded, no card is promised.</summary>
+    internal static volatile Func<string, bool>? AskCardsShown;
 
     private const string CardFollowsRule =
         "A choice card with buttons appears under your reply. Tease them toward it in one or two lines; " +
