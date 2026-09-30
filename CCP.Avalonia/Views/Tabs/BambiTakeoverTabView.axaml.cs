@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Platform.Storage;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -242,15 +243,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 // {loc:Str desc_mantra_chant} binding meanwhile - a .Text write here would be undone
                 // by the next language change anyway.
 
-                // ponytail: WPF also calls RefreshAutonomyVoiceHint (MainWindow.Autonomy.cs) to
-                // amber TxtAutonomyVoiceHint while the mic is being driven by wake word / PTT or the
-                // speech model is missing. Needs ConditioningControlPanel/Services/Speech/SpeechService.cs.
+                RefreshAutonomyVoiceHint();
             }
             catch (Exception ex)
             {
                 Log.Debug("BambiTakeoverTabView.SyncFromSettings: {E}", ex.Message);
             }
             finally { _isLoading = false; }
+        }
+
+        /// <summary>WPF MainWindow.Autonomy.cs:501 RefreshAutonomyVoiceHint: amber while the surprise
+        /// mantras cannot run (no mic, model missing or broken) or are paused by wake word / PTT.
+        /// ponytail: WPF's "Open models folder" button (BtnAutonomyOpenModels) is not on this tab.</summary>
+        internal void RefreshAutonomyVoiceHint()
+        {
+            var s = CoreSettings.Current;
+            var on = s.AutonomyCanTriggerVoiceCommand && s.MicConsentGiven;
+            var amber = on && (!CoreSpeech.IsAvailable || s.SpeechWakeWordEnabled || s.SpeechPushToTalkEnabled);
+            TxtAutonomyVoiceHint.Foreground = new global::Avalonia.Media.SolidColorBrush(amber
+                ? global::Avalonia.Media.Color.FromRgb(0xFF, 0xC1, 0x07)
+                : global::Avalonia.Media.Color.FromRgb(0x88, 0x88, 0x88));
+            TxtAutonomyVoiceHint.Text = Loc.Get(!on ? "takeover_voice_hint_off"
+                : !CoreSpeech.IsAvailable
+                    ? (!CoreSpeech.HasCaptureDevice ? "takeover_voice_hint_no_mic"
+                        : CoreSpeech.ModelStatus == CoreSpeechModelStatus.LoadFailed ? "takeover_voice_hint_model_failed"
+                        : "takeover_voice_hint_model_missing")
+                : amber ? "takeover_voice_hint_paused_mic" : "takeover_voice_hint_on");
         }
 
         /// <summary>WPF's RefreshWallpaperFolderLabel + RefreshWallpaperDurationVisibility.</summary>
@@ -503,6 +521,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             s.AutonomyCanTriggerVoiceCommand = on;
             CoreSettings.Save();
+            RefreshAutonomyVoiceHint();
         }
 
         // =====================================================================================
@@ -529,12 +548,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // ConditioningControlPanel/Services/WallpaperService.cs, which is Win32.
         }
 
-        private void BtnWallpaperFolder_Click(object? sender, RoutedEventArgs e)
+        /// <summary>WPF MainWindow.Autonomy.cs:329. The folder is saved for Takeover's wallpaper
+        /// action, which this head does not perform yet (no wallpaper service), so it is inert here.</summary>
+        private async void BtnWallpaperFolder_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs a folder picker AND the refusal that makes it safe -
-            // ConditioningControlPanel/Services/Auth/SecurityHelper.cs IsPersonalFolderRoot (#1053).
-            // Every top-level image in the chosen folder becomes a wallpaper she can put on screen,
-            // so this stays shut rather than opening a picker with no personal-folder guard.
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            try
+            {
+                var s = CoreSettings.Current;
+                var storage = owner.StorageProvider;
+                var start = !string.IsNullOrWhiteSpace(s.WallpaperSourceFolder) && System.IO.Directory.Exists(s.WallpaperSourceFolder)
+                    ? s.WallpaperSourceFolder
+                    : System.IO.Path.Combine(CorePaths.EffectiveAssets, "wallpapers");
+                var picked = await storage.OpenFolderPickerAsync(new global::Avalonia.Platform.Storage.FolderPickerOpenOptions
+                {
+                    Title = "Pick the folder she pulls desktop wallpapers from",
+                    SuggestedStartLocation = await storage.TryGetFolderFromPathAsync(start),
+                });
+                if (picked.Count != 1 || picked[0].TryGetLocalPath() is not { } path) return;
+
+                // #1053: every top-level image in it becomes a wallpaper she can put on screen.
+                if (Windows.MainShellWindow.IsPersonalFolderRoot(path))
+                {
+                    await Dialogs.MessageDialog.ShowAsync(owner, "Pick a folder of your own",
+                        "That folder is one of your system's own - your Desktop, Documents, Pictures, Downloads, " +
+                        "your home folder or a whole drive." + Environment.NewLine + Environment.NewLine +
+                        "Every image sitting in it would become a wallpaper she can put on your screen, so pick " +
+                        "a folder you filled with wallpapers on purpose instead.");
+                    return;
+                }
+                s.WallpaperSourceFolder = path;
+                CoreSettings.Save();
+                RefreshWallpaperBlock(s);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Wallpaper folder pick failed"); }
         }
 
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e)

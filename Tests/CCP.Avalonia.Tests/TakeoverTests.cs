@@ -87,4 +87,90 @@ public sealed class TakeoverTests
             return Task.CompletedTask;
         });
     }
+
+    private sealed class FakeBubbleCountHost : IBubbleCountHost
+    {
+        public void Show(string path, int difficulty, bool strict, Action<bool> onComplete) { }
+        public void ShowMessage(string text, int ms, Action then) { }
+        public void CloseAll() { }
+        public double LastVideoDurationSeconds => 0;
+    }
+
+    /// <summary>takeover-actions: the actions ported to this head do what WPF's PerformAction does,
+    /// the ones with no surface are never picked, panic hands the pink pulse back, and the voice
+    /// hint follows the mic state.</summary>
+    [Fact]
+    public async Task PortedActionsPerformMissingOnesAreNeverPicked()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var s = CoreSettings.Current;
+            s.PanicKeyEnabled = true;
+            s.PanicKey = "F8";
+            s.AutonomyConsentGiven = true;
+            s.AutonomyResumeOnStartup = false;
+            var shell = new MainShellWindow();
+            shell.Show();
+            var oldBubbleCount = CoreEngine.BubbleCount;
+            try
+            {
+                // No surface on this head: never picked (WPF skips an unavailable action).
+                foreach (var a in new[] { AutonomyActionType.SpiralPulse, AutonomyActionType.BrainDrainPulse,
+                             AutonomyActionType.WebVideo, AutonomyActionType.WallpaperShuffle, AutonomyActionType.SpokenMantra })
+                    Assert.False(shell.Autonomy.CanPerform(a), a.ToString());
+                Assert.False(shell.Autonomy.CanPerform(AutonomyActionType.MindWipe));   // CoreMindWipe unseeded
+
+                CoreEntitlement.HasPremiumProvider = () => true;
+                Assert.True(shell.SetAutonomyEnabled(true));
+                Dispatcher.UIThread.RunJobs();
+
+                // Bubble Count: a forced game (WPF TriggerGame(forceTest: true)), engine off, card off.
+                var bc = CoreEngine.BubbleCount = new BubbleCountScheduler(new FakeBubbleCountHost());
+                s.BubbleCountEnabled = false;
+                Assert.True(shell.Autonomy.CanPerform(AutonomyActionType.BubbleCount));
+                shell.PerformAutonomy(AutonomyActionType.BubbleCount);
+                Assert.True(bc.IsBusy);
+                bc.ForceCleanup();
+
+                // Pink pulse: boosted and held up with the engine off, then handed back on panic.
+                s.PinkFilterEnabled = false;
+                s.PinkFilterOpacity = 10;
+                shell.PerformAutonomy(AutonomyActionType.PinkFilterPulse);
+                Assert.True(s.PinkFilterEnabled);
+                Assert.Equal(30, s.PinkFilterOpacity);
+                Assert.True(global::ConditioningControlPanel.Avalonia.Views.Overlays.PinkFilterOverlay.PulseHold);
+                shell.HandlePanicKeyPress(new DateTime(2026, 1, 1, 12, 0, 0));
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(shell.Autonomy.IsEnabled);
+                Assert.False(s.PinkFilterEnabled);
+                Assert.Equal(10, s.PinkFilterOpacity);
+                Assert.False(global::ConditioningControlPanel.Avalonia.Views.Overlays.PinkFilterOverlay.PulseHold);
+
+                // Voice hint (WPF RefreshAutonomyVoiceHint): off, then on with no speech engine.
+                var tab = shell.GetLogicalDescendants().OfType<global::ConditioningControlPanel.Avalonia.Views.Tabs.BambiTakeoverTabView>().First();
+                var hint = tab.GetLogicalDescendants().OfType<TextBlock>().First(x => x.Name == "TxtAutonomyVoiceHint");
+                s.AutonomyCanTriggerVoiceCommand = false;
+                tab.RefreshAutonomyVoiceHint();
+                Assert.Equal(global::ConditioningControlPanel.Localization.Loc.Get("takeover_voice_hint_off"), hint.Text);
+                s.AutonomyCanTriggerVoiceCommand = s.MicConsentGiven = true;
+                tab.RefreshAutonomyVoiceHint();
+                Assert.Equal(global::ConditioningControlPanel.Localization.Loc.Get("takeover_voice_hint_no_mic"), hint.Text);
+            }
+            finally
+            {
+                shell.Autonomy.Stop();
+                CoreEngine.BubbleCount = oldBubbleCount;
+                CoreEntitlement.HasPremiumProvider = null;
+                s.AutonomyModeEnabled = s.AutonomyConsentGiven = false;
+                s.AutonomyCanTriggerVoiceCommand = s.MicConsentGiven = false;
+                CoreEngine.Stop();
+                shell.RequestExit();
+            }
+            return Task.CompletedTask;
+        });
+    }
 }

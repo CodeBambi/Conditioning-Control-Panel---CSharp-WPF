@@ -145,8 +145,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// </summary>
         /// <para>A session counts as running (WPF ResumeSession's App.Overlay.Start() after a panic) and a
         /// paused one hides the tint (PauseSession's App.Overlay.Stop()).</para>
+        /// <summary>A Takeover pulse holds the tint up with the engine off (WPF: the pulse starts
+        /// OverlayService, #1180). MainShellWindow.Autonomy.cs sets and releases it.</summary>
+        internal static bool PulseHold;
+
         private static bool ShouldShow()
-            => App.Sessions?.IsPaused != true
+            => PulseHold || App.Sessions?.IsPaused != true
                && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true);
 
         // Start (MainShellWindow.StartEngine) is what restores a tint left enabled - WPF OverlayService.Start().
