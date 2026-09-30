@@ -193,6 +193,28 @@ public sealed class EmiDeskSummonTests
         finally { host.Close(); }
     });
 
+    /// <summary>WPF EmiDeskService.Summon :313/:325: a summon counts in EmiState and puts her back
+    /// where SavePlacement left her, not at the default park.</summary>
+    [Fact]
+    public Task SummonCountsAndRestoresHerSavedPlace() => Muted(() => Task.FromResult(EmiMuteChoice.Keep), async svc =>
+    {
+        CoreSettings.Current.EmiDeskMuteAvatar = false;
+        int before = ConditioningControlPanel.Services.EmiDesk.EmiState.Current.SummonCount;
+        await svc.Summon();
+        Assert.Equal(before + 1, ConditioningControlPanel.Services.EmiDesk.EmiState.Current.SummonCount);
+        var win = svc.Window!;
+        var parked = win.Position;
+        var moved = new PixelPoint(parked.X - 137, parked.Y - 91);
+        win.Position = moved;
+        win.SavePlacement();
+        win.ParkBottomRightOfMain();
+        Assert.Equal(parked, win.Position);
+        win.RestorePlacement();
+        Assert.Equal(moved, win.Position);
+        svc.Dismiss();
+        await Pump(2000);
+    });
+
     /// <summary>WPF App.OnExit closed her; here she goes with the main window.</summary>
     [Fact]
     public Task ClosingTheShellClosesHer() => Muted(() => Task.FromResult(EmiMuteChoice.Keep), svc =>

@@ -745,6 +745,7 @@
   "tooltip_change_camera_shortcut": "クリックしてカメラのショートカットを変更",
   "camera_shortcut_toast_started": "カメラ追跡を開始しました",
   "camera_shortcut_toast_stopped": "カメラ追跡を停止しました",
+  "panic_camera_stopped": "カメラを停止しました。再開するにはトラッキングを開始してください。",
   "btn_confirm": "確認",
   "btn_save": "保存",
   "btn_close": "閉じる",

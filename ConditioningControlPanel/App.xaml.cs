@@ -395,6 +395,9 @@ namespace ConditioningControlPanel
             CoreProgression.AddXPProvider = (amount, source) =>
                 Progression?.AddXP(amount, Enum.TryParse<Services.XPSource>(source, out var s) ? s : Services.XPSource.Other);
             CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+            // MantraService moved to Core; its App.Quests / App.Chaster reads, unchanged.
+            CoreProgression.TrackMantraCompletedProvider = () => Quests?.TrackMantraCompleted();
+            MantraService.ChasterNote = reps => Chaster?.Note("mantra", reps);
             // QuestService moved to Core; these are the head services it still reads. Lazy, like
             // the App.X?. reads they replace (SkillTree, Programs and Haptics are built later).
             CoreQuests.PatreonVerifyingProvider = () => Patreon?.IsVerifying;

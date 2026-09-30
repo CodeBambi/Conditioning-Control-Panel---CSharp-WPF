@@ -38,7 +38,7 @@ namespace ConditioningControlPanel.Services
     /// WPF's token-and-unified-id check in <see cref="GetSupabaseTokenAsync"/>, shared by every head.</remarks>
     public class CatalogueClient
     {
-        private const string RealBaseUrl = "https://app.cclabs.app";
+        internal const string RealBaseUrl = "https://app.cclabs.app";
 
         /// <summary>Where the catalogue lives, or null for "no network". CCP_CATALOGUE_BASE_URL is honoured
         /// only for a loopback host (the Core LoopbackUrl rule); a CCP_USERDATA_DIR sandbox without one never
