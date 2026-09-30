@@ -37,7 +37,7 @@
 
       <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <Grid Margin="28,20,28,20" MaxWidth="1300" HorizontalAlignment="Center">
+            <Grid Margin="28,20,28,20" MaxWidth="1300" HorizontalAlignment="Stretch">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/> <!-- Hero -->
                     <RowDefinition Height="Auto"/> <!-- Capped settings column + side art -->
