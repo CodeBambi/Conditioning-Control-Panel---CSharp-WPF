@@ -211,6 +211,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     case "exclusives": RefreshExclusivesTab(); break;
                     // WPF MainWindow.TabNavigation.cs:588-593 (AnimateTabIn is the header's ponytail).
                     case "chaster": Named<Tabs.ChasterTabView>("ChasterTab")?.OnTabShown(); break;
+                    // WPF MainWindow.SheListening.cs RefreshSheListeningTab "called on tab show".
+                    case "shelistening": RefreshSheListeningTab(); break;
 
                     // WPF MainWindow.TabNavigation.cs:324-337: spend the tab's seen-flag on any
                     // route in, then the one-time explainer on top of the tab just shown.

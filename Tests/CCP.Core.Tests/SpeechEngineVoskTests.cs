@@ -80,6 +80,16 @@ public class SpeechEngineVoskTests
         Assert.False(r.Unavailable);
     }
 
+    [Fact]
+    public async Task Wakes_on_the_first_configured_phrase_from_the_she_listening_rules()
+    {
+        using var engine = Engine(WavPcm());
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(20));
+        var words = VoiceInputRules.ExpandWakeVariants(VoiceInputRules.WakeWords($" {Spoken} ;hey bambi,HEY BAMBI"));
+        Assert.Equal(SpeechEngine.Normalize(Spoken), SpeechEngine.Normalize(await engine.WaitForWakeWordAsync(words, cts.Token)));
+    }
+
     /// <summary>Replays PCM in 50 ms chunks (10 ms apart, 5x real time), then silence until stopped.</summary>
     private sealed class WavMicSource(byte[] pcm) : IMicSource
     {

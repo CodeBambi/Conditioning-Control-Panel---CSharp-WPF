@@ -176,8 +176,7 @@ namespace ConditioningControlPanel
         internal bool MicIsArmed()
         {
             var s = App.Settings?.Current;
-            return s != null && s.MicConsentGiven
-                   && (s.SpeechWakeWordEnabled || s.SpeechPushToTalkEnabled);
+            return s != null && Services.Speech.VoiceInputRules.MicIsArmed(s);
         }
 
         /// <summary>
@@ -398,16 +397,9 @@ namespace ConditioningControlPanel
                     s.SpeechHeadphonesMode ? Localization.Loc.Get("set2_chip_on") : off;
         }
 
-        // "Mic sensitivity" slider <-> loudness gate. Slider 0..100 maps INVERSELY to the RMS threshold:
-        // 100% = most sensitive (lowest threshold, softest speech OK), 0% = strictest (must speak up).
-        // Useful gate range only — far below this is room noise, far above rejects normal speech.
-        private const double LoudThrAtMinSens = 0.045; // slider 0%
-        private const double LoudThrAtMaxSens = 0.004; // slider 100%
-
-        private static double SensToThreshold(double sens)
-            => LoudThrAtMinSens - (LoudThrAtMinSens - LoudThrAtMaxSens) * (Math.Clamp(sens, 0, 100) / 100.0);
-        private static double ThresholdToSens(double thr)
-            => Math.Clamp((LoudThrAtMinSens - thr) / (LoudThrAtMinSens - LoudThrAtMaxSens) * 100.0, 0, 100);
+        // "Mic sensitivity" slider <-> loudness gate: the mapping lives in Core (VoiceInputRules).
+        private static double SensToThreshold(double sens) => Services.Speech.VoiceInputRules.SensToThreshold(sens);
+        private static double ThresholdToSens(double thr) => Services.Speech.VoiceInputRules.ThresholdToSens(thr);
 
         /// <summary>
         /// Mic-sensitivity slider: tunes the loudness gate (<see cref="Models.AppSettings.SpeechLoudnessThreshold"/>)
