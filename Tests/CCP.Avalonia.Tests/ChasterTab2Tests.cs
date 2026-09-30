@@ -70,7 +70,7 @@ public sealed class ChasterTab2Tests
             chaster.Dispose();
             new SecretChasterTokenStore().Clear();
             try { Directory.Delete(dir, true); } catch { }
-            CoreSettings.ServiceProvider = null;
+            service.SaveImmediate(); CoreSettings.ServiceProvider = null;
         }
     }
 

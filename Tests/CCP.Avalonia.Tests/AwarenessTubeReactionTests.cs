@@ -55,7 +55,7 @@ public sealed class AwarenessTubeReactionTests
         {
             tube.Close();
             Dispatcher.UIThread.RunJobs();
-            CoreSettings.ServiceProvider = null;
+            service.SaveImmediate(); CoreSettings.ServiceProvider = null;
         }
         return Task.CompletedTask;
     });

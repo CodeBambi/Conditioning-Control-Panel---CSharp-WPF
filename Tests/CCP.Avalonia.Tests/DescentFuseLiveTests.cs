@@ -93,7 +93,7 @@ public sealed class DescentFuseShellTests
             Assert.False(corner.IsVisible);
             Assert.Null(ToolTip.GetTip(spark));
         }
-        finally { shell.Close(); CoreSettings.ServiceProvider = null; }
+        finally { shell.Close(); service.SaveImmediate(); CoreSettings.ServiceProvider = null; }
         return Task.CompletedTask;
     });
 
@@ -116,7 +116,7 @@ public sealed class DescentFuseShellTests
             service.Current.PendingDescentMigrationChoice = null;
             Assert.NotNull(MainShellWindow.OpenLiveFuseShow());
         }
-        finally { DescentFuseWindow.ForceCloseAll(); CoreSettings.ServiceProvider = null; }
+        finally { DescentFuseWindow.ForceCloseAll(); service.SaveImmediate(); CoreSettings.ServiceProvider = null; }
         return Task.CompletedTask;
     });
 
@@ -142,6 +142,6 @@ public sealed class DescentFuseShellTests
             fuse.OnTimerTick();
             Assert.Single(said);          // said once, never repeated
         }
-        finally { CoreSettings.ServiceProvider = null; }
+        finally { service.SaveImmediate(); CoreSettings.ServiceProvider = null; }
     }
 }

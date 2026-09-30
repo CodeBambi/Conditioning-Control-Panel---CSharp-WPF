@@ -76,7 +76,7 @@ public sealed class EmiDeskSummonTests
         finally
         {
             svc.Window?.ShutDown();
-            CoreSettings.ServiceProvider = oldSettings;
+            service.SaveImmediate(); CoreSettings.ServiceProvider = oldSettings;
         }
     });
 
@@ -110,7 +110,7 @@ public sealed class EmiDeskSummonTests
             svc.ResetMutePrompt();
             svc.Window?.ShutDown();
             Dispatcher.UIThread.RunJobs();
-            CoreSettings.ServiceProvider = oldSettings;
+            service.SaveImmediate(); CoreSettings.ServiceProvider = oldSettings;
         }
     });
 

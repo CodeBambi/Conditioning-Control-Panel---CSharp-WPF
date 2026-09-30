@@ -37,6 +37,13 @@ namespace ConditioningControlPanel.Avalonia.Localization
             {
                 Source = LocalizationManager.Instance,
                 Mode = BindingMode.OneWay,
+                // Below LocalValue: text that code sets later (RefreshQuestUI's weekly name over its
+                // "Loading..." placeholder) must survive a language switch, as it does in WPF, where
+                // the local set replaces the binding. A LocalValue binding here re-published the
+                // placeholder over it on every SetLanguage. Controls code never writes still follow.
+                // Code that calls ProvideValue(null!) to Bind() a label itself (StartStop's START/STOP)
+                // is replacing its own earlier binding, so it keeps LocalValue.
+                Priority = serviceProvider is null ? BindingPriority.LocalValue : BindingPriority.Template,
             };
         }
     }
