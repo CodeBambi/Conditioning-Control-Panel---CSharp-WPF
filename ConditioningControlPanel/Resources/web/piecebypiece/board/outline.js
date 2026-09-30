@@ -24,6 +24,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { sculptOutlineGeometry } from './sculpt-finish.js';
 import { SILICONE_GLSL } from './silicone.js';
 import { TUNING as J } from './jiggle.js';
 
@@ -194,7 +195,7 @@ export function createOutline({ group, bus = null }) {
     piece.traverse((o) => { if (o.isMesh && o.geometry && !o.userData.pbpHull && o !== patch) sources.push(o); });
     for (const src of sources) {
       const mat = hullMaterial(u, base, insideOut(src.geometry));
-      const hull = new THREE.Mesh(src.geometry, mat);
+      const hull = new THREE.Mesh(sculptOutlineGeometry(src.geometry), mat);
       hull.userData.pbpHull = true;
       hull.castShadow = false;
       hull.receiveShadow = false;

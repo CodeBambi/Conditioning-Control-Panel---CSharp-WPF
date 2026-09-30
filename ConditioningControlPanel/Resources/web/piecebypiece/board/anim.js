@@ -47,6 +47,7 @@
 import * as THREE from 'three';
 import { createChoreography } from './choreography.js';
 import { hopPlan, hopAt } from './hops.js';
+import { CASTLE, castlePose } from './castle.js';
 import { TUNING as TUNE } from './jiggle.js';
 import { WHIP_TUNING as W, whipBend, whipTimes, shiverAt } from './whip.js';
 import { TRAVEL, createCaptureDeck, capturePose, presentationRate } from './captures.js';
@@ -59,7 +60,7 @@ export const TUNING = Object.freeze({
   knightHop: 0.9,        // world units, the top of the arc over the board
   knightLean: 0.30,      // radians of forward lean at the top of the hop
   knightLand: 1.6,       // extra squash on the landing, so he comes down harder
-  castleLag: 0.15,       // the rook leaves this long after the king
+  castleLag: 0.08,       // the rook clears the back rank just after the king leaves
   tipSec: 0.30,          // a taken man tips over in this long
   rollSec: 0.42,         // then rolls once
   rollPush: 0.32,        // world units he rolls away from the man who took him
@@ -154,16 +155,15 @@ export function createAnim({ group, jiggle = null }) {
   /**
    * A piece has been placed on `to`; play it as travel rather than a jump.
    * `hop` overrides the arc height (springBack asks for a low one); a knight
-   * ignores the default and hops. Two men leaving in the same frame are read
-   * as a castle when one is a king and the other his rook on the same rank:
-   * the rook waits a beat. A taker sets his victim's fall so the landing comes
+   * ignores the default and hops. Castling gives the rook its own clear path
+   * outside the back rank. A taker sets his victim's fall so the landing comes
    * exactly captureLand after it starts.
    */
   function slide(piece, from, to = null, hop = null, opts = {}) {
     if (!from) return;
     const dest = (to || piece.position).clone();
     acts.settle(piece);
-    if (from.distanceToSquared(dest) < 1e-6 && !fresh(tumbles).length) return;
+    if (from.distanceToSquared(dest) < 1e-6 && !fresh(tumbles).length && !opts.castle) return;
     piece.userData.busy = true;   // hands the piece to us; idle wobble stands off
     const d = piece.userData;
     // A fast next move or undo takes ownership from the previous flight.
@@ -173,6 +173,13 @@ export function createAnim({ group, jiggle = null }) {
     const knight = d.type === 'n' && !refused && hop == null;
     const travel = TRAVEL[d.type] || TRAVEL.p;
     const low = prefersReducedMotion();
+    if (opts.castle && low) {
+      piece.position.copy(dest);
+      piece.rotation.set(0, baseYaw(piece), 0);
+      d.busy = false;
+      landed(piece, dest, false, { capture: false });
+      return;
+    }
     const pendingVictim = fresh(tumbles).find((v) => v.piece !== piece && v.piece.userData.side !== d.side);
     if (pendingVictim && !opts.finish && !(d.type === 'b' && whipOn())) {
       tumbles.splice(tumbles.indexOf(pendingVictim), 1);
@@ -183,7 +190,7 @@ export function createAnim({ group, jiggle = null }) {
     if (knight && !low && !refused) emit('captureCue', { name: 'hooves', piece: 'n' });
     if (pendingVictim) d.tookOne = true; // includes en passant, whose victim is on another square
     const s = {
-      piece, from: from.clone(), to: dest, t: 0, fresh: true, refused,
+      piece, from: from.clone(), to: dest, t: 0, fresh: true, refused, castleMove: !!opts.castle,
       dur: opts.dur ?? (knight ? T.knightSec : T.slideSec),
       hop: low ? 0 : (hop ?? travel.hop),
       lean: low || refused ? 0 : travel.lean,
@@ -194,12 +201,13 @@ export function createAnim({ group, jiggle = null }) {
       finish: !!opts.finish,    // this slide is the bishop's last stride
     };
     d.refusedDrop = false;
-    // Castling: the king is already in flight this frame, and this is his rook
-    // leaving along the same rank. He goes a beat behind.
-    if (d.type === 'r') {
-      const king = fresh(slides).find((k) => k.piece.userData.type === 'k' && k.piece.userData.side === d.side
-        && Math.abs(k.from.z - from.z) < 0.01 && Math.abs(dest.z - from.z) < 0.01 && Math.abs(k.to.x - k.from.x) > 1.5);
-      if (king) s.delay = T.castleLag;
+    // Explicit move intent also works after dragging the king onto his square.
+    if (opts.castle && d.type === 'r') {
+      s.castle = true;
+      s.delay = T.castleLag;
+      s.dur = CASTLE.duration;
+      s.hop = CASTLE.lift;
+      s.lean = .07;
     }
     // A capture: the victim was tipped this same frame. He falls away from the
     // taker, and a slow arrival (a knight) holds him upright the difference.
@@ -240,7 +248,7 @@ export function createAnim({ group, jiggle = null }) {
         }
       }
     }
-    if (!low && !refused && !s.whip && !s.finish) {
+    if (!low && !refused && !s.whip && !s.finish && !s.castle) {
       s.hopPlan = hopPlan(from, dest); s.dur = Math.max(.01, s.hopPlan.duration - .10);
       s.hop = s.hopPlan.height;
     }
@@ -455,6 +463,7 @@ export function createAnim({ group, jiggle = null }) {
       const s = slides[i];
       if (!s.piece.parent) { slides.splice(i, 1); continue; }
       s.t += dt;
+      if (s.castleMove && prefersReducedMotion()) s.t = s.delay + s.dur;
       if (s.t < s.delay) continue;   // the rook waits for his king to go first
       const p = Math.min(1, (s.t - s.delay) / s.dur);
       const hopping = s.hop > 0 && !prefersReducedMotion();
@@ -479,8 +488,14 @@ export function createAnim({ group, jiggle = null }) {
           }
         }
       }
-      s.piece.position.lerpVectors(s.from, s.to, hop ? hop.travel : ease(p));
-      s.piece.position.y += hopping ? (hop ? hop.height : Math.sin(Math.PI * p) * s.hop) : 0;
+      if (s.castle) {
+        // Turning motion off mid-castle settles the move, never cuts through the king.
+        const at = castlePose(s.from, s.to, prefersReducedMotion() ? 1 : p);
+        s.piece.position.set(at.x, at.y, at.z);
+      } else {
+        s.piece.position.lerpVectors(s.from, s.to, hop ? hop.travel : ease(p));
+        s.piece.position.y += hopping ? (hop ? hop.height : Math.sin(Math.PI * p) * s.hop) : 0;
+      }
       if (s.lean && hopping) leanTo(s, hop ? hop.flight : p);
       if (p >= 1) {
         s.piece.position.copy(s.to);
@@ -593,7 +608,7 @@ export function createAnim({ group, jiggle = null }) {
     update, squash, slide, tumble, buzz, springBack, bindBus, skip,
     setClock(source) { clockSource = source; },
     hooks: {
-      onMoved: (piece, from, origin) => slide(piece, from, null, null, { origin }),
+      onMoved: (piece, from, origin, motion = {}) => slide(piece, from, null, null, { ...motion, origin }),
       onReplaced: (old, next) => {
         acts.replace(old, next);
         for (const s of slides) if (s.piece === old) {
