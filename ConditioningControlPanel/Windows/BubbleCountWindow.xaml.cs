@@ -1148,21 +1148,8 @@ namespace ConditioningControlPanel
 
         #endregion
 
-        private void CalculateTargetBubbles()
-        {
-            double baseRate = _difficulty switch
-            {
-                BubbleCountService.Difficulty.Easy => 3,
-                BubbleCountService.Difficulty.Medium => 5,
-                BubbleCountService.Difficulty.Hard => 8,
-                _ => 5
-            };
-
-            var scaledCount = (baseRate / 30.0) * _videoDurationSeconds;
-            var variance = scaledCount * 0.2;
-            _targetBubbleCount = (int)Math.Round(scaledCount + (_random.NextDouble() * variance * 2 - variance));
-            _targetBubbleCount = Math.Max(3, _targetBubbleCount);
-        }
+        private void CalculateTargetBubbles() =>
+            _targetBubbleCount = BubbleCountScheduler.TargetBubbles((BubbleCountScheduler.Difficulty)(int)_difficulty, _videoDurationSeconds, _random.NextDouble());
 
         private void LoadBubbleImage()
         {

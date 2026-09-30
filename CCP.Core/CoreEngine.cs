@@ -33,6 +33,9 @@ namespace ConditioningControlPanel
         /// <summary>The head's mandatory-video scheduler (it owns the <see cref="IMandatoryVideoHost"/>).</summary>
         public static volatile MandatoryVideoScheduler? Video;
 
+        /// <summary>The head's bubble-count game (it owns the <see cref="IBubbleCountHost"/>).</summary>
+        public static volatile BubbleCountScheduler? BubbleCount;
+
         /// <summary>WPF StartEngine's arming matrix, minus the services no head here has.
         /// Not idempotent in TotalSessions, exactly as WPF; callers start only when stopped.</summary>
         public static void Start()
@@ -49,6 +52,7 @@ namespace ConditioningControlPanel
             if (!audioOnly && s.SubliminalEnabled) CoreSubliminal.Start();
             if (!audioOnly && s.MandatoryVideosEnabled) Video?.Start();   // WPF StartStop.cs:320
             if (!audioOnly && s.BubblesEnabled) CoreBubbles.Start();   // WPF StartStop.cs:339
+            if (!audioOnly && s.BubbleCountEnabled) BubbleCount?.Start();   // WPF StartStop.cs:349
             if (!audioOnly && s.LockCardEnabled) LockCardScheduler.Instance.Start();
             if (!audioOnly && s.PopQuizEnabled) PopQuiz?.Start();   // WPF StartStop.cs:393
             if (!audioOnly && s.BouncingTextEnabled) CoreBouncingText.Start();
@@ -70,6 +74,8 @@ namespace ConditioningControlPanel
                 CoreFlash.Stop();
                 CoreBubbles.Stop();   // WPF StartStop.cs:473, before video
                 Video?.Stop();   // WPF StartStop.cs:477
+                BubbleCount?.Stop();   // WPF StartStop.cs:488
+                BubbleCount?.ForceCleanup();   // WPF StartStop.cs:517-518 ForceCloseAll (panic)
                 CoreBouncingText.Stop();
                 CoreSubliminal.Stop();
                 LockCardScheduler.Instance.Stop();
@@ -93,6 +99,7 @@ namespace ConditioningControlPanel
             if (!s.BouncingTextEnabled) ApplyLive("bouncingtext", false);
             if (!s.BubblesEnabled) ApplyLive("bubbles", false);
             if (!s.MandatoryVideosEnabled) ApplyLive("video", false);
+            if (!s.BubbleCountEnabled) ApplyLive("bubblecount", false);   // WPF Presets.cs:2261
         }
 
         /// <summary>A card or wall toggle already wrote its flag; start or stop the matching
@@ -108,6 +115,7 @@ namespace ConditioningControlPanel
                 case "bouncingtext": if (on) CoreBouncingText.Start(); else CoreBouncingText.Stop(); break;
                 case "bubbles": if (on) CoreBubbles.Start(); else CoreBubbles.Stop(); break;
                 case "video": if (on) Video?.Start(); else Video?.Stop(); break;   // WPF VideoFeatureControl ChkEnable
+                case "bubblecount": if (on) BubbleCount?.Start(); else BubbleCount?.Stop(); break;   // WPF BubbleCountFeatureControl ChkEnable
             }
         }
     }

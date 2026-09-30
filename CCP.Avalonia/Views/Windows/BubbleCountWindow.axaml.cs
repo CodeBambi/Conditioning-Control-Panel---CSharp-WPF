@@ -10,20 +10,12 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Platform;
-using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Services;
+using LibVLCSharp.Shared;
+using Difficulty = ConditioningControlPanel.Services.BubbleCountScheduler.Difficulty;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
-    /// <summary>
-    /// Difficulty of a bubble-count game.
-    ///
-    /// ponytail: verbatim copy of <c>BubbleCountService.Difficulty</c>
-    /// (ConditioningControlPanel/Services/BubbleCountService.cs:23). The service is WPF-side and
-    /// this head may not reference that project, so the enum is duplicated rather than the game
-    /// losing its difficulty. Delete this and use the real one the moment BubbleCountService
-    /// moves to CCP.Core.
-    /// </summary>
-    public enum Difficulty { Easy, Medium, Hard }
 
     /// <summary>
     /// Bubble Count Challenge - watch video, count bubbles, enter total.
@@ -57,27 +49,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///   <item><c>DisableProcessWindowsGhosting</c>-class calls: none in this file to drop.</item>
     /// </list>
     ///
-    /// <para><b>WebView2.</b> The original has no <c>wv2:WebView2</c> element in its XAML; browser
-    /// mode builds a <c>BrowserVideoSurface</c> (a WebView2 host) in code and does
-    /// <c>VideoContainer.Children.Add(...)</c>. The port mirrors that exactly with
-    /// <see cref="WebHost"/> - see <see cref="StartBrowserPlayback"/>. What the original did
-    /// through CoreWebView2 is a ponytail stub, but not for one reason any more: the shared
-    /// environment and InitAsync have no counterpart (WebHost probes and navigates on Source), the
-    /// Post could be written against <c>WebHost.InvokeScriptAsync</c> today, and the WebMessage
-    /// pump plus ProcessFailed are the real gap - WebHost wraps neither, so the page cannot report
-    /// anything back and the game clock has nothing to run on.</para>
+    /// <para><b>Video.</b> One decoder on the shared LibVLC (<c>LibVlcAudio.Shared</c>) through
+    /// <see cref="VlcFrameSink"/>, its frames shown in an <c>Image</c> in every game window (WPF ran
+    /// one muted player per secondary). Browser mode (WebView2) is not ported: every clip plays here.</para>
     ///
     /// <para><b>Wired:</b> the pop sound (<c>CoreAudio.PlayOneShot</c> at the WPF
     /// <c>(master * bubbles) ^ 1.5</c> volume), the monitor set (<c>DualMonitorEnabled</c> from
     /// <c>CoreSettings</c>, screens from <c>ScreenList.Enumerate</c>) and the result window, so a
     /// finished game asks for the count and resolves on the answer instead of being written off.</para>
     ///
-    /// <para><b>Stubbed, all service-shaped:</b> the whole LibVLC path (VideoService lease,
-    /// CreateManagedPlayer/ReleaseManagedPlayer, the wedge watchdog, the native poison cooldown,
-    /// the bounded pumped Stop() batch, VideoView attach/detach and every message-pump wait that
-    /// only existed to keep HwndHost teardown safe), BrowserVideoEngine/BrowserVideoGate,
-    /// App.Achievements and VideoDiag. Each is marked at its site. The mod art is NOT stubbed any
-    /// more - the bubble sprite loads through <c>CoreModArt</c> + <c>Helpers.ModArt</c>.</para>
+    /// <para><b>Stubbed:</b> the VideoService lease/wedge watchdog/native poison cooldown (HwndHost
+    /// teardown safety with no counterpart here), the metadata-cache duration (LengthChanged corrects
+    /// the 30 s fallback within a second) and VideoDiag.</para>
     ///
     /// <para><c>Loaded</c> became <c>Opened</c>: WPF's Loaded fires synchronously inside Show(),
     /// which ShowOnAllMonitors' completion de-duplication leans on, and Avalonia's Opened is the
@@ -91,10 +74,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly Action<bool> _onComplete;
         private readonly Screen? _screen;
         private readonly bool _isPrimary;
-        /// <summary>This game plays out-of-process in a web view instead of a leased LibVLC player.
-        /// Nothing else about the game changes: bubbles, counting, difficulty, the result window,
-        /// the strict lock and the XP flow are shared verbatim.</summary>
-        private readonly bool _useBrowser;
 
         private readonly Random _random = new();
         private readonly List<CountBubble> _activeBubbles = new();
@@ -115,9 +94,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// null to draw the gradient ellipse fallback. See <see cref="LoadBubbleImage"/>.</summary>
         private IImage? _bubbleImage;
 
-        // The web view surface, browser mode only. Mutually exclusive with the LibVLC player the
-        // original also carried here: a game is one engine or the other.
-        private WebHost? _browserSurface;
+        // Every window shows the one shared decoder's frames.
+        private readonly Image _videoImage = new() { Stretch = Stretch.Uniform };
+        private static MediaPlayer? _player;
+        private static Media? _media;
+        private static VlcFrameSink? _sink;
+
+        /// <summary>The global panic listener can stop the game right now (as MandatoryVideoOverlay). Tests swap it.</summary>
+        internal static Func<bool> PanicListenerLive = () => X11PanicKey.IsListening && X11PanicKey.BoundKeycode != 0;
+        internal static VlcFrameSink? Sink => _sink;
 
         // Multi-monitor support - static shared state
         private static readonly object _cleanupLock = new();
@@ -125,13 +110,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static readonly List<BubbleCountWindow> _allWindows = new();
         private static int _sharedBubbleCount = 0;
         private static int _sharedTargetCount = 0;
-
-        /// <summary>
-        /// Routing decision for the game being started, taken ONCE in <see cref="ShowOnAllMonitors"/>
-        /// and copied into every window's <c>_useBrowser</c> as it is constructed. A static handover
-        /// rather than a constructor argument so the public signature does not change.
-        /// </summary>
-        private static bool _nextGameUsesBrowser;
 
         /// <summary>Fallback duration when the metadata cache has never seen this video.</summary>
         private const double FallbackDurationSeconds = 30;
@@ -158,10 +136,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _gameCompleted = true;
             Width = 1280;
             Height = 720;
-            // The browser seam, shown the way browser mode shows it. On a machine with no web
-            // engine (every CI runner, every headless render) WebHost draws its fallback panel,
-            // so the proof is a legible "no web view here" rather than a black rectangle.
-            _videoContainer.Children.Add(new WebHost());
         }
 
         public BubbleCountWindow(string videoPath, Difficulty difficulty,
@@ -183,7 +157,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // read of it is guarded. WPF's Screen.PrimaryScreen! could not be null.
             _screen = screen ?? Screens?.Primary ?? Screens?.All.FirstOrDefault();
             _isPrimary = isPrimary;
-            _useBrowser = _nextGameUsesBrowser;
+            _videoContainer.Children.Add(_videoImage);
 
             // Set difficulty display. A local value, not a {loc:Str} binding - see the XAML.
             _txtDifficulty.Text = $" ({difficulty})";
@@ -271,10 +245,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // Only reachable when a previous game threw partway through its show/teardown;
             // normally the list is already empty.
-            // ponytail: the WPF original also stopped and released every LEASED LibVLC player here
-            // before closing the windows, because detaching a live VideoView is the historic
-            // multi-monitor crash. There is no player and no VideoService on this head, so the
-            // window loop is all that is left of it. Restore when VideoService moves to Core.
+            StopPlayer();
             foreach (var window in orphanWindows)
             {
                 try
@@ -285,12 +256,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 catch { }
             }
-
-            // ponytail: needs BrowserVideoGate/BrowserVideoEngine to pick the engine for this file,
-            // and VideoService.NativePoisonCooldownRemainingMs to refuse to start on a LibVLC
-            // instance a wedged Stop() already poisoned. Both are WPF-side services. Until they
-            // move, every game takes the browser path - which is the only one this head can host.
-            _nextGameUsesBrowser = true;
 
             // One screen or all of them, per the user's setting - the same question
             // BubbleCountResultWindow.ShowOnAllMonitors asks, answered from the same place.
@@ -358,9 +323,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     }
                     catch { }
                 }
-
-                // ponytail: needs VideoService (the leased-player stop batch and the wedge
-                // watchdog disarm) and App.BubbleCount.ResetBusyState(). Both WPF-side.
+                StopPlayer();
             }
             finally
             {
@@ -375,6 +338,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// Check if any bubble count window is currently open
         /// </summary>
         public static bool IsAnyOpen() => _allWindows.Count > 0;
+        internal static IReadOnlyList<BubbleCountWindow> OpenWindows => _allWindows;
+        internal Image VideoImage => _videoImage;
 
         private void OnOpened(object? sender, EventArgs e)
         {
@@ -392,44 +357,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             try
             {
-                // ponytail: needs a file-existence check against the real media root. Kept as-is;
-                // the abort path below is the game's only defence against a missing clip.
-                if (string.IsNullOrWhiteSpace(_videoPath))
+                // WPF: a missing clip aborts the game (a loss, as there).
+                if (string.IsNullOrWhiteSpace(_videoPath) || !File.Exists(_videoPath))
                 {
                     if (_isPrimary) CloseAllWindows(false);
                     return;
                 }
-
-                // Browser mode owns the whole start-up sequence. Everything AFTER playback start
-                // (bubbles, counting, result window, strict lock, XP) is shared with the LibVLC
-                // path below and in CloseAllWindows.
-                if (_useBrowser)
+                if (!_isPrimary)
                 {
-                    StartBrowserPlayback();
+                    _targetBubbleCount = _sharedTargetCount;
+                    _videoImage.Source = _sink?.Bitmap;
                     return;
                 }
-
-                // ponytail: the LibVLC path. Needs LibVLCSharp (Windows-only on this repo's
-                // packaging) plus VideoService.CreateManagedPlayer / the Media+Play sequence /
-                // EndReached+EncounteredError+LengthChanged wiring / App.Audio's device routing /
-                // App.Settings' MasterVolume. None of it exists off the WPF head, so a non-browser
-                // game cannot start here and is resolved rather than left on a black screen.
-                if (_isPrimary) CloseAllWindows(false);
+                if (!StartPlayback()) CloseAllWindows(false);
             }
             catch
             {
                 if (_isPrimary) CloseAllWindows(false);
             }
-        }
-
-        /// <summary>
-        /// Duration for the game clock. WPF read a metadata cache and queued a background parse on
-        /// a miss; the value is corrected the moment the player reports its real length.
-        /// </summary>
-        private static double ResolveVideoDurationSeconds(string path)
-        {
-            // ponytail: needs VideoMetadataCache (WPF-side). Always the fallback until it moves.
-            return FallbackDurationSeconds;
         }
 
         /// <summary>
@@ -448,107 +393,54 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             StartSafetyTimer(_videoDurationSeconds);
         }
 
-        #region Browser engine
-
-        private void StartBrowserPlayback()
+        /// <summary>WPF's primary LibVLC start: the 30 s fallback clock (the metadata cache is not
+        /// ported; LengthChanged corrects it), bubbles, then Play at master volume. False when no
+        /// LibVLC is available, which ends the game as a start failure does in WPF.</summary>
+        private bool StartPlayback()
         {
-            // ponytail: needs BrowserVideoEngine.BuildPageUrl (WPF head) to map the clip onto the
-            // player page's virtual host, and WebHost has no virtual-host mapping to point it at
-            // either. Without both there is no page to navigate to, so the surface is built (that
-            // IS the port of VideoContainer.Children.Add(_browserSurface)) and left showing
-            // WebHost's fallback rather than a black rectangle.
-            _browserSurface = new WebHost();
-            _videoContainer.Children.Add(_browserSurface);
+            var vlc = LibVlcAudio.Shared;
+            if (vlc == null) return false;
+            _videoDurationSeconds = FallbackDurationSeconds;
+            LastVideoDurationSeconds = _videoDurationSeconds;
+            CalculateTargetBubbles();
+            _sharedTargetCount = _targetBubbleCount;
+            StartSafetyTimer(_videoDurationSeconds);
+            StartBubbleSpawning();
 
-            // ponytail: needs a message pump. WebHost wraps Source, AllowNavigation,
-            // InvokeScriptAsync and HasEngine, but NOT NativeWebView.WebMessageReceived - and the
-            // page-to-app reports are what drive this whole game clock, so InvokeScriptAsync alone
-            // cannot stand in. The original did, in order:
-            //   _browserSurface.Message += OnBrowserMessage        (WebMessageReceived pump:
-            //       playing / timeupdate / ended / error / key reports drive the whole game clock)
-            //   _browserSurface.ProcessFailed += OnBrowserProcessFailed
-            //   _browserSurface.Post(new { type = "load", url, volume, muted, blurBackground,
-            //       hideCursor, startAtMs, sinkLabel })                (ExecuteScript/PostWebMessage)
-            //   await BrowserVideoEngine.SharedEnvironmentAsync()   (CoreWebView2Environment)
-            //   await surface.InitAsync(env, mappings, startUrl, host)
-            //       (EnsureCoreWebView2Async + SetVirtualHostNameToFolderMapping + Navigate)
-            // Two of those five could be written today (the load post through InvokeScriptAsync,
-            // the navigate through Source); the two event hookups and the virtual-host mapping
-            // have no twin, so nothing is invented here. Consequences: no audio routing, no
-            // first-frame watch, no page keys, and the clip never actually plays - the safety
-            // timer below is what ends the game.
+            var player = new MediaPlayer(vlc) { EnableHardwareDecoding = true };
+            player.Volume = Math.Clamp(CoreSettings.Current.MasterVolume, 0, 100);
+            _player = player;
+            _sink = new VlcFrameSink(player, () => _media,
+                bmp => { foreach (var w in _allWindows) w._videoImage.Source = bmp; },
+                () => { foreach (var w in _allWindows) w._videoImage.InvalidateVisual(); });
+            // LibVLC raises these on its own thread; the game is torn down only on the UI thread.
+            player.LengthChanged += (_, a) => Dispatcher.UIThread.Post(() => { if (ReferenceEquals(player, _player)) AdoptRealDuration(a.Length / 1000.0); });
+            player.EndReached += (_, _) => Dispatcher.UIThread.Post(() => { if (ReferenceEquals(player, _player)) OnVideoEnded(); });
+            player.EncounteredError += (_, _) => Dispatcher.UIThread.Post(() => { if (ReferenceEquals(player, _player)) OnVideoEnded(); });
+            _media = new Media(vlc, _videoPath, FromType.FromPath);
+            player.Play(_media);
+            return true;
+        }
 
-            if (_isPrimary)
+        /// <summary>Stop joins the decoder thread, so after it no callback touches the frame buffer.</summary>
+        private static void StopPlayer()
+        {
+            var player = _player;
+            _player = null;
+            if (player != null)
             {
-                _videoDurationSeconds = ResolveVideoDurationSeconds(_videoPath);
-                LastVideoDurationSeconds = _videoDurationSeconds;
-
-                CalculateTargetBubbles();
-                _sharedTargetCount = _targetBubbleCount;
-
-                StartSafetyTimer(_videoDurationSeconds);
-                StartBubbleSpawning();
+                try { player.Stop(); } catch { }
+                try { player.Dispose(); } catch { }
             }
-            else
-            {
-                _targetBubbleCount = _sharedTargetCount;
-            }
+            try { _media?.Dispose(); } catch { }
+            _media = null;
+            foreach (var w in _allWindows) w._videoImage.Source = null;
+            _sink?.Free();
+            _sink = null;
         }
 
-        /// <summary>Keys over a focused web view go to the page, not to this window, so the page
-        /// reported them back and they were replayed here.</summary>
-        private void OnBrowserKey(string key)
-        {
-            if (key == "Escape" && !_strictMode && !_gameCompleted && !_isCleaningUp)
-            {
-                _gameCompleted = true;
-                CloseAllWindows(false);
-            }
-        }
-
-        /// <summary>The clip could not be played. A secondary just loses its mirror; the primary
-        /// ends the game.</summary>
-        private void OnBrowserFailure(string reason, bool blameFile)
-        {
-            if (!_isPrimary) return;
-            if (_gameCompleted || _isCleaningUp) return;
-            _gameCompleted = true;
-            CloseAllWindows(false);
-        }
-
-        /// <summary>Unhook, stop the clip and dispose the surface. Called from OnClosed, which
-        /// every teardown path reaches.</summary>
-        private void DisposeBrowserSurface()
-        {
-            var surface = _browserSurface;
-            if (surface == null) return;
-            _browserSurface = null;
-            // ponytail: the stop post could go through WebHost.InvokeScriptAsync now, but the
-            // teardown that matters cannot: the original detached Message/ProcessFailed and
-            // Dispose()d the WebView2, which is what actually ends the browser process, and
-            // WebHost wraps neither the events nor a Dispose. Removing the control from the tree
-            // is all it allows, so a WebKitGTK process may outlive the window until the wrapper
-            // grows one.
-            try { _videoContainer.Children.Remove(surface); } catch { }
-        }
-
-        #endregion
-
-        private void CalculateTargetBubbles()
-        {
-            double baseRate = _difficulty switch
-            {
-                Difficulty.Easy => 3,
-                Difficulty.Medium => 5,
-                Difficulty.Hard => 8,
-                _ => 5
-            };
-
-            var scaledCount = (baseRate / 30.0) * _videoDurationSeconds;
-            var variance = scaledCount * 0.2;
-            _targetBubbleCount = (int)Math.Round(scaledCount + (_random.NextDouble() * variance * 2 - variance));
-            _targetBubbleCount = Math.Max(3, _targetBubbleCount);
-        }
+        private void CalculateTargetBubbles() =>
+            _targetBubbleCount = BubbleCountScheduler.TargetBubbles(_difficulty, _videoDurationSeconds, _random.NextDouble());
 
         /// <summary>
         /// The bubble sprite: the mod's <c>bubble.png</c> if it ships one, else this head's copy
@@ -731,10 +623,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 window._videoEnded = true;
                 window._bubbleSpawnTimer?.Stop();
-                // ponytail: needs CoreWebView2 - the original posted {type="pause"} to each page
-                // here, because the game windows are only HIDDEN for the result screen and a clip
-                // still running would keep playing behind it.
             }
+            // WPF paused the players: the windows are only HIDDEN for the result screen.
+            try { _player?.SetPause(true); } catch { }
 
             // Clear remaining bubbles on all windows (bubbles are separate windows now).
             // Dispose directly: the shared animation timer that would otherwise finish their
@@ -750,8 +641,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 window._bubbleAnimTimer = null;
             }
 
-            // ponytail: needs App.Achievements.TrackVideoWatched(_videoDurationSeconds) for the
-            // primary. The XP the game earns is awarded by the result window, not here.
+            // WPF :1399. The XP the game earns is awarded by the result window, not here.
+            if (_isPrimary) CoreProgression.TrackVideoWatched(_videoDurationSeconds);
 
             // Show result window (only from primary)
             if (_isPrimary)
@@ -782,12 +673,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 });
         }
 
+        /// <summary>WPF: Esc skips a non-strict game. Strict swallows the panic key and Alt+F4 while
+        /// the global panic listener can stop the game, and falls open without one (panic key or Esc
+        /// force-stops, LockCardWindow #875) - the rules MandatoryVideoScheduler.KeyAction owns.</summary>
         private void OnKeyDown(object? sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape && !_strictMode && !_gameCompleted && !_isCleaningUp)
+            if (_gameCompleted || _isCleaningUp) return;
+            var s = CoreSettings.Current;
+            switch (MandatoryVideoScheduler.KeyAction(_strictMode, e.Key.ToString(), e.KeyModifiers.HasFlag(KeyModifiers.Alt),
+                s.PanicKeyEnabled, s.PanicKey, s.PanicKeyEnabled && PanicListenerLive()))
             {
-                _gameCompleted = true;
-                CloseAllWindows(false);
+                case VideoKeyAction.Dismiss:
+                    e.Handled = true;
+                    _gameCompleted = true;
+                    CloseAllWindows(false);
+                    break;
+                case VideoKeyAction.ForceStop:
+                    e.Handled = true;
+                    if (CoreEngine.BubbleCount is { } game) game.ForceCleanup(); else ForceCloseAll();
+                    break;
+                case VideoKeyAction.Swallow: e.Handled = true; break;
             }
         }
 
@@ -801,12 +706,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             try
             {
-                // ponytail: needs VideoService. The WPF original stopped every leased player off
-                // the dispatcher under a bounded, message-pumping wait, detached each VideoView,
-                // pumped 50ms more, and only then closed the windows and released the players
-                // (disposing the ones that stopped, quarantining the ones that wedged). All of it
-                // existed to make HwndHost teardown survivable; there is no HwndHost and no player
-                // here, so the window loop is the whole of it.
+                StopPlayer();
                 var windowsCopy = _allWindows.ToList();
                 _allWindows.Clear();
                 foreach (var window in windowsCopy)
@@ -842,8 +742,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _bubbleSpawnTimer = null;
             _bubbleAnimTimer?.Stop();
             _bubbleAnimTimer = null;
-            // Closing the window alone would leave the browser surface alive.
-            DisposeBrowserSurface();
 
             foreach (var bubble in _activeBubbles)
             {

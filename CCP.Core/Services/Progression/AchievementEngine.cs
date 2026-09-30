@@ -161,6 +161,13 @@ internal sealed class AchievementEngine
         return minutes;
     }
 
+    /// <summary>WPF AchievementService.TrackBubbleCountGameStarted.</summary>
+    public void TrackBubbleCountGameStarted()
+    {
+        Progress.TotalBubbleCountGames++;
+        _isDirty = true;
+    }
+
     public void TrackBubbleCountGameResult(bool success)
     {
         if (success) Progress.TotalBubbleCountCorrect++;
