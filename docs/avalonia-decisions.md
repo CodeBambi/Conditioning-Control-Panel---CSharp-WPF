@@ -201,14 +201,65 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
 - Choice: the session is head code (`Views/Overlays/BlinkTrainerSession.cs`, overlay windows are head-only); the pure parts
   moved to Core (`BlinkTrainerAssetPool` by git mv, `BlinkTrainerState.TileGrid`, WPF delegates). Overlays use the pink-filter
   refusals (click-through + transparency or nothing). The start goes through `StartEffect` so the Wayland panic shortcut is
-  bound first; a Stop/panic while the bind is pending cancels it (`Generation`). Panic, owner close, app exit and consent revoke
-  stop the session. Calibration, quick recal and tracker test are NOT in this slice: all three need the gaze-projection feed
+  bound first; the session `Generation` is read before the tracker start is awaited, so a Stop/panic during the tracker start
+  or the pending bind cancels it. Panic, the shell's Closing (so a close cancelled to the tray too, as WPF LabTab.cs:1000),
+  app exit and consent revoke stop the session. Calibration, quick recal and tracker test are NOT in this slice: all three need the gaze-projection feed
   (WPF WebcamCalibrationWindow ~2.1k LOC + gaze maths) that WebcamTracker does not emit; their buttons stay disabled with a
-  reason. `CoreWebcam.IsAvailable` is seeded true, and revoke now keeps all four promises in one place (`WebcamTracker.RevokeConsent`).
+  reason. `CoreWebcam.IsAvailable` is seeded true, and revoke keeps all four promises in one place (`WebcamTracker.RevokeConsent`: stop, delete the calibration file via
+  `WebcamCalibrationData.DeleteIfExists`, clear consent, turn the webcam features off).
   Deviations: GIF/animated webp show their first frame; mix mode buckets only already-seen images; no explicit tracking-monitor
   pick (placement = DualMonitorEnabled ? all : primary); no stage video preview; no SeasonRecap credit.
 - Advisor: supervisor (progress update), worker.
 
+## 2026-09-30: panic and the camera (Avalonia only, deliberate WPF deviation)
+- Question: should a panic press stop webcam tracking? WPF leaves the camera running.
+- Choice (C): every panic press, including Lock Card presses that do not advance the exit ladder and a press consumed as a video
+  grace pause, stops tracking after the audio and overlay teardown, fire-and-forget (Stop can block up to 5 s, so never awaited
+  on the panic path). Consent, calibration, device choice and settings are kept; status chips follow the tracker's StateChanged.
+  The notice "Camera stopped. Start tracking to resume." (`panic_camera_stopped`, all languages) shows when a camera was on or
+  starting. The Blink Trainer session stops with it, and the tracker's stop generation keeps an in-flight Start from publishing
+  its camera afterwards. A palette-claimed Escape is not a panic (PanicPolicy.DismissSettingsPalette) and does not stop it.
+- Rationale: Panic is the get-me-out control; a camera left running is the most visible privacy leak; attention checks skip when
+  tracking is off (AttentionCheckService.cs:247), session/autonomy don't depend on the webcam, no StrictLock/Lockdown escape rule
+  uses gaze; cost is a manual restart, made expected by the notice.
+- Advisor: oracle-deep.
+## 2026-09-30: Chaster booked figure on Avalonia
+- Question: WPF shows a booked price first as ChasterBookedPop (a topmost window at the cause or cursor) and only falls back to
+  the rail-padlock adorner. Which does the Avalonia head show?
+- Options: (a) port the pop window (desktop-wide topmost, cursor from Win32; Bucket E, not permitted on Wayland); (b) always the
+  rail adorner, WPF's own fallback.
+- Choice: (b) for now; the pop stays `missing` in the ledger. BookedFlashPlan moved to Core with colours as 0xAARRGGBB `uint`
+  (WPF converts with `BookedFlashColour.Wpf()`), so both heads draw one plan.
+- Advisor: none (worker, per branch brief avalonia-port/chaster-bill).
+## 2026-09-30: Mantra Lab audio and opener (avalonia-port/mantra-service)
+MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `CoreProgression.AddXP("Mantra")`, new `CoreProgression.TrackMantraCompletedProvider`, `MantraService.ChasterNote`, seeded by both heads). WPF's NAudio SignalGenerators become synthesised 16-bit WAVs (`CCP.Avalonia/Platform/ToneWav.cs`, per-process temp dir): tones through `CoreAudio.PlayOneShot` at WPF's 0.15 gain; the drone (90 Hz + 0.4 x 180 Hz, 10 s of whole cycles) as a looping `LayeredAudio.VlcLayerPlayer` whose volume follows WPF's gain ramp x MantraDroneVolume. No NAudio on Linux. `MainShellWindow.StartMantraSession` is ported with no caller, exactly as WPF (MainWindow.PlayTab.cs:~264; the Mantras card left the Play page 2026-08-12); where the game lives is still an owner call. Its WPF failure MessageBox is dropped on this head (logged only). The drone player starts muted and unmutes once its first volume sticks (no full-volume blip); exit closes the window and deletes the temp WAVs.
+- Test: `Tests/CCP.Core.Tests/MantraServiceTests.cs`, `Tests/CCP.Avalonia.Tests/MantraWindowSessionTests.cs` (fail-proven x7).
+- Advisor: none (worker).
+## 2026-10-01: WebHost live URL and the catalogue lookup trigger
+- Question: where does the Avalonia head fire the HT catalogue lookup, and with which URL?
+- Choice: WebHost gains CurrentUrl + NavigationCompleted (from NativeWebView.NavigationCompleted, raised for failed
+  completions too, like WPF BrowserService.cs:1435-1443); the shell's OnBrowserNavigationCompleted sets the status line and
+  fires the lookup with the live URL (Uri.AbsoluteUri, escaped like CoreWebView2.Source). The lookup no longer fires from
+  NavigateBrowser with the requested URL, so with no web engine nothing is looked up, as on WPF with no browser.
+  Headless tests drive the internal WebHost.OnNavigationCompleted seam. IsBrowserShowingKnownSite stays unwritten until
+  its caller SyncSiteRadiosToActiveMod is ported. DashboardFold reads no URL, so it is untouched.
+
+## 2026-10-01: sandbox rule for the catalogue lookup; clients still outside it (known gap)
+- CatalogueLookup (by-ht-url lookup and bundle download) now resolves its base URL through CatalogueClient.ResolveBaseUrl:
+  loopback CCP_CATALOGUE_BASE_URL only; a CCP_USERDATA_DIR sandbox without one sends nothing; under a loopback override a
+  non-loopback bundle FileUrl is refused (`CatalogueLookupTests.SandboxWithoutAnOverrideSendsNothingAndALoopbackOverrideIsWhereItGoes`).
+- Known gap, a separate branch will add a shared HTTP-layer guard. These still reach real servers from a sandbox:
+  CCP.Core/Services/BugReportService.cs:24; CCP.Core/Services/Descent/DescentCountdownService.cs:101;
+  CCP.Core/Services/Progression/QuestDefinitionService.cs:20; CCP.Core/Services/Progression/LeaderboardClient.cs:17;
+  CCP.Core/Services/Account/V2AuthService.cs:30; CCP.Core/Services/Account/ProviderSubscription.cs:23;
+  CCP.Core/Services/Account/SyncPush.cs:30; CCP.Core/Services/Account/DiscordAccount.cs:53 (ProviderSubscription.ProxyBaseUrl);
+  CCP.Avalonia/Views/Dialogs/LoginDialog.axaml.cs:58; CCP.Avalonia/Views/Dialogs/UsernamePickerDialog.axaml.cs:49;
+  web views loading fixed hosts (SpiralTabView.axaml.cs:85 embed, MainShellWindow.Browser.cs:77-78 site homes,
+  MainShellWindow.TabNavigation.cs:346).
+  Not audited (HTTP with a caller-supplied URL, so the rule depends on the caller): FriendsApi, ServerClock, HtMetadataFetcher,
+  EnhancementFetcher, GoonContracts, ChasterLadderApi, AnnouncementPopup, MainShellWindow.Marquee, EnhancementPlayerWindow.
+  Already under the rule: CatalogueClient, CatalogueLookup, RemoteRelay, AiService, ReleaseContentService, DailyFreeService,
+  AppUpdater, ChasterHead.
 ## 2026-09-30: EmiDesk ring/codex/book slice (emidesk-ring)
 - Question: which of ring, codex, book, options, summon count/placement fits one layer honestly?
 - Choice: the pure data half of WPF `EmiCodex` (chapter models, fail-soft `Read(dir)`, bookmark) moved to Core

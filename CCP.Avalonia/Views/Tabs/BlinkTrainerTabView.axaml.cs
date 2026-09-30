@@ -181,6 +181,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         internal bool LivePreview => _liveSubscribed;
 
+        private BlinkTrainerAssetPool? _livePool;
+        private string _livePoolToken = "";
+
+        /// <summary>WPF GetOrBuildBlinkTrainerLivePool: rebuilt only when the folders or the videos toggle change.</summary>
+        internal BlinkTrainerAssetPool LivePool(Models.AppSettings s)
+        {
+            var token = string.Join("|", s.BlinkTrainerFolders) + "::" + s.BlinkTrainerIncludeVideos;
+            if (_livePool == null || _livePoolToken != token) { _livePool = BlinkTrainerAssetPool.Build(s.BlinkTrainerFolders, s.BlinkTrainerIncludeVideos); _livePoolToken = token; }
+            return _livePool;
+        }
+
         /// <summary>WPF OnBlinkTrainerStagePreviewBlink + ApplyBlinkTrainerLiveImage: a hard-cut swap.
         /// ponytail: a video pick is skipped on the stage (WPF plays it in a MediaElement); the
         /// session overlay plays it.</summary>
@@ -189,7 +200,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             try
             {
                 var s = CoreSettings.Current;
-                var path = BlinkTrainerAssetPool.Build(s.BlinkTrainerFolders, s.BlinkTrainerIncludeVideos).PickRandom(_liveLast);
+                var path = LivePool(s).PickRandom(_liveLast);
                 if (path == null || BlinkTrainerAssetPool.IsVideo(path)) return;
                 _liveLast = path;
                 var bmp = new Bitmap(path);
@@ -514,9 +525,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnBlinkTrainerManageConsent_Click(object? sender, RoutedEventArgs e) => GrantConsent();
 
         /// <summary>WPF BtnBlinkTrainerRevokeConsent_Click: confirm (Cancel default), then
-        /// WebcamTrackingService.RevokeConsent's settings half. Its Stop/ClearCalibration half is
-        /// CoreWebcam.RevokeConsent, a no-op while no tracker is seeded - and with none there is
-        /// no running camera and no calibration to clear.</summary>
+        /// WebcamTrackingService.RevokeConsent in full (Platform.WebcamTracker.RevokeConsent: stop,
+        /// delete the calibration file, clear consent, turn the webcam features off).</summary>
         private async void BtnBlinkTrainerRevokeConsent_Click(object? sender, RoutedEventArgs e)
         {
             try
@@ -550,10 +560,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             try
             {
                 if (BlinkTrainerSession.IsRunning) { BlinkTrainerSession.Stop(); return; }
+                // Read BEFORE any await: a panic or Stop during the tracker start or the portal bind
+                // (up to 30 s) cancels this start.
+                var gen = BlinkTrainerSession.Generation;
                 var tracker = Platform.WebcamTracker.Instance;
                 if (!tracker.IsRunning && WebcamConsent.IsCurrent(CoreSettings.Current)) await tracker.StartAsync();
-                // StartEffect may run this up to 30 s later: a panic or Stop in between cancels it.
-                var gen = BlinkTrainerSession.Generation;
+                if (gen != BlinkTrainerSession.Generation) return;
                 Windows.MainShellWindow.StartEffect(() => { if (gen == BlinkTrainerSession.Generation) BlinkTrainerSession.Start(this); });
             }
             catch (Exception ex) { Log.Warning(ex, "Blink Trainer Start handler failed"); }

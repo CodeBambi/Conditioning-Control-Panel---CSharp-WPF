@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -13,42 +14,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// The Mantra Lab: a full-screen typing drill where every correctly typed character lights up
     /// and the whole scene warms from cold purple to hot pink as the streak climbs.
     ///
-    /// PORTED from ConditioningControlPanel/Windows/MantraWindow.xaml.cs. Deviations:
-    ///  - <c>App.Mantra</c> (MantraService) is pinned to the WPF head by App.Progression /
-    ///    App.Quests, so the SESSION half is still stubbed: no completion counting, no streak
-    ///    events, no NAudio drone or tones, no session-complete trigger. The VIEW half is ported
-    ///    verbatim — the per-character highlight system, the streak intensity ramp, the colour
-    ///    lerp, the float drift and the #734 anti-cheat guard — and its text and rep target now
-    ///    come from <c>CoreSettings.Current</c> (MantraPool, MantraDefaultCount) rather than an
-    ///    invented English line; <see cref="SampleStreak"/> still drives the warm palette so the
-    ///    render shows a live scene rather than a cold empty one.
-    ///  - Five WPF Storyboards (pulse, shake, letter-pulse, wrong-shake, glow) are dropped, and
-    ///    MantraService is NOT what blocks four of them - it is that Avalonia's
-    ///    <c>TransformAnimator</c> seizes the target's <c>RenderTransform</c> and throws on a
+    /// PORTED from ConditioningControlPanel/Windows/MantraWindow.xaml.cs over the Core
+    /// <see cref="MantraService"/> (<c>App.Mantra</c>), which the opener must have started
+    /// (<c>MainShellWindow.StartMantraSession</c>, as WPF). Deviations:
+    ///  - Audio: NAudio's SignalGenerator/WaveOutEvent become synthesised WAVs (<see cref="Platform.ToneWav"/>):
+    ///    tones through <see cref="CoreAudio.PlayOneShot"/>, the drone as a looping LibVLC layer whose
+    ///    volume follows WPF's gain ramp.
+    ///  - Five WPF Storyboards (pulse, shake, letter-pulse, wrong-shake, glow) are dropped:
+    ///    Avalonia's <c>TransformAnimator</c> seizes the target's <c>RenderTransform</c> and throws on a
     ///    code-held <c>Transform</c>, so a ported shake/pulse has to be a tween stepped off a
     ///    shared ~16ms <c>DispatcherTimer</c> (ChaosHudWindow is the worked example in this head).
-    ///    Letter-pulse is blocked differently and permanently: its target is a <c>Run</c>, which is
-    ///    not a <c>Visual</c>, so no Avalonia <c>Animation</c> can address it at all - the
-    ///    stepped-timer colour hop already in <see cref="UpdateHighlights"/> is its replacement.
-    ///  - <c>DispatcherTimer</c> exists in Avalonia; the float timer is stopped in
-    ///    <c>OnClosed</c> as well as <c>CleanupAndClose</c>, because --render-all closes the
-    ///    window externally and a 16ms tick would outlive the view in that shared process.
-    ///  - The idle timer is dropped entirely: it only calls <c>MantraService.BreakStreak</c>.
+    ///    Letter-pulse's target is a <c>Run</c>, not a <c>Visual</c>; the stepped colour hop in
+    ///    <see cref="UpdateHighlights"/> is its replacement.
+    ///  - Opened with no running session (the render proof), it starts one with MantraDefaultCount;
+    ///    WPF assumes the opener did. A failed StartMantraSession is logged, not shown in a MessageBox.
+    ///  - Timers and the drone are also stopped in <c>OnClosed</c>, because --render-all closes the
+    ///    window externally.
     ///  - <c>DataObject.AddPastingHandler</c> -> <c>TextBox.PastingFromClipboardEvent</c>;
     ///    <c>Visibility</c> -> <c>IsVisible</c>.
     /// </summary>
     public partial class MantraWindow : Window
     {
-        /// <summary>Last-resort line for the letter highlighting when the user's pool is empty.
-        /// ponytail: the live line needs MantraService.CurrentMantra from
-        /// ConditioningControlPanel/Services/MantraService.cs — it is pinned to the head by
-        /// App.Progression / App.Quests, so no Core seam exists for it yet.</summary>
-        private const string SampleMantra = "good girls sink deeper every time";
-        private const int SampleStreak = 7;
-
+        private readonly MantraService _service = App.Mantra;
         private DispatcherTimer? _floatTimer;
+        private DispatcherTimer? _idleTimer;
         private DateTime _startTime;
         private bool _sessionComplete;
+        private bool _updatingInput;
+
+        // Drone audio (WPF: two SignalGenerators; here one looping synthesised layer)
+        /// <summary>Opens the looping drone file. Tests swap it; null when libvlc did not load.</summary>
+        internal static Func<string, Platform.LayeredAudio.ILayerPlayer?> DroneOpener =
+            path => Platform.LibVlcAudio.Shared is { } vlc ? new Platform.LayeredAudio.VlcLayerPlayer(vlc, path, startMuted: true) : null;
+        private Platform.LayeredAudio.ILayerPlayer? _drone;
+        private float _droneTargetGain = 0.05f;
+        private float _droneCurrentGain = 0.05f;
+        private bool _droneRamped;   // WPF applies MantraDroneVolume only from the first ramp step
 
         // Per-character highlight state
         private readonly List<Run> _mantraRuns = new();
@@ -107,18 +108,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             _startTime = DateTime.UtcNow;
 
-            // ponytail: subscribing StreakChanged / StreakBroken / MantraCompleted /
-            // SessionComplete needs ConditioningControlPanel/Services/MantraService.cs; the drone
-            // and the streak tones need NAudio's SignalGenerator + WaveOutEvent, which CoreAudio
-            // deliberately does not cover (PlayOneShot takes a file path, not a generator).
+            // Deviation: WPF assumes the opener started a session; opened bare (the render proof), start
+            // one with the user's default count rather than draw an empty line and "/0".
+            if (!_service.IsActive) _service.StartSession(CoreSettings.Current.MantraDefaultCount);
+
+            // Subscribe to service events
+            _service.StreakChanged += OnStreakChanged;
+            _service.StreakBroken += OnStreakBroken;
+            _service.MantraCompleted += OnMantraCompleted;
+            _service.SessionComplete += OnSessionComplete;
 
             // Build initial letter display
-            var mantra = CurrentMantra ?? "";
-            BuildMantraRuns(mantra);
-            // ponytail: the live figure is MantraService.TargetCount, which the caller sets via
-            // StartSession(reps). MantraDefaultCount is the settings-backed default that caller
-            // reads, so it is the honest stand-in rather than an invented number.
-            _txtTarget.Text = $"/{CoreSettings.Current.MantraDefaultCount}";
+            BuildMantraRuns(_service.CurrentMantra ?? "");
+            _txtTarget.Text = $"/{_service.TargetCount}";
             _txtCompletions.Text = "0";
             _txtStreak.Text = "0";
             _txtBestStreak.Text = "0";
@@ -128,16 +130,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _floatTimer.Tick += FloatTimer_Tick;
             _floatTimer.Start();
 
-            // Placeholder session state, so the highlight ramp and the warm palette both draw.
-            OnStreakChanged(SampleStreak);
-            UpdateHighlights(mantra[..Math.Min(11, mantra.Length)]);
+            // Start idle timer (5s inactivity breaks streak)
+            _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _idleTimer.Tick += IdleTimer_Tick;
+            _idleTimer.Start();
+
+            StartDrone();
 
             _txtInput.Focus();
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            _floatTimer?.Stop();
+            Cleanup();
             base.OnClosed(e);
         }
 
@@ -164,7 +169,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private int UpdateHighlights(string input)
         {
-            var mantra = CurrentMantra;
+            var mantra = _service.CurrentMantra;
             if (mantra == null || _mantraRuns.Count == 0) return 0;
 
             int matchCount = 0;
@@ -226,51 +231,51 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         #endregion
 
-        /// <summary>
-        /// The line on screen. The user's own <c>MantraPool</c> is in Core, so the window shows a
-        /// real mantra rather than an invented English one; the pool's FIRST entry is deliberate —
-        /// picking at random here would be a second copy of <c>MantraService.NextMantra</c>'s
-        /// no-immediate-repeat rotation, which is the drift the service exists to prevent.
-        /// ponytail: needs MantraService.CurrentMantra for the rotating line.
-        /// </summary>
-        private static string? CurrentMantra
-        {
-            get
-            {
-                var pool = CoreSettings.Current.MantraPool;
-                return pool is { Count: > 0 } && !string.IsNullOrWhiteSpace(pool[0])
-                    ? pool[0]
-                    : SampleMantra;
-            }
-        }
-
         private void FloatTimer_Tick(object? sender, EventArgs e)
         {
             var elapsed = (DateTime.UtcNow - _startTime).TotalSeconds;
             if (_mantraTranslate != null)
                 _mantraTranslate.Y = Math.Sin(elapsed * 0.5) * 6;
 
-            // ponytail: the drone gain ramp lived here. Needs NAudio's SignalGenerator (the tone is
-            // synthesised, not a file), which CoreAudio.PlayOneShot cannot express; its volume knob
-            // CoreSettings.Current.MantraDroneVolume is already in Core and waits on the generator.
+            // Smoothly ramp drone gain
+            if (_drone != null && Math.Abs(_droneCurrentGain - _droneTargetGain) > 0.001f)
+            {
+                _droneCurrentGain += (_droneTargetGain - _droneCurrentGain) * 0.02f;
+                _droneRamped = true;
+                ApplyDroneVolume();
+            }
+        }
+
+        private void IdleTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_service.IsActive && _service.Streak > 0)
+                _service.BreakStreak();
         }
 
         private void TxtInput_TextChanged()
         {
-            if (_sessionComplete) return;
+            if (_updatingInput || _sessionComplete || !_service.IsActive) return;
+
+            // Reset idle timer
+            _idleTimer?.Stop();
+            _idleTimer?.Start();
 
             var input = _txtInput.Text ?? "";
-            var target = CurrentMantra;
+            var target = _service.CurrentMantra;
             if (target == null) return;
 
             int matchCount = UpdateHighlights(input);
 
-            // Check completion: all characters match and input length equals mantra length.
-            // ponytail: needs MantraService.TryCompleteMantra from
-            // ConditioningControlPanel/Services/MantraService.cs to count the rep, clear the box
-            // and roll the next mantra; until then a finished line just stays lit. The
-            // _updatingInput re-entry guard belongs with it — it only exists to cover that clear.
-            _ = matchCount;
+            // Check completion: all characters match and input length equals mantra length
+            if (matchCount == target.Length && input.Length == target.Length)
+            {
+                if (_service.TryCompleteMantra())
+                {
+                    _updatingInput = true;
+                    _txtInput.Text = "";
+                    _updatingInput = false;
+                }
+            }
         }
 
         private void TxtInput_PreviewKeyDown(object? sender, KeyEventArgs e)
@@ -285,28 +290,53 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
+        private void OnMantraCompleted()
+        {
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Invoke(OnMantraCompleted); return; }
+
+            // Rebuild runs for the new mantra (CurrentMantra already updated before event fires)
+            BuildMantraRuns(_service.CurrentMantra ?? "");
+            _txtCompletions.Text = _service.Completions.ToString();
+
+            // Play streak-up tone
+            PlayTone(400 + _service.Streak * 20, 150);
+        }
+
         private void OnStreakChanged(int streak)
         {
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Invoke(() => OnStreakChanged(streak)); return; }
+
             _txtStreak.Text = streak.ToString();
-            _txtBestStreak.Text = streak.ToString();
+            _txtBestStreak.Text = _service.BestStreak.ToString();
 
             UpdateVisualIntensity(streak);
         }
 
-        /// <summary>
-        /// The MantraService.SessionComplete handler, ported view-side. Nothing calls it yet — the
-        /// event it hangs off is stubbed — so the overlay only draws once the service reaches Core.
-        /// The stats line is hardcoded English in the WPF original too; no loc key exists for it.
-        /// </summary>
+        private void OnStreakBroken()
+        {
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Invoke(OnStreakBroken); return; }
+
+            // Play streak-break tone
+            PlayTone(200, 300);
+
+            // Cool down visuals
+            UpdateVisualIntensity(0);
+        }
+
+        /// <summary>The stats line is hardcoded English in the WPF original too; no loc key exists for it.</summary>
         private void OnSessionComplete(int totalReps, int bestStreak)
         {
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Invoke(() => OnSessionComplete(totalReps, bestStreak)); return; }
+
             _sessionComplete = true;
+            _idleTimer?.Stop();
 
             _txtCompletionStats.Text = $"{totalReps} repetitions  |  Best streak: {bestStreak}";
             _completionOverlay.IsVisible = true;
             _txtInput.IsEnabled = false;
 
-            // ponytail: the completion tone needs NAudio, wired with the rest of the audio.
+            // Play completion tone
+            PlayTone(523, 400);
 
             // Auto-close after 5 seconds
             var closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
@@ -328,7 +358,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // Re-color already highlighted runs with new color
             var input = _txtInput.Text ?? "";
-            var mantra = CurrentMantra;
+            var mantra = _service.CurrentMantra;
             if (mantra != null)
             {
                 int matchLen = 0;
@@ -363,7 +393,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_baseCenter != null)
                 _baseCenter.Color = LerpColor(Color.FromRgb(0x1A, 0x0A, 0x2E), Color.FromRgb(0x2E, 0x0A, 0x2E), t);
 
-            // ponytail: the drone target gain rode this same t; needs NAudio.
+            // Drone gain: 0.05 idle → 0.4 max
+            _droneTargetGain = 0.05f + (float)t * 0.35f;
         }
 
         private static Color LerpColor(Color a, Color b, double t)
@@ -391,14 +422,60 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        private void CleanupAndClose()
+        /// <summary>WPF StartDrone: 90 Hz fundamental + 180 Hz harmonic at 0.4 of its gain.</summary>
+        private void StartDrone()
+        {
+            try
+            {
+                _drone = DroneOpener(Platform.ToneWav.Drone());
+                ApplyDroneVolume();
+            }
+            catch (Exception ex)
+            {
+                _drone = null;
+                Serilog.Log.Warning(ex, "Failed to start mantra drone audio");
+            }
+        }
+
+        /// <summary>WPF: the drone opens at a raw 0.05 (StartDrone) and only the ramp multiplies in
+        /// MantraDroneVolume% (FloatTimer_Tick). The file's peak is 1.4 x the fundamental's.</summary>
+        private void ApplyDroneVolume()
+        {
+            if (_drone == null) return;
+            var masterVol = _droneRamped ? CoreSettings.Current.MantraDroneVolume / 100.0 : 1.0;
+            _drone.Volume = Platform.ToneWav.VlcVolume(_droneCurrentGain * masterVol * Platform.ToneWav.DronePeak);
+        }
+
+        private void StopDrone()
+        {
+            try { _drone?.Dispose(); } catch { }
+            _drone = null;
+        }
+
+        private static void PlayTone(double frequency, int durationMs)
+        {
+            try { CoreAudio.PlayOneShot(Platform.ToneWav.Tone(frequency, durationMs), 0.15f, "mantra"); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Failed to play mantra tone"); }
+        }
+
+        private void Cleanup()
         {
             _floatTimer?.Stop();
+            _idleTimer?.Stop();
+            StopDrone();
 
-            // ponytail: unsubscribing the four MantraService events and MantraService.EndSession()
-            // go here, plus StopDrone(); all need ConditioningControlPanel/Services/MantraService.cs
-            // and NAudio respectively.
+            _service.StreakChanged -= OnStreakChanged;
+            _service.StreakBroken -= OnStreakBroken;
+            _service.MantraCompleted -= OnMantraCompleted;
+            _service.SessionComplete -= OnSessionComplete;
 
+            if (_service.IsActive)
+                _service.EndSession();
+        }
+
+        private void CleanupAndClose()
+        {
+            Cleanup();
             Close();
         }
     }

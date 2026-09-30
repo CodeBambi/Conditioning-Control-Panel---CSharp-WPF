@@ -82,7 +82,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Dispatcher.UIThread.Post(async () =>
             {
                 var ok = IsVisible && await Dialogs.MessageDialog.ConfirmAsync(this, "Age Verification", AgeGateBody, defaultToCancel: true);
-                if (!ok) { RequestExit(); return; }
+                if (!ok) { ExitWithoutBill(); return; }   // WPF App.xaml.cs:3835 Shutdown, no bill
                 CoreSettings.Current.HasAcceptedAgeVerification = true;
                 CoreSettings.Save();
             }, DispatcherPriority.Normal);

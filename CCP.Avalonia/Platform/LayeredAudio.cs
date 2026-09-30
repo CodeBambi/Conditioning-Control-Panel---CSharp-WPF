@@ -140,11 +140,15 @@ namespace ConditioningControlPanel.Avalonia.Platform
             private readonly TaskCompletionSource _closed = new();
             private int _volume;
             private bool _playing, _disposed;
+            private readonly bool _startMuted;
 
             public Task Closing => _closed.Task;
 
-            public VlcLayerPlayer(LibVLC vlc, string path)
+            /// <param name="startMuted">Mute until the first volume sticks, so the stream never opens at
+            /// full volume for the moment before Playing (the mantra drone).</param>
+            public VlcLayerPlayer(LibVLC vlc, string path, bool startMuted = false)
             {
+                _startMuted = startMuted;
                 _media = new Media(vlc, path, FromType.FromPath);
                 _media.AddOption(LibVlcAudio.NoVideo);
                 _player = new MediaPlayer(_media);
@@ -158,6 +162,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 {
                     lock (this) { if (_disposed) return; _playing = false; _player.Stop(); _player.Play(); }
                 });
+                if (startMuted) _player.Mute = true;
                 _player.Play();
             }
 
@@ -173,10 +178,11 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 for (var i = 0; i < 20; i++)
                 {
                     _player.Volume = _volume;
-                    if (_player.Volume == _volume) return;
+                    if (_player.Volume == _volume) { if (_startMuted) _player.Mute = false; return; }
                     Thread.Sleep(25);
                 }
                 Log.Debug("LayeredAudio: volume {V} did not stick", _volume);
+                if (_startMuted) _player.Mute = false;
             }
 
             public void Dispose()

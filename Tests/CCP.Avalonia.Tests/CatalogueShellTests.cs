@@ -107,6 +107,64 @@ public sealed class CatalogueShellTests
         });
     }
 
+    /// <summary>The user path WPF has (MainWindow.Browser.cs:132-158): a site radio navigates the
+    /// browser, and the lookup fires from the WebHost's NavigationCompleted with the LIVE url (here a
+    /// video the user clicked into), not from the URL we asked for. Headless has no engine, so the
+    /// test drives WebHost's completion seam.</summary>
+    [Fact]
+    public async Task SiteRadioNavigatesAndTheLiveUrlCompletionTriggersTheLookup()
+    {
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            Setup();
+            var fake = new Fake { Respond = _ => "{\"enhancements\":[]}" };
+            var (oldLookup, oldClient) = (AppA.CatalogueLookup, AppA.Catalogue);
+            var oldOffline = CoreSettings.Current.OfflineMode;
+            CoreSettings.Current.OfflineMode = false;
+            AppA.CatalogueLookup = new CatalogueLookup(() => Path.GetTempPath(), "test", AppA.OnUiThread, fake);
+            AppA.Catalogue = new CatalogueClient(() => null, () => null, "test", fake);
+            var shell = new MainShellWindow();
+            shell.Show();
+            try
+            {
+                var tab = shell.Named<ConditioningControlPanel.Avalonia.Views.Tabs.SettingsTabView>("SettingsTab")!;
+                var web = tab.FindControl<ConditioningControlPanel.Avalonia.Views.Controls.WebHost>("BrowserWebHost")!;
+                var hypno = tab.FindControl<RadioButton>("RbHypnoTube")!;
+                hypno.IsChecked = true;
+                hypno.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal("https://hypnotube.com/", web.Source?.ToString());
+                Assert.Equal(1, web.NavigationRequests);
+                // WPF #867: re-clicking the site you are on, and Reload, navigate again although the URL is equal.
+                hypno.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                tab.FindControl<Button>("BtnReloadBrowser")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(3, web.NavigationRequests);
+
+                // Asking for an HT video looks nothing up: only a completed navigation does.
+                var video = new Uri("https://hypnotube.com/video/sleepy-123.html");
+                Assert.True(shell.NavigateToUrlInBrowser(video.AbsoluteUri));
+                for (var i = 0; i < 20; i++) { Dispatcher.UIThread.RunJobs(); await Task.Delay(5); }
+                Assert.DoesNotContain(fake.Seen, u => u.Contains("by-ht-url"));
+
+                web.OnNavigationCompleted(video);
+                Assert.Equal(video, web.CurrentUrl);
+                Assert.Equal(Loc.Get("label_connected_2"), tab.FindControl<TextBlock>("TxtBrowserStatus")!.Text);
+                for (var i = 0; i < 200 && !fake.Seen.Any(u => u.Contains("by-ht-url")); i++)
+                {
+                    Dispatcher.UIThread.RunJobs();
+                    await Task.Delay(10);
+                }
+                var lookup = fake.Seen.Single(u => u.Contains("by-ht-url"));
+                Assert.Contains(Uri.EscapeDataString(video.AbsoluteUri), lookup);
+            }
+            finally
+            {
+                shell.Close();
+                (AppA.CatalogueLookup, AppA.Catalogue) = (oldLookup, oldClient);
+                CoreSettings.Current.OfflineMode = oldOffline;
+            }
+        });
+    }
+
     [Fact]
     public async Task MinePollMarksThePresetApprovedToastsOnceAndPaintsItsPill()
     {
