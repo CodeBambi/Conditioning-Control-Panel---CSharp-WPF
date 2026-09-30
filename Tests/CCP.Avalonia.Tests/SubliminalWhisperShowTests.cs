@@ -55,14 +55,14 @@ public sealed class SubliminalWhisperShowTests
         CoreSubliminal.TriggerBambiFreeze();
         Assert.Equal(new[] { "duck 70", "play freeze.mp3 whisper" }, run.Log);   // no card yet
         Fire(run, 500);                                                         // unduck after the clip
-        Fire(run, 300);                                                         // haptic lead + visual gap
+        Fire(run, 50); Fire(run, 250);                                          // haptic lead, then visual gap
         Assert.Equal(new[] { "duck 70", "play freeze.mp3 whisper", "unduck", "card Freeze" }, run.Log);
         var reset = Assert.Single(run.Timers);
         Assert.InRange(reset.Ms, 4000, 7999);
         Fire(run, reset.Ms);
         Assert.Equal("play reset.mp3 whisper", run.Log[^1]);
         Fire(run, 500);
-        Fire(run, 300);
+        Fire(run, 50); Fire(run, 250);
         Assert.Equal("card Reset", run.Log[^1]);
         Assert.Empty(run.Timers);
     });
@@ -79,7 +79,7 @@ public sealed class SubliminalWhisperShowTests
             {
                 SubliminalWhisperShow.Phrase("reset");                            // has a neutral clip
                 Assert.Equal(new[] { "duck 70", "play reset.mp3 whisper" }, run.Log);
-                Fire(run, 300);
+                Fire(run, 50); Fire(run, 250);
                 Assert.Equal("card reset", run.Log[^1]);
                 SubliminalWhisperShow.Phrase("no clip for this");
                 Assert.Equal("card no clip for this", run.Log[^1]);             // no clip: card at once
@@ -102,7 +102,7 @@ public sealed class SubliminalWhisperShowTests
         {
             CoreSubliminal.TriggerBambiFreeze();
             Fire(run, 500);
-            Fire(run, 300);
+            Fire(run, 50); Fire(run, 250);
             Assert.Empty(run.Timers);                                           // the 10% skip
         });
     }

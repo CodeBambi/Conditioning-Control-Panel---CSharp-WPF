@@ -149,6 +149,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (b.Lucky) vol *= 0.35f;
             CoreAudio.PlayOneShot(path, Math.Min(vol, 1f), "bubble-pop");
             try { App.Quests?.TrackBubblePopped(); } catch (Exception ex) { Log.Debug("bubble quest credit: {E}", ex.Message); }
+            _ = CoreHaptics.Service?.BubblePopAsync();   // WPF BubbleService.cs:1089
         }
 
         internal static void OnFrame(TimeSpan now)

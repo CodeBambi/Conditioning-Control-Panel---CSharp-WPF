@@ -2872,7 +2872,18 @@ namespace ConditioningControlPanel
             DescentShow = new Services.Descent.DescentShowDirector();
             DescentShow.Arm();
             Leaderboard = new LeaderboardService();
+            // HapticService lives in Core; these are its three head seams.
+            Services.Haptics.Core.MockProviderV2.Toast = Services.Haptics.Core.MockToast.Post;
+            Services.Haptics.FunScriptService.SubscribePlaybackTime = h =>
+            {
+                var video = Video;
+                if (video == null) return null;
+                video.PrimaryPlaybackTimeMsChanged += h;
+                return () => video.PrimaryPlaybackTimeMsChanged -= h;
+            };
+            HapticService.EmiDeskFire = (moment, ctx) => EmiDesk?.Fire(moment, ctx);
             Haptics = new HapticService(Settings.Current.Haptics);
+            CoreHaptics.Service = Haptics;
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
             KeywordTriggers = new KeywordTriggerService();
             KeywordPresets = new KeywordTriggerPresetService();
@@ -2927,10 +2938,7 @@ namespace ConditioningControlPanel
             // value, which means every v6.6.3 upgrader with AutoConnect on would silently bring up
             // three virtual toys and a stream of pink toasts at each launch. Only a REAL provider
             // justifies auto-connecting; Lovense and/or Buttplug still work in any combination.
-            if (Settings.Current.Haptics.AutoConnect && HasRealHapticProviderEnabled())
-            {
-                _ = AutoConnectHapticsAsync();
-            }
+            _ = Haptics.AutoConnectOnStartupAsync();   // Core: AutoConnect + a real provider only
 
             // Initialize Discord Rich Presence (only if Discord is linked — prevents
             // accidental exposure for users who chose anonymous invite-code accounts)
@@ -5044,46 +5052,6 @@ namespace ConditioningControlPanel
         /// legacy <c>Provider</c> enum defaults to, so treating it as a provider choice would make
         /// every upgrader auto-connect virtual toys they never asked for.
         /// </summary>
-        private static bool HasRealHapticProviderEnabled()
-        {
-            try
-            {
-                var v2 = Settings.Current.Haptics.V2;
-                return v2.Provider("lovense").Enabled || v2.Provider("buttplug").Enabled;
-            }
-            catch { return false; }
-        }
-
-        /// <summary>
-        /// Auto-connect to haptics device on startup if enabled
-        /// </summary>
-        private async Task AutoConnectHapticsAsync()
-        {
-            try
-            {
-                // Short delay to let app fully initialize
-                await Task.Delay(2000);
-
-                Logger?.Information("Auto-connecting haptics: Provider={Provider}", Settings.Current.Haptics.Provider);
-
-                var connected = await Haptics.ConnectAsync();
-
-                if (connected)
-                {
-                    Logger?.Information("Haptics auto-connected successfully to {Provider}", Haptics.ProviderName);
-                }
-                else
-                {
-                    Logger?.Warning("Haptics auto-connect failed for {Provider}", Settings.Current.Haptics.Provider);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger?.Warning(ex, "Haptics auto-connect error");
-                // Silently fail - user can manually connect later
-            }
-        }
-
         /// <summary>
         /// Show update notification dialog and handle user response
         /// </summary>

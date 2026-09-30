@@ -97,6 +97,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CmbPatternToy.SelectedIndex = 0;
 
             ApplyFeatureArt();
+            LoadHapticsSettingsToUi();
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -104,11 +105,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             CoreMods.ModChanged += OnModChanged;
             ApplyFeatureArt();
+            HookHapticService(true);
+            RefreshHapticConnectionUi();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             CoreMods.ModChanged -= OnModChanged;
+            HookHapticService(false);
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -134,23 +138,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ImgVideoHapticSync.Source = art;
         }
 
-        // ponytail: every handler below forwards to MainWindow on WPF
-        // (Window.GetWindow(this) as MainWindow -> mw.<same name>). Needs the MainWindow.Haptics
-        // partial and HapticService, wired when they move to Core. Names kept identical so the
-        // wiring diffs cleanly against ConditioningControlPanel/Views/Tabs/HapticsTabView.xaml.cs.
+        // Wired: enable (premium gate), providers, addresses, auto-connect, connect/panic/test, help,
+        // intensity and max power (HapticsTabView.Connection.cs). ponytail: the empty handlers below
+        // (per-toy test, DtRH, pattern preview, sync dials, Phase F) and the three sample lists
+        // above - toy cards, provider chips, routing rows - still need MainWindow.Haptics.cs's VMs.
         private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
-        private void ChkHapticsEnabled_Changed(object? sender, RoutedEventArgs e) { }
-        private void BtnHapticConnect_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnHapticPanic_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnHapticTest_Click(object? sender, RoutedEventArgs e) { }
+        private void ChkHapticsEnabled_Changed(object? sender, RoutedEventArgs e) => OnHapticsEnabledChanged();
+        private void BtnHapticConnect_Click(object? sender, RoutedEventArgs e) => OnHapticConnectClicked();
+        private void BtnHapticPanic_Click(object? sender, RoutedEventArgs e) => OnHapticPanicClicked();
+        private void BtnHapticTest_Click(object? sender, RoutedEventArgs e) => OnHapticTestClicked();
         private void BtnHapticToyTest_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnHapticsHelp_Click(object? sender, RoutedEventArgs e) { }
-        private void ChkHapticProvider_Changed(object? sender, RoutedEventArgs e) { }
-        private void ChkHapticAutoConnect_Changed(object? sender, RoutedEventArgs e) { }
-        private void TxtHapticUrl_TextChanged(object? sender, TextChangedEventArgs e) { }
-        private void TxtHapticIntifaceUrl_TextChanged(object? sender, TextChangedEventArgs e) { }
-        private void SliderHapticIntensity_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderHapticMaxPower_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e) { }
+        private async void BtnHapticsHelp_Click(object? sender, RoutedEventArgs e)
+        {
+            // WPF: the wizard rewrites provider flags and addresses, so re-read afterwards.
+            if (TopLevel.GetTopLevel(this) is Windows.MainShellWindow shell) await shell.ShowHapticsSetupAsync();
+            LoadHapticsSettingsToUi();
+        }
+        private void ChkHapticProvider_Changed(object? sender, RoutedEventArgs e) => OnHapticProviderChanged(sender);
+        private void ChkHapticAutoConnect_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_loading || Cfg.AutoConnect == (ChkHapticAutoConnect.IsChecked == true)) return;
+            Cfg.AutoConnect = ChkHapticAutoConnect.IsChecked == true;
+            CoreSettings.Save();
+        }
+        private void TxtHapticUrl_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (_loading || (Cfg.LovenseUrl ?? "") == (TxtHapticUrl.Text ?? "")) return;   // compare-before-write
+            Cfg.LovenseUrl = TxtHapticUrl.Text ?? "";   // mirrors into V2.Provider("lovense").Url
+            CoreSettings.Save();
+        }
+        private void TxtHapticIntifaceUrl_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (_loading || (Cfg.ButtplugUrl ?? "") == (TxtHapticIntifaceUrl.Text ?? "")) return;
+            Cfg.ButtplugUrl = TxtHapticIntifaceUrl.Text ?? "";   // what ButtplugProviderV2 reads
+            CoreSettings.Save();
+        }
+        private void SliderHapticIntensity_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtHapticIntensity != null) OnHapticIntensityChanged(); }
+        private void SliderHapticMaxPower_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtHapticMaxPower != null) OnHapticMaxPowerChanged(); }
         private void SliderHapticDtrhAmbient_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
         private void CmbHapticDtrhDensity_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
         private void CmbPatternMode_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }

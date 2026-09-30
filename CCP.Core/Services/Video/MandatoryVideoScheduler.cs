@@ -83,6 +83,7 @@ namespace ConditioningControlPanel.Services
         public void NoteHit()
         {
             AttentionHits++;
+            _ = CoreHaptics.Service?.VideoTargetHitAsync();   // WPF VideoService.cs:5729
             CoreProgression.AddXP(AttentionHitXp, "Video");
         }
 
@@ -312,7 +313,11 @@ namespace ConditioningControlPanel.Services
                 Dispose(ref _preroll);
                 CoreBubbles.Pause();   // WPF StartVideoPlayback: App.Bubbles?.PauseAndClear(), until the run ends
                 try { _host.Show(path, strict); }
-                catch (Exception ex) { Log.Error(ex, "VideoService: show failed"); End(); }
+                catch (Exception ex) { Log.Error(ex, "VideoService: show failed"); End(); return; }
+                // WPF VideoService.cs:3372: background vibe and the clip's funscript, once on screen.
+                _ = CoreHaptics.Service?.StartVideoBackgroundVibeAsync();
+                try { CoreHaptics.Service?.FunScript.OnVideoStarted(path); }
+                catch (Exception ex) { Log.Debug("FunScript start hook failed: {Error}", ex.Message); }
             }); }, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             _preroll = created;
             created.Change(PreRoll, Timeout.InfiniteTimeSpan);
@@ -389,6 +394,10 @@ namespace ConditioningControlPanel.Services
             try { watched = _host.CloseAll(); }
             catch (Exception ex) { Log.Warning(ex, "VideoService: close failed"); }
             if (watched >= 1.0) CoreProgression.TrackVideoWatched(watched);
+            // WPF CloseAll (VideoService.cs:7916): every teardown path stops the vibe and the funscript.
+            _ = CoreHaptics.Service?.StopVideoBackgroundVibeAsync();
+            try { CoreHaptics.Service?.FunScript.OnVideoStopped(); }
+            catch (Exception ex) { Log.Debug("FunScript stop hook failed: {Error}", ex.Message); }
             return true;
         }
 

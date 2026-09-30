@@ -369,4 +369,23 @@ public sealed class MandatoryVideoSchedulerTests
         Assert.False(ConditioningControlPanel.Services.Companion.CompanionPerks.ApplyAttentionFailPenalty(s));
         Assert.Equal(30, s.ActiveCompanionProgress.CurrentXP);
     }
+
+    /// <summary>WPF VideoService.cs:5729 through CoreHaptics: a caught target pulses the toy.</summary>
+    [Fact]
+    public void Haptics_follow_the_target_hit_and_the_clip() => With(6, false, () =>
+    {
+        var haptics = new HapticService(new ConditioningControlPanel.Models.HapticSettings());
+        var msgs = new List<string>();
+        haptics.HapticTriggered += (_, m) => msgs.Add(m);
+        var old = CoreHaptics.Service;
+        CoreHaptics.Service = haptics;
+        try
+        {
+            var clock = new FakeClock(); var host = new Host();
+            var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+            v.NoteSpawn(); v.NoteHit();
+            Assert.Contains(msgs, m => m.StartsWith("Target Hit"));
+        }
+        finally { CoreHaptics.Service = old; haptics.Dispose(); }
+    });
 }

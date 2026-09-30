@@ -30,7 +30,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// here: the primary screen's scaling), each window draws the part on its screen.</para>
     ///
     /// <para>ponytail: not here yet - pause during mandatory video / BouncingTextAlwaysOnTop (no
-    /// video service on this head), corner-hit achievement, bounce haptics, the 0.5 s topmost
+    /// video service on this head), corner-hit achievement, the 0.5 s topmost
     /// re-assert (override-redirect windows need no WM layer, but a later overlay maps above).</para>
     /// </summary>
     internal static class BouncingTextOverlay
@@ -220,7 +220,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     var c = step.ColorBeforeBounce;
                     foreach (var w in Windows) w.SpawnBurst(l.PosX + l.TextWidth / 2, l.PosY + l.TextHeight / 2, Color.FromRgb(c.R, c.G, c.B));
                 }
-                if (step.Bounced) UpdateText(i);
+                if (step.Bounced)
+                {
+                    _ = CoreHaptics.Service?.BouncingTextBounceAsync();   // WPF BouncingTextService.cs:372
+                    UpdateText(i);
+                }
             }
             for (var i = 0; i < logos.Count; i++)
             {

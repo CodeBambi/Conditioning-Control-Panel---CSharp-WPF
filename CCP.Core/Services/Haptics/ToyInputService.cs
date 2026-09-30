@@ -1,3 +1,4 @@
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -101,7 +102,7 @@ namespace ConditioningControlPanel.Services.Haptics
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ToyInputService: event handling failed (non-fatal): {E}", ex.Message);
+                Log.Debug("ToyInputService: event handling failed (non-fatal): {E}", ex.Message);
             }
         }
 
@@ -125,7 +126,7 @@ namespace ConditioningControlPanel.Services.Haptics
             }
 
             LastPressUtc = DateTime.UtcNow;
-            App.Logger?.Debug("ToyInput: button press from {Device}", e.DeviceKey);
+            Log.Debug("ToyInput: button press from {Device}", e.DeviceKey);
 
             if (waiters != null)
                 foreach (var w in waiters) { try { w.TrySetResult(true); } catch { } }
@@ -165,7 +166,7 @@ namespace ConditioningControlPanel.Services.Haptics
             _mixer.SuppressLayersUntil(DateTime.UtcNow.AddSeconds(cooldown));
             if (!announce) return;
 
-            App.Logger?.Information(
+            Log.Information(
                 "ToyInput: user changed strength on {Device} — backing continuous haptic layers off for {Seconds}s",
                 e.DeviceKey, cooldown);
 
@@ -177,22 +178,11 @@ namespace ConditioningControlPanel.Services.Haptics
         private void RaiseOnDispatcher(EventHandler<HapticToyEvent>? handler, HapticToyEvent e)
         {
             if (handler == null) return;
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.HasShutdownStarted)
+            CoreDispatch.Post(() =>
             {
-                try { handler(this, e); } catch { }
-                return;
-            }
-
-            try
-            {
-                dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try { handler(this, e); }
-                    catch (Exception ex) { App.Logger?.Debug("ToyInput: subscriber threw: {E}", ex.Message); }
-                }));
-            }
-            catch { }
+                try { handler(this, e); }
+                catch (Exception ex) { Log.Debug("ToyInput: subscriber threw: {E}", ex.Message); }
+            });
         }
 
         // ===================================================================== await

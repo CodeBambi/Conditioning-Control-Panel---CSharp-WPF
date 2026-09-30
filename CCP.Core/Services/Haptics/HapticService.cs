@@ -57,6 +57,9 @@ namespace ConditioningControlPanel.Services
         private readonly object _liveGate = new();
 
         public event EventHandler<bool>? ConnectionChanged;
+
+        /// <summary>Head seam for EMI Desk moments (WPF: App.EmiDesk.Fire). Null = no desk.</summary>
+        public static Action<string, object?>? EmiDeskFire;
         public event EventHandler<string>? DeviceDiscovered;
         public event EventHandler<string>? Error;
         public event EventHandler<string>? HapticTriggered;
@@ -164,7 +167,7 @@ namespace ConditioningControlPanel.Services
                 {
                     var devices = ConnectedDevices;
                     var name = devices.Count > 0 ? devices[0]?.ToLowerInvariant() : null;
-                    App.EmiDesk?.Fire("hapticsConnected",
+                    EmiDeskFire?.Invoke("hapticsConnected",
                         string.IsNullOrWhiteSpace(name) ? null : new { target = name });
                 }
                 catch { }
@@ -236,7 +239,7 @@ namespace ConditioningControlPanel.Services
                     CancelKind(HapticEventKind.AvatarEasterEgg);
                 }
             }
-            catch (Exception ex) { App.Logger?.Debug("NotifyRuleChanged({Kind}) failed: {E}", kind, ex.Message); }
+            catch (Exception ex) { Log.Debug("NotifyRuleChanged({Kind}) failed: {E}", kind, ex.Message); }
         }
 
         // ================================================================== connection
@@ -297,18 +300,18 @@ namespace ConditioningControlPanel.Services
                 _consecutivePingFailures++;
                 if (_consecutivePingFailures < MaxConsecutivePingFailures)
                 {
-                    App.Logger?.Warning("Haptic ping failed ({Count}/{Max}) — device briefly unreachable, will retry before disconnecting",
+                    Log.Warning("Haptic ping failed ({Count}/{Max}) — device briefly unreachable, will retry before disconnecting",
                         _consecutivePingFailures, MaxConsecutivePingFailures);
                     return;
                 }
 
-                App.Logger?.Warning("Haptic ping failed {Max}x consecutively — device unreachable, marking disconnected", MaxConsecutivePingFailures);
+                Log.Warning("Haptic ping failed {Max}x consecutively — device unreachable, marking disconnected", MaxConsecutivePingFailures);
                 _consecutivePingFailures = 0;
                 await _deviceManager.DisconnectAsync();
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug(ex, "Haptic ping tick error (non-fatal)");
+                Log.Debug(ex, "Haptic ping tick error (non-fatal)");
             }
         }
 
@@ -412,7 +415,7 @@ namespace ConditioningControlPanel.Services
             {
                 try { await _mixer.SetPositionAsync(d.DeviceKey, position01, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
-                catch (Exception ex) { App.Logger?.Debug("SetPositionAsync failed for {Key}: {E}", d.DeviceKey, ex.Message); }
+                catch (Exception ex) { Log.Debug("SetPositionAsync failed for {Key}: {E}", d.DeviceKey, ex.Message); }
             }
         }
 
@@ -541,7 +544,7 @@ namespace ConditioningControlPanel.Services
         {
             if (!_deviceManager.IsConnected)
             {
-                App.Logger?.Warning("TestAsync: Not connected");
+                Log.Warning("TestAsync: Not connected");
                 Error?.Invoke(this, "Not connected to any device");
                 return HapticTestResult.NotConnected;
             }
@@ -550,13 +553,13 @@ namespace ConditioningControlPanel.Services
             var reachable = await _deviceManager.PingAsync();
             if (!reachable)
             {
-                App.Logger?.Warning("TestAsync: Device unreachable — likely VPN/network change");
+                Log.Warning("TestAsync: Device unreachable — likely VPN/network change");
                 await _deviceManager.DisconnectAsync();
                 Error?.Invoke(this, "Device unreachable");
                 return HapticTestResult.Unreachable;
             }
 
-            App.Logger?.Information("TestAsync: Starting test pattern");
+            Log.Information("TestAsync: Starting test pattern");
             // The test must work even if the user has not flipped the master toggle on yet.
             _mixer.AllowTestWindow(4000);
             // Three steps up the range, on a high priority so ambient layers can't mask them.
@@ -567,7 +570,7 @@ namespace ConditioningControlPanel.Services
                 new(2200, new HapticPulse(1.0, 60, 740, 120, 5)),
             };
             await _mixer.Play(steps).Completion;
-            App.Logger?.Information("TestAsync: Test pattern completed");
+            Log.Information("TestAsync: Test pattern completed");
             return HapticTestResult.Success;
         }
 
@@ -622,7 +625,7 @@ namespace ConditioningControlPanel.Services
                 }
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { App.Logger?.Debug("TestDeviceAsync failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("TestDeviceAsync failed: {E}", ex.Message); }
             finally
             {
                 try { await SendDeviceLevelAsync(device, 0, CancellationToken.None).ConfigureAwait(false); }
@@ -676,7 +679,7 @@ namespace ConditioningControlPanel.Services
                 }
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { App.Logger?.Debug("TestStrokeAsync failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("TestStrokeAsync failed: {E}", ex.Message); }
             finally
             {
                 try { await _mixer.SetPositionAsync(device.DeviceKey, 0, CancellationToken.None).ConfigureAwait(false); }
@@ -1050,6 +1053,23 @@ namespace ConditioningControlPanel.Services
             TrackKind(HapticEventKind.AvatarEasterEgg, seq);
             HapticTriggered?.Invoke(this, $"Avatar: Easter Egg! {(int)(intensity * 100)}%");
             return seq.Completion;
+        }
+
+        /// <summary>Startup auto-connect (WPF App.AutoConnectHapticsAsync). Mock is the legacy enum's
+        /// default, so only a REAL provider (Lovense and/or Buttplug) justifies connecting at launch;
+        /// a short delay lets the app finish starting. Never throws: the user can connect by hand.</summary>
+        public async Task AutoConnectOnStartupAsync(int delayMs = 2000)
+        {
+            try
+            {
+                var v2 = Settings.V2;
+                if (!Settings.AutoConnect || !(v2.Provider("lovense").Enabled || v2.Provider("buttplug").Enabled)) return;
+                await Task.Delay(delayMs);
+                Log.Information("Auto-connecting haptics: Provider={Provider}", Settings.Provider);
+                if (await ConnectAsync()) Log.Information("Haptics auto-connected successfully to {Provider}", ProviderName);
+                else Log.Warning("Haptics auto-connect failed for {Provider}", Settings.Provider);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Haptics auto-connect error"); }
         }
 
         /// <summary>
