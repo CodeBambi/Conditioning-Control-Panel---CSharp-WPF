@@ -113,6 +113,43 @@ public sealed class WindowAwarenessServiceTests : IDisposable
         }
     }
 
+    /// <summary>Holds posted ticks until the test runs them, like a busy UI thread.</summary>
+    private sealed class QueueContext : System.Threading.SynchronizationContext
+    {
+        public readonly System.Collections.Concurrent.ConcurrentQueue<(System.Threading.SendOrPostCallback, object?)> Posted = new();
+        public override void Post(System.Threading.SendOrPostCallback d, object? state) => Posted.Enqueue((d, state));
+    }
+
+    [Fact]
+    public void ATickQueuedBeforeStopOrRestartNeverRuns()
+    {
+        var s = CoreSettings.Current;
+        var old = (s.AwarenessModeEnabled, s.AwarenessConsentGiven, System.Threading.SynchronizationContext.Current);
+        var ctx = new QueueContext();
+        var (svc, _) = Make(filtered: true);
+        try
+        {
+            s.AwarenessModeEnabled = true; s.AwarenessConsentGiven = true;
+            System.Threading.SynchronizationContext.SetSynchronizationContext(ctx);
+            svc.Start();
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (ctx.Posted.IsEmpty && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(50);
+            Assert.False(ctx.Posted.IsEmpty);   // the 1.5 s poll queued a tick
+
+            svc.Stop();
+            svc.Start();                         // a new poll timer; the queued tick belongs to the old one
+            Assert.True(ctx.Posted.TryDequeue(out var stale));
+            stale.Item1(stale.Item2);
+            Assert.Equal(0, _reads);
+        }
+        finally
+        {
+            svc.Dispose();
+            System.Threading.SynchronizationContext.SetSynchronizationContext(old.Current);
+            (s.AwarenessModeEnabled, s.AwarenessConsentGiven) = (old.AwarenessModeEnabled, old.AwarenessConsentGiven);
+        }
+    }
+
     [Fact]
     public void StartNeedsEntitlementAndConsent()
     {

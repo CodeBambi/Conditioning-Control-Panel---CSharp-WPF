@@ -27,13 +27,18 @@ internal static class X11ActiveWindow
     [DllImport(LibX11)] private static extern IntPtr XDefaultRootWindow(IntPtr display);
     [DllImport(LibX11)] private static extern IntPtr XInternAtom(IntPtr display, string name, bool onlyIfExists);
     [DllImport(LibX11)] private static extern IntPtr XSetErrorHandler(XErrorHandler handler);
+    [DllImport(LibX11, EntryPoint = "XSetErrorHandler")] private static extern IntPtr XRestoreErrorHandler(IntPtr previous);
     [DllImport(LibX11)] private static extern int XFree(IntPtr data);
     [DllImport(LibX11)] private static extern int XGetWindowProperty(IntPtr display, IntPtr window, IntPtr property,
         long offset, long length, bool delete, IntPtr reqType, out IntPtr actualType, out int actualFormat,
         out ulong nItems, out ulong bytesAfter, out IntPtr prop);
 
     // A window can close between the two reads; the default Xlib handler would exit the process on
-    // that BadWindow. Same swallow-and-carry-on stance as X11Overlay.
+    // that BadWindow. Xlib's handler is process-wide, so it is swapped in only around each read and
+    // the previous one (Avalonia's, X11Overlay's, or Xlib's default) restored straight after. Each
+    // read is a reply round trip, so its error is dispatched inside the window.
+    // ponytail: another thread's X error landing inside that window is swallowed too; a per-display
+    // handler needs XCB.
     private static readonly XErrorHandler IgnoreErrors = (_, _) => 0;
 
     private static IntPtr _display;
@@ -50,7 +55,6 @@ internal static class X11ActiveWindow
                 if (!OperatingSystem.IsLinux() || string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"))) return "";
                 _display = XOpenDisplay(IntPtr.Zero);
                 if (_display == IntPtr.Zero) return "";
-                XSetErrorHandler(IgnoreErrors);
                 _root = XDefaultRootWindow(_display);
                 _active = XInternAtom(_display, "_NET_ACTIVE_WINDOW", false);
                 _netWmName = XInternAtom(_display, "_NET_WM_NAME", false);
@@ -59,9 +63,14 @@ internal static class X11ActiveWindow
             }
             if (_display == IntPtr.Zero) return "";
 
-            var window = ReadWindow(_root, _active);
-            if (window == IntPtr.Zero) return "";
-            return ReadString(window, _netWmName, _utf8) ?? ReadString(window, _wmName, IntPtr.Zero /* AnyPropertyType */) ?? "";
+            var previous = XSetErrorHandler(IgnoreErrors);
+            try
+            {
+                var window = ReadWindow(_root, _active);
+                if (window == IntPtr.Zero) return "";
+                return ReadString(window, _netWmName, _utf8) ?? ReadString(window, _wmName, IntPtr.Zero /* AnyPropertyType */) ?? "";
+            }
+            finally { XRestoreErrorHandler(previous); }
         }
         catch { return ""; }   // no libX11 on this machine: nothing to observe
     }

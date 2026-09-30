@@ -196,6 +196,12 @@ public class AwarenessConsentTests
         // (docs/avalonia-decisions.md). WPF's legacy observer is the frozen reference: one argument.
         var app = SourceRoots.ReadProductFile("App.xaml.cs");
         Assert.Contains("WindowAwareness = new WindowAwarenessService(ReadForegroundWindowTitle);", app, StringComparison.Ordinal);
+
+        // The Core service asks v2 through these two hooks; unwired, the legacy events would never be
+        // suppressed under v2 and the observer would never start (TheLegacySuppressionAsksExactly-
+        // TheRoutingQuestion cannot see this headless, where the hook is unset on both sides).
+        Assert.Contains("WindowAwarenessService.V2OwnsReactionsProvider = () => Services.Awareness.AwarenessV2Routing.IsActive;", app, StringComparison.Ordinal);
+        Assert.Contains("WindowAwarenessService.V2Lifecycle = start => { if (start) Awareness?.Start(); else Awareness?.Stop(); };", app, StringComparison.Ordinal);
     }
 
     [Fact]

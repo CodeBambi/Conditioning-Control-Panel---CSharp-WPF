@@ -427,7 +427,7 @@ namespace ConditioningControlPanel.Services
             _context = SynchronizationContext.Current;
             _isRunning = true;
             var poll = TimeSpan.FromSeconds(1.5); // Fast polling for quick tab/app detection
-            _pollTimer = Arm(poll, poll, () => OnPollTick(this, EventArgs.Empty));
+            _pollTimer = Arm(poll, poll, () => _pollTimer, () => OnPollTick(this, EventArgs.Empty));
 
             // v2 rides the same on/off switch. This is the one call site every caller already uses
             // (the avatar tube on load, the Companion tab's awareness dial), so starting the observer
@@ -458,14 +458,21 @@ namespace ConditioningControlPanel.Services
             Log.Debug("WindowAwareness: Stopped monitoring");
         }
 
-        // One-shot (period Infinite) or periodic timer whose tick runs on the Start() context and
-        // never after Stop().
-        private Timer Arm(TimeSpan due, TimeSpan period, Action tick) =>
-            new(_ =>
+        // One-shot (period Infinite) or periodic timer whose tick runs on the Start() context. A tick
+        // already queued when its timer was replaced or stopped is dropped: it runs only while that
+        // timer is still the current one (<paramref name="current"/>), which is what DispatcherTimer.Stop
+        // guaranteed the WPF original.
+        private Timer Arm(TimeSpan due, TimeSpan period, Func<Timer?> current, Action tick)
+        {
+            Timer? self = null;
+            self = new Timer(_ =>
             {
-                void Run() { if (_isRunning) tick(); }
+                void Run() { if (_isRunning && ReferenceEquals(self, current())) tick(); }
                 if (_context is { } c) c.Post(_ => Run(), null); else Run();
-            }, null, due, period);
+            }, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            self.Change(due, period);
+            return self;
+        }
 
         /// <summary>
         /// Check if enough time has passed since last reaction (cooldown)
@@ -534,6 +541,7 @@ namespace ConditioningControlPanel.Services
         private void RestartStillOnTimer()
         {
             _stillOnTimer?.Dispose();
+            _stillOnTimer = null;
             _currentMilestoneIndex = 0; // Reset milestones when activity changes
 
             // Only start if we have a recognized activity (not Unknown or Idle)
@@ -561,7 +569,7 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            _stillOnTimer = Arm(TimeSpan.FromMinutes(waitMinutes), Timeout.InfiniteTimeSpan, () => OnStillOnMilestoneTick(this, EventArgs.Empty));
+            _stillOnTimer = Arm(TimeSpan.FromMinutes(waitMinutes), Timeout.InfiniteTimeSpan, () => _stillOnTimer, () => OnStillOnMilestoneTick(this, EventArgs.Empty));
 
             Log.Debug("WindowAwareness: Still-on timer set for {Minutes}min milestone", minutesUntilMilestone);
         }
@@ -569,6 +577,7 @@ namespace ConditioningControlPanel.Services
         private void OnStillOnMilestoneTick(object? sender, EventArgs e)
         {
             _stillOnTimer?.Dispose();
+            _stillOnTimer = null;
 
             // Fire the StillOnActivity event if we're still on the same activity. Under v2 the whole
             // {1, 5, 10}-minute nag is replaced by cumulative-dwell LongHaul milestones (doc 02 §4.4),
@@ -587,7 +596,11 @@ namespace ConditioningControlPanel.Services
                     var milestone = _currentMilestoneIndex < StillOnMilestonesMinutes.Length
                         ? StillOnMilestonesMinutes[_currentMilestoneIndex]
                         : 10;
-                    Log.Debug("WindowAwareness: Still on {Name} for {Minutes} minutes", _currentDetectedName, milestone);
+                    // Filtered (Avalonia) path: names can carry a page title, so the category only.
+                    if (_allowTitle == null)
+                        Log.Debug("WindowAwareness: Still on {Name} for {Minutes} minutes", _currentDetectedName, milestone);
+                    else
+                        Log.Debug("WindowAwareness: Still on {Category} for {Minutes} minutes", _currentCategory, milestone);
                     StillOnActivity?.Invoke(this, new ActivityChangedEventArgs(
                         _currentCategory, _currentCategory, _currentDetectedName, _currentServiceName, _currentPageTitle));
                 }
@@ -706,8 +719,12 @@ namespace ConditioningControlPanel.Services
             _lastActivityChange = DateTime.Now; // Track when this activity started
 
             // Fire event (don't log the window title for privacy, only the detected name)
-            Log.Debug("WindowAwareness: Detected {Name} ({Category}) - Service: {Service}, IsNew: {IsNew}",
-                detectedName, newCategory, serviceName, isNewService);
+            // (Filtered/Avalonia path: not the names either - DetectedName embeds the page title.)
+            if (_allowTitle == null)
+                Log.Debug("WindowAwareness: Detected {Name} ({Category}) - Service: {Service}, IsNew: {IsNew}",
+                    detectedName, newCategory, serviceName, isNewService);
+            else
+                Log.Debug("WindowAwareness: Detected {Category}, IsNew: {IsNew}", newCategory, isNewService);
 
             // v2 owns the moment: the state above stays current for the readouts that consume it, but
             // the reaction/bark wiring hangs off this event and must not fire a second pipeline.
