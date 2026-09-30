@@ -435,6 +435,7 @@ namespace ConditioningControlPanel.Avalonia
                     // A sandbox settles only against its loopback fake: ChasterHead routes fail closed.
                     Platform.ChasterHead.Service.StartSettle();
                     Platform.ChasterHead.Attach(Platform.ChasterHead.Service, Quests);
+                    (desktop.MainWindow as Views.Windows.MainShellWindow)?.InitializeChasterFlash(Platform.ChasterHead.Service);
                 }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Chaster] service could not be built"); }
                 // WPF App.xaml.cs:2940-2968. EnsureBaselineAsync keeps WPF's rules: no-op on a full

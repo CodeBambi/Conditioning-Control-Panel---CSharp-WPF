@@ -94,11 +94,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ShowAvatarTube();
         }
 
-        /// <summary>MainWindow.Launcher.cs RequestExit: the one real exit; OnDesktopExit saves.</summary>
+        /// <summary>MainWindow.Launcher.cs RequestExit: the one real exit; OnDesktopExit saves. Circe's bill
+        /// shows only on the user's own exits - the tray's Exit and Settings' Exit button (both land
+        /// here); double panic and the 18+ refusals come through <see cref="ExitWithoutBill"/>.</summary>
         public void RequestExit()
         {
             if (LockdownActive) { Serilog.Log.Information("Lockdown: Exit refused"); return; }   // WPF Launcher.cs:184
-            // ponytail: WPF also stops the engine and shows Circe's exit bill; no bill on this head yet.
+            if (CoreEngine.IsRunning) StopEngine();                  // WPF Launcher.cs:187
+            // Circe's bill holds the exit for a few seconds, then calls back in here (Launcher.cs:188).
+            if (TryShowExitBill(RequestExit)) return;
             _exitRequested = true;
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
                 desktop.Shutdown();

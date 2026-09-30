@@ -1120,3 +1120,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/blink-trainer-session-safety: +338
 - Blink Trainer review fixes (revoke deletes calibration, close-to-tray stop, panic during start, cached preview pool, haptic off-thread) and
   the oracle-deep decision: every panic and the tray Stop everything also stop the camera (consent kept, notice shown). Fail-proven.
+
+## avalonia-port/chaster-bill: +918
+- Chaster exit bill (tray/Settings Exit; panic, 18+ refusal and ungated first run skip it), import confirm on both preset paths, account badge,
+  booked "+time" flash on the rail padlock (Core BookedFlashPlan). Faked-write secret tests now read an empty store, never the keyring.
+- Evidence: ChasterBillTests (7, fail-proven), headless frames. Rows wired x4, receipt stub. No Keincheck run.

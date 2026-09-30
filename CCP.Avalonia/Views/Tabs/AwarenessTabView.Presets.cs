@@ -1,9 +1,6 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.Awareness.cs:832-1200 - the preset
 // card grid, the "+ New Preset" tile and the advanced link's preset-first branch - all through
 // Core KeywordTriggerPresetService and AwarenessPresetDetailDialog.
-//
-// ponytail: the card's Activate toggle installs without ChasterImportConfirmDialog (not ported),
-// i.e. lock time declined - the same default AwarenessPresetDetailDialog's own install uses.
 
 using System;
 using System.Collections.Generic;
@@ -137,10 +134,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Cursor = new Cursor(StandardCursorType.Hand),
             };
             ToolTip.SetTip(btn, active ? "Turn this preset off" : "Turn this preset on");
-            btn.Click += (_, _) =>
+            btn.Click += async (_, _) =>
             {
                 if (Presets.IsInstalled(preset.Id)) Presets.UninstallPreset(preset.Id);
-                else Presets.InstallPreset(preset.Id);
+                else if (TopLevel.GetTopLevel(this) is Window owner)   // lock time needs a yes first (WPF Awareness.cs:1019)
+                    Presets.InstallPreset(preset.Id, await ChasterImportConfirmDialog.AskAsync(owner, Presets.ChasterSummary(preset.Id)));
                 RefreshAwarenessPresetCards();
             };
             return btn;

@@ -223,3 +223,11 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   tracking is off (AttentionCheckService.cs:247), session/autonomy don't depend on the webcam, no StrictLock/Lockdown escape rule
   uses gaze; cost is a manual restart, made expected by the notice.
 - Advisor: oracle-deep.
+## 2026-09-30: Chaster booked figure on Avalonia
+- Question: WPF shows a booked price first as ChasterBookedPop (a topmost window at the cause or cursor) and only falls back to
+  the rail-padlock adorner. Which does the Avalonia head show?
+- Options: (a) port the pop window (desktop-wide topmost, cursor from Win32; Bucket E, not permitted on Wayland); (b) always the
+  rail adorner, WPF's own fallback.
+- Choice: (b) for now; the pop stays `missing` in the ledger. BookedFlashPlan moved to Core with colours as 0xAARRGGBB `uint`
+  (WPF converts with `BookedFlashColour.Wpf()`), so both heads draw one plan.
+- Advisor: none (worker, per branch brief avalonia-port/chaster-bill).
