@@ -184,3 +184,12 @@ html.arc-reduced .cam-boot .cam-fx { animation: none; }
   .cam-boot svg.campus-plan, .cam-boot .cam-fx { animation: none; }
   .an-actor { transition: none; }
 }
+
+/* Tiles leave .an-camwall when composited onto the Annex painting. */
+.cam-tile.an-lite *, .cam-tile.an-lite *::before, .cam-tile.an-lite *::after {
+  animation: none !important;
+  transition: none !important;
+}
+.cam-tile.an-paused *, .cam-tile.an-paused *::before, .cam-tile.an-paused *::after {
+  animation-play-state: paused !important;
+}
