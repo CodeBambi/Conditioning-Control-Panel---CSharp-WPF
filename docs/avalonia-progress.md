@@ -1125,3 +1125,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Chaster exit bill (tray/Settings Exit; panic, 18+ refusal and ungated first run skip it), import confirm on both preset paths, account badge,
   booked "+time" flash on the rail padlock (Core BookedFlashPlan). Faked-write secret tests now read an empty store, never the keyring.
 - Evidence: ChasterBillTests (7, fail-proven), headless frames. Rows wired x4, receipt stub. No Keincheck run.
+
+## avalonia-port/mantra-service: +499
+- MantraService moved to Core (WPF seeds XP/quest/Chaster seams); Avalonia MantraWindow on App.Mantra with synthesised tones and a LibVLC
+  drone at WPF's volumes; exit cleanup; mantra favourite in memory signals.
+- Evidence: MantraServiceTests, MantraWindowSessionTests, fail-proven. win-mantra stays stub (no opener, animations).
