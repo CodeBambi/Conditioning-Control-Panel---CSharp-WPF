@@ -1,0 +1,80 @@
+<!-- PORTED from ConditioningControlPanel/Controls/InboxFlyout.xaml. Same colours, sizes and order.
+     Deviations, all forced: Visibility -> IsVisible; ToolTip -> ToolTip.Tip; the RelativeSource
+     verb labels -> $parent[UserControl] bindings; the dismiss hover trigger -> a :pointerover style;
+     every button is a TextBlock inside a Template so '_' is never an access key. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:startup="clr-namespace:ConditioningControlPanel.Services.Startup;assembly=CCP.Core"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.InboxFlyout"
+             x:DataType="local:InboxFlyout">
+    <UserControl.Styles>
+        <Style Selector="Button.dismiss /template/ TextBlock">
+            <Setter Property="Foreground" Value="#FF7A7A98"/>
+        </Style>
+        <Style Selector="Button.dismiss:pointerover /template/ TextBlock">
+            <Setter Property="Foreground" Value="#FFE8E8F5"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border Background="#FF1B1B2B" BorderBrush="#FF3D3D60" BorderThickness="1"
+            Width="340" MaxHeight="420">
+        <Grid RowDefinitions="Auto,*">
+            <Border Grid.Row="0" Background="#FF232338" Padding="14,10">
+                <TextBlock x:Name="TxtInboxTitle" Text="Inbox"
+                           Foreground="#FFE8E8F5" FontSize="13" FontWeight="SemiBold"/>
+            </Border>
+
+            <TextBlock x:Name="TxtInboxEmpty" Grid.Row="1" Text="Nothing waiting."
+                       Foreground="#FF8A8AA8" FontSize="12" Margin="14,18,14,18"
+                       HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="False"/>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="ItemsInbox">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="startup:InboxItem">
+                            <Border BorderBrush="#FF2C2C44" BorderThickness="0,0,0,1" Padding="12,10">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Grid.Column="0" Text="{Binding Glyph}"
+                                               Foreground="#FFE8E8F5" FontSize="16"
+                                               Margin="0,0,10,0" VerticalAlignment="Top"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Title}" Foreground="#FFE8E8F5"
+                                                   FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Summary}" Foreground="#FF9A9ABA"
+                                                   FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <Button Classes="open" Tag="{Binding}" Click="InboxOpen_Click"
+                                                HorizontalAlignment="Left" Margin="0,6,0,0" Cursor="Hand"
+                                                Background="Transparent" BorderThickness="0" Padding="0">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <TextBlock Text="{Binding $parent[local:InboxFlyout].OpenLabel}"
+                                                               Foreground="#FFFF9ED8" FontSize="11.5"
+                                                               TextDecorations="Underline"/>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Classes="dismiss" Tag="{Binding}" Click="InboxDismiss_Click"
+                                            ToolTip.Tip="{Binding $parent[local:InboxFlyout].DismissLabel}"
+                                            VerticalAlignment="Top" Cursor="Hand" Width="18" Height="18" Padding="0"
+                                            Background="Transparent" BorderThickness="0">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="Transparent">
+                                                    <TextBlock Text="✕" FontSize="11"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>

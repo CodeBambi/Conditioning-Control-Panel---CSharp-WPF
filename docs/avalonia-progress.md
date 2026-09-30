@@ -1102,3 +1102,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - CompanionBrain slice 3: MemorySignalWriter moved to Core (head sources via SourcesHook/DeferredSourcesHook, WPF wiring unchanged);
   Core MandatoryVideoScheduler.VideoStarted; Avalonia seeds SignalMirrorFactory (profile, level-ups, feature use, video starts, chat turns).
 - Evidence: MemorySignalSeedTests + VideoStarted test, fail-proven x3; live memory.json profile. Row stays stub (bark echo, mantra/drain/wipe).
+
+## avalonia-port/inbox-flyout: +612
+- InboxItem/StartupQueueCore moved to Core; new Core StartupInbox (WPF StartupPresenter delegates). Avalonia StartupLadder parks passive
+  cards (programs intro, wardrobe toasts) through the Core quiet rule; shell badge (99+, hidden at 0) opens InboxFlyout.
+- Evidence: InboxFlyoutTests (3, fail-proven); render-all. ctrl-inbox-flyout wired, shell-inbox stub.

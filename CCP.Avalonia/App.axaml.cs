@@ -686,22 +686,29 @@ namespace ConditioningControlPanel.Avalonia
 
         /// <summary>WPF App.ShowWardrobeRewardToasts (App.xaml.cs:3987): every item gated on this achievement gets an
         /// ItemUnlockedPopup 900ms after the achievement popup, at most three, stacked upward.
-        /// ponytail: shown directly - WPF routes the column through StartupLadder.PresentOrInbox in the quiet
-        /// window, and this head has no startup ladder or inbox yet.</summary>
+        /// Inside the quiet window the column collapses to ONE Inbox row (WPF App.xaml.cs:4200).</summary>
         internal static void ShowWardrobeRewardToasts(Models.Achievement a)
         {
             var rewards = WardrobeCatalog.Items
                 .Where(i => string.Equals(i.RequiredAchievementId, a.Id, StringComparison.OrdinalIgnoreCase)).Take(3).ToList();
             if (rewards.Count == 0) return;
             Serilog.Log.Information("Achievement '{Id}' unlocked {Count} wardrobe item(s); queuing item toast(s)", a.Id, rewards.Count);
-            Dispatcher.UIThread.Post(() => DispatcherTimer.RunOnce(() =>
+            void ShowAll()
             {
                 for (int i = 0; i < rewards.Count; i++)
                 {
                     try { new Views.Windows.ItemUnlockedPopup(rewards[i], i).Show(); }
                     catch (Exception ex) { Serilog.Log.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id); }
                 }
-            }, TimeSpan.FromMilliseconds(900)));
+            }
+            Dispatcher.UIThread.Post(() => DispatcherTimer.RunOnce(() => Platform.StartupLadder.PresentOrInbox(new Services.Startup.InboxItem
+            {
+                Key = "wardrobe-unlock:" + a.Id,
+                Glyph = "👗",
+                Title = rewards.Count == 1 ? "A new wardrobe item is yours" : rewards.Count + " new wardrobe items are yours",
+                Summary = string.Join(", ", rewards.Select(static r => r.Name)),
+                Open = ShowAll,
+            }), TimeSpan.FromMilliseconds(900)));
         }
 
         internal static void ShowAchievementPopup(Models.Achievement a)

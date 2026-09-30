@@ -188,3 +188,11 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   (Ubuntu 22.04 build); if OpenCV fails to load, the feature is disabled with a message, never a crash. The LibVLC v4l2 source is a
   documented fallback behind an IFrameSource seam. Check ldd of libOpenCvSharpExtern.so before shipping.
 - Advisor: oracle.
+
+## 2026-09-30: what drives the Avalonia Inbox
+- Question: the brief said the title-bar Inbox is driven by the friends Core service (slice 1). It is not: WPF's badge and
+  InboxFlyout bind App.StartupLadder (Services/Startup/StartupPresenter.cs), whose rows are parked by the quiet-window rule.
+- Options: (a) move the whole StartupPresenter (modal ladder, pump, quiet watch) to Core; (b) move only InboxItem + StartupQueueCore
+  (pure) and extract the Inbox half into Core StartupInbox, WPF's presenter delegating; the head gets a small passive-route presenter.
+- Choice: (b) (supervisor). Platform.StartupLadder routes through StartupQueueCore.Route with session/tour/first-launch inputs;
+  programs intro and wardrobe toasts post to it. The modal ladder and the other WPF posters stay out; listed on shell-inbox.
