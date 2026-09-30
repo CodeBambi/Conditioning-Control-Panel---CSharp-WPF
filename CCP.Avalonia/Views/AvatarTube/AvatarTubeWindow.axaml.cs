@@ -1117,6 +1117,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     // bark output passes aiGenerated:false and must not suppress the next bark.
                     if (aiGenerated) _lastAiBubbleUtc = DateTime.UtcNow;
 
+                    StopThinkingAnimation();   // the reply pre-empts the thinking bubble (WPF Speech.cs:335)
                     _speechTimer?.Stop();
                     AddToChatHistory(text, isUser: false);
 
@@ -1138,6 +1139,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     // also stopped showing bubbles read as completely broken.
                     if (!IsMuted) PlaySpeechAudio(playSound, phraseAudioPath, barkVoice);
 
+                    SyncAskButtonsFor(text);
                     _txtSpeech.Text = text;
                     _speechBubble.MaxWidth = 380;
                     ApplySpeechBubblePlacement();
@@ -1155,15 +1157,11 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// <summary>
         /// True while the companion is mid-chat: an AI bubble is on screen, or a genuine AI reply
         /// landed within <paramref name="windowMs"/>. The bark system asks this to avoid talking
-        /// over a conversation.
-        /// <para>ponytail: WPF also returns true while an AI request is IN FLIGHT
-        /// (<c>_isWaitingForAi</c>), which is ChatInput.cs's inference pipeline. This head never
-        /// sets that flag, so the window opens when the reply lands rather than when it is asked
-        /// for - narrower, never wider, so no bark is let through that WPF would have held.</para>
+        /// over a conversation. As WPF, an AI request IN FLIGHT (<c>_isWaitingForAi</c>) counts too.
         /// </summary>
         public bool IsCompanionBusy(int windowMs)
         {
-            if (_isShowingAiBubble) return true;
+            if (_isShowingAiBubble || _isWaitingForAi) return true;
             return windowMs > 0 && (DateTime.UtcNow - _lastAiBubbleUtc).TotalMilliseconds < windowMs;
         }
 
@@ -1416,9 +1414,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// leaves and on the reply before it is shown. A refused input never enters the chat log (P2/H5).
         /// <para>As WPF (ChatInput.cs:772), a send routes through the Core CompanionBrain (conversation
         /// history, memory) while UseCompanionBrain is on, its default, and takes the stateless call when
-        /// it is off or the brain failed to build. ponytail: still missing - CompanionAskService's
-        /// OfferForRequest after a brain reply (head-side in WPF), the thinking animation, the double
-        /// bounce, the season-recap/achievement hooks and the enabled-phrases filter (App.CompanionPhrases).</para>
+        /// it is off or the brain failed to build, with WPF's thinking bubble, double bounce and the asks
+        /// offer after a brain reply. ponytail: still missing - SeasonRecapService.TrackFeature and the
+        /// NotifyUserMessageSent achievement emit (both head services with no Avalonia twin) and the
+        /// enabled-phrases filter (App.CompanionPhrases).</para>
         /// </summary>
         internal async System.Threading.Tasks.Task SendChatAsync()
         {
@@ -1436,16 +1435,20 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             var brain = App.Brain;   // decided once, up front, as WPF (ChatInput.cs:772)
             if (CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true })
             {
+                var routesThroughBrain = ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
                 try
                 {
+                    StartThinkingAnimation();
 #pragma warning disable CS0618 // WPF's kill-switch-off path
-                    var result = ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain)
+                    var result = routesThroughBrain
                         ? await brain!.ChatAsync(input)
                         : await ai.GetBambiReplyExAsync(input);
 #pragma warning restore CS0618
+                    PlayDoubleBounce();
                     if (result.Refusal != null) { ShowModerationRefusalBubble(result.Refusal.Source); return; }
                     AddToChatHistory(input, isUser: true);
                     GigglePriority(result.Text, aiGenerated: result.IsAiGenerated);
+                    if (routesThroughBrain) ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.OfferForRequest(input);
                 }
                 catch (Exception ex)
                 {

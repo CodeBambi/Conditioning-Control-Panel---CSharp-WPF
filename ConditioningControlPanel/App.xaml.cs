@@ -612,6 +612,35 @@ namespace ConditioningControlPanel
         /// <c>CoreTutorial.Step</c>. The follow-up actions are pre-bound to their own step, so a
         /// Core-side card can invoke them without ever naming <c>TutorialStep</c>.</para>
         /// </summary>
+        /// <summary>CompanionAskService moved to Core; these are the head pieces it used to read
+        /// off App directly (bodies verbatim from its WPF IsBusy / Show / Say / Answer / Sources).</summary>
+        private static void SeedAskSeams()
+        {
+            Services.Companion.Asks.CompanionAskService.BrainProvider = () => Brain;
+            Services.Companion.Asks.CompanionAskService.ShowCardSurface = card =>
+                AvatarWindow?.RunOnAvatar(() => AvatarWindow?.ShowAskCard(card));
+            Services.Companion.Asks.CompanionAskService.SaySurface = text =>
+            {
+                var avatar = AvatarWindow;
+                avatar?.RunOnAvatar(() => { if (avatar.IsVisible) avatar.GigglePriority(text, aiGenerated: false); });
+            };
+            Services.Companion.Asks.CompanionAskService.SessionOptions = () =>
+                MainWindowRef?.CompanionSessionOptions() ?? Array.Empty<Services.Companion.Asks.AskOption>();
+            Services.Companion.Asks.CompanionAskService.StartSession = id => MainWindowRef?.StartSessionFromCompanion(id) == true;
+            Services.Companion.Asks.CompanionAskService.OpenLink = Views.Controls.Companion.Runtime.CompanionLinkLauncher.Open;
+            Services.Companion.Asks.CompanionAskService.BusyProvider = () =>
+            {
+                if (StartupLadder?.IsQuiet == true || IsSessionRunning) return true;
+                if (MainWindowRef?.CompanionSessionRunning == true) return true;
+                if (Video?.IsPlaying == true) return true;
+                if (BrowserMedia?.IsPlaying == true || BrowserMedia?.IsTakeover == true) return true;
+                if (Lockdown?.IsActive == true) return true;
+                if (Mantra?.IsActive == true) return true;
+                if (RemoteControl?.ControllerConnected == true) return true;
+                return Current?.Windows.OfType<Window>().Any(w => w.IsVisible && w is LockCardWindow) == true;
+            };
+        }
+
         private static void SeedTutorialSeam()
         {
             CoreTutorial.IsActiveProvider = () => Tutorial?.IsActive == true;
@@ -2705,6 +2734,7 @@ namespace ConditioningControlPanel
             Services.Companion.Brain.CompanionBrain.MemoryRecalled = LocalAiService.SignalPersistentMemoryRecalled;
             Services.Companion.Brain.CompanionBrain.ActivitiesProvider = Services.Companion.CompanionActivities.Current;
             Services.Companion.ConversationDelivery.AskCardsShown = () => true;   // ChatInput.cs OfferForRequest
+            SeedAskSeams();
 
             // CompanionBrain sits between every caller and the AI strategy: it owns conversation
             // state so providers stay dumb transports. Constructed unconditionally (it reads the

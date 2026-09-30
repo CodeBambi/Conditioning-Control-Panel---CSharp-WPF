@@ -62,7 +62,7 @@ internal static class ConversationDelivery
         && (WantsMedia(input) || WantsActivity(input));
 
     /// <summary>True when this head actually shows the ask card after a reply (WPF: CompanionAskService.OfferForRequest,
-    /// seeded by App.xaml.cs). Unseeded (Avalonia until OfferForRequest is ported) the model is never told a card follows.</summary>
+    /// seeded by both heads). Unseeded, the model is never told a card follows.</summary>
     internal static volatile Func<bool>? AskCardsShown;
 
     private const string CardFollowsRule =

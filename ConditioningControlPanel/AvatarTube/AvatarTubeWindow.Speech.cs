@@ -2695,51 +2695,6 @@ namespace ConditioningControlPanel
                 .Trim();
         }
 
-        // Default thinking phrases (used when no mod overrides)
-        private static readonly string[] DefaultThinkingPhrases = new[]
-        {
-            "*POP*",
-            "*Poppin bubbles...*",
-            "*giggles*",
-            "*blink blink*",
-            "*~*",
-            "*teehee*"
-        };
-
-        private string GetRandomThinkingPhrase()
-        {
-            var modPhrases = App.Mods?.GetPhrases("Thinking");
-            var phrases = modPhrases != null && modPhrases.Length > 0 ? modPhrases : DefaultThinkingPhrases;
-            return phrases[_random.Next(phrases.Length)];
-        }
-
-        // Matches a run of trailing dots/ellipsis at the end of the phrase, even when
-        // tucked just inside closing wrapper chars () [] * _ ~ / whitespace. Removing
-        // it (while leaving the wrappers themselves in place) is what stops the static
-        // dots in phrases like "(thinking...)" or "[PROCESSING...]" from doubling up
-        // with the thinking animation's own dots.
-        private static readonly Regex TrailingDotsInsideWrappersRegex =
-            new Regex(@"[.…]+(?=[)\]\s*_~]*$)", RegexOptions.Compiled);
-
-        // Strips dots, ellipsis, whitespace, AND markdown emphasis chars (* _ ~) from
-        // both ends of a thinking phrase so the animation's dots aren't duplicated and
-        // wrapping characters like "*Poppin bubbles...*" don't render asterisks around
-        // the animated dots. Also strips a trailing dot-run sitting just inside () or []
-        // wrappers (e.g. "(thinking...)" -> "(thinking)") while preserving those brackets,
-        // since paren/bracket-wrapped phrases would otherwise keep their static dots.
-        // Trims both ends because phrases come pre-wrapped in *...*.
-        private static string StripTrailingDots(string phrase)
-        {
-            if (string.IsNullOrEmpty(phrase)) return phrase;
-            // Drop the trailing dot-run first (handles dots tucked inside ) or ] so the
-            // brackets survive), then trim the outer wrapper decoration as before.
-            var withoutDots = TrailingDotsInsideWrappersRegex.Replace(phrase, "");
-            var trimmed = withoutDots.Trim('.', '…', '*', '_', '~', ' ', '\t');
-            // If the phrase was nothing but decoration (e.g. "*~*"), keep the original
-            // so we don't end up animating just bare dots.
-            return string.IsNullOrEmpty(trimmed) ? phrase : trimmed;
-        }
-
         // ============================================================
         // THINKING ANIMATION (rotating phrases + animated dots)
         // ============================================================
@@ -2756,7 +2711,7 @@ namespace ConditioningControlPanel
             StopThinkingAnimation(); // clear any prior animation
 
             _isWaitingForAi = true;
-            _thinkingPhraseBase = StripTrailingDots(GetRandomThinkingPhrase());
+            _thinkingPhraseBase = Services.Companion.ThinkingPhrases.Pick(_random);
             _thinkingTickCount = 0;
             var generation = ++_thinkingGeneration;
 
@@ -2797,14 +2752,13 @@ namespace ConditioningControlPanel
             if (_thinkingTickCount > 3)
             {
                 // Cycle complete — pick a new phrase, restart dots.
-                _thinkingPhraseBase = StripTrailingDots(GetRandomThinkingPhrase());
+                _thinkingPhraseBase = Services.Companion.ThinkingPhrases.Pick(_random);
                 _thinkingTickCount = 0;
                 RenderSpeechBubbleRaw(_thinkingPhraseBase);
             }
             else
             {
-                var dots = new string('.', _thinkingTickCount);
-                RenderSpeechBubbleRaw(_thinkingPhraseBase + dots);
+                RenderSpeechBubbleRaw(Services.Companion.ThinkingPhrases.Frame(_thinkingPhraseBase, _thinkingTickCount));
             }
         }
 

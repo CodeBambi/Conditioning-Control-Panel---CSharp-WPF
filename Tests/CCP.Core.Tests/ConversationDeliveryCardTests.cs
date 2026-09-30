@@ -26,7 +26,7 @@ public sealed class ConversationDeliveryCardTests
             service.Current.CompanionAsksEnabled = true;
             Assert.True(ConversationDelivery.CardFollows(ask));
 
-            ConversationDelivery.AskCardsShown = null;              // Avalonia: no card shown yet
+            ConversationDelivery.AskCardsShown = null;              // a head that shows no card
             Assert.False(ConversationDelivery.CardFollows(ask));
         }
         finally { (CoreSettings.ServiceProvider, ConversationDelivery.AskCardsShown) = (provider, shown); }

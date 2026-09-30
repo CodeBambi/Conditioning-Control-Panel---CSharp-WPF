@@ -112,6 +112,36 @@ namespace ConditioningControlPanel.Avalonia
         /// which sends through the stateless call exactly as WPF's kill-switch-off path.</summary>
         internal static ConditioningControlPanel.Services.Companion.Brain.CompanionBrain? Brain { get; set; }
 
+        /// <summary>
+        /// WPF App.xaml.cs SeedAskSeams + NoticeSurface: the asks service and the oversize-prompt toast.
+        /// ponytail: SessionOptions/StartSession stay unseeded (no session launcher on this head, so no
+        /// Session cards), Busy knows only a running session, and a Watch link opens in the external
+        /// browser - WPF's own fallback when its embedded browser cannot take it.
+        /// </summary>
+        internal static void SeedCompanionTubeSeams()
+        {
+            ConditioningControlPanel.Services.Companion.Brain.PromptAssembler.NoticeSurface = () =>
+                message => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    try { Notifications.Show(message, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(12)); }
+                    catch (Exception ex) { Serilog.Log.Debug("PromptAssembler: oversize notice failed to show: {Error}", ex.Message); }
+                });
+            ConditioningControlPanel.Services.Companion.ConversationDelivery.AskCardsShown = () => true;
+            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BrainProvider = () => Brain;
+            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.ShowCardSurface = card =>
+                Views.AvatarTube.AvatarTubeWindow.Live?.RunOnAvatar(() => Views.AvatarTube.AvatarTubeWindow.Live?.ShowAskCard(card));
+            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.SaySurface = text =>
+                Views.AvatarTube.AvatarTubeWindow.Live?.RunOnAvatar(() => Views.AvatarTube.AvatarTubeWindow.Live?.GigglePriority(text, aiGenerated: false));
+            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BusyProvider = () => CoreSession.IsSessionRunning;
+            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.OpenLink = url =>
+            {
+                if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+                    _ = Platform.AppUpdater.OpenUrl(Views.AvatarTube.AvatarTubeWindow.Live, url!);
+                else Serilog.Log.Warning("Companion watch chip refused a non-https link");
+            };
+            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.Start();
+        }
+
         /// <summary>The release-content pack service (WPF App.ReleaseContent), or null on the headless render path.</summary>
         internal static ReleaseContentService? ReleaseContent { get; private set; }
 
@@ -416,9 +446,11 @@ namespace ConditioningControlPanel.Avalonia
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
                 // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
-                // echo, command executor, activities and signal mirror stay unseeded (head services not here).
+                // echo (no bark engine here: CoreBark is a doorbell), command executor, activities, signal
+                // mirror and the UserMessageSent achievement emit stay unseeded (head services not here).
                 try { if (Ai != null) Brain = new ConditioningControlPanel.Services.Companion.Brain.CompanionBrain(Ai); }
                 catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
+                SeedCompanionTubeSeams();
                 //
                 // CoreModerationLog's record half stays unseeded, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes
