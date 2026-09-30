@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Companion.Brain
 {
@@ -78,6 +79,20 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         }
 
         /// <summary>
+        /// The head's signal sources (WPF: App.Progression, the feature services and App.Companion;
+        /// Avalonia: ProgressionBank and its overlays). Each calls <see cref="Wire{THandler}"/> with
+        /// <see cref="SafeRefresh"/>, <see cref="NoteFeatureUse"/> or <see cref="NoteChatTurn"/>.
+        /// Unseeded, only the settings mirror runs.
+        /// </summary>
+        public static volatile Action<MemorySignalWriter>? SourcesHook;
+
+        /// <summary>
+        /// Sources that do not exist yet at <see cref="Start"/> (WPF: App.Mantra is built ~200 lines
+        /// after the brain). Returns true once it has wired them, so later calls are no-ops.
+        /// </summary>
+        public static volatile Func<MemorySignalWriter, bool>? DeferredSourcesHook;
+
+        /// <summary>
         /// Takes an immediate snapshot of app state, then subscribes to the events that can change it.
         /// Idempotent; safe to call before the services it wants exist (they are simply skipped).
         /// </summary>
@@ -88,31 +103,28 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             RefreshProfile();
             WireSettings();
-            WireProgression();
-            WireFeatureUsage();
-            WireRelationship();
+            try { SourcesHook?.Invoke(this); }
+            catch (Exception ex) { Log.Debug("MemorySignalWriter: signal sources failed: {Error}", ex.Message); }
+            WireDeferredSources();
 
-            App.Logger?.Debug("MemorySignalWriter: mirroring {Count} app signal source(s)", _unsubscribe.Count);
+            Log.Debug("MemorySignalWriter: mirroring {Count} app signal source(s)", _unsubscribe.Count);
         }
 
         /// <summary>
         /// Wires the signal sources that do not exist yet at <see cref="Start"/> time.
         ///
         /// <para><see cref="Start"/> runs inside <c>new MemoryStore()</c> inside
-        /// <c>new CompanionBrain(Ai)</c>, which <c>App.OnStartup</c> builds ~200 lines before
-        /// <c>App.Mantra</c>. <see cref="WireFeatureUsage"/>'s <c>if (App.Mantra != null)</c> is
-        /// therefore false, and <see cref="Start"/> is idempotent-by-flag — so without a second pass
-        /// the mantra counter is never subscribed for the whole process lifetime, and a user who does
-        /// mantras every session never sees "mantra" in their favourite features. Called once from the
+        /// <c>new CompanionBrain(Ai)</c>, which WPF <c>App.OnStartup</c> builds ~200 lines before
+        /// <c>App.Mantra</c>, and <see cref="Start"/> is idempotent-by-flag — so without a second pass
+        /// the mantra counter is never subscribed for the whole process lifetime. Called once from the
         /// end of <c>OnStartup</c>; idempotent, so a second call costs nothing.</para>
         /// </summary>
         public void WireDeferredSources()
         {
-            if (_disposed || _mantraWired || App.Mantra == null) return;
-            _mantraWired = true;
-            Wire<Action>(h => App.Mantra.MantraCompleted += h, h => App.Mantra.MantraCompleted -= h,
-                () => NoteFeatureUse(FeatureMantra));
-            App.Logger?.Debug("MemorySignalWriter: deferred sources wired");
+            if (_disposed || _mantraWired) return;
+            try { _mantraWired = DeferredSourcesHook?.Invoke(this) == true; }
+            catch (Exception ex) { Log.Debug("MemorySignalWriter: deferred sources failed: {Error}", ex.Message); }
+            if (_mantraWired) Log.Debug("MemorySignalWriter: deferred sources wired");
         }
 
         /// <summary>Unsubscribes everything. Safe to call twice, or without a prior <see cref="Start"/>.</summary>
@@ -128,7 +140,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             foreach (var off in handlers)
             {
                 try { off(); }
-                catch (Exception ex) { App.Logger?.Debug("MemorySignalWriter: unsubscribe failed: {Error}", ex.Message); }
+                catch (Exception ex) { Log.Debug("MemorySignalWriter: unsubscribe failed: {Error}", ex.Message); }
             }
             _started = false;
             _mantraWired = false;
@@ -141,7 +153,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// drift out of sync with <see cref="Start"/> — the leak this pattern prevents is a settings
         /// object holding a dead writer for the life of the process.
         /// </summary>
-        private void Wire<THandler>(Action<THandler> add, Action<THandler> remove, THandler handler)
+        public void Wire<THandler>(Action<THandler> add, Action<THandler> remove, THandler handler)
         {
             try
             {
@@ -150,13 +162,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("MemorySignalWriter: could not wire a signal: {Error}", ex.Message);
+                Log.Debug("MemorySignalWriter: could not wire a signal: {Error}", ex.Message);
             }
         }
 
         private void WireSettings()
         {
-            var settings = App.Settings?.Current;
+            var settings = CurrentSettings();
             if (settings == null) return;
 
             PropertyChangedEventHandler handler = (_, e) =>
@@ -168,74 +180,30 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("MemorySignalWriter: settings signal failed: {Error}", ex.Message);
+                    Log.Debug("MemorySignalWriter: settings signal failed: {Error}", ex.Message);
                 }
             };
             Wire<PropertyChangedEventHandler>(h => settings.PropertyChanged += h, h => settings.PropertyChanged -= h, handler);
         }
 
-        private void WireProgression()
+        /// <summary>WPF App.Settings?.Current: null until a head seeds CoreSettings (never the fallback).</summary>
+        private static AppSettings? CurrentSettings() => CoreSettings.HasProvider ? CoreSettings.Current : null;
+
+        /// <summary>
+        /// The per-mod chat counter (doc 01 §2.2 relationship block), fed from the app's "the user just
+        /// talked to her" signal, so the count is identical whether the reply came from the brain or the
+        /// legacy path.
+        /// </summary>
+        public void NoteChatTurn(string? modId)
         {
-            // PlayerLevel is also a watched setting, but LevelUp is the moment the number becomes
-            // interesting and the settings notification is not guaranteed to precede it.
-            if (App.Progression == null) return;
-            Wire<EventHandler<int>>(
-                h => App.Progression.LevelUp += h,
-                h => App.Progression.LevelUp -= h,
-                (_, _) => SafeRefresh());
+            try { if (!CompanionExperience.IsV2Enabled) _store.NoteChatTurn(modId); }
+            catch (Exception ex) { Log.Debug("MemorySignalWriter: chat-turn signal failed: {Error}", ex.Message); }
         }
 
-        private void WireFeatureUsage()
-        {
-            if (App.Flash != null)
-                Wire<EventHandler>(h => App.Flash.FlashDisplayed += h, h => App.Flash.FlashDisplayed -= h,
-                    (_, _) => NoteFeatureUse(FeatureFlash));
-
-            if (App.Video != null)
-                Wire<EventHandler>(h => App.Video.VideoStarted += h, h => App.Video.VideoStarted -= h,
-                    (_, _) => NoteFeatureUse(FeatureVideo));
-
-            if (App.Subliminal != null)
-                Wire<EventHandler>(h => App.Subliminal.SubliminalDisplayed += h, h => App.Subliminal.SubliminalDisplayed -= h,
-                    (_, _) => NoteFeatureUse(FeatureSubliminal));
-
-            if (App.BrainDrain != null)
-                Wire<EventHandler>(h => App.BrainDrain.BrainDrainTriggered += h, h => App.BrainDrain.BrainDrainTriggered -= h,
-                    (_, _) => NoteFeatureUse(FeatureBrainDrain));
-
-            if (App.MindWipe != null)
-                Wire<EventHandler>(h => App.MindWipe.MindWipeTriggered += h, h => App.MindWipe.MindWipeTriggered -= h,
-                    (_, _) => NoteFeatureUse(FeatureMindWipe));
-
-            if (App.Bubbles != null)
-                Wire<Action>(h => App.Bubbles.OnBubblePopped += h, h => App.Bubbles.OnBubblePopped -= h,
-                    () => NoteFeatureUse(FeatureBubbles));
-
-            // App.Mantra is built ~200 lines AFTER the brain in OnStartup, so this is normally false
-            // on the Start() pass; WireDeferredSources() picks it up at the end of startup.
-            WireDeferredSources();
-        }
-
-        private void WireRelationship()
-        {
-            // The per-mod chat counter (doc 01 §2.2 relationship block). UserMessageSent is the app's
-            // existing "the user just talked to her" signal — BarkService already uses it — so the
-            // count is identical whether the reply came from the brain or the legacy path.
-            if (App.Companion == null) return;
-            Wire<EventHandler>(
-                h => App.Companion.UserMessageSent += h,
-                h => App.Companion.UserMessageSent -= h,
-                (_, _) =>
-                {
-                    try { if (!CompanionExperience.IsV2Enabled) _store.NoteChatTurn(App.Mods?.ActiveModId); }
-                    catch (Exception ex) { App.Logger?.Debug("MemorySignalWriter: chat-turn signal failed: {Error}", ex.Message); }
-                });
-        }
-
-        private void SafeRefresh()
+        public void SafeRefresh()
         {
             try { RefreshProfile(); }
-            catch (Exception ex) { App.Logger?.Debug("MemorySignalWriter: profile refresh failed: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Debug("MemorySignalWriter: profile refresh failed: {Error}", ex.Message); }
         }
 
         // ===================== the actual mirroring =====================
@@ -248,7 +216,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public void RefreshProfile()
         {
             var signals = BuildProfileSignals(
-                App.Settings?.Current,
+                CurrentSettings(),
                 _store.FeatureUsage,
                 _clock(),
                 ExistingFirstSeen());
@@ -327,7 +295,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// Returns true when the counter actually moved — the return value exists for the tests, the
         /// production callers ignore it.
         /// </summary>
-        internal bool NoteFeatureUse(string feature)
+        public bool NoteFeatureUse(string feature)
         {
             if (string.IsNullOrWhiteSpace(feature) || _disposed) return false;
 
@@ -348,7 +316,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("MemorySignalWriter: feature signal failed: {Error}", ex.Message);
+                Log.Debug("MemorySignalWriter: feature signal failed: {Error}", ex.Message);
                 return false;
             }
         }

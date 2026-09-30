@@ -1474,8 +1474,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// <para>As WPF (ChatInput.cs:772), a send routes through the Core CompanionBrain (conversation
         /// history, memory) while UseCompanionBrain is on, its default, and takes the stateless call when
         /// it is off or the brain failed to build, with WPF's thinking bubble, double bounce and the asks
-        /// offer after a brain reply. ponytail: still missing - SeasonRecapService.TrackFeature and the
-        /// NotifyUserMessageSent achievement emit (both head services with no Avalonia twin) and the
+        /// offer after a brain reply. The "user talked" signal feeds the memory chat counter (App.UserMessageSent).
+        /// ponytail: still missing - SeasonRecapService.TrackFeature and the companion-chat
+        /// achievement listener on that signal (both head services with no Avalonia twin) and the
         /// enabled-phrases filter (App.CompanionPhrases).</para>
         /// </summary>
         internal async System.Threading.Tasks.Task SendChatAsync()
@@ -1492,6 +1493,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
             var ai = App.Ai;
             var brain = App.Brain;   // decided once, up front, as WPF (ChatInput.cs:772)
+            // WPF ChatInput.cs:788: the brain raises the "user talked" signal itself; emit only for the other paths.
+            if (!(CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true }
+                  && ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain)))
+                App.NotifyUserMessageSent();
             if (CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true })
             {
                 var routesThroughBrain = ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
