@@ -930,3 +930,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - WPF source-scan tests (ChasterHooks, Circe, Natasha, ChasterTab*) read all product roots / moved languages and web assets.
 - Evidence: ChasterServiceTests (63) on Linux + token-store tests, fail-proven; scan paths proven by script. No UI yet (no
   door: ChasterRailChip unported). Review: FIX -> fixed.
+
+## avalonia-port/bubbles-live: +762
+- Plain ambient Bubble Pop runs on this head: Core AmbientBubbles (WPF numbers: speed, wobble, pop, 40/3 cap, cadence, lucky 5%
+  x20, 300 XP/day bucket; WPF BubbleService delegates the bucket), CoreEngine start/stop in WPF order. Avalonia BubbleOverlay per
+  screen, click-through except on bubbles (X11 input region; Win32 toggles WS_EX_TRANSPARENT under the cursor), pop sound, XP,
+  quests; idle loop parks when empty. Card toggles live, N/300 line; header XP tooltip filled on open.
+- Evidence: AmbientBubblesTests (0 alloc/step at 40 bubbles), BubbleOverlayTests, fail-proven; live 3 overlays, pops paid XP;
+  0.013 ms/step. Windows popping not run. Rows stay stub (trigger/v2 bubbles, lucky FX, Bubble Count). Review: ACCEPT + notes.
