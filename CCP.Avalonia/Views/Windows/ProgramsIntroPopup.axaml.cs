@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using ConditioningControlPanel.Models.Program;
 using ConditioningControlPanel.Services.Program;
 using Serilog;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -27,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// PORTED from ConditioningControlPanel/Windows/ProgramsIntroPopup.xaml.cs. Deviations:
     ///  - <c>ShowIfFirstTime</c> reads CoreSettings / CoreMods and the built-in library; no
     ///    ProgramService is constructed (its timers must not start on a head with no run panel).
-    ///    No StartupLadder here, so the card opens directly instead of via the Inbox presenter.
+    ///    Routed through Platform.StartupLadder, so the quiet window parks it as an Inbox row.
     ///  - <c>ProgramArt.Sigil/DayPlate</c> stays unresolved, blocked on the unlinked
     ///    <c>Assets/programs</c> art rather than on the resolver - see the note at its call site.
     ///    The sigil stays hidden and the rail shows its gradient, glow and program title, which is
@@ -71,6 +72,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// Wholly guarded: an explainer must never be the reason the Programs tab fails to open.
         /// </summary>
         internal static void ShowIfFirstTime(Window? owner)
+        {
+            try
+            {
+                if (CoreSettings.Current.HasSeenProgramsIntro || _opening) return;
+                // Quiet window -> an Inbox row (WPF ProgramsIntroPopup.xaml.cs:58); the seen-flag is
+                // spent in ShowCore at open time, so a row waved away leaves the card owed.
+                Platform.StartupLadder.PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:programs",
+                    Glyph = "\U0001F4C5",
+                    Title = Loc.Get("inbox_programs_title"),
+                    Summary = Loc.Get("inbox_programs_summary"),
+                    Open = () => ShowCore(owner),
+                });
+            }
+            catch (Exception ex) { Log.Warning(ex, "Programs intro presenter gate failed"); }
+        }
+
+        private static void ShowCore(Window? owner)
         {
             try
             {

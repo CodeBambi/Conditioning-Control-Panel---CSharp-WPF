@@ -67,7 +67,7 @@ public partial class ChaosHubWindow
             {
                 System.Windows.Controls.ToolTipService.SetShowOnDisabled(TabImprove, true);
                 ChaosTips.Attach(TabImprove, "???", WALL_TIP,
-                    ChaosRanks.RankSpecifics(ChaosRank.Slipping));
+                    ChaosRanks.RankSpecifics(ChaosRank.Slipping, ChaosMeta.State.RunsCompleted));
             }
             else TabImprove.ToolTip = null;   // the wall came down — drop the locked tooltip
             if (!lookingGlass && TabImprove.IsChecked == true) ShowTab("loadout");

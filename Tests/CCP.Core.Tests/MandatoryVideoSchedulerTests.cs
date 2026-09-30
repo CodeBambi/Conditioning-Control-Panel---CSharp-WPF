@@ -67,6 +67,20 @@ public sealed class MandatoryVideoSchedulerTests
         Assert.Equal(2, host.Shown.Count);
     });
 
+    [Fact]   // WPF VideoStarted (VideoService.cs:3370): once the clip is on screen, not at the trigger
+    public void VideoStarted_fires_when_the_clip_is_shown() => With(20, false, () =>
+    {
+        var clock = new FakeClock(); var host = new Host(); var started = 0;
+        var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+        v.VideoStarted += () => started++;
+        Assert.True(v.Trigger());
+        Assert.Equal(0, started);                           // still in the pre-roll
+        clock.Advance(TimeSpan.FromSeconds(1.3));
+        Assert.Single(host.Shown);
+        Assert.Equal(1, started);
+        v.ForceCleanup();
+    });
+
     [Fact]
     public void ForceCleanup_does_not_rearm_and_cancels_a_pending_pre_roll() => With(20, true, () =>
     {

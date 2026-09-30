@@ -1474,8 +1474,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// <para>As WPF (ChatInput.cs:772), a send routes through the Core CompanionBrain (conversation
         /// history, memory) while UseCompanionBrain is on, its default, and takes the stateless call when
         /// it is off or the brain failed to build, with WPF's thinking bubble, double bounce and the asks
-        /// offer after a brain reply. ponytail: still missing - SeasonRecapService.TrackFeature and the
-        /// NotifyUserMessageSent achievement emit (both head services with no Avalonia twin) and the
+        /// offer after a brain reply. The "user talked" signal feeds the memory chat counter (App.UserMessageSent).
+        /// ponytail: still missing - SeasonRecapService.TrackFeature and the companion-chat
+        /// achievement listener on that signal (both head services with no Avalonia twin) and the
         /// enabled-phrases filter (App.CompanionPhrases).</para>
         /// </summary>
         internal async System.Threading.Tasks.Task SendChatAsync()
@@ -1492,16 +1493,20 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
             var ai = App.Ai;
             var brain = App.Brain;   // decided once, up front, as WPF (ChatInput.cs:772)
-            if (CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true })
+            // WPF ChatInput.cs:771-779: both halves cached, so the emit and the branch cannot disagree.
+            var aiChatLive = CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true };
+            var routesThroughBrain = aiChatLive && ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
+            // WPF ChatInput.cs:788: the brain raises the "user talked" signal itself; emit only for the other paths.
+            if (!routesThroughBrain) App.NotifyUserMessageSent();
+            if (aiChatLive)
             {
-                var routesThroughBrain = ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
                 try
                 {
                     StartThinkingAnimation();
 #pragma warning disable CS0618 // WPF's kill-switch-off path
                     var result = routesThroughBrain
                         ? await brain!.ChatAsync(input)
-                        : await ai.GetBambiReplyExAsync(input);
+                        : await ai!.GetBambiReplyExAsync(input);
 #pragma warning restore CS0618
                     PlayDoubleBounce();
                     if (result.Refusal != null) { ShowModerationRefusalBubble(result.Refusal.Source); return; }
