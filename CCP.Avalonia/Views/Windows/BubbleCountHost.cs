@@ -25,7 +25,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal IReadOnlyList<Window> Messages => _messages;
         public double LastVideoDurationSeconds => BubbleCountWindow.LastVideoDurationSeconds;
 
-        // Core's timers may tick off the UI thread (unseeded CoreDispatch), so every door hops onto it.
+        // The app seeds CoreDispatch (AvaloniaCoreDispatch), but headless tests do not: every door hops onto the UI thread.
         public void Show(string path, int difficulty, bool strict, Action<bool> onComplete) => Dispatcher.UIThread.Invoke(() =>
             BubbleCountWindow.ShowOnAllMonitors(path, (BubbleCountScheduler.Difficulty)difficulty, strict, onComplete));
 
@@ -50,6 +50,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         Foreground = Brushes.Magenta,
                         FontSize = 64,
                         FontWeight = FontWeight.Bold,
+                    FontFamily = new FontFamily("Impact, Arial Black, Segoe UI"),
                         TextAlignment = TextAlignment.Center,
                         HorizontalAlignment = HorizontalAlignment.Center,
                         VerticalAlignment = VerticalAlignment.Center,

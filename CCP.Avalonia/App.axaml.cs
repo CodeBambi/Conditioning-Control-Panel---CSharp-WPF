@@ -264,7 +264,7 @@ namespace ConditioningControlPanel.Avalonia
                 // WPF BubbleService.PauseAndClear/Resume for the bubble-count game; a Stop cancels the resume.
                 var bubblesPaused = false;
                 CoreBubbles.StopAction = () => { bubblesPaused = false; Views.Overlays.BubbleOverlay.Stop(); };
-                // Posted: the bubble-count schedule ticks off the UI thread (CoreDispatch is unseeded).
+                // Posted, so a caller off the UI thread (an unseeded CoreDispatch in tests) is safe.
                 CoreBubbles.PauseAction = () => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
                     if (Views.Overlays.BubbleOverlay.IsRunning) { bubblesPaused = true; Views.Overlays.BubbleOverlay.Stop(); }

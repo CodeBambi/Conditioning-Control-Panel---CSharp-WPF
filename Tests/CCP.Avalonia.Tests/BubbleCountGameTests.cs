@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,8 +18,8 @@ namespace CCP.Avalonia.Tests;
 /// <summary>The bubble-count game headless with a real clip on the shared LibVLC: the Test trigger
 /// opens the game after the lead-in and frames reach the window; the clip's end opens the answer
 /// window and a correct answer completes the game with XP; strict falls open to the panic key with
-/// no global listener and swallows it with one; engine Stop (panic) closes it. Skips where ffmpeg
-/// or libvlc is missing.</summary>
+/// no global listener and swallows it with one; engine Stop (panic) closes it. The clip is committed
+/// (Assets/bubblecount-2s.mp4); only a missing libvlc skips, and never on Linux CI.</summary>
 public sealed class BubbleCountGameTests
 {
     [Fact]
@@ -30,16 +29,14 @@ public sealed class BubbleCountGameTests
         var clip = Path.Combine(dir, "clip.mp4");
         try
         {
-            try
-            {
-                using var ff = Process.Start(new ProcessStartInfo("ffmpeg",
-                    $"-v error -f lavfi -i testsrc=d=2:s=320x240:r=25 -pix_fmt yuv420p \"{clip}\"") { UseShellExecute = false })!;
-                ff.WaitForExit();
-            }
-            catch (Exception) { }
-            if (!File.Exists(clip)) Assert.Skip("ffmpeg not available to generate a test clip");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "bubblecount-2s.mp4"), clip);
             try { _ = new LibVlcAudio("--aout=dummy"); }
-            catch (Exception e) { Assert.Skip("libvlc not available: " + e.Message); }
+            catch (Exception e)
+            {
+                // core-linux installs libvlc (build.yml), so a missing one there is a broken job, not a skip.
+                if (OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("CI") == "true") throw;
+                Assert.Skip("libvlc not installed (apt install libvlc-dev vlc-plugin-base): " + e.Message);
+            }
 
             var s = CoreSettings.Current;
             var saved = (s.PanicKeyEnabled, s.PanicKey, s.BubbleCountStrictLock, s.DualMonitorEnabled);

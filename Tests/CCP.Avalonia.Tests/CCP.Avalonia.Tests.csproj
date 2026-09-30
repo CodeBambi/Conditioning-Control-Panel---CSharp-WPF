@@ -21,5 +21,7 @@
     <Compile Include="..\Shared\AvaloniaTestDispatcher.cs" Link="AvaloniaTestDispatcher.cs" />
     <Compile Include="..\Shared\FakeContentServer.cs" Link="FakeContentServer.cs" />
     <ProjectReference Include="..\..\CCP.Avalonia\CCP.Avalonia.csproj" />
+    <!-- 2 s 96x64 h264 clip (3 KB) so the bubble-count game test never depends on ffmpeg. -->
+    <None Include="Assets\bubblecount-2s.mp4" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
