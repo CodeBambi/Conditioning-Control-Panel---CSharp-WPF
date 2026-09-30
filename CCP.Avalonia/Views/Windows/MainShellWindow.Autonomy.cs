@@ -5,7 +5,7 @@
 //
 // Performed here (AutonomyService.PerformAction :935): Flash, Subliminal, LockCard, Video
 // (mandatory), Bubbles and Bouncing Text as 30 s pulses, Pink Filter as a 30 s pulse (X11 only -
-// the tint refuses every other platform), Bubble Count (forced game), Comment (AI when chat is on
+// only where the compositor can show the tint), Bubble Count (forced game), Comment (AI when chat is on
 // and available, else a preset phrase through the tube), Mind Wipe (only once CoreMindWipe is
 // seeded). Never picked here (CanPerform false, exactly as WPF skips an unavailable action):
 // ponytail: Spiral pulse and Brain Drain pulse (no spiral / blur overlay on this head), Web Video
@@ -62,7 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private bool CanPerformAutonomy(AutonomyActionType a) => a switch
         {
-            AutonomyActionType.PinkFilterPulse => Platform.X11Overlay.IsAvailable,
+            AutonomyActionType.PinkFilterPulse => PinkFilterOverlay.CanShowTint,
             AutonomyActionType.BubbleCount => CoreEngine.BubbleCount != null,
             AutonomyActionType.Comment => _avatarTubeWindow != null,
             AutonomyActionType.MindWipe => CoreMindWipe.TriggerOnceProvider != null,
@@ -146,8 +146,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             "Teehee~", "I'm always watching~", "*bounces* Pay attention to me~",
         };
 
-        /// <summary>WPF MakeComment / MakeAICommentAsync. ponytail: WPF's preset path is the
-        /// low-priority Giggle (dropped under an AI bubble); this tube only has GigglePriority.</summary>
+        /// <summary>WPF MakeComment / MakeAICommentAsync: AI through GigglePriority, a preset through
+        /// the low-priority Giggle (dropped under an AI request or bubble).</summary>
         private async void MakeAutonomyComment()
         {
             var tube = _avatarTubeWindow;
@@ -165,13 +165,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 return;
             }
             var phrase = CommentPhrases[Random.Shared.Next(CommentPhrases.Length)];
-            tube.GigglePriority(ConditioningControlPanel.Localization.VocabTokens.Apply(phrase), aiGenerated: false);
+            tube.Giggle(ConditioningControlPanel.Localization.VocabTokens.Apply(phrase));
         }
+
+        /// <summary>The 30 s pulse clock; tests step it by hand.</summary>
+        internal Action<Action, TimeSpan> PulseTimer = (a, t) => DispatcherTimer.RunOnce(a, t);
 
         private void EndPulseAfter30s(Action end)
         {
             var gen = _pulseGen;
-            DispatcherTimer.RunOnce(() => { if (gen == _pulseGen) end(); }, TimeSpan.FromSeconds(30));
+            PulseTimer(() => { if (gen == _pulseGen) end(); }, TimeSpan.FromSeconds(30));
         }
 
         /// <summary>WPF CancelActivePulses: stop only what a Takeover pulse started.</summary>

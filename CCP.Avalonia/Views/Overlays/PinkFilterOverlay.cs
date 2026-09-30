@@ -33,6 +33,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// </summary>
     internal static class PinkFilterOverlay
     {
+        /// <summary>A Takeover pulse holds the tint up with the engine off (WPF: the pulse starts
+        /// OverlayService, #1180). MainShellWindow.Autonomy.cs sets and releases it.</summary>
+        internal static bool PulseHold;
+
+        private static bool _refused;
+
+        /// <summary>Whether a tint can actually reach the screen: X11 with click-through, a
+        /// compositing manager, and no earlier refusal by <see cref="Accept"/>. Takeover picks its
+        /// pink pulse only on this (WPF never picks an action that would do nothing).</summary>
+        internal static bool CanShowTint => !_refused && X11Overlay.IsAvailable && X11Overlay.IsCompositing;
+
         private static readonly List<TintOverlayWindow> Windows = new();
         private static int[] _shownOn = Array.Empty<int>();
         private static Window? _hookedOwner;
@@ -145,13 +156,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// </summary>
         /// <para>A session counts as running (WPF ResumeSession's App.Overlay.Start() after a panic) and a
         /// paused one hides the tint (PauseSession's App.Overlay.Stop()).</para>
-        /// <summary>A Takeover pulse holds the tint up with the engine off (WPF: the pulse starts
-        /// OverlayService, #1180). MainShellWindow.Autonomy.cs sets and releases it.</summary>
-        internal static bool PulseHold;
-
         private static bool ShouldShow()
-            => PulseHold || App.Sessions?.IsPaused != true
-               && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true);
+            => PulseHold || (App.Sessions?.IsPaused != true
+               && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true));
 
         // Start (MainShellWindow.StartEngine) is what restores a tint left enabled - WPF OverlayService.Start().
 
@@ -161,6 +168,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (!X11Overlay.SetClickThrough(w, true))
             {
                 Log.Warning("Pink filter: this platform cannot make the tint click-through, so it is not shown - a full-screen topmost window that swallows clicks would lock the desktop");
+                _refused = true;
                 Close(w);
                 return false;
             }
@@ -168,6 +176,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (w.ActualTransparencyLevel == WindowTransparencyLevel.None)
             {
                 Log.Warning("Pink filter: the window manager refused per-pixel transparency (no compositor), so the tint is not shown - it would paint an opaque block, not a wash");
+                _refused = true;
                 Close(w);
                 return false;
             }

@@ -9,6 +9,7 @@ using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Services;
 using Xunit;
@@ -116,6 +117,7 @@ public sealed class TakeoverTests
             var shell = new MainShellWindow();
             shell.Show();
             var oldBubbleCount = CoreEngine.BubbleCount;
+            var (pinkOn, pinkOpacity) = (s.PinkFilterEnabled, s.PinkFilterOpacity);
             try
             {
                 // No surface on this head: never picked (WPF skips an unavailable action).
@@ -123,6 +125,7 @@ public sealed class TakeoverTests
                              AutonomyActionType.WebVideo, AutonomyActionType.WallpaperShuffle, AutonomyActionType.SpokenMantra })
                     Assert.False(shell.Autonomy.CanPerform(a), a.ToString());
                 Assert.False(shell.Autonomy.CanPerform(AutonomyActionType.MindWipe));   // CoreMindWipe unseeded
+                Assert.False(shell.Autonomy.CanPerform(AutonomyActionType.PinkFilterPulse));   // no compositor headless
 
                 CoreEntitlement.HasPremiumProvider = () => true;
                 Assert.True(shell.SetAutonomyEnabled(true));
@@ -142,13 +145,13 @@ public sealed class TakeoverTests
                 shell.PerformAutonomy(AutonomyActionType.PinkFilterPulse);
                 Assert.True(s.PinkFilterEnabled);
                 Assert.Equal(30, s.PinkFilterOpacity);
-                Assert.True(global::ConditioningControlPanel.Avalonia.Views.Overlays.PinkFilterOverlay.PulseHold);
+                Assert.True(PinkFilterOverlay.PulseHold);
                 shell.HandlePanicKeyPress(new DateTime(2026, 1, 1, 12, 0, 0));
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(shell.Autonomy.IsEnabled);
                 Assert.False(s.PinkFilterEnabled);
                 Assert.Equal(10, s.PinkFilterOpacity);
-                Assert.False(global::ConditioningControlPanel.Avalonia.Views.Overlays.PinkFilterOverlay.PulseHold);
+                Assert.False(PinkFilterOverlay.PulseHold);
 
                 // Voice hint (WPF RefreshAutonomyVoiceHint): off, then on with no speech engine.
                 var tab = shell.GetLogicalDescendants().OfType<global::ConditioningControlPanel.Avalonia.Views.Tabs.BambiTakeoverTabView>().First();
@@ -167,10 +170,159 @@ public sealed class TakeoverTests
                 CoreEntitlement.HasPremiumProvider = null;
                 s.AutonomyModeEnabled = s.AutonomyConsentGiven = false;
                 s.AutonomyCanTriggerVoiceCommand = s.MicConsentGiven = false;
+                Dispatcher.UIThread.RunJobs();
+                PinkFilterOverlay.PulseHold = false;
+                (s.PinkFilterEnabled, s.PinkFilterOpacity) = (pinkOn, pinkOpacity);
                 CoreEngine.Stop();
                 shell.RequestExit();
             }
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>Headless shell with Takeover armed, a stepped pulse clock and the pink/bubble state
+    /// saved; <paramref name="body"/> gets the shell and the queued 30 s timer callbacks.</summary>
+    private static Task WithArmedShell(Action<MainShellWindow, System.Collections.Generic.List<Action>> body) =>
+        AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var s = CoreSettings.Current;
+            s.AutonomyConsentGiven = true;
+            s.AutonomyResumeOnStartup = false;
+            var (pinkOn, pinkOpacity) = (s.PinkFilterEnabled, s.PinkFilterOpacity);
+            var (start, stop) = (CoreBubbles.StartAction, CoreBubbles.StopAction);
+            var shell = new MainShellWindow();
+            shell.Show();
+            var timers = new System.Collections.Generic.List<Action>();
+            shell.PulseTimer = (a, _) => timers.Add(a);
+            try
+            {
+                CoreEntitlement.HasPremiumProvider = () => true;
+                Assert.True(shell.SetAutonomyEnabled(true));
+                Dispatcher.UIThread.RunJobs();
+                body(shell, timers);
+            }
+            finally
+            {
+                shell.Autonomy.Stop();
+                Dispatcher.UIThread.RunJobs();
+                PinkFilterOverlay.PulseHold = false;
+                (s.PinkFilterEnabled, s.PinkFilterOpacity) = (pinkOn, pinkOpacity);
+                (CoreBubbles.StartAction, CoreBubbles.StopAction) = (start, stop);
+                CoreEntitlement.HasPremiumProvider = null;
+                s.AutonomyModeEnabled = s.AutonomyConsentGiven = false;
+                CoreEngine.Stop();
+                shell.RequestExit();
+            }
+            return Task.CompletedTask;
+        });
+
+    /// <summary>WPF PulsePinkFilter's own restore after 30 s, and #441a: a slider moved during the
+    /// pulse is kept rather than snapped back.</summary>
+    [Fact]
+    public Task PinkPulseEndsAfter30sAndKeepsASliderMove() => WithArmedShell((shell, timers) =>
+    {
+        var s = CoreSettings.Current;
+        (s.PinkFilterEnabled, s.PinkFilterOpacity) = (false, 10);
+        shell.PerformAutonomy(AutonomyActionType.PinkFilterPulse);
+        Assert.Equal(30, s.PinkFilterOpacity);
+        Assert.Single(timers)();
+        Assert.False(s.PinkFilterEnabled);
+        Assert.Equal(10, s.PinkFilterOpacity);
+        Assert.False(PinkFilterOverlay.PulseHold);
+
+        timers.Clear();
+        shell.PerformAutonomy(AutonomyActionType.PinkFilterPulse);
+        s.PinkFilterOpacity = 20;   // the user drags the slider mid-pulse
+        Assert.Single(timers)();
+        Assert.False(s.PinkFilterEnabled);
+        Assert.Equal(20, s.PinkFilterOpacity);
+    });
+
+    /// <summary>WPF: a running session owns the overlays, so the pink pulse is skipped.</summary>
+    [Fact]
+    public Task PinkPulseSkipsWhileASessionRuns() => WithArmedShell((shell, timers) =>
+    {
+        var s = CoreSettings.Current;
+        (s.PinkFilterEnabled, s.PinkFilterOpacity) = (false, 10);
+        var runner = global::ConditioningControlPanel.Avalonia.App.Sessions = new SessionRunner(new SessionLogService());
+        try
+        {
+            shell.StartSession(new global::ConditioningControlPanel.Models.Session { Id = "pulse_test", Name = "Pulse", Icon = "x", DurationMinutes = 1 });
+            Assert.True(runner.IsRunning);
+            shell.PerformAutonomy(AutonomyActionType.PinkFilterPulse);
+            Assert.False(s.PinkFilterEnabled);
+            Assert.Equal(10, s.PinkFilterOpacity);
+            Assert.Empty(timers);
+        }
+        finally
+        {
+            runner.Stop();
+            CoreSession.IsSessionRunningProvider = null;
+            global::ConditioningControlPanel.Avalonia.App.Sessions = null;
+            foreach (var w in shell.OwnedWindows.ToList()) w.Close();
+        }
+    });
+
+    /// <summary>WPF StartStop.cs:485: stopping the engine cancels Takeover's pulses, so a restart
+    /// inside 30 s can pulse again and the old timer cannot end the new run's bubbles.</summary>
+    [Fact]
+    public Task EngineStopRetiresPulses() => WithArmedShell((shell, timers) =>
+    {
+        int starts = 0, stops = 0;
+        CoreBubbles.StartAction = () => starts++;
+        CoreBubbles.StopAction = () => stops++;
+        shell.PerformAutonomy(AutonomyActionType.StartBubbles);
+        shell.OnEngineStopped();
+        var stopsAfterEngineStop = stops;
+        shell.PerformAutonomy(AutonomyActionType.StartBubbles);   // restart within 30 s
+        Assert.Equal(2, starts);
+        Assert.Equal(2, timers.Count);
+        timers[0]();   // the old run's timer
+        Assert.Equal(stopsAfterEngineStop, stops);
+        timers[1]();
+        Assert.Equal(stopsAfterEngineStop + 1, stops);
+    });
+
+    /// <summary>A Takeover preset comment is WPF Giggle (Speech.cs:240): dropped while an AI request
+    /// is in flight or an AI bubble shows, kept out of chat history, sound on every fifth.</summary>
+    [Fact]
+    public Task PresetCommentIsWpfGiggle() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var tube = new global::ConditioningControlPanel.Avalonia.Views.AvatarTube.AvatarTubeWindow(null);
+        try
+        {
+            tube.Show();
+            var text = tube.FindControl<TextBlock>("TxtSpeech")!;
+            var history = tube.ChatHistory.Count;
+            tube.StartThinkingAnimation();   // an AI request in flight
+            tube.Giggle("preset zero");
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotEqual("preset zero", text.Text);
+            tube.StopThinkingAnimation();
+
+            tube.Giggle("preset one");
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("preset one", text.Text);
+            Assert.Equal(history, tube.ChatHistory.Count);
+
+            tube.GigglePriority("ai reply", false, aiGenerated: true);
+            Dispatcher.UIThread.RunJobs();
+            tube.Giggle("preset two");   // an AI bubble is up
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("ai reply", text.Text);
+
+            var sounds = Enumerable.Range(0, 10).Select(_ => tube.NextPresetGiggleSound()).ToArray();
+            Assert.Equal(2, sounds.Count(x => x));
+        }
+        finally { tube.Close(); }
+        return Task.CompletedTask;
+    });
 }
