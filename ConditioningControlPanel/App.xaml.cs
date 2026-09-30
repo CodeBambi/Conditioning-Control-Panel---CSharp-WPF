@@ -2813,6 +2813,11 @@ namespace ConditioningControlPanel
             // putting it on screen, so the launcher is the first window the player sees; the panel
             // used to flash up here and vanish a pump later, in RouteBootSurface.
             bool panelHidden = Services.Launcher.LauncherBoot.PanelStartsHidden(Boot, Lockdown?.IsActive == true);
+            // Held BEFORE the hidden show: the panel's Loaded work and the dashboard's first
+            // visibility run inside it and ask the ladder for their cards (Today's Free Feature,
+            // a fast server announcement). Held from RouteBootSurface only, a pump later, they
+            // opened owned by a panel nobody could see, on top of the launcher.
+            if (panelHidden) Services.Launcher.LauncherHost.HoldStartupLadder();
             try
             {
                 if (panelHidden) mainWindow.ShowHiddenForBoot();

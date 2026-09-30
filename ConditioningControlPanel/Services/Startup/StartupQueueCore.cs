@@ -255,6 +255,19 @@ namespace ConditioningControlPanel.Services.Startup
         /// </summary>
         public static bool IsParked(in QuietInputs w) => w.GameHostUp || w.LauncherHolding;
 
+        /// <summary>How long a passive surface counts as on its way after it was opened: a feature
+        /// card opens on the next dispatcher turn, so its window is not there yet when the next
+        /// surface asks.</summary>
+        public static readonly TimeSpan PassiveSettle = TimeSpan.FromSeconds(3);
+
+        /// <summary>
+        /// Must a passive surface that would open now wait for the one already up? Two of them
+        /// stacked on the same launch ("The Spiral is open" over "Today's Free Feature"): only one
+        /// is ever on screen, the next opens when it closes.
+        /// </summary>
+        public static bool PassiveWaits(DateTime? lastPassiveUtc, DateTime nowUtc, bool passiveWindowUp)
+            => passiveWindowUp || (lastPassiveUtc is DateTime last && nowUtc - last < PassiveSettle);
+
         /// <summary>
         /// Should this surface become an Inbox row rather than open itself?
         ///
