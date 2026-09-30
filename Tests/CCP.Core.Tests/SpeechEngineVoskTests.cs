@@ -25,7 +25,9 @@ public class SpeechEngineVoskTests
     private static string Fixture([CallerFilePath] string here = "") =>
         Path.Combine(Path.GetDirectoryName(here)!, "Fixtures", "vosk-test.wav");
 
-    private static SpeechEngine Engine(byte[] pcm)
+    private static SpeechEngine Engine(byte[] pcm) => Engine(new WavMicSource(pcm));
+
+    private static SpeechEngine Engine(WavMicSource mic)
     {
         var model = Environment.GetEnvironmentVariable("CCP_VOSK_MODEL") is { Length: > 0 } m ? m
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -36,7 +38,7 @@ public class SpeechEngineVoskTests
             if (Environment.GetEnvironmentVariable("CCP_REQUIRE_VOSK") == "1") Assert.Fail(msg);
             Assert.Skip(msg);
         }
-        var engine = new SpeechEngine(new WavMicSource(pcm), new[] { model });
+        var engine = new SpeechEngine(mic, new[] { model });
         Assert.True(engine.IsAvailable, $"Vosk refused the model: {engine.ModelStatus}");
         return engine;
     }
@@ -48,6 +50,20 @@ public class SpeechEngineVoskTests
             if (b[i] == 'd' && b[i + 1] == 'a' && b[i + 2] == 't' && b[i + 3] == 'a')
                 return b.AsSpan(i + 8, BitConverter.ToInt32(b, i + 4)).ToArray();
         throw new InvalidDataException("no data chunk");
+    }
+
+    /// <summary>A session asked for with an already-cancelled token (a Stop that raced it) never
+    /// opens the mic - no parec is spawned just to be killed.</summary>
+    [Fact]
+    public async Task A_cancelled_token_never_opens_the_mic()
+    {
+        var mic = new WavMicSource(WavPcm());
+        using var engine = Engine(mic);
+        var r = await engine.RecognizeOneOfAsync(new[] { Spoken }, new RecognizeOptions { Timeout = TimeSpan.FromSeconds(5) },
+            new CancellationToken(canceled: true));
+        Assert.False(r.Matched);
+        Assert.Equal(0, mic.Starts);
+        Assert.False(engine.IsListening);
     }
 
     [Fact]
@@ -96,8 +112,11 @@ public class SpeechEngineVoskTests
         public bool HasDevice => true;
         public IReadOnlyList<SpeechInputDevice> ListDevices() => new[] { new SpeechInputDevice(-1, "wav") };
 
+        public int Starts;
+
         public IDisposable Start(Action<byte[], int> onPcm)
         {
+            Interlocked.Increment(ref Starts);
             var cts = new CancellationTokenSource();
             _ = Task.Run(async () =>
             {

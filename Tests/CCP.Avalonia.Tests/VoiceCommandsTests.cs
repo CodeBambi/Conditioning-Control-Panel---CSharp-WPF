@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -72,6 +73,43 @@ public sealed class VoiceCommandsTests
         CoreEntitlement.HasPremiumProvider = () => false;   // lapse: every repaint re-reads entitlement
         shell.RefreshSheListeningTab();
         await Closed();
+    });
+
+    /// <summary>Revoke while a command's first listen is open: the prompt ends there. Its silence must
+    /// not become the spoken "you called?" re-prompt, which would reopen the mic.</summary>
+    [Fact]
+    public Task RevokingMidCommandClosesTheMicForGood() => Run(async (shell, mic, engine) =>
+    {
+        CoreSettings.Current.SpeechWakeWords = "hey bambi";   // the WAV never wakes her: the prompt is ours
+        shell.RefreshVoiceInputModes();
+        await Until(() => engine.IsListening, 10);
+        shell.OnWakeWordHeard(null);
+        await Until(() => shell.VoicePromptActive && engine.IsListening, 10);
+        shell.RevokeMicConsent();
+        await Until(() => !shell.VoicePromptActive && !engine.IsListening, 3);
+        var starts = mic.Starts;
+        await Task.Delay(2500);
+        Assert.Equal(starts, mic.Starts);
+        Assert.False(engine.IsListening);
+    });
+
+    /// <summary>"what can I say" and the tab's list name only what this head can run.</summary>
+    [Fact]
+    public Task HelpAndTheTabNameOnlyRunnableCommands() => Run(async (shell, mic, engine) =>
+    {
+        var help = shell.VoiceCmds.HelpLine();
+        Assert.Contains("take over", help);
+        Assert.DoesNotContain("spiral", help);
+        Assert.DoesNotContain("quiz", help);
+        shell.ShowTab("shelistening");
+        Dispatcher.UIThread.RunJobs();
+        var rows = global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(shell.SheListeningPage!)
+            .OfType<global::Avalonia.Controls.TextBlock>().Where(t => t.Tag is string g && g.StartsWith("voice:")).ToList();
+        Assert.False(rows.Single(t => t.Text!.Contains("Spiral")).IsVisible);
+        Assert.True(rows.Single(t => t.Text!.Contains("Takeover")).IsVisible);
+        var toys = rows.Single(t => t.Text!.Contains("Quick toys"));   // freeze runs here only if its seam is seeded
+        Assert.Equal(shell.VoiceCmds.Available.Any(i => i.Name == "freeze_once"), toys.IsVisible);
+        await Task.CompletedTask;
     });
 
     [Fact]
