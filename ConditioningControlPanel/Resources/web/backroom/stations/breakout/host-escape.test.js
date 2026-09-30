@@ -119,13 +119,12 @@ test('play.html makes the listener before the station and plays the host frame t
   assert.match(page, /if \(m\.breakoutStandalone\) ctx\.hostKeepsEscape = true;/, 'only the desktop window leaves on Escape, Escape');
 });
 
-test('station: a held Escape is one press; on the desktop an Escape on an Escape pause leaves, any other pause arms first', () => {
+test('station: a held Escape is one press; on the desktop an Escape on any pause card leaves', () => {
   const s = read('./station.js');
   const repeat = s.indexOf("if(e.key==='Escape'&&e.repeat)");
-  assert.ok(repeat > 0 && repeat < s.indexOf('setPaused(!paused);if(paused){escPaused'), 'repeats are dropped before the toggle');
-  assert.match(s, /if\(e\.key==='Escape'&&paused&&ctx\.hostKeepsEscape\)\{if\(escPaused\)back\(\);else escPaused=true;return;\}/);
-  assert.match(s, /setPaused\(!paused\);if\(paused\)\{escPaused=e\.key==='Escape';/);
-  assert.match(s, /if \(!p\) escPaused = false;/, 'resuming clears the mark');
+  assert.ok(repeat > 0 && repeat < s.indexOf('setPaused(!paused);if(paused)'), 'repeats are dropped before the toggle');
+  assert.match(s, /if\(e\.key==='Escape'&&paused&&ctx\.hostKeepsEscape\)\{back\(\);return;\}/);
+  assert.doesNotMatch(s, /escPaused/, 'no arming step: one Escape on any pause card leaves');
   assert.match(s, /demoComplete&&!ui\.demoCard\.hidden\)\{e\.preventDefault\(\);ui\.demoCard\.querySelector\('\[data-demo="menu"\]'\)\.click\(\)/,
     'Escape on the demo card is its Menu button, never a dead key');
 });
