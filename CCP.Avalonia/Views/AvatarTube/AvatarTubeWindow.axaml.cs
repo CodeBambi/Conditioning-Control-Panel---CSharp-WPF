@@ -310,6 +310,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // chamber rather than on the stock one.
             RefreshTubeLayout();
 
+            AttachAwareness();   // WPF xaml.cs:317-322 (Reactions.cs)
+
             // ponytail: WPF's OnLoaded also ran StartFloatingAnimation / StartFullscreenDetection
             // and InitTakeoverCountdownBar; none has ported.
         }
@@ -321,6 +323,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // ReferenceEquals would be false every time because the conversion allocates.
             if (OpenChatSink == (Action)OpenChatInput) OpenChatSink = null;
             ReleaseWindowing();
+            DetachAwareness();
 
             // Every timer this window starts is stopped here. --render-all constructs ~180 windows
             // in one process, and a tick against a torn-down visual tree is exactly the flaky

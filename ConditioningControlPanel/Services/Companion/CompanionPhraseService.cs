@@ -289,36 +289,8 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Gets only enabled phrase texts for a specific category (used by AvatarTubeWindow).
         /// </summary>
-        public string[] GetEnabledPhrases(string category)
-        {
-            var settings = App.Settings?.Current;
-            var disabledIds = settings?.DisabledPhraseIds ?? new HashSet<string>();
-            var removedIds = settings?.RemovedPhraseIds ?? new HashSet<string>();
-
-            var result = new List<string>();
-
-            // Built-in phrases for this category from mod system
-            if (_categoryNames.Contains(category))
-            {
-                var phrases = GetCategoryPhrases(category);
-                for (int i = 0; i < phrases.Length; i++)
-                {
-                    var id = $"{category}:{i}";
-                    if (!removedIds.Contains(id) && !disabledIds.Contains(id))
-                        result.Add(phrases[i]);
-                }
-            }
-
-            // Custom phrases in this category
-            var customPhrases = settings?.CustomCompanionPhrases ?? new List<CustomCompanionPhrase>();
-            foreach (var custom in customPhrases)
-            {
-                if (custom.Category == category && custom.Enabled)
-                    result.Add(custom.Text);
-            }
-
-            return result.ToArray();
-        }
+        public string[] GetEnabledPhrases(string category) =>
+            Services.Awareness.AwarenessReactionPhrases.Enabled(category, _categoryNames.Contains(category));
 
         /// <summary>
         /// Quick check if a phrase ID is enabled.

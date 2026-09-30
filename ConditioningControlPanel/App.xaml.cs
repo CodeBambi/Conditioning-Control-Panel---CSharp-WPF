@@ -1379,6 +1379,23 @@ namespace ConditioningControlPanel
         [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
         private static extern bool IsWindowVisible(IntPtr hWnd);
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+        /// <summary>WindowAwarenessService's title source (moved verbatim from that service).</summary>
+        private static string ReadForegroundWindowTitle()
+        {
+            var handle = GetForegroundWindow();
+            if (handle == IntPtr.Zero) return "";
+
+            var sb = new StringBuilder(512);
+            GetWindowText(handle, sb, 512);
+            return sb.ToString();
+        }
+
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct CcpRect { public int Left, Top, Right, Bottom; }
 
@@ -2671,7 +2688,11 @@ namespace ConditioningControlPanel
                 _ = Task.Run(async () => { try { await aiStrategy.WarmUpLocalAsync(); } catch (Exception ex) { Diag.Swallowed(ex); } });
             }
 
-            WindowAwareness = new WindowAwarenessService();
+            // Core service since awareness-observer; the head supplies the user32 title read and the
+            // v2 hooks it used to call directly. No privacy filter: unchanged legacy behaviour.
+            WindowAwarenessService.V2OwnsReactionsProvider = () => Services.Awareness.AwarenessV2Routing.IsActive;
+            WindowAwarenessService.V2Lifecycle = start => { if (start) Awareness?.Start(); else Awareness?.Stop(); };
+            WindowAwareness = new WindowAwarenessService(ReadForegroundWindowTitle);
 
             // Awareness v2 (Train 2). Built after Brain because the arbiter is the companion's one
             // mouth and the memory seam is the brain's to fill later; started from

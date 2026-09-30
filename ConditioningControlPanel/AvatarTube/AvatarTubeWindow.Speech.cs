@@ -2290,72 +2290,9 @@ namespace ConditioningControlPanel
         /// Get a random Bambi Sleep themed phrase for a specific activity category.
         /// Phrases may include {0} placeholder for the detected app/service name.
         /// </summary>
-        private string GetPhraseForCategory(ActivityCategory category, string detectedName = "")
-        {
-            // Check for special services first
-            var lowerName = detectedName?.ToLowerInvariant() ?? "";
-            var svc = App.CompanionPhrases;
-
-            // Discord - special phrases
-            if (lowerName.Contains("discord"))
-            {
-                var discordPhrases = svc?.GetEnabledPhrases("Discord") is { Length: > 0 } dp
-                    ? dp : App.Mods?.GetPhrases("Discord") ?? System.Array.Empty<string>();
-                if (discordPhrases.Length == 0) return "*giggles*";
-                return discordPhrases[_random.Next(discordPhrases.Length)];
-            }
-
-            // BambiCloud/Hypnotube - positive reinforcement (training sites)
-            if (lowerName.Contains("bambicloud") || lowerName.Contains("hypnotube"))
-            {
-                var sitePhrases = svc?.GetEnabledPhrases("TrainingSite") is { Length: > 0 } sp
-                    ? sp : App.Mods?.GetPhrases("TrainingSite") ?? System.Array.Empty<string>();
-                if (sitePhrases.Length == 0) return "*giggles*";
-                return sitePhrases[_random.Next(sitePhrases.Length)];
-            }
-
-            // Hypno content in tab name - congratulate for bimbofication
-            if (lowerName.Contains("bambi") || lowerName.Contains("sissy") || lowerName.Contains("hypno"))
-            {
-                var hypnoPhrases = svc?.GetEnabledPhrases("HypnoContent") is { Length: > 0 } hp
-                    ? hp : App.Mods?.GetPhrases("HypnoContent") ?? System.Array.Empty<string>();
-                if (hypnoPhrases.Length == 0) return "*giggles*";
-                return hypnoPhrases[_random.Next(hypnoPhrases.Length)];
-            }
-
-            var categoryName = category switch
-            {
-                ActivityCategory.Gaming => "Gaming",
-                ActivityCategory.Browsing => "Browsing",
-                ActivityCategory.Shopping => "Shopping",
-                ActivityCategory.Social => "Social",
-                ActivityCategory.Working => "Working",
-                ActivityCategory.Media => "Media",
-                ActivityCategory.Learning => "Learning",
-                ActivityCategory.Idle => "WindowAwarenessIdle",
-                _ => "RandomFloating"
-            };
-
-            var phrases = svc?.GetEnabledPhrases(categoryName) is { Length: > 0 } enabled
-                ? enabled
-                : App.Mods?.GetPhrases(categoryName) ?? System.Array.Empty<string>();
-            if (phrases.Length == 0) phrases = new[] { "*giggles*" };
-
-            var phrase = phrases[_random.Next(phrases.Length)];
-
-            // Replace {0} placeholder with detected name if present
-            if (phrase.Contains("{0}") && !string.IsNullOrEmpty(detectedName))
-            {
-                phrase = string.Format(phrase, detectedName);
-            }
-            else if (phrase.Contains("{0}"))
-            {
-                // Remove placeholder if no name detected
-                phrase = phrase.Replace("{0} ", "").Replace("{0}", "").Replace("  ", " ").Trim();
-            }
-
-            return phrase;
-        }
+        private string GetPhraseForCategory(ActivityCategory category, string detectedName = "") =>
+            Services.Awareness.AwarenessReactionPhrases.ForCategory(category, detectedName, _random,
+                App.CompanionPhrases is { } svc ? svc.GetEnabledPhrases : null);
 
         /// <summary>
         /// Play a random pop sound when clicking the avatar

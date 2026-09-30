@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Services
         private static bool _loaded;
 
         private static string FilePath =>
-            Path.Combine(CompanionPhraseService.CompanionAudioFolder, FileName);
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Companion.CompanionContentResolver.CompanionAudioRelativeDir, FileName);
 
         /// <summary>Largest override file that will be read at all. A mod file, not a database.</summary>
         public const int MaxFileBytes = 256 * 1024;
@@ -63,6 +63,10 @@ namespace ConditioningControlPanel.Services
         {
             if (_loaded) return;
             _loaded = true;
+            // The field initialisers above run before the Default* tables below exist (textual
+            // order), so without an override file both tables were null and Classify threw.
+            _clusters ??= DefaultClusters;
+            _apps ??= DefaultApps;
             try
             {
                 var path = FilePath;

@@ -180,12 +180,22 @@ public class AwarenessConsentTests
         Assert.Contains("if (!IsEnabled) return;", observerTick[..1400], StringComparison.Ordinal);
 
         var legacyTick = legacy[legacy.IndexOf("private void OnPollTick", StringComparison.Ordinal)..];
-        Assert.Contains("AwarenessObserver.HasEntitlement", legacyTick[..1400], StringComparison.Ordinal);
+        // The service moved to Core; its HasEntitlement is the same tier-1 expression via CoreEntitlement.
+        Assert.Contains("if (!HasEntitlement) return;", legacyTick[..1400], StringComparison.Ordinal);
 
         // …and it has to be ahead of the title read, or a lapsed account is observed and then discarded.
-        var guard = legacyTick.IndexOf("AwarenessObserver.HasEntitlement", StringComparison.Ordinal);
+        var guard = legacyTick.IndexOf("if (!HasEntitlement) return;", StringComparison.Ordinal);
         var read = legacyTick.IndexOf("GetActiveWindowTitle()", StringComparison.Ordinal);
         Assert.True(guard >= 0 && read > guard, "the entitlement guard must precede the window-title read");
+    }
+
+    [Fact]
+    public void WpfBuildsTheLegacyObserverWithoutAPrivacyFilter()
+    {
+        // The Core service takes an optional title filter that only the Avalonia head passes
+        // (docs/avalonia-decisions.md). WPF's legacy observer is the frozen reference: one argument.
+        var app = SourceRoots.ReadProductFile("App.xaml.cs");
+        Assert.Contains("WindowAwareness = new WindowAwarenessService(ReadForegroundWindowTitle);", app, StringComparison.Ordinal);
     }
 
     [Fact]

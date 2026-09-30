@@ -157,6 +157,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // purpose.
             if (enabled) AwarenessPause.Resume();
 
+            // WPF MainWindow.CompanionRoom.cs:236-245: the dial is the on/off call site.
+            if (enabled) App.WindowAwareness.Start(); else App.WindowAwareness.Stop();
+
             Log.Information("Awareness Mode {State} via the awareness dial", enabled ? "enabled" : "disabled");
             return enabled;
         }

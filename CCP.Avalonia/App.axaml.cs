@@ -32,6 +32,11 @@ namespace ConditioningControlPanel.Avalonia
         /// Local-only: no sync, no streak writes, no ResetProgress on this head (oracle-achievements.md).</summary>
         internal static AchievementEngine? Achievements { get; private set; }
 
+        /// <summary>WPF App.WindowAwareness (App.xaml.cs:2674), the legacy title observer. X11/XWayland
+        /// titles only; unlike WPF, the privacy rules run on each title first (docs/avalonia-decisions.md).</summary>
+        internal static WindowAwarenessService WindowAwareness { get; } =
+            new(Platform.X11ActiveWindow.ReadTitle, WindowAwarenessService.PassesPrivacyRules);
+
         /// <summary>The one session runner (WPF MainWindow._sessionEngine), or null on the headless render path.</summary>
         internal static SessionRunner? Sessions { get; set; }
         /// <summary>THE FUSE (WPF App.DescentCountdown). Built before the shell so its spark can subscribe.</summary>
