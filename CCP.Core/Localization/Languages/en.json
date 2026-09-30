@@ -6175,6 +6175,7 @@
   "lockdown_ee_button": "EMERGENCY EXIT",
   "lockdown_ee_sub": "press it if you want out",
   "lockdown_ee_tooltip": "Opens the way out. Getting through it is still up to you.",
+  "lockdown_ee_phrase_steps_fmt": "The exit games are not on this build yet. The way out: tap the timer digits 5 times, each within a second of the last, then type \"let me out\" and press Enter. Time left: {0}",
   "lockdown_badge_label": "LOCKDOWN",
   "lockdown_badge_end": "End",
   "lockdown_badge_tooltip": "Lockdown is running. Click to open the Lockdown tab.",

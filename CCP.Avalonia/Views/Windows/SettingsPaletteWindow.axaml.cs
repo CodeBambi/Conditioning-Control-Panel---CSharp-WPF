@@ -94,8 +94,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                // ponytail: WPF refuses while App.Lockdown.IsActive. LockdownService is not on this
-                // head, so Lockdown cannot be active; add the check when it arrives.
+                // Lockdown owns the screen; a navigation palette floating above it reads as an
+                // escape hatch even though it only ever calls ShowTab (WPF SettingsPaletteWindow.xaml.cs:80).
+                if (MainShellWindow.LockdownActive) return;
                 if (_instance != null)
                 {
                     _instance.ClosePalette(fromEscape: false);

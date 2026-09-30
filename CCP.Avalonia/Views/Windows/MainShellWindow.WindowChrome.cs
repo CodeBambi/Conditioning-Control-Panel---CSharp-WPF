@@ -138,8 +138,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnMinimize_Click(object? sender, RoutedEventArgs e)
         {
             CoreBark.NotifyUiAction("minimize");
-            // ponytail: still needs App.Lockdown (NotifyEscapeAttempt - minimizing during a
-            // lockdown stays ALLOWED, it just gets noticed). The tube hides via OnShellStateForTube.
+            // WPF WindowChrome.cs:62: minimizing during a lockdown stays ALLOWED, it just gets noticed
+            // (no-op outside lockdown). The tube hides via OnShellStateForTube.
+            try { Services.LockdownService.Current?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Minimize); } catch { }
             WindowState = WindowState.Minimized;
         }
 

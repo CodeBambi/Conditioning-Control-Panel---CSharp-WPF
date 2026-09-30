@@ -17,11 +17,8 @@ namespace ConditioningControlPanel.Services.Chaster;
 /// </summary>
 public static class ChasterHooks
 {
-    /// <summary>Which Lockdown tripwires are "trying to leave". Close, Stop and a wrong phrase
-    /// are. The emergency exit NEVER is. Minimize is allowed, a system key is usually a
-    /// reflex, a greyed toggle is curiosity and a starved dose is not an exit at all.</summary>
-    public static bool EscapeCosts(string? kind) =>
-        kind is EscapeKinds.Close or EscapeKinds.Stop or EscapeKinds.WrongPhrase;
+    /// <summary>Which Lockdown tripwires are "trying to leave": the Core rule, <see cref="EscapeKinds.CostsChaster"/>.</summary>
+    public static bool EscapeCosts(string? kind) => EscapeKinds.CostsChaster(kind);
 
     public static string QuestRow(QuestType type) => type == QuestType.Weekly ? "quest_weekly" : "quest";
 

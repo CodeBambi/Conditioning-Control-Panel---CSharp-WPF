@@ -53,7 +53,8 @@ internal static class ChasterHead
     /// <summary>WPF ChasterHooks.Attach, for the events this head raises: quests (and the dailies
     /// board) and level-ups. Every call is inert until the tab is on and the row is priced.
     /// ponytail: no program_done / program_skipped (ProgramService is not constructed on this head)
-    /// and no escape (Lockdown is WPF-only); hook them here when those services arrive.</summary>
+    /// and no RemoteOpen; hook them here when those services arrive. Escape: Lockdown tripwires that
+    /// EscapeKinds.CostsChaster (WPF ChasterHooks.cs:73).</summary>
     /// Returns the detach (the static LevelUp outlives any one service); a second Attach of the same service is a no-op,
     /// as WPF's _attached guard makes it.
     internal static Action Attach(ChasterService chaster, QuestService? quests)
@@ -70,9 +71,13 @@ internal static class ChasterHead
         }
         Action<int> levelUp = _ => Safe(() => chaster.Note("levelup"));
         ProgressionBank.LevelUp += levelUp;
+        var lockdown = LockdownService.Current;
+        Action<Services.Possession.EscapeAttempt> escape = a => Safe(() => { if (Services.Possession.EscapeKinds.CostsChaster(a.Kind)) chaster.Note("escape"); });
+        if (lockdown != null) lockdown.EscapeAttempted += escape;
         return () =>
         {
             ProgressionBank.LevelUp -= levelUp;
+            if (lockdown != null) lockdown.EscapeAttempted -= escape;
             if (quests != null) { quests.QuestCompleted -= done; quests.QuestCompleted -= board; quests.QuestsRefreshed -= refreshed; }
             Attached.Remove(chaster);
         };

@@ -5,7 +5,7 @@
 // The head owns one Core SessionRunner (App.Sessions), which runs only the ported subset - flash,
 // subliminal, bouncing text, lock cards (docs/avalonia-decisions.md).
 // BtnPauseSession_Click (:2021) too.
-// ponytail: dropped, each with no service on this head: corner-GIF options, lockdown/remote gates, program/punch-card/Bark/profile-sync hooks, the takeaway-shelf refresh, the
+// ponytail: dropped, each with no service on this head: corner-GIF options, remote gates, program/punch-card/Bark/profile-sync hooks, the takeaway-shelf refresh, the
 // Withdraw summary suppression and the video-teardown wait before the recap (no video service yet).
 // ponytail: both confirms use MessageDialog, so the buttons read OK/Cancel rather than WPF's
 // "▶ Start Session"/"Not yet" and "Yes, stop"/"Keep going"; the text above them is WPF's.
@@ -87,10 +87,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF BtnPauseSession_Click: resume at once; a pause asks first (it costs 100 XP)
         /// unless SkipPauseXpWarning. ponytail: MessageDialog has no "don't ask again" box, so the opt-out
-        /// is only settable from the WPF head; no Lockdown refusal (no Lockdown service here).</summary>
+        /// is only settable from the WPF head. Lockdown refuses the pause, never the resume (LockdownPauseRule).</summary>
         private async void BtnPauseSession_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
             if (App.Sessions is not { IsRunning: true } runner) return;
+            if (ConditioningControlPanel.Services.LockdownPauseRule.RefusesPauseButton(LockdownActive, runner.IsPaused))
+            {
+                await Dialogs.MessageDialog.ShowAsync(this, Loc.Get("title_lockdown"), Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_pause_du"));
+                return;
+            }
             if (runner.IsPaused)
             {
                 StartEffect(() =>   // effects come back, so the portal panic bind comes first

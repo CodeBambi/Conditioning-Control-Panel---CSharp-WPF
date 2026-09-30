@@ -77,6 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static void StopEverything()
         {
             Serilog.Log.Information("Tray: Stop everything");
+            if (RefuseStopUnderLockdown()) return;   // WPF refuses every Stop under Lockdown (StartStop.cs:45)
             try { CoreHaptics.Service?.PanicStop(); } catch (System.Exception ex) { Serilog.Log.Warning(ex, "Tray stop: haptics stop failed"); }
             StopEngine();
         }
@@ -94,8 +95,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>MainWindow.Launcher.cs RequestExit: the one real exit; OnDesktopExit saves.</summary>
         public void RequestExit()
         {
-            // ponytail: WPF also refuses under Lockdown, stops the engine and shows Circe's exit
-            // bill; this head has none of those services yet.
+            if (LockdownActive) { Serilog.Log.Information("Lockdown: Exit refused"); return; }   // WPF Launcher.cs:184
+            // ponytail: WPF also stops the engine and shows Circe's exit bill; no bill on this head yet.
             _exitRequested = true;
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
                 desktop.Shutdown();
@@ -107,6 +108,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// a missing tray host, really closes.</summary>
         protected override void OnClosing(WindowClosingEventArgs e)
         {
+            // WPF WindowChrome.cs:131: under Lockdown the user's close is refused (not even hidden),
+            // after the Close tripwire. OS / application shutdown still goes through: the recovery
+            // file puts the real panic key and Strict Lock back on the next start.
+            if (LockdownActive && e.CloseReason == WindowCloseReason.WindowClosing && !_exitRequested)
+            {
+                try { Services.LockdownService.Current?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Close); } catch { }
+                e.Cancel = true;
+                base.OnClosing(e);
+                return;
+            }
             if (Tray is not null && !_exitRequested && e.CloseReason == WindowCloseReason.WindowClosing
                 && TrayHostPresent())
             {

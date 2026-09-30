@@ -3093,8 +3093,10 @@ namespace ConditioningControlPanel
 
             // Initialize lockdown service (ephemeral — not persisted). Recover from a
             // prior run that was killed mid-lockdown so the panic key isn't stuck off.
+            LockdownService.PanicKeyUiSync = () => MainWindowRef?.SyncNoPanicState();
             LockdownService.RecoverIfNeeded();
             Lockdown = new LockdownService();
+            LockdownService.Current = Lockdown;
             // Possession: the haunt that rides the lockdown timer. It only arms when a lockdown starts
             // and LockdownPossessionEnabled is on, so constructing it here costs nothing.
             Possession = new Services.Possession.PossessionDirector(Lockdown, Services.Possession.Effects.PossessionEffectCatalog.CreateAll());

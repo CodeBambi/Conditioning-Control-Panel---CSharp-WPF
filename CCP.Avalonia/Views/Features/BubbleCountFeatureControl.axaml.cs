@@ -147,6 +147,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var s = CoreSettings.Current;
             var on = ChkStrict.IsChecked ?? false;
             if (s.BubbleCountStrictLock == on) return;
+            // WPF: a Lockdown forcing Strict Lock holds this toggle (#1282, LockdownStrictHold): put the tick back.
+            if (ConditioningControlPanel.Services.LockdownStrictHold.RefusesNow(on))
+            {
+                _isLoading = true;
+                ChkStrict.IsChecked = CoreSettings.Current.BubbleCountStrictLock;
+                _isLoading = false;
+                return;
+            }
 
             if (on)
             {

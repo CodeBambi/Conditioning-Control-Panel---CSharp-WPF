@@ -229,9 +229,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal bool NavRailHooked => _navRailHooked;
 
         /// <summary>
-        /// The rail's search pill, one line as in WPF (MainWindow.NavRail.cs:480-484). WPF's Toggle
-        /// also refuses during Lockdown; LockdownService is not on this head, so Lockdown cannot be
-        /// active here and there is nothing to refuse.
+        /// The rail's search pill, one line as in WPF (MainWindow.NavRail.cs:480-484). Toggle refuses
+        /// during Lockdown, as WPF's does.
         /// </summary>
         private void BtnNavSearch_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
             => SettingsPaletteWindow.Toggle(this);

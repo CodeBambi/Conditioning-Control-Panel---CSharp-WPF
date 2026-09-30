@@ -135,3 +135,18 @@ here record where and why the port chose something, and who advised.
   strict fall-open panic, the Test button's force reset) resumes them too; WPF leaves them held because its panic
   always stops the engine as well.
 - Advisor: reviewer (video-grace-watchdog).
+
+## 2026-09-30: Lockdown / Emergency Exit (avalonia-port/lockdown-core)
+- Question: the WPF Emergency Exit opens WebView2 exit games (EmergencyExitHostService), not portable yet. What does the slab do on Avalonia?
+- Options: (A) keep the slab, fire the tripwire + Chaster hold, show the phrase steps; (B) hide the slab.
+- Choice (A), rule verbatim:
+  "Lockdown / Emergency Exit (Avalonia, until a native or WebView host for the exit games exists): the Emergency Exit slab stays visible and keeps the Possession off-limits name BtnEmergencyExit. Clicking it only works while a lockdown is active. It fires NotifyEscapeAttempt(EscapeKinds.EmergencyExit) and Chaster.NoteSafetyExit(), then shows a notice that states the exact secret-phrase steps (5 taps on the timer digits, then type "let me out") and the time remaining. It must never call RestartTimer() or Deactivate(). The global panic key stays ignored under Lockdown, as on WPF (LockdownDisablePanicKey). This is allowed because on WPF the timer and the phrase are the only guaranteed exits, and the Emergency Exit is a gamble. Lockdown must not ship in Avalonia unless (a) the phrase path works under StrictLock and every Lockdown overlay, (b) keys are ignored only at the global-hotkey layer, never in window text input, and (c) the recovery file restores PanicKeyEnabled and StrictLockEnabled after a kill. When the exit games are ported, bring back the WPF verdict rules exactly: the verdict is rolled on the host, a sendback restarts the full timer, and closing the window changes nothing."
+- Escape paths on this head under Lockdown: timer expiry; the secret phrase; ending the process (lockdown_recovery.json restores the panic key and Strict Lock on the next start); minimize; OS shutdown (only the user's window close is refused). Refused like WPF: global panic key (MainWindow.xaml.cs:888, whatever LockdownDisablePanicKey says), Stop button and tray Stop everything (StartStop.cs:45), Exit (Launcher.cs:184), window close (WindowChrome.cs:131), session pause but never resume (LockdownPauseRule). No system-key hook exists here, so the consent dialog does not promise one. Blockers (a)-(c): `Tests/CCP.Avalonia.Tests/LockdownTests.cs`, fail-proven.
+- Advisor: oracle-deep.
+
+## 2026-09-30: Lockdown clock is UTC (deliberate improvement over WPF, both heads)
+- Question: WPF LockdownService measured Remaining / ElapsedFraction / LastActiveDuration against DateTime.Now, so a DST fall-back or a clock set back lengthened a running lockdown (an hour, on the fall-back night).
+- Choice: the Core LockdownService reads an injectable UTC clock (`UtcNow`, default DateTime.UtcNow), so both heads get it; a safety fix, not a parity divergence to undo. Tripwire timestamps (EscapeAttempt.At) stay local.
+- Also under this rule: the Emergency Exit notice always states the real time left, even with HideLockdownTimer (the notice is the way out; hiding its clock would hide the exit).
+- Tests: `LockdownTests.RemainingFollowsAMonotonicUtcClockNotTheWallClock`, `TheSlabTripsTheWireHoldsChasterAndShowsTheRealTimeEvenWhenTheTimerIsHidden`, `TheTimerRunningOutEndsTheLockdown` (fail-proven); WPF source pins in LockdownEmergencyExitTests updated.
+- Advisor: reviewer (lockdown-core review).
