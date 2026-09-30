@@ -219,6 +219,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RbBambiCloud.Click += BrowserSiteToggle_Click;
             RbHypnoTube.Click += BrowserSiteToggle_Click;
             BtnReloadBrowser.Click += BtnReloadBrowser_Click;
+            BrowserWebHost.NavigationCompleted += url => Shell?.OnBrowserNavigationCompleted(url);
             BtnWebcamTracking.Click += BtnWebcamTracking_Click;
             BtnMuteBrowser.Click += BtnMuteBrowser_Click;
             BtnPopOutBrowser.Click += BtnPopOutBrowser_Click;
@@ -373,8 +374,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // -- browser card ---------------------------------------------------------------
         private void BrowserLoadingText_Click(object? sender, PointerPressedEventArgs e) { }   // mw.BrowserLoadingText_Click(...)
-        private void BrowserSiteToggle_Click(object? sender, RoutedEventArgs e) { }   // mw.BrowserSiteToggle_Click(...)
-        private void BtnReloadBrowser_Click(object? sender, RoutedEventArgs e) { }    // mw.BtnReloadBrowser_Click(...)
+        private void BrowserSiteToggle_Click(object? sender, RoutedEventArgs e) => Shell?.BrowserSiteToggle_Click(sender, e);
+        private void BtnReloadBrowser_Click(object? sender, RoutedEventArgs e) => Shell?.BtnReloadBrowser_Click(sender, e);
         private void BtnWebcamTracking_Click(object? sender, RoutedEventArgs e) { }   // mw.BtnWebcamTracking_Click(...)
         private void BtnMuteBrowser_Click(object? sender, RoutedEventArgs e) { }      // mw.BtnMuteBrowser_Click(...)
         private void BtnPopOutBrowser_Click(object? sender, RoutedEventArgs e) { }    // mw.BtnPopOutBrowser_Click(...)

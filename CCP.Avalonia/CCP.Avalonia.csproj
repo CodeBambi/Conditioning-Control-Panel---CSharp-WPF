@@ -92,6 +92,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- EmiCodexWindow's plain reader: the same chapter files the WPF head ships under Resources\web\codex. -->
+    <Content Include="..\Assets\web\codex\chapters\*.json" Link="Resources\web\codex\chapters\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <Content Include="..\Assets\Audio\backroom\words\**\*" Link="Resources\Audio\backroom\words\%(RecursiveDir)%(Filename)%(Extension)" Exclude="..\Assets\Audio\**\README.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
