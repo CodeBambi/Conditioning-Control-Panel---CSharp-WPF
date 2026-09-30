@@ -1071,3 +1071,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   safe word works under Lockdown (oracle-deep). Help and "What you can say" list only runnable commands.
 - Evidence: VoiceCommandsTests (Avalonia WAV-fed + Core), SpeechEngine cancelled-token test, fail-proven; never the real mic. Rows stub.
   Split at the 1000-line cap. Review: FIX -> fixed.
+
+## avalonia-port/webcam-core: +494
+- Webcam slice 1: WebcamCalibrationData moved to Core (git mv; same file and format); new Core WebcamPipeline holds the frame-free logic
+  verbatim (BlinkDetector thresholds + 2 s hold + cooldown, GazeSideClassifier hysteresis + fallback, OneEuroFilter); WPF
+  WebcamTrackingService delegates (-330 lines, same capture thread, no new allocations). Capture stack decided (oracle): OpenCvSharp4
+  + OnnxRuntime on both heads.
+- Evidence: WebcamPipelineTests (9, synthetic streams, fail-proven); no camera opened. Row shell-webcam stub. Review: ACCEPT.

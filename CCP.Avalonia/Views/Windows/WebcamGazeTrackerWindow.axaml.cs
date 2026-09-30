@@ -31,7 +31,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <c>MainWindow.BtnWebcamDebugTrackerTest_Click</c> (MainWindow.LabTab.cs:1059) and only after
     /// two preconditions it can evaluate and this head cannot: the tracking service is RUNNING
     /// (starting it here if needed) and <c>svc.Calibration != null</c>. Neither exists on this head
-    /// — Services/Webcam/WebcamTrackingService.cs is the device, and Core holds only WebcamConsent
+    /// — Services/Webcam/WebcamTrackingService.cs is the device; Core holds WebcamConsent, the frame-free
+    /// blink/gaze pipeline and calibration (Services/Webcam) but no capture
     /// plus CoreWebcam (capability + revoke, no feed) — so a button wired to this window would put
     /// up a full-screen "gaze
     /// tracker" whose dot can never move, with the two checks that would have refused honestly
