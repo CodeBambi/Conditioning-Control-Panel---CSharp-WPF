@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Windows.Threading;
+using System.Threading;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -81,22 +80,63 @@ namespace ConditioningControlPanel.Services
         /// construction's catch block exists to survive, and it claims in its log line to fall back to
         /// legacy awareness — so it has to actually do it.</para>
         /// </summary>
-        private static bool V2OwnsReactions => Services.Awareness.AwarenessV2Routing.IsActive;
+        private static bool V2OwnsReactions { get { try { return V2OwnsReactionsProvider?.Invoke() == true; } catch { return false; } } }
 
-        // P/Invoke declarations
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetForegroundWindow();
+        /// <summary>WPF: <c>AwarenessV2Routing.IsActive</c>. Unset on heads without Awareness v2.</summary>
+        public static volatile Func<bool>? V2OwnsReactionsProvider;
 
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+        /// <summary>WPF: <c>App.Awareness?.Start()/Stop()</c> (true = start). Unset on heads without v2.</summary>
+        public static volatile Action<bool>? V2Lifecycle;
+
+        /// <summary>
+        /// Tier-1 entitlement, same expression as WPF <c>AwarenessObserver.HasEntitlement</c>
+        /// (Patreon premium or the ? box's free day), read through the Core seam both heads seed.
+        /// Fails closed when no head has seeded it.
+        /// </summary>
+        public static bool HasEntitlement =>
+            CoreEntitlement.HasPremium || CoreEntitlement.IsFreeToday("awareness");
+
+        // The head's active-window title reader (WPF: user32 GetForegroundWindow/GetWindowText;
+        // Linux: X11 _NET_ACTIVE_WINDOW). "" when there is nothing to read.
+        private readonly Func<string> _titleSource;
+
+        // Optional privacy filter run on the raw title BEFORE anything else reads it; false = drop
+        // (treated as Unknown, no event, nothing kept). WPF passes none: its legacy observer never
+        // applied the deny list (docs/avalonia-decisions.md).
+        private readonly Func<string, bool>? _allowTitle;
+
+        // Timers post back to the context Start() ran on (the UI thread on both heads), which is what
+        // DispatcherTimer gave the WPF original.
+        private SynchronizationContext? _context;
+
+        /// <summary>
+        /// The Avalonia head's <c>allowTitle</c> filter: the v2 privacy layer
+        /// (<see cref="Awareness.AwarenessPrivacyRules.Evaluate(Awareness.AwarenessSightRequest)"/>: incognito
+        /// markers, the effective deny list incl. seeded groups, matched on id, name, cluster and raw
+        /// title). The legacy poll has no process id, so the id is the bespoke app id, else the
+        /// dictionary service, else "window" (never Unknown, which Evaluate would drop wholesale).
+        /// </summary>
+        public static bool PassesPrivacyRules(string title)
+        {
+            var (cluster, appId) = AppClusterMap.Classify(title);
+            var (_, name, service, _) = CategorizeWindow(title);
+            var id = !string.IsNullOrEmpty(appId) ? appId : !string.IsNullOrEmpty(service) ? service : "window";
+            return Awareness.AwarenessPrivacyRules.Evaluate(new Awareness.AwarenessSightRequest(id, name, cluster, title)).Allowed;
+        }
+
+        public WindowAwarenessService(Func<string> titleSource, Func<string, bool>? allowTitle = null)
+        {
+            _titleSource = titleSource ?? throw new ArgumentNullException(nameof(titleSource));
+            _allowTitle = allowTitle;
+        }
 
         // Events
         public event EventHandler<ActivityChangedEventArgs>? ActivityChanged;
         public event EventHandler<ActivityChangedEventArgs>? StillOnActivity;
 
         // State
-        private DispatcherTimer? _pollTimer;
-        private DispatcherTimer? _stillOnTimer;
+        private Timer? _pollTimer;
+        private Timer? _stillOnTimer;
         private ActivityCategory _currentCategory = ActivityCategory.Unknown;
         private string _currentDetectedName = "";
         private string _currentServiceName = "";
@@ -371,34 +411,31 @@ namespace ConditioningControlPanel.Services
             // observer would have left the older, blunter watcher running for a lapsed account.
             // Awareness is a tier-1 feature (ExclusiveFeature "awareness", Tier = 1) and this asks the
             // same question its page's veil does.
-            if (!Services.Awareness.AwarenessObserver.HasEntitlement)
+            if (!HasEntitlement)
             {
-                App.Logger?.Debug("WindowAwareness: Not starting - no premium entitlement for awareness");
+                Log.Debug("WindowAwareness: Not starting - no premium entitlement for awareness");
                 return;
             }
 
-            if (App.Settings?.Current?.AwarenessModeEnabled != true ||
-                App.Settings?.Current?.AwarenessConsentGiven != true)
+            if (CoreSettings.Current.AwarenessModeEnabled != true ||
+                CoreSettings.Current.AwarenessConsentGiven != true)
             {
-                App.Logger?.Debug("WindowAwareness: Not starting - feature disabled or no consent");
+                Log.Debug("WindowAwareness: Not starting - feature disabled or no consent");
                 return;
             }
 
-            _pollTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1.5) // Fast polling for quick tab/app detection
-            };
-            _pollTimer.Tick += OnPollTick;
-            _pollTimer.Start();
+            _context = SynchronizationContext.Current;
             _isRunning = true;
+            var poll = TimeSpan.FromSeconds(1.5); // Fast polling for quick tab/app detection
+            _pollTimer = Arm(poll, poll, () => _pollTimer, () => OnPollTick(this, EventArgs.Empty));
 
             // v2 rides the same on/off switch. This is the one call site every caller already uses
             // (the avatar tube on load, the Companion tab's awareness dial), so starting the observer
             // here is what makes the toggle take effect without a relaunch — and the observer's own
             // Start() is what loads and PRUNES the ledger, which must never sit behind a UI surface.
-            try { App.Awareness?.Start(); } catch (Exception ex) { App.Logger?.Warning(ex, "WindowAwareness: v2 observer failed to start"); }
+            try { V2Lifecycle?.Invoke(true); } catch (Exception ex) { Log.Warning(ex, "WindowAwareness: v2 observer failed to start"); }
 
-            App.Logger?.Information("WindowAwareness: Started monitoring (v2 owns reactions: {V2})", V2OwnsReactions);
+            Log.Information("WindowAwareness: Started monitoring (v2 owns reactions: {V2})", V2OwnsReactions);
         }
 
         /// <summary>
@@ -408,17 +445,33 @@ namespace ConditioningControlPanel.Services
         {
             if (!_isRunning) return;
 
-            _pollTimer?.Stop();
+            _pollTimer?.Dispose();
             _pollTimer = null;
-            _stillOnTimer?.Stop();
+            _stillOnTimer?.Dispose();
             _stillOnTimer = null;
             _isRunning = false;
             _currentCategory = ActivityCategory.Unknown;
             _currentDetectedName = "";
 
-            try { App.Awareness?.Stop(); } catch (Exception ex) { App.Logger?.Warning(ex, "WindowAwareness: v2 observer failed to stop"); }
+            try { V2Lifecycle?.Invoke(false); } catch (Exception ex) { Log.Warning(ex, "WindowAwareness: v2 observer failed to stop"); }
 
-            App.Logger?.Debug("WindowAwareness: Stopped monitoring");
+            Log.Debug("WindowAwareness: Stopped monitoring");
+        }
+
+        // One-shot (period Infinite) or periodic timer whose tick runs on the Start() context. A tick
+        // already queued when its timer was replaced or stopped is dropped: it runs only while that
+        // timer is still the current one (<paramref name="current"/>), which is what DispatcherTimer.Stop
+        // guaranteed the WPF original.
+        private Timer Arm(TimeSpan due, TimeSpan period, Func<Timer?> current, Action tick)
+        {
+            Timer? self = null;
+            self = new Timer(_ =>
+            {
+                void Run() { if (_isRunning && ReferenceEquals(self, current())) tick(); }
+                if (_context is { } c) c.Post(_ => Run(), null); else Run();
+            }, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            self.Change(due, period);
+            return self;
         }
 
         /// <summary>
@@ -429,7 +482,7 @@ namespace ConditioningControlPanel.Services
             // Use the randomized target rolled at the last reaction when set, else the fixed base.
             var cooldownSeconds = _nextReactionCooldownSeconds > 0
                 ? _nextReactionCooldownSeconds
-                : (App.Settings?.Current?.AwarenessReactionCooldownSeconds ?? 90);
+                : CoreSettings.Current.AwarenessReactionCooldownSeconds;
             return (DateTime.Now - _lastReactionTime).TotalSeconds >= cooldownSeconds;
         }
 
@@ -440,7 +493,7 @@ namespace ConditioningControlPanel.Services
         {
             var cooldownSeconds = _nextStillOnCooldownSeconds > 0
                 ? _nextStillOnCooldownSeconds
-                : (App.Settings?.Current?.AwarenessReactionCooldownSeconds ?? 90);
+                : CoreSettings.Current.AwarenessReactionCooldownSeconds;
             return (DateTime.Now - _lastStillOnTime).TotalSeconds >= cooldownSeconds;
         }
 
@@ -450,7 +503,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private int RollCooldownSeconds()
         {
-            var s = App.Settings?.Current;
+            var s = CoreSettings.Current;
             var baseSeconds = s?.AwarenessReactionCooldownSeconds ?? 90;
             var maxSeconds = s?.AwarenessCooldownMaxSeconds ?? 0;
             if (maxSeconds > baseSeconds)
@@ -487,7 +540,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void RestartStillOnTimer()
         {
-            _stillOnTimer?.Stop();
+            _stillOnTimer?.Dispose();
+            _stillOnTimer = null;
             _currentMilestoneIndex = 0; // Reset milestones when activity changes
 
             // Only start if we have a recognized activity (not Unknown or Idle)
@@ -515,19 +569,15 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            _stillOnTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMinutes(waitMinutes)
-            };
-            _stillOnTimer.Tick += OnStillOnMilestoneTick;
-            _stillOnTimer.Start();
+            _stillOnTimer = Arm(TimeSpan.FromMinutes(waitMinutes), Timeout.InfiniteTimeSpan, () => _stillOnTimer, () => OnStillOnMilestoneTick(this, EventArgs.Empty));
 
-            App.Logger?.Debug("WindowAwareness: Still-on timer set for {Minutes}min milestone", minutesUntilMilestone);
+            Log.Debug("WindowAwareness: Still-on timer set for {Minutes}min milestone", minutesUntilMilestone);
         }
 
         private void OnStillOnMilestoneTick(object? sender, EventArgs e)
         {
-            _stillOnTimer?.Stop();
+            _stillOnTimer?.Dispose();
+            _stillOnTimer = null;
 
             // Fire the StillOnActivity event if we're still on the same activity. Under v2 the whole
             // {1, 5, 10}-minute nag is replaced by cumulative-dwell LongHaul milestones (doc 02 §4.4),
@@ -546,7 +596,11 @@ namespace ConditioningControlPanel.Services
                     var milestone = _currentMilestoneIndex < StillOnMilestonesMinutes.Length
                         ? StillOnMilestonesMinutes[_currentMilestoneIndex]
                         : 10;
-                    App.Logger?.Debug("WindowAwareness: Still on {Name} for {Minutes} minutes", _currentDetectedName, milestone);
+                    // Filtered (Avalonia) path: names can carry a page title, so the category only.
+                    if (_allowTitle == null)
+                        Log.Debug("WindowAwareness: Still on {Name} for {Minutes} minutes", _currentDetectedName, milestone);
+                    else
+                        Log.Debug("WindowAwareness: Still on {Category} for {Minutes} minutes", _currentCategory, milestone);
                     StillOnActivity?.Invoke(this, new ActivityChangedEventArgs(
                         _currentCategory, _currentCategory, _currentDetectedName, _currentServiceName, _currentPageTitle));
                 }
@@ -557,6 +611,9 @@ namespace ConditioningControlPanel.Services
             StartNextMilestoneTimer();
         }
 
+        /// <summary>One poll, synchronously (tests; the timer calls the same body).</summary>
+        internal void PollOnce() => OnPollTick(this, EventArgs.Empty);
+
         private void OnPollTick(object? sender, EventArgs e)
         {
             try
@@ -565,7 +622,7 @@ namespace ConditioningControlPanel.Services
                 // expires (or a free day that rotates out at midnight) while this timer is armed must
                 // stop the watching, not merely re-draw the padlock over it — the #267 rule. Ahead of
                 // GetActiveWindowTitle so a lapsed account's titles are never read.
-                if (!Services.Awareness.AwarenessObserver.HasEntitlement) return;
+                if (!HasEntitlement) return;
 
                 // "Not right now." Tested BEFORE the window title is read, so a pause observes
                 // nothing rather than observing and discarding.
@@ -590,12 +647,26 @@ namespace ConditioningControlPanel.Services
 
                 var windowTitle = GetActiveWindowTitle();
 
+                // Head privacy filter (Avalonia: deny list + incognito), before anything below sees
+                // the title: a dropped window is never logged, classified or kept, raises no event and
+                // silences the still-on timer; the state reads Unknown.
+                if (_allowTitle != null && windowTitle.Length > 0 && !_allowTitle(windowTitle))
+                {
+                    _stillOnTimer?.Dispose();
+                    _stillOnTimer = null;
+                    _lastWindowTitle = "";
+                    _lastActivityChange = DateTime.Now;
+                    _currentCategory = ActivityCategory.Unknown;
+                    _currentDetectedName = _currentServiceName = _currentPageTitle = "";
+                    return;
+                }
+
                 // Debug: Log what we're seeing
                 if (!string.IsNullOrEmpty(windowTitle) && windowTitle != _lastWindowTitle)
                 {
                     // Never the title itself. This is whatever the user has on screen right
                     // now - browser tab titles, document names - and it changes on every switch.
-                    App.Logger?.Debug("WindowAwareness: Active window changed ({Chars} chars of title)", windowTitle.Length);
+                    Log.Debug("WindowAwareness: Active window changed ({Chars} chars of title)", windowTitle.Length);
                 }
 
                 // Check for idle (same window for too long)
@@ -627,7 +698,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("WindowAwareness: Poll error - {Error}", ex.Message);
+                Log.Warning("WindowAwareness: Poll error - {Error}", ex.Message);
             }
         }
 
@@ -648,8 +719,12 @@ namespace ConditioningControlPanel.Services
             _lastActivityChange = DateTime.Now; // Track when this activity started
 
             // Fire event (don't log the window title for privacy, only the detected name)
-            App.Logger?.Debug("WindowAwareness: Detected {Name} ({Category}) - Service: {Service}, IsNew: {IsNew}",
-                detectedName, newCategory, serviceName, isNewService);
+            // (Filtered/Avalonia path: not the names either - DetectedName embeds the page title.)
+            if (_allowTitle == null)
+                Log.Debug("WindowAwareness: Detected {Name} ({Category}) - Service: {Service}, IsNew: {IsNew}",
+                    detectedName, newCategory, serviceName, isNewService);
+            else
+                Log.Debug("WindowAwareness: Detected {Category}, IsNew: {IsNew}", newCategory, isNewService);
 
             // v2 owns the moment: the state above stays current for the readouts that consume it, but
             // the reaction/bark wiring hangs off this event and must not fire a second pipeline.
@@ -665,12 +740,7 @@ namespace ConditioningControlPanel.Services
 
         private string GetActiveWindowTitle()
         {
-            var handle = GetForegroundWindow();
-            if (handle == IntPtr.Zero) return "";
-
-            var sb = new StringBuilder(512);
-            GetWindowText(handle, sb, 512);
-            return sb.ToString();
+            return _titleSource() ?? "";
         }
 
         /// <summary>

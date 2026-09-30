@@ -151,6 +151,13 @@ here record where and why the port chose something, and who advised.
 - Tests: `LockdownTests.RemainingFollowsAMonotonicUtcClockNotTheWallClock`, `TheSlabTripsTheWireHoldsChasterAndShowsTheRealTimeEvenWhenTheTimerIsHidden`, `TheTimerRunningOutEndsTheLockdown` (fail-proven); WPF source pins in LockdownEmergencyExitTests updated.
 - Advisor: reviewer (lockdown-core review).
 
+## 2026-09-30: Awareness legacy observer applies the privacy rules on Avalonia only
+- Question: WPF's legacy title observer (WindowAwarenessService, now in Core) never applied the deny list or the incognito drop; only Awareness v2 (AwarenessObserverPolicy) does, and v2 is not on this head.
+- Choice: Avalonia applies AwarenessPrivacyRules (deny list incl. seeded groups + incognito) in the poll through the service's optional `allowTitle` filter (`WindowAwarenessService.PassesPrivacyRules`), before anything reads the title (logs included). A dropped window reads Unknown, raises no event and keeps nothing. WPF's legacy observer does not, and is left unchanged (constructed with no filter). Privacy-tightening deviation.
+- Also: this head has no AI service, so the reaction is always the preset line WPF says with AI off; no title, app name or reaction leaves the machine.
+- Tests: `Tests/CCP.Core.Tests/WindowAwarenessServiceTests.cs` (denied/incognito produce no event, fail-proven); `AwarenessConsentTests.WpfBuildsTheLegacyObserverWithoutAPrivacyFilter` (WPF source pin).
+- Advisor: supervisor.
+
 ## 2026-09-30: Remote Control – escape integrity (avalonia-port/remote-control-core)
 Remote Control – escape integrity. A remote controller may never remove the subject's last means of escape. 1. disable_panic is always refused and reported to the controller as refused; the panic key can be disabled only locally, through Lockdown; the consent waiver must not list 'disable panic key'. Deviation from WPF (RemoteControlService disable_panic): WPF saves the change, it outlives disconnect and restart, and the client doesn't enforce the tier. 2. While Lockdown is active, enable_strict_lock is refused; commands that only reduce restraint (stop_session, pause, trigger_panic, enable_panic, disable_strict_lock) run exactly as on WPF, don't end the Lockdown timer, and Lockdown restores the user's earlier settings when it ends.
 - Advisor: oracle-deep.
