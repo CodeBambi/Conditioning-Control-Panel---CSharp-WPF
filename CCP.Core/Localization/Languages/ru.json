@@ -745,6 +745,7 @@
   "tooltip_change_camera_shortcut": "Нажмите, чтобы изменить сочетание клавиш камеры",
   "camera_shortcut_toast_started": "Отслеживание камеры запущено",
   "camera_shortcut_toast_stopped": "Отслеживание камеры остановлено",
+  "panic_camera_stopped": "Камера остановлена. Запустите отслеживание, чтобы продолжить.",
   "btn_confirm": "Подтвердить",
   "btn_save": "Сохранить",
   "btn_close": "Закрыть",
