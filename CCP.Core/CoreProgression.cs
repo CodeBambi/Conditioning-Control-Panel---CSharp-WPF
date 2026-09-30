@@ -54,5 +54,13 @@ namespace ConditioningControlPanel
         {
             try { TrackBubbleCountResultProvider?.Invoke(correct); } catch { }
         }
+
+        /// <summary>Seconds of a mandatory video watched (WPF AchievementService.TrackVideoWatched).</summary>
+        public static volatile Action<double>? TrackVideoWatchedProvider;
+
+        public static void TrackVideoWatched(double seconds)
+        {
+            try { TrackVideoWatchedProvider?.Invoke(seconds); } catch { }
+        }
     }
 }

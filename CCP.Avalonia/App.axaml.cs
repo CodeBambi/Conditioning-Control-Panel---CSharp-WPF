@@ -228,6 +228,8 @@ namespace ConditioningControlPanel.Avalonia
 
                 // Pop quiz: Core schedules, PopQuizHost opens the window (WPF App.PopQuiz).
                 CoreEngine.PopQuiz = Views.Windows.PopQuizHost.Instance.Scheduler;
+                // Mandatory video: Core schedules, the overlay plays (WPF App.Video).
+                CoreEngine.Video = Views.Overlays.MandatoryVideoOverlay.Instance.Scheduler;
 
                 // The ambient flash surface. CoreFlash owns the rhythm; a burst needs any attached
                 // visual to reach Screens, and the main window is the one that always is.
@@ -382,6 +384,8 @@ namespace ConditioningControlPanel.Avalonia
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+                // WPF AchievementService.TrackVideoWatched -> App.Quests.TrackVideoMinutes.
+                CoreProgression.TrackVideoWatchedProvider = sec => Quests?.TrackVideoMinutes(Achievements?.TrackVideoWatched(sec) ?? sec / 60.0);
                 SeedLevelAchievements(Achievements);
                 StartQuests();
 
