@@ -50,6 +50,8 @@ import { renderChart } from './charts.js';
 
 const STAGE_W = 1376;
 const STAGE_H = 768;
+/* the closest a hotspot's name tag comes to the plane's left or right edge */
+const TAG_EDGE = 8;
 
 /* module-relative asset base (campus.js:336's law) */
 const ART_BASE = (function resolveArtBase() {
@@ -62,16 +64,24 @@ const QUADS_URL = (function resolveQuads() {
 }());
 
 /** Slide art per view. The quad table still keys the shot names the extractor
- *  used; FEED_KEY maps our filenames back to it. */
+ *  used; FEED_SHOTS maps our slides back to them. */
 const VIEW_ART = Object.freeze({
   wide: 'lab-wide.png',
   monitors: 'lab-monitors.png',
   desk: 'lab-desk.png',
   shelf: 'lab-shelf.png',
 });
-const FEED_KEY = 'annex_shot_monitors2';
-const MASK_FILE = 'lab-monitors-mask.png';
-/* cam8 sits mostly behind the laptop; the demo's proven override */
+/** THE PAINTED SCREENS. Every slide that shows the monitor wall names its shot
+ *  in the quad table, the mask that punches its glass, and the prefix its
+ *  screen names carry. The wide shot's ten are the SAME ten tiles as the
+ *  close-up's, re-pinned: one wall on whichever of the two slides is up. Until
+ *  2026-09-30 the wide shot had no row here and showed ten slabs of raw chroma
+ *  green, with its mask and its quads already on disk. */
+const FEED_SHOTS = Object.freeze({
+  wide: Object.freeze({ key: 'annex_pixel_establishing2', mask: 'lab-wide-mask.png', prefix: 'est_' }),
+  monitors: Object.freeze({ key: 'annex_shot_monitors2', mask: 'lab-monitors-mask.png', prefix: '' }),
+});
+/* cam8 sits mostly behind the laptop; the demo's proven override (close-up only) */
 const CAM8_BBOX = Object.freeze([581, 539, 215, 143]);
 
 /** Hotspots per view, in slide pixels: [x, y, w, h, action, lexKey, fallback]. */
@@ -162,9 +172,10 @@ export function createAnnexLab(caps) {
   let paperBack = null;     /* set while the BACK of the sheet is the side up  */
   let backPill = null;      /* the step-back pill, on the ROOT (wave 3)        */
   let descent = null;
-  let quads = null;
+  let quads = null;         /* the close-up's own table: the laptop reads it   */
+  let quadsAll = null;      /* the whole quad file, every shot                 */
   let quadsWanted = false;
-  let feedMask = null;
+  const feedMasks = {};     /* mask file -> Promise<data url | null>, per visit */
   const timers = [];
 
   /* ONE page-owned blob under the key `annex`, never six keys. `read` is the
@@ -316,7 +327,9 @@ export function createAnnexLab(caps) {
     if (dead || view === name) return;
     const entering = view !== null;
     view = name;
-    if (name !== 'monitors' && wall) wall.stop();
+    /* the wall keeps running between the two slides that show it (no second
+     * power-on, no restarted hum for monitors that were on the whole time) */
+    if (!FEED_SHOTS[name] && wall) wall.stop();
 
     clearLayers();
     stage.textContent = '';
@@ -325,7 +338,7 @@ export function createAnnexLab(caps) {
     art.src = ART_BASE + VIEW_ART[name];
     stage.appendChild(art);
 
-    if (name === 'monitors') mountFeeds();
+    if (FEED_SHOTS[name]) mountFeeds();
 
     (HOTSPOTS[name] || []).forEach((h) => stage.appendChild(hotspot(h)));
     if (name === 'monitors') mountLaptopHotspot();
@@ -351,6 +364,11 @@ export function createAnnexLab(caps) {
     b.style.top = y + 'px';
     b.style.width = w + 'px';
     b.style.height = h + 'px';
+    /* How far the name tag may slide off this box's centre and stay on the
+     * plane (lab.css clamps it there). A phone's tag is wider than a narrow
+     * box: the stairs are 130 slide px, their tag about 310. */
+    b.style.setProperty('--tag-lo', (TAG_EDGE - x - w / 2) + 'px');
+    b.style.setProperty('--tag-hi', (STAGE_W - TAG_EDGE - x - w / 2) + 'px');
     const label = t(key, fb);
     b.setAttribute('aria-label', label);
     b.appendChild(el('span', 'al-hot-tag', label));
@@ -382,18 +400,62 @@ export function createAnnexLab(caps) {
       .then((r) => r.json())
       .then((j) => {
         if (dead) return;
-        quads = j && j[FEED_KEY] ? j[FEED_KEY] : null;
-        if (view === 'monitors') { mountFeeds(); mountLaptopHotspot(); }
+        quadsAll = j && typeof j === 'object' ? j : null;
+        quads = quadsAll && quadsAll[FEED_SHOTS.monitors.key] ? quadsAll[FEED_SHOTS.monitors.key] : null;
+        /* warm every mask this visit can use, so walking up to the wall never
+         * shows the green under the glass while its mask decodes */
+        Object.keys(FEED_SHOTS).forEach((k) => { if (shotScreens(k).length) feedMask(FEED_SHOTS[k].mask); });
+        if (FEED_SHOTS[view]) mountFeeds();
+        if (view === 'monitors') mountLaptopHotspot();
       })
-      .catch(() => { quads = null; log('annex quads failed', 'warn'); });
+      .catch(() => { quads = null; quadsAll = null; log('annex quads failed', 'warn'); });
+  }
+
+  /** The screens a slide's shot has on file, or [] (no quad file yet, no row). */
+  function shotScreens(name) {
+    const shot = FEED_SHOTS[name];
+    const table = shot && quadsAll ? quadsAll[shot.key] : null;
+    return table && Array.isArray(table.screens) ? table.screens : [];
+  }
+
+  /** Decode a full-size mask once per visit, red channel to alpha. */
+  function feedMask(file) {
+    if (feedMasks[file]) return feedMasks[file];
+    feedMasks[file] = new Promise(resolve => {
+      const mask = new Image();
+      mask.onload = () => {
+        if (dead) { resolve(null); return; }
+        try {
+          const cv = doc.createElement('canvas');
+          cv.width = mask.naturalWidth;
+          cv.height = mask.naturalHeight;
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(mask, 0, 0);
+          const im = ctx.getImageData(0, 0, cv.width, cv.height);
+          for (let i = 0; i < im.data.length; i += 4) im.data[i + 3] = im.data[i];
+          ctx.putImageData(im, 0, 0);
+          resolve(cv.toDataURL());
+        } catch (e) { log('annex mask failed', 'warn'); resolve(null); }
+      };
+      mask.onerror = () => { log('annex mask missing', 'warn'); resolve(null); };
+      mask.src = ART_BASE + file;
+    });
+    return feedMasks[file];
   }
 
   function mountFeeds() {
+    const at = view;
+    const shot = FEED_SHOTS[at];
+    if (!shot) return;
     loadQuads();
-    if (!quads) return;
+    if (!quadsAll) return;   /* still on its way: loadQuads mounts on arrival */
+    const screens = shotScreens(at);
+    /* no screens on file for this slide: it shows its paint, and a wall still
+     * running from the other slide stops, because nobody can see it */
+    if (!screens.length) { if (wall) wall.stop(); return; }
     if (stage.querySelector('.al-feeds')) return;
 
-    const feeds = el('div', 'al-feeds is-waiting');
+    const feeds = el('div', 'al-feeds al-feeds-' + at + ' is-waiting');
     stage.appendChild(feeds);
 
     if (!wall) {
@@ -404,14 +466,16 @@ export function createAnnexLab(caps) {
       wallStage.appendChild(wall.root);
     }
 
-    /* place tiles by bbox, cam8 by the proven override */
-    const screens = Array.isArray(quads.screens) ? quads.screens : [];
+    /* place tiles by bbox (the shot's prefix off the name), cam8's close-up
+     * glass by the proven override */
     /* every tile places, the laptop included: its locked-terminal card is the
      * diegetic pre-OS screen (raw chroma green through the mask otherwise) */
     screens.forEach((s2) => {
-      const tile = wall.tiles && wall.tiles[s2.name];
+      const name = String((s2 && s2.name) || '');
+      const id = name.startsWith(shot.prefix) ? name.slice(shot.prefix.length) : '';
+      const tile = id && wall.tiles ? wall.tiles[id] : null;
       if (!tile) return;
-      const bb = s2.name === 'cam8' ? CAM8_BBOX : s2.bbox;
+      const bb = at === 'monitors' && id === 'cam8' ? CAM8_BBOX : s2.bbox;
       if (!bb) return;
       tile.style.left = bb[0] + 'px';
       tile.style.top = bb[1] + 'px';
@@ -420,32 +484,10 @@ export function createAnnexLab(caps) {
       feeds.appendChild(tile);
     });
 
-    // Decode the full-size mask once per visit, not on every slide change.
-    if (!feedMask) {
-      feedMask = new Promise(resolve => {
-        const mask = new Image();
-        mask.onload = () => {
-          if (dead) { resolve(null); return; }
-          try {
-            const cv = doc.createElement('canvas');
-            cv.width = mask.naturalWidth;
-            cv.height = mask.naturalHeight;
-            const ctx = cv.getContext('2d');
-            ctx.drawImage(mask, 0, 0);
-            const im = ctx.getImageData(0, 0, cv.width, cv.height);
-            for (let i = 0; i < im.data.length; i += 4) im.data[i + 3] = im.data[i];
-            ctx.putImageData(im, 0, 0);
-            resolve(cv.toDataURL());
-          } catch (e) { log('annex mask failed', 'warn'); resolve(null); }
-        };
-        mask.onerror = () => { log('annex mask missing', 'warn'); resolve(null); };
-        mask.src = ART_BASE + MASK_FILE;
-      });
-    }
-    feedMask.then(url => {
+    feedMask(shot.mask).then(url => {
       // A late decode belongs only to the slide that requested it.
-      if (dead || view !== 'monitors' || feeds.parentNode !== stage) return;
-      if (!url) { feeds.remove(); return; }
+      if (dead || view !== at || feeds.parentNode !== stage) return;
+      if (!url) { feeds.remove(); if (wall) wall.stop(); return; }
       feeds.style.maskImage = 'url(' + url + ')';
       feeds.style.webkitMaskImage = 'url(' + url + ')';
       feeds.style.maskSize = '100% 100%';
@@ -571,7 +613,9 @@ export function createAnnexLab(caps) {
     if (paperLayer) { closePaper(); return; }
     if (drawerLayer) { closeDrawer(); return; }
     if (os) { closeOs(); return; }
-    if (view && view !== 'wide') { sfx('door', 0.3); showView('wide'); }
+    /* showView plays the door on entering the wide shot; a second one here
+     * stacked two doors on one step */
+    if (view && view !== 'wide') showView('wide');
   }
 
   function closeOs() {
@@ -1161,7 +1205,7 @@ export function createAnnexLab(caps) {
       closeOs();
       return true;
     }
-    if (view && view !== 'wide') { sfx('door', 0.3); showView('wide'); return true; }
+    if (view && view !== 'wide') { showView('wide'); return true; }   /* its door is showView's */
     return false;
   }
 

@@ -36,7 +36,13 @@
   border: 1px solid color-mix(in srgb, var(--annex-cold), transparent 78%);
   border-radius: 3px;
 }
-.cam-tile svg.campus-plan { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* The feed pins its WHOLE box, transform included: it wears `campus-plan`, and
+   a hub rule that reached it once (the 16:9 pillarbox, translateX(-50%)) slid
+   every feed half a screen left. The power-on keyframes still win over this. */
+.cam-tile svg.campus-plan {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  aspect-ratio: auto; transform: none; pointer-events: none;
+}
 
 /* the campus seen through lab glass: darker sky than the campus's own dusk */
 .an-sky { fill: color-mix(in srgb, var(--campus-sky), black 22%); }

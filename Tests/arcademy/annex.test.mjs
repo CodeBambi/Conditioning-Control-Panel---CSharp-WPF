@@ -23,7 +23,7 @@ test('pending mint uses max, never double counts or adds retired cards', () => {
 class Node {
   constructor(tag = 'div') {
     this.tag = tag; this.children = []; this.attrs = {}; this.dataset = {}; this.events = {};
-    this.style = { setProperty() {} }; this.clientWidth = 1376; this.clientHeight = 768;
+    this.style = { setProperty(k, v) { this[k] = v; } }; this.clientWidth = 1376; this.clientHeight = 768;
     this.className = '';
     this.classList = {
       contains: x => this.className.split(' ').includes(x),
@@ -45,7 +45,9 @@ class Node {
   toDataURL() { return 'data:image/png;base64,AA=='; }
 }
 
-async function fixture(file, overrides = {}) {
+const CLOSE_UP_ONLY = { annex_shot_monitors2: { screens: [{name:'cam1',bbox:[0,0,100,100]}] } };
+
+async function fixture(file, overrides = {}, quadFile = CLOSE_UP_ONLY) {
   let id = 0, now = 0;
   const timers = new Map(), frames = new Map(), images = [];
   const doc = new Node(); doc.documentElement = new Node(); doc.head = new Node(); doc.hidden = false;
@@ -57,7 +59,8 @@ async function fixture(file, overrides = {}) {
     clearTimeout: id => timers.delete(id), requestAnimationFrame: fn => { frames.set(++id, fn); return id; },
     cancelAnimationFrame: id => frames.delete(id),
     Image: class { constructor() { images.push(this); this.naturalWidth = 1; this.naturalHeight = 1; } },
-    fetch: async () => ({ json: async () => ({ annex_shot_monitors2: { screens: [{name:'cam1',bbox:[0,0,100,100]}] } }) }),
+    CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
+    fetch: async () => ({ json: async () => quadFile }),
   });
   const keys = ['daily_trigger','deja_vu','impulse_control','lost_and_found','the_deep_end','sort','echo','instant_recall'];
   const rooms = Object.fromEntries(keys.map(key => [key, {rect:[200,240,100,100],side:'n',door:250,nameEn:key}]));
@@ -119,5 +122,127 @@ test('late mask cannot restart departed slide; revisit reuses decoded mask', asy
   assert.equal(starts, 0);
   click('the monitors'); await new Promise(resolve => setImmediate(resolve));
   assert.equal(f.images.length, 1); assert.equal(starts, 1);
+  lab.destroy();
+});
+
+/* ---- the wide shot's screens, the wall between slides, one door (2026-09-30) ---- */
+
+const BOTH_SHOTS = {
+  annex_shot_monitors2: { screens: [
+    {name:'cam1',bbox:[0,0,100,100]}, {name:'cam8',bbox:[5,5,5,5]}, {name:'laptop',bbox:[40,60,20,10]},
+  ] },
+  annex_pixel_establishing2: { screens: [{name:'est_cam1',bbox:[1,2,3,4]}, {name:'est_laptop',bbox:[5,6,7,8]}] },
+};
+const tick = () => new Promise(resolve => setImmediate(resolve));
+const findNode = (n, pred) => pred(n) ? n : n.children.map(c => findNode(c, pred)).find(Boolean) || null;
+const press = (lab, label) => findNode(lab.root, n => n.attrs['aria-label'] === label).dispatchEvent({type:'click'});
+function spyWall(calls, ids = ['cam1', 'cam8', 'laptop']) {
+  const tiles = Object.fromEntries(ids.map(id => [id, new Node()]));
+  return { root:new Node(), tiles, start() { calls.push('start'); }, stop() { calls.push('stop'); }, destroy() {} };
+}
+const maskOf = (f, file) => f.images.find(i => String(i.src).endsWith(file));
+
+test('the wide shot runs the same wall through its own mask and quads, not chroma green', async () => {
+  const calls = []; const wall = spyWall(calls);
+  const f = await fixture('lab.js', {'./cams.js':{createCamWall:()=>wall}}, BOTH_SHOTS);
+  const lab = f.api.createAnnexLab({lite:true});
+  await tick();
+  assert.ok(maskOf(f, 'lab-wide-mask.png'), 'the wide shot decodes its own mask');
+  assert.ok(maskOf(f, 'lab-monitors-mask.png'), 'the close-up mask is warmed before anyone walks up');
+  assert.equal(wall.tiles.cam1.style.left, '1px');
+  assert.equal(wall.tiles.cam1.style.height, '4px');
+  assert.equal(wall.tiles.laptop.style.top, '6px');
+  const feeds = wall.tiles.cam1.parentNode;
+  assert.ok(feeds.classList.contains('al-feeds-wide') && feeds.classList.contains('is-waiting'));
+  maskOf(f, 'lab-wide-mask.png').onload(); await tick();
+  assert.ok(!feeds.classList.contains('is-waiting'));
+  assert.deepEqual(calls, ['start']);
+  lab.destroy();
+});
+test('one wall runs across the wide shot and the close-up, and stops anywhere else', async () => {
+  const calls = []; const wall = spyWall(calls);
+  const f = await fixture('lab.js', {'./cams.js':{createCamWall:()=>wall}}, BOTH_SHOTS);
+  const lab = f.api.createAnnexLab({lite:true});
+  await tick(); f.images.forEach(i => i.onload()); await tick();
+  lab.escapeStep(); // descent
+  press(lab, 'the monitors'); await tick();
+  assert.equal(wall.tiles.cam1.style.left, '0px');
+  assert.equal(wall.tiles.cam8.style.left, '581px', 'the close-up keeps its proven cam8 glass');
+  assert.ok(wall.tiles.cam1.parentNode.classList.contains('al-feeds-monitors'));
+  lab.escapeStep(); await tick(); // back to the wide shot
+  assert.equal(wall.tiles.cam1.style.left, '1px');
+  assert.ok(!calls.includes('stop'), 'monitors that were on the whole time do not power down between slides');
+  press(lab, 'the desk');
+  assert.deepEqual(calls.filter(c => c === 'stop'), ['stop']);
+  lab.destroy();
+});
+test('a slide with no screens on file stops the wall the other slide left running', async () => {
+  const calls = []; const wall = spyWall(calls, ['cam1']);
+  const f = await fixture('lab.js', {'./cams.js':{createCamWall:()=>wall}}); // close-up quads only
+  const lab = f.api.createAnnexLab({lite:true});
+  await tick(); lab.escapeStep(); // descent
+  press(lab, 'the monitors'); maskOf(f, 'lab-monitors-mask.png').onload(); await tick();
+  assert.deepEqual(calls, ['start']);
+  lab.escapeStep(); // the wide shot has no screens on file here
+  assert.deepEqual(calls, ['start', 'stop']);
+  lab.destroy();
+});
+test('stepping back to the wide shot plays one door, not two', async () => {
+  const f = await fixture('lab.js', {'./cams.js':{createCamWall:()=>spyWall([])}});
+  const cues = [];
+  f.doc.addEventListener('arcademy-sfx', e => cues.push(e.detail.name));
+  const lab = f.api.createAnnexLab({lite:true});
+  await tick(); lab.escapeStep(); // descent
+  press(lab, 'the desk'); cues.length = 0;
+  findNode(lab.root, n => n.classList.contains('al-back')).dispatchEvent({type:'click'});
+  assert.deepEqual(cues.filter(c => c === 'door'), ['door'], 'the step-back pill');
+  press(lab, 'the desk'); cues.length = 0;
+  lab.escapeStep();
+  assert.deepEqual(cues.filter(c => c === 'door'), ['door'], 'Esc');
+  lab.destroy();
+});
+
+const readWeb = rel => readFile(new URL('../../ConditioningControlPanel/Resources/web/arcademy/' + rel, import.meta.url), 'utf8');
+const stripCss = css => css.replace(/\/\*[\s\S]*?\*\//g, '');
+test('no campus-plan box rule outside the hub can move an Annex feed', async () => {
+  /* The feeds wear `campus-plan` for the [data-game] fills. A rule that sizes,
+   * places or transforms the plan ELEMENT is the hub's business and must say
+   * `.campus-stage`: the 16:9 pillarbox once slid every feed half a screen. */
+  const BOX = /(?:^|;)\s*(left|right|top|bottom|inset|width|height|transform|aspect-ratio)\s*:\s*([^;]+)/g;
+  const FULL = new Set(['left:0', 'right:0', 'top:0', 'bottom:0', 'inset:0', 'width:100%', 'height:100%']);
+  let checked = 0;
+  for (const [, sel, body] of stripCss(await readWeb('styles.css')).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const s of sel.split(',').map(x => x.trim())) {
+      if (!/\.campus-plan$/.test(s) || /\.campus-stage\b/.test(s)) continue;
+      for (const [, prop, val] of body.matchAll(BOX)) {
+        checked++;
+        const decl = prop + ':' + val.trim().replace(/\s+/g, '');
+        assert.ok(FULL.has(decl), `"${s}" sets ${decl} on every campus-plan, Annex feeds included`);
+      }
+    }
+  }
+  assert.ok(checked > 0, 'the base plan rule was found and read');
+  assert.match(stripCss(await readWeb('annex/cams.css')), /\.cam-tile svg\.campus-plan\s*\{[^}]*transform:\s*none/);
+});
+test('on a phone every Annex hotspot is visible without hovering', async () => {
+  const css = stripCss(await readWeb('annex/lab.css'));
+  assert.match(css, /html\.arc-mobile \.al-hot\s*\{[^}]*box-shadow/);
+  assert.match(css, /html\.arc-mobile \.al-hot \.al-hot-tag\s*\{[^}]*opacity:\s*1/);
+});
+test('a name tag may outgrow its box, but it is never cut and never leaves the plane', async () => {
+  const f = await fixture('lab.js', {'./cams.js':{createCamWall:()=>spyWall([])}});
+  const lab = f.api.createAnnexLab({lite:true});
+  await tick();
+  const hot = label => findNode(lab.root, n => n.attrs['aria-label'] === label);
+  /* the monitors box is [10, 90, 325, 480] and the stairs [1075, 235, 130, 195], on a 1376 plane */
+  assert.equal(hot('the monitors').style['--tag-lo'], '-164.5px');
+  assert.equal(hot('the monitors').style['--tag-hi'], '1195.5px');
+  assert.equal(hot('the stairs').style['--tag-hi'], '228px');
+  const css = stripCss(await readWeb('annex/lab.css'));
+  assert.match(css, /\.al-hot \.al-hot-tag\s*\{[^}]*translateX\(clamp\(var\(--tag-lo/);
+  for (const [, sel, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!sel.includes('al-hot-tag')) continue;
+    assert.doesNotMatch(body, /overflow\s*:\s*hidden|text-overflow|max-width/, `${sel.trim()} cuts the name short`);
+  }
   lab.destroy();
 });
