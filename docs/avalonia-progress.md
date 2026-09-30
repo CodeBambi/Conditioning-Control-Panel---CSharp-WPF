@@ -1001,3 +1001,14 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: HapticsCoreTests, HapticsHeadTests (incl. panic zeroes the toy), fail-proven; mock toy only, no real hardware; live gates
   shown without premium. Rows stay stub (toy cards/routing, pattern editors, premium live connect); feat-intiface-url wired.
   Review: FIX -> fixed.
+
+## avalonia-port/lockdown-core: +650
+- LockdownService / LockdownStrictHold / LockdownPauseRule moved to Core (git mv; WPF delegates; EscapeKinds + CostsChaster in Core);
+  time left now runs on a UTC clock (a DST fall-back or clock set back no longer lengthens a lockdown; affects WPF too, logged).
+  Avalonia runs a real lockdown: premium gate, consent, Activate, clock, 5-tap secret phrase; Emergency Exit slab per the oracle-deep
+  rule (notice with exact steps and real time left, tripwire, Chaster hold; never ends/restarts). WPF refusals: global panic ignored
+  (window text input still works), Stop/tray Stop everything, Exit, user window close, pause, settings palette; minimize trips the
+  escape counter; crash recovery at startup; preset/strict-toggle hold.
+- Evidence: LockdownTests (7: phrase under StrictLock, global-only key ignore, recovery, preset hold, slab, UTC clock, expiry),
+  fail-proven; live sandbox lockdown and unlock. Row stays stub (badge, theme, Possession, Dose, exit games, syskey hook). Reviews:
+  FIX -> fixed; final safety check ACCEPT.
