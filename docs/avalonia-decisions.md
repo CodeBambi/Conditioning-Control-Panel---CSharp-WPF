@@ -119,3 +119,19 @@ here record where and why the port chose something, and who advised.
 - Choice: no. As LockCardWindow #875: while the listener is not live, the panic key and Esc force-stop a strict video (no
   reschedule). With the listener live, strict swallows them and the global path stops it.
 - Advisor: reviewer (video-playback-core).
+
+## 2026-09-30: mandatory video output heal and grace card
+- Question: WPF heals a white screen (no vout 8 s after Play, or a vout lost for 5 s mid-clip) by retiring the shared
+  LibVLC, quarantining the player and replaying the clip once. This head decodes through video callbacks (no vout).
+- Choice: the signal is frame arrival (none 8 s after Play, none for 5 s after the first frame; a clip with no video
+  track plays out, as WPF). Replay the same clip once with the same strictness, on the SAME shared LibVLC (no
+  retire/quarantine/4-per-session breaker), without the 1.3 s pre-roll; then end it like a dismiss. One heal budget
+  per clip covers both cases (WPF: one start retry and one mid-play heal). Core `Guard`/`GuardHeals`,
+  `MandatoryVideoOverlay.GuardTick`, tests `ClipGuards`, `MandatoryVideoOverlayTests`.
+- The grace pause card is drawn inside each (topmost, full-screen) video window, not a separate no-activate topmost
+  window with a 300 ms re-assert.
+- Bubbles (Core `CoreBubbles.Pause/Resume` from `MandatoryVideoScheduler`) are held from the clip's show until the run
+  ends, through verdict messages and replays, as WPF. Deviation: a ForceCleanup while the engine still runs (the
+  strict fall-open panic, the Test button's force reset) resumes them too; WPF leaves them held because its panic
+  always stops the engine as well.
+- Advisor: reviewer (video-grace-watchdog).

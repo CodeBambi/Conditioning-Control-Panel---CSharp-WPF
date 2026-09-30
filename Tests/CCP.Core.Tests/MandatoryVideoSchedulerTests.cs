@@ -138,7 +138,11 @@ public sealed class MandatoryVideoSchedulerTests
         {
             var clock = new FakeClock(); var host = new Host();
             var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+            var bubbles = new List<string>();   // WPF: bubbles held from the first clip until the run ends
+            CoreBubbles.PauseAction = () => bubbles.Add("pause");
+            CoreBubbles.ResumeAction = () => bubbles.Add("resume");
             v.Trigger(); clock.Advance(MandatoryVideoScheduler.PreRoll);
+            Assert.Equal(new[] { "pause" }, bubbles);
             for (var replay = 1; replay <= 2; replay++)
             {
                 v.NoteSpawn(); v.NoteSpawn(); v.NoteHit();   // 1 of 2 caught
@@ -151,10 +155,12 @@ public sealed class MandatoryVideoSchedulerTests
                 Assert.Equal(replay + 1, host.Shown.Count);
                 Assert.True(host.Shown[^1].Strict);
                 Assert.Equal(0, v.AttentionSpawned);
+                Assert.DoesNotContain("resume", bubbles);    // not through the verdict or the replay
             }
             v.NoteSpawn(); v.Ended();                        // third miss: mercy, no replay
             Assert.Equal(AttentionVerdict.Mercy, host.Messages[^1]);
             host.Then!();
+            Assert.Equal("resume", bubbles[^1]);
             clock.Advance(TimeSpan.FromSeconds(5));
             Assert.Equal(3, host.Shown.Count);
             Assert.Equal(0, v.Penalties);
@@ -182,6 +188,7 @@ public sealed class MandatoryVideoSchedulerTests
             (s.AttentionChecksEnabled, s.MercySystemEnabled) = (a, m);
             CoreProgression.AddXPProvider = null;
             CoreProgression.TrackAttentionCheckProvider = null;
+            CoreBubbles.PauseAction = CoreBubbles.ResumeAction = null;
         }
     });
 
@@ -318,20 +325,28 @@ public sealed class MandatoryVideoSchedulerTests
         Assert.Null(MandatoryVideoScheduler.GraceKey(false, "F12", false, "F12"));
     }
 
-    // WPF vout watchdog, safety timer (+5 s), 600 s fallback, max-length cap and mid-play loss.
+    // WPF vout watchdog (8 s), mid-play vout loss (5 s) - both replay once - and the safety timer
+    // (+5 s), 600 s fallback and max-length cap on the clock from the first frame.
     [Fact]
     public void ClipGuards()
     {
-        Assert.Null(MandatoryVideoScheduler.Guard(7.9, false, 0, 0, 0));
-        Assert.Equal("no frame", MandatoryVideoScheduler.Guard(8, false, 0, 0, 0));
-        Assert.Null(MandatoryVideoScheduler.Guard(34.9, true, 30, 0, 0));
-        Assert.Equal("overran", MandatoryVideoScheduler.Guard(35, true, 30, 0, 0));
-        Assert.Null(MandatoryVideoScheduler.Guard(599, true, 0, 0, 0));
-        Assert.Equal("overran", MandatoryVideoScheduler.Guard(600, true, 0, 0, 0));
-        Assert.Equal("max length", MandatoryVideoScheduler.Guard(20, true, 30, 0, 20));
-        Assert.Null(MandatoryVideoScheduler.Guard(20, true, 30, 0, 0));
-        Assert.Equal("stalled", MandatoryVideoScheduler.Guard(10, true, 30, 8, 0));
-        Assert.Null(MandatoryVideoScheduler.Guard(10, true, 30, 7.9, 0));
+        string? G(double show, double played, bool framed, double len, double sinceFrame, int max, bool video = true)
+            => MandatoryVideoScheduler.Guard(show, played, framed, video, len, sinceFrame, max);
+        Assert.Null(G(7.9, 0, false, 0, 0, 0));
+        Assert.Equal("no frame", G(8, 0, false, 0, 0, 0));
+        Assert.Null(G(30, 30, false, 0, 0, 0, video: false));            // audio-only plays out
+        Assert.Null(G(40, 34.9, true, 30, 0, 0));                        // counts from the first frame
+        Assert.Equal("overran", G(40, 35, true, 30, 0, 0));
+        Assert.Null(G(700, 599, true, 0, 0, 0));
+        Assert.Equal("overran", G(600, 600, true, 0, 0, 0));
+        Assert.Equal("max length", G(25, 20, true, 30, 0, 20));
+        Assert.Null(G(25, 19.9, true, 30, 0, 20));
+        Assert.Equal("output lost", G(10, 10, true, 30, 5, 0));
+        Assert.Null(G(10, 10, true, 30, 4.9, 0));
+        Assert.True(MandatoryVideoScheduler.GuardHeals("no frame", false));
+        Assert.True(MandatoryVideoScheduler.GuardHeals("output lost", false));
+        Assert.False(MandatoryVideoScheduler.GuardHeals("output lost", true));
+        Assert.False(MandatoryVideoScheduler.GuardHeals("max length", false));
     }
 
     // WPF CompanionService.OnAttentionCheckFailed: only the Trainer's perk costs 25 XP, floored at 0.

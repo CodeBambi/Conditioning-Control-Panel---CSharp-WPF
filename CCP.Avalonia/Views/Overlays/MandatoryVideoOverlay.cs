@@ -32,11 +32,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// master x video volume; other apps are ducked while it plays (AudioDuckingEnabled).
     /// The Esc grace pause (WPF #735) draws its Paused/Resume card inside each video window, not as a
     /// separate topmost window; the clip guards (Core <see cref="MandatoryVideoScheduler.Guard"/>) run
-    /// on a 1 s UI timer; ambient bubbles are paused and cleared for the clip.
-    /// ponytail: missing against WPF - the off-thread UI-wedge watchdog and the retire-and-replay
-    /// LibVLC heal (a wedged clip is ended, not healed; a Stop that hangs in native code still hangs
-    /// the UI thread), the toy-button/gaze/haptics attention inputs, no-activate z-order, and the
-    /// remote-media offer after the "no videos" dialog.
+    /// on a 1 s UI timer: a dead (8 s) or lost (5 s without frames) output replays the clip once, as
+    /// WPF's vout heal, but on the same shared LibVLC (docs/avalonia-decisions.md). Ambient bubbles
+    /// are paused by the Core scheduler.
+    /// ponytail: missing against WPF - the off-thread UI-wedge watchdog and the LibVLC retire/quarantine
+    /// (a Stop that hangs in native code still hangs the UI thread), the toy-button/gaze/haptics
+    /// attention inputs, no-activate z-order, and the remote-media offer after the "no videos" dialog.
     /// </summary>
     internal sealed class MandatoryVideoOverlay : IMandatoryVideoHost
     {
@@ -60,7 +61,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private VlcFrameSink? _sink;
         private WriteableBitmap? _fill;
         private bool _closing, _didDuck, _attention, _gracePaused, _graceConsumed;
-        private long _watchedMs, _progressTs;
+        private long _watchedMs;
+        /// <summary>Stopwatch timestamp of the last frame shown (tests age it to fake a lost output).</summary>
+        internal long FrameTs;
+        private bool _healUsed, _strict;
+        private string _path = "";
+        private readonly Stopwatch _sinceFrame = new();
         private DateTime _lastGraceUtc, _gracePausedAt;
         private DispatcherTimer? _graceTimer, _guard;
         private readonly Stopwatch _sinceShow = new();
@@ -84,13 +90,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         public void Show(string path, bool strict) => Dispatcher.UIThread.Invoke(() =>
         {
+            _healUsed = false;   // WPF PlayVideo: one output heal per clip; the heal's replay keeps it spent
+            Play(path, strict);
+        });
+
+        private void Play(string path, bool strict)
+        {
             if (_surfaces.Count > 0) CloseAll();
+            (_path, _strict) = (path, strict);
             _sinceShow.Restart();
+            _sinceFrame.Reset();
             FirstFrameMs = -1;
             _watchedMs = 0;
             FillMs = FillCount = 0;
             _graceConsumed = false;   // WPF PlayVideo: one grace pause per clip, replays included
-            _progressTs = Stopwatch.GetTimestamp();
 
             var s = CoreSettings.Current;
             var host = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
@@ -107,7 +120,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             // bouncing text, and arm the attention checks.
             if (s.AudioDuckingEnabled) { CoreAudio.Duck(s.DuckingLevel); _didDuck = true; }
             BouncingTextOverlay.PauseForVideo(true);
-            BubbleOverlay.PauseAndClear();
             _attention = s.AttentionChecksEnabled;
 
             _player = new MediaPlayer(vlc) { EnableHardwareDecoding = true };
@@ -132,9 +144,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 }
             }, () =>
             {
+                FrameTs = Stopwatch.GetTimestamp();
                 if (FirstFrameMs < 0)
                 {
                     FirstFrameMs = _sinceShow.ElapsedMilliseconds;
+                    if (!_gracePaused) _sinceFrame.Start();   // WPF arms the length/max timers once playing
                     Log.Information("VideoService: first frame after {Ms} ms", FirstFrameMs);
                 }
                 var fill = _surfaces.Any(x => x.Fill.IsVisible);
@@ -151,10 +165,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     if (fill) x.Fill.InvalidateVisual();
                 }
             });
-            _player.TimeChanged += (_, e) =>
-            {
-                if (Interlocked.Exchange(ref _watchedMs, e.Time) != e.Time) Interlocked.Exchange(ref _progressTs, Stopwatch.GetTimestamp());
-            };
+            _player.TimeChanged += (_, e) => Interlocked.Exchange(ref _watchedMs, e.Time);
             _player.EndReached += (_, _) =>
             {
                 var len = _player?.Length ?? 0;
@@ -173,7 +184,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _guard.Tick += (_, _) => GuardTick();
             _guard.Start();
             if (_attention) DispatcherTimer.RunOnce(SetupAttention, TimeSpan.FromSeconds(2));   // WPF: Task.Delay(2000)
-        });
+        }
 
         private static List<global::Avalonia.Platform.Screen?> Targets(Window? host, bool fillAll)
         {
@@ -301,7 +312,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _gracePaused = true;
             _lastGraceUtc = _gracePausedAt = now;
             _player?.SetPause(true);
-            _sinceShow.Stop();   // freezes the attention clock and the clip guards (WPF re-phases both)
+            _sinceShow.Stop();
+            _sinceFrame.Stop();   // freezes the attention clock and the clip guards (WPF re-phases both)
             foreach (var x in _surfaces) { x.Layer.IsHitTestVisible = false; x.Grace.IsVisible = true; }
             SetCountdown(MandatoryVideoScheduler.GraceWindowSeconds);
             _graceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -330,7 +342,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _graceTimer = null;
             foreach (var x in _surfaces) { x.Grace.IsVisible = false; x.Layer.IsHitTestVisible = true; }
             _sinceShow.Start();
-            Interlocked.Exchange(ref _progressTs, Stopwatch.GetTimestamp());
+            if (FirstFrameMs >= 0) _sinceFrame.Start();
+            FrameTs = Stopwatch.GetTimestamp();
             _player?.SetPause(false);
             Log.Information("VideoService: grace pause released ({Reason}) after {Sec:F1}s", reason, (DateTime.UtcNow - _gracePausedAt).TotalSeconds);
         }
@@ -340,9 +353,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         internal void GuardTick()
         {
             if (_gracePaused || _surfaces.Count == 0 || !Scheduler.IsPlaying) return;
-            var why = MandatoryVideoScheduler.Guard(Elapsed, FirstFrameMs >= 0, (_player?.Length ?? 0) / 1000.0,
-                Stopwatch.GetElapsedTime(Interlocked.Read(ref _progressTs)).TotalSeconds, CoreSettings.Current.VideoMaxDurationSeconds);
+            var framed = FirstFrameMs >= 0;
+            var why = MandatoryVideoScheduler.Guard(Elapsed, framed ? _sinceFrame.Elapsed.TotalSeconds : Elapsed, framed,
+                (_player?.VideoTrackCount ?? -1) != 0, (_player?.Length ?? 0) / 1000.0,
+                Stopwatch.GetElapsedTime(FrameTs).TotalSeconds, CoreSettings.Current.VideoMaxDurationSeconds);
             if (why == null) return;
+            if (MandatoryVideoScheduler.GuardHeals(why, _healUsed))
+            {
+                // WPF DispatchVoutHeal(retry): the same clip once more, same strictness.
+                Log.Warning("VideoService: clip guard fired ({Why}) after {Sec:F1}s - replaying the clip once", why, Elapsed);
+                Scheduler.NoteReplay();
+                Play(_path, _strict);
+                _healUsed = true;
+                return;
+            }
             Log.Warning("VideoService: clip guard fired ({Why}) after {Sec:F1}s - ending the clip", why, Elapsed);
             Scheduler.End();
         }
@@ -681,7 +705,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 _fill = null;
                 if (_didDuck) { _didDuck = false; CoreAudio.Unduck(); }
                 BouncingTextOverlay.PauseForVideo(false);
-                BubbleOverlay.Resume();   // WPF resumes in Cleanup; a replay pauses them again
                 if (FillCount > 0) Log.Information("VideoService: blur fill {Avg:F3} ms/frame over {N} frames", FillMs / FillCount, FillCount);
             }
             finally { _closing = false; }
