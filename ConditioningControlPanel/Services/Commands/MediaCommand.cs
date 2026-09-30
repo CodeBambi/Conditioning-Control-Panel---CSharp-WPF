@@ -11,9 +11,9 @@ namespace ConditioningControlPanel.Services.Commands
     /// <summary>
     /// Plays a video or audio file from inside the user's assets root. Path is normalized
     /// and rejected if it escapes the assets directory after resolution. The AI doesn't
-    /// know which files actually exist on disk, so when the path is missing or doesn't
-    /// resolve we fall back to a random pick of the right kind — that way "play me a
-    /// video" still does something even when the model hallucinates a filename.
+    /// know which files actually exist on disk. A request that names nothing is a random pick
+    /// of the right kind; a named video that does not resolve plays nothing (see
+    /// <see cref="Decide"/>), a named audio still falls back to a random one.
     /// </summary>
     public class MediaCommand : ICommand
     {
@@ -26,31 +26,44 @@ namespace ConditioningControlPanel.Services.Commands
             _kind = kind;
         }
 
+        /// <summary>What an AI media request plays.</summary>
+        internal enum MediaPick { Random, Named, Nothing }
+
+        /// <summary>Pure decision (ccp-bugs #1325). An explicit Random, or a request that names
+        /// nothing at all ("play any video"), is a random pick. A request that NAMES something
+        /// (a Title or a Path) plays that file when it resolves to a playable file inside the
+        /// assets root. When it does not, a video request plays NOTHING: the chat text was about
+        /// that one video (often a Hypnotube recommendation), and a random local file in its place
+        /// is the unrelated video the report describes. Audio keeps its random fallback.</summary>
+        internal static MediaPick Decide(Media data, AICommandType kind, bool namedFilePlayable)
+        {
+            if (data.Random) return MediaPick.Random;
+            var named = !string.IsNullOrWhiteSpace(data.Path) || !string.IsNullOrWhiteSpace(data.Title);
+            if (!named) return MediaPick.Random;
+            if (namedFilePlayable) return MediaPick.Named;
+            return kind == AICommandType.audio ? MediaPick.Random : MediaPick.Nothing;
+        }
+
         public Task<bool> ExecuteAsync()
         {
-            // Random pick — the AI can ask for "any video" / "any audio" without naming a file.
-            if (_data.Random || string.IsNullOrEmpty(_data.Path))
-            {
-                if (_kind == AICommandType.audio)
-                    return Task.FromResult(PlayRandomAudio());
-                return Task.FromResult(PlayRandomVideo());
-            }
+            var fullPath = string.IsNullOrWhiteSpace(_data.Path) ? null : GetValidatedPath(_data.Path);
+            var ext = fullPath == null ? "" : Path.GetExtension(fullPath).ToLowerInvariant();
+            var playable = fullPath != null && (IsVideo(ext) || IsAudio(ext));
 
-            var fullPath = GetValidatedPath(_data.Path);
-            if (fullPath == null)
+            switch (Decide(_data, _kind, playable))
             {
-                // AI named a file that doesn't exist (or escaped assets). Fall back to a
-                // random pick so the request still produces something audible/visible —
-                // matches what the user sees in the live actions feed.
-                App.Logger?.Information("MediaCommand: path '{Path}' didn't resolve — falling back to random {Kind}",
-                    _data.Path, _kind);
-                if (_kind == AICommandType.audio) return Task.FromResult(PlayRandomAudio());
-                return Task.FromResult(PlayRandomVideo());
+                case MediaPick.Random:
+                    if (_kind == AICommandType.audio)
+                        return Task.FromResult(PlayRandomAudio());
+                    return Task.FromResult(PlayRandomVideo());
+                case MediaPick.Nothing:
+                    // No title or path in the log: a named video can be a private file name.
+                    App.Logger?.Information("MediaCommand: AI named a video that is not a playable local file, playing nothing");
+                    return Task.FromResult(false);
             }
 
             App.Logger?.Information("MediaCommand: AI play media {Path}", fullPath);
 
-            var ext = Path.GetExtension(fullPath).ToLowerInvariant();
             if (IsVideo(ext))
             {
                 // The main Videos feature toggle is authoritative for AI-triggered videos
@@ -77,14 +90,7 @@ namespace ConditioningControlPanel.Services.Commands
                 }));
             }
 
-            if (IsAudio(ext))
-            {
-                return Task.FromResult(PlayFile(fullPath));
-            }
-
-            App.Logger?.Information("MediaCommand: extension {Ext} not recognized as audio/video — falling back to random {Kind}", ext, _kind);
-            if (_kind == AICommandType.audio) return Task.FromResult(PlayRandomAudio());
-            return Task.FromResult(PlayRandomVideo());
+            return Task.FromResult(PlayFile(fullPath!));   // Named means video or audio
         }
 
         private static bool PlayRandomVideo()
