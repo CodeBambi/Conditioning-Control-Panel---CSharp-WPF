@@ -235,3 +235,16 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
 MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `CoreProgression.AddXP("Mantra")`, new `CoreProgression.TrackMantraCompletedProvider`, `MantraService.ChasterNote`, seeded by both heads). WPF's NAudio SignalGenerators become synthesised 16-bit WAVs (`CCP.Avalonia/Platform/ToneWav.cs`, per-process temp dir): tones through `CoreAudio.PlayOneShot` at WPF's 0.15 gain; the drone (90 Hz + 0.4 x 180 Hz, 10 s of whole cycles) as a looping `LayeredAudio.VlcLayerPlayer` whose volume follows WPF's gain ramp x MantraDroneVolume. No NAudio on Linux. `MainShellWindow.StartMantraSession` is ported with no caller, exactly as WPF (MainWindow.PlayTab.cs:~264; the Mantras card left the Play page 2026-08-12); where the game lives is still an owner call. Its WPF failure MessageBox is dropped on this head (logged only). The drone player starts muted and unmutes once its first volume sticks (no full-volume blip); exit closes the window and deletes the temp WAVs.
 - Test: `Tests/CCP.Core.Tests/MantraServiceTests.cs`, `Tests/CCP.Avalonia.Tests/MantraWindowSessionTests.cs` (fail-proven x7).
 - Advisor: none (worker).
+## 2026-09-30: Launcher slice 1 (avalonia-port/launcher-core)
+- Question: the WPF launcher's cards are games whose hosts (Back Room, Breakout, Piece by Piece, Racing, DtRH, Arcademy, Goon)
+  do not exist on Avalonia. Draw them, or not?
+- Choice: the card table (ids, order, art, glyph, hue, account/new flags) moved to Core `LauncherCards`, with the close/Play rules
+  in `LauncherRules`; WPF `LauncherCatalogue`/`LauncherHost` build and act on them unchanged. The Avalonia `LauncherWindow` draws
+  only cards with a destination on this head (`LauncherWindow.Destinations`: today only Graded Intake, a panel tab); a game card
+  appears when its host lands. Nothing is faked. The launcher is reached from the shell's title-bar "CC Labs" door (WPF
+  `BtnBackToLauncher`); the boot surface, skip-to-panel box and tray row are slice 2 (~/ccp-port/briefs/launcher-plan.md).
+- Deviation: WPF hides the launcher behind the panel's tray icon when something still runs. A Linux desktop may have no tray host,
+  so when the panel is hidden and no StatusNotifierWatcher is present the close button minimizes instead of hiding, keeping a way
+  back. A user close is routed through the rule; a `Close()` from code (shutdown, tests) goes through.
+- WindowControlButton/WindowCloseButton hoisted from MainShellWindow.axaml into Theme/Styles.xaml (its ponytail note: second caller).
+- Advisor: none (worker, per branch brief).

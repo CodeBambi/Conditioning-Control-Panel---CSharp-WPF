@@ -166,6 +166,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
+        /// <summary>WPF MainWindow.Launcher.cs BtnBackToLauncher_Click: tuck the panel away, launcher up.</summary>
+        private void BtnBackToLauncher_Click(object? sender, RoutedEventArgs e) => LauncherWindow.BackToLauncher(this);
+
         private void BtnClose_Click(object? sender, RoutedEventArgs e)
         {
             CoreBark.NotifyUiAction("close");

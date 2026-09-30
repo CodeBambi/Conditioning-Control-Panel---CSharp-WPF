@@ -1,0 +1,154 @@
+<!-- PORTED (slice 1, shell only) from ConditioningControlPanel/Windows/Launcher/LauncherWindow.xaml.
+     The panel on the left, the games on the right, the title bar on top; sizes, order and loc keys
+     are the original's. Cards come from Core LauncherCards and only those whose destination this
+     head has are drawn (LauncherWindow.axaml.cs Destinations) - the rest are hidden, not faked.
+
+     Not here yet (docs/avalonia-parity.md win-launcher, ~/ccp-port/briefs/launcher-plan.md):
+     backdrop spiral/glow/ambient, edge glint, burst/shockwave/shake, hover tilt/glow, sounds,
+     account chip + sign-in pill + tier badge + SP readout, mod pill, gear (media dialog), panel
+     stats/XP/running status + Stop, add-shortcut, friends chip + What's new, skip-to-panel (the
+     boot surface is slice 2), lockdown veil.
+     WindowStyle="None" + WindowChrome -> SystemDecorations="None" (the bar is drawn here). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.LauncherWindow"
+        Title="CC Labs"
+        Icon="avares://CCP.Avalonia/Resources/app.ico"
+        Height="800" Width="1280" MinHeight="680" MinWidth="1000"
+        Background="{DynamicResource DarkerBgBrush}"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None" CanResize="True"
+        FontFamily="Segoe UI">
+
+    <Window.Resources>
+        <ControlTheme x:Key="LauncherCta" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="23"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Height" Value="76"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="12">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bg">
+                <Setter Property="Opacity" Value="0.92"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- A tile's Play: outline at rest, the tile's colour floods in on hover. The tile sets
+             Background (the fill), BorderBrush and Foreground. -->
+        <ControlTheme x:Key="LauncherPlay" TargetType="Button">
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Panel>
+                        <Border x:Name="Fill" Background="{TemplateBinding Background}" CornerRadius="10" Opacity="0">
+                            <Border.Transitions>
+                                <Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.14"/></Transitions>
+                            </Border.Transitions>
+                        </Border>
+                        <Border x:Name="Rim" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10"/>
+                        <ContentPresenter x:Name="Cp" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Fill"><Setter Property="Opacity" Value="1"/></Style>
+            <Style Selector="^:pointerover /template/ Border#Rim"><Setter Property="Opacity" Value="0.35"/></Style>
+            <Style Selector="^:pointerover /template/ ContentPresenter#Cp"><Setter Property="Foreground" Value="White"/></Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.eyebrow">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid x:Name="ContentRoot" RowDefinitions="48,*,52">
+
+        <!-- ================= top bar ================= -->
+        <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent" PointerPressed="TitleBar_PointerPressed">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <StackPanel x:Name="Wordmark" Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
+                    <Image Source="avares://CCP.Avalonia/Resources/logo2.png" Height="28"/>
+                    <TextBlock Text="{loc:Str launcher_window_title}" Margin="10,0,0,0"
+                               FontFamily="Fredoka, Segoe UI" FontSize="18" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
+                            Click="BtnMinimize_Click" Theme="{StaticResource WindowControlButton}"/>
+                    <Button x:Name="BtnClose" Content="✕" Width="46" Height="36"
+                            Click="BtnClose_Click" Theme="{StaticResource WindowCloseButton}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ================= body ================= -->
+        <Grid Grid.Row="1" Margin="28,14,28,8" ColumnDefinitions="440,28,*">
+
+            <!-- the panel card -->
+            <Border x:Name="PanelCard" Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                    CornerRadius="20" ClipToBounds="True">
+                <Grid RowDefinitions="190,Auto,*,Auto">
+                    <Panel x:Name="PanelArtPlate" Grid.Row="0">
+                        <Image Source="avares://CCP.Avalonia/Resources/features/ccp_banner.png" Stretch="UniformToFill"/>
+                        <Border IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                    <GradientStop Color="Transparent" Offset="0.5"/>
+                                    <GradientStop Color="{DynamicResource SurfaceBg}" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                    </Panel>
+                    <StackPanel Grid.Row="1" Margin="32,20,32,0">
+                        <TextBlock Text="{loc:Str launcher_section_panel}" Classes="eyebrow"/>
+                        <TextBlock Text="{loc:Str launcher_panel_title}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   FontFamily="Fredoka, Segoe UI" FontSize="30" FontWeight="SemiBold"
+                                   LineHeight="34" Foreground="{DynamicResource TextLightBrush}"/>
+                        <TextBlock Text="{loc:Str launcher_panel_blurb}" Margin="0,14,0,0" TextWrapping="Wrap"
+                                   FontSize="14" LineHeight="21" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="3" Margin="32,0,32,26">
+                        <Button x:Name="PanelCta" Theme="{StaticResource LauncherCta}" Click="PanelCta_Click">
+                            <TextBlock Text="{loc:Str launcher_panel_launch}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- the games: two columns or three by the column's width (LauncherGridLayout) -->
+            <Grid x:Name="GamesColumn" Grid.Column="2" RowDefinitions="Auto,*">
+                <TextBlock Text="{loc:Str launcher_section_games}" Classes="eyebrow" Margin="9,0,0,4"/>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <UniformGrid x:Name="GamesGrid" Columns="2" VerticalAlignment="Top"/>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+
+        <!-- ================= bottom row ================= -->
+        <Border Grid.Row="2" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0" Margin="28,0,28,0"/>
+    </Grid>
+</Window>
