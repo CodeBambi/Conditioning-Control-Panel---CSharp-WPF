@@ -8325,9 +8325,9 @@ namespace ConditioningControlPanel.Models
         private string _pbpMediaFlavour = "";
         /// <summary>
         /// Piece by Piece's picture flavour (trance, pink, frills, shiny, censored, mine), or ""
-        /// when never picked. Remembered as a preselection only: a pick counts as the online
-        /// opt-in for the window it was made in, unless the app-wide online source is already
-        /// consented (MediaSource not local and HasRemoteMediaConsent).
+        /// when never picked. Since 2026-09-30 the saved pick is the chess game's own online opt-in
+        /// in every window (see <see cref="PbpMediaChosen"/>); the app-wide online source, when
+        /// consented (MediaSource not local and HasRemoteMediaConsent), opens it as well.
         /// </summary>
         [JsonProperty("pbpMediaFlavour")]
         public string PbpMediaFlavour
@@ -8363,6 +8363,19 @@ namespace ConditioningControlPanel.Models
         {
             get => _pbpMediaOnline;
             set { _pbpMediaOnline = value; OnPropertyChanged(); }
+        }
+
+        private bool _pbpMediaChosen;
+        /// <summary>The player made the one-time picture choice in Piece by Piece (a flavour, or
+        /// "no online pictures"). Set by the page's first-start picker or its niche manager; while
+        /// false (and nothing else is stored) the first start asks. Owner, 2026-09-30: record the
+        /// choice and never ask again. The saved flavour is then the chess game's own online opt-in
+        /// in every window; it is never app-wide consent.</summary>
+        [JsonProperty("pbpMediaChosen")]
+        public bool PbpMediaChosen
+        {
+            get => _pbpMediaChosen;
+            set { _pbpMediaChosen = value; OnPropertyChanged(); }
         }
 
         #endregion
