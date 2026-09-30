@@ -6,10 +6,8 @@
 // orb and the copy, Controls/TakeoverOrb.cs for SetActive), and the strings are English literals in
 // WPF too - no {loc:Str} binding is being overwritten.
 //
-// NOTHING CALLS IT YET. On WPF the bool arrives from AutonomyService.EnabledChanged; on this head
-// the caller belongs in MainShellWindow.Autonomy.cs, which this layer does not own and which is
-// still a stub. Until then the pill keeps its XAML default (hidden) and the tab keeps its authored
-// "○ DORMANT", which is the honest resting state rather than a claim.
+// The caller is Core AutonomyScheduler.EnabledChanged, hooked in MainShellWindow.Autonomy.cs (as WPF's
+// AutonomyService.EnabledChanged), so start, stop, panic and startup resume all repaint it.
 //
 // THE LIVE VOICE PANEL IS NOT RESTORED, and the reason is a seam, not effort. Every one of its
 // painters is driven by an event that does not exist on this head:

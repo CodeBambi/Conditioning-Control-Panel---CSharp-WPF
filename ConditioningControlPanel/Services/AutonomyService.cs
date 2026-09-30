@@ -9,66 +9,8 @@ using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
-    /// <summary>
-    /// Types of autonomous actions the companion can take
-    /// </summary>
-    public enum AutonomyActionType
-    {
-        Flash,
-        Video,
-        Subliminal,
-        BrainDrainPulse,
-        StartBubbles,
-        Comment,
-        MindWipe,
-        LockCard,
-        SpiralPulse,
-        PinkFilterPulse,
-        BouncingText,
-        BubbleCount,
-        WebVideo,
-        WallpaperShuffle,
-        SpokenMantra
-    }
-
-    /// <summary>
-    /// What triggered the autonomous action
-    /// </summary>
-    public enum AutonomyTriggerSource
-    {
-        Idle,
-        Random,
-        Context,
-        TimeOfDay
-    }
-
-    /// <summary>
-    /// Time-of-day mood affecting behavior style
-    /// </summary>
-    public enum AutonomyMood
-    {
-        Gentle,     // Morning - softer, less frequent
-        Attentive,  // Afternoon - moderate
-        Playful,    // Evening - more active
-        Mischievous // Night - most active
-    }
-
-    /// <summary>
-    /// Event args for when an autonomous action is triggered
-    /// </summary>
-    public class AutonomyActionEventArgs : EventArgs
-    {
-        public AutonomyActionType ActionType { get; }
-        public AutonomyTriggerSource Source { get; }
-        public string? Context { get; }
-
-        public AutonomyActionEventArgs(AutonomyActionType actionType, AutonomyTriggerSource source, string? context = null)
-        {
-            ActionType = actionType;
-            Source = source;
-            Context = context;
-        }
-    }
+    // AutonomyActionType, AutonomyTriggerSource, AutonomyMood and AutonomyActionEventArgs live in
+    // Core now (CCP.Core/Services/Autonomy/AutonomyScheduler.cs), with the pure rules this delegates to.
 
     /// <summary>
     /// Service that enables autonomous companion behavior.
@@ -86,8 +28,8 @@ namespace ConditioningControlPanel.Services
 
         // When a random tick fires but she can't act yet (cooldown, a fullscreen interaction, or a
         // web video), we re-check after this short window instead of waiting a whole fresh interval —
-        // so she acts the moment she's free and the countdown bar stays honest.
-        private const double RetryIntervalSeconds = 12;
+        // so she acts the moment she's free and the countdown bar stays honest
+        // (AutonomyScheduler.RetryIntervalSeconds, in Core).
 
         // State
         private DateTime _lastActionTime = DateTime.MinValue;
@@ -147,97 +89,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Raised when a voice prompt resolves, carrying its result.</summary>
         public event EventHandler<Services.Speech.PhraseResult>? VoicePromptFinished;
 
-        // Announcement phrases by action type
-        private readonly Dictionary<AutonomyActionType, string[]> _announcementPhrases = new()
-        {
-            { AutonomyActionType.Flash, new[] {
-                "Time for a little surprise~",
-                "Here comes something pretty!",
-                "Look at the screen for me~",
-                "Ooh, I want to show you something~",
-                "Pretty picture time~"
-            }},
-            { AutonomyActionType.Video, new[] {
-                "Video time! Get comfy~",
-                "I have something to show you...",
-                "Time to watch and absorb~",
-                "Sit back and watch~",
-                "Let's watch something together~"
-            }},
-            { AutonomyActionType.Subliminal, new[] {
-                "Just a little message for you~",
-                "*giggles* Did you see that?",
-                "Shhh, just let it sink in~",
-                "A little reminder~",
-                "Don't think, just absorb~"
-            }},
-            { AutonomyActionType.BrainDrainPulse, new[] {
-                "Let me blur your thoughts~",
-                "Time to get fuzzy~",
-                "Thinking is overrated~",
-                "Let it all go blurry~"
-            }},
-            { AutonomyActionType.StartBubbles, new[] {
-                "Pop pop pop!",
-                "Let's play~",
-                "Bubble time!",
-                "Click the bubbles~"
-            }},
-            { AutonomyActionType.Comment, new[] {
-                "*giggles*",
-                "Teehee~",
-                "Just thinking about you~"
-            }},
-            { AutonomyActionType.MindWipe, new[] {
-                "Let me wipe your thoughts~",
-                "Shhh... empty mind~",
-                "No more thinking~",
-                "Time to forget~"
-            }},
-            { AutonomyActionType.LockCard, new[] {
-                "Time to earn a reward~",
-                "Complete this for me~",
-                "Show me how good you are~",
-                "Task time~"
-            }},
-            { AutonomyActionType.SpiralPulse, new[] {
-                "Watch the pretty spiral~",
-                "Spirals are so pretty...",
-                "Look at the swirls~",
-                "Round and round~"
-            }},
-            { AutonomyActionType.PinkFilterPulse, new[] {
-                "Everything looks better in pink~",
-                "Pink is your color~",
-                "So pretty and pink~",
-                "Pink thoughts~"
-            }},
-            { AutonomyActionType.BouncingText, new[] {
-                "Read the pretty words~",
-                "Follow the bouncing text~",
-                "Words to remember~",
-                "Let them sink in~"
-            }},
-            { AutonomyActionType.BubbleCount, new[] {
-                "Count with me~",
-                "How many bubbles?",
-                "Test your focus~",
-                "Counting game time~"
-            }},
-            { AutonomyActionType.WebVideo, new[] {
-                "Time to watch something special~",
-                "I picked a video just for you~",
-                "Sit back and let it sink in~",
-                "Watch and absorb~",
-                "Fullscreen time~"
-            }},
-            { AutonomyActionType.WallpaperShuffle, new[] {
-                "New scenery for you~",
-                "Let me redecorate~",
-                "A little change of view~",
-                "How about this one?~"
-            }}
-        };
+        private static IReadOnlyDictionary<AutonomyActionType, string[]> _announcementPhrases => AutonomyScheduler.AnnouncementPhrases;
 
         public bool IsEnabled => _isEnabled;
         public bool IsIdleTimerRunning => _idleTimer?.IsEnabled == true;
@@ -565,7 +417,7 @@ namespace ConditioningControlPanel.Services
         /// <param name="overlayWasRunningBeforePulse">OverlayService.IsRunning as captured when the pulse began.</param>
         /// <param name="otherPulseActive">True while the sibling pulse (spiral for pink, pink for spiral) still runs.</param>
         public static bool ShouldStopOverlayAfterPulse(bool overlayWasRunningBeforePulse, bool otherPulseActive)
-            => !overlayWasRunningBeforePulse && !otherPulseActive;
+            => AutonomyScheduler.ShouldStopOverlayAfterPulse(overlayWasRunningBeforePulse, otherPulseActive);
 
         /// <summary>
         /// Should an action that was queued behind an announcement still fire? (#1153)
@@ -576,7 +428,7 @@ namespace ConditioningControlPanel.Services
         /// everything. Enabled AND same generation, or it is dropped.</para>
         /// </summary>
         public static bool ShouldRunDelayedAction(bool enabled, int generationAtSchedule, int generationNow)
-            => enabled && generationAtSchedule == generationNow;
+            => AutonomyScheduler.ShouldRunDelayedAction(enabled, generationAtSchedule, generationNow);
 
         /// <summary>
         /// Cancel all active pulses and restore original settings.
@@ -677,11 +529,7 @@ namespace ConditioningControlPanel.Services
             // Daily free day (the ? box) counts as access here too - the UI gate
             // (TierGate keyed overload) and this engine gate must agree or the chip
             // toggles a takeover that then refuses to start.
-            var hasPatreon = App.Patreon?.HasPremiumAccess == true
-                             || App.DailyFree?.IsFreeToday("takeover") == true;
-            return settings.AutonomyModeEnabled &&
-                   settings.AutonomyConsentGiven &&
-                   hasPatreon;
+            return AutonomyScheduler.CanStart(settings);
         }
 
         /// <summary>
@@ -753,45 +601,9 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            double actualSeconds;
-            string modeInfo;
-
-            if (retry)
-            {
-                // A tick fired but she couldn't act (cooldown / fullscreen interaction / web video).
-                // Re-check soon instead of burning a whole fresh interval — otherwise the countdown
-                // bar completes with nothing happening and her real cadence drifts far below the
-                // slider. ~12–24s jittered so it doesn't hammer while a long video is on screen.
-                actualSeconds = RetryIntervalSeconds + _random.NextDouble() * RetryIntervalSeconds;
-                modeInfo = "retry (was blocked)";
-            }
-            else if (_forceTestMode)
-            {
-                // Force test mode: always use 30 seconds
-                actualSeconds = 30;
-                modeInfo = "FORCE TEST MODE";
-            }
-            else
-            {
-                // Normal mode: jitter ±~33% AROUND the configured interval, so the slider value is the
-                // midpoint (e.g. 30 → 20–40s, 60 → 40–80s). Tightened from the old 0.5–1.5× spread,
-                // which let a 60s setting fire as early as 30s.
-                var baseSeconds = settings.AutonomyRandomIntervalSeconds;
-                var variance = (2.0 / 3.0) + _random.NextDouble() * (2.0 / 3.0); // 0.667 to 1.333
-                actualSeconds = baseSeconds * variance;
-
-                // Time-of-day pacing: when "time aware" is on, a higher activity multiplier means she's
-                // MORE active, so the gap shrinks at night and stretches in the morning. Until now
-                // GetTimeMultiplier() was computed but never applied anywhere, so the toggle (and every
-                // morning/afternoon/evening/night multiplier) did nothing at all.
-                var timeMult = GetTimeMultiplier();
-                if (timeMult > 0)
-                    actualSeconds /= timeMult;
-
-                // Keep the result sane no matter how jitter and the multiplier combine.
-                actualSeconds = Math.Clamp(actualSeconds, 15, 900);
-                modeInfo = $"base: {baseSeconds}s (±33%, timeMult {timeMult:0.00})";
-            }
+            // Rule (retry 12-24 s, test 30 s, else ±33 % / time multiplier, 15-900 s) is in Core.
+            var actualSeconds = AutonomyScheduler.NextRandomSeconds(settings, retry, _forceTestMode, DateTime.Now.Hour, _random.NextDouble());
+            var modeInfo = retry ? "retry (was blocked)" : _forceTestMode ? "FORCE TEST MODE" : $"base: {settings.AutonomyRandomIntervalSeconds}s";
 
             _randomTimer?.Stop();
             _randomTimer = new DispatcherTimer
@@ -969,9 +781,7 @@ namespace ConditioningControlPanel.Services
             // rotate out (or a subscription lapse) while the timers are armed, and CanStart()
             // never runs again after Start(). Without this the takeover kept acting from behind
             // the re-drawn padlock veil. Same OR as CanStart, or the two gates disagree.
-            var hasEntitlement = App.Patreon?.HasPremiumAccess == true
-                                 || App.DailyFree?.IsFreeToday("takeover") == true;
-            if (!hasEntitlement)
+            if (!AutonomyScheduler.HasEntitlement)
             {
                 App.Logger?.Debug("AutonomyService: CanTakeAction=false - premium access lapsed");
                 return false;
@@ -1095,197 +905,32 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return null;
 
-            var candidates = new List<(AutonomyActionType type, int weight)>();
-
-            // Build weighted list of enabled actions
-            // Note: Autonomy works independently of engine - only checks Autonomy-specific settings
-            if (settings.AutonomyCanTriggerFlash)
-                candidates.Add((AutonomyActionType.Flash, 30));
-
-            if (settings.AutonomyCanTriggerVideo)
-                candidates.Add((AutonomyActionType.Video, 15)); // Lower weight - more disruptive
-
-            if (settings.AutonomyCanTriggerSubliminal)
-                candidates.Add((AutonomyActionType.Subliminal, 25));
-
-            // Note: BrainDrainPulse removed from autonomy — Brain Drain is being kept out of user-facing
-            // surfaces while the blur feature is still being verified (mirrors its removal from the
-            // Deeper editor + session creator). Enum/label/PulseBrainDrain kept for a clean restore later.
-
-            if (settings.AutonomyCanTriggerBubbles)
-                candidates.Add((AutonomyActionType.StartBubbles, 15));
-
-            if (settings.AutonomyCanComment)
-                candidates.Add((AutonomyActionType.Comment, 20));
-
-            // New progression features
-            if (settings.AutonomyCanTriggerMindWipe)
-                candidates.Add((AutonomyActionType.MindWipe, 15));
-
-            if (settings.AutonomyCanTriggerLockCard)
-                candidates.Add((AutonomyActionType.LockCard, 10)); // Lower weight - very disruptive
-
-            // Note: SpiralPulse removed from autonomy - can interfere with user experience
-
-            if (settings.AutonomyCanTriggerPinkFilter)
-                candidates.Add((AutonomyActionType.PinkFilterPulse, 20));
-
-            if (settings.AutonomyCanTriggerBouncingText)
-                candidates.Add((AutonomyActionType.BouncingText, 15));
-
-            // Web video - plays random HypnoTube video fullscreen in browser.
-            // Exclude while a mandatory video is on screen so we pick a different action
-            // rather than stacking two videos (BUG-XRFQH4AHDN).
-            // ShouldDeferNewVideo (not ...Interruptions): the cool-off applies to starting ANOTHER
-            // video, so one web video is never chased straight back by the next. Other action
-            // types stay eligible during the cool-off, which is what keeps the countdown bar
-            // honest instead of completing and doing nothing.
-            if (settings.AutonomyCanTriggerWebVideo
-                && App.BrowserMedia?.ShouldDeferNewVideo != true
-                && App.Video?.IsPlaying != true
-                && !Fyp.FypHostService.IsActive)
-                candidates.Add((AutonomyActionType.WebVideo, 20));
-
-            // Wallpaper shuffle - subtle desktop wallpaper change
-            if (settings.AutonomyCanTriggerWallpaper)
-                candidates.Add((AutonomyActionType.WallpaperShuffle, 10));
-
-            // Spoken mantra - "say it for me" (offline speech). Self-gating: only ever a candidate
-            // when the speech engine is actually available (model + mic), the user consented to the
-            // mic, AND the active mod ships mantra content — so it's purely additive: no engine or no
-            // content => it simply never appears.
-            // When the user opted into wake-word or push-to-talk, the mic only opens on her own
-            // initiative — so we suppress the surprise auto-trigger ("overrides auto-listen").
-            if (settings.AutonomyCanTriggerVoiceCommand
-                && settings.MicConsentGiven
-                && !settings.SpeechWakeWordEnabled
-                && !settings.SpeechPushToTalkEnabled
-                && App.Speech?.IsAvailable == true
-                && App.Speech?.IsListening != true
-                && !_voiceBusy
-                && App.AvatarWindow != null
-                && App.MantraVoice?.HasMantras() == true)
-                candidates.Add((AutonomyActionType.SpokenMantra, 18));
-
-            // Note: BubbleCount removed from autonomy - too disruptive and unreliable
-
-            if (candidates.Count == 0) return null;
-
-            // Apply mood modifiers
-            ApplyMoodWeights(candidates);
-
-            // Apply intensity scaling
-            ApplyIntensityScaling(candidates, settings.AutonomyIntensity);
-
-            // Weighted random selection
-            var totalWeight = candidates.Sum(c => c.weight);
-            if (totalWeight <= 0) return null;
-
-            var roll = _random.Next(totalWeight);
-            var cumulative = 0;
-
-            foreach (var (type, weight) in candidates)
-            {
-                cumulative += weight;
-                if (roll < cumulative)
-                {
-                    return type;
-                }
-            }
-
-            return candidates.FirstOrDefault().type;
-        }
-
-        private void ApplyMoodWeights(List<(AutonomyActionType type, int weight)> candidates)
-        {
+            // Candidate list, weights, mood + intensity scaling and the roll are Core's; the
+            // head-only conditions for a web video / spoken mantra are decided here.
+            var webVideoOk = App.BrowserMedia?.ShouldDeferNewVideo != true
+                             && App.Video?.IsPlaying != true
+                             && !Fyp.FypHostService.IsActive;
+            // Same short-circuit order as before the move: no speech probe (Vosk load) without mic
+            // consent, or while the user drives the mic by wake word / push-to-talk.
+            var mantraOk = settings.AutonomyCanTriggerVoiceCommand
+                           && settings.MicConsentGiven
+                           && !settings.SpeechWakeWordEnabled
+                           && !settings.SpeechPushToTalkEnabled
+                           && App.Speech?.IsAvailable == true
+                           && App.Speech?.IsListening != true
+                           && !_voiceBusy
+                           && App.AvatarWindow != null
+                           && App.MantraVoice?.HasMantras() == true;
             UpdateMood();
-
-            // Mood affects which actions are more likely
-            for (int i = 0; i < candidates.Count; i++)
-            {
-                var (type, weight) = candidates[i];
-                var modifier = 1.0;
-
-                switch (_currentMood)
-                {
-                    case AutonomyMood.Gentle:
-                        // Prefer comments, reduce disruptive actions
-                        modifier = type switch
-                        {
-                            AutonomyActionType.Comment => 1.5,
-                            AutonomyActionType.Video => 0.5,
-                            AutonomyActionType.BrainDrainPulse => 0.5,
-                            _ => 1.0
-                        };
-                        break;
-
-                    case AutonomyMood.Playful:
-                        // Prefer bubbles and flashes
-                        modifier = type switch
-                        {
-                            AutonomyActionType.StartBubbles => 1.5,
-                            AutonomyActionType.Flash => 1.3,
-                            _ => 1.0
-                        };
-                        break;
-
-                    case AutonomyMood.Mischievous:
-                        // More likely to do "naughty" things
-                        modifier = type switch
-                        {
-                            AutonomyActionType.Video => 1.5,
-                            AutonomyActionType.BrainDrainPulse => 1.5,
-                            AutonomyActionType.Subliminal => 1.3,
-                            _ => 1.0
-                        };
-                        break;
-                }
-
-                candidates[i] = (type, (int)(weight * modifier));
-            }
-        }
-
-        private void ApplyIntensityScaling(List<(AutonomyActionType type, int weight)> candidates, int intensity)
-        {
-            // Higher intensity = more disruptive actions become more likely
-            var disruptiveBonus = (intensity - 5) * 0.1; // -0.4 to +0.5
-
-            for (int i = 0; i < candidates.Count; i++)
-            {
-                var (type, weight) = candidates[i];
-
-                // Disruptive actions scale with intensity
-                if (type == AutonomyActionType.Video || type == AutonomyActionType.BrainDrainPulse)
-                {
-                    var modifier = 1.0 + disruptiveBonus;
-                    candidates[i] = (type, Math.Max(1, (int)(weight * modifier)));
-                }
-            }
+            return AutonomyScheduler.Pick(AutonomyScheduler.Candidates(settings, webVideoOk, mantraOk),
+                _currentMood, settings.AutonomyIntensity, _random);
         }
 
         /// <summary>
         /// Display label for the on-screen takeover cue, or <c>null</c> to suppress it.
         /// Comment is suppressed — it's just the avatar giggling, not a screen effect.
         /// </summary>
-        private static string? TakeoverEffectLabel(AutonomyActionType t) => t switch
-        {
-            AutonomyActionType.Flash            => "FLASH",
-            AutonomyActionType.Video            => "VIDEO",
-            AutonomyActionType.Subliminal       => "SUBLIMINAL",
-            AutonomyActionType.BrainDrainPulse  => "BRAIN DRAIN",
-            AutonomyActionType.StartBubbles     => "BUBBLES",
-            AutonomyActionType.MindWipe         => "MIND WIPE",
-            AutonomyActionType.LockCard         => "LOCK CARD",
-            AutonomyActionType.SpiralPulse      => "SPIRAL",
-            AutonomyActionType.PinkFilterPulse  => "PINK FILTER",
-            AutonomyActionType.BouncingText     => "BOUNCING TEXT",
-            AutonomyActionType.BubbleCount      => "BUBBLE COUNT",
-            AutonomyActionType.WebVideo         => "WEB VIDEO",
-            AutonomyActionType.WallpaperShuffle => "WALLPAPER",
-            AutonomyActionType.SpokenMantra     => "MANTRA",
-            AutonomyActionType.Comment          => null,   // avatar giggle — no banner
-            _                                   => null,
-        };
+        private static string? TakeoverEffectLabel(AutonomyActionType t) => AutonomyScheduler.TakeoverEffectLabel(t);
 
         private void PerformAction(AutonomyActionType actionType, AutonomyTriggerSource source, string? context, bool announce)
         {
@@ -2137,15 +1782,7 @@ namespace ConditioningControlPanel.Services
 
         private void UpdateMood()
         {
-            var hour = DateTime.Now.Hour;
-
-            _currentMood = hour switch
-            {
-                >= 22 or < 6 => AutonomyMood.Mischievous,
-                >= 18 => AutonomyMood.Playful,
-                >= 12 => AutonomyMood.Attentive,
-                _ => AutonomyMood.Gentle
-            };
+            _currentMood = AutonomyScheduler.MoodAt(DateTime.Now.Hour);
         }
 
         /// <summary>
@@ -2154,18 +1791,7 @@ namespace ConditioningControlPanel.Services
         public double GetTimeMultiplier()
         {
             var settings = App.Settings?.Current;
-            if (settings == null || !settings.AutonomyTimeAwareEnabled)
-                return 1.0;
-
-            var hour = DateTime.Now.Hour;
-
-            return hour switch
-            {
-                >= 22 or < 6 => settings.AutonomyNightMultiplier,
-                >= 18 => settings.AutonomyEveningMultiplier,
-                >= 12 => settings.AutonomyAfternoonMultiplier,
-                _ => settings.AutonomyMorningMultiplier
-            };
+            return settings == null ? 1.0 : AutonomyScheduler.TimeMultiplier(settings, DateTime.Now.Hour);
         }
 
         #endregion
