@@ -80,19 +80,18 @@ namespace ConditioningControlPanel.Services
                 bool entitled = App.Patreon?.HasPremiumAccess == true
                                 || App.DailyFree?.IsFreeToday("voice") == true;
 
-                bool baseOk = !_disposed
-                              && entitled
-                              && s?.MicConsentGiven == true
-                              && App.Speech?.IsAvailable == true;
+                var (wake, ptt) = s == null || _disposed
+                    ? (false, false)
+                    : VoiceInputRules.ModesToRun(s, entitled, App.Speech?.IsAvailable == true);
 
                 // Wake-word loop
-                if (baseOk && s!.SpeechWakeWordEnabled && WakeWords().Count > 0)
+                if (wake)
                     StartWakeLoop();
                 else
                     StopWakeLoop();
 
                 // Push-to-talk hook
-                if (baseOk && s!.SpeechPushToTalkEnabled)
+                if (ptt)
                     StartPushToTalk();
                 else
                     StopPushToTalk();
@@ -163,50 +162,11 @@ namespace ConditioningControlPanel.Services
 
         // ── Wake-word loop ────────────────────────────────────────────────────
 
-        private List<string> WakeWords()
-        {
-            var raw = App.Settings?.Current?.SpeechWakeWords ?? "";
-            return raw.Split(new[] { ',', ';', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                      .Select(w => w.Trim())
-                      .Where(w => w.Length > 0)
-                      .Distinct(StringComparer.OrdinalIgnoreCase)
-                      .ToList();
-        }
+        // Wake phrases + phonetic variants live in Core (VoiceInputRules), shared with the Avalonia head.
+        private List<string> WakeWords() => VoiceInputRules.WakeWords(App.Settings?.Current?.SpeechWakeWords);
 
-        // "bambi" (and friends) aren't English dictionary words, so the offline model can't spell them
-        // reliably — it returns close-but-not-exact tokens or dumps the name into [unk]. Feeding the
-        // decoder these acoustically-plausible spellings as extra grammar targets lets it return a full
-        // phrase that fuzzy-matches the canonical wake word. Only the trailing name token is varied.
-        private static readonly Dictionary<string, string[]> WakeNameVariants =
-            new(StringComparer.OrdinalIgnoreCase)
-            {
-                ["bambi"]  = new[] { "bambi", "bamby", "bambie", "bambee", "bombi", "bambit" },
-                ["bimbo"]  = new[] { "bimbo", "bimba", "bimbow", "bimboh" },
-                ["bambis"] = new[] { "bambis", "bambies" },
-            };
-
-        /// <summary>
-        /// Expand the user's wake phrases with phonetic spellings of any OOV name token (e.g. "hey bambi"
-        /// -> "hey bambi/bamby/bambie/..."). Canonical phrases stay FIRST so the recognizer's match target
-        /// (its words[0]) remains the real wake word; the variants only widen what the decoder can return.
-        /// </summary>
         private static List<string> ExpandWakeVariants(IReadOnlyList<string> phrases)
-        {
-            var outp = new List<string>(phrases);
-            foreach (var phrase in phrases)
-            {
-                var toks = phrase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (toks.Length == 0) continue;
-                if (!WakeNameVariants.TryGetValue(toks[^1], out var variants)) continue;
-                var prefix = toks.Length > 1 ? string.Join(' ', toks[..^1]) + " " : "";
-                foreach (var v in variants)
-                {
-                    var cand = prefix + v;
-                    if (!outp.Contains(cand, StringComparer.OrdinalIgnoreCase)) outp.Add(cand);
-                }
-            }
-            return outp;
-        }
+            => VoiceInputRules.ExpandWakeVariants(phrases);
 
         private void StartWakeLoop()
         {

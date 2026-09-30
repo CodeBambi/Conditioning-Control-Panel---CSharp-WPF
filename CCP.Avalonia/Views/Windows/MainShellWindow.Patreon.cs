@@ -157,6 +157,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Named<Tabs.BambiTakeoverTabView>("BambiTakeoverTab")?.SyncFromSettings();
                 Named<Tabs.AwarenessTabView>("AwarenessTab")?.SyncAwarenessTabUi();
                 StudioRack?.HapticsPanel.LoadHapticsSettingsToUi();   // haptics Enabled may just have been cleared
+                RefreshSheListeningTab();   // "voice" / "voice-mic" may just have been cleared
             }
             catch (System.Exception ex) { Serilog.Log.Warning(ex, "EnforceEntitlementLapse failed"); }
         }

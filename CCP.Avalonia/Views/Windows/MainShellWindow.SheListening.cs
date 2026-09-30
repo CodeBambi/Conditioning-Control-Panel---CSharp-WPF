@@ -1,59 +1,27 @@
-// PORTED from ConditioningControlPanel/MainWindow/MainWindow.SheListening.cs (481 lines) - the
-// "She's Listening" surface, sorted member by member rather than stubbed wholesale.
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.SheListening.cs - the "She's
+// Listening" surface. The shared rules (MicIsArmed, the loudness-gate dial, wake phrases, which
+// modes may run) are Core VoiceInputRules, which WPF delegates to as well.
 //
-// WHAT IS REAL HERE. Everything this page needs that is settings, arithmetic or CoreSpeech:
-// the loudness-gate mapping (SensToThreshold/ThresholdToSens, pure maths), MicIsArmed, the
-// sensitivity slider's write, the spoken-mantras toggle with its mic-consent gate
-// (Views/Dialogs/MicConsentDialog is on this head), the device chips, the status hero and the
-// tab's own re-seed. CoreSpeech answers IsAvailable / HasCaptureDevice / ModelStatus, which is
-// the whole of what RefreshSheListeningStatus asks a service for.
+// Every tab handler is wired: master Start/Stop (premium bar, speech check, consent, default wake
+// word), revoke consent, spoken mantras with the consent gate, calibrate, the premium veil.
 //
-// SheListeningTabView loads with the GENERATED InitializeComponent, so ITS x:Name fields are
-// real and are used directly. This WINDOW does not - the tab itself is reached only through
-// Named<T>() (see MainShellWindow.TabNavigation.cs).
+// ponytail: the mic is NEVER opened on this head. On WPF an armed wake word / push-to-talk feeds
+// AutonomyService.VoiceCommands (+ RunSpokenMantraAsync, MantraVoice) - none of it ported - so a
+// capture here would have no consumer (avalonia-decisions.md "voice arm without consumer").
+// Arming therefore writes the settings and the hero says plainly (sl_voice_not_on_this_build)
+// that voice commands are not on this build. Port VoiceCommands, then start
+// PulseMicSource.Speech.WaitForWakeWordAsync(VoiceInputRules.ExpandWakeVariants(...)) from
+// VoiceInputRules.ModesToRun. Also not here: sherpa wake engine (calibration shows WPF's "not
+// installed" notice), UpdateMicPill, SetSheListeningStatusPulse, BtnSL_OpenModels.
 //
-// _slLoading, not _isLoading. The class-wide _isLoading is listed in MainShellWindow.axaml.cs's
-// dropped ledger and belongs to that file; a partial-class field can be declared exactly once,
-// so this concern carries its own. It is MORE load-bearing here than on WPF: Avalonia's CheckBox
-// and Slider raise IsCheckedChanged / ValueChanged on a PROGRAMMATIC set, so seeding a control
-// would otherwise write settings straight back.
-//
-// NO CALLER YET, and both call sites are named so this is not mistaken for a live page:
-//   - the seven handlers in CCP.Avalonia/Views/Tabs/SheListeningTabView.axaml.cs are still
-//     `(_, _) => { }`; they are one forward each to the members below once that file is a
-//     layer's to own.
-//   - the on-show refresh belongs in OnTabShown (MainShellWindow.TabNavigation.cs), beside the
-//     StudioTab cases already there.
-//
-// STILL HEAD-SIDE, each with the exact symbol and where it lives today:
-//   DemandSheListeningPremium  - nothing any more: TierGate is CCP.Core/Services/TierGate.cs.
-//                                Still unwired here only because its two readers below,
-//                                ToggleVoiceMic's arming half and the SheListeningGate veil, are
-//                                blocked on the mic services listed next.
-//   ToggleVoiceMic             - App.Autonomy.RefreshVoiceInputModes / StopVoiceInput
-//   DisarmVoiceMic               (ConditioningControlPanel/Services/AutonomyService.cs),
-//                                App.Speech.StopListening
-//                                (ConditioningControlPanel/Services/Speech/SpeechService.cs) and
-//                                (LockCardWindow.DisableVoiceForAll is on this head now:
-//                                CCP.Avalonia/Views/Windows/LockCardWindow.axaml.cs).
-//                                The settings half of both is trivial; shipping it WITHOUT the
-//                                stop calls would leave a mic open behind a switch that says off,
-//                                which is the one failure this file must not have. Blocked whole.
-//   SL_RevokeMicConsent_Click  - the same three, through DisarmVoiceMic. Clearing the four
-//                                consent settings is pointless while the capture cannot be cut.
-//   SL_Calibrate_Click         - Services.Speech.SherpaWakeService.CalibrateAsync
-//   RefreshWakeEngineStatus      (ConditioningControlPanel/Services/Speech/SherpaWakeService.cs).
-//                                CoreSpeech carries no wake engine, only the recognizer's status.
-//   UpdateMicPill              - MainShellWindow.PrivacyPill.cs, still a stub.
-//   SetSheListeningStatusPulse - MainShellWindow.SheListeningFx.cs, still a stub.
-//   RefreshPremiumRail         - MainShellWindow.PremiumRail.cs / RefreshPremiumGate, neither of
-//   RefreshPremiumGate           which this layer owns. TierGate itself is no longer the blocker.
-// Every one of those calls is DROPPED from the restored bodies below, never faked.
+// _slLoading, not _isLoading: a partial-class field is declared once, and Avalonia's CheckBox
+// raises IsCheckedChanged on a programmatic set, so seeding needs its own guard.
 
 using System;
 using Avalonia.Controls;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Speech;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -68,47 +36,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Seeding guard for this page. See the header for why it is not _isLoading.</summary>
         private bool _slLoading;
 
-        // ---- the loudness gate -----------------------------------------------------------
-        // Slider 0..100 maps INVERSELY to the RMS threshold: 100% = most sensitive (lowest
-        // threshold, softest speech OK), 0% = strictest. Verbatim from the WPF file - pure
-        // arithmetic, no dependency at all, and the numbers are the gate's useful range.
-
-        private const double LoudThrAtMinSens = 0.045; // slider 0%
-        private const double LoudThrAtMaxSens = 0.004; // slider 100%
-
-        private static double SensToThreshold(double sens)
-            => LoudThrAtMinSens - (LoudThrAtMinSens - LoudThrAtMaxSens) * (Math.Clamp(sens, 0, 100) / 100.0);
-
-        private static double ThresholdToSens(double thr)
-            => Math.Clamp((LoudThrAtMinSens - thr) / (LoudThrAtMinSens - LoudThrAtMaxSens) * 100.0, 0, 100);
-
         /// <summary>
         /// True when the offline mic is actually armed: consent given AND at least one input mode
         /// (wake word or push-to-talk) is on. The "She's Listening" master on/off state, fully
         /// independent of Takeover.
         /// </summary>
         internal bool MicIsArmed()
-        {
-            var s = CoreSettings.Current;
-            return s.MicConsentGiven && (s.SpeechWakeWordEnabled || s.SpeechPushToTalkEnabled);
-        }
-
-        /// <summary>
-        /// Mic-sensitivity slider: tunes the loudness gate that decides whether a recognized
-        /// command or mantra was "said out loud". Applies live. Does NOT touch the wake word -
-        /// that is calibration. Avalonia hands the new value rather than WPF's
-        /// RoutedPropertyChangedEventArgs, so the signature takes it directly.
-        /// </summary>
-        internal void SL_MicSensitivity_Changed(double newValue)
-        {
-            if (_slLoading) return;
-            var tab = SheListeningPage;
-            if (tab == null) return;
-
-            CoreSettings.Current.SpeechLoudnessThreshold = SensToThreshold(newValue);
-            CoreSettings.Save();
-            tab.TxtSL_MicSensitivity.Text = $"{(int)Math.Round(newValue)}%";
-        }
+            => VoiceInputRules.MicIsArmed(CoreSettings.Current);
 
         /// <summary>
         /// On-demand spoken mantras (AppSettings.SpokenMantrasEnabled). Separate from the Takeover
@@ -157,7 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 tab.ChkSL_Mantras.IsChecked = s.SpokenMantrasEnabled && s.MicConsentGiven;
-                double sens = ThresholdToSens(s.SpeechLoudnessThreshold);
+                double sens = VoiceInputRules.ThresholdToSens(s.SpeechLoudnessThreshold);
                 tab.SldSL_MicSensitivity.Value = sens;
                 tab.TxtSL_MicSensitivity.Text = $"{(int)Math.Round(sens)}%";
             }
@@ -251,9 +185,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (armed)
             {
-                tab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0x90, 0xEE, 0x90));
-                tab.SL_StatusTitle.Text = "She's listening";
-                tab.SL_StatusSub.Text = "The mic is open. Call her, then say a command.";
+                // WPF: green "She's listening / The mic is open". Not true here - see the header.
+                tab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0xC1, 0x07));
+                tab.SL_StatusTitle.Text = "Mic off";
+                tab.SL_StatusSub.Text = Loc.Get("sl_voice_not_on_this_build");
             }
             else
             {
@@ -262,5 +197,75 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 tab.SL_StatusSub.Text = "Tap Start listening so she can hear you. Works with or without Takeover.";
             }
         }
+
+        /// <summary>WPF ToggleVoiceMic: the master Start/Stop. Arming is premium-barred (the veil is
+        /// only a Border); disarming never is. Arming writes settings only - see the header.</summary>
+        internal async void ToggleVoiceMic()
+        {
+            var s = CoreSettings.Current;
+            if (MicIsArmed()) { DisarmVoiceMic(); return; }
+            if (!Services.TierGate.DemandPremium(Loc.Get("tab_shelistening"), "voice")) return;
+
+            if (!CoreSpeech.IsAvailable)
+            {
+                await Dialogs.MessageDialog.ShowAsync(this, "She's Listening",
+                    CoreSpeech.HasCaptureDevice
+                        ? "The offline speech model isn't installed yet, so the mic can't start."
+                        : "No microphone detected — connect one to use voice control.");
+                return;
+            }
+            if (!s.MicConsentGiven)
+            {
+                var dlg = new Dialogs.MicConsentDialog();
+                await dlg.ShowDialog(this);
+                if (!dlg.ConsentGiven) return;
+            }
+            if (!s.SpeechWakeWordEnabled && !s.SpeechPushToTalkEnabled)
+                s.SpeechWakeWordEnabled = true;
+            CoreSettings.Save();
+            RefreshSheListeningTab();
+        }
+
+        /// <summary>WPF DisarmVoiceMic: clear both input modes, cut any in-flight capture (a voice
+        /// lock card's), drop open lock cards to typed solve, repaint.</summary>
+        internal void DisarmVoiceMic()
+        {
+            var s = CoreSettings.Current;
+            s.SpeechWakeWordEnabled = false;
+            s.SpeechPushToTalkEnabled = false;
+            CoreSettings.Save();
+            try { Platform.PulseMicSource.Speech?.StopListening(); } catch { }
+            try { LockCardWindow.DisableVoiceForAll(); } catch { }
+            RefreshSheListeningTab();
+        }
+
+        /// <summary>WPF SL_RevokeMicConsent_Click: disarm, then clear every mic capability and the
+        /// consent record so the next enable asks again.</summary>
+        internal async void SL_RevokeMicConsent_Click()
+        {
+            try
+            {
+                if (!await Dialogs.MessageDialog.ConfirmAsync(this, "Revoke microphone consent",
+                        "This turns off every voice feature (wake word, push-to-talk, spoken mantras, voice lock cards) and clears your mic consent. You'll be asked again next time you enable one.",
+                        defaultToCancel: true))
+                    return;
+                DisarmVoiceMic();
+                var s = CoreSettings.Current;
+                s.SpokenMantrasEnabled = false;
+                s.AutonomyCanTriggerVoiceCommand = false;
+                s.LockCardVoiceMode = false;
+                s.MicConsentGiven = false;
+                CoreSettings.Save();
+                Log.Information("Microphone consent revoked");
+                RefreshSheListeningTab();
+            }
+            catch (Exception ex) { Log.Warning(ex, "SL_RevokeMicConsent_Click failed"); }
+        }
+
+        /// <summary>WPF SL_Calibrate_Click's first branch: this head has no sherpa wake engine
+        /// (App.WakeWord), so it is never configured and WPF's notice is the whole answer.</summary>
+        internal void SL_Calibrate_Click()
+            => _ = Dialogs.MessageDialog.ShowAsync(this, "Calibrate wake word",
+                "The offline wake-word model isn't installed yet, so there's nothing to calibrate.");
     }
 }

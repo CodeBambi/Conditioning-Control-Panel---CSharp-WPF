@@ -161,3 +161,9 @@ here record where and why the port chose something, and who advised.
 ## 2026-09-30: Remote Control – escape integrity (avalonia-port/remote-control-core)
 Remote Control – escape integrity. A remote controller may never remove the subject's last means of escape. 1. disable_panic is always refused and reported to the controller as refused; the panic key can be disabled only locally, through Lockdown; the consent waiver must not list 'disable panic key'. Deviation from WPF (RemoteControlService disable_panic): WPF saves the change, it outlives disconnect and restart, and the client doesn't enforce the tier. 2. While Lockdown is active, enable_strict_lock is refused; commands that only reduce restraint (stop_session, pause, trigger_panic, enable_panic, disable_strict_lock) run exactly as on WPF, don't end the Lockdown timer, and Lockdown restores the user's earlier settings when it ends.
 - Advisor: oracle-deep.
+
+## 2026-09-30: She's Listening – voice arm without consumer (avalonia-port/she-listening)
+- Question: on WPF an armed wake word / push-to-talk feeds AutonomyService.VoiceCommands (+ RunSpokenMantraAsync, MantraVoice); none of it is on this head. What does arming do on Avalonia?
+- Choice: the mic is never opened without a consumer. The master Start button still runs the WPF arming rules (premium/voice free-day bar, speech check, consent, wake word on by default) and saves the settings, but the hero never claims "She's listening": it stays "Mic off" and says `sl_voice_not_on_this_build` ("Voice commands aren't available on this build yet, so the mic stays closed..."). The Test button says the same. Stop/revoke always work and also cut any lock-card capture. When VoiceCommands is ported, start the wake loop from Core `VoiceInputRules.ModesToRun` and restore WPF's green status.
+- Test: `Tests/CCP.Avalonia.Tests/SheListeningTests.cs` (fail-proven: removing the premium bar or restoring "The mic is open" fails it).
+- Advisor: supervisor.

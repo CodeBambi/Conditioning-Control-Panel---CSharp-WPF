@@ -16,48 +16,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// <para><b>What is real here.</b> The mic-sensitivity dial is a stored threshold on
     /// <see cref="AppSettings.SpeechLoudnessThreshold"/> (Core), so its load, its readout and its
-    /// save are the WPF round-trip verbatim - see <see cref="SensToThreshold"/>. The two
+    /// save are the WPF round-trip verbatim - see Core VoiceInputRules.SensToThreshold. The two
     /// audio_whispers plates are painted through <see cref="Helpers.ModArt.TryLoad"/> and repainted
     /// on <see cref="CoreMods.ModChanged"/>, which is the WPF ModResourceResolver behaviour split
     /// across the seam.</para>
     ///
-    /// <para><b>What is deliberately still a stub.</b> The remaining buttons forward to
-    /// ConditioningControlPanel/MainWindow/MainWindow.SheListening.cs, which owns the mic itself
-    /// (App.Speech), the wake-word calibration and the premium gate - none of that is on this head.
-    /// <c>ChkSL_Mantras</c> is REFUSED rather than stubbed-with-persistence: on WPF
-    /// (MainWindow.SheListening.cs:51) turning it on opens MicConsentDialog and reverts the box when
-    /// consent is declined. Writing the setting here would record "spoken mantras on" with the
-    /// consent gate never shown. <c>BtnSL_MicMaster</c> is refused for the sibling reason - it would
-    /// read "Stop listening" over a device nothing has opened.</para>
+    /// <para>Every button forwards to MainShellWindow.SheListening.cs, as WPF forwards to
+    /// MainWindow.SheListening.cs. ponytail: the Test button (WPF BtnTestVoice_Click ->
+    /// AutonomyService.TestVoiceCommand) needs MantraVoice + VoiceCommands, not on this head, so it
+    /// says so (sl_voice_not_on_this_build).</para>
     /// </summary>
     public partial class SheListeningTabView : UserControl
     {
-        // MainWindow.SheListening.cs:406 - the slider's two ends, copied so the stored threshold
-        // means the same thing on both heads.
-        private const double LoudThrAtMinSens = 0.045; // slider 0%
-        private const double LoudThrAtMaxSens = 0.004; // slider 100%
-
-        private static double SensToThreshold(double sens)
-            => LoudThrAtMinSens - (LoudThrAtMinSens - LoudThrAtMaxSens) * (Math.Clamp(sens, 0, 100) / 100.0);
-        private static double ThresholdToSens(double thr)
-            => Math.Clamp((LoudThrAtMinSens - thr) / (LoudThrAtMinSens - LoudThrAtMaxSens) * 100.0, 0, 100);
-
         private bool _isLoading;
+
+        private Windows.MainShellWindow? Main => TopLevel.GetTopLevel(this) as Windows.MainShellWindow;
 
         public SheListeningTabView()
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
 
-            // Refused, not missing - see the class note. Each would need
-            // ConditioningControlPanel/MainWindow/MainWindow.SheListening.cs (App.Speech, the wake
-            // calibration, the premium gate, MicConsentDialog).
-            BtnSL_MicMaster.Click += (_, _) => { };          // mw.ToggleVoiceMic()
-            BtnSL_OpenDeviceSettings.Click += (_, _) => { }; // mw.OpenDeviceSettings()
-            BtnSL_Calibrate.Click += (_, _) => { };          // mw.SL_Calibrate_Click(...)
-            BtnSL_TestMantra.Click += (_, _) => { };         // mw.BtnTestVoice_Click(...)
-            BtnSL_RevokeConsent.Click += (_, _) => { };      // mw.SL_RevokeMicConsent_Click(...)
-            BtnSL_GateUnlock.Click += (s, e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(s, e);
-            ChkSL_Mantras.IsCheckedChanged += (_, _) => { }; // mw.SL_Mantras_Changed(...) - consent gate
+            BtnSL_MicMaster.Click += (_, _) => Main?.ToggleVoiceMic();
+            BtnSL_OpenDeviceSettings.Click += (_, _) => Main?.OpenDeviceSettings();
+            BtnSL_Calibrate.Click += (_, _) => Main?.SL_Calibrate_Click();
+            BtnSL_TestMantra.Click += (_, _) =>
+            {
+                if (Main is { } mw)
+                    _ = Dialogs.MessageDialog.ShowAsync(mw, "She's Listening", ConditioningControlPanel.Localization.Loc.Get("sl_voice_not_on_this_build"));
+            };
+            BtnSL_RevokeConsent.Click += (_, _) => Main?.SL_RevokeMicConsent_Click();
+            BtnSL_GateUnlock.Click += (s, e) => Main?.BtnGateUnlock_Click(s, e);
+            ChkSL_Mantras.IsCheckedChanged += (_, _) => Main?.SL_Mantras_Changed();
 
             // MainWindow.SheListening.cs:419, both halves. The readout uses Math.Round, not a
             // truncating cast, so 49.6 reads 50 the way it does on WPF.
@@ -65,12 +54,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 TxtSL_MicSensitivity.Text = $"{(int)Math.Round(e.NewValue)}%";
                 if (_isLoading) return;
-                CoreSettings.Current.SpeechLoudnessThreshold = SensToThreshold(e.NewValue);
+                CoreSettings.Current.SpeechLoudnessThreshold = Services.Speech.VoiceInputRules.SensToThreshold(e.NewValue);
                 CoreSettings.Save();
             };
 
             _isLoading = true;
-            SldSL_MicSensitivity.Value = ThresholdToSens(CoreSettings.Current.SpeechLoudnessThreshold);
+            SldSL_MicSensitivity.Value = Services.Speech.VoiceInputRules.ThresholdToSens(CoreSettings.Current.SpeechLoudnessThreshold);
             _isLoading = false;
 
             ApplyFeatureArt();
