@@ -3,12 +3,46 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 using ConditioningControlPanel.Localization;
-using ConditioningControlPanel.Services.Speech;
+using Serilog;
 
-namespace ConditioningControlPanel.Services
+namespace ConditioningControlPanel.Services.Speech
 {
+    /// <summary>Why a command may be refused. The head answers whether it holds right now.</summary>
+    public enum VoiceGuard
+    {
+        None,
+        /// <summary>Lockdown, a strict video, or a strict-locked bubble count (#706).</summary>
+        StopLocked,
+        /// <summary>Lockdown only (Takeover cannot be released while locked in, #514).</summary>
+        Lockdown,
+    }
+
+    /// <summary>What a head supplies to <see cref="VoiceCommands"/>: the mic, the tube and its actions.
+    /// Every member runs on the caller's thread except <see cref="OnUi"/>, which marshals.</summary>
+    public sealed class VoiceCommandHost
+    {
+        /// <summary>One grammar-constrained listen (SpeechEngine.RecognizeOneOfAsync).</summary>
+        public Func<IReadOnlyList<string>, RecognizeOptions, Task<PhraseResult>> Recognize = (_, _) => Task.FromResult(PhraseResult.NotAvailable);
+        /// <summary>Intent name -> the head's action; null = this head cannot run it (left out of the grammar).</summary>
+        public Func<string, Action?> ActionFor = _ => null;
+        public Func<VoiceGuard, bool> IsBlocked = _ => false;
+        /// <summary>A refused command: the lockdown escape tripwire (EscapeKinds.Stop).</summary>
+        public Action OnRefused = () => { };
+        public Action<string> ShowListening = _ => { };
+        public Action HideListening = () => { };
+        /// <summary>The tube says a line: text, then the voiced clip or null (GigglePriority, not AI).</summary>
+        public Action<string, string?> Say = (_, _) => { };
+        /// <summary>BarkService.PickVoiceLine; null = no voiced line (text fallback).</summary>
+        public Func<string, (string Text, string? Audio)?> PickVoiceLine = _ => null;
+        /// <summary>Echo guard: hold until the avatar stopped speaking (arg: wait for her clip to start).</summary>
+        public Func<bool, Task> WaitQuiet = _ => Task.CompletedTask;
+        public Func<string?> ActiveModId = () => null;
+        /// <summary>Run on the UI thread and wait for it.</summary>
+        public Func<Action, Task> OnUi = a => { a(); return Task.CompletedTask; };
+        public Func<TimeSpan, Task> Delay = Task.Delay;
+    }
+
     /// <summary>
     /// "Hey Bambi" voice COMMAND layer (v2) — the user-initiated mic (wake-word / push-to-talk)
     /// first listens against a closed command grammar and, if it hears one, drives an app feature
@@ -16,8 +50,8 @@ namespace ConditioningControlPanel.Services
     /// Spoken-Mantra flow, so saying nothing useful still gets you a mantra.
     ///
     /// Stays squarely in the offline engine's sweet spot ("say a known thing -> trigger that"):
-    /// the grammar is constrained to the intent aliases, so <see cref="SpeechService"/> returns one
-    /// of them (or [unk]); we then pick the best intent with the same fuzzy <see cref="SpeechService.Similarity"/>
+    /// the grammar is constrained to the intent aliases, so <see cref="SpeechEngine"/> returns one
+    /// of them (or [unk]); we then pick the best intent with the same fuzzy <see cref="SpeechEngine.Similarity"/>
     /// the mantra mechanic uses. Self-protecting: needs speech available + loud speech to fire, and
     /// the safety word routes to the same teardown as the panic key, so a false positive is the SAFE
     /// direction.
@@ -26,21 +60,18 @@ namespace ConditioningControlPanel.Services
     /// command chaining (a short follow-up window so you can stack commands without re-waking), a
     /// polite re-listen on a near-miss, "again"/"more" to repeat the last command, "what can I say"
     /// help, and terse acks for utility verbs.
-    /// </summary>
-    public partial class AutonomyService
+    ///
+    /// An intent = a set of spoken aliases -> one app action + per-mod confirmation.
+    /// The action itself is the head's (<see cref="VoiceCommandHost.ActionFor"/>, by Name).</summary>
+    public sealed class VoiceCommandIntent
     {
-        /// <summary>An intent = a set of spoken aliases -> one app action + per-mod confirmation.</summary>
-        private sealed class VoiceCommandIntent
-        {
             public string Name = "";
             public string[] Aliases = Array.Empty<string>();
-            /// <summary>Run on the UI thread when matched. Null + <see cref="IsMantra"/> = fall back to a mantra.</summary>
-            public Action? Execute;
-            /// <summary>When it returns true the command is refused: Execute is skipped and
+            /// <summary>When the head says this guard holds the command is refused: the action is skipped and
             /// <see cref="BlockedConfirm"/> is spoken instead of <see cref="Confirm"/>.</summary>
-            public Func<bool>? Blocked;
-            /// <summary>mod-key (see <see cref="ModKeyFor"/>) -> refusal line used when
-            /// <see cref="Blocked"/> fires. Must carry a "neutral" entry - that is the unmodded line.</summary>
+            public VoiceGuard Guard;
+            /// <summary>mod-key (see <see cref="VoiceCommands.ModKeyFor"/>) -> refusal line used when
+            /// <see cref="Guard"/> holds. Must carry a "neutral" entry - that is the unmodded line.</summary>
             public Dictionary<string, string> BlockedConfirm = new();
             public bool IsMantra;
             /// <summary>"again"/"one more"/"more"/"harder" — re-run the last actionable command instead of a fixed action.</summary>
@@ -57,18 +88,22 @@ namespace ConditioningControlPanel.Services
             ///
             /// EVERY table must carry a "neutral" entry and it is written FIRST, because "neutral" is what
             /// an unmodded install resolves to and because the <c>Values.FirstOrDefault()</c> last-ditch
-            /// fallback in <see cref="ExecuteIntentAndConfirm"/> then lands on the neutral line rather than
+            /// fallback in VoiceCommands.ExecuteIntentAndConfirm then lands on the neutral line rather than
             /// on a themed one. Neutral lines may use <c>{petname}</c>; see the substitution note there.
             /// VoiceCommandNeutralPackTests pins the parity so the panic line can never go silent.</summary>
             public Dictionary<string, string> Confirm = new();
             /// <summary>
             /// Bark-manifest rule id whose variant pool holds this command's voiced confirmations
-            /// (text + per-mod audio). Picked via <see cref="BarkService.PickVoiceLine"/> so the
+            /// (text + per-mod audio). Picked via BarkService.PickVoiceLine so the
             /// spoken clip always matches the bubble. Null = use <see cref="Confirm"/>, text-only.
             /// </summary>
             public string? VoiceRuleId;
-        }
+    }
 
+    /// <summary>The shared voice-command rules and driver, moved from WPF AutonomyService.VoiceCommands.
+    /// One instance per head (it holds the "again" target and the stashed wake ack).</summary>
+    public sealed class VoiceCommands
+    {
         // Minimum fuzzy similarity. Similarity is WORD-level (1 - wordEditDistance/maxWords), so each
         // dropped/wrong word costs 1/maxWords — brutal on the short aliases that dominate this grammar.
         // At the old 0.62 a bare noun ("bubbles") scored only 0.5 vs its 2-word alias ("bubbles on") and
@@ -93,24 +128,14 @@ namespace ConditioningControlPanel.Services
         // so you can stack "bubbles ... flashes ... deeper" in one breath. Capped so it always winds down.
         private const int MaxChainedCommands = 3;
 
-        // The last actionable command run this session — the target of "again" / "one more" / "more".
-        private static VoiceCommandIntent? _lastVoiceIntent;
-
         private static List<VoiceCommandIntent>? _voiceCommandIntents;
 
-        // The user asked to be held; voice must not be the way out (#706). Mirrors the contract
-        // AvatarTubeWindow.IsEngineStopLocked() already enforces for the tube's Stop button, so the
-        // two entry points can't disagree about whether a lock is honoured.
-        //
+        // VoiceGuard.StopLocked: the user asked to be held; voice must not be the way out (#706).
         // Guard EVERY intent that reaches a privileged teardown, not just the obvious ones: the
         // original report was `video_off`, but session `pause` funnels into SessionEngine.PauseSession
-        // -> App.Video.Stop() through a completely different file, and its aliases ("wait", "hold on")
+        // -> Video.Stop() through a completely different file, and its aliases ("wait", "hold on")
         // are the ones a frustrated user actually reaches for. Panic stays unguarded — it is the
         // intended way out and routes to the same teardown on purpose.
-        private static bool StopLocked() =>
-            App.Lockdown?.IsActive == true ||
-            App.Video?.IsStrictActive == true ||
-            (App.BubbleCount?.IsBusy == true && App.Settings?.Current?.BubbleCountStrictLock == true);
 
         // ── Alias expansion ────────────────────────────────────────────────────
         // Toggle features share a wide, consistent spoken vocabulary so natural phrasings all land.
@@ -143,8 +168,8 @@ namespace ConditioningControlPanel.Services
             return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
 
-        /// <summary>The command set. Built lazily; Execute closures call the static App services.</summary>
-        private static List<VoiceCommandIntent> VoiceCommandIntents => _voiceCommandIntents ??= new()
+        /// <summary>The command set. Built lazily; constant data (the actions are the head's).</summary>
+        public static IReadOnlyList<VoiceCommandIntent> Intents => _voiceCommandIntents ??= new()
         {
             // ── Safety ────────────────────────────────────────────────────────────
             // Routes to the exact panic-key teardown. A false positive just stops things.
@@ -152,7 +177,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "panic",
                 Aliases = new[] { "red", "stop everything", "stop it all", "shut it all down", "safe word", "i'm done", "make it all stop", "make it stop", "everything off", "turn everything off", "kill everything", "that's too much", "i need to stop", "all stop", "emergency stop" },
-                Execute = () => App.MainWindowRef?.TriggerPanicFromRemote(),
                 VoiceRuleId = "voicecmd_panic",
                 NoChain = true,
                 Repeatable = false,
@@ -170,7 +194,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "bubbles_on",
                 Aliases = OnAliases("bubbles", "the bubbles", "show me some bubbles", "more bubbles"),
-                Execute = () => App.Bubbles?.Start(bypassLevelCheck: true),
                 VoiceRuleId = "voicecmd_bubbles_on",
                 Confirm = new()
                 {
@@ -184,7 +207,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "bubbles_off",
                 Aliases = OffAliases("bubbles", "the bubbles"),
-                Execute = () => App.Bubbles?.Stop(),
                 VoiceRuleId = "voicecmd_bubbles_off",
                 Confirm = new()
                 {
@@ -200,7 +222,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "video_on",
                 Aliases = new[] { "show me a video", "play a video", "play a hypnotube video", "play hypnotube", "give me a video", "i want a video", "put on a video", "play me a video", "start a video", "play video", "video on", "show me a clip" },
-                Execute = () => App.Video?.TriggerVideo(),
                 VoiceRuleId = "voicecmd_video_on",
                 Confirm = new()
                 {
@@ -218,7 +239,7 @@ namespace ConditioningControlPanel.Services
                 // VideoService.Stop() is a privileged teardown that clears _strictActive before the
                 // window's Closing veto can see it — so the refusal has to live here (#706). Panic
                 // stays unguarded: it routes to the same teardown and is the intended way out.
-                Blocked = StopLocked,
+                Guard = VoiceGuard.StopLocked,
                 BlockedConfirm = new()
                 {
                     ["neutral"] = "no, {petname}. you asked to be locked in - eyes on the screen.",
@@ -226,7 +247,6 @@ namespace ConditioningControlPanel.Services
                     ["sissy"] = "no, good girl. you asked to be locked in — eyes on the screen.",
                     ["circe"] = "you locked it yourself. the video stays.",
                 },
-                Execute = () => App.Video?.Stop(),
                 VoiceRuleId = "voicecmd_video_off",
                 Confirm = new()
                 {
@@ -241,7 +261,7 @@ namespace ConditioningControlPanel.Services
                 Name = "video_pause",
                 Aliases = new[] { "pause the video", "pause video", "pause this video", "pause the clip", "hold the video" },
                 // Pausing indefinitely neuters a strict video just as thoroughly as stopping it (#706).
-                Blocked = StopLocked,
+                Guard = VoiceGuard.StopLocked,
                 BlockedConfirm = new()
                 {
                     ["neutral"] = "not this one, {petname}. it plays through.",
@@ -249,7 +269,6 @@ namespace ConditioningControlPanel.Services
                     ["sissy"] = "not this one, good girl. it plays through.",
                     ["circe"] = "no. it plays through.",
                 },
-                Execute = () => App.Video?.PausePrimary(),
                 TerseAck = true,
                 NoChain = true,
                 Confirm = new()
@@ -264,7 +283,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "video_resume",
                 Aliases = new[] { "resume the video", "play the video", "unpause the video", "continue the video", "resume video", "play the clip", "keep playing", "continue playing" },
-                Execute = () => App.Video?.PlayPrimary(),
                 TerseAck = true,
                 NoChain = true,
                 Confirm = new()
@@ -287,7 +305,6 @@ namespace ConditioningControlPanel.Services
                 Aliases = new[] { "flash me", "one flash", "give me a flash", "flash once", "just one flash", "quick flash", "a single flash", "one quick flash" },
                 // TriggerFlash() bails when the service isn't running; TriggerFlashOnce() is the
                 // standalone one-shot (sets its own images path) so "flash me" fires without a session.
-                Execute = () => App.Flash?.TriggerFlashOnce(),
                 VoiceRuleId = "voicecmd_flash_once",
                 Confirm = new()
                 {
@@ -303,7 +320,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "subliminals_on",
                 Aliases = OnAliases("subliminals", "the subliminals"),
-                Execute = () => App.Subliminal?.Start(),
                 VoiceRuleId = "voicecmd_subliminals_on",
                 Confirm = new()
                 {
@@ -317,7 +333,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "subliminals_off",
                 Aliases = OffAliases("subliminals", "the subliminals"),
-                Execute = () => App.Subliminal?.Stop(),
                 VoiceRuleId = "voicecmd_subliminals_off",
                 Confirm = new()
                 {
@@ -333,7 +348,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "bouncing_on",
                 Aliases = OnAliases("bouncing text", "the bouncing text"),
-                Execute = () => App.BouncingText?.Start(),
                 VoiceRuleId = "voicecmd_bouncing_on",
                 Confirm = new()
                 {
@@ -347,7 +361,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "bouncing_off",
                 Aliases = OffAliases("bouncing text", "the bouncing text"),
-                Execute = () => App.BouncingText?.Stop(),
                 VoiceRuleId = "voicecmd_bouncing_off",
                 Confirm = new()
                 {
@@ -363,12 +376,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "spiral_on",
                 Aliases = OnAliases("spiral", "the spiral"),
-                // The user's OWN spiral, at the opacity they configured. ShowOverlaySustained used to
-                // drop the value entirely for spiral (#1051) so this hard-coded 0.5 never reached the
-                // screen; now that it does, pass the saved setting so "turn on spiral" keeps behaving
-                // exactly as it always has instead of suddenly rendering 5x heavier.
-                Execute = () => App.Overlay?.ShowOverlaySustained("spiral",
-                    (App.Settings?.Current?.SpiralOpacity ?? 10) / 100.0),
                 VoiceRuleId = "voicecmd_spiral_on",
                 Confirm = new()
                 {
@@ -382,7 +389,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "spiral_off",
                 Aliases = OffAliases("spiral", "the spiral"),
-                Execute = () => App.Overlay?.HideOverlaySustained("spiral"),
                 VoiceRuleId = "voicecmd_spiral_off",
                 Confirm = new()
                 {
@@ -398,12 +404,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "pink_on",
                 Aliases = OnAliases("pink filter", "the pink filter", "make it pink", "go pink"),
-                // OverlayService keys this overlay "pink_filter"; "pink" hits the unknown-kind no-op.
-                // 0.4 is this command's own floor (a voice "go pink" should actually read as pink even
-                // for a user whose saved tint is faint) but it must never DIM a stronger live tint,
-                // which it now would - the sustained path applies the opacity it is handed (#1051).
-                Execute = () => App.Overlay?.ShowOverlaySustained("pink_filter",
-                    Math.Max(0.4, (App.Settings?.Current?.PinkFilterOpacity ?? 10) / 100.0)),
                 VoiceRuleId = "voicecmd_pink_on",
                 Confirm = new()
                 {
@@ -417,7 +417,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "pink_off",
                 Aliases = OffAliases("pink filter", "the pink filter", "make it normal"),
-                Execute = () => App.Overlay?.HideOverlaySustained("pink_filter"),
                 VoiceRuleId = "voicecmd_pink_off",
                 Confirm = new()
                 {
@@ -433,7 +432,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "wipe_once",
                 Aliases = new[] { "wipe my mind", "wipe me", "empty my head", "blank my mind", "wipe my brain", "clear my mind", "empty my mind", "erase my thoughts" },
-                Execute = () => App.MindWipe?.TriggerOnce(),
                 VoiceRuleId = "voicecmd_wipe_once",
                 Confirm = new()
                 {
@@ -449,7 +447,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "lock_once",
                 Aliases = new[] { "lock me", "lock card now", "give me a lock card", "show me a lock card", "a lock card", "one lock card", "lock me up", "lock me down" },
-                Execute = () => App.LockCard?.ShowLockCard(),
                 VoiceRuleId = "voicecmd_lock_once",
                 Confirm = new()
                 {
@@ -465,7 +462,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "quiz_once",
                 Aliases = new[] { "quiz me", "quiz me now", "give me a quiz", "test me", "pop quiz", "quiz time", "ask me a question", "give me a question" },
-                Execute = () => App.PopQuiz?.ShowPopQuiz(),
                 VoiceRuleId = "voicecmd_quiz_once",
                 Confirm = new()
                 {
@@ -481,7 +477,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "keyword_on",
                 Aliases = OnAliases("keyword triggers", "the keyword triggers", "trigger words on"),
-                Execute = () => App.KeywordTriggers?.Start(),
                 VoiceRuleId = "voicecmd_keyword_on",
                 Confirm = new()
                 {
@@ -495,7 +490,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "keyword_off",
                 Aliases = OffAliases("keyword triggers", "the keyword triggers", "trigger words off"),
-                Execute = () => App.KeywordTriggers?.Stop(),
                 VoiceRuleId = "voicecmd_keyword_off",
                 Confirm = new()
                 {
@@ -513,7 +507,6 @@ namespace ConditioningControlPanel.Services
                 Aliases = new[] { "count for me", "count the bubbles", "give me a counting game", "make me count", "let me count", "counting game", "time to count", "i want to count" },
                 // forceTest: true — TriggerGame() bails when the engine isn't running; the force path is
                 // built to run standalone (it sets its own videos path), so the voice command fires it now.
-                Execute = () => App.BubbleCount?.TriggerGame(forceTest: true),
                 VoiceRuleId = "voicecmd_count_once",
                 Confirm = new()
                 {
@@ -527,7 +520,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "freeze_once",
                 Aliases = new[] { "freeze", "freeze me", "freeze for me", "bambi freeze", "freeze now", "hold still", "stay still", "don't move" },
-                Execute = () => App.Subliminal?.TriggerBambiFreeze(),
                 VoiceRuleId = "voicecmd_freeze_once",
                 Confirm = new()
                 {
@@ -541,7 +533,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "shake_once",
                 Aliases = new[] { "shake the screen", "shake it", "shake me", "earthquake", "shake things up", "make it shake", "shake everything", "shake the room" },
-                Execute = () => App.ScreenShake?.Shake(60, 1200),
                 VoiceRuleId = "voicecmd_shake_once",
                 Confirm = new()
                 {
@@ -557,7 +548,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "deeper",
                 Aliases = new[] { "deeper", "go deeper", "take me deeper", "sink deeper", "drop deeper", "deeper now", "further down", "take me down", "drop me down", "make me go deeper", "i want to go deeper" },
-                Execute = () => App.BrainDrain?.Start(),
                 VoiceRuleId = "voicecmd_deeper",
                 Confirm = new()
                 {
@@ -573,7 +563,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "takeover_on",
                 Aliases = new[] { "take over", "take control", "you're in charge", "take over for me", "you take over", "take the wheel", "you drive", "you're in control", "control me", "i give up control" },
-                Execute = () => App.Autonomy?.Start(),
                 VoiceRuleId = "voicecmd_takeover_on",
                 Confirm = new()
                 {
@@ -588,7 +577,7 @@ namespace ConditioningControlPanel.Services
                 Name = "takeover_off",
                 Aliases = new[] { "stop taking over", "stop the takeover", "you can stop now", "give me control back", "stop taking control", "i want control back", "let me drive", "give me back control", "take over off", "release control" },
                 // Lockdown mode: Takeover cannot be released while locked in (#514).
-                Blocked = () => App.Lockdown?.IsActive == true,
+                Guard = VoiceGuard.Lockdown,
                 BlockedConfirm = new()
                 {
                     ["neutral"] = "not during lockdown, {petname}. i keep control.",
@@ -596,7 +585,6 @@ namespace ConditioningControlPanel.Services
                     ["sissy"] = "not during lockdown, good girl. i keep control.",
                     ["circe"] = "lockdown is active. control stays with me.",
                 },
-                Execute = () => App.Autonomy?.Stop(),
                 VoiceRuleId = "voicecmd_takeover_off",
                 Confirm = new()
                 {
@@ -616,7 +604,7 @@ namespace ConditioningControlPanel.Services
                 // along with every other feature teardown — the same privileged exit `video_off` is
                 // refused for, reached by a shorter word (#706). Note this one also outranked the
                 // panic key during lockdown, which returns early before it can pause anything.
-                Blocked = StopLocked,
+                Guard = VoiceGuard.StopLocked,
                 BlockedConfirm = new()
                 {
                     ["neutral"] = "no pausing, {petname}. you asked to be held, so sit with it.",
@@ -624,7 +612,6 @@ namespace ConditioningControlPanel.Services
                     ["sissy"] = "no pausing, good girl. you asked to be held — sit with it.",
                     ["circe"] = "no. you don't get to pause this.",
                 },
-                Execute = () => App.MainWindowRef?.PauseSessionFromRemote(),
                 TerseAck = true,
                 NoChain = true,
                 Confirm = new()
@@ -639,7 +626,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "resume",
                 Aliases = new[] { "resume", "resume the session", "continue", "keep going", "unpause", "carry on", "go on", "let's continue", "back to it", "resume please", "continue the session" },
-                Execute = () => App.MainWindowRef?.ResumeSessionFromRemote(),
                 TerseAck = true,
                 NoChain = true,
                 Confirm = new()
@@ -670,7 +656,6 @@ namespace ConditioningControlPanel.Services
                 // strict run; muting doesn't. The video plays through to the end either way, so the
                 // lock the user asked for still holds. Silencing is not escaping, and letting someone
                 // kill the sound (housemate walked in, headphones died) costs the run nothing.
-                Execute = () => App.MainWindowRef?.ApplyVoiceMute(true),
                 TerseAck = true,
                 NoChain = true,
                 Confirm = new()
@@ -687,7 +672,6 @@ namespace ConditioningControlPanel.Services
                 // The inverse of "mute": clear the avatar mute flag and, if master is sitting at 0
                 // (where mute left it), lift it back to a comfortable level so she's audible again.
                 Aliases = new[] { "unmute", "un mute", "unmute yourself", "unmute everything", "sound on", "audio on", "turn the sound on", "turn the sound back on", "turn sound back on", "you can talk again", "i can't hear you" },
-                Execute = () => App.MainWindowRef?.ApplyVoiceMute(false),
                 TerseAck = true,
                 NoChain = true,
                 Confirm = new()
@@ -702,7 +686,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "louder",
                 Aliases = new[] { "louder", "turn it up", "volume up", "more volume", "turn up the volume", "crank it up", "louder please", "make it louder", "raise the volume", "pump it up" },
-                Execute = () => App.MainWindowRef?.AdjustMasterVolume(+15),
                 TerseAck = true,
                 NoChain = true,
                 Confirm = new()
@@ -717,7 +700,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "quieter",
                 Aliases = new[] { "quieter", "turn it down", "volume down", "less volume", "lower the volume", "turn down the volume", "quieter please", "make it quieter", "not so loud", "softer", "tone it down" },
-                Execute = () => App.MainWindowRef?.AdjustMasterVolume(-15),
                 TerseAck = true,
                 NoChain = true,
                 Confirm = new()
@@ -734,7 +716,6 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "stop_listening",
                 Aliases = new[] { "stop listening", "stop the mic", "turn off the mic", "you can stop listening", "mic off", "stop the microphone", "turn off the microphone", "microphone off", "stop hearing me", "close the mic", "mute the mic" },
-                Execute = () => App.Autonomy?.StopVoiceInput(),
                 TerseAck = true,
                 NoChain = true,
                 Repeatable = false,
@@ -797,13 +778,13 @@ namespace ConditioningControlPanel.Services
         /// a fresh install with no mod heard the sissy pack for every voice confirmation including the
         /// safe-word line ("you're safe now, good girl"). The themed packs are unchanged.
         /// </summary>
-        private static string ModKey() => ModKeyFor(App.Mods?.ActiveModId);
+        private string ModKey() => ModKeyFor(Host.ActiveModId());
 
         /// <summary>
         /// The pure half of <see cref="ModKey"/>: mod id -> confirmation-pack key, with no App statics
         /// so the mapping is testable. Order matters - the substring checks are first-match.
         /// </summary>
-        internal static string ModKeyFor(string? activeModId)
+        public static string ModKeyFor(string? activeModId)
         {
             var id = activeModId ?? "";
             if (id.Contains("bambi", StringComparison.OrdinalIgnoreCase)) return "bambi";
@@ -822,10 +803,10 @@ namespace ConditioningControlPanel.Services
         /// of the two tables it is. Used by VoiceCommandNeutralPackTests to prove the neutral pack
         /// covers exactly what the sissy pack covers.
         /// </summary>
-        internal static List<(string Intent, string Table, IReadOnlyDictionary<string, string> Lines)> VoiceConfirmTablesForTests()
+        public static List<(string Intent, string Table, IReadOnlyDictionary<string, string> Lines)> ConfirmTables()
         {
             var tables = new List<(string, string, IReadOnlyDictionary<string, string>)>();
-            foreach (var intent in VoiceCommandIntents)
+            foreach (var intent in Intents)
             {
                 if (intent.Confirm.Count > 0) tables.Add((intent.Name, "Confirm", intent.Confirm));
                 if (intent.BlockedConfirm.Count > 0) tables.Add((intent.Name, "BlockedConfirm", intent.BlockedConfirm));
@@ -848,17 +829,72 @@ namespace ConditioningControlPanel.Services
             HandledFinal,
         }
 
+        public VoiceCommandHost Host { get; }
+
+        public VoiceCommands(VoiceCommandHost host) => Host = host;
+
+        // The last actionable command run this session — the target of "again" / "one more" / "more".
+        private VoiceCommandIntent? _lastVoiceIntent;
+
+        // The wake-ack line picked once in PrepareWake. Tier 0 listens BEFORE speaking, so this is
+        // NOT spoken on wake — it is stashed so (a) the primary listen's dots bubble can read the same
+        // words, and (b) the command driver can speak it aloud as the "you called?" re-prompt if you
+        // stay silent. Audio is the matching clip for the active mod (null = text-only).
+        private string? _pendingWakeAckText;
+        private string? _pendingWakeAckAudio;
+
+        /// <summary>The intents this head can run: it has an action for them, or they need none
+        /// (help, "again"). A head without spoken mantras returns no action for "mantra".</summary>
+        public IEnumerable<VoiceCommandIntent> Available
+            => Intents.Where(i => i.IsReplay || i.Name == "help" || Host.ActionFor(i.Name) != null);
+
+        /// <summary>The closed command grammar (every alias this head can act on).</summary>
+        public List<string> Grammar() => Available.SelectMany(i => i.Aliases).Distinct().ToList();
+
+        /// <summary>
+        /// A wake (word or push-to-talk). Pick the wake-ack once, stash it for the listen window and
+        /// the on-silence re-prompt, and pop the dots at once. Tier 0 — listen BEFORE speaking, the way
+        /// Alexa/Google do: the spoken "you called?" only comes AFTER you stay silent.
+        /// </summary>
+        public void PrepareWake()
+        {
+            // Voiced manifest variant when available, else a plain per-mod line, text-only.
+            var voiced = Host.PickVoiceLine("voicecmd_wake");
+            string ack;
+            string? audio = null;
+            if (voiced is { } line && !string.IsNullOrWhiteSpace(line.Text))
+            {
+                ack = line.Text;
+                audio = line.Audio;
+            }
+            else
+            {
+                ack = ModKey() switch
+                {
+                    "bambi" => "mmm? you called for me~",
+                    "circe" => "you called. i'm listening.",
+                    _       => "yes, lovely? i'm right here~",
+                };
+            }
+            _pendingWakeAckText = ack;
+            _pendingWakeAckAudio = audio;
+            try { Host.ShowListening(ack); } catch { }
+        }
+
         /// <summary>
         /// The serialized command driver. Listens once for a command, re-listens once on a near-miss,
         /// then (on a hit) keeps a short follow-up window open so commands can be chained. Returns true
         /// when a command was handled (caller should NOT then run a mantra); false to fall through to
         /// the mantra flow (no match, an explicit mantra request, silence, or speech unavailable).
         /// </summary>
-        private async Task<bool> TryHandleVoiceCommandAsync()
+        /// <param name="ct">Cancelled by a panic: the chain ends after the current step, nothing more
+        /// is said or heard, and the caller runs no mantra.</param>
+        public async Task<bool> TryHandleVoiceCommandAsync(CancellationToken ct = default)
         {
             // Tier 0 — listen first (the dots bubble is already up; nothing has been spoken). This short
             // primary window catches "hey bambi <command>" said in one breath or after a brief pause.
             var outcome = await ListenForCommandAsync().ConfigureAwait(false);
+            if (ct.IsCancellationRequested) return true;
 
             // Stayed silent? NOW she speaks the wake ack out loud ("you called?") and opens a longer
             // window — the "called her, then took a beat to think" path.
@@ -867,10 +903,12 @@ namespace ConditioningControlPanel.Services
                 SpeakPendingWakeAck();
                 outcome = await ListenForCommandAsync(isReprompt: true).ConfigureAwait(false);
             }
+            if (ct.IsCancellationRequested) return true;
 
             // Heard something loud that didn't match — give one polite "say that again?" before giving up.
             if (outcome == VoiceCmdOutcome.NoMatch)
                 outcome = await ListenForCommandAsync(isRetry: true).ConfigureAwait(false);
+            if (ct.IsCancellationRequested) return true;
 
             if (outcome == VoiceCmdOutcome.Handled)
             {
@@ -878,6 +916,7 @@ namespace ConditioningControlPanel.Services
                 // non-command turn (silence / no-match / a final command), or after the cap.
                 for (int i = 0; i < MaxChainedCommands; i++)
                 {
+                    if (ct.IsCancellationRequested) break;
                     var next = await ListenForCommandAsync(chained: true).ConfigureAwait(false);
                     if (next == VoiceCmdOutcome.Handled) continue;
                     // An explicit "give me a mantra" as a follow-up should still deliver a mantra, exactly
@@ -896,25 +935,15 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Speak the wake acknowledgement stashed by OnWakeWordHeard ("you called?"). Tier 0 only does
+        /// Speak the wake acknowledgement stashed by PrepareWake ("you called?"). Tier 0 only does
         /// this AFTER the primary listen times out in silence — the spoken re-prompt before the second,
         /// longer listen window. No-op if nothing is stashed.
         /// </summary>
         private void SpeakPendingWakeAck()
         {
             var text = _pendingWakeAckText;
-            var audio = _pendingWakeAckAudio;
             if (string.IsNullOrWhiteSpace(text)) return;
-            if (Application.Current?.Dispatcher == null) return;
-            _ = Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                try
-                {
-                    App.AvatarWindow?.GigglePriority(text, playSound: audio != null, aiGenerated: false,
-                        phraseAudioPath: audio, barkVoice: audio != null);
-                }
-                catch { }
-            });
+            try { Host.Say(text, _pendingWakeAckAudio); } catch { }
         }
 
         /// <summary>
@@ -929,16 +958,13 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                if (App.Speech?.IsAvailable != true) return VoiceCmdOutcome.Silence;
-
-                var intents = VoiceCommandIntents;
-                var grammar = intents.SelectMany(i => i.Aliases).Distinct().ToList();
+                var grammar = Grammar();
                 if (grammar.Count == 0) return VoiceCmdOutcome.Silence;
 
                 // On a chained follow-up, let the previous command's confirmation bubble stay up for a
                 // beat before we replace it with the "anything else?" listening dots — otherwise the
                 // confirmation is overwritten within a frame and never read.
-                if (chained) await Task.Delay(1400).ConfigureAwait(false);
+                if (chained) await Host.Delay(TimeSpan.FromMilliseconds(1400)).ConfigureAwait(false);
 
                 // Keep the speech bubble up with animated dots for the whole listen window. The primary and
                 // re-prompt turns show the wake-ack words (read == heard); the primary shows them silently
@@ -951,13 +977,11 @@ namespace ConditioningControlPanel.Services
                     listeningLine = _pendingWakeAckText;
                     if (string.IsNullOrWhiteSpace(listeningLine))
                     {
-                        var wl = App.Bark?.PickVoiceLine("voicecmd_wake");
+                        var wl = Host.PickVoiceLine("voicecmd_wake");
                         listeningLine = (wl is { } l && !string.IsNullOrWhiteSpace(l.Text)) ? l.Text : ListeningPrompt();
                     }
                 }
-                if (Application.Current?.Dispatcher != null)
-                    _ = Application.Current.Dispatcher.InvokeAsync(() =>
-                        { try { App.AvatarWindow?.ShowListeningBubble(listeningLine); } catch { } });
+                try { Host.ShowListening(listeningLine); } catch { }
 
                 // Echo guard (Tier 0/1). Only needed when she JUST spoke and the user might be on speakers:
                 //   • primary turn: nothing was spoken (silent dots) — open the mic immediately, no wait.
@@ -966,9 +990,9 @@ namespace ConditioningControlPanel.Services
                 //   • retry:        a near-miss is never spoken — nothing to wait for.
                 //   • headphones mode: her voice can't bleed in, so allow barge-in and never wait.
                 bool sheJustSpoke = isReprompt || chained;
-                bool headphones = App.Settings?.Current?.SpeechHeadphonesMode == true;
+                bool headphones = CoreSettings.Current.SpeechHeadphonesMode;
                 if (sheJustSpoke && !headphones)
-                    await WaitForAvatarQuietAsync(waitForStart: isReprompt).ConfigureAwait(false);
+                    await Host.WaitQuiet(isReprompt).ConfigureAwait(false);
 
                 // Window sizing (Tier 0). Primary + re-prompt use a short *onset* deadline — you have that
                 // long to START talking; once you do, the generous hard cap lets you finish (Vosk usually
@@ -984,31 +1008,29 @@ namespace ConditioningControlPanel.Services
                 PhraseResult res;
                 try
                 {
-                    res = await App.Speech.RecognizeOneOfAsync(grammar, opts).ConfigureAwait(false);
+                    res = await Host.Recognize(grammar, opts).ConfigureAwait(false);
                 }
                 finally
                 {
                     // Drop the dots indicator. If a command matched, the confirmation bubble has already
                     // taken over (ShowGiggle clears the listening flag) so this no-ops on visibility.
-                    if (Application.Current?.Dispatcher != null)
-                        _ = Application.Current.Dispatcher.InvokeAsync(() =>
-                            { try { App.AvatarWindow?.HideListeningBubble(); } catch { } });
+                    try { Host.HideListening(); } catch { }
                 }
 
                 if (res.Unavailable || !res.LoudEnough || string.IsNullOrWhiteSpace(res.Transcript))
                     return VoiceCmdOutcome.Silence;
 
-                var heard = SpeechService.Normalize(res.Transcript);
+                var heard = SpeechEngine.Normalize(res.Transcript);
                 var (best, bestScore) = MatchVoiceIntent(heard);
 
                 if (best == null)
                 {
-                    App.Logger?.Information(
+                    Log.Information(
                         "AutonomyService: voice command no-match ({Chars} chars heard, best {Score:0.00})", (heard ?? "").Length, bestScore);
                     return VoiceCmdOutcome.NoMatch;
                 }
 
-                App.Logger?.Information("AutonomyService: voice command '{Name}' ({Chars} chars heard, score {Score:0.00})",
+                Log.Information("AutonomyService: voice command '{Name}' ({Chars} chars heard, score {Score:0.00})",
                     best.Name, (heard ?? "").Length, bestScore);
 
                 // Explicit "give me a mantra" -> let the funnel run the Spoken-Mantra flow.
@@ -1021,28 +1043,31 @@ namespace ConditioningControlPanel.Services
                     target = _lastVoiceIntent;
                     if (target == null)
                     {
-                        if (Application.Current?.Dispatcher != null)
-                            await Application.Current.Dispatcher.InvokeAsync(() => ExecuteIntentAndConfirm(best));
+                        await Host.OnUi(() => ExecuteIntentAndConfirm(best)).ConfigureAwait(false);
                         return VoiceCmdOutcome.Handled; // acknowledged ("nothing to repeat") — still chainable
                     }
                 }
 
                 var toRun = target;
-                if (Application.Current?.Dispatcher != null)
-                    await Application.Current.Dispatcher.InvokeAsync(() => ExecuteIntentAndConfirm(toRun));
+                await Host.OnUi(() => ExecuteIntentAndConfirm(toRun)).ConfigureAwait(false);
 
                 // Remember the last actionable command so a later "again"/"more" can replay it.
                 // A Blocked (refused) command must not become the replay target, or "again"
                 // repeats the refusal instead of the last real effect.
-                if (best.Repeatable && best.Blocked?.Invoke() != true) _lastVoiceIntent = best;
+                if (best.Repeatable && !IsBlocked(best)) _lastVoiceIntent = best;
 
                 return best.NoChain ? VoiceCmdOutcome.HandledFinal : VoiceCmdOutcome.Handled;
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "AutonomyService: ListenForCommandAsync failed");
+                Log.Warning(ex, "AutonomyService: ListenForCommandAsync failed");
                 return VoiceCmdOutcome.Silence;
             }
+        }
+
+        private bool IsBlocked(VoiceCommandIntent intent)
+        {
+            try { return intent.Guard != VoiceGuard.None && Host.IsBlocked(intent.Guard); } catch { return false; }
         }
 
         /// <summary>
@@ -1055,17 +1080,18 @@ namespace ConditioningControlPanel.Services
         ///     mantra intent even when a utility alias coincidentally ties (the original "sound mantra" bug).
         /// Shared by the listen flow and the one-breath inline-command path so both score identically.
         /// </summary>
-        private static (VoiceCommandIntent? intent, double score) MatchVoiceIntent(string heard)
+        public (VoiceCommandIntent? intent, double score) MatchVoiceIntent(string heard)
         {
-            heard = SpeechService.Normalize(heard);
+            heard = SpeechEngine.Normalize(heard);
             if (heard.Length == 0) return (null, 0);
 
+            var intents = Available.ToList();
             VoiceCommandIntent? best = null;
             double bestScore = 0;
-            foreach (var intent in VoiceCommandIntents)
+            foreach (var intent in intents)
                 foreach (var alias in intent.Aliases)
                 {
-                    var s = SpeechService.Similarity(SpeechService.Normalize(alias), heard);
+                    var s = SpeechEngine.Similarity(SpeechEngine.Normalize(alias), heard);
                     if (s > bestScore) { bestScore = s; best = intent; }
                 }
 
@@ -1075,7 +1101,7 @@ namespace ConditioningControlPanel.Services
             if (best?.IsMantra != true && bestScore < 0.85
                 && heard.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("mantra"))
             {
-                var mantra = VoiceCommandIntents.FirstOrDefault(i => i.IsMantra);
+                var mantra = intents.FirstOrDefault(i => i.IsMantra);
                 if (mantra != null) return (mantra, Math.Max(bestScore, VoiceCommandMatchThreshold));
             }
 
@@ -1084,33 +1110,80 @@ namespace ConditioningControlPanel.Services
             return bestScore >= required ? (best, bestScore) : (null, bestScore);
         }
 
-        /// <summary>Run an intent's action and speak its confirmation. Must be called on the UI thread.</summary>
-        private static void ExecuteIntentAndConfirm(VoiceCommandIntent intent)
+        /// <summary>
+        /// Parse a command that rode in on the wake utterance ("hey bambi show me bubbles") and, if one
+        /// fuzzy-matches an intent, run it immediately — no second listen window. Returns true when a
+        /// command was executed. Strips the leading wake phrase (any phonetic variant) first; bare wake
+        /// (no remainder) and unmatched tails return false so the caller runs the normal listen flow.
+        /// </summary>
+        public bool TryHandleInlineCommand(string? heard, IReadOnlyList<string> wakeWords)
         {
-            bool blocked = false;
-            try { blocked = intent.Blocked?.Invoke() == true; } catch { }
-            if (blocked)
+            try
+            {
+                if (string.IsNullOrWhiteSpace(heard)) return false;
+                var tokens = SpeechEngine.Normalize(heard).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (tokens.Length == 0) return false;
+
+                // Drop the wake prefix: pick the longest wake variant whose leading tokens fuzzy-match.
+                int drop = 0;
+                foreach (var v in VoiceInputRules.ExpandWakeVariants(wakeWords))
+                {
+                    var vt = SpeechEngine.Normalize(v).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (vt.Length == 0 || vt.Length > tokens.Length || vt.Length <= drop) continue;
+                    var lead = string.Join(' ', tokens.Take(vt.Length));
+                    if (SpeechEngine.Similarity(string.Join(' ', vt), lead) >= 0.6) drop = vt.Length;
+                }
+                if (drop == 0) return false;                       // wake prefix not found — let the flow handle it
+                var remainder = string.Join(' ', tokens.Skip(drop)).Trim();
+                if (remainder.Length == 0) return false;           // bare wake, no chained command
+
+                // Fuzzy-match the remainder to an intent (same scoring + guards as the listen path).
+                var (best, bestScore) = MatchVoiceIntent(remainder);
+                if (best == null) return false;
+                // Mantra / "again" need the listen-flow context — defer those to the normal path.
+                if (best.IsMantra || best.IsReplay) return false;
+
+                Log.Information(
+                    "AutonomyService: inline voice command '{Name}' from wake utterance ({Chars} chars, score {Score:0.00})",
+                    best.Name, remainder.Length, bestScore);
+
+                var toRun = best;
+                _ = Host.OnUi(() => ExecuteIntentAndConfirm(toRun));
+                if (best.Repeatable && !IsBlocked(best)) _lastVoiceIntent = best;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "AutonomyService: TryHandleInlineCommand failed");
+                return false;
+            }
+        }
+
+        /// <summary>Run an intent's action and speak its confirmation. Called on the UI thread.</summary>
+        private void ExecuteIntentAndConfirm(VoiceCommandIntent intent)
+        {
+            if (IsBlocked(intent))
             {
                 // Possession tripwire: talking your way out is an escape attempt too. Only lockdown
                 // arms it - a strict-video / bubble-count refusal simply finds the service inactive.
-                try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Stop); } catch { }
+                try { Host.OnRefused(); } catch { }
                 var refuseKey = ModKey();
                 var refusal = intent.BlockedConfirm.TryGetValue(refuseKey, out var r) && !string.IsNullOrWhiteSpace(r)
                     ? r
                     : intent.BlockedConfirm.Values.FirstOrDefault() ?? "no~";
-                try { App.AvatarWindow?.GigglePriority(VocabTokens.Apply(refusal), playSound: false, aiGenerated: false); } catch { }
+                try { Host.Say(VocabTokens.Apply(refusal), null); } catch { }
                 return;
             }
 
-            try { intent.Execute?.Invoke(); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "AutonomyService: voice command '{Name}' execute failed", intent.Name); }
+            try { Host.ActionFor(intent.Name)?.Invoke(); }
+            catch (Exception ex) { Log.Warning(ex, "AutonomyService: voice command '{Name}' execute failed", intent.Name); }
 
             // Utility verbs get a short, text-only ack. Feature verbs prefer the voiced manifest variant
             // (text + matching clip for the active mod), falling back to the inline per-mod text.
             string confirm;
             string? audio = null;
             var voiced = (!intent.TerseAck && intent.VoiceRuleId != null)
-                ? App.Bark?.PickVoiceLine(intent.VoiceRuleId)
+                ? Host.PickVoiceLine(intent.VoiceRuleId)
                 : null;
             if (voiced is { } line && !string.IsNullOrWhiteSpace(line.Text))
             {
@@ -1131,8 +1204,7 @@ namespace ConditioningControlPanel.Services
             // writes the token and it is resolved here instead - same pass, same result: the active
             // mod's word for the user when it has one, the vanilla "sweetie" when it does not. Runs on
             // the manifest line too, which costs one IndexOf('{') miss and lets a bark author use it.
-            try { App.AvatarWindow?.GigglePriority(VocabTokens.Apply(confirm), playSound: audio != null,
-                aiGenerated: false, phraseAudioPath: audio, barkVoice: audio != null); } catch { }
+            try { Host.Say(VocabTokens.Apply(confirm), audio); } catch { }
         }
 
         // The three listening prompts below used to leave the sissy line in the `_` arm, so the
@@ -1140,7 +1212,7 @@ namespace ConditioningControlPanel.Services
         // the identical text and `_` (i.e. "neutral", plus any third-party mod) carries the token.
 
         /// <summary>First-turn "I'm listening" prompt when no voiced wake line is available.</summary>
-        private static string ListeningPrompt() => VocabTokens.Apply(ModKey() switch
+        private string ListeningPrompt() => VocabTokens.Apply(ModKey() switch
         {
             "bambi" => "mmm? i'm listening~",
             "circe" => "i'm listening.",
@@ -1149,7 +1221,7 @@ namespace ConditioningControlPanel.Services
         });
 
         /// <summary>Follow-up prompt shown during command chaining.</summary>
-        private static string ChainPrompt() => VocabTokens.Apply(ModKey() switch
+        private string ChainPrompt() => VocabTokens.Apply(ModKey() switch
         {
             "bambi" => "ooh, anything else?~",
             "circe" => "anything else?",
@@ -1158,45 +1230,12 @@ namespace ConditioningControlPanel.Services
         });
 
         /// <summary>Prompt shown for the one polite re-listen after a near-miss.</summary>
-        private static string RetryPrompt() => VocabTokens.Apply(ModKey() switch
+        private string RetryPrompt() => VocabTokens.Apply(ModKey() switch
         {
             "bambi" => "hmm? say that again?~",
             "circe" => "again?",
             "sissy" => "sorry love, say that again?~",
             _       => "sorry {petname}, say that again?~",
         });
-
-        /// <summary>
-        /// Holds until the avatar has stopped speaking (capped by <paramref name="maxWaitMs"/>), then
-        /// waits a short <paramref name="tailMs"/> for speaker echo to decay — so the command mic never
-        /// hears her own voice. When <paramref name="waitForStart"/> is set (the wake/PTT turn, where the
-        /// ack clip starts after a brief bubble lead-in), it first gives her clip up to
-        /// <paramref name="graceMs"/> to actually begin so we don't sail past the wait before she speaks.
-        /// </summary>
-        private static async Task WaitForAvatarQuietAsync(bool waitForStart, int graceMs = 800, int maxWaitMs = 5000, int tailMs = 300)
-        {
-            try
-            {
-                if (waitForStart)
-                {
-                    int g = 0;
-                    while (App.AvatarWindow?.IsSpeakingAudio != true && g < graceMs)
-                    {
-                        await Task.Delay(50).ConfigureAwait(false);
-                        g += 50;
-                    }
-                }
-
-                int waited = 0;
-                while (App.AvatarWindow?.IsSpeakingAudio == true && waited < maxWaitMs)
-                {
-                    await Task.Delay(60).ConfigureAwait(false);
-                    waited += 60;
-                }
-
-                if (tailMs > 0) await Task.Delay(tailMs).ConfigureAwait(false);
-            }
-            catch { /* never let the echo guard wedge the listen */ }
-        }
     }
 }

@@ -7,10 +7,10 @@
 // 30 s pulses. Never picked here (CanPerform false, so ticking them does nothing):
 // ponytail: Comment (AI/phrase comment), MindWipe (CoreMindWipe unseeded on this head), Pink Filter
 // pulse (opacity boost + overlay ownership, #1180), Web Video (no browser media service), Wallpaper
-// (Win32 WallpaperService), Spoken Mantra (AutonomyService.VoiceCommands / MantraVoice not ported).
+// (Win32 WallpaperService), Spoken Mantra (MantraVoiceService not ported).
 // Also not here: the TakeoverAnnouncerOverlay banner (overlay-takeover-announcer), the avatar
 // countdown bar, the announcement's event audio (CompanionPhraseService), the diagnostic Test
-// dialogs, Force Start (debug), and the voice/PTT/wake-word members (slice 2).
+// dialogs and Force Start (debug). Voice/PTT/wake word: MainShellWindow.VoiceCommands.cs.
 
 using System;
 using Avalonia.Controls;
@@ -52,8 +52,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF AnnounceAction: the tube says it (text only; no event audio here).
             Autonomy.AnnouncementMade += (_, phrase) => Dispatcher.UIThread.Post(() =>
                 _avatarTubeWindow?.GigglePriority(phrase, false, aiGenerated: false));
-            Closed += (_, _) => Autonomy.Stop();
-            Opened += (_, _) => ResumeAutonomyOnStartup();
+            Closed += (_, _) => { Autonomy.Stop(); StopVoiceInput(); };
+            Opened += (_, _) => { ResumeAutonomyOnStartup(); RefreshVoiceInputModes(); };
         }
 
         private static bool CanPerformAutonomy(AutonomyActionType a) => a switch
@@ -158,7 +158,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Panic (key or tray): Takeover stops with everything else and its queued
         /// action is dropped. The saved switch stays on; the user restarts her. Lockdown has
         /// already refused the panic before this is reached.</summary>
-        internal void StopAutonomyForPanic() => Autonomy.Stop();
+        internal void StopAutonomyForPanic()
+        {
+            Autonomy.Stop();
+            CancelVoicePrompt();   // decisions "Panic ↔ mic": the capture in flight ends, the loop stays armed
+        }
 
         /// <summary>WPF App.xaml.cs:4284: re-arm only on the resume-on-startup opt-in; otherwise the
         /// stale enabled flag is cleared so the switch reads OFF on a fresh launch.</summary>

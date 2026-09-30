@@ -13,8 +13,7 @@ using Xunit;
 namespace CCP.Avalonia.Tests;
 
 /// <summary>She's Listening on this head (WPF MainWindow.SheListening.cs): the master button arms
-/// and disarms the real settings behind the premium bar, and - with no voice-command consumer
-/// ported - the hero never claims the mic is open (avalonia-decisions.md "voice arm without consumer").</summary>
+/// and disarms the real settings behind the premium bar, and the hero follows the armed state.</summary>
 public sealed class SheListeningTests
 {
     [Fact]
@@ -48,12 +47,13 @@ public sealed class SheListeningTests
                 Assert.Equal("Mic off", tab.SL_StatusTitle.Text);
                 Assert.StartsWith("Tap Start listening", tab.SL_StatusSub.Text);
 
-                // Voice free day: arming defaults to the wake word, and the hero says the mic stays closed.
+                // Voice free day: arming defaults to the wake word and the hero says the mic is open
+                // (MainShellWindow.VoiceCommands.cs is the consumer; VoiceCommandsTests proves it opens).
                 CoreEntitlement.IsFreeTodayProvider = k => k == "voice";
                 Master();
                 Assert.True(s.SpeechWakeWordEnabled);
-                Assert.Equal("Mic off", tab.SL_StatusTitle.Text);
-                Assert.Equal(Loc.Get("sl_voice_not_on_this_build"), tab.SL_StatusSub.Text);
+                Assert.Equal("She's listening", tab.SL_StatusTitle.Text);
+                Assert.Equal("The mic is open. Call her, then say a command.", tab.SL_StatusSub.Text);
                 Assert.NotEqual(Loc.Get("set2_chip_off"), tab.TxtSL_WakeWordChip.Text);
 
                 // Disarming is never barred.
