@@ -4,8 +4,9 @@
 // the link flow (:830-863) on the Core loopback OAuth, the lock pick (:962-1053) and the fact cap.
 // ponytail: Circe's mood is a line (WPF chaster_mood_peek wording), not the CircesMoodMeter heat
 // row, and CirceSays lines are not shown. The ground (spiral/glow/ambient), hero art, paper tag,
-// calendar, LockTitle letters, unlink, the switch/consent, pause, the numbers, the receipt,
-// limits, menu, presets, ladder, trailer and all Fx (ChasterTabView.Fx.cs) are later slices.
+// calendar, LockTitle letters, the account badge, the numbers, the receipt, limits, menu,
+// presets, ladder, trailer and all Fx (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
+// bursts included) are later slices. Unlink, the switch + consent and pause are real (slice 2).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,6 +31,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static readonly Color IceColour = Color.FromRgb(0x9F, 0xD8, 0xFF);
         private static readonly Color AmberColour = Color.FromRgb(0xFF, 0xC9, 0x8A);
         private static readonly Color MutedColour = Color.FromRgb(0xA8, 0xA2, 0xB8);
+        private static readonly Color CostColour = Color.FromRgb(0xFF, 0x6B, 0x8A);
+        private static readonly Color PauseGold = Color.FromRgb(0xE0, 0xB0, 0x52);
         private static readonly FontFamily Display = new("Fredoka, Segoe UI");
 
         private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -88,11 +91,106 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             UnlinkedPanel.IsVisible = !linked;
             FactRow.IsVisible = !linked;
             AccountStrip.IsVisible = linked;
+            SwitchPill.IsVisible = linked;
+            PausePill.IsVisible = linked;
+            PaintPause(CoreSettings.Current.ChasterPaused);
             BtnLink.IsEnabled = chaster != null;
             ShowLinking(chaster?.IsLinking == true);
-            TxtFactCap1.Text = CircesTab.Format((chaster?.Caps ?? TabLimits.Default).DailySeconds, signed: false);
+            TxtFactCap1.Text = TxtFactCap2.Text = CircesTab.Format((chaster?.Caps ?? TabLimits.Default).DailySeconds, signed: false);
             if (!linked) LockRow.IsVisible = false;
             RefreshHero();
+            ConsentCard.IsVisible = false;
+            if (!linked) return;
+            var on = CoreSettings.Current.ChasterTabEnabled;
+            _loading = true;
+            try { ChkTab.IsChecked = on; }
+            finally { _loading = false; }
+            PaintSwitch(on);
+        }
+
+        // ---- the switch, and the one consent (WPF :910-958) ----
+
+        private void PaintSwitch(bool on)
+        {
+            TxtSwitchState.Text = Loc.Get(on ? "chaster_switch_on" : "chaster_switch_off");
+            TxtSwitchState.Foreground = on ? new SolidColorBrush(CostColour) : Brush("TextMutedBrush");
+            SwitchPill.BorderBrush = on ? new SolidColorBrush(CostColour) : Brush("GlassBorderBrush");
+        }
+
+        private void ChkTab_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            var wanted = ChkTab.IsChecked == true;
+            PaintSwitch(wanted);
+            var settings = CoreSettings.Current;
+            // The first time anyone switches this on, the four facts come first. Inline, not a modal.
+            if (wanted && !settings.ChasterConsentSeen)
+            {
+                _loading = true;
+                try { ChkTab.IsChecked = false; }
+                finally { _loading = false; }
+                ConsentCard.IsVisible = true;
+                return;
+            }
+            ConsentCard.IsVisible = false;
+            settings.ChasterTabEnabled = wanted;
+            CoreSettings.Save();
+            RefreshHero();
+        }
+
+        private void BtnConsentOk_Click(object? sender, RoutedEventArgs e)
+        {
+            var settings = CoreSettings.Current;
+            settings.ChasterConsentSeen = true;
+            settings.ChasterTabEnabled = true;
+            CoreSettings.Save();
+            _loading = true;
+            try { ChkTab.IsChecked = true; }
+            finally { _loading = false; }
+            PaintSwitch(true);
+            RefreshHero();
+            ConsentCard.IsVisible = false;
+        }
+
+        // ---- pause (WPF :1053-1072) ----
+
+        private void PaintPause(bool paused)
+        {
+            TxtPause.Text = Loc.Get(paused ? "chaster_paused" : "chaster_pause");
+            PauseBarA.IsVisible = PauseBarB.IsVisible = !paused;
+            PlayArrow.IsVisible = paused;
+            TxtPause.Foreground = paused ? new SolidColorBrush(PauseGold) : Brush("TextLightBrush");
+            PausePill.BorderBrush = paused ? new SolidColorBrush(PauseGold) : Brush("GlassBorderBrush");
+            ToolTip.SetTip(PausePill, Loc.Get(paused ? "chaster_paused_tip" : "chaster_pause_tip"));
+        }
+
+        private void BtnPause_Click(object? sender, RoutedEventArgs e)
+        {
+            var settings = CoreSettings.Current;
+            settings.ChasterPaused = !settings.ChasterPaused;
+            CoreSettings.Save();
+            PaintPause(settings.ChasterPaused);
+            ChasterHead.Service?.NoteChoiceChanged();
+            RefreshHero();
+        }
+
+        // ---- unlink (WPF :865, ConfirmAndUnlinkAsync :896) ----
+
+        private async void BtnUnlink_Click(object? sender, RoutedEventArgs e)
+        {
+            if (TopLevel.GetTopLevel(this) is Window owner) await ConfirmAndUnlinkAsync(owner);
+        }
+
+        /// <summary>One way out, asked once. The service revokes the grant and clears the stored
+        /// token (SecretChasterTokenStore); LinkChanged repaints the page.</summary>
+        internal static async Task<bool> ConfirmAndUnlinkAsync(Window owner, Func<Window, string, string, Task<bool>>? ask = null)
+        {
+            var chaster = ChasterHead.Service;
+            if (chaster == null || !chaster.IsLinked) return false;
+            ask ??= (o, title, body) => Dialogs.MessageDialog.ConfirmAsync(o, title, body);
+            if (!await ask(owner, Loc.Get("chaster_unlink_confirm_title"), Loc.Get("chaster_unlink_confirm_body"))) return false;
+            try { await chaster.UnlinkAsync(); return true; }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] unlink"); return false; }
         }
 
         internal void RefreshHero()

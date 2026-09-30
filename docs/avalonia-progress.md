@@ -938,3 +938,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   quests; idle loop parks when empty. Card toggles live, N/300 line; header XP tooltip filled on open.
 - Evidence: AmbientBubblesTests (0 alloc/step at 40 bubbles), BubbleOverlayTests, fail-proven; live 3 overlays, pops paid XP;
   0.013 ms/step. Windows popping not run. Rows stay stub (trigger/v2 bubbles, lucky FX, Bubble Count). Review: ACCEPT + notes.
+
+## avalonia-port/chaster-tab-live: +1000
+- Head builds the Core ChasterService (WPF options, SecretChasterTokenStore; a sandbox reaches only a loopback CCP_CHASTER_API_URL, fail closed otherwise; consent and site links obey it). Rail padlock (ChasterRailChip) opens a read-only tab: account chip, live lock clock, ends line, pills, lock pick, loopback PKCE link, facts, mood line.
+- Evidence: ChasterTabLiveTests (fail-proven, real pointer click); live against a loopback fake, 0 binding errors. Rows missing->stub. Review: ACCEPT.
