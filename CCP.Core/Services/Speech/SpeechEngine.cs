@@ -515,6 +515,10 @@ namespace ConditioningControlPanel.Services.Speech
                         });
                     }
 
+                    // Already cancelled (a Stop/panic raced the setup): the registration above has
+                    // finished the session, so never open the mic for it.
+                    if (_activeCts.IsCancellationRequested) return await tcs.Task.ConfigureAwait(false);
+
                     IsListening = true;
                     mic = _mic.Start(OnPcm);
 

@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             WaitQuiet = _ => Task.Delay(300),
             ActiveModId = () => CoreMods.ActiveModId,
             OnUi = a => Dispatcher.UIThread.InvokeAsync(a).GetTask(),
+            HelpFromAvailable = true,
         });
 
         /// <summary>True while the wake-word loop owns (or is waiting to own) the mic.</summary>
@@ -114,6 +115,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var entitled = CoreEntitlement.HasPremium || CoreEntitlement.IsFreeToday("voice");
                 var (wake, ptt) = _windowClosed ? (false, false)
                     : VoiceInputRules.ModesToRun(CoreSettings.Current, entitled, CoreSpeech.IsAvailable);
+                if (!wake && !ptt) CancelVoicePrompt();   // a lapse / revoke mid-command ends the prompt too
                 if (wake) StartWakeLoop(); else StopWakeLoop();
                 _pttArmed = ptt;
                 Platform.X11PanicKey.PushToTalkKey = () => CoreSettings.Current.SpeechPushToTalkKey is { Length: > 0 } k ? k : "F8";
@@ -126,7 +128,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// cut any capture and stand both modes down until the next reconcile.</summary>
         internal void StopVoiceInput()
         {
-            try { VoiceSpeech?.StopListening(); } catch { }
+            // First: a command prompt in flight must end too, or its "you called?" re-prompt / retry
+            // would reopen the mic after the user closed it.
+            CancelVoicePrompt();
             StopWakeLoop();
             _pttArmed = false;
         }

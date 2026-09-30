@@ -41,6 +41,9 @@ namespace ConditioningControlPanel.Services.Speech
         /// <summary>Run on the UI thread and wait for it.</summary>
         public Func<Action, Task> OnUi = a => { a(); return Task.CompletedTask; };
         public Func<TimeSpan, Task> Delay = Task.Delay;
+        /// <summary>"what can I say" lists only this head's <see cref="VoiceCommands.Available"/>
+        /// intents. False (WPF) keeps the authored help line, which names the full set.</summary>
+        public bool HelpFromAvailable;
     }
 
     /// <summary>
@@ -1198,6 +1201,8 @@ namespace ConditioningControlPanel.Services.Speech
                     : intent.Confirm.Values.FirstOrDefault() ?? "okay~";
             }
 
+            if (intent.Name == "help" && Host.HelpFromAvailable) confirm = HelpLine();
+
             // THE PETNAME. These lines are not localized, so they never pass through
             // LocalizationManager.Get, which is where the {petname}/{collective} substitution normally
             // happens; GigglePriority takes a raw string and substitutes nothing. So the neutral pack
@@ -1219,6 +1224,29 @@ namespace ConditioningControlPanel.Services.Speech
             "sissy" => "i'm listening, good girl~",
             _       => "i'm listening, {petname}~",
         });
+
+        // The help line's words per intent, in the authored help's order (WPF's line names the same).
+        private static readonly (string Intent, string Words)[] HelpWords =
+        {
+            ("bubbles_on", "bubbles"), ("flash_once", "flash me"), ("video_on", "a video"), ("spiral_on", "the spiral"),
+            ("subliminals_on", "subliminals"), ("bouncing_on", "bouncing text"), ("deeper", "deeper"),
+            ("quiz_once", "quiz me"), ("lock_once", "lock me"), ("freeze_once", "freeze"), ("takeover_on", "take over"),
+            ("pause", "pause"), ("quieter", "quieter"),
+        };
+
+        /// <summary>The help reply built from what this head can run (<see cref="VoiceCommandHost.HelpFromAvailable"/>).</summary>
+        public string HelpLine()
+        {
+            var names = Available.Select(i => i.Name).ToHashSet();
+            var list = string.Join(", ", HelpWords.Where(w => names.Contains(w.Intent)).Select(w => w.Words));
+            return ModKey() switch
+            {
+                "bambi" => $"ooh lots! try: {list} — or say red to stop everything~!",
+                "circe" => $"try: {list} — or 'red' to stop everything.",
+                "sissy" => $"you can ask for: {list} — or say red and i'll stop everything, good girl~",
+                _       => $"you can ask for: {list}, or say red and i'll stop everything, {{petname}}~",
+            };
+        }
 
         /// <summary>Follow-up prompt shown during command chaining.</summary>
         private string ChainPrompt() => VocabTokens.Apply(ModKey() switch

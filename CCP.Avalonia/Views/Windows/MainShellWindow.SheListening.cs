@@ -15,6 +15,7 @@
 // raises IsCheckedChanged on a programmatic set, so seeding needs its own guard.
 
 using System;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
@@ -96,6 +97,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             catch (Exception ex) { Log.Debug("RefreshSheListeningTab: {E}", ex.Message); }
             finally { _slLoading = wasLoading; }
+
+            tab.ShowOnlyVoiceCommands(VoiceCmds.Available.Select(i => i.Name).ToHashSet());
 
             // "Revoke consent" only means something once consent exists.
             tab.SL_PrivacyCard.IsVisible = s.MicConsentGiven;
