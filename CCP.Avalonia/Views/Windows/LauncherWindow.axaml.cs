@@ -1,8 +1,5 @@
-// PORTED (slice 1) from ConditioningControlPanel/Windows/Launcher/LauncherWindow.xaml.cs,
-// LauncherWindow.Tiles.cs and Services/Launcher/LauncherHost.cs. The rules (card table, close,
-// Play) are Core's LauncherCards/LauncherRules; this file only acts on their answers.
-// ponytail: games, the boot surface, the account row and every FX partial are later slices
-// (~/ccp-port/briefs/launcher-plan.md); a card with no destination on this head is not drawn.
+// PORTED (slice 1) from WPF LauncherWindow.xaml.cs/.Tiles.cs and LauncherHost.cs; rules are Core's
+// LauncherCards/LauncherRules. ponytail: games, boot surface, account row, FX = later slices (launcher-plan.md).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,16 +23,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     {
         private const double TileRadius = 16;
 
-        /// <summary>
-        /// The cards whose destination exists on this head: whether the tier gate would refuse it
-        /// (the padlock) and how to open it. WPF LauncherCatalogue.Build carries the rest.
-        /// </summary>
+        /// <summary>Cards whose destination exists on this head: padlock probe + how to open it.</summary>
         internal static readonly IReadOnlyDictionary<string, (Func<bool> Locked, Action<MainShellWindow> Open)> Destinations =
             new Dictionary<string, (Func<bool>, Action<MainShellWindow>)>(StringComparer.OrdinalIgnoreCase)
             {
-                // Graded Intake: a panel tab. Locked when the weekly pass is spent below tier 2
-                // (WPF IntakePassService.CanStartIntake: Lab, or an unspent pass); the click still
-                // opens the tab, whose gate explains the pass.
+                // Graded Intake (WPF IntakePassService.CanStartIntake); locked still opens the tab's gate.
                 ["intake"] = (() => !(CoreEntitlement.HasLab || CoreEntitlement.IsIntakePassAvailable),
                               panel => panel.ShowTab("gradedintake")),
             };
@@ -59,8 +51,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             BuildTiles();
         }
 
-        // ------------------------------------------------------------------ lifecycle (LauncherHost)
-
         /// <summary>WPF LauncherHost.Show: bring the launcher up, creating it on first use.</summary>
         internal static LauncherWindow Open()
         {
@@ -72,10 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return w;
         }
 
-        /// <summary>
-        /// WPF LauncherHost.BackToLauncher: the panel's "back to client" door. Refused during
-        /// Lockdown like closing the panel is. The panel tucks away with everything still running.
-        /// </summary>
+        /// <summary>WPF LauncherHost.BackToLauncher: the panel's door; refused under Lockdown.</summary>
         internal static bool BackToLauncher(MainShellWindow panel)
         {
             if (MainShellWindow.LockdownActive)
@@ -85,7 +72,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             panel.Hide();
             panel.HideAvatarTube();
-            Open()._panel = panel;
+            var w = Open();
+            // The launcher goes with its panel: hidden, it would keep a trayless process alive UI-less.
+            if (!ReferenceEquals(w._panel, panel)) { w._panel = panel; panel.Closed += (_, _) => w.Close(); }
             return true;
         }
 
@@ -136,8 +125,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             base.OnClosing(e);
         }
 
-        // ------------------------------------------------------------------ chrome
-
         private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
         {
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e);
@@ -148,8 +135,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnClose_Click(object? sender, RoutedEventArgs e) => RequestClose();
 
         private void PanelCta_Click(object? sender, RoutedEventArgs e) => OpenPanel();
-
-        // ------------------------------------------------------------------ tiles
 
         /// <summary>WPF LauncherHost.LaunchGame for the destinations this head has.</summary>
         internal void Play(LauncherCard card)
@@ -222,8 +207,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var body = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
 
             // --- the art plate: the mod's art, else the hue plate with the glyph ---
-            // ponytail: WPF's glyph plate also draws a radial hue and a road; no card without
-            // art is visible on this head yet (Breakout lands with its host).
+            // ponytail: WPF's glyph plate also draws a radial hue and a road (no art-less card shows yet).
             var plate = new Panel { MinHeight = LauncherGridLayout.MinArtHeight, Background = new SolidColorBrush(hue, 0.35) };
             if (ModArt.TryLoad(card.ArtPath, 640) is { } art)
                 plate.Children.Add(new Image { Source = art, Stretch = Stretch.UniformToFill });

@@ -1,14 +1,5 @@
-<!-- PORTED (slice 1, shell only) from ConditioningControlPanel/Windows/Launcher/LauncherWindow.xaml.
-     The panel on the left, the games on the right, the title bar on top; sizes, order and loc keys
-     are the original's. Cards come from Core LauncherCards and only those whose destination this
-     head has are drawn (LauncherWindow.axaml.cs Destinations) - the rest are hidden, not faked.
-
-     Not here yet (docs/avalonia-parity.md win-launcher, ~/ccp-port/briefs/launcher-plan.md):
-     backdrop spiral/glow/ambient, edge glint, burst/shockwave/shake, hover tilt/glow, sounds,
-     account chip + sign-in pill + tier badge + SP readout, mod pill, gear (media dialog), panel
-     stats/XP/running status + Stop, add-shortcut, friends chip + What's new, skip-to-panel (the
-     boot surface is slice 2), lockdown veil.
-     WindowStyle="None" + WindowChrome -> SystemDecorations="None" (the bar is drawn here). -->
+<!-- PORTED (slice 1, shell only) from ConditioningControlPanel/Windows/Launcher/LauncherWindow.xaml; sizes,
+     order and loc keys are the original's. What is not here yet: docs/avalonia-parity.md win-launcher. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"

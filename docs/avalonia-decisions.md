@@ -246,5 +246,7 @@ MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `Cor
 - Deviation: WPF hides the launcher behind the panel's tray icon when something still runs. A Linux desktop may have no tray host,
   so when the panel is hidden and no StatusNotifierWatcher is present the close button minimizes instead of hiding, keeping a way
   back. A user close is routed through the rule; a `Close()` from code (shutdown, tests) goes through.
+- Closing the shell closes the launcher (LauncherWindow.BackToLauncher hooks the panel's Closed), so a hidden launcher never keeps a trayless process alive.
+- Test: `Tests/CCP.Core.Tests/LauncherRulesTests.cs`, `Tests/CCP.Avalonia.Tests/LauncherWindowTests.cs` (each behaviour fail-proven by a deliberate break).
 - WindowControlButton/WindowCloseButton hoisted from MainShellWindow.axaml into Theme/Styles.xaml (its ponytail note: second caller).
 - Advisor: none (worker, per branch brief).

@@ -125,4 +125,48 @@ public sealed class LauncherWindowTests
         Dispatcher.UIThread.RunJobs();
         Assert.True(closed);
     });
+    [Fact]
+    public void ClosingTheShell_ClosesTheHiddenLauncher() => Run(shell =>
+    {
+        LauncherWindow.BackToLauncher(shell);
+        var launcher = LauncherWindow.Instance!;
+        launcher.Hide();
+        shell.Close();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(LauncherWindow.Instance);       // gone, not a hidden window keeping the process up
+    });
+
+    [Fact]
+    public void Close_HidesWhileTheEngineOrASessionRuns_MinimizesWithNoTray() => Run(shell =>
+    {
+        var oldSession = CoreSession.IsSessionRunningProvider;
+        try
+        {
+            CoreSettings.Current.FlashEnabled = true;
+            shell.StartEngine();
+            LauncherWindow.BackToLauncher(shell);
+            var launcher = LauncherWindow.Instance!;
+            shell.TrayHostPresent = () => true;
+            launcher.RequestClose();
+            Assert.False(launcher.IsVisible);           // engine running: hide, not exit
+            Assert.True(CoreEngine.IsRunning);
+
+            CoreEngine.Stop();
+            CoreSession.IsSessionRunningProvider = () => true;
+            LauncherWindow.Open();
+            launcher.RequestClose();
+            Assert.False(launcher.IsVisible);           // session running: hide, not exit
+
+            LauncherWindow.Open();
+            shell.TrayHostPresent = () => false;
+            launcher.RequestClose();
+            Assert.True(launcher.IsVisible);            // no tray: the way back stays on the taskbar
+            Assert.Equal(WindowState.Minimized, launcher.WindowState);
+        }
+        finally
+        {
+            CoreSession.IsSessionRunningProvider = oldSession;
+            CoreEngine.Stop();
+        }
+    });
 }

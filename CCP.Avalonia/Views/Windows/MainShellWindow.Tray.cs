@@ -11,8 +11,8 @@
 //   - With no tray host (Linux desktop without a StatusNotifierWatcher) Avalonia's tray falls back
 //     silently, so X would hide the window behind nothing. X is gated on a host probe: no host, X exits.
 // The first-minimize balloon (TrayIconService.cs:165-171) goes through Platform/OsNotifications.
-// ponytail: "launcher_back_to_client" is omitted - WPF hides it unless LauncherHost.SurfaceInPlay,
-// and this head has no launcher, so it is never visible. Add it with the launcher.
+// ponytail: "launcher_back_to_client" is omitted until the boot surface lands (launcher slice 2): WPF
+// shows it while LauncherHost.SurfaceInPlay; here the title-bar door (LauncherWindow.BackToLauncher) is the way.
 
 using System;
 using System.Threading.Tasks;

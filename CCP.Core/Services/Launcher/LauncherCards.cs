@@ -53,34 +53,15 @@ public static class LauncherCards
     }
 }
 
-/// <summary>What the launcher's close button does.</summary>
-public enum LauncherCloseOutcome
-{
-    /// <summary>Lockdown: the launcher is never a way around the veil.</summary>
-    Veto,
-    /// <summary>Something runs behind it, or the panel is up: hide, the panel/tray is the way back.</summary>
-    Hide,
-    /// <summary>Nothing running and the panel tucked away: closing the launcher means leaving.</summary>
-    Exit,
-}
+/// <summary>The launcher's close button: Veto under Lockdown (never a way around the veil); Hide while
+/// something runs or the panel is up (the panel/tray is the way back); Exit when nothing is left.</summary>
+public enum LauncherCloseOutcome { Veto, Hide, Exit }
 
-/// <summary>What a tile's Play does, in the order the checks run.</summary>
-public enum LauncherGameStep
-{
-    /// <summary>Nobody signed in and the entry needs an account: the launcher's sign-in flow.</summary>
-    SignIn,
-    /// <summary>Tier-locked: the host's own refusal toast, the launcher stays up behind it.</summary>
-    Refuse,
-    /// <summary>A leash punishment is pending: the panel comes up with the gate.</summary>
-    Leash,
-    /// <summary>Start it and hide the launcher.</summary>
-    Launch,
-}
+/// <summary>A tile's Play, in check order: SignIn (account needed, nobody signed in), Refuse (tier-locked:
+/// the host's toast, launcher stays up), Leash (the panel comes up with the gate), Launch.</summary>
+public enum LauncherGameStep { SignIn, Refuse, Leash, Launch }
 
-/// <summary>
-/// The launch-handoff and panel-to-tray lifecycle rules, pure so each head's host only acts on
-/// the answer (WPF <c>LauncherHost</c>, Avalonia <c>LauncherWindow</c>).
-/// </summary>
+/// <summary>Launch-handoff and panel-to-tray rules; each head's host only acts on the answer.</summary>
 public static class LauncherRules
 {
     /// <summary>The longest the window may hold its exit beat before it hides, in ms.</summary>
