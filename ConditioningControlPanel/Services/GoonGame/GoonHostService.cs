@@ -70,10 +70,20 @@ namespace ConditioningControlPanel.Services.GoonGame
         private const string AllowedPathPrefix = "/v2/goon/";
 
         /// <summary>Seconds of "beats arriving, frame counter frozen, page says it is visible"
-        /// before the page is treated as visually frozen. Ten seconds is far past any legitimate
-        /// hitch (a 4K shader resize, a video decode stutter, a GC pause) and far short of how long
-        /// the owner sat in front of a dead picture on 2026-08-04.</summary>
-        private const double PaintStallSeconds = 10;
+        /// before the page is treated as visually frozen. Was 10 s until ccp-bugs #1326 (a busy
+        /// machine closed a live match twice at 11 s); 20 s is still far short of how long the
+        /// owner sat in front of a dead picture on 2026-08-04.</summary>
+        internal const double PaintStallSeconds = 20;
+
+        /// <summary>The heartbeat watch's own tick interval. A tick that arrives much later than
+        /// this means the UI thread itself was stalled, see <see cref="PaintStallVerdict"/>.</summary>
+        internal const double WatchIntervalSeconds = 5;
+
+        /// <summary>Slack on <see cref="WatchIntervalSeconds"/> before a late tick counts as a UI
+        /// stall, and the <see cref="VideoDiag.UiStallMs"/> age that counts as one too.</summary>
+        internal const double UiStallSlackSeconds = 3;
+
+        private static DateTime _lastWatchTickUtc;
 
         private static ChaosWebViewHost? _host;
         private static DispatcherTimer? _heartbeatWatch;
@@ -295,6 +305,10 @@ namespace ConditioningControlPanel.Services.GoonGame
                     OnMessage = OnPageMessage,
                     OnProcessFailed = OnProcessFailed,
                 });
+                // A launch the player asked for starts a new game session with its own one
+                // recovery; only a recovery relaunch keeps the spent flag (ccp-bugs #1326: it was
+                // never reset, so one stall anywhere in the app's life closed every later match).
+                if (!_recoveryWindowed) _relaunchedOnce = false;
                 _recoveryWindowed = false;   // consumed by the Options above; the next launch is normal again
                 _host.Show();
                 // Windowed surface: the user closes it via the title-bar X. Tear down cleanly so
@@ -1714,9 +1728,13 @@ namespace ConditioningControlPanel.Services.GoonGame
             _lastPaint = null;
             _lastPaintMoveUtc = DateTime.UtcNow;
             _paintStallHandled = false;
-            _heartbeatWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _lastWatchTickUtc = DateTime.UtcNow;
+            _heartbeatWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(WatchIntervalSeconds) };
             _heartbeatWatch.Tick += (_, _) =>
             {
+                var tickNow = DateTime.UtcNow;
+                var tickGap = (tickNow - _lastWatchTickUtc).TotalSeconds;
+                _lastWatchTickUtc = tickNow;
                 // Only after the page is live (it beats via rAF once booted) so a still-loading
                 // page can't false-trip.
                 if (_host == null || !_host.IsReady || _exiting) return;
@@ -1737,7 +1755,18 @@ namespace ConditioningControlPanel.Services.GoonGame
                 if (!_paintStallHandled && _lastPaint != null)
                 {
                     var frozen = (DateTime.UtcNow - _lastPaintMoveUtc).TotalSeconds;
-                    if (frozen > PaintStallSeconds)
+                    var verdict = PaintStallVerdict(frozen, tickGap, VideoDiag.UiStallMs);
+                    if (verdict == PaintStallCall.UiStalled)
+                    {
+                        // ccp-bugs #1326: OUR thread was the stalled one (the page's beats sat in
+                        // the dispatcher queue), so the frozen counter says nothing about the page.
+                        // Restart the clock instead of closing a live match.
+                        App.Logger?.Debug(
+                            "GoonHostService: paint clock reset after a UI stall (tick gap {Gap:F1}s, frozen {Sec:F0}s)",
+                            tickGap, frozen);
+                        _lastPaintMoveUtc = DateTime.UtcNow;
+                    }
+                    else if (verdict == PaintStallCall.Stalled)
                     {
                         _paintStallHandled = true;
                         App.Logger?.Warning(
@@ -1756,6 +1785,24 @@ namespace ConditioningControlPanel.Services.GoonGame
                 }
             };
             _heartbeatWatch.Start();
+        }
+
+        internal enum PaintStallCall { Healthy, UiStalled, Stalled }
+
+        /// <summary>Pure decision for the paint-stall watchdog (ccp-bugs #1326).
+        /// <paramref name="frozenSeconds"/> is how long the page's frame counter has not moved,
+        /// <paramref name="tickGapSeconds"/> how long since the watch last ticked, and
+        /// <paramref name="uiStallMs"/> the app's own UI-thread stall age. A late tick or a stalled
+        /// UI thread means the page's heartbeats were stuck behind us in the dispatcher queue, so
+        /// the frozen figure is not evidence about the page: it is never a stall, the clock
+        /// restarts. Only a frozen counter seen by a healthy UI thread past
+        /// <see cref="PaintStallSeconds"/> is one.</summary>
+        internal static PaintStallCall PaintStallVerdict(double frozenSeconds, double tickGapSeconds, long uiStallMs)
+        {
+            if (tickGapSeconds > WatchIntervalSeconds + UiStallSlackSeconds
+                || uiStallMs > UiStallSlackSeconds * 1000)
+                return PaintStallCall.UiStalled;
+            return frozenSeconds > PaintStallSeconds ? PaintStallCall.Stalled : PaintStallCall.Healthy;
         }
 
         private static void StopHeartbeatWatch()
