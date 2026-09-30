@@ -34,6 +34,28 @@ public class ChaosMetaStoreTests
     }
 
     [Fact]
+    public void Legacy_file_migrates_into_slot_1_once_and_both_files_survive()
+    {
+        var legacy = Path.Combine(CorePaths.UserData, "chaos_meta.json");
+        try
+        {
+            ChaosMetaStore.Delete(1);
+            Directory.CreateDirectory(CorePaths.UserData);
+            File.WriteAllText(legacy, Newtonsoft.Json.JsonConvert.SerializeObject(
+                new ChaosMetaState { Sparks = 77, RunsCompleted = 4 }));
+
+            Assert.Equal(77, ChaosMetaStore.Load(1).Sparks);
+            Assert.Equal(77, ChaosMetaStore.Load(1).Sparks);   // second load is idempotent
+
+            Assert.True(File.Exists(legacy));
+            var slot1 = ChaosMetaStore.SlotFilePath(1);
+            Assert.True(File.Exists(slot1));
+            Assert.Equal(File.ReadAllText(legacy), File.ReadAllText(slot1));
+        }
+        finally { ChaosMetaStore.Delete(1); }
+    }
+
+    [Fact]
     public void Ranks_and_specifics_match_the_wpf_copy()
     {
         Assert.Equal("Slipping", ChaosRanks.Name(ChaosRanks.For(10)));

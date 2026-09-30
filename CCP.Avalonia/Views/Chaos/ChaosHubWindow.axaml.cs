@@ -1957,7 +1957,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// <summary>The active save slot's meta (WPF: <c>ChaosMeta.State</c>), re-read from Core's
         /// <see cref="ChaosMetaStore"/> each time the hub opens. Balances, rank and lifetime stats
         /// are real; the shelves below are still <see cref="Sample"/>.</summary>
-        private static ChaosMetaState Live = new();
+        internal static ChaosMetaState Live = new();
 
         private static string LiveRank => ChaosRanks.Name(ChaosRanks.For(Live.RunsCompleted));
 

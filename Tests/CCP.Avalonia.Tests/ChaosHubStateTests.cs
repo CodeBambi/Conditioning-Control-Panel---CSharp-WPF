@@ -26,6 +26,8 @@ public sealed class ChaosHubStateTests
                     .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                     .SetupWithoutStarting();
             var old = CoreSettings.Current.ChaosActiveSlot;
+            ChaosSlotPickerWindow? picker = null;
+            ChaosHubWindow? hub = null;
             try
             {
                 for (int s = 1; s <= 3; s++) ChaosMetaStore.Delete(s);
@@ -36,7 +38,7 @@ public sealed class ChaosHubStateTests
                 }, 1);
                 ChaosMetaStore.SetActiveSlot(1);
 
-                var picker = new ChaosSlotPickerWindow();
+                picker = new ChaosSlotPickerWindow();
                 var text = Texts(picker);
                 Assert.Contains("Slipping", text);        // ChaosRanks over slot 1's 10 descents
                 Assert.Contains("New Journey", text);     // slot 2 opened by the ragdoll
@@ -49,13 +51,16 @@ public sealed class ChaosHubStateTests
                 Assert.DoesNotContain("Stitched Shut again",
                     ChaosSlotPickerWindow.EraseMessage(2, ChaosMetaStore.AllSummaries()));
 
-                var hub = new ChaosHubWindow();
+                hub = new ChaosHubWindow();
                 Assert.Equal("Slipping", hub.FindControl<TextBlock>("MenuRank")!.Text);
                 Assert.Equal("10", hub.FindControl<TextBlock>("StRuns")!.Text);
                 Assert.Equal("321", hub.FindControl<TextBlock>("MenuSparks")!.Text);
             }
             finally
             {
+                picker?.Close();
+                hub?.Close();
+                ChaosHubWindow.Live = new ChaosMetaState();
                 for (int s = 1; s <= 3; s++) ChaosMetaStore.Delete(s);
                 CoreSettings.Current.ChaosActiveSlot = old;
             }
