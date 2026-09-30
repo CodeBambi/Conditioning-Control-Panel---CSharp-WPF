@@ -1097,3 +1097,4 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   (CompanionAskService + Ask* moved to Core behind 7 seams WPF seeds); a card is promised only when one can be built; busy = session,
   video, lock card, bubble count, pop quiz; the ask timer stops on exit on both heads.
 - Evidence: TubeChatParityTests (loopback fake, protocol 2, fail-proven x9); live ask cards reached the tube. Rows stay stub. Review: FIX -> fixed.
+
