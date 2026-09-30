@@ -65,18 +65,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private bool _isPlaying;
         private string? _currentFilePath;
 
-        // LibVLC's decode target (vmem): written by the decoder thread, copied to _videoBitmap on
-        // the UI thread. _frameLock guards the buffer's lifetime, not tearing - as WPF InlineLoopVideo.
-        private readonly object _frameLock = new();
-        private IntPtr _frameBuffer;
-        private int _frameWidth, _frameHeight, _blitQueued;
-        private WriteableBitmap? _videoBitmap;
-        private byte[] _row = Array.Empty<byte>();
+        // LibVLC's decode target, copied into a WriteableBitmap on the UI thread.
+        private VlcFrameSink? _frames;
 
         /// <summary>For --video-check and its test: the live player (null before load and after close).</summary>
         internal MediaPlayer? Player => _mediaPlayer;
-        internal WriteableBitmap? VideoFrame => _videoBitmap;
-        internal bool FrameBufferFreed { get { lock (_frameLock) return _frameBuffer == IntPtr.Zero; } }
+        internal WriteableBitmap? VideoFrame => _frames?.Bitmap;
+        internal bool FrameBufferFreed => _frames?.Freed ?? true;
 
         public MiniPlayerWindow()
         {
@@ -166,8 +161,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                 _mediaPlayer = new MediaPlayer(libVLC);
                 _mediaPlayer.EnableHardwareDecoding = true;
-                _mediaPlayer.SetVideoFormatCallbacks(VideoFormat, (ref IntPtr _) => { });
-                _mediaPlayer.SetVideoCallbacks(VideoLock, null, VideoDisplay);
+                _frames = new VlcFrameSink(_mediaPlayer, () => _media, bmp => _videoImage.Source = bmp, _videoImage.InvalidateVisual);
 
                 _mediaPlayer.Playing += (s, e) => Dispatcher.UIThread.Post(() =>
                 {
@@ -213,72 +207,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Log.Error(ex, "MiniPlayerWindow: Failed to load video");
                 Close();
             }
-        }
-
-        // ---- LibVLC video callbacks (decoder thread) ----
-
-        private uint VideoFormat(ref IntPtr opaque, IntPtr chroma, ref uint width, ref uint height, ref uint pitches, ref uint lines)
-        {
-            // RV32 = B,G,R,X in memory: Bgra8888 with the alpha ignored (AlphaFormat.Opaque).
-            Marshal.Copy(new[] { (byte)'R', (byte)'V', (byte)'3', (byte)'2' }, 0, chroma, 4);
-            // VLC offers padded decoder dimensions (320x240 arrives as 320x258) and scales into
-            // whatever we answer, so answer the track's display size to keep the aspect ratio.
-            foreach (var t in _media?.Tracks ?? Array.Empty<MediaTrack>())
-            {
-                if (t.TrackType != TrackType.Video || t.Data.Video.Width == 0 || t.Data.Video.Height == 0) continue;
-                var v = t.Data.Video;
-                width = v.SarNum > 0 && v.SarDen > 0 ? v.Width * v.SarNum / v.SarDen : v.Width;
-                height = v.Height;
-                break;
-            }
-            pitches = width * 4;
-            lines = height;
-            lock (_frameLock)
-            {
-                if (_frameBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_frameBuffer);
-                _frameBuffer = Marshal.AllocHGlobal((int)(pitches * lines));
-                _frameWidth = (int)width;
-                _frameHeight = (int)height;
-            }
-            return 1;
-        }
-
-        private IntPtr VideoLock(IntPtr opaque, IntPtr planes)
-        {
-            lock (_frameLock) Marshal.WriteIntPtr(planes, _frameBuffer);
-            return IntPtr.Zero;
-        }
-
-        private void VideoDisplay(IntPtr opaque, IntPtr picture)
-        {
-            // One pending blit at a time: a slow UI thread drops frames rather than queueing them.
-            if (Interlocked.Exchange(ref _blitQueued, 1) == 0)
-                Dispatcher.UIThread.Post(BlitFrame, DispatcherPriority.Render);
-        }
-
-        private void BlitFrame()
-        {
-            Volatile.Write(ref _blitQueued, 0);
-            lock (_frameLock)
-            {
-                if (_frameBuffer == IntPtr.Zero || _mediaPlayer == null) return;
-                if (_videoBitmap == null || _videoBitmap.PixelSize.Width != _frameWidth || _videoBitmap.PixelSize.Height != _frameHeight)
-                {
-                    _videoBitmap?.Dispose();
-                    _videoBitmap = new WriteableBitmap(new PixelSize(_frameWidth, _frameHeight), new Vector(96, 96),
-                        PixelFormat.Bgra8888, AlphaFormat.Opaque);
-                    _videoImage.Source = _videoBitmap;
-                }
-                using var fb = _videoBitmap.Lock();
-                var rowBytes = _frameWidth * 4;
-                if (_row.Length != rowBytes) _row = new byte[rowBytes];
-                for (var y = 0; y < _frameHeight; y++)
-                {
-                    Marshal.Copy(_frameBuffer + y * rowBytes, _row, 0, rowBytes);
-                    Marshal.Copy(_row, 0, fb.Address + y * fb.RowBytes, rowBytes);
-                }
-            }
-            _videoImage.InvalidateVisual();
         }
 
         private void LoadGif(string filePath)
@@ -417,14 +345,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try { _media?.Dispose(); } catch { /* Ignore dispose errors */ }
                 _media = null;
 
-                lock (_frameLock)
-                {
-                    if (_frameBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_frameBuffer);
-                    _frameBuffer = IntPtr.Zero;
-                }
                 _videoImage.Source = null;
-                _videoBitmap?.Dispose();
-                _videoBitmap = null;
+                _frames?.Free();
 
                 (_imagePreview.Source as Bitmap)?.Dispose();
                 _imagePreview.Source = null;

@@ -104,3 +104,18 @@ here record where and why the port chose something, and who advised.
   learns the clock, retries once on clock_skew and backs off after failures; DiscordAccount and ProviderSubscription (Patreon)
   honour DeadRefreshTokens. New WPF surfaces are ledger rows under "main-sync-3 additions".
 - Advisor: supervisor.
+
+## 2026-09-30: mandatory video keeps scheduling after an empty library
+- Question: WPF's scheduled tick that finds no video returns (VideoService.ContinueTriggerVideo :2424) without ScheduleNext, so
+  mandatory videos stop for the rest of the engine run. Keep that?
+- Options: (a) die like WPF; (b) re-arm the normal interval.
+- Choice: (b). A clip added mid-session still plays; the cost is one directory walk per interval. Core MandatoryVideoScheduler.Tick,
+  test `Empty_library_starts_nothing_and_keeps_the_schedule_alive`.
+- Advisor: reviewer (video-playback-core).
+
+## 2026-09-30: strict mandatory video falls open without a live panic listener
+- Question: strict mode swallows the panic key in the video window because WPF's global hook stops the video. On this head the
+  X11 panic listener can be down (no X display, native Wayland, key with no keycode). Keep swallowing?
+- Choice: no. As LockCardWindow #875: while the listener is not live, the panic key and Esc force-stop a strict video (no
+  reschedule). With the listener live, strict swallows them and the global path stops it.
+- Advisor: reviewer (video-playback-core).

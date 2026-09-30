@@ -11,7 +11,7 @@ namespace CCP.Core.Tests;
 [Collection(SessionStatics.Name)]
 public sealed class PopQuizSchedulerTests
 {
-    private sealed class FakeClock : TimeProvider
+    internal sealed class FakeClock : TimeProvider
     {
         private DateTimeOffset _now = DateTimeOffset.UnixEpoch;
         private readonly List<FakeTimer> _timers = new();

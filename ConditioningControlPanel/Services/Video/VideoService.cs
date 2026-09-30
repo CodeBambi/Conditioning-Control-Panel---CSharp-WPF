@@ -1630,9 +1630,7 @@ namespace ConditioningControlPanel.Services
         private int GetEffectiveVolume()
         {
             if (_externalMute) return 0;
-            var master = App.Settings.Current.MasterVolume;
-            var video = App.Settings.Current.VideoVolume;
-            return (int)((master / 100.0) * (video / 100.0) * 100);
+            return MandatoryVideoScheduler.EffectiveVolume(App.Settings.Current.MasterVolume, App.Settings.Current.VideoVolume);
         }
 
         /// <summary>
@@ -2766,9 +2764,7 @@ namespace ConditioningControlPanel.Services
             // screenCount is the TARGETED screen count (App.GetGlobalScreens), so the
             // DualMonitorEnabled test this used to open with is already applied: one targeted
             // screen means there is no secondary to fill.
-            if (screenCount <= 1) return false;
-            if (screenCount <= 2) return true; // 1–2 monitors: unchanged
-            return App.Settings.Current.FillAllMonitorsWithVideo;
+            return MandatoryVideoScheduler.ShouldFillSecondaryMonitors(screenCount, App.Settings.Current.FillAllMonitorsWithVideo);
         }
 
         private Window CreateLibVLCUrlWindow(string url, Screen screen, bool withAudio)
@@ -2960,9 +2956,7 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                var perHour = Math.Max(1, App.Settings.Current.VideosPerHour);
-                secs = 3600.0 / perHour * (0.8 + _random.NextDouble() * 0.4);
-                secs = Math.Max(60, secs);
+                secs = MandatoryVideoScheduler.NextIntervalSeconds(App.Settings.Current.VideosPerHour, _random.NextDouble());
             }
 
             _scheduler?.Stop();
@@ -5452,8 +5446,8 @@ namespace ConditioningControlPanel.Services
                     }
 
                     // In strict mode, block panic key, Alt+F4, and system keys
-                    if (e.Key.ToString() == App.Settings.Current.PanicKey || e.Key == Key.System ||
-                        (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
+                    if (MandatoryVideoScheduler.KeyAction(true, e.Key.ToString(), Keyboard.Modifiers.HasFlag(ModifierKeys.Alt),
+                            App.Settings.Current.PanicKeyEnabled, App.Settings.Current.PanicKey) == VideoKeyAction.Swallow)
                         e.Handled = true;
                 };
                 // In strict mode the window is already Topmost — reactivation causes a
@@ -8318,21 +8312,11 @@ namespace ConditioningControlPanel.Services
         /// clip that fails at play time; the cost of a narrow one is a folder that silently scans to
         /// zero videos and a "no videos" dialog on a folder that visibly has some (#1124).
         /// </summary>
-        internal static readonly string[] SupportedVideoExtensions =
-        {
-            ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm",
-            ".m4v", ".mpg", ".mpeg", ".flv", ".ts"
-        };
+        internal static readonly string[] SupportedVideoExtensions = MandatoryVideoScheduler.SupportedVideoExtensions;
 
         /// <summary>Extension gate of the local video walk, case-insensitive. Pure, so it is unit
         /// tested (VideoExtensionFilterTests) rather than only exercised through a disk scan.</summary>
-        internal static bool IsSupportedVideoExtension(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            var ext = Path.GetExtension(path);
-            if (string.IsNullOrEmpty(ext)) return false;
-            return SupportedVideoExtensions.Contains(ext.ToLowerInvariant());
-        }
+        internal static bool IsSupportedVideoExtension(string path) => MandatoryVideoScheduler.IsSupportedVideoExtension(path);
 
         private void RefillVideoQueues()
         {
