@@ -42,6 +42,7 @@ export const roomStage = false;
 
 const num = (q, k, d) => (q.has(k) && !Number.isNaN(Number(q.get(k))) ? Number(q.get(k)) : d);
 const DEV_KEY = 'bo.dev.open', FOCUS_R = 140, REDEAL_WALLS = 3;
+const BLUR_PAUSE_MS = 150;   // a blur that is back within this is focus being handed around, not the player leaving
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
@@ -841,7 +842,14 @@ export async function mount(ctx) {
       else return;
       syncKeys();
     });
-    on(window, 'blur', () => { if (moved) setPaused(true); });
+    // A blur pauses only when the page is still out of focus a moment later. The desktop panel hands a kept
+    // Escape over and gives the game the keyboard back in the same beat, which blurs and refocuses the page at
+    // once; pausing on that blur put the real Escape on a pause card, and Escape there leaves (desk run 2026-09-30).
+    let blurWait = 0;
+    on(window, 'blur', () => {
+      if (!moved || blurWait) return;
+      blurWait = setTimeout(() => { blurWait = 0; if (moved && el && !document.hasFocus()) setPaused(true); }, BLUR_PAUSE_MS);
+    });
     on(document, 'visibilitychange', () => { if (document.hidden) pageFx?.cancelAll(); if (document.hidden && moved) setPaused(true); });
     if (ui.back) on(ui.back, 'click', back);
     on(window,'keydown',e=>{
