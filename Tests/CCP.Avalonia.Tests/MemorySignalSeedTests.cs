@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using ConditioningControlPanel.Services.Companion.Brain;
 using Xunit;
 using AvApp = ConditioningControlPanel.Avalonia.App;
@@ -15,7 +16,8 @@ public sealed class MemorySignalSeedTests
     public void SeededMirrorCountsFeatureUseAndUnsubscribesOnDispose()
     {
         var dir = Directory.CreateTempSubdirectory("ccp-memsig-").FullName;
-        var (factory, sources) = (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook);
+        var (factory, sources, sent) = (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook, CompanionBrain.UserMessageSent);
+        var (features0, chats0) = (Handlers("FeatureUsed"), Handlers("UserMessageSent"));
         try
         {
             AvApp.SeedMemorySignals();
@@ -28,14 +30,19 @@ public sealed class MemorySignalSeedTests
             Assert.Equal(1, store.FeatureUsage[MemorySignalWriter.FeatureFlash]);
             Assert.Equal(1, store.FeatureUsage[MemorySignalWriter.FeatureBubbles]);
 
-            writer.Dispose();
-            AvApp.NoteFeatureUsed(MemorySignalWriter.FeatureSubliminal);
-            Assert.False(store.FeatureUsage.ContainsKey(MemorySignalWriter.FeatureSubliminal));
+            Assert.Equal(features0 + 1, Handlers("FeatureUsed"));
+            Assert.Equal(chats0 + 1, Handlers("UserMessageSent"));
+            writer.Dispose();   // a disposed writer must leave the head's events, not just ignore them
+            Assert.Equal(features0, Handlers("FeatureUsed"));
+            Assert.Equal(chats0, Handlers("UserMessageSent"));
         }
         finally
         {
-            (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook) = (factory, sources);
+            (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook, CompanionBrain.UserMessageSent) = (factory, sources, sent);
             Directory.Delete(dir, true);
         }
     }
+
+    private static int Handlers(string evt) =>
+        (typeof(AvApp).GetField(evt, BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null) as Delegate)?.GetInvocationList().Length ?? 0;
 }

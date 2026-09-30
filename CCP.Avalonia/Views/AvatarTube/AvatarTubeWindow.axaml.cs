@@ -1493,20 +1493,20 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
             var ai = App.Ai;
             var brain = App.Brain;   // decided once, up front, as WPF (ChatInput.cs:772)
+            // WPF ChatInput.cs:771-779: both halves cached, so the emit and the branch cannot disagree.
+            var aiChatLive = CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true };
+            var routesThroughBrain = aiChatLive && ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
             // WPF ChatInput.cs:788: the brain raises the "user talked" signal itself; emit only for the other paths.
-            if (!(CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true }
-                  && ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain)))
-                App.NotifyUserMessageSent();
-            if (CoreSettings.Current.AiChatEnabled && ai is { IsAvailable: true })
+            if (!routesThroughBrain) App.NotifyUserMessageSent();
+            if (aiChatLive)
             {
-                var routesThroughBrain = ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
                 try
                 {
                     StartThinkingAnimation();
 #pragma warning disable CS0618 // WPF's kill-switch-off path
                     var result = routesThroughBrain
                         ? await brain!.ChatAsync(input)
-                        : await ai.GetBambiReplyExAsync(input);
+                        : await ai!.GetBambiReplyExAsync(input);
 #pragma warning restore CS0618
                     PlayDoubleBounce();
                     if (result.Refusal != null) { ShowModerationRefusalBubble(result.Refusal.Source); return; }

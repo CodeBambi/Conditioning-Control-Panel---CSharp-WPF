@@ -495,8 +495,9 @@ namespace ConditioningControlPanel.Avalonia
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
                 // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
-                // echo (no bark engine here: CoreBark is a doorbell), command executor, activities and the
-                // UserMessageSent achievement emit stay unseeded (head services not here).
+                // echo (no bark engine here: CoreBark is a doorbell), command executor and activities stay
+                // unseeded (head services not here). SeedMemorySignals seeds UserMessageSent for the memory
+                // chat counter only; no companion-chat achievement listens to it on this head yet.
                 SeedMemorySignals();
                 try { if (Ai != null) Brain = new ConditioningControlPanel.Services.Companion.Brain.CompanionBrain(Ai); }
                 catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
