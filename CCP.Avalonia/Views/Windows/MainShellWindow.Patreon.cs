@@ -145,6 +145,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     CoreSettings.Save();
                     _lapseUnsaved = false;
                 }
+                // WPF MainWindow.Patreon.cs:108 - the lapse stops the engine, not just the flag.
+                if (cleared.Contains("awareness-mode")) App.WindowAwareness.Stop();
+                // WPF Patreon.cs:152 - the mirror case: entitlement resolving late re-arms what the
+                // settings (and consent) already ask for. Start() re-checks everything itself.
+                var s = CoreSettings.Current;
+                if (s.AwarenessModeEnabled && s.AwarenessConsentGiven && ConditioningControlPanel.Services.WindowAwarenessService.HasEntitlement
+                    && !App.WindowAwareness.IsRunning)
+                    App.WindowAwareness.Start();
                 if (cleared.Count == 0) return;
                 Named<Tabs.BambiTakeoverTabView>("BambiTakeoverTab")?.SyncFromSettings();
                 Named<Tabs.AwarenessTabView>("AwarenessTab")?.SyncAwarenessTabUi();
