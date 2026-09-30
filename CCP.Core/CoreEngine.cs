@@ -30,6 +30,9 @@ namespace ConditioningControlPanel
         /// on a head with no pop-quiz window.</summary>
         public static volatile PopQuizScheduler? PopQuiz;
 
+        /// <summary>The head's mandatory-video scheduler (it owns the <see cref="IMandatoryVideoHost"/>).</summary>
+        public static volatile MandatoryVideoScheduler? Video;
+
         /// <summary>WPF StartEngine's arming matrix, minus the services no head here has.
         /// Not idempotent in TotalSessions, exactly as WPF; callers start only when stopped.</summary>
         public static void Start()
@@ -44,6 +47,7 @@ namespace ConditioningControlPanel
             bool audioOnly = s.AudioOnlySession;
             if (!audioOnly) CoreFlash.Start();   // it checks FlashEnabled itself
             if (!audioOnly && s.SubliminalEnabled) CoreSubliminal.Start();
+            if (!audioOnly && s.MandatoryVideosEnabled) Video?.Start();   // WPF StartStop.cs:320
             if (!audioOnly && s.BubblesEnabled) CoreBubbles.Start();   // WPF StartStop.cs:339
             if (!audioOnly && s.LockCardEnabled) LockCardScheduler.Instance.Start();
             if (!audioOnly && s.PopQuizEnabled) PopQuiz?.Start();   // WPF StartStop.cs:393
@@ -65,6 +69,7 @@ namespace ConditioningControlPanel
             {
                 CoreFlash.Stop();
                 CoreBubbles.Stop();   // WPF StartStop.cs:473, before video
+                Video?.Stop();   // WPF StartStop.cs:477
                 CoreBouncingText.Stop();
                 CoreSubliminal.Stop();
                 LockCardScheduler.Instance.Stop();
@@ -87,6 +92,7 @@ namespace ConditioningControlPanel
             if (!s.LockCardEnabled) ApplyLive("lockcard", false);
             if (!s.BouncingTextEnabled) ApplyLive("bouncingtext", false);
             if (!s.BubblesEnabled) ApplyLive("bubbles", false);
+            if (!s.MandatoryVideosEnabled) ApplyLive("video", false);
         }
 
         /// <summary>A card or wall toggle already wrote its flag; start or stop the matching
@@ -101,6 +107,7 @@ namespace ConditioningControlPanel
                 case "lockcard": if (on) LockCardScheduler.Instance.Start(); else LockCardScheduler.Instance.Stop(); break;
                 case "bouncingtext": if (on) CoreBouncingText.Start(); else CoreBouncingText.Stop(); break;
                 case "bubbles": if (on) CoreBubbles.Start(); else CoreBubbles.Stop(); break;
+                case "video": if (on) Video?.Start(); else Video?.Stop(); break;   // WPF VideoFeatureControl ChkEnable
             }
         }
     }

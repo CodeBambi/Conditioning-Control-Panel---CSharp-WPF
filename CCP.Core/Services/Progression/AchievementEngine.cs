@@ -148,6 +148,19 @@ internal sealed class AchievementEngine
         TrackBubbleCountGameResult(correct);
     }
 
+    /// <summary>WPF AchievementService.TrackVideoWatched: minutes to the total, screen_time at 10 h.
+    /// Returns the minutes so the caller can credit quests (WPF App.Quests.TrackVideoMinutes).</summary>
+    public double TrackVideoWatched(double seconds)
+    {
+        if (seconds <= 0) return 0;
+        var minutes = seconds / 60.0;
+        Progress.TotalVideoMinutes += minutes;
+        _isDirty = true;
+        Save();
+        if (Progress.TotalVideoMinutes >= AchievementRules.ScreenTimeVideoMinutes) TryUnlock("screen_time");
+        return minutes;
+    }
+
     public void TrackBubbleCountGameResult(bool success)
     {
         if (success) Progress.TotalBubbleCountCorrect++;

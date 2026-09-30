@@ -198,11 +198,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Save();
 
             // Live-apply: start/stop the video service if the engine is running.
-            if (CoreSession.IsEngineRunning)
-            {
-                // ponytail: App.Video.Start()/Stop() - VideoService
-                // (ConditioningControlPanel/Services/Video/VideoService.cs), still in the WPF head.
-            }
+            CoreEngine.ApplyLive("video", CoreSettings.Current.MandatoryVideosEnabled);
         }
 
         private void SliderPerHour_Changed(object? sender, RangeBaseValueChangedEventArgs e)
@@ -307,11 +303,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
         private void BtnTestVideo_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs VideoService (IsPlaying / ForceCleanup / TriggerVideo),
-            // InteractionQueue (CanStart / CurrentInteraction / ForceReset) and
-            // AutonomyService.ForceEndWebVideoTakeover, all under
-            // ConditioningControlPanel/Services/ and still in the WPF head. The two "looks stuck,
-            // force reset?" prompts around them go with it.
+            // WPF TriggerVideo(userInitiated: true). ponytail: WPF first offers "a video appears to be
+            // playing / another interaction is in progress - force reset?" prompts; this head has no
+            // interaction queue, so a press during a video is ignored.
+            CoreEngine.Video?.Trigger();
         }
     }
 }
