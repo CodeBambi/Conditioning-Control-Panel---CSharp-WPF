@@ -884,9 +884,13 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Lockdown mode: block all key handling (panic key, etc.)
+            // Lockdown mode: block all key handling (panic key, etc.), except the leash's own way
+            // out: panic always works on a leash, Lockdown or not.
             if (App.Lockdown?.IsActive == true)
+            {
+                if (Controls.Leash.LeashSurfaces.IsLeashed && !LeashHoldSwallows(key)) LeashPanicKeyWhilePanicOff(key);
                 return;
+            }
 
             // Track Alt+Tab for achievement (Player 2 Disconnected)
             if (key == Key.Tab && (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt)))
@@ -969,6 +973,7 @@ namespace ConditioningControlPanel
                     return;
                 }
             }
+            else if (LeashPanicKeyWhilePanicOff(key)) return;
 
             // Optional Pause key (v6.8.5). PanicOverridesAll took the #735 "someone walked in"
             // grace pause off the panic key; this is where it lives now, for the people who liked
@@ -2112,7 +2117,7 @@ namespace ConditioningControlPanel
                 if (!confirmed) return false;
 
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
                 App.Settings.Current.PanicKeyEnabled = false;
                 App.Settings?.Save();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");
@@ -2199,7 +2204,7 @@ namespace ConditioningControlPanel
             else
             {
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");
             }
 

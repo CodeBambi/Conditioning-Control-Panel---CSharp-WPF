@@ -106,7 +106,7 @@ namespace ConditioningControlPanel
                     settings.KeywordTriggersEnabled = false;
                     App.KeywordTriggers?.Stop();
                     App.ScreenOcr?.Stop();
-                    if (settings.PanicKeyEnabled != true) _keyboardHook?.Stop();
+                    if (settings.PanicKeyEnabled != true) StopKeyboardHookUnlessLeashed();
                     changed = true;
                     App.Logger?.Information("Entitlement lapsed: Awareness switched off");
                 }

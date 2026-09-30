@@ -54,6 +54,10 @@ namespace ConditioningControlPanel
                         // Off the leash by any road (a cut, the holder, a block, sign out): nothing
                         // the leash started may stay running or locked.
                         EndLeashTask("leash off");
+                        // The hook stayed on for the leash; it goes quiet again if nothing else needs it.
+                        var s = App.Settings?.Current;
+                        if (s != null && !s.PanicKeyEnabled && !s.KeywordTriggersEnabled && App.Lockdown?.IsActive != true)
+                            _keyboardHook?.Stop();
                     }
                 });
                 if (RemoteControlOverlay.Parent is Grid host)
@@ -365,19 +369,56 @@ namespace ConditioningControlPanel
         /// used to reopen a lock card every 3 s), the video window closes, bubbles the task
         /// started stop, and the gate stands back ten minutes. The rest of the panic ladder then
         /// takes down the lock card and the session. The punishment itself stays pending.</summary>
-        private void LeashOnPanicPress()
+        private void LeashOnPanicPress() => LeashOnPanicPress(panicRuns: true);
+
+        /// <param name="panicRuns">False when the panic itself will not run (switched off, or
+        /// Lockdown holding the keys): nothing else takes the task's lock card down then, so a lines
+        /// task closes its own card here. A card the leash did not open is left alone.</param>
+        private void LeashOnPanicPress(bool panicRuns)
         {
             var running = _leashRunner?.IsRunning == true;
-            if (!running && LeashPunishWindow.Current == null) return;
+            var gateUp = !panicRuns && _leashGate?.Visibility == Visibility.Visible;
+            if (!running && LeashPunishWindow.Current == null && !gateUp) return;
             // An Escape aimed at closing the Ctrl+K palette is not a panic (the ladder's rung 2).
             if (SettingsPaletteWindow.IsOpen && !LockCardWindow.IsAnyOpen()
                 && string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)) return;
-            App.Logger?.Information("Leash: panic press stops the running task (kept pending, gate back in {M} min)", LeashUiRules.PanicSnooze.TotalMinutes);
+            App.Logger?.Information("Leash: panic press stops the running task (kept pending, gate back in {M} min, panic runs={Runs})",
+                LeashUiRules.PanicSnooze.TotalMinutes, panicRuns);
             _leashSnoozeUntilUtc = DateTime.UtcNow + LeashUiRules.PanicSnooze;
+            var linesCard = !panicRuns && (_leashRunner as LeashTaskRunner)?.RunningKind == PunishKind.Lines;
             try { _leashRunner?.Park(); } catch { }
+            if (linesCard) { try { LockCardWindow.ForceCloseAll(); } catch { } }
             LeashPunishWindow.CloseNow();
             _leashGate?.StopRunning();
             HideLeashGate();
+        }
+
+        /// <summary>
+        /// The panic key while leashed when the panic cannot run (the player switched it off, or
+        /// Lockdown holds every key). Panic always works on a leash, so the leash part runs anyway:
+        /// the task parks, its window closes, the gate stands back, and holding the key still asks
+        /// to cut. Nothing else a panic does (the session, effects, the exit ladder) is touched.
+        /// Runs inside the hook callback: it only decides and posts. True = the press was taken.
+        /// </summary>
+        private bool LeashPanicKeyWhilePanicOff(System.Windows.Input.Key key)
+        {
+            var s = App.Settings?.Current;
+            if (s == null || key.ToString() != s.PanicKey || !LeashSurfaces.IsLeashed) return false;
+            VideoDiag.Log("PANIC", "panic key while leashed with the panic off - leash safety only");
+            Dispatcher.BeginInvoke(() =>
+            {
+                try { LeashOnPanicPress(panicRuns: false); }
+                catch (Exception ex) { App.Logger?.Warning("Leash: panic-off stop failed: {E}", ex.Message); }
+            });
+            return true;
+        }
+
+        /// <summary>The global key hook goes quiet only when nothing needs it. While leashed it stays
+        /// on whatever the panic setting says: the panic key is the leash's way out (hold to cut).</summary>
+        private void StopKeyboardHookUnlessLeashed()
+        {
+            if (LeashSurfaces.IsLeashed) return;
+            _keyboardHook?.Stop();
         }
 
         /// <summary>A tug from the holder: the window gives a small wobble (the chain jingle has

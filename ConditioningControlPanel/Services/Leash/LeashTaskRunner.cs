@@ -148,6 +148,9 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
 
     public string? RunningPid => _task?.Pid;
 
+    /// <summary>What the running punishment asks for, or null (no task, or a video assignment).</summary>
+    public PunishKind? RunningKind => _task?.Kind;
+
     /// <summary>The open video assignment being watched, or null.</summary>
     public string? RunningAid => _watchAssignment?.Aid;
 
