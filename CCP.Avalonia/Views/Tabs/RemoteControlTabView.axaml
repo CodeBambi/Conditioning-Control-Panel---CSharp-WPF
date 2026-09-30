@@ -286,8 +286,7 @@
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center">
                                     <Border CornerRadius="10" Background="White" Padding="10"
                                             BorderBrush="{StaticResource TabHueBrush}" BorderThickness="2">
-                                        <!-- ponytail: Source stays null until RemoteControlService moves to
-                                             Core; the white plate is the WPF placeholder too. -->
+                                        <!-- Source is the pairing QR while a session runs (RemoteControlTabView.QrCode). -->
                                         <Image x:Name="ImgRemoteQrCode" Width="200" Height="200" Stretch="Uniform"/>
                                     </Border>
                                     <TextBlock Text="{loc:Str label_remote_pairing}"

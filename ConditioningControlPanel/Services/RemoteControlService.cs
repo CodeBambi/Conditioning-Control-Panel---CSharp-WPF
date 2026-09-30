@@ -50,12 +50,12 @@ namespace ConditioningControlPanel.Services
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
         // 5s gives comfortable headroom under the server's 40/min per-user poll cap
         // (12/min steady-state) while keeping perceived latency negligible.
-        private const double PollIntervalSeconds = 5.0;
+        private const double PollIntervalSeconds = RemoteRelay.PollIntervalSeconds;
         // Status pushes are throttled — the controller UI doesn't need 3s-fresh status.
         // Push immediately on command execution or controller-connected state change.
-        private const double StatusPushIntervalSeconds = 15.0;
+        private const double StatusPushIntervalSeconds = RemoteRelay.StatusPushIntervalSeconds;
         // When a status push hits 429, skip subsequent pushes for this long.
-        private const double StatusBackoffSeconds = 60.0;
+        private const double StatusBackoffSeconds = RemoteRelay.StatusBackoffSeconds;
 
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _pollTimer;
@@ -171,7 +171,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 // Generate a random 4-digit PIN for controller authentication
-                var pin = _pinRng.Next(0, 10000).ToString("D4");
+                var pin = RemoteRelay.NewPin(_pinRng);
 
                 var body = JsonConvert.SerializeObject(new { unified_id = unifiedId, tier, connect_pin = pin });
                 using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/start", body);
@@ -423,11 +423,11 @@ namespace ConditioningControlPanel.Services
         private DateTime _lastHealthLog = DateTime.MinValue;
         private DateTime _sessionStartTime = DateTime.MinValue;
         private double _currentPollInterval = PollIntervalSeconds;
-        private const double MaxBackoffSeconds = 60.0;
+        private const double MaxBackoffSeconds = RemoteRelay.MaxBackoffSeconds;
         private const int HealthLogIntervalSeconds = 30;
         private DateTime? _controllerIdleSince;
         private bool _controllerAutoDisconnected;
-        private const double IdleAutoDisconnectSeconds = 120.0; // 2 minutes
+        private const double IdleAutoDisconnectSeconds = RemoteRelay.IdleAutoDisconnectSeconds;
         private DateTime _lastStatusPushUtc = DateTime.MinValue;
         private DateTime _statusBackoffUntil = DateTime.MinValue;
         // Debounce window for SendEmoteAsync to swallow accidental double-clicks
