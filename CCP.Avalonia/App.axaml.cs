@@ -146,6 +146,42 @@ namespace ConditioningControlPanel.Avalonia
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.Start();
         }
 
+        /// <summary>WPF CompanionService.UserMessageSent (the "user just talked to her" signal).</summary>
+        internal static event Action? UserMessageSent;
+        internal static void NotifyUserMessageSent() => UserMessageSent?.Invoke();
+
+        /// <summary>WPF FlashDisplayed / SubliminalDisplayed / OnBubblePopped, as a MemorySignalWriter feature id.</summary>
+        internal static event Action<string>? FeatureUsed;
+        internal static void NoteFeatureUsed(string feature) => FeatureUsed?.Invoke(feature);
+
+        /// <summary>
+        /// WPF App.xaml.cs SignalMirrorFactory + WireMemorySignalSources: the brain's memory profile gets
+        /// level, streak, sessions, archetype (CoreSettings), level-ups, favourite features and per-mod
+        /// chat turns. ponytail: no mantra / brain drain / mind wipe on this head, so those three
+        /// favourites never count; seed DeferredSourcesHook / wire them when those services land.
+        /// </summary>
+        internal static void SeedMemorySignals()
+        {
+            ConditioningControlPanel.Services.Companion.Brain.MemoryStore.SignalMirrorFactory = store =>
+            {
+                var writer = new ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter(store);
+                try { writer.Start(); }
+                catch { writer.Dispose(); throw; }
+                return writer;
+            };
+            ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.SourcesHook = w =>
+            {
+                w.Wire<Action<int>>(h => ProgressionBank.LevelUp += h, h => ProgressionBank.LevelUp -= h, _ => w.SafeRefresh());
+                w.Wire<Action<string>>(h => FeatureUsed += h, h => FeatureUsed -= h, f => w.NoteFeatureUse(f));
+                if (CoreEngine.Video is { } video)
+                    w.Wire<Action>(h => video.VideoStarted += h, h => video.VideoStarted -= h,
+                        () => w.NoteFeatureUse(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureVideo));
+                w.Wire<Action>(h => UserMessageSent += h, h => UserMessageSent -= h, () => w.NoteChatTurn(CoreMods.ActiveModId));
+            };
+            // The brain raises this for every send it takes (CompanionBrain.cs:311); the tube raises the rest.
+            ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.UserMessageSent = NotifyUserMessageSent;
+        }
+
         /// <summary>The release-content pack service (WPF App.ReleaseContent), or null on the headless render path.</summary>
         internal static ReleaseContentService? ReleaseContent { get; private set; }
 
@@ -298,13 +334,19 @@ namespace ConditioningControlPanel.Avalonia
                 CoreFlash.IsBusyProvider = () => Views.Overlays.FlashOverlay.IsBusy;
                 CoreFlash.ShowProvider = () =>
                 {
-                    if (desktop.MainWindow is { } host) Views.Overlays.FlashOverlay.TriggerOnce(host);
+                    if (desktop.MainWindow is not { } host) return;
+                    Views.Overlays.FlashOverlay.TriggerOnce(host);
+                    NoteFeatureUsed(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureFlash);
                 };
 
                 // Subliminal and bouncing-text surfaces. Core owns the schedule / the motion;
                 // these draw on click-through overlays (Views/Overlays), hosted like the flash.
                 // SubliminalWhisperShow plays the linked whisper first, then draws SubliminalOverlay.
-                CoreSubliminal.ShowProvider = Views.Overlays.SubliminalWhisperShow.Phrase;
+                CoreSubliminal.ShowProvider = text =>
+                {
+                    Views.Overlays.SubliminalWhisperShow.Phrase(text);
+                    NoteFeatureUsed(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureSubliminal);
+                };
                 CoreSubliminal.BambiFreezeProvider = Views.Overlays.SubliminalWhisperShow.Freeze;
                 CoreSubliminal.RunStateChanged = running =>
                 {
@@ -453,8 +495,10 @@ namespace ConditioningControlPanel.Avalonia
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
                 // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
-                // echo (no bark engine here: CoreBark is a doorbell), command executor, activities, signal
-                // mirror and the UserMessageSent achievement emit stay unseeded (head services not here).
+                // echo (no bark engine here: CoreBark is a doorbell), command executor and activities stay
+                // unseeded (head services not here). SeedMemorySignals seeds UserMessageSent for the memory
+                // chat counter only; no companion-chat achievement listens to it on this head yet.
+                SeedMemorySignals();
                 try { if (Ai != null) Brain = new ConditioningControlPanel.Services.Companion.Brain.CompanionBrain(Ai); }
                 catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
                 SeedCompanionTubeSeams();
