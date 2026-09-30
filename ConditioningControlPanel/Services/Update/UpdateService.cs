@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Services
 NEW IN 7.0.1
 
 LAG AND FLICKER
-the Awareness and Listening pages no longer flip between a wide and a compact layout over and over. that flip was what made the whole app lag when you opened them.
+the Awareness and Listening pages no longer flip between a wide and a compact layout over and over. that flip was what made the whole app lag when you opened them. the Awareness privacy card also no longer rebuilds itself every second and a half.
 
 GOON GAME
 the game no longer closes itself when a busy moment makes the picture pause for a few seconds. it waits longer and only steps in when it is really stuck.
