@@ -1012,3 +1012,12 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Evidence: LockdownTests (7: phrase under StrictLock, global-only key ignore, recovery, preset hold, slab, UTC clock, expiry),
   fail-proven; live sandbox lockdown and unlock. Row stays stub (badge, theme, Possession, Dose, exit games, syskey hook). Reviews:
   FIX -> fixed; final safety check ACCEPT.
+
+## avalonia-port/remote-control-core: +966
+- Core RemoteRelay (WPF relay protocol: endpoints, headers, PIN/pairing URL, 5 s poll, backoff, idle/expiry; sandbox loopback-only)
+  and RemoteCommands; WPF delegates constants/PIN/URL/labels. Avalonia Remote Control tab pairs: premium gate, login, double
+  waiver, code/PIN/QR, status, tiers, Stop, command log; share-avatar pushes at once.
+- Escape integrity (oracle-deep, logged): disable_panic always refused; under Lockdown only enable_strict_lock refused; the waiver
+  says a controller can never turn the panic key off.
+- Evidence: RemoteRelayTests (fake relay) + RemoteControlTabTests, fail-proven; live gate/login dialog/tiers, 0 binding errors. No real
+  relay pairing tested. Rows stay stub (controller overlay, session/feature commands, toasts, 409 recovery). Reviews: FIX -> ACCEPT.

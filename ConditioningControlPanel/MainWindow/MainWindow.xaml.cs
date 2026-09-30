@@ -136,36 +136,9 @@ namespace ConditioningControlPanel
         private Storyboard? _lockdownPulseStoryboard;
         private bool _skillTreeAnimationsActive = false;
 
-        private static readonly Dictionary<string, string> CommandLabels = new()
-        {
-            ["show_pink_filter"] = "cmd_pink_filter_enabled",
-            ["stop_pink_filter"] = "cmd_pink_filter_disabled",
-            ["show_spiral"] = "cmd_spiral_enabled",
-            ["stop_spiral"] = "cmd_spiral_disabled",
-            ["start_bubbles"] = "cmd_bubbles_started",
-            ["stop_bubbles"] = "cmd_bubbles_stopped",
-            ["trigger_video"] = "cmd_video_triggered",
-            ["trigger_haptic"] = "cmd_haptic_triggered",
-            ["trigger_bubble_count"] = "cmd_bubble_count_triggered",
-            ["start_autonomy"] = "cmd_autonomy_enabled",
-            ["stop_autonomy"] = "cmd_autonomy_disabled",
-            ["start_session"] = "cmd_session_started",
-            ["pause_session"] = "cmd_session_paused",
-            ["resume_session"] = "cmd_session_resumed",
-            ["stop_session"] = "cmd_session_stopped",
-            ["enable_strict_lock"] = "cmd_strict_lock_enabled",
-            ["disable_strict_lock"] = "cmd_strict_lock_disabled",
-            ["disable_panic"] = "cmd_panic_key_disabled",
-            ["enable_panic"] = "cmd_panic_key_enabled",
-            ["trigger_panic"] = "cmd_all_effects_stopped",
-        };
-
-        private static readonly HashSet<string> SuppressedCommands = new()
-        {
-            "trigger_flash", "trigger_subliminal",
-            "set_pink_opacity", "set_spiral_opacity",
-            "duck_audio", "unduck_audio",
-        };
+        // Core RemoteCommands owns the labels and the quiet set; every head shows the same log.
+        private static Dictionary<string, string> CommandLabels => RemoteCommands.LabelKeys;
+        private static HashSet<string> SuppressedCommands => RemoteCommands.Quiet;
 
         /// <summary>
         /// Fires when the engine is stopped (for avatar reactions)

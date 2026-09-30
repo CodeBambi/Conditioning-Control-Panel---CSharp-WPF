@@ -1242,13 +1242,7 @@ namespace ConditioningControlPanel
         /// Uses a hash fragment so the PIN never appears in server access logs or
         /// Referer headers. The web page parses the fragment and auto-connects.
         /// </summary>
-        private string BuildRemotePairingUrl(string code)
-        {
-            var pin = App.RemoteControl?.ConnectPin;
-            if (!string.IsNullOrEmpty(pin))
-                return $"https://cclabs.app/remote/#code={code}&pin={pin}";
-            return $"https://cclabs.app/remote/#code={code}";
-        }
+        private string BuildRemotePairingUrl(string code) => RemoteRelay.PairingUrl(code, App.RemoteControl?.ConnectPin);
 
         /// <summary>
         /// Renders a QR code image into RemoteControlTab.ImgRemoteQrCode for the given pairing URL.
