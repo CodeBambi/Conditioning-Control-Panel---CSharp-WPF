@@ -189,6 +189,48 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   documented fallback behind an IFrameSource seam. Check ldd of libOpenCvSharpExtern.so before shipping.
 - Advisor: oracle.
 
+## 2026-09-30: what drives the Avalonia Inbox
+- Question: the brief said the title-bar Inbox is driven by the friends Core service (slice 1). It is not: WPF's badge and
+  InboxFlyout bind App.StartupLadder (Services/Startup/StartupPresenter.cs), whose rows are parked by the quiet-window rule.
+- Options: (a) move the whole StartupPresenter (modal ladder, pump, quiet watch) to Core; (b) move only InboxItem + StartupQueueCore
+  (pure) and extract the Inbox half into Core StartupInbox, WPF's presenter delegating; the head gets a small passive-route presenter.
+- Choice: (b) (supervisor). Platform.StartupLadder routes through StartupQueueCore.Route with session/tour/first-launch inputs;
+  programs intro and wardrobe toasts post to it. The modal ladder and the other WPF posters stay out; listed on shell-inbox.
+## 2026-09-30: Blink Trainer session on Avalonia (webcam slice 3)
+- Question: how much of BlinkTrainerService/calibration fits this slice, and where does the session live?
+- Choice: the session is head code (`Views/Overlays/BlinkTrainerSession.cs`, overlay windows are head-only); the pure parts
+  moved to Core (`BlinkTrainerAssetPool` by git mv, `BlinkTrainerState.TileGrid`, WPF delegates). Overlays use the pink-filter
+  refusals (click-through + transparency or nothing). The start goes through `StartEffect` so the Wayland panic shortcut is
+  bound first; the session `Generation` is read before the tracker start is awaited, so a Stop/panic during the tracker start
+  or the pending bind cancels it. Panic, the shell's Closing (so a close cancelled to the tray too, as WPF LabTab.cs:1000),
+  app exit and consent revoke stop the session. Calibration, quick recal and tracker test are NOT in this slice: all three need the gaze-projection feed
+  (WPF WebcamCalibrationWindow ~2.1k LOC + gaze maths) that WebcamTracker does not emit; their buttons stay disabled with a
+  reason. `CoreWebcam.IsAvailable` is seeded true, and revoke keeps all four promises in one place (`WebcamTracker.RevokeConsent`: stop, delete the calibration file via
+  `WebcamCalibrationData.DeleteIfExists`, clear consent, turn the webcam features off).
+  Deviations: GIF/animated webp show their first frame; mix mode buckets only already-seen images; no explicit tracking-monitor
+  pick (placement = DualMonitorEnabled ? all : primary); no stage video preview; no SeasonRecap credit.
+- Advisor: supervisor (progress update), worker.
+
+## 2026-09-30: panic and the camera (Avalonia only, deliberate WPF deviation)
+- Question: should a panic press stop webcam tracking? WPF leaves the camera running.
+- Choice (C): every panic press, including Lock Card presses that do not advance the exit ladder and a press consumed as a video
+  grace pause, stops tracking after the audio and overlay teardown, fire-and-forget (Stop can block up to 5 s, so never awaited
+  on the panic path). Consent, calibration, device choice and settings are kept; status chips follow the tracker's StateChanged.
+  The notice "Camera stopped. Start tracking to resume." (`panic_camera_stopped`, all languages) shows when a camera was on or
+  starting. The Blink Trainer session stops with it, and the tracker's stop generation keeps an in-flight Start from publishing
+  its camera afterwards. A palette-claimed Escape is not a panic (PanicPolicy.DismissSettingsPalette) and does not stop it.
+- Rationale: Panic is the get-me-out control; a camera left running is the most visible privacy leak; attention checks skip when
+  tracking is off (AttentionCheckService.cs:247), session/autonomy don't depend on the webcam, no StrictLock/Lockdown escape rule
+  uses gaze; cost is a manual restart, made expected by the notice.
+- Advisor: oracle-deep.
+## 2026-09-30: Chaster booked figure on Avalonia
+- Question: WPF shows a booked price first as ChasterBookedPop (a topmost window at the cause or cursor) and only falls back to
+  the rail-padlock adorner. Which does the Avalonia head show?
+- Options: (a) port the pop window (desktop-wide topmost, cursor from Win32; Bucket E, not permitted on Wayland); (b) always the
+  rail adorner, WPF's own fallback.
+- Choice: (b) for now; the pop stays `missing` in the ledger. BookedFlashPlan moved to Core with colours as 0xAARRGGBB `uint`
+  (WPF converts with `BookedFlashColour.Wpf()`), so both heads draw one plan.
+- Advisor: none (worker, per branch brief avalonia-port/chaster-bill).
 ## 2026-09-30: Mantra Lab audio and opener (avalonia-port/mantra-service)
 MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `CoreProgression.AddXP("Mantra")`, new `CoreProgression.TrackMantraCompletedProvider`, `MantraService.ChasterNote`, seeded by both heads). WPF's NAudio SignalGenerators become synthesised 16-bit WAVs (`CCP.Avalonia/Platform/ToneWav.cs`, per-process temp dir): tones through `CoreAudio.PlayOneShot` at WPF's 0.15 gain; the drone (90 Hz + 0.4 x 180 Hz, 10 s of whole cycles) as a looping `LayeredAudio.VlcLayerPlayer` whose volume follows WPF's gain ramp x MantraDroneVolume. No NAudio on Linux. `MainShellWindow.StartMantraSession` is ported with no caller, exactly as WPF (MainWindow.PlayTab.cs:~264; the Mantras card left the Play page 2026-08-12); where the game lives is still an owner call. Its WPF failure MessageBox is dropped on this head (logged only). The drone player starts muted and unmutes once its first volume sticks (no full-volume blip); exit closes the window and deletes the temp WAVs.
 - Test: `Tests/CCP.Core.Tests/MantraServiceTests.cs`, `Tests/CCP.Avalonia.Tests/MantraWindowSessionTests.cs` (fail-proven x7).

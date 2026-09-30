@@ -1,5 +1,4 @@
 using System;
-using System.Windows.Media;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Chaster;
@@ -28,13 +27,13 @@ namespace ConditioningControlPanel.Services.Chaster;
 public static class BookedFlashPlan
 {
     /// <summary>Time added. Not the mod accent: the figure means the same under every skin.</summary>
-    public static readonly Color AddColour = Color.FromRgb(0xFF, 0x6B, 0x8A);
+    public const uint AddColour = 0xFFFF6B8A;
 
     /// <summary>Time handed back.</summary>
-    public static readonly Color CreditColour = Color.FromRgb(0x5F, 0xFF, 0xD0);
+    public const uint CreditColour = 0xFF5FFFD0;
 
     /// <summary>The jackpot wipe, whichever way it moved the tab.</summary>
-    public static readonly Color JackpotColour = Color.FromRgb(0xE0, 0xB0, 0x52);
+    public const uint JackpotColour = 0xFFE0B052;
 
     /// <summary>Bookings this close to the first one become one figure.</summary>
     public const int CoalesceMs = 400;
@@ -42,9 +41,9 @@ public static class BookedFlashPlan
     /// <summary>What one figure is showing, and when its coalescing window opened.</summary>
     public readonly record struct Figure(int Seconds, string EventId, long StartedAtMs);
 
-    /// <summary>The drawn figure: text, colour, how far it lifts, how long it lives, and whether
+    /// <summary>The drawn figure: text, colour (0xAARRGGBB; each head makes its own brush), how far it lifts, how long it lives, and whether
     /// it blinks on arrival.</summary>
-    public readonly record struct Plan(string Text, Color Colour, double TravelPx, int DurationMs, bool Flash, string? Source = null);
+    public readonly record struct Plan(string Text, uint Colour, double TravelPx, int DurationMs, bool Flash, string? Source = null);
 
     /// <summary>How visible the source badge under the figure is (owner, 2026-09-26: faded,
     /// about 30% transparent, so the number stays the message).</summary>

@@ -1,0 +1,33 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/ChasterImportConfirmDialog.xaml: asked before a preset
+     carrying Chaster add-time actions goes live. Buttons carry TextBlock children (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ChasterImportConfirmDialog"
+        Title="{loc:Str chaster_import_title}"
+        Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        WindowDecorations="None" Background="Transparent" TransparencyLevelHint="Transparent">
+    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2" CornerRadius="12">
+        <Grid Margin="25" RowDefinitions="Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Text="{loc:Str chaster_import_title}" Foreground="{StaticResource PinkBrush}" FontSize="20"
+                       FontWeight="Bold" Margin="0,0,0,15"/>
+            <StackPanel Grid.Row="1">
+                <TextBlock Text="{loc:Str chaster_import_body}" Foreground="#E0E0E0" FontSize="14"
+                           TextWrapping="Wrap" Margin="0,0,0,12"/>
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="12">
+                    <TextBlock x:Name="TxtDetail" Foreground="{DynamicResource TextMutedBrush}" FontSize="13" TextWrapping="Wrap"/>
+                </Border>
+            </StackPanel>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button x:Name="BtnSkip" Theme="{StaticResource SecondaryButton}" Margin="0,0,10,0" Padding="18,12"
+                        IsCancel="True" IsDefault="True" Click="BtnSkip_Click">
+                    <TextBlock Text="{loc:Str chaster_import_skip}" FontWeight="Bold" FontSize="13"/>
+                </Button>
+                <Button x:Name="BtnAllow" Theme="{StaticResource ActionButton}" Padding="24,12" Click="BtnAllow_Click">
+                    <TextBlock Text="{loc:Str chaster_import_allow}" FontWeight="Bold" FontSize="13"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

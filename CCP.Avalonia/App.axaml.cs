@@ -440,6 +440,7 @@ namespace ConditioningControlPanel.Avalonia
                     // A sandbox settles only against its loopback fake: ChasterHead routes fail closed.
                     Platform.ChasterHead.Service.StartSettle();
                     Platform.ChasterHead.Attach(Platform.ChasterHead.Service, Quests);
+                    (desktop.MainWindow as Views.Windows.MainShellWindow)?.InitializeChasterFlash(Platform.ChasterHead.Service);
                 }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Chaster] service could not be built"); }
                 // WPF App.xaml.cs:2940-2968. EnsureBaselineAsync keeps WPF's rules: no-op on a full
@@ -475,9 +476,10 @@ namespace ConditioningControlPanel.Avalonia
                 // Speech: Core Vosk engine over parec, seeding CoreSpeech (model is a drop-in, no download).
                 try { Platform.PulseMicSource.Seed(); }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Speech] engine unavailable on this head"); }
-                // Webcam: only the revoke verb crosses (it must close the camera). IsAvailable stays unseeded
-                // until calibration/tracker-test land, so the Devices section keeps its controls off.
-                CoreWebcam.RevokeConsentAction = () => Platform.WebcamTracker.Instance.Stop();
+                // Webcam: this head has a tracking engine (WPF: Webcam != null). OpenCV/models/camera load at
+                // Start, which fails with a message; revoke keeps all four of the consent dialog's promises.
+                CoreWebcam.IsAvailableProvider = () => true;
+                CoreWebcam.RevokeConsentAction = Platform.WebcamTracker.RevokeConsent;
                 // CoreMindWipe stays unseeded, and it is the audio surface that is missing rather
                 // than the feature: MindWipeSchedule (Core) already decides the tick interval, the
                 // per-tick probability, the session escalation and which clips are candidates.
@@ -694,22 +696,29 @@ namespace ConditioningControlPanel.Avalonia
 
         /// <summary>WPF App.ShowWardrobeRewardToasts (App.xaml.cs:3987): every item gated on this achievement gets an
         /// ItemUnlockedPopup 900ms after the achievement popup, at most three, stacked upward.
-        /// ponytail: shown directly - WPF routes the column through StartupLadder.PresentOrInbox in the quiet
-        /// window, and this head has no startup ladder or inbox yet.</summary>
+        /// Inside the quiet window the column collapses to ONE Inbox row (WPF App.xaml.cs:4200).</summary>
         internal static void ShowWardrobeRewardToasts(Models.Achievement a)
         {
             var rewards = WardrobeCatalog.Items
                 .Where(i => string.Equals(i.RequiredAchievementId, a.Id, StringComparison.OrdinalIgnoreCase)).Take(3).ToList();
             if (rewards.Count == 0) return;
             Serilog.Log.Information("Achievement '{Id}' unlocked {Count} wardrobe item(s); queuing item toast(s)", a.Id, rewards.Count);
-            Dispatcher.UIThread.Post(() => DispatcherTimer.RunOnce(() =>
+            void ShowAll()
             {
                 for (int i = 0; i < rewards.Count; i++)
                 {
                     try { new Views.Windows.ItemUnlockedPopup(rewards[i], i).Show(); }
                     catch (Exception ex) { Serilog.Log.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id); }
                 }
-            }, TimeSpan.FromMilliseconds(900)));
+            }
+            Dispatcher.UIThread.Post(() => DispatcherTimer.RunOnce(() => Platform.StartupLadder.PresentOrInbox(new Services.Startup.InboxItem
+            {
+                Key = "wardrobe-unlock:" + a.Id,
+                Glyph = "👗",
+                Title = rewards.Count == 1 ? "A new wardrobe item is yours" : rewards.Count + " new wardrobe items are yours",
+                Summary = string.Join(", ", rewards.Select(static r => r.Name)),
+                Open = ShowAll,
+            }), TimeSpan.FromMilliseconds(900)));
         }
 
         internal static void ShowAchievementPopup(Models.Achievement a)
@@ -813,6 +822,7 @@ namespace ConditioningControlPanel.Avalonia
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
+            try { Views.Overlays.BlinkTrainerSession.Stop(); } catch { /* WPF Application.Exit += Stop */ }
             try { Platform.WebcamTracker.Instance.Stop(); } catch { /* WPF App.OnExit:6185 Webcam.Dispose */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never

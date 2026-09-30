@@ -641,7 +641,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         /// <para>Checked against the WPF original before leaving it false: there is no mouse or
         /// keyboard fallback to restore. GameSide has exactly one writer there, OnGazeSideChanged,
         /// fed by App.Webcam.OnGazeSide - so with no tracker no input can move a round.</para>
-        /// <para><b>NOT <c>CoreWebcam.IsAvailable</c>, though the two read the same today.</b> This
+        /// <para><b>NOT <c>CoreWebcam.IsAvailable</c>, which is now true on this head (a blink-only
+        /// tracker) while this stays false.</b> This
         /// gate stands for "a gaze-SIDE stream reaches this window", which is strictly more than
         /// "this head has a camera engine". Binding it to the capability flag would enable Start the
         /// moment any head seeded one, on a game whose rounds still could not advance. Point it at

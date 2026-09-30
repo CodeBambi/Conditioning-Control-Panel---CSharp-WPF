@@ -242,12 +242,7 @@ public static class ChaosMeta
     /// file-driven so "delete the active save, then descend into it" correctly starts fresh.</summary>
     public static void SwitchSlot(int slot)
     {
-        if (slot < 1 || slot > ChaosMetaStore.SlotCount) slot = 1;
-        if (App.Settings?.Current != null)
-        {
-            App.Settings.Current.ChaosActiveSlot = slot;
-            try { App.Settings.Save(); } catch (Exception ex) { App.Logger?.Warning("ChaosMeta.SwitchSlot: settings save failed ({E})", ex.Message); }
-        }
+        slot = ChaosMetaStore.SetActiveSlot(slot);
         State = ChaosMetaStore.Load(slot);
         RefundRetiredBoons();
         SanitizePockets();
@@ -259,9 +254,7 @@ public static class ChaosMeta
     /// and a just-deleted slot stays gone.</summary>
     public static List<SlotSummary> AllSlotSummaries()
     {
-        var list = new List<SlotSummary>();
-        for (int s = 1; s <= ChaosMetaStore.SlotCount; s++) list.Add(ChaosMetaStore.ReadSummary(s));
-        return list;
+        return ChaosMetaStore.AllSummaries();
     }
 
     /// <summary>Erase a slot's file back to "New Journey". Does not touch the in-memory state:

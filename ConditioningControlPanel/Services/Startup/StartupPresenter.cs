@@ -72,7 +72,6 @@ namespace ConditioningControlPanel.Services.Startup
         public StartupPresenter(Dispatcher dispatcher)
         {
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-            Inbox = new ObservableCollection<InboxItem>();
             _lastQuiet = IsQuiet;
         }
 
@@ -219,13 +218,10 @@ namespace ConditioningControlPanel.Services.Startup
                 return;
             }
 
-            foreach (var existing in Inbox)
+            if (_inbox.Contains(item.Key))
             {
-                if (string.Equals(existing.Key, item.Key, StringComparison.OrdinalIgnoreCase))
-                {
-                    App.Logger?.Debug("[Startup] '{Key}' is already in the Inbox - not posting it twice", item.Key);
-                    return;
-                }
+                App.Logger?.Debug("[Startup] '{Key}' is already in the Inbox - not posting it twice", item.Key);
+                return;
             }
 
             foreach (var held in _deferred)
@@ -244,23 +240,28 @@ namespace ConditioningControlPanel.Services.Startup
                 return;
             }
 
-            Inbox.Insert(0, item);
-            App.Logger?.Information("[Startup] '{Key}' went to the Inbox ({Count} waiting)", item.Key, Inbox.Count);
             // Something is parked, so somebody has to notice when quiet ends - a session or a tour
             // can start the quiet window without going through the ladder, and the clock is the
-            // only thing that watches those.
+            // only thing that watches those. Watch first, then file: File raises InboxChanged.
             EnsureQuietWatch();
-            InboxChanged?.Invoke();
+            _inbox.File(item);
+            App.Logger?.Information("[Startup] '{Key}' went to the Inbox ({Count} waiting)", item.Key, Inbox.Count);
         }
 
+        private readonly StartupInbox _inbox = new();
+
         /// <summary>Rows waiting to be read, newest first.</summary>
-        public ObservableCollection<InboxItem> Inbox { get; }
+        public ObservableCollection<InboxItem> Inbox => _inbox.Items;
 
         /// <summary>How many rows are waiting. Drives the title-bar badge; hidden at zero.</summary>
-        public int UnreadCount => Inbox.Count;
+        public int UnreadCount => _inbox.UnreadCount;
 
         /// <summary>Raised on the UI thread after a row is added, opened or dismissed.</summary>
-        public event Action? InboxChanged;
+        public event Action? InboxChanged
+        {
+            add => _inbox.Changed += value;
+            remove => _inbox.Changed -= value;
+        }
 
         /// <summary>Files a row and nothing else: never presents, never holds. For surfaces that
         /// are a notice rather than a modal (a friend request). A row with the same key is kept once.</summary>
@@ -272,10 +273,7 @@ namespace ConditioningControlPanel.Services.Startup
                 _dispatcher.BeginInvoke(new Action(() => FileRow(item)), DispatcherPriority.Normal);
                 return;
             }
-            foreach (var existing in Inbox)
-                if (string.Equals(existing.Key, item.Key, StringComparison.OrdinalIgnoreCase)) return;
-            Inbox.Insert(0, item);
-            InboxChanged?.Invoke();
+            _inbox.File(item);
         }
 
         /// <summary>Takes a row back by key without running anything (its surface went away).</summary>
@@ -287,12 +285,7 @@ namespace ConditioningControlPanel.Services.Startup
                 _dispatcher.BeginInvoke(new Action(() => RemoveRow(key)), DispatcherPriority.Normal);
                 return;
             }
-            for (int i = Inbox.Count - 1; i >= 0; i--)
-            {
-                if (!string.Equals(Inbox[i].Key, key, StringComparison.OrdinalIgnoreCase)) continue;
-                Inbox.RemoveAt(i);
-                InboxChanged?.Invoke();
-            }
+            _inbox.Remove(key);
         }
 
         /// <summary>Removes the row and runs the surface it was holding.</summary>
@@ -305,9 +298,7 @@ namespace ConditioningControlPanel.Services.Startup
                 return;
             }
 
-            Inbox.Remove(item);
-            InboxChanged?.Invoke();
-            RunSafely(item.Open, item.Key, "open");
+            _inbox.Open(item);
         }
 
         /// <summary>Removes the row and runs the surface's own dismissal bookkeeping, if any.</summary>
@@ -320,9 +311,7 @@ namespace ConditioningControlPanel.Services.Startup
                 return;
             }
 
-            Inbox.Remove(item);
-            InboxChanged?.Invoke();
-            if (item.Dismiss != null) RunSafely(item.Dismiss, item.Key, "dismiss");
+            _inbox.Dismiss(item);
         }
 
         // ------------------------------------------------------------------ internals
@@ -554,11 +543,7 @@ namespace ConditioningControlPanel.Services.Startup
             }
         }
 
-        private static void RunSafely(Action action, string key, string what)
-        {
-            try { action(); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "[Startup] Inbox {What} failed for '{Key}'", what, key); }
-        }
+        private static void RunSafely(Action action, string key, string what) => StartupInbox.RunSafely(action, key, what);
 
         /// <summary>
         /// A 1 Hz watch over the things that end the quiet window without telling anyone - the

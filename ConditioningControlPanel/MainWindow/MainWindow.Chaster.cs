@@ -94,8 +94,8 @@ namespace ConditioningControlPanel
                     // reads as one number settling rather than as a stutter.
                     if (look is { } merged)
                     {
-                        _chasterPop?.Retitle(merged.Text, merged.Colour, merged.Source);
-                        _chasterFlash?.Retitle(merged.Text, merged.Colour);
+                        _chasterPop?.Retitle(merged.Text, merged.Colour.Wpf(), merged.Source);
+                        _chasterFlash?.Retitle(merged.Text, merged.Colour.Wpf());
                     }
                     else
                     {
@@ -121,7 +121,7 @@ namespace ConditioningControlPanel
 
                 // The ring takes the figure's colour for a beat, so the chip and the number read as
                 // one event. A net-zero merge has no plan and no pulse.
-                if (IsVisible && look is { } pulse) (anchor as ChasterRailChip)?.Pulse(pulse.Colour);
+                if (IsVisible && look is { } pulse) (anchor as ChasterRailChip)?.Pulse(pulse.Colour.Wpf());
             }
             catch (Exception ex) { App.Logger?.Debug("[Chaster] booked flash: {E}", ex.Message); }
         }

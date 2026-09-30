@@ -477,7 +477,7 @@ public partial class ChaosHubWindow : Window
                 var train = BuyButton($"Train  ✦{u.Cost}", u.Id, afford && !rankLocked, Buy_Click);
                 if (rankLocked)
                 {
-                    train.ToolTip = ChaosRanks.RankLockedTip + "\n" + ChaosRanks.RankSpecifics(ChaosRank.Devoted);
+                    train.ToolTip = ChaosRanks.RankLockedTip + "\n" + ChaosRanks.RankSpecifics(ChaosRank.Devoted, ChaosMeta.State.RunsCompleted);
                     ToolTipService.SetShowOnDisabled(train, true);
                 }
                 right.Children.Add(train);
@@ -598,7 +598,7 @@ public partial class ChaosHubWindow : Window
         icon.Margin = new Thickness(0, 0, 12, 0);
         icon.Opacity = unlocked ? 1.0 : (rankLocked ? 0.6 : 0.5);
         if (rankLocked)
-            ChaosTips.Attach(icon, "? ? ?", ChaosRanks.RankLockedTip, ChaosRanks.RankSpecifics(b.RankFloor));
+            ChaosTips.Attach(icon, "? ? ?", ChaosRanks.RankLockedTip, ChaosRanks.RankSpecifics(b.RankFloor, ChaosMeta.State.RunsCompleted));
         else
             ChaosTips.Attach(icon, unlocked ? $"{b.Name} · L{level}" : b.Name, b.Desc,
                 string.IsNullOrEmpty(b.CapstoneDesc) ? null : "max: " + b.CapstoneDesc,
@@ -614,7 +614,7 @@ public partial class ChaosHubWindow : Window
             // No desc, no flavor — only the gate. The reveal is the reward for sinking deeper.
             mid.Children.Add(new TextBlock
             {
-                Text = ChaosRanks.RankLockedTip + " " + ChaosRanks.RankSpecifics(b.RankFloor),
+                Text = ChaosRanks.RankLockedTip + " " + ChaosRanks.RankSpecifics(b.RankFloor, ChaosMeta.State.RunsCompleted),
                 Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x80, 0xA8)), FontStyle = FontStyles.Italic,
                 FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0)
             });
@@ -726,7 +726,7 @@ public partial class ChaosHubWindow : Window
                 // Mystery: hide the cost too — show only the depth gate. The button names the
                 // rank you must reach, not the price of a toy you're not meant to know yet.
                 var held = BuyButton($"🔒 {ChaosRanks.Name(b.RankFloor)}", b.Id, false, BoonUnlock_Click);
-                held.ToolTip = ChaosRanks.RankLockedTip + "\n" + ChaosRanks.RankSpecifics(b.RankFloor);
+                held.ToolTip = ChaosRanks.RankLockedTip + "\n" + ChaosRanks.RankSpecifics(b.RankFloor, ChaosMeta.State.RunsCompleted);
                 ToolTipService.SetShowOnDisabled(held, true);
                 right.Children.Add(held);
             }
@@ -758,7 +758,7 @@ public partial class ChaosHubWindow : Window
                 !capLocked && ChaosMeta.CanAffordUpgrade(b.Id), BoonUpgrade_Click);
             if (capLocked)
             {
-                deepen.ToolTip = ChaosRanks.CapstoneLockedTip + "\n" + ChaosRanks.RankSpecifics(ChaosRank.Devoted);
+                deepen.ToolTip = ChaosRanks.CapstoneLockedTip + "\n" + ChaosRanks.RankSpecifics(ChaosRank.Devoted, ChaosMeta.State.RunsCompleted);
                 ToolTipService.SetShowOnDisabled(deepen, true);
             }
             right.Children.Add(deepen);
@@ -1033,7 +1033,7 @@ public partial class ChaosHubWindow : Window
                 charmRankLocked ? "? ? ?" : unlocked ? $"{b.Name} · L{ChaosMeta.BoonLevel(bid)}" : b.Name,
                 charmRankLocked ? ChaosRanks.RankLockedTip : b.Desc,
                 active ? "click to switch off" : unlocked ? "click to switch on"
-                    : charmRankLocked ? ChaosRanks.RankSpecifics(b.RankFloor) : $"unlock for ✦{b.UnlockCost} in the Toybox",
+                    : charmRankLocked ? ChaosRanks.RankSpecifics(b.RankFloor, ChaosMeta.State.RunsCompleted) : $"unlock for ✦{b.UnlockCost} in the Toybox",
                 BoonAccent,
                 active ? TileState.Equipped : unlocked ? TileState.Owned : TileState.Locked,
                 onClick,
@@ -1107,7 +1107,7 @@ public partial class ChaosHubWindow : Window
             // Rank-locked → mystery: keyhole art, "???" everywhere, the depth gate instead of a price.
             string extra = active ? "click to unequip"
                 : unlocked ? "click to equip"
-                : rankLocked ? ChaosRanks.RankSpecifics(b.RankFloor)
+                : rankLocked ? ChaosRanks.RankSpecifics(b.RankFloor, ChaosMeta.State.RunsCompleted)
                 : $"unlock for ✦{b.UnlockCost} in the Toybox";
             host.Children.Add(LoadoutTile(rankLocked ? "?" : b.Glyph,
                 rankLocked ? "? ? ?" : unlocked ? $"{b.Name} · L{level}" : b.Name,
