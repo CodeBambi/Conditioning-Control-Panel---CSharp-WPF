@@ -66,7 +66,7 @@ namespace ConditioningControlPanel
         /// A price landed. Raised on whatever thread booked it (a hook on the UI thread, the daily
         /// settle on a timer), so everything below is marshalled first.
         /// </summary>
-        private void OnChasterBooked(string eventId, TabBooking booking, Point? originPx)
+        private void OnChasterBooked(string eventId, TabBooking booking, ScreenPoint? originPx)
         {
             if (booking.AppliedSeconds == 0) return;
             if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
@@ -74,7 +74,7 @@ namespace ConditioningControlPanel
             try
             {
                 Dispatcher.BeginInvoke(DispatcherPriority.Normal,
-                    new Action(() => ShowBookedFlash(eventId, booking.AppliedSeconds, originPx)));
+                    new Action(() => ShowBookedFlash(eventId, booking.AppliedSeconds, originPx is { } o ? new Point(o.X, o.Y) : null)));
             }
             catch (Exception ex) { App.Logger?.Debug("[Chaster] booked flash marshal: {E}", ex.Message); }
         }
