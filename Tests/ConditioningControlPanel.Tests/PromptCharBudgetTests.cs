@@ -486,7 +486,7 @@ public class OversizeNoticeTests : IDisposable
 
     public void Dispose()
     {
-        PromptAssembler.NoticeDispatcherForTests = null;
+        PromptAssembler.NoticeSurface = null;
         PromptAssembler.ResetOversizeNoticeForTests();
     }
 
@@ -515,7 +515,7 @@ public class OversizeNoticeTests : IDisposable
     [Fact]
     public void WithNoUiToShowItOn_TheNoticeIsNotSpent()
     {
-        PromptAssembler.NoticeDispatcherForTests = () => null;
+        PromptAssembler.NoticeSurface = () => null;
         var prefix = OverCapPrefix();
 
         for (int i = 0; i < 5; i++)
@@ -533,8 +533,7 @@ public class OversizeNoticeTests : IDisposable
     [Fact]
     public void OnceThereIsAUi_TheNoticeIsRaisedExactlyOnce()
     {
-        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
-        PromptAssembler.NoticeDispatcherForTests = () => dispatcher;
+        PromptAssembler.NoticeSurface = () => _ => { };
         var prefix = OverCapPrefix();
 
         for (int i = 0; i < 5; i++)

@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -154,7 +155,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly List<MemoryFact> _facts = new();
 
         private readonly Timer? _saveTimer;
-        private readonly MemorySignalWriter? _signals;
+        private readonly IDisposable? _signals;
+
+        /// <summary>
+        /// Builds and starts the head's app-signal mirror for a production store (WPF MemorySignalWriter,
+        /// which subscribes App.* events). Unseeded, a store mirrors nothing - the honest outcome on a
+        /// head without those signals. Deferred wiring runs through <see cref="WireDeferredSignalsHook"/>.
+        /// </summary>
+        public static volatile Func<MemoryStore, IDisposable?>? SignalMirrorFactory;
+        public static volatile Action<IDisposable>? WireDeferredSignalsHook;
         private EventHandler? _processExitHandler;
         private bool _disposed;
         internal event Action? ChatMemoryEdited;
@@ -197,8 +206,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             // forget, and no call site outside this feature needs to change.
             try
             {
-                _signals = new MemorySignalWriter(this);
-                _signals.Start();
+                _signals = SignalMirrorFactory?.Invoke(this);
 
                 // Nothing in the app owns this store's lifetime (CompanionBrain holds it as an
                 // IMemoryStore and never disposes it), so without this the last debounce window's
@@ -208,7 +216,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "MemoryStore: app-signal mirroring failed to start");
+                Log.Warning(ex, "MemoryStore: app-signal mirroring failed to start");
             }
         }
 
@@ -242,8 +250,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public void WireDeferredSignals()
         {
-            try { _signals?.WireDeferredSources(); }
-            catch (Exception ex) { App.Logger?.Debug("MemoryStore: deferred signal wiring failed: {Error}", ex.Message); }
+            try { if (_signals != null) WireDeferredSignalsHook?.Invoke(_signals); }
+            catch (Exception ex) { Log.Debug("MemoryStore: deferred signal wiring failed: {Error}", ex.Message); }
         }
 
         // ===================== profile =====================
@@ -361,7 +369,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// count toward the cooldown that gates conversation.</para>
         /// </summary>
         private static bool IsStorable(string text, string source)
-            => IsStorable(App.ModerationGuard, text, source);
+            => IsStorable(CoreModerationLog.Guard, text, source);
 
         /// <summary>Testable core of the storage gate. <c>App.ModerationGuard</c> is null headlessly.</summary>
         internal static bool IsStorable(Moderation.IModerationGuard? guard, string text, string source)
@@ -374,15 +382,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 var check = guard?.CheckInput(text);
                 if (check == null || check.Allow || !check.Category.HasValue) return true;
 
-                App.ModerationLog?.Record(check.Category.Value, source: "memory", modelHint: "store");
-                App.Logger?.Information("MemoryStore: fact rejected by ModerationGuard (category={Cat})", check.Category);
+                CoreModerationLog.Record(check.Category.Value, source: "memory", modelHint: "store");
+                Log.Information("MemoryStore: fact rejected by ModerationGuard (category={Cat})", check.Category);
                 return false;
             }
             catch (Exception ex)
             {
                 // A guard that throws must not take memory down; the transport guard still stands
                 // between this text and any model.
-                App.Logger?.Debug("MemoryStore: moderation check failed: {Error}", ex.Message);
+                Log.Debug("MemoryStore: moderation check failed: {Error}", ex.Message);
                 return true;
             }
         }
@@ -702,11 +710,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "MemoryStore: failed to delete {File} during wipe", file);
+                    Log.Warning(ex, "MemoryStore: failed to delete {File} during wipe", file);
                 }
             }
 
-            App.Logger?.Information("MemoryStore: memory wiped");
+            Log.Information("MemoryStore: memory wiped");
         }
 
         /// <summary>
@@ -728,7 +736,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 _facts.RemoveAll(f => string.Equals(f.Source, MemoryFact.SourceChat, StringComparison.OrdinalIgnoreCase));
             }
             SaveNow();
-            App.Logger?.Information("MemoryStore: chat-derived memory cleared");
+            Log.Information("MemoryStore: chat-derived memory cleared");
         }
 
         private string? LegacyLocalHistoryPath()
@@ -754,7 +762,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private bool ChatDerivedPersistenceEnabled => _chatMemoryEnabled();
 
         private static bool DefaultChatMemoryEnabled() =>
-            App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false;
+            CoreSettings.Current.CompanionPrompt?.ChatMemoryEnabled != false;
 
         /// <summary>Schedules a debounced background save. Cheap and safe to call on every mutation.</summary>
         public void RequestSave()
@@ -774,7 +782,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "MemoryStore: failed to serialize memory");
+                Log.Warning(ex, "MemoryStore: failed to serialize memory");
                 return;
             }
 
@@ -788,7 +796,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "MemoryStore: failed to persist memory");
+                    Log.Warning(ex, "MemoryStore: failed to persist memory");
                 }
             }
         }
@@ -841,12 +849,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 json = Render(survivors, keepChatDerived);
                 if (Encoding.UTF8.GetByteCount(json) <= SoftMaxBytes)
                 {
-                    App.Logger?.Warning("MemoryStore: soft size cap hit, shed {Count} fact(s)", removed);
+                    Log.Warning("MemoryStore: soft size cap hit, shed {Count} fact(s)", removed);
                     return json;
                 }
             }
 
-            App.Logger?.Warning("MemoryStore: memory.json still over the soft cap after shedding");
+            Log.Warning("MemoryStore: memory.json still over the soft cap after shedding");
             return json;
         }
 
@@ -900,7 +908,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "MemoryStore: could not read memory.json — starting empty");
+                Log.Warning(ex, "MemoryStore: could not read memory.json — starting empty");
                 return;
             }
 
@@ -914,7 +922,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 EnforceFactCap();
             }
 
-            App.Logger?.Information(
+            Log.Information(
                 "MemoryStore: loaded {Facts} fact(s), {Signals} profile signal(s)",
                 parsed.Facts.Count, parsed.Profile.Count);
         }
@@ -1038,7 +1046,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
 
             if (evicted > 0)
-                App.Logger?.Debug("MemoryStore: evicted {Count} low-value fact(s) at the {Cap} cap", evicted, MaxFacts);
+                Log.Debug("MemoryStore: evicted {Count} low-value fact(s) at the {Cap} cap", evicted, MaxFacts);
         }
 
         // ===================== helpers =====================
