@@ -738,11 +738,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             {
                 var path = CorePaths.EffectiveAssets;
                 System.IO.Directory.CreateDirectory(path);
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = path,
-                    UseShellExecute = true,
-                });
+                Platform.ExternalOpener.Open(path);
             }
             catch (Exception ex)
             {

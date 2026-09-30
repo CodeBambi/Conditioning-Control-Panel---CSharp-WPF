@@ -12,6 +12,7 @@
        Click/Checked/TextChanged     -> wired in the constructor
        whitespace between <Run>s     -> moved inside the Run text (Avalonia drops it) -->
 <Window xmlns="https://github.com/avaloniaui"
+        xmlns:ctl="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.WebcamConsentDialog"
         Title="Webcam Tracking — Privacy and Consent"
@@ -201,10 +202,10 @@
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,18,0,0" Foreground="#B8B8C8"
                            Text="Want to verify? The source code for this feature is public."/>
-                <HyperlinkButton x:Name="LnkSource" Padding="0" Foreground="{StaticResource PinkBrush}"
+                <ctl:SafeHyperlinkButton x:Name="LnkSource" Padding="0" Foreground="{StaticResource PinkBrush}"
                                  NavigateUri="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs">
                     <TextBlock Text="View on GitHub →" FontSize="14"/>
-                </HyperlinkButton>
+                </ctl:SafeHyperlinkButton>
             </StackPanel>
         </ScrollViewer>
 

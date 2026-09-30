@@ -46,7 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             try
             {
-                if (await Launcher.LaunchUriAsync(new Uri(DiscordLinks.Invite)))
+                if (await Platform.ExternalOpener.OpenAsync(this, DiscordLinks.Invite))
                     Log.Information("Opened Discord invite link");
                 else
                     Log.Warning("Nothing on this system handled the Discord invite URI");

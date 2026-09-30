@@ -349,8 +349,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private async Task OpenAsync(string url)
         {
             var top = TopLevel.GetTopLevel(this);
-            try { if (top?.Launcher is { } l && await l.LaunchUriAsync(new Uri(url))) return; }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "[Chaster] could not open the browser"); }
+            if (await Platform.ExternalOpener.OpenAsync(top, url)) return;
             try { if (top?.Clipboard is { } c) await c.SetTextAsync(url); } catch { }
         }
 

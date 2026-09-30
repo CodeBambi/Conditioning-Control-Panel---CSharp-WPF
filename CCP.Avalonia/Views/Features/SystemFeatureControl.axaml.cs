@@ -235,7 +235,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 {
                     // UseShellExecute hands the folder to the platform's file manager - xdg-open
                     // on Linux, Explorer on Windows. Same call the WPF original made.
-                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                    Platform.ExternalOpener.Open(path);
                 }
             }
             catch (Exception ex)

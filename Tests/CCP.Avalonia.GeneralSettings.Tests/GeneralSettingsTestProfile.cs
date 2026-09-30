@@ -30,6 +30,7 @@ internal static class GeneralSettingsTestProfile
         // This is the only environment write in the host, and it happens before any test type can
         // touch CorePaths.UserData. An externally supplied profile is never opened or cleaned.
         Environment.SetEnvironmentVariable(EnvironmentName, Root);
+        _ = ConditioningControlPanel.CorePaths.UserData;   // installs the SandboxNet guard before any test runs
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Cleanup();
     }
 

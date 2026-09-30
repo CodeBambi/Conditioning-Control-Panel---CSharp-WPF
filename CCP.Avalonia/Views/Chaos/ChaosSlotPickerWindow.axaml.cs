@@ -355,7 +355,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             try
             {
                 System.IO.Directory.CreateDirectory(ChaosMetaStore.SaveFolder);
-                Process.Start(new ProcessStartInfo { FileName = ChaosMetaStore.SaveFolder, UseShellExecute = true });
+                Platform.ExternalOpener.Open(ChaosMetaStore.SaveFolder);
             }
             catch (Exception ex)
             {

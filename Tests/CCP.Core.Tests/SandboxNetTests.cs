@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,7 +30,8 @@ public sealed class SandboxNetTests
     private static bool Refused(Exception? ex)
     {
         for (; ex is not null; ex = ex.InnerException)
-            if (ex is SocketException { SocketErrorCode: SocketError.ConnectionRefused }) return true;
+            // Port 0: refused on Linux/macOS, "address not available" on Windows. Never HostNotFound.
+            if (ex is SocketException { SocketErrorCode: SocketError.ConnectionRefused or SocketError.AddressNotAvailable }) return true;
         return false;
     }
 
@@ -82,7 +84,7 @@ public sealed class SandboxNetTests
         Assert.NotNull(dialled);
         var target = new Uri(url);
         Assert.Equal(direct, dialled!.Host == target.Host && dialled.Port == target.Port);
-        if (!direct) Assert.Equal("127.0.0.1", dialled.Host);
+        if (!direct) Assert.Equal(SandboxNet.DeadProxy, new Uri($"http://{dialled.Host}:{dialled.Port}/"));
     }
 
     [Theory]
@@ -95,12 +97,56 @@ public sealed class SandboxNetTests
     public void AllowsNonHttpEgressOnlyToLoopbackInASandbox(string url, bool sandboxed, bool allowed) =>
         Assert.Equal(allowed, SandboxNet.Allows(new Uri(url), sandboxed));
 
+    [Theory]
+    [InlineData("http://127.0.0.1:9/", true)]
+    [InlineData("http://127.0.0.2:9/", true)]
+    [InlineData("http://[::1]:9/", true)]
+    [InlineData("http://LOCALHOST:9/", true)]
+    [InlineData("http://loopback:9/", false)]   // .NET calls this name loopback; DNS/hosts decide what it is
+    [InlineData("http://localhost.example/", false)]
+    public void OnlyLiteralLoopbackBypassesTheProxy(string url, bool bypassed) =>
+        Assert.Equal(bypassed, HttpClient.DefaultProxy!.IsBypassed(new Uri(url)));
+
     [Fact]
-    public void ProductionNeverInstallsTheGuardAndTheSandboxDoes()
+    public async Task UrlSafetyPreflightSkipsDnsInASandbox() =>
+        // A public IP literal passes the pre-flight without any lookup outside a sandbox; inside one it never does.
+        Assert.False(await UrlSafety.IsSafePublicHttpsAsync(new Uri("https://93.184.216.34/"), CancellationToken.None));
+
+    [Fact]
+    public void TheSandboxInstallsTheGuard()
     {
         Assert.True(SandboxNet.Active);
         Assert.IsType<SandboxNet.Refuser>(HttpClient.DefaultProxy);
         Assert.True(SandboxNet.Allows(null, sandboxed: false));
+    }
+
+    private static string RepoRoot()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (!File.Exists(Path.Combine(root.FullName, "ConditioningControlPanel.sln"))) root = root.Parent!;
+        return root.FullName;
+    }
+
+    private static List<string> Scan(IEnumerable<string> dirs, string pattern, Regex bad, Func<string, bool>? exempt = null) =>
+        dirs.Select(d => Path.Combine(RepoRoot(), d)).Where(Directory.Exists)
+            .SelectMany(d => Directory.EnumerateFiles(d, pattern, SearchOption.AllDirectories))
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .SelectMany(f => File.ReadLines(f).Select((l, i) => (f, i, l)))
+            .Where(x => !Regex.IsMatch(x.l, @"^\s*(//|\*|<!--)") && bad.IsMatch(x.l) && exempt?.Invoke(x.l) != true)
+            .Select(x => $"{x.f}:{x.i + 1}: {x.l.Trim()}")
+            .ToList();
+
+    /// <summary>Every link/file/folder launch in the Avalonia head goes through ExternalOpener (SandboxNet.Allows,
+    /// refusals logged). The elevated installer run (Verb = "runas") is a program, not a link.</summary>
+    [Fact]
+    public void EveryLaunchGoesThroughExternalOpener()
+    {
+        var launch = new Regex(@"UseShellExecute\s*=\s*true|\.Launch(Uri|File|FileInfo|DirectoryInfo)Async\b|""xdg-open""|new\s+HyperlinkButton\b");
+        var hits = Scan(new[] { "CCP.Avalonia" }, "*.cs", launch, l => l.Contains("\"runas\""))
+            .Concat(Scan(new[] { "CCP.Avalonia" }, "*.axaml", new Regex(@"<HyperlinkButton\b")))   // SafeHyperlinkButton instead
+            .Where(h => !h.Contains($"{Path.DirectorySeparatorChar}ExternalOpener.cs:"))
+            .ToList();
+        Assert.True(hits.Count == 0, string.Join("\n", hits));
     }
 
     /// <summary>The guard covers a client only while it leaves the proxy alone. A client that opts out
@@ -108,17 +154,7 @@ public sealed class SandboxNetTests
     [Fact]
     public void NoProductCodeOptsOutOfTheDefaultProxy()
     {
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (!File.Exists(Path.Combine(root.FullName, "ConditioningControlPanel.sln"))) root = root.Parent!;
         var optOut = new Regex(@"\bUseProxy\b|\.Proxy\s*=|\bProxy\s*=\s*new\b|new\s+WebProxy\b");
-        var hits = new[] { "CCP.Core", "CCP.Avalonia", "ConditioningControlPanel", "CCP.VR" }
-            .Select(d => Path.Combine(root.FullName, d)).Where(Directory.Exists)
-            .SelectMany(d => Directory.EnumerateFiles(d, "*.cs", SearchOption.AllDirectories))
-            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
-            .SelectMany(f => File.ReadLines(f).Select((l, i) => (f, i, l)))
-            .Where(x => optOut.IsMatch(x.l))
-            .Select(x => $"{x.f}:{x.i + 1}: {x.l.Trim()}")
-            .ToList();
-        Assert.Empty(hits);
+        Assert.Empty(Scan(new[] { "CCP.Core", "CCP.Avalonia", "ConditioningControlPanel", "CCP.VR" }, "*.cs", optOut));
     }
 }
