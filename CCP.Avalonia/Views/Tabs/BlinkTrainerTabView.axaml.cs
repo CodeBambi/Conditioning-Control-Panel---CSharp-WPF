@@ -120,8 +120,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             bool live = CoreEntitlement.HasPremium && WebcamConsent.IsCurrent(s) && s.BlinkTrainerFolders.Count > 0;
             if (!live) { StartDemoLoop(); return; }
             StopDemoLoop();
-            // ponytail: live preview swaps on WebcamTrackingService.OnBlink, which has no Linux twin;
-            // the stage stays parked (WPF ResetBlinkTrainerStageForLive) because no blink ever comes.
+            // ponytail: live preview swaps on OnBlink; Platform/WebcamTracker.OnBlink now exists but the
+            // swap (asset pool, stage video) is not ported, so the stage stays parked (WPF
+            // ResetBlinkTrainerStageForLive) even while the tracker runs.
             SetOpacityNow(BlinkTrainerStageImageA, 0);
             SetOpacityNow(BlinkTrainerStageImageB, 0);
             _demoUsingA = true;

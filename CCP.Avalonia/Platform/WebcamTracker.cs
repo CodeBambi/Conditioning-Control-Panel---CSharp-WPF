@@ -26,8 +26,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         public bool Open()
         {
-            int index = int.TryParse(Environment.GetEnvironmentVariable("CCP_WEBCAM_DEVICE"), out var i)
-                ? i : Math.Max(0, CoreSettings.Current.WebcamDeviceIndex);
+            int index = Math.Max(0, int.TryParse(Environment.GetEnvironmentVariable("CCP_WEBCAM_DEVICE"), out var i)
+                ? i : CoreSettings.Current.WebcamDeviceIndex);
             _cap = new VideoCapture(index, OperatingSystem.IsLinux() ? VideoCaptureAPIs.V4L2 : VideoCaptureAPIs.ANY);
             if (!_cap.IsOpened()) return false;
             // WPF's default mode (WebcamTrackingService CaptureWidth/Height/TargetFps).
@@ -61,16 +61,32 @@ namespace ConditioningControlPanel.Avalonia.Platform
         public event Action? OnBlink;
         public event Action? StateChanged;
 
-        public bool IsRunning => _thread != null;
+        public bool IsRunning => _run != null;
         /// <summary>Why the last start failed, for the user; null after a good start.</summary>
         public string? LastError { get; private set; }
+        /// <summary>Frames whose processing threw (the loop logs and carries on); tests assert zero.</summary>
+        internal int FrameErrors;
 
-        private Thread? _thread;
-        private volatile bool _stop;
-        private IFrameSource? _source;
-        private BlazeFaceDetector? _face;
-        private FaceMeshDetector? _mesh;
-        private IrisDetector? _iris;
+        /// <summary>One camera session. The loop owns it and releases it when it exits, so a loop
+        /// abandoned by a timed-out Stop still closes its own camera when the driver lets go.</summary>
+        private sealed class Run
+        {
+            public volatile bool Stop;
+            public IFrameSource? Source;
+            public BlazeFaceDetector? Face;
+            public FaceMeshDetector? Mesh;
+            public IrisDetector? Iris;
+            public Thread? Thread;
+            public void Release()
+            {
+                try { Source?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                Face?.Dispose(); Mesh?.Dispose(); Iris?.Dispose();
+                Source = null; Face = null; Mesh = null; Iris = null;
+            }
+        }
+
+        private Run? _run;
+        private Thread? _wedged;
         private readonly BlinkDetector _blink = new();
         private int _busy;
 
@@ -83,10 +99,17 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             if (IsRunning) return true;
             if (Interlocked.Exchange(ref _busy, 1) != 0) return false;
+            var run = new Run();
             try
             {
                 LastError = null;
                 if (!WebcamConsent.IsCurrent(CoreSettings.Current)) { LastError = "Webcam consent is not current."; return false; }
+                // WPF #743: a loop a timed-out Stop gave up on may still hold the camera.
+                if (_wedged is { IsAlive: true })
+                {
+                    LastError = "The previous camera session is still closing. Try again in a moment, or restart the app.";
+                    return false;
+                }
                 try { Cv2.GetVersionString(); }
                 catch (Exception ex)
                 {
@@ -96,30 +119,30 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 }
                 try
                 {
-                    _face = new BlazeFaceDetector(Path.Combine(ModelDir, "face_detection_short_range.onnx"), Path.Combine(ModelDir, "blazeface_anchors.json"));
-                    _mesh = new FaceMeshDetector(Path.Combine(ModelDir, "face_landmark.onnx"));
-                    _iris = new IrisDetector(Path.Combine(ModelDir, "iris_landmark.onnx"));
+                    run.Face = new BlazeFaceDetector(Path.Combine(ModelDir, "face_detection_short_range.onnx"), Path.Combine(ModelDir, "blazeface_anchors.json"));
+                    run.Mesh = new FaceMeshDetector(Path.Combine(ModelDir, "face_landmark.onnx"));
+                    run.Iris = new IrisDetector(Path.Combine(ModelDir, "iris_landmark.onnx"));
                 }
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "[Webcam] eye-tracking models failed to load");
                     LastError = "Webcam tracking is unavailable: the eye-tracking models could not be loaded.";
-                    Release();
+                    run.Release();
                     return false;
                 }
-                _source = SourceFactory();
+                run.Source = SourceFactory();
                 bool opened;
-                try { opened = _source.Open(); } catch (Exception ex) { Log.Warning(ex, "[Webcam] open threw"); opened = false; }
+                try { opened = run.Source.Open(); } catch (Exception ex) { Log.Warning(ex, "[Webcam] open threw"); opened = false; }
                 if (!opened)
                 {
                     LastError = "No camera could be opened. Check that a webcam is connected and not in use by another app.";
-                    Release();
+                    run.Release();
                     return false;
                 }
                 _blink.Reset();
-                _stop = false;
-                _thread = new Thread(Loop) { IsBackground = true, Name = "WebcamCapture", Priority = ThreadPriority.BelowNormal };
-                _thread.Start();
+                run.Thread = new Thread(() => Loop(run)) { IsBackground = true, Name = "WebcamCapture", Priority = ThreadPriority.BelowNormal };
+                _run = run;
+                run.Thread.Start();
                 Log.Information("[Webcam] tracking started");
                 return true;
             }
@@ -132,53 +155,61 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         public void Stop()
         {
-            var t = _thread;
-            if (t == null) return;
-            _stop = true;
-            // WPF Stop: bounded join; a wedged driver must not hang the caller forever.
-            if (!t.Join(TimeSpan.FromSeconds(5))) Log.Warning("[Webcam] capture thread did not exit in 5s");
-            else Release();
-            _thread = null;
+            var run = Interlocked.Exchange(ref _run, null);
+            if (run == null) return;
+            run.Stop = true;
+            // WPF Stop: bounded join; a wedged driver must not hang the caller forever. The loop
+            // releases its own camera whenever it does exit; until then Start refuses.
+            if (!run.Thread!.Join(TimeSpan.FromSeconds(5)))
+            {
+                _wedged = run.Thread;
+                Log.Warning("[Webcam] capture thread did not exit in 5s; abandoned, it closes the camera when it exits");
+            }
             Log.Information("[Webcam] tracking stopped");
             Dispatcher.UIThread.Post(() => StateChanged?.Invoke());
         }
 
-        private void Release()
+        private void Loop(Run run)
         {
-            try { _source?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
-            _face?.Dispose(); _mesh?.Dispose(); _iris?.Dispose();
-            _source = null; _face = null; _mesh = null; _iris = null;
-        }
-
-        private void Loop()
-        {
-            using var frame = new Mat();
-            int fails = 0;
-            while (!_stop)
+            try
             {
-                if (!_source!.Read(frame))
+                using var frame = new Mat();
+                int fails = 0;
+                while (!run.Stop)
                 {
-                    // WPF MaxConsecutiveReadFails: a camera that stopped delivering ends tracking.
-                    if (++fails >= 30) { LastError = "The camera stopped delivering frames."; break; }
-                    Thread.Sleep(20);
-                    continue;
+                    // Consent revoked mid-session (or during Start): close the camera now.
+                    if (!WebcamConsent.IsCurrent(CoreSettings.Current)) { LastError = "Webcam consent was revoked."; break; }
+                    if (!run.Source!.Read(frame))
+                    {
+                        // WPF MaxConsecutiveReadFails: a camera that stopped delivering ends tracking.
+                        if (++fails >= 30) { LastError = "The camera stopped delivering frames."; break; }
+                        Thread.Sleep(20);
+                        continue;
+                    }
+                    fails = 0;
+                    if (run.Stop) break;
+                    try { ProcessFrame(run, frame); }
+                    catch (Exception ex) { Interlocked.Increment(ref FrameErrors); Log.Warning(ex, "[Webcam] frame processing threw"); Thread.Sleep(50); }
                 }
-                fails = 0;
-                try { ProcessFrame(frame); }
-                catch (Exception ex) { Log.Warning(ex, "[Webcam] frame processing threw"); Thread.Sleep(50); }
             }
-            if (!_stop) { Release(); _thread = null; Dispatcher.UIThread.Post(() => StateChanged?.Invoke()); }
+            finally
+            {
+                run.Release();
+                // Ended on its own (read failures, revoke): no longer running.
+                if (Interlocked.CompareExchange(ref _run, null, run) == run)
+                    Dispatcher.UIThread.Post(() => StateChanged?.Invoke());
+            }
         }
 
         /// <summary>WPF ProcessFrame steps 1, 2, 4 and 5: face, mesh, iris, EAR blink.</summary>
-        private void ProcessFrame(Mat bgr)
+        private void ProcessFrame(Run run, Mat bgr)
         {
-            var rect = _face!.Detect(bgr);
+            var rect = run.Face!.Detect(bgr);
             if (rect is not { Width: >= 16, Height: >= 16 } r) { _blink.CancelClosure(); return; }
-            var lm = _mesh!.Detect(bgr, r);
+            var lm = run.Mesh!.Detect(bgr, r);
             if (lm == null) { _blink.CancelClosure(); return; }
-            var left = _iris!.Detect(bgr, lm[FaceMeshDetector.LeftEyeOuterIdx], lm[FaceMeshDetector.LeftEyeInnerIdx], isRightEye: false);
-            var right = _iris.Detect(bgr, lm[FaceMeshDetector.RightEyeOuterIdx], lm[FaceMeshDetector.RightEyeInnerIdx], isRightEye: true);
+            var left = run.Iris!.Detect(bgr, lm[FaceMeshDetector.LeftEyeOuterIdx], lm[FaceMeshDetector.LeftEyeInnerIdx], isRightEye: false);
+            var right = run.Iris.Detect(bgr, lm[FaceMeshDetector.RightEyeOuterIdx], lm[FaceMeshDetector.RightEyeInnerIdx], isRightEye: true);
             if (left == null || right == null) return;
             var ev = _blink.Update(
                 BlinkDetector.ComputeEar(left.Contour, BlinkDetector.IrisContourEarIndices),
