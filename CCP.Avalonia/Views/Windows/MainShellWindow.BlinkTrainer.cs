@@ -7,14 +7,13 @@
 // session settings editors, opacity fill and slider label polish. The Play wall's Blink Trainer card
 // routes here (PlayTabView BtnLabBlinkTrainerOpenNew_Click).
 //
-// The tracker toggle is live on the page over Platform/WebcamTracker (OpenCV V4L2 capture, Core
-// ONNX detectors, Core BlinkDetector); a failed start says why. STILL REFUSED, because each needs
-// BlinkTrainerService or WebcamCalibrationWindow: ToggleWebcamFromHotkey, SetBlinkTrainerStatusPulse,
-// start/stop session and its countdown, live preview (OnBlink swaps, asset pool, stage video),
-// calibrate/quick-recal, the loading splash and the Deeper hub's webcam twins. Those buttons stay
-// disabled with a "not available on this build" tooltip.
-// Consent manage/revoke DO work on the page (settings half; CoreWebcam.RevokeConsent tears down a
-// tracker once one is seeded).
+// Live on the page: the tracker toggle (Platform/WebcamTracker), session start/stop with its countdown
+// (Views/Overlays/BlinkTrainerSession: click-through overlays per screen, swap per blink, duration
+// auto-stop, haptic pulse, quest credit; panic and exit stop it), the live stage preview, consent
+// manage/revoke (WebcamTracker.RevokeConsent, the seeded CoreWebcam verb). STILL REFUSED, each needing
+// the gaze feed or a missing surface: calibrate/quick-recal (disabled with a reason),
+// ToggleWebcamFromHotkey, the status pulse, the loading splash, stage video preview and the Deeper
+// hub's webcam twins.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {

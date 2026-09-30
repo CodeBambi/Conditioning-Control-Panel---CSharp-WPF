@@ -1112,3 +1112,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Chaos slice 1: ChaosMetaStore + ChaosRanks moved to Core (WPF ChaosMeta delegates). Avalonia slot picker shows real saves/ranks/locks,
   erase with WPF confirm, persists the chosen slot; hub balances/rank/stats read the active save; overlay uses the Core ranks.
 - Evidence: ChaosMetaStoreTests (incl. legacy migration), ChaosHubStateTests, fail-proven. Rows stay stub (no opener, shelves, ChaosModeService, waves).
+
+## avalonia-port/blink-trainer-session: +777
+- Webcam slice 3 part 1: Blink Trainer session on Avalonia (click-through overlay per screen, swap per blink, looped video, auto-stop,
+  haptic, quest credit), tab Start/Stop/countdown/preview, CoreWebcam seeded (Devices Start tracking/Privacy/Revoke). Merge with part 2.

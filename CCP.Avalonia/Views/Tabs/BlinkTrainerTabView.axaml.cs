@@ -13,6 +13,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Lab.GazeMinigame;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
@@ -32,8 +33,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     {
         private static readonly IBrush Amber = new SolidColorBrush(Color.FromRgb(0xFF, 0xD0, 0x80));
         private static readonly IBrush Green = new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80));
+        private static readonly IBrush Red = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
 
         private DispatcherTimer? _demoTimer;
+        private DispatcherTimer? _tick;
+        private bool _liveSubscribed;
+        private string? _liveLast;
+        private readonly List<Bitmap> _liveBitmaps = new();
         private List<Bitmap>? _demoAssets;
         private int _demoIndex;
         private bool _demoUsingA = true;
@@ -57,9 +63,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             BlinkTrainerStatusAction.Click += (_, _) => _statusAction?.Invoke();
 
-            // Session and calibration still need BlinkTrainerService / WebcamCalibrationWindow: visibly
-            // off, with the reason on hover. The tracker toggle is live (Platform/WebcamTracker).
-            foreach (var b in new[] { BtnBlinkTrainerStartSession, BtnBlinkTrainerCalibrate, BtnBlinkTrainerQuickRecal })
+            // Calibration needs the gaze feed WebcamTracker does not emit yet: visibly off, with the
+            // reason on hover. Session and tracker toggle are live (Overlays/BlinkTrainerSession, Platform/WebcamTracker).
+            foreach (var b in new[] { BtnBlinkTrainerCalibrate, BtnBlinkTrainerQuickRecal })
             {
                 b.IsEnabled = false;
                 ToolTip.SetShowOnDisabled(b, true);
@@ -72,6 +78,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (e.Property != IsVisibleProperty) return;
                 if (IsVisible) Refresh(); else StopDemoLoop();
             };
+
+            // WPF HookBlinkTrainerService: one fan-out for session and tracker state.
+            AttachedToVisualTree += (_, _) =>
+            {
+                BlinkTrainerSession.StateChanged += OnSessionStateChanged;
+                Platform.WebcamTracker.Instance.StateChanged += OnSessionStateChanged;
+            };
+            DetachedFromVisualTree += (_, _) =>
+            {
+                BlinkTrainerSession.StateChanged -= OnSessionStateChanged;
+                Platform.WebcamTracker.Instance.StateChanged -= OnSessionStateChanged;
+                Platform.WebcamTracker.Instance.OnBlink -= OnStagePreviewBlink;
+                _tick?.Stop();
+                _tick = null;
+            };
+        }
+
+        /// <summary>WPF OnBlinkTrainerServiceStateChanged: countdown timer, status row, stage mode.</summary>
+        private void OnSessionStateChanged()
+        {
+            try
+            {
+                if (BlinkTrainerSession.IsRunning) _tick ??= new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) => Tick());
+                else { _tick?.Stop(); _tick = null; }
+                RefreshTrackerButton();
+                RefreshStatusRow();
+                ApplyStageMode();
+            }
+            catch (Exception ex) { Log.Warning(ex, "BlinkTrainer state refresh failed"); }
+        }
+
+        /// <summary>WPF BlinkTrainerTick: the Running text counts down.</summary>
+        private void Tick()
+        {
+            if (!BlinkTrainerSession.IsRunning || StatusState != BlinkTrainerStatusState.Running) return;
+            var rem = BlinkTrainerSession.Remaining;
+            BlinkTrainerStatusText.Text = Loc.GetF("blink_trainer_status_running", rem.ToString(rem.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss"));
         }
 
         internal void Refresh()
@@ -112,20 +155,55 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BlinkTrainerStageActions.IsEnabled = premium;
         }
 
-        /// <summary>WPF DetermineBlinkTrainerStageMode: non-premium always sees the demo; consent +
-        /// folders is live preview, which parks the stage blank until a blink arrives.</summary>
+        /// <summary>WPF DetermineBlinkTrainerStageMode + ApplyBlinkTrainerStageMode: non-premium always
+        /// sees the demo; a running session or consent + folders is live, which parks the stage blank
+        /// (ResetBlinkTrainerStageForLive) and swaps it on every real blink.</summary>
         private void ApplyStageMode()
         {
             var s = CoreSettings.Current;
-            bool live = CoreEntitlement.HasPremium && WebcamConsent.IsCurrent(s) && s.BlinkTrainerFolders.Count > 0;
-            if (!live) { StartDemoLoop(); return; }
+            bool live = CoreEntitlement.HasPremium
+                && (BlinkTrainerSession.IsRunning || (WebcamConsent.IsCurrent(s) && s.BlinkTrainerFolders.Count > 0));
+            if (!live)
+            {
+                if (_liveSubscribed) { Platform.WebcamTracker.Instance.OnBlink -= OnStagePreviewBlink; _liveSubscribed = false; }
+                StartDemoLoop();
+                return;
+            }
+            if (_liveSubscribed) return;   // LivePreview <-> LiveSession is a no-op, as on WPF
             StopDemoLoop();
-            // ponytail: live preview swaps on OnBlink; Platform/WebcamTracker.OnBlink now exists but the
-            // swap (asset pool, stage video) is not ported, so the stage stays parked (WPF
-            // ResetBlinkTrainerStageForLive) even while the tracker runs.
             SetOpacityNow(BlinkTrainerStageImageA, 0);
             SetOpacityNow(BlinkTrainerStageImageB, 0);
             _demoUsingA = true;
+            _liveLast = null;
+            Platform.WebcamTracker.Instance.OnBlink += OnStagePreviewBlink;
+            _liveSubscribed = true;
+        }
+
+        internal bool LivePreview => _liveSubscribed;
+
+        /// <summary>WPF OnBlinkTrainerStagePreviewBlink + ApplyBlinkTrainerLiveImage: a hard-cut swap.
+        /// ponytail: a video pick is skipped on the stage (WPF plays it in a MediaElement); the
+        /// session overlay plays it.</summary>
+        internal void OnStagePreviewBlink()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                var path = BlinkTrainerAssetPool.Build(s.BlinkTrainerFolders, s.BlinkTrainerIncludeVideos).PickRandom(_liveLast);
+                if (path == null || BlinkTrainerAssetPool.IsVideo(path)) return;
+                _liveLast = path;
+                var bmp = new Bitmap(path);
+                var incoming = _demoUsingA ? BlinkTrainerStageImageB : BlinkTrainerStageImageA;
+                var outgoing = _demoUsingA ? BlinkTrainerStageImageA : BlinkTrainerStageImageB;
+                // Two live frames at most: the one fading out and the new one.
+                if (incoming.Source is Bitmap old && _liveBitmaps.Remove(old)) { incoming.Source = null; old.Dispose(); }
+                _liveBitmaps.Add(bmp);
+                incoming.Source = bmp;
+                SetOpacityNow(incoming, 1);
+                SetOpacityNow(outgoing, 0);
+                _demoUsingA = !_demoUsingA;
+            }
+            catch (Exception ex) { Log.Warning(ex, "OnBlinkTrainerStagePreviewBlink failed"); }
         }
 
         internal bool DemoRunning => _demoTimer != null;
@@ -186,14 +264,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             var s = CoreSettings.Current;
             bool multiMonitor = TopLevel.GetTopLevel(this) is Window w && w.Screens.ScreenCount > 1;
-            // No tracker on this head, so there is no calibration: WPF's HasUsableCalibration with
-            // App.Webcam null. Nothing runs and nothing errors, for the same reason.
-            StatusState = BlinkTrainerState.Status(false, null, WebcamConsent.IsCurrent(s),
-                s.BlinkTrainerFolders.Count, multiMonitor, calibrationUsable: false);
+            // ponytail: no calibration on this head yet (it needs the gaze feed), so HasUsableCalibration
+            // is false: multi-monitor reads NeedsCalibration, which still lets the session start (WPF).
+            StatusState = BlinkTrainerState.Status(BlinkTrainerSession.IsRunning, BlinkTrainerSession.LastError,
+                WebcamConsent.IsCurrent(s), s.BlinkTrainerFolders.Count, multiMonitor, calibrationUsable: false);
 
-            BlinkTrainerStatusDot.Fill = StatusState == BlinkTrainerStatusState.IdleReady
-                ? (this.FindResource("PinkBrush") as IBrush ?? Brushes.HotPink) : Amber;
-            BindLoc(BlinkTrainerStatusText, StatusState switch
+            BlinkTrainerStatusDot.Fill = StatusState switch
+            {
+                BlinkTrainerStatusState.IdleReady => this.FindResource("PinkBrush") as IBrush ?? Brushes.HotPink,
+                BlinkTrainerStatusState.Running => Green,
+                BlinkTrainerStatusState.Error => Red,
+                _ => Amber,
+            };
+            BlinkTrainerStatusText.Foreground = StatusState == BlinkTrainerStatusState.Error ? Red
+                : this.FindResource("TextMutedBrush") as IBrush ?? Brushes.Gray;
+            if (StatusState is BlinkTrainerStatusState.Running or BlinkTrainerStatusState.Error)
+            {
+                BlinkTrainerStatusText.ClearValue(TextBlock.TextProperty);   // drop the {loc} binding first
+                BlinkTrainerStatusText.Text = BlinkTrainerSession.LastError;   // WPF passes the error through as-is
+                Tick();
+            }
+            else BindLoc(BlinkTrainerStatusText, StatusState switch
             {
                 BlinkTrainerStatusState.NeedsConsent => "blink_trainer_status_needs_consent",
                 BlinkTrainerStatusState.NeedsFolders => "blink_trainer_status_needs_folders",
@@ -208,8 +299,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 // there is nothing to calibrate, so the fix-it button is not offered.
                 default: WireStatusAction(null, null); break;
             }
-            // WPF SetStartButtonState enables Start outside the consent/folder states; here it stays
-            // off (see the constructor) because there is no BlinkTrainerService to start.
+            // WPF SetStartButtonState: off only while consent or folders are missing; Stop while running.
+            BtnBlinkTrainerStartSession.IsEnabled = StatusState is not (BlinkTrainerStatusState.NeedsConsent or BlinkTrainerStatusState.NeedsFolders);
+            if (BtnBlinkTrainerStartSession.Content is TextBlock label)
+                BindLoc(label, BlinkTrainerSession.IsRunning ? "blink_trainer_stop_session" : "blink_trainer_start_session");
         }
 
         private void WireStatusAction(string? key, Action? action)
@@ -438,24 +531,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         internal void RevokeConsent()
         {
-            CoreWebcam.RevokeConsent();
-            var s = CoreSettings.Current;
-            s.WebcamConsentGiven = false;
-            s.WebcamConsentVersion = "";
-            s.WebcamConsentDate = null;
-            s.WebcamCalibrated = false;
-            s.WebcamCalibrationMode = "";
-            s.WebcamTriggersEnabled = false;
-            s.FocusGameEnabled = false;
-            CoreSettings.Save();
+            Platform.WebcamTracker.RevokeConsent();   // what CoreWebcam.RevokeConsent is seeded with
             Refresh();
         }
 
-        // Disabled in the constructor: BlinkTrainerService and WebcamCalibrationWindow have no
-        // Linux twin yet (see MainShellWindow.BlinkTrainer.cs).
+        // Disabled in the constructor: WebcamCalibrationWindow needs the gaze feed (see
+        // MainShellWindow.BlinkTrainer.cs).
         private void BtnBlinkTrainerCalibrate_Click(object? sender, RoutedEventArgs e) { }
         private void BtnBlinkTrainerQuickRecal_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnBlinkTrainerStartSession_Click(object? sender, RoutedEventArgs e) { }
+
+        /// <summary>WPF BtnBlinkTrainerStartSession_Click: stop if running; else bring the tracker up
+        /// off the UI thread (only with current consent), then start. A refusal lands in the status
+        /// row as Error, as on WPF. The start goes through StartEffect so the Wayland panic shortcut is
+        /// bound before the overlay appears.</summary>
+        private async void BtnBlinkTrainerStartSession_Click(object? sender, RoutedEventArgs e)
+        {
+            BtnBlinkTrainerStartSession.IsEnabled = false;   // #743: work is in flight
+            try
+            {
+                if (BlinkTrainerSession.IsRunning) { BlinkTrainerSession.Stop(); return; }
+                var tracker = Platform.WebcamTracker.Instance;
+                if (!tracker.IsRunning && WebcamConsent.IsCurrent(CoreSettings.Current)) await tracker.StartAsync();
+                // StartEffect may run this up to 30 s later: a panic or Stop in between cancels it.
+                var gen = BlinkTrainerSession.Generation;
+                Windows.MainShellWindow.StartEffect(() => { if (gen == BlinkTrainerSession.Generation) BlinkTrainerSession.Start(this); });
+            }
+            catch (Exception ex) { Log.Warning(ex, "Blink Trainer Start handler failed"); }
+            finally { OnSessionStateChanged(); }
+        }
 
         /// <summary>WPF ToggleWebcamTrackingAsync (MainWindow.BlinkTrainer.cs:310): stop if running;
         /// else consent dialog when stale, then start off the UI thread. A failed start says why
