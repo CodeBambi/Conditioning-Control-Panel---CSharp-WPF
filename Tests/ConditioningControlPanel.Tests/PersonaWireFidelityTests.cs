@@ -48,6 +48,7 @@ public class PersonaWireFidelityTests : IDisposable
     private readonly object? _priorSettings;
     private readonly object? _priorPersonality;
     private readonly object? _priorMods;
+    private readonly object? _priorCoreMods;
     private readonly AppSettings _settings = new();
     private readonly string _tempDir;
 
@@ -56,6 +57,7 @@ public class PersonaWireFidelityTests : IDisposable
         _priorSettings = GetStatic("Settings");
         _priorPersonality = GetStatic("Personality");
         _priorMods = GetStatic("Mods");
+        _priorCoreMods = CoreModsService.GetValue(null);
 
         // Same seam as PersonalityPromptMuxTests: an uninitialized SettingsService around an
         // in-memory AppSettings, saving to a throwaway path.
@@ -74,6 +76,7 @@ public class PersonaWireFidelityTests : IDisposable
         var mods = (ModService)RuntimeHelpers.GetUninitializedObject(typeof(ModService));
         SetPrivate(mods, "_activeMod", new ModPackage(BuiltInMods.BambiSleep, null, isBuiltIn: true));
         SetStatic("Mods", mods);
+        CoreModsService.SetValue(null, mods);   // BambiSprite (Core) reads CoreMods.Service, not App.Mods
 
         BambiSprite.VideoPoolProvider = () => BuiltInMods.BambiSleep.Browser!.DefaultVideoLinks;
         BambiSprite.InvalidateStablePrompt();
@@ -86,6 +89,7 @@ public class PersonaWireFidelityTests : IDisposable
         SetStatic("Settings", _priorSettings);
         SetStatic("Personality", _priorPersonality);
         SetStatic("Mods", _priorMods);
+        CoreModsService.SetValue(null, _priorCoreMods);
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
@@ -287,6 +291,9 @@ public class PersonaWireFidelityTests : IDisposable
             localClock: () => new DateTime(2026, 8, 7, 19, 13, 0),
             linkPool: () => Array.Empty<(string, string)>(),
             personaFence: personaFence);
+
+    private static readonly FieldInfo CoreModsService = BackingField(typeof(ConditioningControlPanel.CoreMods), "Service",
+        BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
 
     private static object? GetStatic(string name) =>
         BackingField(typeof(ConditioningControlPanel.App), name,

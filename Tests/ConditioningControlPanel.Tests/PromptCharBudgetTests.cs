@@ -40,6 +40,7 @@ public class PromptCharBudgetTests : IDisposable
     private readonly object? _priorSettings;
     private readonly object? _priorPersonality;
     private readonly object? _priorMods;
+    private readonly object? _priorCoreMods;
     private readonly AppSettings _settings = new();
     private readonly string _tempDir;
 
@@ -50,6 +51,7 @@ public class PromptCharBudgetTests : IDisposable
         _priorSettings = GetStatic("Settings");
         _priorPersonality = GetStatic("Personality");
         _priorMods = GetStatic("Mods");
+        _priorCoreMods = CoreModsService.GetValue(null);
 
         var service = (SettingsService)RuntimeHelpers.GetUninitializedObject(typeof(SettingsService));
         SetBackingField(service, service.GetType(), "Current", _settings);
@@ -69,6 +71,7 @@ public class PromptCharBudgetTests : IDisposable
         SetStatic("Settings", _priorSettings);
         SetStatic("Personality", _priorPersonality);
         SetStatic("Mods", _priorMods);
+        CoreModsService.SetValue(null, _priorCoreMods);
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
@@ -78,6 +81,7 @@ public class PromptCharBudgetTests : IDisposable
         var mods = (ModService)RuntimeHelpers.GetUninitializedObject(typeof(ModService));
         SetPrivate(mods, "_activeMod", new ModPackage(manifest, null, isBuiltIn: true));
         SetStatic("Mods", mods);
+        CoreModsService.SetValue(null, mods);   // BambiSprite (Core) reads CoreMods.Service, not App.Mods
 
         var pool = poolOverride ?? manifest.Browser?.DefaultVideoLinks;
         BambiSprite.VideoPoolProvider = () => pool;
@@ -259,6 +263,9 @@ public class PromptCharBudgetTests : IDisposable
     }
 
     // ---------- reflection seams (same shape as PersonaWireFidelityTests) ----------
+
+    private static readonly FieldInfo CoreModsService = BackingField(typeof(ConditioningControlPanel.CoreMods), "Service",
+        BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
 
     private static object? GetStatic(string name) =>
         BackingField(typeof(ConditioningControlPanel.App), name,
