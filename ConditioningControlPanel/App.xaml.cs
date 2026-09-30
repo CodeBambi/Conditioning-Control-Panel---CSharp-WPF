@@ -2733,7 +2733,7 @@ namespace ConditioningControlPanel
             Services.Companion.Brain.CompanionBrain.ClearLegacyLocalHistoryHook = () => (Ai as AiServiceStrategy)?.ClearLocalHistory();
             Services.Companion.Brain.CompanionBrain.MemoryRecalled = LocalAiService.SignalPersistentMemoryRecalled;
             Services.Companion.Brain.CompanionBrain.ActivitiesProvider = Services.Companion.CompanionActivities.Current;
-            Services.Companion.ConversationDelivery.AskCardsShown = () => true;   // ChatInput.cs OfferForRequest
+            Services.Companion.ConversationDelivery.AskCardsShown = _ => true;   // ChatInput.cs OfferForRequest
             SeedAskSeams();
 
             // CompanionBrain sits between every caller and the AI strategy: it owns conversation
@@ -6037,6 +6037,7 @@ Application State:
             // Before anything else: the fuse's pool timer outlives the dispatcher (it moved to Core),
             // and after shutdown CoreDispatch runs a posted tick in place.
             try { DescentCountdown?.Dispose(); } catch { /* exit must continue */ }
+            try { Services.Companion.Asks.CompanionAskService.Instance.Stop(); } catch { /* same pool-timer rule */ }
 #if DEBUG
             if (_firstShowPreview)
             {

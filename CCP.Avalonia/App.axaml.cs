@@ -115,7 +115,7 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>
         /// WPF App.xaml.cs SeedAskSeams + NoticeSurface: the asks service and the oversize-prompt toast.
         /// ponytail: SessionOptions/StartSession stay unseeded (no session launcher on this head, so no
-        /// Session cards), Busy knows only a running session, and a Watch link opens in the external
+        /// Session cards), Busy knows a session, video, lock card, bubble count and pop quiz (not grace pause), and a Watch link opens in the external
         /// browser - WPF's own fallback when its embedded browser cannot take it.
         /// </summary>
         internal static void SeedCompanionTubeSeams()
@@ -126,13 +126,17 @@ namespace ConditioningControlPanel.Avalonia
                     try { Notifications.Show(message, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(12)); }
                     catch (Exception ex) { Serilog.Log.Debug("PromptAssembler: oversize notice failed to show: {Error}", ex.Message); }
                 });
-            ConditioningControlPanel.Services.Companion.ConversationDelivery.AskCardsShown = () => true;
+            // Only when a card can really follow here (no launcher: Session/Game/Quests cards may not build).
+            ConditioningControlPanel.Services.Companion.ConversationDelivery.AskCardsShown =
+                ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.CanOfferFor;
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BrainProvider = () => Brain;
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.ShowCardSurface = card =>
                 Views.AvatarTube.AvatarTubeWindow.Live?.RunOnAvatar(() => Views.AvatarTube.AvatarTubeWindow.Live?.ShowAskCard(card));
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.SaySurface = text =>
                 Views.AvatarTube.AvatarTubeWindow.Live?.RunOnAvatar(() => Views.AvatarTube.AvatarTubeWindow.Live?.GigglePriority(text, aiGenerated: false));
-            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BusyProvider = () => CoreSession.IsSessionRunning;
+            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BusyProvider = () => CoreSession.IsSessionRunning
+                || CoreEngine.Video?.IsPlaying == true || Views.Windows.LockCardWindow.IsAnyOpen()
+                || Views.Windows.BubbleCountWindow.IsAnyOpen() || Views.Windows.PopQuizWindow.IsAnyOpen();
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.OpenLink = url =>
             {
                 if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
@@ -747,6 +751,7 @@ namespace ConditioningControlPanel.Avalonia
             catch { /* one service cannot prevent the head from exiting */ }
 
             DescentCountdown?.Dispose();   // its pool timer outlives the dispatcher otherwise
+            ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.Stop();   // same
             _desktopDispatch?.Stop();
         }
     }

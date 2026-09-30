@@ -1060,6 +1060,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - CompanionBrain slice 1: CompanionBrain, PromptAssembler, MemoryStore, CompanionSessionStore, ChatSession, CompanionTurn,
   ConversationRecall, ExplicitMemory, CompanionMemoryMaintenance, ConversationDelivery, ConversationRelationship moved to Core (git mv;
   head-only deps are static seams WPF seeds before building the brain; no-settings reads keep WPF's false default). Avalonia App.Brain;
-  tube chat routes through it while UseCompanionBrain is on (WPF ChatInput.cs:772); ask cards off until the card UI exists.
+  tube chat routes through it while UseCompanionBrain is on (WPF ChatInput.cs:772); ask cards off in this slice (on since companion-brain-tube, only when a card can follow).
 - Evidence: TubeChatBrainTests (loopback fake, protocol 2) + ConversationDeliveryCardTests, fail-proven; live signed out: 0 requests,
   no chat text logged or stored. Row feat-companion-brain stub. Plan: ~/ccp-port/briefs/companion-brain-plan.md. Review: FIX -> fixed.

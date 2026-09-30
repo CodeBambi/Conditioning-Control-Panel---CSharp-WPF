@@ -15,6 +15,7 @@ using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.AvatarTube;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Companion;
 using ConditioningControlPanel.Services.Companion.Asks;
@@ -82,15 +83,17 @@ public sealed class TubeChatParityTests
         CoreAccount.UnifiedUserId = "u-tube";
         var tube = new AvatarTubeWindow(null);
         var started = new List<string>();
+        var restore = SaveSeams();
         try
         {
             AvApp.SeedCompanionTubeSeams();
-            Assert.True(ConversationDelivery.AskCardsShown?.Invoke());   // the model is told a card follows
+            CoreDispatch.PostProvider = a => Dispatcher.UIThread.Post(a);
             Assert.NotNull(PromptAssembler.NoticeSurface?.Invoke());       // the oversize toast has a surface
             CompanionAskService.RequestDelay = TimeSpan.Zero;
             CompanionAskService.ShowCardSurface = c => Dispatcher.UIThread.Post(() => tube.ShowAskCard(c));
             CompanionAskService.SessionOptions = () => new[] { new AskOption("s-one", "Session one", () => true) };
             CompanionAskService.StartSession = id => { started.Add(id); return true; };
+            Assert.True(ConversationDelivery.AskCardsShown?.Invoke("what can I do"));   // a Session card can follow
 
             tube.Show();
             Dispatcher.UIThread.RunJobs();
@@ -146,10 +149,7 @@ public sealed class TubeChatParityTests
             tube.Close();
             Dispatcher.UIThread.RunJobs();
             listener.Stop();
-            CompanionAskService.RequestDelay = TimeSpan.FromSeconds(6);
-            CompanionAskService.ShowCardSurface = null;
-            CompanionAskService.SessionOptions = null;
-            CompanionAskService.StartSession = null;
+            restore();
             AvApp.Brain?.Dispose();
             AvApp.Ai?.Dispose();
             (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain);
@@ -157,6 +157,84 @@ public sealed class TubeChatParityTests
             CoreSettings.ServiceProvider = null;
             Directory.Delete(dir, true);
         }
+    });
+
+    /// <summary>Every seam SeedCompanionTubeSeams or a test sets, plus the 60 s ask timer it starts.</summary>
+    private static Action SaveSeams()
+    {
+        var saved = (CompanionAskService.BrainProvider, CompanionAskService.ShowCardSurface, CompanionAskService.SaySurface,
+            CompanionAskService.BusyProvider, CompanionAskService.SessionOptions, CompanionAskService.StartSession,
+            CompanionAskService.OpenLink, CompanionAskService.RequestDelay, ConversationDelivery.AskCardsShown,
+            PromptAssembler.NoticeSurface, CoreDispatch.PostProvider);
+        return () =>
+        {
+            CompanionAskService.Instance.Stop();
+            (CompanionAskService.BrainProvider, CompanionAskService.ShowCardSurface, CompanionAskService.SaySurface,
+             CompanionAskService.BusyProvider, CompanionAskService.SessionOptions, CompanionAskService.StartSession,
+             CompanionAskService.OpenLink, CompanionAskService.RequestDelay, ConversationDelivery.AskCardsShown,
+             PromptAssembler.NoticeSurface, CoreDispatch.PostProvider) = saved;
+        };
+    }
+
+    private sealed class NoVideoHost : ConditioningControlPanel.Services.IMandatoryVideoHost
+    {
+        public void Show(string path, bool strict) { }
+        public double CloseAll() => 0;
+        public void ShowMessage(ConditioningControlPanel.Services.AttentionVerdict verdict, int ms, Action then) { }
+    }
+
+    /// <summary>The model is promised a card only when this head can build one, and never over a lock
+    /// card or a mandatory video (WPF CompanionAskService.IsBusy).</summary>
+    [Fact]
+    public Task NoCardIsPromisedWhenNoneCanFollow() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<AvApp>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        CoreSettings.Current.AvatarEnabled = true;
+        CoreSettings.Current.CompanionAsksEnabled = true;
+        var dir = Directory.CreateTempSubdirectory("ccp-ask-").FullName;
+        var previousBrain = AvApp.Brain;
+        var previousVideo = CoreEngine.Video;
+        AvApp.Brain = new CompanionBrain(new AiService("http://127.0.0.1:9"), memory: new MemoryStore(Path.Combine(dir, "memory.json")),
+            store: new CompanionSessionStore(Path.Combine(dir, "session.json"), Path.Combine(dir, "legacy.json")));
+        var restore = SaveSeams();
+        try
+        {
+            AvApp.SeedCompanionTubeSeams();
+            const string ask = "what can I do";
+            // No launcher here: no games, no sessions -> nothing to build -> no promise.
+            Assert.False(ConversationDelivery.AskCardsShown!(ask));
+            Assert.False(ConversationDelivery.AskCardsShown!("recommend me a video"));   // no mod video pool either
+
+            CompanionAskService.SessionOptions = () => new[] { new AskOption("s-one", "Session one", () => true) };
+            Assert.True(ConversationDelivery.AskCardsShown!(ask));
+
+            LockCardWindow.ShowOnAllMonitors("good girl", 1, strictMode: false);
+            Assert.False(ConversationDelivery.AskCardsShown!(ask));   // busy: a lock card is up
+            LockCardWindow.ForceCloseAll();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(ConversationDelivery.AskCardsShown!(ask));
+
+            var video = new ConditioningControlPanel.Services.MandatoryVideoScheduler(new NoVideoHost(), library: () => new[] { "a.mp4" });
+            CoreEngine.Video = video;
+            Assert.True(video.Trigger());
+            Assert.False(ConversationDelivery.AskCardsShown!(ask));   // busy: a mandatory video is playing
+            video.ForceCleanup();
+        }
+        finally
+        {
+            restore();
+            CoreEngine.Video = previousVideo;
+            AvApp.Brain?.Dispose();
+            AvApp.Brain = previousBrain;
+            CoreSettings.ServiceProvider = null;
+            Directory.Delete(dir, true);
+        }
+        return Task.CompletedTask;
     });
 
     [Fact]

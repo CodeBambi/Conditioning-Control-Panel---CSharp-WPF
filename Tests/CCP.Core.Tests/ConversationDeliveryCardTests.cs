@@ -17,7 +17,7 @@ public sealed class ConversationDeliveryCardTests
         var (provider, shown) = (CoreSettings.ServiceProvider, ConversationDelivery.AskCardsShown);
         try
         {
-            ConversationDelivery.AskCardsShown = () => true;
+            ConversationDelivery.AskCardsShown = _ => true;
             CoreSettings.ServiceProvider = null;
             Assert.False(ConversationDelivery.CardFollows(ask));   // no settings => false, as WPF
 
