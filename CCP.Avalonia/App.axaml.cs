@@ -646,6 +646,10 @@ namespace ConditioningControlPanel.Avalonia
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
             _exiting = true;
 
+            // WPF App.OnExit:5965: haptics FIRST and synchronously (bounded ~2 s). A Lovense level has no
+            // server-side watchdog, so a toy not countermanded here keeps running after the app is gone.
+            try { CoreHaptics.Service?.ShutdownStop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Haptics shutdown stop failed"); }
+
             try { (((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!).MainWindow as Views.Windows.MainShellWindow)?.Tray?.Dispose(); } catch { }
 
             // Restore any app we ducked; a pending Unduck would otherwise die with the process.
@@ -669,7 +673,7 @@ namespace ConditioningControlPanel.Avalonia
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
-            try { CoreHaptics.Service?.ShutdownStop(); CoreHaptics.Service?.Dispose(); } catch { }
+            try { CoreHaptics.Service?.Dispose(); } catch { }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never
             // opened the quest page.

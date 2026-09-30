@@ -77,6 +77,43 @@ public sealed class HapticsHeadTests
         }
     });
 
+    /// <summary>WPF PanicStopEverySurface (MainWindow.xaml.cs:1992): the panic key and the tray's
+    /// Stop everything both send the (virtual) toy ALL STOP while it is vibrating.</summary>
+    [Fact]
+    public void PanicKeyAndTrayStopZeroTheToy() => AvaloniaTestDispatcher.Run(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var s = CoreSettings.Current;
+        var (enabled, key) = (s.PanicKeyEnabled, s.PanicKey);
+        (s.PanicKeyEnabled, s.PanicKey) = (true, "F8");
+        var shell = new ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+        shell.Show();
+        try
+        {
+            foreach (var stop in new Action[]
+            {
+                () => shell.HandlePanicKeyPress(new DateTime(2026, 1, 1)),
+                ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.StopEverything,
+            })
+            {
+                WithHaptics(premium: true, mock: true, (h, toasts) =>
+                {
+                    h.Settings.Enabled = true;
+                    Assert.True(h.ConnectAsync().Result);
+                    h.SetLayer(ConditioningControlPanel.Services.Haptics.Core.HapticLayer.Manual, 0.8);
+                    Assert.True(Wait(() => toasts.Any(t => t.Contains('%'))), string.Join(" | ", toasts));
+                    toasts.Clear();
+                    stop();
+                    Assert.True(Wait(() => toasts.Any(t => t.Contains("ALL STOP")), 1000), string.Join(" | ", toasts));
+                });
+            }
+        }
+        finally { shell.Close(); (s.PanicKeyEnabled, s.PanicKey) = (enabled, key); }
+    });
+
     /// <summary>The page loads real settings, gates Enable behind premium as WPF (#1917), and a connect
     /// with Intiface not running ends "Disconnected" with the button usable again.</summary>
     [Fact]
