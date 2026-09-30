@@ -208,7 +208,10 @@ public sealed class TubeChatParityTests
             const string ask = "what can I do";
             // No launcher here: no games, no sessions -> nothing to build -> no promise.
             Assert.False(ConversationDelivery.AskCardsShown!(ask));
-            Assert.False(ConversationDelivery.AskCardsShown!("recommend me a video"));   // no mod video pool either
+            // A Watch card follows only with a mod video pool. CoreMods.Service is process-global and stays
+            // attached once any test ran App.StartMods (StartModsTests, ModChoiceTests...), so read it.
+            var hasVideos = CoreMods.Service?.GetVideoLinks() is { Count: > 0 };
+            Assert.Equal(hasVideos, ConversationDelivery.AskCardsShown!("recommend me a video"));
 
             CompanionAskService.SessionOptions = () => new[] { new AskOption("s-one", "Session one", () => true) };
             Assert.True(ConversationDelivery.AskCardsShown!(ask));
