@@ -950,3 +950,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/chaster-tab-live: +1000
 - Head builds the Core ChasterService (WPF options, SecretChasterTokenStore; a sandbox reaches only a loopback CCP_CHASTER_API_URL, fail closed otherwise; consent and site links obey it). Rail padlock (ChasterRailChip) opens a read-only tab: account chip, live lock clock, ends line, pills, lock pick, loopback PKCE link, facts, mood line.
 - Evidence: ChasterTabLiveTests (fail-proven, real pointer click); live against a loopback fake, 0 binding errors. Rows missing->stub. Review: ACCEPT.
+
+## avalonia-port/chaster-tab-2: +607
+- Chaster slice 2: Unlink as WPF (confirm, revoke, SecretStore token cleared), the Run-the-tab switch with the one-time consent
+  card, Pause; StartSettle at startup (sandbox loopback-only; outside a sandbox only when on + linked + not paused, as WPF) and the
+  hooks this head can raise (quests, dailies board, level-ups; attach-once with a detach); rail chip hover peek and ring-coloured
+  glow.
+- Evidence: ChasterTab2Tests (4, fail-proven x7); live against a loopback fake (consent, pause, unlink + revoke, 0 binding errors).
+  Rows stay stub (FX, peek spring/idle/pulse, program/escape hooks). Review: ACCEPT + P3 fixed.
