@@ -39,6 +39,7 @@ public class AutonomySchedulerTests : IDisposable
         s.AutonomyConsentGiven = d.AutonomyConsentGiven;
         s.AutonomyRandomTriggerEnabled = d.AutonomyRandomTriggerEnabled;
         s.AutonomyIdleTriggerEnabled = false;
+        s.AutonomyIdleTimeoutMinutes = d.AutonomyIdleTimeoutMinutes;
         s.AutonomyTimeAwareEnabled = false;
         s.AutonomyRandomIntervalSeconds = d.AutonomyRandomIntervalSeconds;
         s.AutonomyCooldownSeconds = d.AutonomyCooldownSeconds;
@@ -123,9 +124,56 @@ public class AutonomySchedulerTests : IDisposable
         Assert.NotNull(said);
         Assert.Empty(_performed);   // 2 s announce delay
         s.Stop();                   // panic / Stop
+        Advance(s, 1);
+        Assert.False(s.IsEnabled);
+        // Re-armed inside the 2 s window: the old takeover's queued action must still be dropped (#1153).
+        CoreSettings.Current.AutonomyAnnouncementChance = 0;
+        Assert.True(s.Start(withTimer: false));
         Advance(s, 5);
         Assert.Empty(_performed);
-        Assert.False(s.IsEnabled);
+    }
+
+    /// <summary>A Random whose rolls are fixed, so the weighted pick is exact.</summary>
+    private sealed class FixedRoll : Random
+    {
+        private readonly int _roll;
+        public FixedRoll(int roll) => _roll = roll;
+        public override int Next(int maxValue) => _roll;
+    }
+
+    [Theory]
+    // Gentle: Video 15*0.5 = 7, Comment 20*1.5 = 30.
+    [InlineData(AutonomyMood.Gentle, 5, 6, AutonomyActionType.Video)]
+    [InlineData(AutonomyMood.Gentle, 5, 7, AutonomyActionType.Comment)]
+    // Attentive, intensity 10: Video 15*(1+0.5) = 22, Comment 20.
+    [InlineData(AutonomyMood.Attentive, 10, 21, AutonomyActionType.Video)]
+    [InlineData(AutonomyMood.Attentive, 10, 22, AutonomyActionType.Comment)]
+    // Mischievous, intensity 1: Video 15*1.5 = 22, then *(1-0.4) = 13.
+    [InlineData(AutonomyMood.Mischievous, 1, 12, AutonomyActionType.Video)]
+    [InlineData(AutonomyMood.Mischievous, 1, 13, AutonomyActionType.Comment)]
+    public void WeightedPickFollowsMoodAndIntensity(AutonomyMood mood, int intensity, int roll, AutonomyActionType expected)
+    {
+        var candidates = new List<(AutonomyActionType, int)> { (AutonomyActionType.Video, 15), (AutonomyActionType.Comment, 20) };
+        Assert.Equal(expected, AutonomyScheduler.Pick(candidates, mood, intensity, new FixedRoll(roll)));
+    }
+
+    [Fact]
+    public void IdleTriggerFiresAfterTheTimeoutAndActivityResetsIt()
+    {
+        var st = CoreSettings.Current;
+        st.AutonomyRandomTriggerEnabled = false;
+        st.AutonomyIdleTriggerEnabled = true;
+        st.AutonomyIdleTimeoutMinutes = 1;
+        var s = Make();
+        s.Start(withTimer: false);
+        Advance(s, 50);
+        s.ReportUserActivity();
+        Advance(s, 59);
+        Assert.Empty(_performed);   // 109 s since start, 59 s since activity
+        Advance(s, 1);
+        Assert.Single(_performed);
+        Advance(s, 60);             // the idle timer repeats like WPF's DispatcherTimer
+        Assert.Equal(2, _performed.Count);
     }
 
     [Fact]

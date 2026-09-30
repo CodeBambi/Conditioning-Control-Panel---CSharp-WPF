@@ -243,7 +243,6 @@ namespace ConditioningControlPanel.Services
             if (_enabled || !CanStart(CoreSettings.Current)) return _enabled;
             _enabled = true;
             _lastAction = DateTime.MinValue;
-            _pending = null;
             RefreshIdleTimer();
             RefreshRandomTimer();
             if (withTimer) _timer = new Timer(_ => CoreDispatch.Post(Tick), null, 1000, 1000);
@@ -258,7 +257,7 @@ namespace ConditioningControlPanel.Services
             var was = _enabled;
             _enabled = false;
             _generation++;
-            _pending = null;
+            // The queued action is not cleared here: the generation drops it (#1153), as WPF.
             _timer?.Dispose();
             _timer = null;
             _nextRandom = _nextIdle = DateTime.MaxValue;

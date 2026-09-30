@@ -117,7 +117,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal bool SetAutonomyEnabled(bool on)
         {
             var s = CoreSettings.Current;
-            if (!on && Autonomy.IsEnabled && RefuseStopUnderLockdown()) return true;
+            // WPF MainWindow.Autonomy.cs:43-51: the message only - no Stop tripwire for Takeover.
+            if (!on && Autonomy.IsEnabled && LockdownActive)
+            {
+                Log.Information("Lockdown: Takeover stop refused");
+                _ = MessageDialog.ShowAsync(this, ConditioningControlPanel.Localization.Loc.Get("title_lockdown"),
+                    ConditioningControlPanel.Localization.Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"));
+                return true;
+            }
 
             s.AutonomyModeEnabled = on;
             CoreSettings.Save();

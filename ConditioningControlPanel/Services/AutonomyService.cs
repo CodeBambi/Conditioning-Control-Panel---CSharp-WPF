@@ -910,7 +910,12 @@ namespace ConditioningControlPanel.Services
             var webVideoOk = App.BrowserMedia?.ShouldDeferNewVideo != true
                              && App.Video?.IsPlaying != true
                              && !Fyp.FypHostService.IsActive;
-            var mantraOk = settings.AutonomyCanTriggerVoiceCommand   // keeps WPF's short-circuit
+            // Same short-circuit order as before the move: no speech probe (Vosk load) without mic
+            // consent, or while the user drives the mic by wake word / push-to-talk.
+            var mantraOk = settings.AutonomyCanTriggerVoiceCommand
+                           && settings.MicConsentGiven
+                           && !settings.SpeechWakeWordEnabled
+                           && !settings.SpeechPushToTalkEnabled
                            && App.Speech?.IsAvailable == true
                            && App.Speech?.IsListening != true
                            && !_voiceBusy

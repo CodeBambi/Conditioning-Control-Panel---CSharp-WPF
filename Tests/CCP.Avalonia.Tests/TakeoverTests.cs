@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
+using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
@@ -36,6 +37,7 @@ public sealed class TakeoverTests
             var shell = new MainShellWindow();
             shell.Show();
             Border Pill() => shell.GetVisualDescendants().OfType<Border>().First(b => b.Name == "TakeoverActivePill");
+            string? Text(string name) => shell.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == name).Text;
             LockdownService? ld = null;
             try
             {
@@ -53,7 +55,10 @@ public sealed class TakeoverTests
                 // Lockdown: neither the switch nor the panic key stops a running Takeover.
                 ld = LockdownService.Current = new LockdownService();
                 ld.Activate(TimeSpan.FromMinutes(30));
+                var escapes = 0;
+                ld.EscapeAttempted += _ => escapes++;
                 Assert.True(shell.SetAutonomyEnabled(false));
+                Assert.Equal(0, escapes);   // WPF #514: the message only, no Stop tripwire
                 shell.HandlePanicKeyPress(new DateTime(2026, 1, 1, 12, 0, 0));
                 Assert.True(shell.Autonomy.IsEnabled);
                 Assert.True(s.AutonomyModeEnabled);
@@ -65,6 +70,9 @@ public sealed class TakeoverTests
                 Assert.False(shell.Autonomy.IsEnabled);
                 Assert.True(s.AutonomyModeEnabled);
                 Assert.False(Pill().IsVisible);
+                // The tab shows her stopped, too.
+                Assert.Equal("○ DORMANT", Text("TxtTakeoverStatus"));
+
             }
             finally
             {
