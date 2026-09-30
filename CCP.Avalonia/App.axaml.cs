@@ -254,6 +254,12 @@ namespace ConditioningControlPanel.Avalonia
                 CoreBouncingText.StopAction = Views.Overlays.BouncingTextOverlay.Stop;
                 CoreBouncingText.RefreshAction = Views.Overlays.BouncingTextOverlay.Refresh;
                 CoreBouncingText.RestartAction = Views.Overlays.BouncingTextOverlay.Restart;
+                CoreBubbles.StartAction = () =>
+                {
+                    if (desktop.MainWindow is { } host) Views.Overlays.BubbleOverlay.Start(host);
+                };
+                CoreBubbles.StopAction = Views.Overlays.BubbleOverlay.Stop;
+                CoreBubbles.RefreshFrequencyAction = Views.Overlays.BubbleOverlay.RefreshFrequency;
 
                 // Core cannot read the running build's version - the entry assembly is whichever
                 // head started the process, and Core is not it. Reading the version is a head job,

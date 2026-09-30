@@ -1089,64 +1089,21 @@ public class BubbleService : IDisposable
         _ = App.Haptics?.BubblePopAsync();
     }
 
-    /// <summary>Daily ceiling on ambient-pop XP. Lucky rolls draw from the same bucket.</summary>
-    public const int AmbientBubbleDailyXpCap = 300;
+    /// <summary>Daily ceiling on ambient-pop XP. Lucky rolls draw from the same bucket.
+    /// The bucket itself is Core <see cref="AmbientBubbleXp"/>, shared with every head.</summary>
+    public const int AmbientBubbleDailyXpCap = AmbientBubbleXp.DailyXpCap;
 
     /// <summary>Raised (UI thread, from the pop path) whenever the ambient-bubble XP bucket moves,
     /// so surfaces showing "N/300 today" can refresh. #1019/#1026.</summary>
     public static event Action? AmbientXpBudgetChanged;
 
-    /// <summary>
-    /// XP already paid out of today's ambient-bubble bucket, 0..<see cref="AmbientBubbleDailyXpCap"/>.
-    /// READ-ONLY: applies the same lazy day rollover as the pop path in reasoning only — a stale day
-    /// key reads as 0 without mutating settings, so merely opening a tooltip never spends or resets
-    /// anything. #1019/#1026.
-    /// </summary>
-    public static int AmbientBubbleXpPaidToday()
-    {
-        try
-        {
-            var settings = App.Settings?.Current;
-            if (settings == null) return 0;
-            var today = DateTime.Now.ToString("yyyy-MM-dd");
-            if (!string.Equals(settings.AmbientBubbleXpDayKey, today, StringComparison.Ordinal)) return 0;
-            return Math.Clamp(settings.AmbientBubbleXpPaidToday, 0, AmbientBubbleDailyXpCap);
-        }
-        catch { return 0; }
-    }
+    /// <summary>XP already paid out of today's bucket (read-only; a stale day reads as 0). #1019/#1026.</summary>
+    public static int AmbientBubbleXpPaidToday() => AmbientBubbleXp.PaidToday(App.Settings?.Current);
 
     /// <summary>XP still payable from today's ambient-bubble bucket.</summary>
-    public static int AmbientBubbleXpRemainingToday()
-        => Math.Max(0, AmbientBubbleDailyXpCap - AmbientBubbleXpPaidToday());
+    public static int AmbientBubbleXpRemainingToday() => AmbientBubbleXp.RemainingToday(App.Settings?.Current);
 
-    /// <summary>
-    /// Draw <paramref name="earnedXp"/> from today's ambient-bubble bucket and return what the
-    /// bucket can actually pay (a lucky roll near the ceiling pays the remainder, not nothing).
-    /// The {dayKey, xpPaid} pair persists in AppSettings with LAZY rollover: nothing runs at
-    /// midnight, the first pop of a new local day resets the pair. Deliberately no Save() here —
-    /// a per-pop disk write would be the expensive half of a 5 XP grant; the counter rides out
-    /// with the next regular settings save, same as the XP it meters.
-    /// </summary>
-    private static int TakeFromAmbientBubbleBucket(int earnedXp)
-    {
-        var settings = App.Settings?.Current;
-        if (settings == null) return earnedXp;
-
-        var today = DateTime.Now.ToString("yyyy-MM-dd");
-        if (!string.Equals(settings.AmbientBubbleXpDayKey, today, StringComparison.Ordinal))
-        {
-            settings.AmbientBubbleXpDayKey = today;
-            settings.AmbientBubbleXpPaidToday = 0;
-        }
-
-        var paidSoFar = Math.Max(0, settings.AmbientBubbleXpPaidToday);   // hand-edited negatives read as 0
-        var remaining = AmbientBubbleDailyXpCap - paidSoFar;
-        if (remaining <= 0) return 0;
-
-        var pay = Math.Min(earnedXp, remaining);
-        settings.AmbientBubbleXpPaidToday = paidSoFar + pay;
-        return pay;
-    }
+    private static int TakeFromAmbientBubbleBucket(int earnedXp) => AmbientBubbleXp.Take(App.Settings?.Current, earnedXp);
 
     // ======================= Trigger Bubbles =======================
     // Opt-in: a configurable share of ambient bubbles spawn as Chaos effect bubbles that fire

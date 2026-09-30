@@ -156,6 +156,41 @@ internal static class X11Overlay
         }
     }
 
+    private static IntPtr _rectBuf;   // grown, never freed: one per process, reused every frame
+    private static int _rectCap;
+
+    /// <summary>Several input rects (window-relative px); count 0 = fully click-through. Allocation-
+    /// free after the first call at a given size, so a per-frame caller (the bubble field) costs
+    /// one XFixes request, not garbage.</summary>
+    internal static bool SetInputRects(TopLevel window, PixelRect[] rects, int count)
+    {
+        if (TryGet(window, OverlayBackend.Win32, out var hwnd)) return Win32Overlay.SetInputRects(window, hwnd, rects, count);
+        if (!TryGetXid(window, out var xid)) return false;
+        lock (Gate)
+        {
+            if (!EnsureDisplay()) return false;
+            if (count > _rectCap)
+            {
+                if (_rectBuf != IntPtr.Zero) Marshal.FreeHGlobal(_rectBuf);
+                _rectCap = Math.Max(count, 64);
+                _rectBuf = Marshal.AllocHGlobal(_rectCap * 8);
+            }
+            for (var i = 0; i < count; i++)
+            {
+                var r = rects[i];
+                Marshal.WriteInt16(_rectBuf, i * 8, (short)r.X);
+                Marshal.WriteInt16(_rectBuf, i * 8 + 2, (short)r.Y);
+                Marshal.WriteInt16(_rectBuf, i * 8 + 4, (short)(ushort)Math.Max(0, r.Width));
+                Marshal.WriteInt16(_rectBuf, i * 8 + 6, (short)(ushort)Math.Max(0, r.Height));
+            }
+            var region = XFixesCreateRegion(_display, count > 0 ? _rectBuf : IntPtr.Zero, count);
+            XFixesSetWindowShapeRegion(_display, xid, ShapeInput, 0, 0, region);
+            XFixesDestroyRegion(_display, region);
+            XFlush(_display);
+            return true;
+        }
+    }
+
     /// <summary>Takes <paramref name="window"/> out of the window manager's hands: no frame, no
     /// focus, no taskbar entry, no WM layer policy - the X11 form of a Win32 tool/topmost overlay.
     ///
