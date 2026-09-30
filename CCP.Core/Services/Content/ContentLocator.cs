@@ -197,8 +197,10 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private static string Normalize(string rel) =>
-            rel.Replace('/', Path.DirectorySeparatorChar)
+        // Callers spell paths the Windows way (Resources\Audio\...); off Windows '\' is a file-name
+        // character, so both separators fold to the platform's (a no-op on Windows).
+        internal static string Normalize(string rel) =>
+            rel.Replace('\\', '/').Replace('/', Path.DirectorySeparatorChar)
                .Trim()
                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 

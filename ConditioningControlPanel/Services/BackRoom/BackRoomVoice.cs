@@ -41,12 +41,8 @@ namespace ConditioningControlPanel.Services.BackRoom;
 internal sealed class BackRoomVoice : IBackRoomVoice
 {
     /// <summary>Bundled preset clips, next to the manifest that names them.</summary>
-    internal const string WordsFolder = @"Resources\Audio\backroom\words";
-    internal const string ManifestName = "words.json";
-
-    /// <summary>A manifest may only name a plain file inside its own folder.</summary>
-    private static readonly Regex SafeFileName = new("^[a-z0-9][a-z0-9_.-]{0,63}$", RegexOptions.CultureInvariant);
-    private static readonly Regex NotWord = new(@"[^\p{L}\p{N}]+", RegexOptions.CultureInvariant);
+    internal const string WordsFolder = SubliminalWhisper.WordsFolder;
+    internal const string ManifestName = SubliminalWhisper.ManifestName;
 
     /// <summary>Longer than any word the deal can hold; a pasted paragraph is never looked up.</summary>
     internal const int MaxTextLength = 200;
@@ -87,9 +83,7 @@ internal sealed class BackRoomVoice : IBackRoomVoice
 
     /// <summary>The phrase as the manifest and the clip lookup see it: lower case, punctuation
     /// stripped, runs of anything else collapsed to one space. "Let Go!" and "let  go" are one word.</summary>
-    internal static string Normalize(string? text)
-        => string.IsNullOrWhiteSpace(text) ? string.Empty
-           : NotWord.Replace(text.Trim().ToLowerInvariant(), " ").Trim();
+    internal static string Normalize(string? text) => SubliminalWhisper.Normalize(text);
 
     /// <summary>The preset clip's file stem: the normalised phrase with spaces as hyphens
     /// ("Let Go!" -&gt; <c>let-go</c>, so the file is <c>let-go.mp3</c>).</summary>
@@ -204,67 +198,13 @@ internal sealed class BackRoomVoice : IBackRoomVoice
 
     // ============================ 2. the bundled preset clip ============================
 
-    private static readonly object ManifestGate = new();
-    private static Dictionary<string, string>? _manifest;
-    private static DateTime _manifestAt;
-
-    /// <summary>The words folder inside the install (and inside any content pack that mirrors it).</summary>
-    internal static string WordsRoot() => ContentLocator.ResolveDirectory(WordsFolder);
-
-    /// <summary><c>words.json</c> as normalised phrase -&gt; file name, both validated. An unreadable or
-    /// absent manifest is an empty map, never a throw. Re-read at most once a minute, so the owner can
-    /// drop clips in without a restart.</summary>
-    internal static IReadOnlyDictionary<string, string> Manifest()
-    {
-        lock (ManifestGate)
-        {
-            if (_manifest != null && DateTime.UtcNow - _manifestAt < TimeSpan.FromMinutes(1)) return _manifest;
-            _manifestAt = DateTime.UtcNow;
-            _manifest = ReadManifest(Path.Combine(WordsRoot(), ManifestName));
-            return _manifest;
-        }
-    }
-
-    /// <summary>Parse one manifest file. <c>{ "version": 1, "words": { "let go": "let-go.mp3" } }</c>.
-    /// Keys are normalised on the way in, so the file may spell a phrase however it likes; a value that
-    /// is not a plain file name inside the folder is dropped.</summary>
-    internal static Dictionary<string, string> ReadManifest(string file)
-    {
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        try
-        {
-            if (!File.Exists(file)) return map;
-            var words = JObject.Parse(File.ReadAllText(file))["words"] as JObject;
-            if (words == null) return map;
-            foreach (var row in words.Properties())
-            {
-                var key = Normalize(row.Name);
-                var name = (row.Value as JValue)?.Value as string;
-                if (key.Length == 0 || string.IsNullOrWhiteSpace(name)) continue;
-                name = name.Trim();
-                if (!SafeFileName.IsMatch(name.ToLowerInvariant()) || name.Contains("..", StringComparison.Ordinal)) continue;
-                map[key] = name;
-            }
-        }
-        catch (Exception ex) { App.Logger?.Debug("BackRoomVoice: words.json unreadable ({Type})", ex.GetType().Name); }
-        return map;
-    }
-
-    /// <summary>The recorded neutral (Circe) clip for a phrase, or null. The main app's
-    /// subliminals and triggers use it for mods that may not borrow the Bambi clips (CCP Default,
-    /// Locked), so those mods speak with a real voice instead of staying silent.</summary>
-    public static string? FindNeutralClip(string? phrase)
-    {
-        var key = Normalize(phrase);
-        return key.Length == 0 ? null : FindPresetClip(key);
-    }
-
-    private static string? FindPresetClip(string key)
-    {
-        if (!Manifest().TryGetValue(key, out var name)) return null;
-        var path = Path.Combine(WordsRoot(), name);
-        return File.Exists(path) ? path : null;
-    }
+    // The manifest, its cache and the neutral lookup live in Core (SubliminalWhisper) so every head
+    // resolves the same clip; these stay as the names this class and its suite already use.
+    internal static string WordsRoot() => SubliminalWhisper.WordsRoot();
+    internal static IReadOnlyDictionary<string, string> Manifest() => SubliminalWhisper.Manifest();
+    internal static Dictionary<string, string> ReadManifest(string file) => SubliminalWhisper.ReadManifest(file);
+    public static string? FindNeutralClip(string? phrase) => SubliminalWhisper.FindNeutralClip(phrase);
+    private static string? FindPresetClip(string key) => SubliminalWhisper.FindPresetClip(key);
 
     // ============================ 3. the render cache ============================
 

@@ -272,17 +272,17 @@ namespace ConditioningControlPanel.Services
                 PlayWhisperAudio(audioPath);
                 
                 // Haptic triggers 250ms before visual appears
-                Task.Delay(50).ContinueWith(_ =>
+                Task.Delay(SubliminalWhisper.HapticLeadMs).ContinueWith(_ =>
                 {
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(text);
-                    Task.Delay(250).ContinueWith(__ =>
+                    Task.Delay(SubliminalWhisper.VisualAfterHapticMs).ContinueWith(__ =>
                     {
                         DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text));
                     });
                 });
 
                 // If "Bambi Freeze" was played, follow up with "Bambi Reset"
-                if (text.Equals("Bambi Freeze", StringComparison.OrdinalIgnoreCase))
+                if (SubliminalWhisper.IsFreezePhrase(text))
                 {
                     ScheduleBambiReset();
                 }
@@ -347,10 +347,10 @@ namespace ConditioningControlPanel.Services
                 PlayWhisperAudio(audioPath);
 
                 // Haptic triggers 250ms before visual appears
-                Task.Delay(50).ContinueWith(_ =>
+                Task.Delay(SubliminalWhisper.HapticLeadMs).ContinueWith(_ =>
                 {
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(text);
-                    Task.Delay(250).ContinueWith(__ =>
+                    Task.Delay(SubliminalWhisper.VisualAfterHapticMs).ContinueWith(__ =>
                     {
                         DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text));
                     });
@@ -389,14 +389,14 @@ namespace ConditioningControlPanel.Services
             }
 
             // 90% chance to trigger reset
-            if (_random.NextDouble() > 0.90)
+            if (!SubliminalWhisper.ResetFollows(_random.NextDouble()))
             {
                 App.Logger?.Debug("Bambi Reset skipped (10% chance roll)");
                 return;
             }
 
             // Trigger reset after a short delay (1-2 seconds after video ends)
-            var delay = _random.Next(1000, 2000);
+            var delay = SubliminalWhisper.DeferredResetDelayMs(_random);
             Task.Delay(delay).ContinueWith(_ =>
             {
                 DispatcherHelper.RunOnUI(() => PlayBambiReset());
@@ -409,14 +409,14 @@ namespace ConditioningControlPanel.Services
         private void ScheduleBambiReset()
         {
             // 90% chance to trigger reset
-            if (_random.NextDouble() > 0.90)
+            if (!SubliminalWhisper.ResetFollows(_random.NextDouble()))
             {
                 App.Logger?.Debug("Bambi Reset skipped (10% chance roll)");
                 return;
             }
 
             // Wait 4-8 seconds then show Bambi Reset (longer delay than before)
-            var delay = _random.Next(4000, 8000);
+            var delay = SubliminalWhisper.ResetDelayMs(_random);
             Task.Delay(delay).ContinueWith(_ =>
             {
                 DispatcherHelper.RunOnUI(() => PlayBambiReset());
@@ -437,10 +437,10 @@ namespace ConditioningControlPanel.Services
                     App.Audio?.Duck(App.Settings.Current.DuckingLevel);
                 PlayWhisperAudio(resetAudio);
                 // Haptic triggers 250ms before visual appears
-                Task.Delay(50).ContinueWith(_ =>
+                Task.Delay(SubliminalWhisper.HapticLeadMs).ContinueWith(_ =>
                 {
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(resetText);
-                    Task.Delay(250).ContinueWith(__ =>
+                    Task.Delay(SubliminalWhisper.VisualAfterHapticMs).ContinueWith(__ =>
                     {
                         DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(resetText));
                     });
@@ -477,103 +477,33 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private string? FindLinkedAudio(string text)
+        // Lookup order, name variants and the neutral fallback are Core's (SubliminalWhisper);
+        // this head keeps only its 60 s directory-listing cache for the case-insensitive pass.
+        private string? FindLinkedAudio(string text) =>
+            SubliminalWhisper.FindLinkedAudio(text, SubliminalWhisper.ModAudioDir(App.Mods?.ActiveMod?.InstalledPath),
+                _audioPath, App.Mods?.ActiveModId, ListAudioFiles);
+
+        private string[]? ListAudioFiles(string directory, bool isModCache)
         {
-            var cleanText = text.Trim();
-            var extensions = new[] { ".mp3", ".wav", ".ogg", ".MP3", ".WAV", ".OGG" };
-
-            // Try various case combinations
-            var textVariants = new[]
+            if (!Directory.Exists(directory)) return null;
+            if (isModCache)
             {
-                cleanText,                          // As-is
-                cleanText.ToUpper(),                // UPPERCASE
-                cleanText.ToLower(),                // lowercase
-                cleanText.Replace("\u2019", "'"),    // Normalize curly apostrophe to straight
-                cleanText.Replace("'", "\u2019"),    // Normalize straight apostrophe to curly
-                cleanText.ToUpper().Replace("\u2019", "'"),
-            };
-
-            // Check active mod's audio directory first
-            var modAudioPath = GetModAudioPath();
-            if (modAudioPath != null)
-            {
-                var result = SearchAudioDirectory(modAudioPath, cleanText, textVariants, extensions, isModCache: true);
-                if (result != null) return result;
-            }
-
-            // Fall back to default sub_audio directory - Bambi-voiced, so never for CCP Default.
-            // Those mods get the recorded neutral clips instead (Resources/Audio/backroom/words).
-            if (!ModAudioPolicy.UsesSharedSubAudio(App.Mods?.ActiveModId))
-                return BackRoom.BackRoomVoice.FindNeutralClip(text);
-            return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
-        }
-
-        private string? GetModAudioPath()
-        {
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
-            if (modPath == null) return null;
-
-            var modAudioDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
-            return Directory.Exists(modAudioDir) ? modAudioDir : null;
-        }
-
-        private string? SearchAudioDirectory(string directory, string cleanText, string[] textVariants, string[] extensions, bool isModCache)
-        {
-            // Try exact filename match with case variants
-            foreach (var textVar in textVariants)
-            {
-                foreach (var ext in extensions)
+                var currentModId = App.Mods?.ActiveMod?.Id;
+                if (_modAudioFilesCache == null || _modAudioCacheModId != currentModId ||
+                    (DateTime.UtcNow - _modAudioFilesCacheTime).TotalSeconds > 60)
                 {
-                    var path = Path.Combine(directory, textVar + ext);
-                    if (File.Exists(path)) return path;
+                    _modAudioFilesCache = Directory.GetFiles(directory);
+                    _modAudioFilesCacheTime = DateTime.UtcNow;
+                    _modAudioCacheModId = currentModId;
                 }
+                return _modAudioFilesCache;
             }
-
-            // Fallback: case-insensitive directory search (cached to avoid per-subliminal disk scan)
-            try
+            if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
             {
-                if (Directory.Exists(directory))
-                {
-                    string[]? files;
-                    if (isModCache)
-                    {
-                        var currentModId = App.Mods?.ActiveMod?.Id;
-                        if (_modAudioFilesCache == null || _modAudioCacheModId != currentModId ||
-                            (DateTime.UtcNow - _modAudioFilesCacheTime).TotalSeconds > 60)
-                        {
-                            _modAudioFilesCache = Directory.GetFiles(directory);
-                            _modAudioFilesCacheTime = DateTime.UtcNow;
-                            _modAudioCacheModId = currentModId;
-                        }
-                        files = _modAudioFilesCache;
-                    }
-                    else
-                    {
-                        if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
-                        {
-                            _audioFilesCache = Directory.GetFiles(directory);
-                            _audioFilesCacheTime = DateTime.UtcNow;
-                        }
-                        files = _audioFilesCache;
-                    }
-
-                    var normalizedText = cleanText.ToUpperInvariant().Replace("\u2019", "'");
-                    foreach (var file in files)
-                    {
-                        var fileName = Path.GetFileNameWithoutExtension(file).ToUpperInvariant().Replace("\u2019", "'");
-                        if (fileName == normalizedText)
-                        {
-                            return file;
-                        }
-                    }
-                }
+                _audioFilesCache = Directory.GetFiles(directory);
+                _audioFilesCacheTime = DateTime.UtcNow;
             }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Error searching audio directory {Dir}: {Error}", directory, ex.Message);
-            }
-
-            return null;
+            return _audioFilesCache;
         }
 
         private void PlayWhisperAudio(string path)
@@ -583,9 +513,7 @@ namespace ConditioningControlPanel.Services
                 StopAudio();
 
                 // Apply volume with curve, including master volume
-                var masterVol = App.Settings.Current.MasterVolume / 100.0f;
-                var subVol = App.Settings.Current.SubAudioVolume / 100.0f;
-                var curvedVol = (float)Math.Pow(subVol * masterVol, 1.5);
+                var curvedVol = SubliminalWhisper.Volume(App.Settings.Current.MasterVolume, App.Settings.Current.SubAudioVolume);
 
                 // Capture duck generation so stale callbacks after ForceUnduck are ignored
                 var duckGen = App.Audio?.DuckGeneration ?? -1;
@@ -604,7 +532,7 @@ namespace ConditioningControlPanel.Services
                     onFinished: () =>
                     {
                         // Unduck after playback + small delay
-                        Task.Delay(500).ContinueWith(_ =>
+                        Task.Delay(SubliminalWhisper.UnduckDelayMs).ContinueWith(_ =>
                         {
                             try { App.Audio?.Unduck(duckGen); }
                             catch (Exception ex) { App.Logger?.Debug("Unduck failed after whisper: {Error}", ex.Message); }

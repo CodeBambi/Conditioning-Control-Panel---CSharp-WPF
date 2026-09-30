@@ -69,6 +69,18 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Subliminal whispers (SubliminalWhisper.FindLinkedAudio): the shared Bambi clips and the
+         neutral voice's words.json + clips, at the WPF head's logical paths. -->
+    <Content Include="..\Assets\sub_audio\**\*" Link="Resources\sub_audio\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <Content Include="..\Assets\Audio\backroom\words\**\*" Link="Resources\Audio\backroom\words\%(RecursiveDir)%(Filename)%(Extension)" Exclude="..\Assets\Audio\**\README.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
   </ItemGroup>
 
   <!-- Keincheck: an MCP server inside the running app so an AI agent can inspect and drive the

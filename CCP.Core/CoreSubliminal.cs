@@ -54,6 +54,20 @@ namespace ConditioningControlPanel
         /// </summary>
         public static volatile Action<bool>? RunStateChanged;
 
+        /// <summary>
+        /// Play the Bambi Freeze trigger (WPF <c>SubliminalService.TriggerBambiFreeze</c>): the mod's
+        /// Freeze text with its whisper, ducking and haptic, then usually a Reset. Fires even with
+        /// subliminals off - it is a special trigger. Null when the head has no surface for it.
+        /// </summary>
+        public static volatile Action? BambiFreezeProvider;
+
+        /// <summary>Fire <see cref="BambiFreezeProvider"/>; a throwing head never takes the caller down.</summary>
+        public static void TriggerBambiFreeze()
+        {
+            try { BambiFreezeProvider?.Invoke(); }
+            catch (Exception ex) { Log.Debug("BambiFreeze: {E}", ex.Message); }
+        }
+
         private static readonly object Gate = new();
         private static readonly Random Rng = new();
         private static Timer? _timer;

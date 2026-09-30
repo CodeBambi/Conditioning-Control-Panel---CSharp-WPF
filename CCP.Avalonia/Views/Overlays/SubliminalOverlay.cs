@@ -24,8 +24,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// <para>A new card replaces the one on screen (WPF reuses one keep-alive window per screen,
     /// and SubliminalLayer draws the most recent card only).</para>
     ///
-    /// <para>ponytail: not here yet - whisper audio + ducking (SubAudioAudible), the haptic
-    /// anticipation delay, XP, the Bambi Freeze/Reset pair, SubliminalStealsFocus (always
+    /// <para>Whisper audio, ducking, XP and the Bambi Freeze/Reset pair: <see cref="SubliminalWhisperShow"/>.
+    /// ponytail: not here yet - the haptic anticipation delay, SubliminalStealsFocus (always
     /// no-activate here), the solid-mode shared host (same look, separate windows here).</para>
     /// </summary>
     internal static class SubliminalOverlay

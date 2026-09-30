@@ -983,3 +983,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   run, Chaster "video" note, Trainer -25 XP (CompanionPerks moved to Core).
 - Evidence: scheduler + overlay + shell panic tests, fail-proven; live grace pause/resume/auto-resume, stuck prompt, panic stop, max
   length. Rows stay stub (UI-freeze watchdog, pack clips, min-duration filter, interaction queue). Review: FIX -> fixed.
+
+## avalonia-port/bambi-freeze: +578
+- Bambi Freeze lead-in (WPF BubbleCountService.cs:353) and subliminal whisper audio on Avalonia: Core SubliminalWhisper (90% reset
+  roll, 4-8 s / 1-2 s gaps, 50+250 ms whisper-to-card, 500 ms unduck, (sub x master)^1.5 volume, clip lookup mod -> shared ->
+  neutral), WPF SubliminalService/BackRoomVoice delegate; ContentLocator folds backslashes off Windows (fixes Windows-style
+  paths on Linux).
+- Evidence: Core + Avalonia tests (Windows-safe path asserts), fail-proven; live whisper at 40%, freeze card on 3 screens,
+  game at +0.8 s, reset at +5.2 s. Rows stay stub (freeze haptic; subliminal StealsFocus, shared host, whisper stop). Review: FIX -> fixed.

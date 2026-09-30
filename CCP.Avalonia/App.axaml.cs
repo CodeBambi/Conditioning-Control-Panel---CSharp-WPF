@@ -249,10 +249,9 @@ namespace ConditioningControlPanel.Avalonia
 
                 // Subliminal and bouncing-text surfaces. Core owns the schedule / the motion;
                 // these draw on click-through overlays (Views/Overlays), hosted like the flash.
-                CoreSubliminal.ShowProvider = text =>
-                {
-                    if (desktop.MainWindow is { } host) Views.Overlays.SubliminalOverlay.Show(host, text);
-                };
+                // SubliminalWhisperShow plays the linked whisper first, then draws SubliminalOverlay.
+                CoreSubliminal.ShowProvider = Views.Overlays.SubliminalWhisperShow.Phrase;
+                CoreSubliminal.BambiFreezeProvider = Views.Overlays.SubliminalWhisperShow.Freeze;
                 CoreSubliminal.RunStateChanged = running =>
                 {
                     if (!running) global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Overlays.SubliminalOverlay.CloseAll);

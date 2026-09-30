@@ -27,8 +27,9 @@ namespace ConditioningControlPanel.Services
     /// the schedule (ScheduleNextGame :91), the trigger (TriggerGame :266), completion XP with its 3-minute
     /// cooldown and duration scaling (OnGameComplete :450, ScaleXpByDuration :442), strict retry with
     /// mercy after 3 (:476-512, RetryGame :524) and ForceCleanup (:831). WPF delegates its rules here.
-    /// ponytail: local clips only - pack clips, the For You defer, the interaction queue and the Bambi
-    /// Freeze lead-in are WPF-head services; add each when it reaches Core.
+    /// The Bambi Freeze lead-in (:353) goes through <see cref="CoreSubliminal.TriggerBambiFreeze"/>.
+    /// ponytail: local clips only - pack clips, the For You defer and the interaction queue are
+    /// WPF-head services; add each when it reaches Core.
     /// </summary>
     public sealed class BubbleCountScheduler
     {
@@ -144,6 +145,7 @@ namespace ConditioningControlPanel.Services
             IsBusy = true;
             _retryCount = 0;
             CoreBubbles.Pause();   // WPF App.Bubbles.PauseAndClear: nothing else to count
+            CoreSubliminal.TriggerBambiFreeze();   // WPF :353, before the 800 ms lead-in
             Dispose(ref _leadIn);
             _leadIn = After(LeadIn, mine =>
             {
