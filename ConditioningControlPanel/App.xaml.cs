@@ -4280,7 +4280,7 @@ namespace ConditioningControlPanel
                 // rotation touches nothing of the user's, so it is a line, not a dialog.
                 var template = Loc.Get("wb_season_line");
                 if (string.IsNullOrWhiteSpace(template) || template == "wb_season_line")
-                    template = "The monthly leaderboard rotated to season {0} while you were away. Your level, your XP and everything you unlocked carried over.";
+                    template = "The monthly board rolled over to {0} while you were away. Your level, XP and everything you unlocked stayed.";
 
                 try { return string.Format(template, current); }
                 catch (FormatException) { return template; }
