@@ -1063,3 +1063,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   tube chat routes through it while UseCompanionBrain is on (WPF ChatInput.cs:772); ask cards off until the card UI exists.
 - Evidence: TubeChatBrainTests (loopback fake, protocol 2) + ConversationDeliveryCardTests, fail-proven; live signed out: 0 requests,
   no chat text logged or stored. Row feat-companion-brain stub. Plan: ~/ccp-port/briefs/companion-brain-plan.md. Review: FIX -> fixed.
+
+## avalonia-port/voice-commands + voice-commands-safety: +974 / +162
+- She's Listening gets its consumer: WPF VoiceCommands moved to Core (git mv; WPF delegates via VoiceCommandHost). Avalonia Vosk wake
+  loop + push-to-talk over PulseMicSource only with consent + armed + entitled; Stop/revoke/lapse/shutdown close the mic and cancel any
+  command in flight (no re-prompt can reopen it); a cancelled session never starts parec. Panic aborts capture, loop stays armed; spoken
+  safe word works under Lockdown (oracle-deep). Help and "What you can say" list only runnable commands.
+- Evidence: VoiceCommandsTests (Avalonia WAV-fed + Core), SpeechEngine cancelled-token test, fail-proven; never the real mic. Rows stub.
+  Split at the 1000-line cap. Review: FIX -> fixed.
