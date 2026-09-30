@@ -108,6 +108,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             AttachModSwitch();
             HookWallRings();   // MainShellWindow.Presets.cs: wall tile rings follow the flags
             HookLevelDisplay(); // MainShellWindow.HeroFx.cs: header level/XP follow ProgressionBank
+            InitializeDescentFuse(); // MainShellWindow.DescentFuse.cs (WPF MainWindow ctor); no-op without App.DescentCountdown
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
             Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
             Closed += (_, _) => _avatarTubeWindow?.Close();

@@ -914,3 +914,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
   StakeRules and LockSnapshot/LockLookup moved to CCP.Core with git mv; ChasterClientTests (27, fake handler) now run on Linux.
   ChasterService stays in WPF (App partial + System.Windows.Point); next slice splits CreateForApp and adds a Core point type.
 - Evidence: 27 tests, fail-proven; full gate. No UI; ledger notes only. Review: ACCEPT.
+
+## avalonia-port/spiral-descent-live: +373
+- DescentCountdownService moved to Core (git mv; CoreSettings/CoreDispatch; WPF speech through a Speaker seam; phase marked before
+  speaking like WPF; no ticks after exit). Core SyncPush arms/kills it from descent_countdown (absent = kill switch, as WPF).
+  Avalonia shell: spark, T-minus tooltip, corner clock (gold at Terminal), presence per phase; at zero the Live fuse show opens
+  unless the account already answered; witnessed flag saved.
+- Evidence: DescentFuseLiveTests (5, fail-proven); live T-8m sandbox: gold corner, spark 1.25, zero opened the show, surfaces
+  cleared. Rows stay stub (chrome dim, phase lines, rail chip, stage visual, ceremony/migration). Review: ACCEPT + P3s fixed.

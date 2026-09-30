@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Http;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using Newtonsoft.Json.Linq;
 using Serilog;
@@ -48,7 +46,7 @@ namespace ConditioningControlPanel.Services.Descent
     /// A keyless install that never synced has no cached timestamp at all, so it has no countdown —
     /// and that is the correct answer, not a gap.</para>
     ///
-    /// <para><b>Threading.</b> The clock is a single <see cref="DispatcherTimer"/>, so
+    /// <para><b>Threading.</b> The clock is a single timer hopping through CoreDispatch, so
     /// <see cref="Tick"/>, <see cref="PhaseChanged"/> and <see cref="ZeroReached"/> all arrive on
     /// the UI thread and handlers may touch visuals directly. <see cref="ApplyCeremonyAt"/> is the
     /// one entry point that can be called from a background sync continuation, and it marshals with
@@ -108,7 +106,13 @@ namespace ConditioningControlPanel.Services.Descent
         private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
         private readonly HashSet<DescentFusePhase> _spokenPhases = new();
 
-        private DispatcherTimer? _timer;
+        // Threading.Timer, not DispatcherTimer: this lives in Core, so each tick hops to the UI
+        // thread through CoreDispatch and handlers still run on it.
+        private System.Threading.Timer? _timer;
+
+        /// <summary>The companion's mouth, seeded by the head. Returns false when there is nowhere
+        /// to say the line yet (no avatar window), so the phase is not marked spoken.</summary>
+        public Func<string, bool>? Speaker { get; set; }
         private bool _started;
         private bool _disposed;
         private bool _zeroRaised;
@@ -161,7 +165,7 @@ namespace ConditioningControlPanel.Services.Descent
         /// every read: the cached string is the single source of truth, so a sync that rewrites or
         /// clears it is felt immediately by every reader without an invalidation dance.
         /// </summary>
-        public DateTime? CeremonyAtUtc => ParseCeremonyAt(App.Settings?.Current?.DescentCeremonyAtUtc);
+        public DateTime? CeremonyAtUtc => ParseCeremonyAt(CoreSettings.Current?.DescentCeremonyAtUtc);
 
         /// <summary>True when a usable timestamp is cached. The one-line "is the fuse lit" check.</summary>
         public bool IsArmed => CeremonyAtUtc.HasValue;
@@ -193,7 +197,7 @@ namespace ConditioningControlPanel.Services.Descent
         /// per six hours. Read by the chrome choke point and by nothing else.
         /// </summary>
         public int DimStep => DimStepFor(CeremonyAtUtc, DateTime.UtcNow,
-            App.Settings?.Current?.DescentMigrationCompleted ?? false);
+            CoreSettings.Current?.DescentMigrationCompleted ?? false);
 
         /// <summary>
         /// The server's presence reading, or null when it did not speak — which is the state unless
@@ -228,7 +232,7 @@ namespace ConditioningControlPanel.Services.Descent
             get
             {
                 if (!ZeroPassedWhileAway) return false;
-                var s = App.Settings?.Current;
+                var s = CoreSettings.Current;
                 if (s is null) return false;
                 if (s.DescentMigrationCompleted) return false;
                 if (s.DescentLastNightWitnessed) return false;
@@ -241,7 +245,7 @@ namespace ConditioningControlPanel.Services.Descent
         /// The audio hook's gate (<see cref="AppSettings.DescentCountdownAudio"/>). A convenience
         /// so the zero-show lane does not have to know which settings flag it is.
         /// </summary>
-        public bool AudioEnabled => App.Settings?.Current?.DescentCountdownAudio ?? true;
+        public bool AudioEnabled => CoreSettings.Current?.DescentCountdownAudio ?? true;
 
         /// <summary>
         /// MEMORY LANE — the highest phase this subject actually lived through, 0..7, read straight
@@ -253,7 +257,7 @@ namespace ConditioningControlPanel.Services.Descent
         /// the live <see cref="Phase"/>, and that is deliberate — the ratchet is a record, not a
         /// second source of truth about what is on screen right now.</para>
         /// </summary>
-        public int MaxPhaseWitnessed => App.Settings?.Current?.DescentFuseMaxPhaseWitnessed ?? 0;
+        public int MaxPhaseWitnessed => CoreSettings.Current?.DescentFuseMaxPhaseWitnessed ?? 0;
 
         // ------------------------------------------------------------------
         // Lifecycle
@@ -311,11 +315,7 @@ namespace ConditioningControlPanel.Services.Descent
 
             // CLAUDE.md async rules 6/8: this arrives on a sync continuation, and a dispatcher that
             // has begun shutting down must not be posted to.
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher is null || dispatcher.HasShutdownStarted) return;
-
-            if (dispatcher.CheckAccess()) ApplyCeremonyAtCore(isoUtc);
-            else dispatcher.BeginInvoke(new Action(() => ApplyCeremonyAtCore(isoUtc)));
+            CoreDispatch.Post(() => ApplyCeremonyAtCore(isoUtc));
         }
 
         private void ApplyCeremonyAtCore(string? isoUtc)
@@ -323,7 +323,7 @@ namespace ConditioningControlPanel.Services.Descent
             try
             {
                 if (_disposed) return;
-                var settings = App.Settings?.Current;
+                var settings = CoreSettings.Current;
                 if (settings is null) return;
 
                 var incoming = string.IsNullOrWhiteSpace(isoUtc) ? null : isoUtc.Trim();
@@ -335,7 +335,7 @@ namespace ConditioningControlPanel.Services.Descent
                 var previousAt = ParseCeremonyAt(settings.DescentCeremonyAtUtc);
                 var hadFuse = previousAt.HasValue;
                 settings.DescentCeremonyAtUtc = incoming;
-                App.Settings?.Save();
+                CoreSettings.Save();
 
                 var parsed = ParseCeremonyAt(incoming);
                 if (incoming != null && parsed is null)
@@ -399,7 +399,7 @@ namespace ConditioningControlPanel.Services.Descent
         {
             try
             {
-                _timer?.Stop();
+                _timer?.Dispose();
                 _timer = null;
                 VigilCount = null;
                 _lastConfigFetchUtc = DateTime.MinValue;
@@ -412,28 +412,23 @@ namespace ConditioningControlPanel.Services.Descent
 
         private void ArmTimer()
         {
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher is null || dispatcher.HasShutdownStarted) return;
-
             if (_timer != null) return;   // one cadence at every range: nothing to re-arm
 
-            // Normal, not Background (0825 F7): a running session's flash bursts and overlays
-            // starve Background ticks, which stutters the one-second readout and lets zero land
-            // seconds late. Normal is what the rest of the app's user-visible timers use.
-            _timer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
+            // Each tick hops to the UI thread (0825 F7: it must not queue behind Background work).
+            // Unlike a DispatcherTimer it does not die with the dispatcher, so a disposed service or a
+            // head with no UI thread drops the tick rather than running it on the pool; both heads
+            // Dispose() this on exit.
+            _timer = new System.Threading.Timer(_ =>
             {
-                Interval = TickEvery
-            };
-            _timer.Tick += OnTimerTick;
-            _timer.Start();
+                if (!_disposed && CoreDispatch.HasUiThread) CoreDispatch.Post(OnTimerTick);
+            }, null, TickEvery, TickEvery);
         }
 
-        private void OnTimerTick(object? sender, EventArgs e)
+        internal void OnTimerTick()
         {
             try
             {
                 if (_disposed) return;
-                if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
 
                 var at = CeremonyAtUtc;
                 if (at is null)
@@ -448,12 +443,12 @@ namespace ConditioningControlPanel.Services.Descent
                 var remaining = Remaining ?? TimeSpan.Zero;
 
                 // Re-align to the wall-clock second. TMinus TRUNCATES, so the digit turns over when
-                // `remaining` crosses an integer second; a fixed 1000 ms DispatcherTimer fires at >= its
+                // `remaining` crosses an integer second; a fixed 1000 ms timer fires at >= its
                 // interval and slowly slides off that boundary until a second is visibly skipped.
                 if (_timer != null && remaining > TimeSpan.Zero)
                 {
                     var ms = remaining.Milliseconds;
-                    _timer.Interval = TimeSpan.FromMilliseconds(ms <= 0 ? 1000 : ms);
+                    _timer.Change(ms <= 0 ? 1000 : ms, 1000);
                 }
 
                 // Keeps the clock armed across a re-entry that found it torn down. A no-op while the
@@ -553,9 +548,11 @@ namespace ConditioningControlPanel.Services.Descent
                 // would burn it for the whole session. Instead we bail without marking, and
                 // OnTimerTick re-offers the current phase on every tick — so the line arrives at
                 // most one tick after the companion does, and never at all if she is switched off.
-                var avatar = App.AvatarWindow;
-                if (avatar is null) return;
+                var speak = Speaker;
+                if (speak is null) return;
 
+                // Marked BEFORE speaking, as WPF did: a line that throws is not retried every tick.
+                // False means nowhere to say it (no companion yet), so it is unmarked for the retry.
                 if (!_spokenPhases.Add(phase)) return;
 
                 // The petname pass by hand. These lines are not localized, so they never pass
@@ -567,7 +564,7 @@ namespace ConditioningControlPanel.Services.Descent
 
                 // playSound:false and aiGenerated:false — scripted copy, no AI badge, and no
                 // chat-suppression window opened on the companion's side.
-                avatar.GigglePriority(line, playSound: false, aiGenerated: false);
+                if (!speak(line)) { _spokenPhases.Remove(phase); return; }
 
                 if (phase == DescentFusePhase.Terminal) _scriptedSilence = true;
             }
@@ -589,10 +586,10 @@ namespace ConditioningControlPanel.Services.Descent
         {
             try
             {
-                var s = App.Settings?.Current;
+                var s = CoreSettings.Current;
                 if (s is null || s.DescentLastNightWitnessed) return;
                 s.DescentLastNightWitnessed = true;
-                App.Settings?.Save();
+                CoreSettings.Save();
                 Log.Information("[Fuse] Last night witnessed, live. Keepsake flag set.");
             }
             catch (Exception ex) { Log.Debug("[Fuse] Could not persist the witnessed flag: {Error}", ex.Message); }
@@ -611,14 +608,14 @@ namespace ConditioningControlPanel.Services.Descent
         {
             try
             {
-                var s = App.Settings?.Current;
+                var s = CoreSettings.Current;
                 if (s is null) return;
 
                 var next = WitnessRatchet(s.DescentFuseMaxPhaseWitnessed, announced, ZeroPassedWhileAway);
                 if (next == s.DescentFuseMaxPhaseWitnessed) return;
 
                 s.DescentFuseMaxPhaseWitnessed = next;
-                App.Settings?.Save();
+                CoreSettings.Save();
                 Log.Information("[Fuse] Witnessed up to {Phase} ({Value}). The ratchet does not go back.",
                     (DescentFusePhase)next, next);
             }
@@ -630,10 +627,10 @@ namespace ConditioningControlPanel.Services.Descent
         {
             try
             {
-                var s = App.Settings?.Current;
+                var s = CoreSettings.Current;
                 if (s is null || s.DescentCatchUpCrackPlayed) return;
                 s.DescentCatchUpCrackPlayed = true;
-                App.Settings?.Save();
+                CoreSettings.Save();
                 Log.Information("[Fuse] Catch-up crack played. It will not play again.");
             }
             catch (Exception ex) { Log.Debug("[Fuse] Could not persist the catch-up flag: {Error}", ex.Message); }
@@ -666,7 +663,7 @@ namespace ConditioningControlPanel.Services.Descent
                 // THE OFFLINE FLOOR, same as DescentService.RefreshAsync and every other network
                 // path: a user who turned networking off must not see a request leave for a
                 // decorative counter, and a keyless install has nobody to count.
-                var settings = App.Settings?.Current;
+                var settings = CoreSettings.Current;
                 if (settings is null) return;
                 if (settings.OfflineMode) return;
                 if (string.IsNullOrEmpty(settings.UnifiedId)) return;
@@ -700,17 +697,13 @@ namespace ConditioningControlPanel.Services.Descent
                 }
                 if (vigil is < 0) vigil = null;
 
-                var dispatcher = Application.Current?.Dispatcher;
-                if (dispatcher is null || dispatcher.HasShutdownStarted) return;
-                // Discarded on purpose: this is a fire-and-forget UI hop inside an async method, so
-                // the DispatcherOperation would otherwise read as a forgotten await (CS4014).
-                _ = dispatcher.BeginInvoke(new Action(() =>
+                CoreDispatch.Post(() =>
                 {
                     if (_disposed) return;
                     if (VigilCount == vigil) return;
                     VigilCount = vigil;
                     // Surfaces repaint off Tick, which is at most one second away during the vigil.
-                }));
+                });
             }
             catch (Exception ex)
             {

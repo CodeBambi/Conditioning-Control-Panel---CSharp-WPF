@@ -64,6 +64,8 @@ namespace ConditioningControlPanel.Services
         }
 
         public bool Loaded { get; private set; }
+        /// <summary>The fuse fed by each successful response's <c>descent_countdown</c> block.</summary>
+        public Descent.DescentCountdownService? Countdown { get; set; }
         public DateTime? LastSyncTime { get; private set; }
 
         /// <param name="localAchievements">This install's unlocked achievement ids.</param>
@@ -198,6 +200,9 @@ namespace ConditioningControlPanel.Services
                 Log.Information("V2 Profile synced successfully ({Bytes} bytes)", json.Length);
                 try { ProfileAdopt.ApplySyncResponse(s, JObject.Parse(json), UtcNow()); }
                 catch (Exception ex) { Log.Debug("V2 Sync: Could not parse server flags: {Error}", ex.Message); }
+                // THE FUSE's cache, off the RAW body (WPF ProfileSyncService.HandleDescentCountdown).
+                if (Countdown != null && Descent.DescentCountdownService.TryReadCeremonyAt(json, out var ceremonyAt))
+                    Countdown.ApplyCeremonyAt(ceremonyAt);
                 CoreSettings.Save();
                 return true;
             }

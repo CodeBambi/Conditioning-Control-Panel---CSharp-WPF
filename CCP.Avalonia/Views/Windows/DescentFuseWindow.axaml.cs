@@ -46,9 +46,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///   <item><c>DescentShowDirector</c>
     ///   (ConditioningControlPanel/Services/Descent/DescentShowDirector.cs:156/233/406) opens the
     ///   Live, CatchUp and Ignition shows. CCP.Core/Services/Descent/ carries the SHOW — the
-    ///   timelines and the handoff this file already uses — but not the director and not
-    ///   <c>DescentCountdownService</c>, so nothing on this head knows a countdown reached zero.
-    ///   That is also what MainShellWindow.DescentFuse.cs is waiting on.</item>
+    ///   timelines and the handoff this file already uses — but not the director. The Live open
+    ///   is now MainShellWindow.DescentFuse.cs on Core <c>DescentCountdownService.ZeroReached</c>;
+    ///   CatchUp and Ignition remain unreached.</item>
     ///   <item><see cref="ForceCloseAll"/> is the panic path's
     ///   (MainWindow.StartStop.cs:525), and this head has no <c>StopEngine</c> to call it from.</item>
     /// </list>
@@ -297,9 +297,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (_kind == DescentShowKind.Live && !_witnessedMarked)
                 {
                     _witnessedMarked = true;
-                    // ponytail: needs DescentCountdownService.MarkLastNightWitnessed from
-                    // ConditioningControlPanel/Services/Descent/DescentCountdownService.cs. The
-                    // keepsake it writes is a settings field, but nothing in Core owns the write.
+                    App.DescentCountdown?.MarkLastNightWitnessed();
                 }
 
                 // The light is back, so the door may open.
