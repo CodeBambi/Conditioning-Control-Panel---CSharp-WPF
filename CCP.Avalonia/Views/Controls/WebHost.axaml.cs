@@ -24,8 +24,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// fenced with: <see cref="AllowNavigation"/> (NativeWebView.NavigationStarted, whose args
     /// carry a settable Cancel — so a per-navigation allowlist that also catches redirects is
     /// possible here, unlike what the first pass of these views assumed) and
-    /// <see cref="InvokeScriptAsync"/>. NativeWebView additionally offers WebMessageReceived,
-    /// NewWindowRequested, NavigationCompleted, GoBack/GoForward, Stop and Refresh; nothing needs
+    /// <see cref="InvokeScriptAsync"/>, plus the live URL (<see cref="CurrentUrl"/>,
+    /// <see cref="NavigationCompleted"/>). NativeWebView additionally offers WebMessageReceived,
+    /// NewWindowRequested, GoBack/GoForward, Stop and Refresh; nothing needs
     /// them yet, so they are not wrapped. It has NO zoom factor, no document-created script
     /// injection, and no fullscreen-element signal.
     ///
@@ -54,6 +55,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// pointed at pages the app itself chose.
         /// </summary>
         public Func<Uri, bool>? AllowNavigation { get; set; }
+
+        /// <summary>
+        /// The URL the page actually sits on after its last completed navigation: redirects,
+        /// in-page links and script hops included, unlike <see cref="Source"/>, which is only
+        /// what a caller last asked for. Null until a navigation completes. WPF's
+        /// <c>BrowserService.GetCurrentUrl</c>.
+        /// </summary>
+        public Uri? CurrentUrl { get; private set; }
+
+        /// <summary>
+        /// Raised on the UI thread with <see cref="CurrentUrl"/> after every top-level navigation
+        /// completes, failed ones included, as WPF's <c>BrowserService.NavigationCompleted</c>
+        /// does (BrowserService.cs:1435-1443) - the live-URL signal MainWindow.Browser.cs:132
+        /// hangs its status line and catalogue lookup on.
+        /// </summary>
+        public event Action<Uri>? NavigationCompleted;
+
+        /// <summary>
+        /// The seam the engine's NavigationCompleted routes through, internal so a headless test
+        /// (which never has an engine) can drive the same path. A completion with no URL raises
+        /// nothing: there is nothing live to report.
+        /// </summary>
+        internal void OnNavigationCompleted(Uri? url)
+        {
+            if (url is null) return;
+            CurrentUrl = url;
+            NavigationCompleted?.Invoke(url);
+        }
 
         /// <summary>
         /// True when THIS instance built an adapter. <see cref="IsAvailable"/> is the process-wide
@@ -125,6 +154,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                     // gate has to be live for the FIRST navigation too, and a caller that assigns
                     // the predicate and the Source in that order would otherwise race the engine.
                     _web.NavigationStarted += OnNavigationStarted;
+                    _web.NavigationCompleted += (_, e) => OnNavigationCompleted(e.Request ?? _web?.Source);
                     _webSlot.Children.Add(_web);
                 }
                 catch (Exception ex)

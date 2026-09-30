@@ -174,9 +174,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         // ============ the catalogue lookup (WPF MainWindow.DeeperTab.cs:1017-1204) ============
-        // Fired from NavigateBrowser with the URL we ASKED for: WPF fires on WebView2's
-        // NavigationCompleted (MainWindow.Browser.cs:158) with the live URL, which WebHost does not
-        // expose, so in-page navigation never looks anything up here.
+        // Fired from OnBrowserNavigationCompleted with the WebHost's live URL, as WPF fires on
+        // WebView2's NavigationCompleted (MainWindow.Browser.cs:158).
         private System.Threading.CancellationTokenSource? _catalogueLookupCts;
         private string? _currentCatalogueHtVideoId;
 

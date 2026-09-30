@@ -188,3 +188,12 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   (Ubuntu 22.04 build); if OpenCV fails to load, the feature is disabled with a message, never a crash. The LibVLC v4l2 source is a
   documented fallback behind an IFrameSource seam. Check ldd of libOpenCvSharpExtern.so before shipping.
 - Advisor: oracle.
+
+## 2026-10-01: WebHost live URL and the catalogue lookup trigger
+- Question: where does the Avalonia head fire the HT catalogue lookup, and with which URL?
+- Choice: WebHost gains CurrentUrl + NavigationCompleted (from NativeWebView.NavigationCompleted, raised for failed
+  completions too, like WPF BrowserService.cs:1435-1443); the shell's OnBrowserNavigationCompleted sets the status line and
+  fires the lookup with the live URL (Uri.AbsoluteUri, escaped like CoreWebView2.Source). The lookup no longer fires from
+  NavigateBrowser with the requested URL, so with no web engine nothing is looked up, as on WPF with no browser.
+  Headless tests drive the internal WebHost.OnNavigationCompleted seam. IsBrowserShowingKnownSite stays unwritten until
+  its caller SyncSiteRadiosToActiveMod is ported. DashboardFold reads no URL, so it is untouched.
