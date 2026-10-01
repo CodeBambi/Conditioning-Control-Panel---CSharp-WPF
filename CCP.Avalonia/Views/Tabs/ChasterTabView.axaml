@@ -258,7 +258,10 @@
                         </Ellipse.Fill>
                     </Ellipse>
                 </Panel>
-                <Border x:Name="AddedCard" Grid.Column="0" VerticalAlignment="Top" Background="{DynamicResource SurfaceBgBrush}"
+                <!-- WPF :747: column 0 stacks the clock card and, under it beside the scrap, 4. THE KEYS (2x2 presets).
+                     ponytail: the keys (PresetRow, Preset_Click) are not ported; the presets slice fills KeysSlot. -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Top">
+                <Border x:Name="AddedCard" VerticalAlignment="Top" Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="18" Padding="20,16">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <Border x:Name="AddedClock" Cursor="Hand" Background="#22FF6B8A" BorderBrush="#88FF6B8A" BorderThickness="1.5"
@@ -295,6 +298,8 @@
                         </Grid>
                     </Grid>
                 </Border>
+                <StackPanel x:Name="KeysSlot"/>
+                </StackPanel>
 
                 <!-- The player's own raffle card (WPF :1107-1150). Hover opens, click pins, outside click / deactivate closes. -->
                 <Popup x:Name="LadderPopup" PlacementTarget="{Binding #AddedClock}" Placement="Bottom" VerticalOffset="8" IsLightDismissEnabled="False"
