@@ -272,6 +272,9 @@ public class OverlayService : IDisposable
             }
             _vortexLayer.Start();
         }
+        // Super switched off (or the tier lapsed) under a running spiral: let it be sucked in.
+        // Every other way out, panic and StopSpiral included, stops it at once.
+        else if (SpiralShowing && !_isDisposed) _vortexLayer?.BeginExit();
         else _vortexLayer?.Stop();
     }
     private Compositor.BrainDrainLayer? _brainDrainLayer;

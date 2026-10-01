@@ -37,6 +37,119 @@ public static class VortexMath
     public const double BloomFrom = 0.85;
     public const double MockupR0 = 192;         // the mockup's full radius in px; motes scale off it
 
+    // Juice: the vortex gathers, opens with a small overshoot, breathes, and leaves by being sucked in.
+    public const double GatherSec = 0.16;       // anticipation: a tight seed while the motes pull in
+    public const double OpenSec = 0.42;         // then it opens on an ease-out-back
+    public const double SeedScale = 0.34;       // the seed's size, fraction of the drawn size
+    public const double GatherDip = 0.08;       // the seed draws in a little more before it opens
+    public const double BackFull = 1.70158;     // peak about 6.6 percent past full
+    public const double BackReduced = 1.15;     // peak about 3.2 percent: half the overshoot
+    public const int GatherMotes = 20;
+    public const double CloseSec = 0.34;
+    public const double CloseSwell = 0.04;      // a breath out before it is sucked in
+    public const double CloseSpin = 5;          // extra spin multiplier at the end of the close
+    public const double OffFadeSec = 0.12;      // Motion off: a plain fade, no scale
+    public const double BreathPeriod = 4.2;     // 0.24 Hz, far under the 3 Hz photosafe line
+    public const double BreathScale = 0.025, BreathGlow = 0.06, CoreGlow = 0.10;
+    public const double MoteFadeIn = 0.12;
+    public const double TrailSec = 0.05;        // a mote's tail is where it was 50 ms ago
+    public const double GifPopSec = 0.2, GifRiseSec = 0.07, GifPopFrom = 0.72;
+
+    public static double EaseOutCubic(double t) { t = Clamp01(t); double u = 1 - t; return 1 - u * u * u; }
+    public static double EaseInQuad(double t) { t = Clamp01(t); return t * t; }
+    public static double Smoothstep(double t) { t = Clamp01(t); return t * t * (3 - 2 * t); }
+
+    /// <summary>Ease-out-back: overshoots past 1 and settles. <paramref name="c1"/> sets the overshoot.</summary>
+    public static double EaseOutBack(double t, double c1)
+    {
+        t = Clamp01(t);
+        double c3 = c1 + 1, x = t - 1;
+        return 1 + c3 * x * x * x + c1 * x * x;
+    }
+
+    /// <summary>
+    /// The opening. Full/Reduced: a seed that draws in a touch while the motes gather, then it opens
+    /// on an ease-out-back (Reduced at half the overshoot) while the arms fade up, and a core glow
+    /// peaks at the moment it opens. Off: a 120 ms fade, no scale. False once it is fully open.
+    /// </summary>
+    public static bool Opening(double age, MotionLevel level, out double scale, out double alpha, out double glow)
+    {
+        scale = 1; alpha = 1; glow = 0;
+        if (age < 0) age = 0;
+        if (level == MotionLevel.Off)
+        {
+            if (age >= OffFadeSec) return false;
+            alpha = age / OffFadeSec;
+            return true;
+        }
+        if (age >= GatherSec + OpenSec) return false;
+        if (age < GatherSec)
+        {
+            double g = age / GatherSec;
+            scale = SeedScale * (1 - GatherDip * EaseInQuad(g));
+            alpha = 0.35 * EaseInQuad(g);
+            glow = 0.5 * EaseInQuad(g);
+            return true;
+        }
+        double u = (age - GatherSec) / OpenSec;
+        double from = SeedScale * (1 - GatherDip);
+        scale = from + (1 - from) * EaseOutBack(u, level == MotionLevel.Reduced ? BackReduced : BackFull);
+        alpha = 0.35 + 0.65 * EaseOutCubic(u / 0.6);
+        glow = 0.5 * (1 - EaseOutCubic(u));
+        return true;
+    }
+
+    /// <summary>
+    /// The exit. Full/Reduced: a small swell out (Reduced half), then an ease-in suck to nothing while
+    /// it spins up and the arms fade over the back two thirds. Off: a 120 ms fade, no scale, no spin.
+    /// False once it is gone.
+    /// </summary>
+    public static bool Closing(double age, MotionLevel level, out double scale, out double alpha, out double spin)
+    {
+        scale = 1; alpha = 1; spin = 1;
+        if (age < 0) age = 0;
+        if (level == MotionLevel.Off)
+        {
+            if (age >= OffFadeSec) { alpha = 0; return false; }
+            alpha = 1 - age / OffFadeSec;
+            return true;
+        }
+        if (age >= CloseSec) { scale = 0; alpha = 0; return false; }
+        double amp = level == MotionLevel.Reduced ? 0.5 : 1;
+        double u = age / CloseSec;
+        const double swellEnd = 0.18;
+        scale = u < swellEnd
+            ? 1 + CloseSwell * amp * EaseOutCubic(u / swellEnd)
+            : (1 + CloseSwell * amp) * (1 - EaseInQuad((u - swellEnd) / (1 - swellEnd)));
+        alpha = 1 - Smoothstep((u - 0.35) / 0.65);
+        spin = 1 + CloseSpin * amp * u;
+        return true;
+    }
+
+    /// <summary>Idle breath, -1..1 (Reduced: half amplitude at half speed, Off: 0); phased per vortex.</summary>
+    public static double Breath(double time, double phase, MotionLevel level)
+    {
+        if (level == MotionLevel.Off) return 0;
+        double slow = level == MotionLevel.Reduced ? 0.5 : 1;
+        return slow * Math.Sin(2 * Math.PI * time * slow / BreathPeriod + phase);
+    }
+
+    /// <summary>A new mote fades in over 120 ms instead of popping in.</summary>
+    public static double MoteFade(double age) => EaseOutCubic(age / MoteFadeIn);
+
+    /// <summary>
+    /// The gif grows out of the vortex: a 70 ms alpha rise and an ease-out-back from 0.72 (Reduced
+    /// from 0.86). Soft mode (photosafe or not Full motion) keeps its own fade: no rise, no scale.
+    /// </summary>
+    public static void GifPop(double age, bool flicker, MotionLevel level, out double scale, out double alphaMul)
+    {
+        scale = 1; alphaMul = 1;
+        if (!flicker || level == MotionLevel.Off || age < 0) return;
+        alphaMul = EaseOutCubic(age / GifRiseSec);
+        double from = level == MotionLevel.Reduced ? 1 - (1 - GifPopFrom) / 2 : GifPopFrom;
+        scale = from + (1 - from) * EaseOutBack(age / GifPopSec, level == MotionLevel.Reduced ? BackReduced : BackFull);
+    }
+
     public static double Clamp01(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
 
     /// <summary>Stillness climbs while the cursor moves slower than 25 px/s, falls fast otherwise.</summary>
@@ -133,7 +246,8 @@ public static class VortexMath
 }
 
 public struct VortexEcho { public double Size, Rot, Turns, Born; public bool Alive; }
-public struct VortexMote { public double Angle, Radius, BoostUntil; public bool Alive; }
+/// <summary>A dust mote. Vr (px/s inward) and Va (rad/s) are this frame's speeds, for its tail.</summary>
+public struct VortexMote { public double Angle, Radius, BoostUntil, Born, Vr, Va; public bool Alive; }
 
 /// <summary>
 /// The vortex state machine. Pure: time, cursor, randomness and the motion level come in, the
@@ -172,9 +286,52 @@ public sealed class VortexSim
     public double GifX { get; private set; }
     public double GifY { get; private set; }
 
-    public VortexSim(Random? rng = null) => _rng = rng ?? new Random();
+    /// <summary>This vortex's breath phase, so two vortices never breathe in step.</summary>
+    public double Phase { get; }
+    /// <summary>Open/close/breath product: what the layer multiplies the radius by.</summary>
+    public double DrawScale { get; private set; } = 1;
+    /// <summary>Open/close fade: what the layer multiplies the arms, echoes and glows by.</summary>
+    public double DrawAlpha { get; private set; } = 1;
+    /// <summary>The soft core glow: the open's flare plus the idle breath.</summary>
+    public double CoreGlow { get; private set; }
+    public bool IsOpening { get; private set; }
+    public bool IsClosing => _closeAt > -1e8;
+    /// <summary>The exit has run its course; the layer deactivates.</summary>
+    public bool Closed { get; private set; }
+
+    private double _openAt = -1e9, _closeAt = -1e9;
+
+    public VortexSim(Random? rng = null)
+    {
+        _rng = rng ?? new Random();
+        Phase = _rng.NextDouble() * Math.PI * 2;
+    }
 
     public double Radius => R0 * Size;
+
+    /// <summary>
+    /// Start the opening at the cursor: the seed, and (above Motion off) a ring of motes far out that
+    /// get pulled in hard, so the vortex gathers before it opens.
+    /// </summary>
+    public void Open(MotionLevel level, double cursorX, double cursorY)
+    {
+        _closeAt = -1e9; Closed = false;
+        _openAt = Time; IsOpening = true;
+        if (!_placed) { X = _px = cursorX; Y = _py = cursorY; _placed = true; }
+        if (level == MotionLevel.Off) return;
+        double boost = Time + VortexMath.GatherSec + 0.1;
+        for (int i = 0; i < VortexMath.GatherMotes; i++)
+            SpawnMote(_rng.NextDouble() * Math.PI * 2, Radius * (2.2 + _rng.NextDouble()), boost);
+    }
+
+    /// <summary>Begin the exit: no new dust, every mote is sucked in, the arms close. Idempotent.</summary>
+    public void Close()
+    {
+        if (IsClosing) return;
+        _closeAt = Time; IsOpening = false;
+        for (int i = 0; i < Motes.Length; i++)
+            if (Motes[i].Alive) Motes[i].BoostUntil = Time + VortexMath.CloseSec;
+    }
 
     /// <summary>Advance one frame. <paramref name="level"/> is the effective MotionFx level.</summary>
     public void Step(double dt, double cursorX, double cursorY, MotionLevel level)
@@ -203,14 +360,27 @@ public sealed class VortexSim
         if (still) { Size = Target; _velocity = 0; }
         else Size = VortexMath.SpringStep(Size, ref _velocity, Target, dt);
 
+        // In and out: the opening (gather, then open) and the exit (swell, suck in, fade).
+        double scale = 1, alpha = 1, glow = 0, spin = 1;
+        if (IsClosing)
+        {
+            if (!VortexMath.Closing(Time - _closeAt, level, out scale, out alpha, out spin)) Closed = true;
+        }
+        else if (IsOpening && !VortexMath.Opening(Time - _openAt, level, out scale, out alpha, out glow))
+            IsOpening = false;
+        double breath = VortexMath.Breath(Time, Phase, level);
+        DrawScale = scale * (1 + VortexMath.BreathScale * breath);
+        DrawAlpha = alpha;
+        CoreGlow = Math.Max(glow, (VortexMath.CoreGlow + VortexMath.BreathGlow * breath) * alpha);
+
         Collapse = VortexMath.Collapse(_velocity);
-        Rot += dt * VortexMath.RotationSpeed(Still, Collapse) * speed;
+        Rot += dt * VortexMath.RotationSpeed(Still, Collapse) * speed * spin;
         Turns = VortexMath.Turns(Still, Collapse);
         ArmsAlpha = VortexMath.ArmsAlpha(Still, Collapse);
         FlashAlpha = prev > Size + 0.002 && Collapse > 0.3 ? 0.35 * Collapse : 0;
         BloomAlpha = VortexMath.BloomAlpha(Still);
 
-        if (!still && Collapse > 0.15 && Time - _lastEcho > VortexMath.EchoEvery)
+        if (!still && !IsClosing && Collapse > 0.15 && Time - _lastEcho > VortexMath.EchoEvery)
         {
             _lastEcho = Time;
             int slot = OldestEcho();
@@ -221,7 +391,7 @@ public sealed class VortexSim
 
         // Dust motes spiral inward; none at Off.
         double r = Radius;
-        if (!still)
+        if (!still && !IsClosing)
         {
             _dustAcc += dt * VortexMath.DustRate(Still) * speed;
             while (_dustAcc >= 1)
@@ -236,8 +406,10 @@ public sealed class VortexSim
             ref var m = ref Motes[i];
             if (!m.Alive) continue;
             bool boosted = Time < m.BoostUntil;
-            m.Radius -= dt * speed * px * (40 + 120 * Still + (boosted ? 520 : 0));
-            m.Angle += dt * speed * (1.2 + 2.5 * Still + (boosted ? 5 : 0));
+            m.Vr = speed * px * (40 + 120 * Still + (boosted ? 520 : 0));
+            m.Va = speed * (1.2 + 2.5 * Still + (boosted ? 5 : 0));
+            m.Radius -= dt * m.Vr;
+            m.Angle += dt * m.Va;
             if (m.Radius <= 4 * px || still) m.Alive = false;
         }
     }
@@ -251,6 +423,7 @@ public sealed class VortexSim
     {
         // Off is still: a click neither jumps nor collapses it (the gif may still show, as one
         // soft fade, because the layer never cycles frames below Full motion).
+        if (IsClosing) return false;   // on its way out: a click no longer feeds it
         if (level != MotionLevel.Off)
         {
             Target = VortexMath.ClickTarget(Target);
@@ -273,7 +446,7 @@ public sealed class VortexSim
         for (int i = 0; i < Motes.Length; i++)
         {
             if (Motes[i].Alive) continue;
-            Motes[i] = new VortexMote { Angle = angle, Radius = radius, BoostUntil = boostUntil, Alive = true };
+            Motes[i] = new VortexMote { Angle = angle, Radius = radius, BoostUntil = boostUntil, Born = Time, Alive = true };
             return;
         }
     }
