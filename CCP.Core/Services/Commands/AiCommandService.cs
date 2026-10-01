@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using System.Windows;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Commands
 {
@@ -31,36 +31,36 @@ namespace ConditioningControlPanel.Services.Commands
         {
             if (commandData.Data == null) return;
 
-            var settings = App.Settings?.Current?.CompanionPrompt;
+            var settings = CoreSettings.Current?.CompanionPrompt;
             if (settings == null)
             {
-                App.Logger?.Debug("AiCommandService: no settings — dropping command {Cmd}", commandData.Command);
+                Log.Debug("AiCommandService: no settings — dropping command {Cmd}", commandData.Command);
                 return;
             }
 
             // Master gate.
-            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOn(settings, App.Patreon?.HasLabAccess == true))
+            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOn(settings, CoreAccount.HasLabAccess))
             {
-                App.Logger?.Information("AiCommandService: master toggle off or no Tier 2 - dropping {Cmd}", commandData.Command);
+                Log.Information("AiCommandService: master toggle off or no Tier 2 - dropping {Cmd}", commandData.Command);
                 return;
             }
 
             // Per-effect gate.
             if (!IsEffectAllowed(commandData.Command, settings))
             {
-                App.Logger?.Information("AiCommandService: effect {Cmd} disabled by user — dropping", commandData.Command);
+                Log.Information("AiCommandService: effect {Cmd} disabled by user — dropping", commandData.Command);
                 return;
             }
 
             // Per-batch cap.
             if (Interlocked.Increment(ref _batchCount) > MaxCommandsPerResponse)
             {
-                App.Logger?.Information("AiCommandService: batch cap reached ({Cap}) — dropping {Cmd}",
+                Log.Information("AiCommandService: batch cap reached ({Cap}) — dropping {Cmd}",
                     MaxCommandsPerResponse, commandData.Command);
                 return;
             }
 
-            App.Logger?.Information("AiCommandService: dispatching {Cmd}", commandData.Command);
+            Log.Information("AiCommandService: dispatching {Cmd}", commandData.Command);
 
             // Surface a human-readable line in the AI Brain "Live actions" feed. This is the
             // request; a second line follows after execution if the effect did not fire.
@@ -79,9 +79,15 @@ namespace ConditioningControlPanel.Services.Commands
             try
             {
                 var command = CommandFactory.CreateCommand(commandData, cts?.Token ?? default, depth: 0);
-                if (command != null)
+                if (command == null)
                 {
-                    App.Logger?.Debug("AiCommandService: executing {Cmd}", commandData.Command);
+                    // Unreachable on WPF (the per-effect gate refuses every type the factory lacks);
+                    // kept so a request line is never left standing as if it fired.
+                    AppendLiveAction(FormatFailedAction(commandData));
+                }
+                else
+                {
+                    Log.Debug("AiCommandService: executing {Cmd}", commandData.Command);
                     var fired = await command.ExecuteAsync();
                     if (!fired)
                     {
@@ -89,14 +95,14 @@ namespace ConditioningControlPanel.Services.Commands
                         // the effect never happened (empty assets/audio folder, video already
                         // playing, feature off), so follow up instead of leaving a feed line
                         // that reads like it played (#1120).
-                        App.Logger?.Warning("AiCommandService: {Cmd} did not fire", commandData.Command);
+                        Log.Warning("AiCommandService: {Cmd} did not fire", commandData.Command);
                         AppendLiveAction(FormatFailedAction(commandData));
                     }
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "AiCommandService: command {Cmd} threw", commandData.Command);
+                Log.Error(ex, "AiCommandService: command {Cmd} threw", commandData.Command);
             }
             finally
             {
@@ -116,29 +122,17 @@ namespace ConditioningControlPanel.Services.Commands
             }
         }
 
-        // Last-N feed cap so the list doesn't grow forever in long sessions.
-        private const int MaxLiveActions = 30;
+        /// <summary>Last-N feed cap so the list doesn't grow forever in long sessions.</summary>
+        public const int MaxLiveActions = 30;
 
-        /// <summary>
-        /// Appends a user-readable line to <see cref="App.AiLiveActions"/> (bound to the
-        /// AI Brain "Live actions" panel on the Companion tab). Marshals to the UI
-        /// thread because ObservableCollection updates aren't allowed off-thread.
-        /// </summary>
+        /// <summary>The AI Brain "Live actions" feed (WPF App.AiLiveActions, marshalled to its UI
+        /// thread). Unseeded: the line is logged only, as on a head without that panel.</summary>
+        public static volatile Action<string>? LiveActionSink;
+
         private static void AppendLiveAction(string line)
         {
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null) return;
-
-            void Apply()
-            {
-                var list = App.AiLiveActions;
-                var stamped = $"[{DateTime.Now:HH:mm:ss}] {line}";
-                list.Add(stamped);
-                while (list.Count > MaxLiveActions) list.RemoveAt(0);
-            }
-
-            if (dispatcher.CheckAccess()) Apply();
-            else dispatcher.BeginInvoke((Action)Apply);
+            try { LiveActionSink?.Invoke(line); }
+            catch (Exception ex) { Log.Debug("AiCommandService: live action feed failed: {Error}", ex.Message); }
         }
 
         /// <summary>
@@ -210,7 +204,7 @@ namespace ConditioningControlPanel.Services.Commands
                 AICommandType.flash_image => s.AllowAiFlash,
                 // Videos also require the main Videos feature toggle (#512) — gating here
                 // (not just in MediaCommand) keeps blocked videos out of the Live actions feed.
-                AICommandType.video => s.AllowAiVideo && App.Settings?.Current?.MandatoryVideosEnabled == true,
+                AICommandType.video => s.AllowAiVideo && CoreSettings.Current?.MandatoryVideosEnabled == true,
                 AICommandType.audio => s.AllowAiAudio,
                 AICommandType.bubbles => s.AllowAiBubbles,
                 AICommandType.subliminal => s.AllowAiSubliminal,

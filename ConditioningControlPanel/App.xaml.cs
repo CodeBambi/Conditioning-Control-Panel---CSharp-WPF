@@ -2731,6 +2731,7 @@ namespace ConditioningControlPanel
 
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
+            SeedAiEffectSurfaces();
 
             // Core brain pieces reach head-only services through these (PromptAssembler/MemoryStore moved to Core).
             Services.Companion.Brain.MemoryStore.SignalMirrorFactory = store =>

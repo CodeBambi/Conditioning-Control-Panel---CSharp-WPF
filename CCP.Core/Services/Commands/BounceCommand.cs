@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using System.Windows;
+using Serilog;
 using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services.Commands
@@ -10,22 +10,19 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly Bounce _data;
         public BounceCommand(Bounce data) { _data = data; }
 
+        /// <summary>Head surface: (on, words) on the UI thread (WPF App.BouncingText Start/Stop).
+        /// Returns false when nothing could show. Unseeded: refused, nothing faked.</summary>
+        public static volatile Func<bool, System.Collections.Generic.List<string>?, bool>? Surface;
+
         public Task<bool> ExecuteAsync()
         {
             try
             {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    if (_data.On)
-                        App.BouncingText?.Start(true, _data.Words);
-                    else
-                        App.BouncingText?.Stop();
-                });
-                return Task.FromResult(true);
+                return Task.FromResult(Surface?.Invoke(_data.On, _data.Words) == true);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "BounceCommand failed");
+                Log.Warning(ex, "BounceCommand failed");
                 return Task.FromResult(false);
             }
         }
