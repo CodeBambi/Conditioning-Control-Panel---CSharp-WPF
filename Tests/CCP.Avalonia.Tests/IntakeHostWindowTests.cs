@@ -36,6 +36,8 @@ public sealed class IntakeHostWindowTests
             (service.Current.IntakePassSpentWeek, service.Current.IntakePassSpentUtc) = ("", null);
             var dir = Directory.CreateTempSubdirectory("intake-host-").FullName;
             var host = new IntakeHostWindow { SessionsFolder = dir };
+            var drafted = 0;
+            host.Drafted += (_, path) => { drafted++; Assert.True(File.Exists(path)); };
             try
             {
                 Assert.True(AvApp.IntakePass.IsPassAvailable);
@@ -59,11 +61,17 @@ public sealed class IntakeHostWindowTests
                 host.Web.OnNavigationCompleted(new Uri("http://127.0.0.1:5000/other/index.html"));
                 host.Web.OnWebMessage(result);
                 Assert.True(AvApp.IntakePass.IsPassAvailable);
+                // Same path on another loopback origin (another run's server) is not the served page.
+                host.Web.OnNavigationCompleted(new Uri("http://127.0.0.1:5001/intake/index.html"));
+                host.Web.OnWebMessage(result);
+                Assert.True(AvApp.IntakePass.IsPassAvailable);
+                Assert.Equal(0, drafted);
                 host.Web.OnNavigationCompleted(new Uri("http://127.0.0.1:5000/intake/index.html?x=1#y"));
                 host.Web.OnWebMessage(result);
                 Assert.Equal(IntakePassService.CurrentWeekKey(), service.Current.IntakePassSpentWeek);
                 Assert.False(AvApp.IntakePass.IsPassAvailable);
                 Assert.Single(Directory.GetFiles(dir, "*.session.json"));
+                Assert.Equal(1, drafted);   // the Sessions refresh + toast hang off this
             }
             finally
             {

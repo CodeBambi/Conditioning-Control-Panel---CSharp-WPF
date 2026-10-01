@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Models;
@@ -151,5 +152,32 @@ public class IntakeRunTests
         Assert.Contains("webview.addEventListener('message', (e) => dispatchHostMessage(e.data));", shim);
         Assert.Matches(new Regex(@"!webview && win && typeof win\.invokeCSharpAction === 'function'"), shim);
         Assert.Single(Regex.Matches(shim, "invokeCSharpAction\\("));
+    }
+
+    /// <summary>The init payload's Core halves (WPF SafeNiche/Resolve, BuildMediaManifest, GetSubjectId).</summary>
+    [Fact]
+    public void InitPayloadPartsResolveNicheSampleActiveMediaAndKeepTheSubject()
+    {
+        Assert.Equal("bambi", IntakeRun.ResolveNiche(BuiltInMods.BambiSleepId, null, true));
+        Assert.Equal("circe", IntakeRun.ResolveNiche("x", new[] { "Chastity" }, false));
+        Assert.Equal("sissy", IntakeRun.ResolveNiche(null, null, true));
+        Assert.Equal(IntakeRun.FallbackNiche, IntakeRun.ResolveNiche(null, null, false));
+
+        var root = Directory.CreateTempSubdirectory("intake-media-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "images", "sub"));
+            foreach (var f in new[] { "a.gif", "b.png", "off.png", "note.txt", "sub/c d.jpg" })
+                File.WriteAllText(Path.Combine(root, "images", f), "x");
+            var (gifs, images) = IntakeRun.SampleMedia(root, new[] { "images\\off.png" });
+            Assert.Equal(new[] { "images/a.gif" }, gifs);
+            Assert.Equal(new[] { "images/b.png", "images/sub/c%20d.jpg" }, images.OrderBy(x => x));
+            Assert.Equal(2, IntakeRun.SampleMedia(root, null, take: 2).Images.Length);
+
+            var id = IntakeRun.SubjectId(root);
+            Assert.Matches("^[0-9]{4}$", id);
+            Assert.Equal(id, IntakeRun.SubjectId(root));
+        }
+        finally { Directory.Delete(root, true); }
     }
 }
