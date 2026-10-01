@@ -182,17 +182,23 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        public void Save()
+        /// <summary>Atomic: written to a temp file, then renamed over the old one, so a failed save
+        /// leaves the previous calibration intact. False when it failed.</summary>
+        public bool Save()
         {
+            var tmp = FilePath + ".tmp";
             try
             {
                 Directory.CreateDirectory(CorePaths.UserData);
-                var json = JsonConvert.SerializeObject(this, Formatting.Indented);
-                File.WriteAllText(FilePath, json);
+                File.WriteAllText(tmp, JsonConvert.SerializeObject(this, Formatting.Indented));
+                File.Move(tmp, FilePath, overwrite: true);
+                return true;
             }
             catch (Exception ex)
             {
                 Log.Warning(ex, "WebcamCalibrationData: failed to save");
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch (Exception cleanup) { Log.Debug("tmp cleanup: {E}", cleanup.Message); }
+                return false;
             }
         }
 

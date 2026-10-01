@@ -48,8 +48,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
     /// BlinkDetector + GazeEngine, the same pipeline WebcamTrackingService.ProcessFrame runs on WPF:
     /// blinks, face lost/found, head pose, raw iris, gaze side and the projected gaze point. Camera
     /// open only between Start and Stop, only with current consent.
-    /// ponytail: no mouth/tongue, eyes-closed-long, long stare or gaze lock-on yet - their only
-    /// consumers (calibration validation, bubble test, triggers) are not ported.
+    /// ponytail: no mouth/tongue, long stare or gaze lock-on yet (the MAR/HSV detectors are still
+    /// WPF-only), so calibration's mouth prompts time out to "moving on", as WPF does on a miss.
     /// </summary>
     internal sealed class WebcamTracker
     {
@@ -61,6 +61,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
         internal static string ModelDir = Path.Combine(AppContext.BaseDirectory, "Resources", "Models");
 
         public event Action? OnBlink;
+        /// <summary>Eyes held shut past BlinkDetector.EyesClosedLongMs (WPF OnEyesClosedLong).</summary>
+        public event Action? OnEyesClosedLong;
         public event Action? StateChanged;
         public event Action? OnFaceLost;
         public event Action? OnFaceFound;
@@ -272,6 +274,23 @@ namespace ConditioningControlPanel.Avalonia.Platform
             }
         }
 
+        /// <summary>WPF ApplyCalibration: save to the profile file, then use it. False (nothing
+        /// changed) when the save failed.</summary>
+        public bool ApplyCalibration(WebcamCalibrationData data)
+        {
+            if (!data.Save()) return false;
+            SetCalibrationLive(data);
+            Log.Information("[Webcam] calibration applied (mode={Mode})", data.Mode);
+            return true;
+        }
+
+        /// <summary>WPF SetCalibrationLive: in memory only (calibration's verify phase); null clears.</summary>
+        public void SetCalibrationLive(WebcamCalibrationData? data)
+        {
+            Calibration = data;
+            _gaze.ResetSideHysteresis();
+        }
+
         /// <summary>WPF Quick Recal's SetRuntimeOffset: swap the whole calibration (the capture thread
         /// reads it every frame), optionally saving it. Null clears the offset.</summary>
         public void SetRuntimeOffset(RuntimeOffsetData? offset, bool persist)
@@ -309,6 +328,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     BlinkDetector.ComputeEar(left.Contour, BlinkDetector.IrisContourEarIndices),
                     BlinkDetector.ComputeEar(right.Contour, BlinkDetector.IrisContourEarIndices), DateTime.UtcNow);
                 if (ev == BlinkEvent.Blink) Dispatcher.UIThread.Post(() => OnBlink?.Invoke());
+                else if (ev == BlinkEvent.EyesClosedLong) Dispatcher.UIThread.Post(() => OnEyesClosedLong?.Invoke());
             }
             (double Dx, double Dy)? vl = left == null ? null
                 : _gaze.NormalizeIris(left.IrisCenter, lm[FaceMeshDetector.LeftEyeOuterIdx], lm[FaceMeshDetector.LeftEyeInnerIdx], rightEye: false);

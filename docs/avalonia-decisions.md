@@ -67,6 +67,7 @@ here record where and why the port chose something, and who advised.
 | 2026-09-29 | Second-instance signal on Avalonia | WPF named events (Windows only); named pipe on both OSes | Same mutex name as WPF; show/ack over a named pipe, since named EventWaitHandles are unsupported on Unix | worker |
 | 2026-09-29 | Linux package shape | AppImage; Flatpak bundles WPE; tarball + Flatpak + AUR | Tarball `ConditioningControlPanel/` with the Vosk model, `.desktop` and icon; app id `io.github.CodeBambi.ConditioningControlPanel`; Flatpak on GNOME 50 (has webkit2gtk-4.1, libsecret) bundles libVLC only - WebHost needs the GTK3 NativeControlHost engine, not WPE. CONFLICT: docs/avalonia-linux-install.md asks to bundle wpewebkit/wpebackend-fdo/libwpe; the Flatpak row stays blocked until the first flatpak-builder run shows whether any web surface needs WPE, then bundle it or amend the brief with the user; WM_CLASS = app id (X11PlatformOptions.WmClass) matching StartupWMClass; AUR `-bin` depends on system vlc/webkit/WPE | worker |
 | 2026-09-30 | MemorySignalWriter head sources | Core writer reads App.* via one seam per service; new Core events per feature; one SourcesHook the head seeds | `SourcesHook`/`DeferredSourcesHook` (WPF seeds its original bodies verbatim); settings mirror in Core over CoreSettings; Avalonia raises `App.FeatureUsed` from its flash/subliminal/bubble surfaces and Core `MandatoryVideoScheduler.VideoStarted` (mirrors WPF VideoService.VideoStarted) | worker |
+| 2026-10-01 | getbacktome follow-ups and the AI effect gate | keep WPF behaviour as frozen reference; fix on Avalonia only; fix in Core for both heads | Option A, fix in Core for both heads: getbacktome follow-ups ran nested effects without the AI-effects switch, Lab access, per-effect toggles or the 3-command cap, and panic couldn't cancel them, contradicting the shipped help text and the user's explicit consent choices. Frozen-reference status doesn't protect a consent/panic bypass, so the fix lives in Core for both heads: re-gated at fire time, refusals logged, 3-per-follow-up cap, panic or switch-off cancels everything pending. | oracle-deep |
 
 ## 2026-09-29: flashing line after moving the window on KDE
 - Question: the user saw a thin purple line flash where the window's top edge had been after moving it. Can the app fix it?
@@ -357,6 +358,30 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   LauncherHost.OnBareRelaunch (panel visible -> raise it; else skip-to-panel ? panel : launcher) instead of always raising the panel.
 - Known limit: .NET named mutexes on Unix are scoped to the login session, so a second launch from another session (setsid,
   another TTY) runs as its own instance. Pre-existing; found while proving the handoff live.
+## web-assets-host: Resources/web served on loopback HTTP, not a custom scheme
+- Question: how does this head serve Assets/web (WPF: WebView2 `SetVirtualHostNameToFolderMapping("ccp.game", Resources\web)`) to its web views?
+- Options: (a) loopback static server; (b) custom URI scheme / `WebResourceRequested`; (c) `file://`.
+- Choice: (a). (b) is not available: Avalonia.Controls.WebView 12.1.0's WebKitGTK adapter imports no
+  `webkit_web_context_register_uri_scheme`/`webkit_uri_scheme_request_finish` (only navigation-policy calls), so it cannot answer a
+  request on Linux. (c) blocks ES modules, workers and `fetch` that the intake/dtrh pages use.
+- `CCP.Avalonia/Platform/WebAssetServer.cs`: HttpListener on `127.0.0.1` only, random port, 128-bit per-run token. The first URL
+  carries `?ccp_t=<token>`; the reply sets an HttpOnly SameSite=Strict cookie so relative and root-relative loads work like they
+  do on `ccp.game`. No token -> 403; foreign Host header -> 404 (HttpListener prefix match); GET/HEAD only; any path resolving
+  outside Resources/web -> 404. No Range support yet (marked `ponytail:`).
+- Packaging: the Avalonia head links `Assets/web/**` to `Resources/web` with the subset WPF ships (same harness/test/notes and
+  content-pack mp3 excludes). Size delta about +158 MB (1,913 files) in the Linux tarball/output; the intake/dtrh mp3s stay in the
+  content pack, as on WPF.
+- Not wired: no page navigates to it yet beyond the test proof (`SharedServer_ServesTheShippedIntakePage`); ccp.assets/ccp.mod/
+  ccp.content/ccp.tunnel user-media hosts are not mapped.
+- Advisor: worker (oracle unavailable; choice clear-cut on the brief's safety constraints).
+## 2026-10-01: 16-point calibration on Avalonia (webcam slice 5)
+- Question: where does the calibration fit live, and what does a cancelled run leave behind?
+- Choice: the window's pure maths (grid, pose gate, robust means, homography, ridge Cerrolaza fit, axis correction) moved to
+  Core `WebcamCalibrationFit` (extracted, not git mv: it sat inside a WPF window); both windows call it, so the saved file is
+  identical. Escape, a tracker stop (panic) or the X before the save puts back the calibration that was live before
+  (WPF leaves the unsaved candidate live in memory). Mouth/tongue detectors and the verify cursor/bubble test are not ported:
+  the mouth prompts time out to WPF's "moving on" text and Verify runs its countdown only.
+- Advisor: worker (supervisor informed).
 
 ## 2026-10-02: EmiDesk ring, slice 2 (avalonia-port/emidesk-ring-2)
 - Catalogue split: the door table (id, art, hue, order) is Core `EmiDoors`; each head's `EmiTargets` answers only "available,

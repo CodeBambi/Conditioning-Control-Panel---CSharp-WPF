@@ -207,6 +207,8 @@ public sealed class LauncherWindowTests
     [Fact]
     public void SecondInstance_RoutesTheSurfaceItNames() => Run(shell =>
     {
+        // SkipToPanelBox saves true to this run's settings.json, which Run's fresh SettingsService reloads.
+        CoreSettings.Current.LauncherSkipToPanel = false;
         LauncherWindow.RouteHandoff(shell, LauncherHandoff.Encode(new[] { "--launcher" }));
         Dispatcher.UIThread.RunJobs();
         var launcher = LauncherWindow.Instance!;
@@ -279,6 +281,9 @@ public sealed class LauncherWindowTests
         box.IsChecked = true;
         box.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Assert.True(CoreSettings.Current.LauncherSkipToPanel);
+        // The click saved true to the run's settings.json; put it back so no later test inherits it.
+        CoreSettings.Current.LauncherSkipToPanel = false;
+        (CoreSettings.ServiceProvider?.Invoke() as SettingsService)?.SaveImmediate();
     });
 
     [Fact]

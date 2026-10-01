@@ -63,14 +63,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             BlinkTrainerStatusAction.Click += (_, _) => _statusAction?.Invoke();
 
-            // The 16-point calibration window is not ported yet: visibly off, with the reason on hover.
-            // Session, tracker toggle and Quick Recal are live (Overlays/BlinkTrainerSession, Platform/WebcamTracker).
-            foreach (var b in new[] { BtnBlinkTrainerCalibrate })
-            {
-                b.IsEnabled = false;
-                ToolTip.SetShowOnDisabled(b, true);
-                b.Bind(ToolTip.TipProperty, new Binding("[deeper_player_eye_tracking_unavailable]") { Source = LocalizationManager.Instance });
-            }
 
             // WPF ShowTab: RefreshBlinkTrainerTab on entry, StopBlinkTrainerDemoLoop on exit.
             PropertyChanged += (_, e) =>
@@ -275,10 +267,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             var s = CoreSettings.Current;
             bool multiMonitor = TopLevel.GetTopLevel(this) is Window w && w.Screens.ScreenCount > 1;
-            // ponytail: no calibration on this head yet (it needs the gaze feed), so HasUsableCalibration
-            // is false: multi-monitor reads NeedsCalibration, which still lets the session start (WPF).
+            // WPF HasUsableCalibration: a calibration that knows its monitor.
+            bool calibrationUsable = !string.IsNullOrEmpty(Platform.WebcamTracker.Instance.Calibration?.MonitorBounds?.DeviceName);
             StatusState = BlinkTrainerState.Status(BlinkTrainerSession.IsRunning, BlinkTrainerSession.LastError,
-                WebcamConsent.IsCurrent(s), s.BlinkTrainerFolders.Count, multiMonitor, calibrationUsable: false);
+                WebcamConsent.IsCurrent(s), s.BlinkTrainerFolders.Count, multiMonitor, calibrationUsable);
 
             BlinkTrainerStatusDot.Fill = StatusState switch
             {
@@ -306,8 +298,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 case BlinkTrainerStatusState.NeedsConsent: WireStatusAction("blink_trainer_consent_grant", GrantConsent); break;
                 case BlinkTrainerStatusState.NeedsFolders: WireStatusAction("blink_trainer_add_folder", () => BtnBlinkTrainerAddFolderCard_Click(null, new RoutedEventArgs())); break;
-                // ponytail: calibration is WebcamCalibrationWindow over the tracker; with no camera
-                // there is nothing to calibrate, so the fix-it button is not offered.
+                case BlinkTrainerStatusState.NeedsCalibration: WireStatusAction("blink_trainer_calibration_btn", () => BtnBlinkTrainerCalibrate_Click(null, new RoutedEventArgs())); break;
                 default: WireStatusAction(null, null); break;
             }
             // WPF SetStartButtonState: off only while consent or folders are missing; Stop while running.
@@ -345,7 +336,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BindLoc(BlinkTrainerConsentStatus, consented ? "blink_trainer_consent_granted" : "blink_trainer_consent_required");
             BtnBlinkTrainerManageConsent.Content = BindLoc(new TextBlock { FontSize = 11 }, consented ? "blink_trainer_consent_manage" : "blink_trainer_consent_grant");
             BtnBlinkTrainerRevokeConsent.IsVisible = consented;
-            BindLoc(BlinkTrainerCalibrationStatus, "blink_trainer_calibration_none");
+            var cal = Platform.WebcamTracker.Instance.Calibration;
+            if (cal?.MonitorBounds?.DeviceName is { Length: > 0 } device)
+            {
+                BlinkTrainerCalibrationStatus.ClearValue(TextBlock.TextProperty);   // drop the {loc} binding first
+                BlinkTrainerCalibrationStatus.Text = Loc.GetF("blink_trainer_calibration_calibrated_format", device);
+            }
+            else BindLoc(BlinkTrainerCalibrationStatus, cal == null ? "blink_trainer_calibration_none" : "blink_trainer_calibration_outdated");
         }
 
         // ---- folder library ----------------------------------------------------------------
@@ -545,8 +542,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Refresh();
         }
 
-        // Disabled in the constructor: WebcamCalibrationWindow is not ported yet.
-        private void BtnBlinkTrainerCalibrate_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF BtnBlinkTrainerCalibrate_Click (MainWindow.BlinkTrainer.cs:1320): straight to the
+        /// window, which says so when tracking is not running.</summary>
+        private async void BtnBlinkTrainerCalibrate_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                await Windows.WebcamCalibrationWindow.ShowDialogWithRecalibrate(owner);
+                Refresh();
+            }
+            catch (Exception ex) { Log.Warning(ex, "BtnBlinkTrainerCalibrate_Click failed"); }
+        }
 
         /// <summary>WPF BtnBlinkTrainerQuickRecal_Click (MainWindow.BlinkTrainer.cs:1334): consent when
         /// stale, refuse without a calibration, start tracking if off (say so if that fails), run the
