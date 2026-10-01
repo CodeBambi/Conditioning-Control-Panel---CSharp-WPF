@@ -521,6 +521,8 @@ export function createHud(opts = {}) {
   on('iq', iqLanded);
   on('newgame', paintIq);
   on('takeback', paintIq);
+  // the server corrected a guessed online seat; the grader (subscribed first, at boot) has moved over already
+  on('seat', paintIq);
   on('draw-offer', () => { stopAsking(); paintOnline(); });
   on('draw-decline', (p) => {
     const by = p && (p.by === 'w' || p.by === 'b') ? p.by : null;
