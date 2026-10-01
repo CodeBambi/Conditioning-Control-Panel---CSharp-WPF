@@ -2579,6 +2579,8 @@ namespace ConditioningControlPanel
             // Suggestion #659 — layered audio mixer. Inert until Start() (used by the Audio
             // Layers window and by #668 audio-only sessions), so constructing it is free.
             LayeredAudio = new Services.Audio.LayeredAudioService();
+            Services.Chaos.ChaosLessons.LessonBark = id => App.Bark?.NotifyChaosLessonComplete(id);
+            Services.Chaos.ChaosLessons.FirstTimeBark = id => App.Bark?.NotifyChaosFirstTime(id);
             Services.Chaos.ChaosMeta.Init();   // load persistent Chaos meta-progression before the run service
             Chaos = new Services.Chaos.ChaosModeService();
             InteractionQueue = new InteractionQueueService();
@@ -2934,7 +2936,9 @@ namespace ConditioningControlPanel
             // which only resolves once the async validation below returns. Hook both providers now
             // that they exist so the pass re-evaluates (and every listener repaints) the moment the
             // answer lands, instead of leaving a patron looking free until something else refreshes.
-            IntakePass?.AttachEntitlementSources();
+            IntakePass?.AttachEntitlementSources(
+                h => { if (Patreon != null) Patreon.TierChanged += h; if (SubscribeStar != null) SubscribeStar.TierChanged += h; },
+                h => { if (Patreon != null) Patreon.TierChanged -= h; if (SubscribeStar != null) SubscribeStar.TierChanged -= h; });
             ProfileSync = new ProfileSyncService();
             // THE XP NUDGE (pitch "The tap holds", 2026-08-30): an earn outside a
             // running session schedules one coalesced sync inside the existing 30s
@@ -2946,11 +2950,11 @@ namespace ConditioningControlPanel
             // (there is no sign-out event), and a loaded profile is the sign-in moment to poll now.
             try
             {
-                _friendsService = Services.Friends.FriendsService.CreateForApp();
+                _friendsService = Services.Friends.FriendsServiceApp.CreateForApp();
                 Friends = _friendsService;
                 try { FriendsFeed = Services.Friends.FriendsFeed.CreateForApp(_friendsService); } catch (Exception exFeed) { Logger?.Debug("Friends feed failed to start: {E}", exFeed.Message); }
                 ProfileSync.ProfileLoaded += (_, _) => _friendsService?.Kick();
-                _friendsService.Start();
+                _friendsService.Start(new Services.Friends.FriendsServiceApp.Timer());
             }
             catch (Exception ex) { Logger?.Warning("Friends service failed to start: {E}", ex.Message); }
             // THE LEASH: no timer of its own. The friends poll carries its report out and its

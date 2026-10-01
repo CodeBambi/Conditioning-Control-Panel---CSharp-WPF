@@ -76,11 +76,16 @@ namespace ConditioningControlPanel.Avalonia
         /// SetupWithoutStarting() has called App.Initialize(). The view then binds against an
         /// uninitialised app - which showed up as every localized string rendering as its raw key
         /// while the same lookup succeeded in --smoke. Construct after setup, not before.</param>
+        /// <summary>True once a render path (--render-view / --render-all) runs: views must then
+        /// draw from in-memory state and never load-with-cleanup or save a real profile.</summary>
+        internal static bool Rendering;
+
         public static int Run(string outPath, Func<Control>? viewFactory)
         {
             Window? window = null;
             try
             {
+                Rendering = true;
                 EnsureSetUp();
                 _bindingErrors.Messages.Clear();
 

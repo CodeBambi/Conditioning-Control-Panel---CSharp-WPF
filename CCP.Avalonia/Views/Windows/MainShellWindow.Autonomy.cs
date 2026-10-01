@@ -3,15 +3,17 @@
 // mood/intensity pick, announce delay, stop generation) are Core's AutonomyScheduler; this file
 // seeds it with what this head can actually do and wires start/stop, panic and the state hero.
 //
-// Performed here: Flash, Subliminal, LockCard, Video (mandatory), Bubbles and Bouncing Text as
-// 30 s pulses. Never picked here (CanPerform false, so ticking them does nothing):
-// ponytail: Comment (AI/phrase comment), MindWipe (CoreMindWipe unseeded on this head), Pink Filter
-// pulse (opacity boost + overlay ownership, #1180), Web Video (no browser media service), Wallpaper
-// (Win32 WallpaperService), Spoken Mantra (MantraVoiceService not ported).
+// Performed here (AutonomyService.PerformAction :935): Flash, Subliminal, LockCard, Video
+// (mandatory), Bubbles and Bouncing Text as 30 s pulses, Pink Filter as a 30 s pulse (X11 only -
+// only where the compositor can show the tint), Bubble Count (forced game), Comment (AI when chat is on
+// and available, else a preset phrase through the tube), Mind Wipe (only once CoreMindWipe is
+// seeded). Never picked here (CanPerform false, exactly as WPF skips an unavailable action):
+// ponytail: Spiral pulse and Brain Drain pulse (no spiral / blur overlay on this head), Web Video
+// (no browser media service), Wallpaper (Win32 WallpaperService), Spoken Mantra (MantraVoiceService
+// not ported). Add each to CanPerformAutonomy the day its surface lands.
 // Also not here: the TakeoverAnnouncerOverlay banner (overlay-takeover-announcer), the avatar
 // countdown bar, the announcement's event audio (CompanionPhraseService), the diagnostic Test
 // dialogs and Force Start (debug). Voice/PTT/wake word: MainShellWindow.VoiceCommands.cs.
-
 using System;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -28,7 +30,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>This window's Takeover. Per window so a test's shell never shares one.</summary>
         internal readonly AutonomyScheduler Autonomy = new();
 
-        private bool _bubblesPulse, _bouncingPulse;
+        private bool _bubblesPulse, _bouncingPulse, _pinkPulse;
+        private bool _pinkWasEnabled;
+        private int _pinkBaseOpacity, _pinkAppliedOpacity;
         private int _pulseGen;
 
         private bool _autonomyHooked;
@@ -52,12 +56,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF AnnounceAction: the tube says it (text only; no event audio here).
             Autonomy.AnnouncementMade += (_, phrase) => Dispatcher.UIThread.Post(() =>
                 _avatarTubeWindow?.GigglePriority(phrase, false, aiGenerated: false));
-            Closed += (_, _) => { Autonomy.Stop(); StopVoiceInput(); };
+            Closed += (_, _) => { CancelAutonomyPulses(); Autonomy.Stop(); StopVoiceInput(); };
             Opened += (_, _) => { ResumeAutonomyOnStartup(); RefreshVoiceInputModes(); };
         }
 
-        private static bool CanPerformAutonomy(AutonomyActionType a) => a switch
+        private bool CanPerformAutonomy(AutonomyActionType a) => a switch
         {
+            AutonomyActionType.PinkFilterPulse => PinkFilterOverlay.CanShowTint,
+            AutonomyActionType.BubbleCount => CoreEngine.BubbleCount != null,
+            AutonomyActionType.Comment => _avatarTubeWindow != null,
+            AutonomyActionType.MindWipe => CoreMindWipe.TriggerOnceProvider != null,
             AutonomyActionType.Flash => CoreFlash.ShowProvider != null,
             AutonomyActionType.Subliminal => CoreSubliminal.ShowProvider != null,
             AutonomyActionType.LockCard => CoreLockCard.ShowHandler != null,
@@ -68,7 +76,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         };
 
         /// <summary>WPF PerformAction for the actions this head has. UI thread.</summary>
-        private void PerformAutonomy(AutonomyActionType a)
+        internal void PerformAutonomy(AutonomyActionType a)
         {
             if (!Autonomy.IsEnabled) return;   // stopped while the post was queued
             switch (a)
@@ -92,13 +100,81 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     CoreBouncingText.Start();
                     EndPulseAfter30s(() => { if (_bouncingPulse) { _bouncingPulse = false; CoreBouncingText.Stop(); } });
                     break;
+                case AutonomyActionType.PinkFilterPulse: PulsePinkFilter(); break;
+                // WPF: TriggerGame(forceTest: true) - runs with the engine stopped and the card off.
+                case AutonomyActionType.BubbleCount: CoreEngine.BubbleCount?.Trigger(forceTest: true); break;
+                case AutonomyActionType.Comment: MakeAutonomyComment(); break;
+                case AutonomyActionType.MindWipe: CoreMindWipe.TriggerOnce(); break;
             }
         }
+
+        /// <summary>WPF PulsePinkFilter: boost the tint for 30 s, then hand it back. Skipped while a
+        /// session runs (it owns the overlays). <see cref="PinkFilterOverlay.PulseHold"/> is WPF's
+        /// "pulse started the overlay service" (#1180): it shows the tint with the engine off and
+        /// is released, not left on, when the pulse ends.</summary>
+        private void PulsePinkFilter()
+        {
+            if (App.Sessions?.IsRunning == true || _pinkPulse) return;
+            var s = CoreSettings.Current;
+            _pinkPulse = true;
+            _pinkWasEnabled = s.PinkFilterEnabled;
+            _pinkBaseOpacity = s.PinkFilterOpacity;
+            s.PinkFilterEnabled = true;
+            s.PinkFilterOpacity = Math.Max(30, _pinkBaseOpacity + 15);
+            _pinkAppliedOpacity = s.PinkFilterOpacity;   // the setter clamps; restore only if untouched (#441a)
+            PinkFilterOverlay.PulseHold = true;
+            PinkFilterOverlay.Refresh(this);
+            EndPulseAfter30s(() => EndPinkPulse(cancelled: false));
+        }
+
+        private void EndPinkPulse(bool cancelled)
+        {
+            if (!_pinkPulse) return;
+            _pinkPulse = false;
+            var s = CoreSettings.Current;
+            s.PinkFilterEnabled = _pinkWasEnabled;
+            // WPF CancelActivePulses restores unconditionally; the natural end respects a slider move.
+            if (cancelled || s.PinkFilterOpacity == _pinkAppliedOpacity)
+                s.PinkFilterOpacity = _pinkBaseOpacity;
+            PinkFilterOverlay.PulseHold = false;
+            PinkFilterOverlay.Refresh(this);
+        }
+
+        private static readonly string[] CommentPhrases =
+        {
+            "*giggles* I love being with you~", "You're doing so well~", "Such a good {petname}~",
+            "Teehee~", "I'm always watching~", "*bounces* Pay attention to me~",
+        };
+
+        /// <summary>WPF MakeComment / MakeAICommentAsync: AI through GigglePriority, a preset through
+        /// the low-priority Giggle (dropped under an AI request or bubble).</summary>
+        private async void MakeAutonomyComment()
+        {
+            var tube = _avatarTubeWindow;
+            if (tube == null) return;
+            if (CoreSettings.Current.AiChatEnabled && App.Ai?.IsAvailable == true)
+            {
+                try
+                {
+                    var r = await App.Ai.GetBambiReplyExAsync("Say something random and teasing to get attention. Be playful.");
+                    // Refusals are dropped silently on this surface (WPF R2-NEW-H-1).
+                    if (r.Refusal == null && !string.IsNullOrEmpty(r.Text) && Autonomy.IsEnabled)
+                        _avatarTubeWindow?.GigglePriority(r.Text, false, aiGenerated: r.IsAiGenerated);
+                }
+                catch (Exception ex) { Log.Warning("Autonomy: AI comment failed: {Error}", ex.Message); }
+                return;
+            }
+            var phrase = CommentPhrases[Random.Shared.Next(CommentPhrases.Length)];
+            tube.Giggle(ConditioningControlPanel.Localization.VocabTokens.Apply(phrase));
+        }
+
+        /// <summary>The 30 s pulse clock; tests step it by hand.</summary>
+        internal Action<Action, TimeSpan> PulseTimer = (a, t) => DispatcherTimer.RunOnce(a, t);
 
         private void EndPulseAfter30s(Action end)
         {
             var gen = _pulseGen;
-            DispatcherTimer.RunOnce(() => { if (gen == _pulseGen) end(); }, TimeSpan.FromSeconds(30));
+            PulseTimer(() => { if (gen == _pulseGen) end(); }, TimeSpan.FromSeconds(30));
         }
 
         /// <summary>WPF CancelActivePulses: stop only what a Takeover pulse started.</summary>
@@ -107,6 +183,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _pulseGen++;
             if (_bubblesPulse) { _bubblesPulse = false; CoreBubbles.Stop(); }
             if (_bouncingPulse) { _bouncingPulse = false; CoreBouncingText.Stop(); }
+            EndPinkPulse(cancelled: true);
         }
 
         /// <summary>

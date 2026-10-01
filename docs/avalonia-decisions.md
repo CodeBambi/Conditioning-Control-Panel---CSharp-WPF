@@ -271,6 +271,29 @@ MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `Cor
   bookOffer moment opens it in WPF), book demos/cards, options' global click-away, `RefreshOutfit` (Arcademy outfit store is
   head-only) and `StopPresentation` (no presentation mode on this head). Ledger rows stay stub.
 - Advisor: worker.
+## 2026-09-30: Launcher slice 1 (avalonia-port/launcher-core)
+- Question: the WPF launcher's cards are games whose hosts (Back Room, Breakout, Piece by Piece, Racing, DtRH, Arcademy, Goon)
+  do not exist on Avalonia. Draw them, or not?
+- Choice: the card table (ids, order, art, glyph, hue, account/new flags) moved to Core `LauncherCards`, with the close/Play rules
+  in `LauncherRules`; WPF `LauncherCatalogue`/`LauncherHost` build and act on them unchanged. The Avalonia `LauncherWindow` draws
+  only cards with a destination on this head (`LauncherWindow.Destinations`: today only Graded Intake, a panel tab); a game card
+  appears when its host lands. Nothing is faked. The launcher is reached from the shell's title-bar "CC Labs" door (WPF
+  `BtnBackToLauncher`); the boot surface, skip-to-panel box and tray row are slice 2 (~/ccp-port/briefs/launcher-plan.md).
+- Deviation: WPF hides the launcher behind the panel's tray icon when something still runs. A Linux desktop may have no tray host,
+  so when the panel is hidden and no StatusNotifierWatcher is present the close button minimizes instead of hiding, keeping a way
+  back. A user close is routed through the rule; a `Close()` from code (shutdown, tests) goes through.
+- Closing the shell closes the launcher (LauncherWindow.BackToLauncher hooks the panel's Closed), so a hidden launcher never keeps a trayless process alive.
+- Test: `Tests/CCP.Core.Tests/LauncherRulesTests.cs`, `Tests/CCP.Avalonia.Tests/LauncherWindowTests.cs` (each behaviour fail-proven by a deliberate break).
+- WindowControlButton/WindowCloseButton hoisted from MainShellWindow.axaml into Theme/Styles.xaml (its ponytail note: second caller).
+- Advisor: none (worker, per branch brief).
+
+## graded-intake: IntakePassService in Core takes its entitlement hooks from the head
+`IntakePassService` moved to Core unchanged except for one seam: `AttachEntitlementSources()` read
+`App.Patreon`/`App.SubscribeStar` directly, so it now takes `attach`/`detach` delegates and each head
+passes its two providers' `TierChanged` (WPF App.xaml.cs; Avalonia `AccountSeed.Seed()`, the point where its
+providers exist). A second call re-points the hook at the new providers instead of being a no-op.
+Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate lives on
+`GradedIntakeTabView` rather than the shell, because this head's shell cannot reach x:Name fields.
 ## 2026-10-01: webcam gaze on Avalonia (webcam slice 4)
 - Question: how does the gaze half of WebcamTrackingService reach the Avalonia tracker without a second copy, and what fits one slice?
 - Choice: the stateful frame-free chain moved to Core `GazeEngine` (one instance per tracker, capture thread only) and WPF's

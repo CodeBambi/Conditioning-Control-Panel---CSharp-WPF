@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Threading;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Friends;
 
@@ -12,7 +11,7 @@ namespace ConditioningControlPanel.Services.Friends;
 /// THE FRIENDS SERVICE, hung off <c>App.Friends</c>. Owns the poll (cadence from
 /// <see cref="FriendsPollRule"/>), the last snapshot, the inbox de-dup and the presence gate.
 /// Every event is raised on the thread that ran the poll or the call, which in the app is the
-/// dispatcher: the timer is a DispatcherTimer and nothing here uses ConfigureAwait(false).
+/// dispatcher: the head's <see cref="IUiTimer"/> ticks there and nothing here uses ConfigureAwait(false).
 ///
 /// <para>Sign in and sign out: there is no sign-out event to hang off, so the service reads the
 /// account on every tick. Signed out, the rule says 0 and the timer only re-reads the account
@@ -36,7 +35,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     private readonly Action<bool> _writeShared;
     private readonly Func<int?> _lockDay;
 
-    private DispatcherTimer? _timer;
+    private IUiTimer? _timer;
     private string? _lastAccount;
     private int _pollIndex;
     private bool _drawerOpen;
@@ -61,17 +60,18 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     {
         _api = api;
         _account = account;
-        _foreground = foreground ?? AnyAppWindowActive;
+        // The heads pass their own "any window active"; with none, assume the foreground.
+        _foreground = foreground ?? (() => true);
         // The server's clock: invites, receipts and trails carry server times (a fast PC clock
         // would age a trail out at its first receipt). Tests hand in their own clock.
         _now = now ?? (() => ServerClock.UtcNow);
-        _readShared = readShared ?? (() => App.Settings?.Current?.FriendsPresenceShared == true);
+        _readShared = readShared ?? (() => CoreSettings.Service?.Current?.FriendsPresenceShared == true);
         _writeShared = writeShared ?? (v =>
         {
-            var s = App.Settings?.Current;
+            var s = CoreSettings.Service?.Current;
             if (s == null) return;
             s.FriendsPresenceShared = v;
-            try { App.Settings?.Save(); } catch { }
+            try { CoreSettings.Service?.Save(); } catch { }
         });
         _lockDay = lockDay ?? (() => null);
         WireFeed();
@@ -100,14 +100,8 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
     private void RaiseSentTrails()
     {
         try { SentTrailsChanged?.Invoke(); }
-        catch (Exception ex) { App.Logger?.Debug("Friends trail handler failed: {E}", ex.Message); }
+        catch (Exception ex) { Log.Debug("Friends trail handler failed: {E}", ex.Message); }
     }
-
-    /// <summary>The app's own wiring: the real wire, the account off AppSettings.</summary>
-    public static FriendsService CreateForApp() => new(
-        new FriendsApi(null, Services.BackRoom.BackRoomApi.AppIdentity, Services.BackRoom.BackRoomApi.BaseUrl,
-            MergedAccountRecovery.TryHandle),
-        () => Services.BackRoom.BackRoomApi.AppIdentity()?.UnifiedId);
 
     // ---- IFriendsService ----
 
@@ -198,16 +192,18 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
 
     // ---- the poll ----
 
-    /// <summary>Start the timer. The app calls this once; tests drive <see cref="TickAsync"/> by hand.</summary>
-    public void Start()
+    /// <summary>Start the timer (the head's, on its UI thread). The app calls this once; tests
+    /// drive <see cref="TickAsync"/> by hand.</summary>
+    public void Start(IUiTimer timer)
     {
         if (_disposed || _timer != null) return;
-        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
+        _timer = timer;
+        _timer.Interval = TimeSpan.FromSeconds(2);
         _timer.Tick += async (_, _) =>
         {
             _timer?.Stop();
             try { await TickAsync(); }
-            catch (Exception ex) { App.Logger?.Debug("Friends poll failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Friends poll failed: {E}", ex.Message); }
             finally { Reschedule(); }
         };
         _timer.Start();
@@ -226,8 +222,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             _timer.Interval = TimeSpan.FromMilliseconds(200);
             _timer.Start();
         }
-        if (t.Dispatcher.CheckAccess()) Go();
-        else t.Dispatcher.BeginInvoke((Action)Go);
+        t.OnUiThread(Go);
     }
 
     private void Reschedule()
@@ -245,8 +240,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             _kickPending = false;
             _timer.Start();
         }
-        if (t.Dispatcher.CheckAccess()) Go();
-        else t.Dispatcher.BeginInvoke((Action)Go);
+        t.OnUiThread(Go);
     }
 
     internal int NextIntervalSeconds()
@@ -275,7 +269,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             bool shared = _readShared();
             JObject? report = null;
             try { report = LeashReportProvider?.Invoke(); }
-            catch (Exception ex) { App.Logger?.Debug("Leash report failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Leash report failed: {E}", ex.Message); }
             var reports = TakeReports();
             JArray? receipts = reports.Count > 0 ? FriendReceipts.ToWire(reports) : null;
             var reply = await _api.PollAsync(shared ? _activities.Top : null, shared ? _lockDay() : null, shared, report, receipts);
@@ -286,7 +280,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
                 ApplyOnline(reply.Online);
                 Deliver(reply.Inbox);
                 try { LeashBlockArrived?.Invoke(reply.Leash); }
-                catch (Exception ex) { App.Logger?.Debug("Leash block handler failed: {E}", ex.Message); }
+                catch (Exception ex) { Log.Debug("Leash block handler failed: {E}", ex.Message); }
                 RaiseReceipts(reply.Receipts);
             }
 
@@ -357,7 +351,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
             _seenOrder.Enqueue(item.Id);
             while (_seenOrder.Count > SeenCap) _seen.Remove(_seenOrder.Dequeue());
             try { Delivered?.Invoke(item); }
-            catch (Exception ex) { App.Logger?.Debug("Friends delivery handler failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Friends delivery handler failed: {E}", ex.Message); }
         }
     }
 
@@ -369,12 +363,12 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         foreach (var r in arrived)
         {
             try { RequestArrived?.Invoke(r); }
-            catch (Exception ex) { App.Logger?.Debug("Friends request handler failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Friends request handler failed: {E}", ex.Message); }
         }
         foreach (var id in gone)
         {
             try { RequestGone?.Invoke(id); }
-            catch (Exception ex) { App.Logger?.Debug("Friends request-gone handler failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Friends request-gone handler failed: {E}", ex.Message); }
         }
     }
 
@@ -383,20 +377,7 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         if (FriendsSnapshotEquality.Same(Snapshot, next)) return;
         Snapshot = next;
         try { SnapshotChanged?.Invoke(next); }
-        catch (Exception ex) { App.Logger?.Debug("Friends snapshot handler failed: {E}", ex.Message); }
-    }
-
-    private static bool AnyAppWindowActive()
-    {
-        try
-        {
-            var app = Application.Current;
-            if (app == null) return false;
-            if (!app.Dispatcher.CheckAccess()) return app.Dispatcher.Invoke(AnyAppWindowActive);
-            foreach (Window w in app.Windows) if (w.IsActive) return true;
-            return false;
-        }
-        catch { return false; }
+        catch (Exception ex) { Log.Debug("Friends snapshot handler failed: {E}", ex.Message); }
     }
 
     public void Dispose()
@@ -405,13 +386,21 @@ public sealed partial class FriendsService : IFriendsService, IDisposable
         var t = _timer;
         _timer = null;
         if (t == null) return;
-        try
-        {
-            if (t.Dispatcher.CheckAccess()) t.Stop();
-            else t.Dispatcher.BeginInvoke((Action)t.Stop);
-        }
+        try { t.OnUiThread(t.Stop); }
         catch { }
     }
+}
+
+/// <summary>The poll's timer, owned by the head (WPF and Avalonia each wrap their DispatcherTimer):
+/// <see cref="Tick"/> fires on the UI thread.</summary>
+public interface IUiTimer
+{
+    TimeSpan Interval { get; set; }
+    event EventHandler? Tick;
+    void Start();
+    void Stop();
+    /// <summary>Runs <paramref name="action"/> on the timer's UI thread: in place when already there, else posted.</summary>
+    void OnUiThread(Action action);
 }
 
 /// <summary>Snapshot records hold lists, and list equality is by reference; this compares contents.</summary>
