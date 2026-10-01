@@ -71,6 +71,8 @@ internal static class X11Overlay
     [DllImport(LibX11)] private static extern IntPtr XDefaultRootWindow(IntPtr display);
     [DllImport(LibX11)] private static extern IntPtr XInternAtom(IntPtr display, string name, bool onlyIfExists);
     [DllImport(LibX11)] private static extern int XChangeProperty(IntPtr display, IntPtr window, IntPtr property, IntPtr type, int format, int mode, IntPtr[] data, int count);
+    [DllImport(LibX11)] private static extern IntPtr XGetSelectionOwner(IntPtr display, IntPtr selection);
+    [DllImport(LibX11)] private static extern int XDefaultScreen(IntPtr display);
     [DllImport(LibX11)] private static extern int XSendEvent(IntPtr display, IntPtr window, bool propagate, long mask, IntPtr sendEvent);
 
     [DllImport(LibXfixes)] private static extern int XFixesQueryExtension(IntPtr display, out int eventBase, out int errorBase);
@@ -95,6 +97,22 @@ internal static class X11Overlay
     internal static bool IsAvailable
     {
         get { if (OperatingSystem.IsWindows()) return true; lock (Gate) { return EnsureDisplay(); } }
+    }
+
+    /// <summary>EWMH: a compositing manager owns <c>_NET_WM_CM_S{screen}</c>. Without one the window
+    /// manager refuses per-pixel transparency, so a tint would paint an opaque block.</summary>
+    internal static bool IsCompositing
+    {
+        get
+        {
+            if (OperatingSystem.IsWindows()) return true;   // DWM always composes
+            lock (Gate)
+            {
+                if (!EnsureDisplay()) return false;
+                var atom = XInternAtom(_display, $"_NET_WM_CM_S{XDefaultScreen(_display)}", false);
+                return XGetSelectionOwner(_display, atom) != IntPtr.Zero;
+            }
+        }
     }
 
     /// <summary>Makes <paramref name="window"/> transparent to the mouse while it keeps drawing,

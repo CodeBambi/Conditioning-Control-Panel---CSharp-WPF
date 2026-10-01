@@ -1109,8 +1109,31 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                                    string? mood = null)
         {
             if (_isPlayingUninterruptibleClip) return;
+            RunOnAvatar(() => ShowSpeech(text, playSound, aiGenerated, phraseAudioPath, barkVoice, preset: false));
+        }
+
+        private int _presetGiggleCounter;
+
+        /// <summary>WPF Giggle (Speech.cs:240): a PRESET line. Dropped while an AI request is in
+        /// flight or an AI bubble is up, never logged to chat history, sound on every fifth.
+        /// ponytail: WPF queues a preset behind a line still speaking; this tube has no speech
+        /// queue, so the preset replaces it.</summary>
+        public void Giggle(string text)
+        {
+            if (_isPlayingUninterruptibleClip || _isWaitingForAi || _isShowingAiBubble) return;
             RunOnAvatar(() =>
             {
+                if (_isWaitingForAi || _isShowingAiBubble) return;   // re-checked on the UI thread, as WPF
+                ShowSpeech(text, NextPresetGiggleSound(), aiGenerated: false, null, false, preset: true);
+            });
+        }
+
+        /// <summary>WPF: "1 in 5 for presets".</summary>
+        internal bool NextPresetGiggleSound() => ++_presetGiggleCounter % 5 == 0;
+
+        private void ShowSpeech(string text, bool playSound, bool aiGenerated, string? phraseAudioPath,
+                                bool barkVoice, bool preset)
+        {
                 try
                 {
                     // Only a GENUINE AI reply anchors the bark system's chat-suppression window;
@@ -1119,7 +1142,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
                     StopThinkingAnimation();   // the reply pre-empts the thinking bubble (WPF Speech.cs:335)
                     _speechTimer?.Stop();
-                    AddToChatHistory(text, isUser: false);
+                    if (!preset) AddToChatHistory(text, isUser: false);   // WPF Giggle logs nothing
 
                     if (Windows.EmiDesk.EmiDeskService.Instance.AvatarMuted) { _isGiggling = false; return; }
 
@@ -1145,13 +1168,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     ApplySpeechBubblePlacement();
                     _speechBubble.IsVisible = true;
                     _isGiggling = true;
-                    _isShowingAiBubble = true;
+                    _isShowingAiBubble = !preset;
 
                     StartBubbleHideTimer(text);
                     Log.Debug("Companion says ({Chars} chars, ai={Ai})", text.Length, aiGenerated);   // never the text
                 }
                 catch (Exception ex) { Log.Warning(ex, "AvatarTube GigglePriority failed"); }
-            });
         }
 
         private DispatcherTimer? _listeningDotsTimer;
