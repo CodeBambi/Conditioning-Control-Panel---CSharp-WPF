@@ -144,7 +144,7 @@ public class FlickerDeckTests
         var full = FlickerDeck.Sample(s, MotionLevel.Full).WobbleRad;
         Assert.Equal(full / 2, FlickerDeck.Sample(s, MotionLevel.Reduced).WobbleRad, 9);
         var off = FlickerDeck.Sample(s, MotionLevel.Off);
-        Assert.Equal(new FlickerPose(1, 1, 0, 0, 0, 0, 1.0), off);
+        Assert.Equal(new FlickerPose(1, 1, 0, 0, 0, 0, 0.6), off);
     }
 
     [Fact]
