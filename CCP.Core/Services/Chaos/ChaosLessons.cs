@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -27,6 +28,10 @@ public sealed class ChaosLessonDef
 /// </summary>
 public static class ChaosLessons
 {
+    /// <summary>Head bark hooks (WPF: App.Bark.NotifyChaosLessonComplete / NotifyChaosFirstTime),
+    /// fired at the exact point the WPF head barked. Null on a head without the companion bark.</summary>
+    public static Action<string>? LessonBark, FirstTimeBark;
+
     // ---- thresholds (tunable) ----
     public const long T_VIBE_POPPING   = 10;  // treats popped inside a 5s rolling window (high-water)
     public const long T_FREEZE_TRIGGER = 15;  // freeze pickups caught
@@ -99,7 +104,7 @@ public static class ChaosLessons
     /// <summary>True when this id's Unlock is still lesson-blocked.</summary>
     public static bool IsLessonBlocked(string id) =>
         _byId.ContainsKey(id) && !Lessonless.Contains(id) && !IsComplete(id)
-        && !(CurseBound.Contains(id) && App.Settings?.Current?.ChaosAllowCurses == false);
+        && !(CurseBound.Contains(id) && CoreSettings.Current.ChaosAllowCurses == false);
 
     public static bool IsComplete(string id) =>
         !_byId.ContainsKey(id) || Lessonless.Contains(id) ||
@@ -138,8 +143,8 @@ public static class ChaosLessons
         ChaosMeta.State.LessonsComplete ??= new();
         if (!ChaosMeta.State.LessonsComplete.Add(def.Id)) return;
         ChaosMeta.Save();
-        App.Logger?.Information("Chaos lesson complete: {Id}", def.Id);
-        try { App.Bark?.NotifyChaosLessonComplete(def.Id); } catch { }
+        Log.Information("Chaos lesson complete: {Id}", def.Id);
+        try { LessonBark?.Invoke(def.Id); } catch { }
         RevealService.Sync("lesson:" + def.Id);
         try { LessonCompleted?.Invoke(def.Id); } catch { }
     }
@@ -183,8 +188,8 @@ public static class ChaosFirstTimes
         if (!ChaosMeta.State.FirstTimesAwarded.Add(bonusId)) return false;
         ChaosMeta.State.Sparks += amount;
         ChaosMeta.Save();
-        App.Logger?.Information("Chaos first-time: {Id} +{Amount} drops", bonusId, amount);
-        try { App.Bark?.NotifyChaosFirstTime(bonusId); } catch { }
+        Log.Information("Chaos first-time: {Id} +{Amount} drops", bonusId, amount);
+        try { ChaosLessons.FirstTimeBark?.Invoke(bonusId); } catch { }
         try { Awarded?.Invoke(bonusId, amount); } catch { }
         return true;
     }
