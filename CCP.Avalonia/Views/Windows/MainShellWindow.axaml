@@ -1444,6 +1444,8 @@
                          of those). Self-wiring like the fuse chip: adding the element is the whole
                          integration. See Controls/EmiDock.xaml. -->
                     <cmp:EmiDock x:Name="EmiDockChip"/>
+                    <!-- FRIENDS: you, bottom-left (WPF MainWindow.xaml:1487). See Controls/FriendsRailChip.cs. -->
+                    <cmp:FriendsRailChip x:Name="FriendsChip"/>
                 </StackPanel>
             </Grid>
         </Border>

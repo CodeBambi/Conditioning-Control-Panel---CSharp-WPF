@@ -35,7 +35,7 @@ public sealed class FriendsSeen
             while (_order.Count > Cap) _done.Remove(_order.Dequeue());
         }
         try { svc.ReportReceipt(report); }
-        catch (Exception ex) { App.Logger?.Debug("[Friends] receipt report: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Debug("[Friends] receipt report: {E}", ex.Message); }
         return true;
     }
 

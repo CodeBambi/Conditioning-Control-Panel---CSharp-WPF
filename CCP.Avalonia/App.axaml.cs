@@ -443,6 +443,19 @@ namespace ConditioningControlPanel.Avalonia
                     (desktop.MainWindow as Views.Windows.MainShellWindow)?.InitializeChasterFlash(Platform.ChasterHead.Service);
                 }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Chaster] service could not be built"); }
+                // WPF App.xaml.cs FRIENDS: no request at build; a new identity is the sign-in moment to poll now.
+                try
+                {
+                    var friends = Platform.FriendsHead.Create(
+                        Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
+                    if (friends != null)
+                    {
+                        Platform.FriendsHead.Service = friends;
+                        CoreAccount.UnifiedIdentityChanged += (_, _) => friends.Kick();
+                        friends.Start(new Platform.FriendsHead.Timer());
+                    }
+                }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "[Friends] service could not be built"); }
                 // WPF App.xaml.cs:2940-2968. EnsureBaselineAsync keeps WPF's rules: no-op on a full
                 // install, under a debugger, in offline mode, or when nothing is missing. A Linux dev
                 // build never reads as a full install (flashes_audio is not shipped here), so an

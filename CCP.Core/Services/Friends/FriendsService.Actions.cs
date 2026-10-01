@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Friends;
 
@@ -70,7 +71,7 @@ public sealed partial class FriendsService
             var friend = Snapshot.Friends.FirstOrDefault(f => f.Id == friendId)
                 ?? new Friend(friendId, "", null, 0, false, FriendPresence.None, false);
             try { Sent?.Invoke(kind, friend); }
-            catch (Exception ex) { App.Logger?.Debug("Friends sent handler failed: {E}", ex.Message); }
+            catch (Exception ex) { Log.Debug("Friends sent handler failed: {E}", ex.Message); }
         }
         return result;
     }
