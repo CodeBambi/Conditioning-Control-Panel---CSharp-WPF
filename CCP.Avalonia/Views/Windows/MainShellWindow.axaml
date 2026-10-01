@@ -229,51 +229,8 @@
         </ControlTheme>
 
         <!-- ponytail: local copy of ConditioningControlPanel/Resources/Theme/MainWindow.xaml:
-             WindowControlButton / WindowCloseButton / EmoteCircleButtonBigStyle /
-             EmoteCustomTextBoxStyle. Hoist into Theme/Styles.xaml when a second view needs them;
-             MainWindow is the only caller today. -->
-        <ControlTheme x:Key="WindowControlButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="0">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          Foreground="{TemplateBinding Foreground}"/>
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover /template/ Border#bd">
-                <Setter Property="Background" Value="{DynamicResource TransparentWhiteBrush}"/>
-            </Style>
-        </ControlTheme>
-
-        <ControlTheme x:Key="WindowCloseButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="0">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          Foreground="{TemplateBinding Foreground}"/>
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover /template/ Border#bd">
-                <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
-            </Style>
-        </ControlTheme>
-
+             EmoteCircleButtonBigStyle / EmoteCustomTextBoxStyle. WindowControlButton and
+             WindowCloseButton moved to Theme/Styles.xaml once the launcher needed them too. -->
         <ControlTheme x:Key="EmoteCircleButtonBigStyle" TargetType="Button">
             <Setter Property="Width" Value="72"/>
             <Setter Property="Height" Value="72"/>
@@ -522,6 +479,22 @@
 
                 <!-- Window Control Buttons -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="BtnBackToLauncher" Height="36"
+                            Click="BtnBackToLauncher_Click" Theme="{StaticResource WindowControlButton}"
+                            ToolTip.Tip="{loc:Str launcher_tooltip_back_to_client}"
+                            AutomationProperties.Name="{loc:Str launcher_back_to_client}">
+                        <!-- A left chevron into a small square, and the name of where it goes. -->
+                        <StackPanel Orientation="Horizontal" Margin="12,0,12,0">
+                            <Canvas Width="16" Height="14" VerticalAlignment="Center">
+                                <Path Data="M9,2 L4,7 L9,12" Stroke="White" StrokeThickness="1.6"
+                                      StrokeJoin="Round" StrokeLineCap="Round"/>
+                                <Rectangle Canvas.Left="11.5" Canvas.Top="4" Width="5" Height="6"
+                                           Stroke="White" StrokeThickness="1.4" RadiusX="1" RadiusY="1"/>
+                            </Canvas>
+                            <TextBlock Text="{loc:Str launcher_back_to_client_short}" Foreground="White" FontSize="12"
+                                       FontWeight="SemiBold" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnTitleBarBugReport" Content="🐛" Width="46" Height="36"
                             Click="BtnReportBug_Click" Theme="{StaticResource WindowControlButton}"
                             ToolTip.Tip="{loc:Str btn_report_bug}" FontSize="14"/>
@@ -1444,6 +1417,8 @@
                          of those). Self-wiring like the fuse chip: adding the element is the whole
                          integration. See Controls/EmiDock.xaml. -->
                     <cmp:EmiDock x:Name="EmiDockChip"/>
+                    <!-- FRIENDS: you, bottom-left (WPF MainWindow.xaml:1487). See Controls/FriendsRailChip.cs. -->
+                    <cmp:FriendsRailChip x:Name="FriendsChip"/>
                 </StackPanel>
             </Grid>
         </Border>

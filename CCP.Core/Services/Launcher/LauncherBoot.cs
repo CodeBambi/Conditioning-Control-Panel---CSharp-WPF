@@ -49,7 +49,7 @@ public static class LauncherBoot
         Func<string, bool>? knownGame = null)
     {
         args ??= Array.Empty<string>();
-        knownGame ??= id => LauncherCatalogue.Find(id) != null;
+        knownGame ??= id => LauncherCards.Find(id) != null;
 
         if (Has(args, PanelFlag) || Has(args, StartupFlag)) return BootDecision.PanelFirst;
         if (!welcomed || !ageAccepted) return BootDecision.PanelFirst;
