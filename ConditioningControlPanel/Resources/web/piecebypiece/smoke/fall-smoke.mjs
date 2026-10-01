@@ -22,7 +22,7 @@ assert.equal(goneLine(white.moves[2]), 'Gone at move 19: Qxd5. Better: Nf3.');
 assert.equal(goneLine({ ...white.moves[2], best: 'Qxd5' }), 'Gone at move 19: Qxd5.');
 assert.equal(goneLine({ ...white.moves[2], best: null }), 'Gone at move 19: Qxd5.');
 assert.equal(goneLine(null), 'Not one point lost.');
-assert.ok(!/[–—!]/.test(goneLine(white.moves[2]) + goneLine(null)), 'no dashes, no exclamation marks');
+assert.ok(!/[\u2013\u2014!]/.test(goneLine(white.moves[2]) + goneLine(null)), 'no dashes, no exclamation marks');
 
 // Whose seat: solo and online show your own seat only, even with the other seat in the record.
 assert.deepEqual(seatsShown({ mode: 'solo', me: 'b', iq: { w: white, b: black } }), ['b']);
