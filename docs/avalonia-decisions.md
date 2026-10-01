@@ -415,3 +415,16 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   `SampleMedia` (BuildMediaManifest's walk), `SubjectId` (GetSubjectId); GamificationBridge's quiz handlers became
   `AchievementEngine.TrackQuizCompleted/TrackQuizAbandoned` for this head (WPF's bridge unchanged).
 - Advisor: worker.
+## spoken-mantras
+- WPF `RunSpokenMantraAsync` extracted to Core `SpokenMantra.RunAsync` with a small host (recognize, say, speaking,
+  duration, credit, prompt events); WPF delegates with its exact previous calls, text and timings. `MantraVoiceService`
+  git mv'd to Core (CoreMods/ContentLocator/Serilog); its NAudio `GetAudioDuration` stays in WPF as an extension, so
+  WPF callers are unchanged. Avalonia passes no duration but sets `WaitSpoken`: the tube's GigglePriority `onSpoken`
+  completes from CoreAudio.PlayOneShot's onFinished, and Core awaits it (30 s cap) before every listen (review P1).
+  WPF passes null, so it keeps its NAudio-duration timing. RefreshVoiceInputModes cancels only a wake/PTT turn (or any
+  prompt once consent is gone); Takeover's mantra is not that session.
+- Entitlement for the surprise mantra is Takeover's own (WPF adds no voice check there); the wake/PTT fallback is
+  already behind VoiceInputRules (consent + armed + premium/voice day). Panic cancels the prompt token before the listen.
+- Live voice panel partials/level are subscribed for the mantra prompt only (WPF subscribes always; the panel is only
+  visible during a mantra prompt, so nothing differs on screen). MantraChantService is not used by this path: out of scope.
+- Advisor: worker (supervisor informed).

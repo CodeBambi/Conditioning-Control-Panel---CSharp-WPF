@@ -1211,3 +1211,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/calib-flake: +46
 - Calibration window timing behind a TimeProvider; the test steps a manual clock (no sleeps). Full suite 3x green under load.
+
+## avalonia-port/spoken-mantras: +577
+- Spoken mantras: Core SpokenMantra + MantraVoiceService (WPF delegates); Takeover Spoken Mantra and the wake/PTT fallback; the mic opens only
+  after her clip ends; panic/revoke close it. WAV + fake-mic tests, fail-proven.
