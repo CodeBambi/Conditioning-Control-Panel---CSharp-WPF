@@ -113,8 +113,9 @@ public class FlickerDeckTests
         {
             FlickerDeck.Step(s, Dt, true, MotionLevel.Full);
             var p = FlickerDeck.Sample(s, MotionLevel.Full);
-            Assert.InRange(p.ScaleX, FlickerDeck.MinScaleX, 1);
-            Assert.InRange(p.Scale, 1, 1 + FlickerDeck.LiftScale + 1e-9);
+            // Juice: the opening half pops a few percent wide, the press and the landing nudge the scale.
+            Assert.InRange(p.ScaleX, FlickerDeck.MinScaleX, 1 + FlickerDeck.FlipOvershoot + 0.002);
+            Assert.InRange(p.Scale, 1 - FlickerDeck.LandAmp, 1 + FlickerDeck.LiftScale + 1e-9);
             min = Math.Min(min, p.ScaleX);
         }
         Assert.True(min < 0.1);

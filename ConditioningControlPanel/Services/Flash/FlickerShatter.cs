@@ -22,6 +22,9 @@ public sealed class FlickerSpark
 {
     public double X, Y, Vx, Vy, LifeSec, T;
     public bool Pink;
+    /// <summary>Juice: a dust mote from a crack, drawn dim and small, not additive. Falls by <see cref="Gravity"/>.</summary>
+    public bool Mote;
+    public double Gravity;
     public double Alpha => LifeSec <= 0 ? 0 : Math.Max(0, 1 - T / LifeSec);
 }
 
@@ -153,6 +156,41 @@ public static class FlickerShatter
         return sparks;
     }
 
+    /// <summary>Crack dust: slow, mostly downward, pulled by gravity, gone inside a second.</summary>
+    public const double MoteSpeed = 45.0, MoteGravity = 160.0, MoteLife = 0.8;
+
+    /// <summary>
+    /// The swap puff plus <paramref name="motes"/> dust motes shed at (<paramref name="ox"/>,
+    /// <paramref name="oy"/>) px from the card centre, the crack's impact point. One array per
+    /// flip, never per frame. Off makes nothing; Reduced halves the speed (the count is the
+    /// caller's, see <see cref="FlickerDeck.CrackMotes"/>).
+    /// </summary>
+    public static FlickerSpark[] SwapSparks(MotionLevel level, Random rng, int motes, double ox, double oy)
+    {
+        var puff = SwapSparks(level, rng);
+        if (level == MotionLevel.Off || motes <= 0) return puff;
+        var speed = level == MotionLevel.Reduced ? 0.5 : 1.0;
+        var all = new FlickerSpark[puff.Length + motes];
+        Array.Copy(puff, all, puff.Length);
+        for (var i = 0; i < motes; i++)
+        {
+            // A lower half-fan: the dust falls out of the crack, it is not thrown at the viewer.
+            var a = Math.PI * (0.1 + rng.NextDouble() * 0.8);
+            var sp = MoteSpeed * (0.4 + rng.NextDouble() * 0.6) * speed;
+            all[puff.Length + i] = new FlickerSpark
+            {
+                Mote = true,
+                X = ox + (rng.NextDouble() - 0.5) * 6,
+                Y = oy + (rng.NextDouble() - 0.5) * 6,
+                Vx = Math.Cos(a) * sp,
+                Vy = Math.Sin(a) * sp * 0.5,
+                Gravity = MoteGravity * speed,
+                LifeSec = MoteLife * (0.7 + rng.NextDouble() * 0.4),
+            };
+        }
+        return all;
+    }
+
     /// <summary>Advance a spark set (damped like the mockup's particles). True while any is still visible.</summary>
     public static bool StepSparks(FlickerSpark[] sparks, double dt)
     {
@@ -162,6 +200,7 @@ public static class FlickerShatter
         foreach (var sp in sparks)
         {
             sp.T += dt;
+            sp.Vy += sp.Gravity * dt;
             sp.X += sp.Vx * dt;
             sp.Y += sp.Vy * dt;
             sp.Vx *= damp;
@@ -171,9 +210,12 @@ public static class FlickerShatter
         return alive;
     }
 
-    /// <summary>Shards hold for half a second, then fade over the next 0.9 s.</summary>
+    /// <summary>Shards hold for half a second, then fade over the next 0.9 s, eased (smoothstep) so they neither start nor end on a hard edge.</summary>
     public static double ShardAlpha(double elapsedSec)
-        => Math.Clamp(1 - (elapsedSec - FadeStartSec) / FadeSec, 0, 1);
+    {
+        var u = Math.Clamp(1 - (elapsedSec - FadeStartSec) / FadeSec, 0, 1);
+        return u * u * (3 - 2 * u);
+    }
 
     private static FlickerShard Tri(double u0, double v0, double u1, double v1, double u2, double v2,
         double w, double h, double speed, Random rng)

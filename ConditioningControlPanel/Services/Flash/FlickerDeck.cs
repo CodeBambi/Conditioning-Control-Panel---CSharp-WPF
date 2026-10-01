@@ -35,7 +35,11 @@ public readonly record struct FlickerPose(
     double RiseFrac,    // vertical offset as a share of the height (negative = up)
     double WobbleRad,   // rotation about the centre
     double PeekFrac,    // outward peek as a share of the width
-    double Crack);      // 0 none, 0.4 faint, 1 full
+    double Crack,       // 0 none, 0.4 faint, 1 full
+    double SquashY = 1, // juice: the press squashes the card flat before it lifts
+    double Sheen = 0,   // juice: 0..1 strength of the lit band sweeping the face mid-flip
+    double SheenPos = 0,// juice: 0..1 across the face, left to right
+    double CrackReach = 1); // juice: 0..1 how far the hairlines have run from the impact point
 
 /// <summary>Per-flash Flicker Deck state. Lives on the compositor item; stepped by the layer tick.</summary>
 public sealed class FlickerDeckState
@@ -69,6 +73,10 @@ public sealed class FlickerDeckState
     /// Reset on every press.
     /// </summary>
     public bool NoPicture;
+    /// <summary>Juice: seconds since the last flip settled (drives the landing wobble).</summary>
+    public double SinceLand = 99;
+    /// <summary>Juice: seconds since the last flip's face landed (drives the crack growth).</summary>
+    public double SinceSwap = 99;
 
     public bool Busy => LiftT >= 0;
 }
@@ -105,6 +113,22 @@ public static class FlickerDeck
     public const double RingSec = 0.7, RingRadPerSec = 40.0, RingShare = 0.9;
 
     public const double PeekFrac = 0.07, PeekSec = 0.3;
+
+    // Juice round (owner, 2026-10-01). Feel only: the timings above stay the card's own.
+    /// <summary>Anticipation: the press squashes the card 5% flat (and 2.5% wide) over its first 80 ms.</summary>
+    public const double AnticipationSec = 0.08, AnticipationSquash = 0.05;
+    /// <summary>The opening half of the flip pops 5% past full width (back ease, s = 1.2) before it settles.</summary>
+    public const double FlipBack = 1.2, FlipOvershoot = 0.053;
+    /// <summary>The landing: one soft damped bounce on the new face once the lift is down.</summary>
+    public const double LandSec = 0.5, LandAmp = 0.045, LandHz = 3.2, LandDecay = 7.0;
+    /// <summary>The lit band that sweeps the face through the flip: tinted, low, one pulse per flip.</summary>
+    public const double SheenMax = 0.3;
+    /// <summary>New hairlines run out from the impact point over this long once the new face lands.</summary>
+    public const double CrackGrowSec = 0.35;
+    /// <summary>Dust motes shaken loose when the cracks first show and when they deepen.</summary>
+    public const int MotesFaint = 4, MotesDeep = 7;
+    /// <summary>An exiting card eases out of its pose to rest over this long instead of snapping.</summary>
+    public const double ExitSettleSec = 0.18;
 
     /// <summary>
     /// Does a flash become a card? Super on, drawn by the compositor and clickable by the mouse.
@@ -167,6 +191,8 @@ public static class FlickerDeck
         var off = level == MotionLevel.Off;
         s.Clock += dt * (level == MotionLevel.Reduced ? 0.5 : 1.0);
         s.SinceFlip += dt;
+        s.SinceLand += dt;
+        s.SinceSwap += dt;
 
         var target = s.Hover && !off ? 1.0 : 0.0;
         if (s.Peek != target)
@@ -189,6 +215,7 @@ public static class FlickerDeck
             if (pictureReady)
             {
                 s.Swapped = true;
+                s.SinceSwap = 0;
                 ev |= FlickerEvents.Swap;
             }
             else
@@ -196,6 +223,7 @@ public static class FlickerDeck
                 s.HoldSec += dt;
                 if (s.HoldSec < MaxHoldSec && !s.NoPicture) return ev;
                 s.Swapped = true;
+                s.SinceSwap = 0;
                 ev |= FlickerEvents.GaveUp;
             }
             if (off) { s.LiftT = -1; s.FlipT = -1; return ev; }
@@ -218,6 +246,7 @@ public static class FlickerDeck
         {
             s.LiftT = -1;
             s.FlipT = -1;
+            s.SinceLand = 0;
         }
         return ev;
     }
@@ -230,12 +259,93 @@ public static class FlickerDeck
         var amp = level == MotionLevel.Reduced ? 0.5 : 1.0;
 
         var lift = s.LiftT >= 0 && s.LiftT <= LiftSpanSec ? Math.Sin(Math.PI * s.LiftT / LiftSpanSec) : 0.0;
-        var scaleX = s.FlipT >= 0 && s.FlipT <= FlipSec
-            ? Math.Max(MinScaleX, Math.Abs(Math.Cos(Math.PI * s.FlipT / FlipSec)))
-            : 1.0;
+        var flipping = s.FlipT >= 0 && s.FlipT <= FlipSec;
+        var scaleX = flipping ? FlipWidth(s.FlipT) : 1.0;
+        var ant = Anticipation(s.LiftT) * amp;
+        scaleX *= 1 + AnticipationSquash * 0.5 * ant;
+        var scale = (1 + LiftScale * lift * amp) * (1 + Land(s.SinceLand) * amp);
+        var (sheen, sheenPos) = flipping ? SheenAt(s.FlipT) : (0.0, 0.0);
+        var (shown, reach) = CrackShown(s, level);
         var peek = Ease(s.Peek) * PeekFrac * amp;
-        return new FlickerPose(scaleX, 1 + LiftScale * lift * amp, lift * amp, -LiftRiseFrac * lift * amp,
-            Wobble(s, amp), peek, crack);
+        return new FlickerPose(scaleX, scale, lift * amp, -LiftRiseFrac * lift * amp,
+            Wobble(s, amp), peek, shown, 1 - AnticipationSquash * ant, sheen * amp, sheenPos, reach);
+    }
+
+    /// <summary>
+    /// The card's width through the flip: the closing half is the plain cosine, the opening half a
+    /// back ease that pops about 5% wide before it settles on 1. Never mirrored, never thinner than
+    /// <see cref="MinScaleX"/>.
+    /// </summary>
+    public static double FlipWidth(double flipT)
+    {
+        var half = FlipSec / 2;
+        if (flipT <= half) return Math.Max(MinScaleX, Math.Cos(Math.PI * Math.Max(0, flipT) / FlipSec));
+        var u = Math.Clamp((flipT - half) / half, 0, 1) - 1;
+        return Math.Max(MinScaleX, 1 + (FlipBack + 1) * u * u * u + FlipBack * u * u);
+    }
+
+    /// <summary>The press: one 0..1..0 sine dip over <see cref="AnticipationSec"/> from the click.</summary>
+    public static double Anticipation(double liftT)
+        => liftT >= 0 && liftT < AnticipationSec ? Math.Sin(Math.PI * liftT / AnticipationSec) : 0.0;
+
+    /// <summary>The landing bounce as a scale offset: a damped sine, zero at touchdown and gone by <see cref="LandSec"/>.</summary>
+    public static double Land(double sinceLand)
+    {
+        if (sinceLand < 0 || sinceLand >= LandSec) return 0;
+        var fade = 1 - sinceLand / LandSec;
+        return LandAmp * Math.Exp(-LandDecay * sinceLand) * Math.Sin(2 * Math.PI * LandHz * sinceLand) * fade;
+    }
+
+    /// <summary>
+    /// The lit band: it crosses the face left to right over the flip and is brightest edge-on, one
+    /// sin-squared pulse per flip (a flip takes 0.58 s at least, so well under the 3 Hz photosafe line).
+    /// </summary>
+    public static (double Alpha, double Pos) SheenAt(double flipT)
+    {
+        var p = Math.Clamp(flipT / FlipSec, 0, 1);
+        var k = Math.Sin(Math.PI * p);
+        return (SheenMax * k * k, p);
+    }
+
+    /// <summary>
+    /// The crack drawn this frame. Before the new face lands it keeps the old face's crack; after,
+    /// it eases up to the new amount over <see cref="CrackGrowSec"/> (twice that under Reduced), and
+    /// a first crack runs out from the impact point instead of appearing whole. Off shows it at once.
+    /// </summary>
+    public static (double Amount, double Reach) CrackShown(FlickerDeckState s, MotionLevel level)
+    {
+        var target = CrackAmount(s.Flips, s.BreakAt);
+        if (level == MotionLevel.Off) return (target, 1);
+        var prev = s.Flips > 0 ? CrackAmount(s.Flips - 1, s.BreakAt) : 0.0;
+        if (target <= prev) return (target, 1);
+        if (s.Busy && !s.Swapped) return (prev, 1);
+        var grow = CrackGrowSec * (level == MotionLevel.Reduced ? 2 : 1);
+        var g = Ease(s.SinceSwap / grow);
+        return (prev + (target - prev) * g, prev > 0 ? 1 : g);
+    }
+
+    /// <summary>How many dust motes the crack sheds as this flip's face lands: only when the crack deepens.</summary>
+    public static int CrackMotes(int flips, int breakAt, MotionLevel level)
+    {
+        if (level == MotionLevel.Off || flips <= 0) return 0;
+        var now = CrackAmount(flips, breakAt);
+        if (now <= CrackAmount(flips - 1, breakAt)) return 0;
+        var n = now >= 0.5 ? MotesDeep : MotesFaint;
+        return level == MotionLevel.Reduced ? n / 2 : n;
+    }
+
+    /// <summary>
+    /// An exiting card eases out of its pose: <paramref name="exitSec"/> into the exit, every
+    /// deviation from rest is scaled down by an ease-out to nothing at <see cref="ExitSettleSec"/>.
+    /// The crack stays as it was; the exit's own fade takes it.
+    /// </summary>
+    public static FlickerPose Settle(FlickerPose p, double exitSec)
+    {
+        var u = Math.Clamp(exitSec / ExitSettleSec, 0, 1);
+        var k = (1 - u) * (1 - u) * (1 - u);   // 1 minus a cubic ease-out
+        static double To(double v, double rest, double k) => rest + (v - rest) * k;
+        return new FlickerPose(To(p.ScaleX, 1, k), To(p.Scale, 1, k), p.Lift * k, p.RiseFrac * k,
+            p.WobbleRad * k, p.PeekFrac * k, p.Crack, To(p.SquashY, 1, k), p.Sheen * k, p.SheenPos, p.CrackReach);
     }
 
     /// <summary>Idle sway that grows with the flips, plus a decaying ring after each flip.</summary>
