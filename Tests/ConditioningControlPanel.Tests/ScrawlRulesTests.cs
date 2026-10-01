@@ -178,8 +178,34 @@ public class ScrawlRulesTests
         Assert.Equal(1, ScrawlRules.ShakeGain(MotionLevel.Full));
         Assert.Equal(0.5, ScrawlRules.ShakeGain(MotionLevel.Reduced));
         Assert.Equal(0, ScrawlRules.ShakeGain(MotionLevel.Off));
-        Assert.Equal(0, ScrawlRules.DecayShake(1, 0.35), 6);
-        Assert.Equal(0.5, ScrawlRules.DecayShake(1, 0.175), 6);
+        // The mockup's decay, 3.5 per second
+        Assert.Equal(0, ScrawlRules.DecayShake(1, 1 / 3.5), 6);
+        Assert.Equal(0.5, ScrawlRules.DecayShake(1, 0.5 / 3.5), 6);
+        // Photosafe never shakes, whatever the motion level
+        Assert.Equal(0, ScrawlRules.ShakeGain(MotionLevel.Full, photosafe: true));
+        Assert.Equal(0, ScrawlRules.ShakeGain(MotionLevel.Reduced, photosafe: true));
+    }
+
+    [Fact]
+    public void The_knock_halves_under_reduced_motion_and_is_gone_under_off()
+    {
+        Assert.Equal(85, ScrawlRules.Knock(1060, 540, 960, 540, 115, MotionLevel.Reduced).Dvx, 6);
+        var (ox, oy) = ScrawlRules.Knock(1060, 540, 960, 540, 115, MotionLevel.Off);
+        Assert.Equal(0, ox);
+        Assert.Equal(0, oy);
+    }
+
+    [Fact]
+    public void A_slam_never_swallows_a_click_meant_for_a_ccp_window()
+    {
+        // Another app or the desktop under the word: the click is a slam
+        Assert.True(ScrawlRules.MaySwallow(onWord: true, targetIsOurs: false, targetClickThrough: false));
+        // A click-through overlay of ours (the words, a compositor layer): still a slam
+        Assert.True(ScrawlRules.MaySwallow(onWord: true, targetIsOurs: true, targetClickThrough: true));
+        // CCP's own input window (panel, Lockdown, a lock card, a leash window, an attention check): never
+        Assert.False(ScrawlRules.MaySwallow(onWord: true, targetIsOurs: true, targetClickThrough: false));
+        // Off the word: never
+        Assert.False(ScrawlRules.MaySwallow(onWord: false, targetIsOurs: false, targetClickThrough: false));
     }
 
     [Fact]

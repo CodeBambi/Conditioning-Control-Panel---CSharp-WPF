@@ -123,8 +123,8 @@ namespace ConditioningControlPanel.Services.Super
             Emit(x, y, ScrawlRules.SlamPinkSparks, 0, 240, 0.9);
         }
 
-        /// <summary>Advance every timer by dt. <paramref name="motion"/> is read once per frame by the caller.</summary>
-        public void Tick(double dt, MotionLevel motion)
+        /// <summary>Advance every timer by dt. <paramref name="motion"/> and <paramref name="photosafe"/> are read once per frame by the caller.</summary>
+        public void Tick(double dt, MotionLevel motion, bool photosafe = false)
         {
             _motion = motion;
             for (int i = _stamps.Count - 1; i >= 0; i--)
@@ -154,7 +154,7 @@ namespace ConditioningControlPanel.Services.Super
             }
             if (_labelAge >= 0) { _labelAge += dt; if (_labelAge >= ScrawlRules.FloatLife) { _labelAge = -1; _label = null; } }
 
-            double gain = ScrawlRules.ShakeGain(motion);
+            double gain = ScrawlRules.ShakeGain(motion, photosafe);
             if (_shake > 0 && gain > 0)
             {
                 double amp = ScrawlRules.ShakePixels * _k * _shake * gain;

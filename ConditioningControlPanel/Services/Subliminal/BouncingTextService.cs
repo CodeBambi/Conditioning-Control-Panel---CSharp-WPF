@@ -960,7 +960,7 @@ public class BouncingTextService : IDisposable
     {
         var scene = _scrawl!;
         _scrawlMotion = MotionFx.Level;
-        scene.Tick(dt, _scrawlMotion);
+        scene.Tick(dt, _scrawlMotion, App.Settings?.Current?.LockdownPhotosafe == true);
         bool live = scene.IsLive;
         foreach (var w in _windows) w.UpdateScrawl(scene.ShakeX, scene.ShakeY, live);
 
@@ -986,6 +986,9 @@ public class BouncingTextService : IDisposable
         for (int i = n - 1; i >= 0; i--)
         {
             if (px.X < box[i * 4] || px.X > box[i * 4 + 2] || px.Y < box[i * 4 + 1] || px.Y > box[i * 4 + 3]) continue;
+            // Never take a click from CCP's own UI: Lockdown, lock cards, leash windows, attention checks, the panel.
+            ProbeClickTarget(px, out bool ours, out bool clickThrough);
+            if (!Super.ScrawlRules.MaySwallow(true, ours, clickThrough)) return false;
             int idx = i;
             try { Application.Current?.Dispatcher.BeginInvoke(new Action(() => BeginSlam(idx))); } catch { }
             return true;
@@ -999,9 +1002,36 @@ public class BouncingTextService : IDisposable
         var l = _logos[idx];
         if (l.SlamT >= 0) return;
         (l.SlamX, l.SlamY, l.SlamW) = MonitorCentreAt(l.PosX + l.TextWidth / 2, l.PosY + l.TextHeight / 2);
+        if (_scrawlMotion == Models.MotionLevel.Off)
+        {
+            // Motion off: the word stays put, only the still stamp lands at the centre and fades
+            _scrawl.SlamLanded(l.Text, l.SlamX, l.SlamY, l.SlamW);
+            return;
+        }
         l.SlamT = 0;
         l.SlamLanded = false;
     }
+
+    /// <summary>HOOK THREAD: who would get a click at this physical-px point: one of our windows, and is it click-through?</summary>
+    private static void ProbeClickTarget(Point px, out bool ours, out bool clickThrough)
+    {
+        ours = false; clickThrough = false;
+        try
+        {
+            var root = GetAncestor(WindowFromPoint(new PointInt { X = (int)px.X, Y = (int)px.Y }), 2 /* GA_ROOT */);
+            if (root == IntPtr.Zero) return;
+            GetWindowThreadProcessId(root, out uint pid);
+            ours = pid == (uint)Environment.ProcessId;
+            clickThrough = (GetWindowLong(root, -20 /* GWL_EXSTYLE */) & 0x20 /* WS_EX_TRANSPARENT */) != 0;
+        }
+        catch { ours = true; clickThrough = false; } // unsure: let the click through
+    }
+
+    private struct PointInt { public int X, Y; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(PointInt p);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hwnd, int index);
 
     /// <summary>One frame of a slam: pull to the centre over 0.2 s, land (stamp, shake, knock the others), hold, let go.</summary>
     private void StepSlam(Logo l, double dt)
@@ -1025,7 +1055,7 @@ public class BouncingTextService : IDisposable
             {
                 if (o == l || o.SlamT >= 0) continue;
                 var (dvx, dvy) = Super.ScrawlRules.Knock(o.PosX + o.TextWidth / 2, o.PosY + o.TextHeight / 2,
-                    l.SlamX, l.SlamY, o.Cruise);
+                    l.SlamX, l.SlamY, o.Cruise, _scrawlMotion);
                 o.VelX += dvx;
                 o.VelY += dvy;
             }
