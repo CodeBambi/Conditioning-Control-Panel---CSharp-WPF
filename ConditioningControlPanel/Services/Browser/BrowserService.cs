@@ -83,6 +83,9 @@ namespace ConditioningControlPanel.Services
 
         public event EventHandler? BrowserReady;
         public event EventHandler<string>? NavigationCompleted;
+        /// <summary>The page's HTML is parsed. Comes well before NavigationCompleted, which
+        /// waits for every image, ad and tracker on the page.</summary>
+        public event EventHandler<string>? DomContentLoaded;
         public event EventHandler<string>? TitleChanged;
         public event EventHandler<bool>? FullscreenChanged;
         public event EventHandler<CoreWebView2ProcessFailedEventArgs>? BrowserProcessFailed;
@@ -228,6 +231,7 @@ namespace ConditioningControlPanel.Services
 
                 // Wire up events
                 _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+                _webView.CoreWebView2.DOMContentLoaded += OnDomContentLoaded;
                 _webView.CoreWebView2.DocumentTitleChanged += OnTitleChanged;
                 // ProcessFailed fires when the Chromium browser/render process
                 // crashes. Without a handler, the WebView2 control is left in a
@@ -1443,6 +1447,11 @@ namespace ConditioningControlPanel.Services
             NavigationCompleted?.Invoke(this, url);
         }
 
+        private void OnDomContentLoaded(object? sender, CoreWebView2DOMContentLoadedEventArgs e)
+        {
+            DomContentLoaded?.Invoke(this, _webView?.CoreWebView2?.Source ?? "");
+        }
+
         private void OnTitleChanged(object? sender, object e)
         {
             var title = _webView?.CoreWebView2?.DocumentTitle ?? "";
@@ -1479,6 +1488,7 @@ namespace ConditioningControlPanel.Services
                 if (_webView?.CoreWebView2 != null)
                 {
                     _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+                    _webView.CoreWebView2.DOMContentLoaded -= OnDomContentLoaded;
                     _webView.CoreWebView2.DocumentTitleChanged -= OnTitleChanged;
                 }
                 
