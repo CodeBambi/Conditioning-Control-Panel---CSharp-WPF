@@ -172,6 +172,9 @@ namespace ConditioningControlPanel.Services.Super
             {
                 if (cursorKnown && o.PictureContainsPx(cp.X, cp.Y)) cursorOn = true;
                 if (gazeLive && o.PictureContainsPx(_gazeX, _gazeY)) gazeOn = true;
+                // The iris leans toward whatever decides attention: gaze when live, else the cursor.
+                if (gazeLive) o.SetPointerPx(_gazeX, _gazeY, true);
+                else o.SetPointerPx(cp.X, cp.Y, cursorKnown);
             }
             return LightsDownMath.Attended(v.IsGracePaused, gazeLive, gazeOn, cursorOn);
         }

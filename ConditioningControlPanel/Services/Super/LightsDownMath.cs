@@ -45,6 +45,14 @@ namespace ConditioningControlPanel.Services.Super
         public bool LockInFired;
         /// <summary>True on the one frame attention was lost (the stutter or the fade starts).</summary>
         public bool Lost;
+        /// <summary>Juice: aperture radius multiplier, a slow breath around 1 (1 when still).</summary>
+        public double ApertureBreath;
+        /// <summary>Juice: glow alpha multiplier, a gentle flicker-free pulse around 1 (1 when still).</summary>
+        public double GlowPulse;
+        /// <summary>Juice: 0..1 flare of the glow on the lock-in, already scaled by motion.</summary>
+        public double LockFlare;
+        /// <summary>Juice: how far the iris may lean toward the cursor, 1 Full, 0.5 Reduced, 0 Off.</summary>
+        public double LeanGain;
     }
 
     /// <summary>
@@ -144,14 +152,20 @@ namespace ConditioningControlPanel.Services.Super
 
             f.Depth = d;
             f.Beat = speed > 0 && d > BeatFrom ? Math.Pow(Math.Max(0, Math.Sin(_beatPhase)), 10) * BeatAmp * d * speed : 0;
-            f.DimAlpha = DimPerDepth * d + f.Beat;
-            f.ApertureAlpha = ApertureLayerAlpha * d;
+            // The drawn alphas ease out of zero and into it (soft knee under 0.15), so the room
+            // never starts to dim or finishes brightening on a hard edge. Depth itself is untouched.
+            double soft = LightsDownMath.SoftStart(d);
+            f.DimAlpha = DimPerDepth * soft + f.Beat;
+            f.ApertureAlpha = ApertureLayerAlpha * soft;
+            f.ApertureBreath = LightsDownMath.Breath(_t, motion);
+            f.GlowPulse = LightsDownMath.GlowPulse(_t, motion);
+            f.LeanGain = speed;
             // Off = still: the aperture never moves, it sits closed and fades in with depth.
             f.ApertureClose = motion == LightsDownMotion.Off ? 1 : Ease(d);
             f.ApertureRotation = _rot;
             f.Hue = 300 + 40 * Math.Sin(_huePhase);
             f.RayAngle = _rayAngle;
-            f.RayAlpha = RayPeak * d;
+            f.RayAlpha = RayPeak * soft;
             f.Swell = 1 + SwellPerDepth * d * speed;
             // The mockup's glow never fully leaves; on a real screen at rest it must, so it rides
             // a short ramp in from depth 0.
@@ -166,6 +180,7 @@ namespace ConditioningControlPanel.Services.Super
             }
             double lockAge = _t - _lockAt;
             if (lockAge >= 0 && lockAge < LockRunSeconds) f.LockRun = lockAge / LockRunSeconds;
+            f.LockFlare = LightsDownMath.LockFlare(lockAge) * speed;
 
             return f;
         }
@@ -261,6 +276,97 @@ namespace ConditioningControlPanel.Services.Super
             static byte B8(double v) => (byte)Math.Clamp(Math.Round(v * 255), 0, 255);
             return (B8(r + m), B8(g + m), B8(b + m));
         }
+
+        // ---- Juice (2026-10-01). Cosmetic only: none of this moves depth, attention or timing. ----
+
+        public const double SoftKnee = 0.15;
+        public const double BreathAmp = 0.012;     // aperture radius +-1.2%
+        public const double BreathHz = 0.2;        // one breath every 5 s
+        public const double GlowPulseAmp = 0.08;   // glow alpha +-8%
+        public const double GlowPulseHz = 0.23;    // far under 3 Hz, a smooth sine, never a flicker
+        public const double FlareRise = 0.09;      // s, cubic ease-out to the peak
+        public const double FlareFall = 0.52;      // s, ease-out back to nothing
+        public const double FlareGlow = 0.35;      // glow alpha x (1 + 0.35 flare)
+        public const double FlareBlur = 0.25;      // glow blur x (1 + 0.25 flare)
+        public const double LeanFraction = 0.05;   // the iris leans 5% of the way to the cursor
+        public const double LeanMax = 26;          // DIPs, never further
+        public const double LeanStiffness = 30;    // spring: lag of about a second
+        public const double LeanDamping = 0.7;     // zeta: one small overshoot (about 4.6%)
+        public const double MoteSwayAmp = 3;       // DIPs either side
+        public const double MoteSwayHz = 0.35;
+
+        /// <summary>A soft knee at zero: f(0)=0 with zero slope, f(d)=d from <see cref="SoftKnee"/> up
+        /// with matching slope, monotonic between. The drawn dim eases in and out of nothing.</summary>
+        public static double SoftStart(double d)
+        {
+            if (d <= 0) return 0;
+            if (d >= SoftKnee) return d;
+            return d * d * (2 * SoftKnee - d) / (SoftKnee * SoftKnee);
+        }
+
+        /// <summary>Aperture breath: 1 +- 1.2% at 0.2 Hz. Reduced = half amplitude and speed, Off = 1.</summary>
+        public static double Breath(double time, LightsDownMotion motion)
+        {
+            if (motion == LightsDownMotion.Off) return 1;
+            double k = motion == LightsDownMotion.Reduced ? 0.5 : 1;
+            return 1 + BreathAmp * k * Math.Sin(2 * Math.PI * BreathHz * k * time);
+        }
+
+        /// <summary>Glow pulse: 1 +- 8% at 0.23 Hz, out of phase with the breath. Reduced = half, Off = 1.</summary>
+        public static double GlowPulse(double time, LightsDownMotion motion)
+        {
+            if (motion == LightsDownMotion.Off) return 1;
+            double k = motion == LightsDownMotion.Reduced ? 0.5 : 1;
+            return 1 + GlowPulseAmp * k * Math.Sin(2 * Math.PI * GlowPulseHz * k * time + 1.3);
+        }
+
+        /// <summary>The lock-in flare envelope by seconds since the lock-in: cubic rise to 1 in 90 ms,
+        /// cubic ease-out back to 0 by 520 ms. One swell, never a flash.</summary>
+        public static double LockFlare(double age)
+        {
+            if (double.IsNaN(age) || age < 0 || age >= FlareRise + FlareFall) return 0;
+            if (age < FlareRise)
+            {
+                double u = 1 - age / FlareRise;
+                return 1 - u * u * u;
+            }
+            double v = (age - FlareRise) / FlareFall;
+            return (1 - v) * (1 - v) * (1 - v);
+        }
+
+        /// <summary>Where the iris wants to sit relative to the picture centre: 5% of the way to the
+        /// cursor, clamped to <see cref="LeanMax"/> and scaled by <paramref name="gain"/> (motion).</summary>
+        public static (double X, double Y) LeanTarget(double px, double py, double cx, double cy, double gain)
+        {
+            if (gain <= 0 || double.IsNaN(px) || double.IsNaN(py)) return (0, 0);
+            double dx = (px - cx) * LeanFraction, dy = (py - cy) * LeanFraction;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len > LeanMax) { dx *= LeanMax / len; dy *= LeanMax / len; }
+            return (dx * gain, dy * gain);
+        }
+
+        /// <summary>One step of the lean spring toward a target (semi-implicit, substepped so a 20 fps
+        /// tier or a hitch stays stable). Lag, then one small overshoot, then rest.</summary>
+        public static void LeanStep(ref double x, ref double vx, double target, double dt)
+        {
+            if (double.IsNaN(dt) || dt <= 0) return;
+            dt = Math.Min(dt, 0.25);
+            double c = 2 * LeanDamping * Math.Sqrt(LeanStiffness);
+            int n = Math.Max(1, (int)Math.Ceiling(dt * 120));
+            double h = dt / n;
+            for (int i = 0; i < n; i++)
+            {
+                vx += (LeanStiffness * (target - x) - c * vx) * h;
+                x += vx * h;
+            }
+        }
+
+        /// <summary>Sideways sway of a mote by its age and its own phase, so no two drift alike.</summary>
+        public static double MoteSway(double age, double phase, double amount)
+            => amount <= 0 ? 0 : MoteSwayAmp * amount * Math.Sin(2 * Math.PI * MoteSwayHz * age + phase);
+
+        /// <summary>A mote's diameter from a roll in [0,1): 2 to 3.6 DIPs.</summary>
+        public static double MoteSize(double roll) => 2 + 1.6 * Math.Clamp(roll, 0, 1);
 
         /// <summary>Is the point inside the rectangle (edges inclusive).</summary>
         public static bool Inside(double px, double py, double x, double y, double w, double h)
