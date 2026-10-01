@@ -15,12 +15,13 @@ namespace ConditioningControlPanel.Controls
 {
     /// <summary>
     /// The gold V2 box at the foot of a feature page (owner, 2026-10-01). One card per feature: a
-    /// small "v2" tag top left, the BASIC supporter sign top right, then the effect's quiet
-    /// <see cref="SuperSwitch"/> with its name and one plain line, then <see cref="Body"/>: the
+    /// small "v2" tag top left, the BASIC supporter sign top right, then the effect's name and one
+    /// plain line, the <see cref="SuperModePicker"/> row (Classic / Both / Super only) with a line
+    /// saying what the pick does, then <see cref="Body"/>: the
     /// effect's own options, or (Flashes, Bubble Pop) the Back Room v2 prize rows merged in.
     ///
-    /// <para>States. LIT (Basic and up, or this week's 10 s try running): full gold, switch
-    /// usable. DIM (free account): the Super part dims and the switch is locked; a click shakes it
+    /// <para>States. LIT (Basic and up, or this week's 10 s try running): full gold, the pick
+    /// usable. DIM (free account): the Super part dims and the Super segments lock; a press shakes the row
     /// and shows the normal tier refusal. Free accounts keep the weekly corner: "Try it, 10 s" on
     /// this week's effect, a countdown ring while it runs, "Used. Back Monday" after, Get Basic
     /// otherwise. The <see cref="Body"/> is never dimmed by the box: a v2 prize row is lit or dim
@@ -61,7 +62,10 @@ namespace ConditioningControlPanel.Controls
         private readonly Border _v2Tag;
         private readonly Border _signHost = new() { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         private readonly TierBadge _sign = new() { Tier = 1, MaxWidthOverride = 64 };
-        private readonly SuperSwitch _switch = new() { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 10, 0) };
+        private readonly SuperModePicker _picker = new() { Margin = new Thickness(0, 7, 0, 0) };
+        private readonly TextBlock _modeLine = new() { FontSize = 11, TextWrapping = TextWrapping.Wrap, Opacity = 0.7, Foreground = Brushes.White };
+        private readonly Border _modeLineHost = new() { Margin = new Thickness(1, 4, 0, 0) };
+        private readonly TranslateTransform _modeLineRise = new();
         private readonly TextBlock _title = new() { FontSize = 12.5, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Gold) };
         private readonly TextBlock _twist = new() { FontSize = 11, TextWrapping = TextWrapping.Wrap, Opacity = 0.7, Foreground = Brushes.White, Margin = new Thickness(0, 1, 0, 0) };
         private readonly TextBlock _baseOff = new() { FontSize = 11, FontStyle = FontStyles.Italic, Opacity = 0.6, Foreground = Brushes.White, Margin = new Thickness(0, 3, 0, 0) };
@@ -152,23 +156,25 @@ namespace ConditioningControlPanel.Controls
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(_title);
             text.Children.Add(_twist);
-            text.Children.Add(_baseOff);
 
             var row = new Grid();
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            Grid.SetColumn(_switch, 0);
-            Grid.SetColumn(text, 1);
-            Grid.SetColumn(_corner, 2);
-            row.Children.Add(_switch);
+            Grid.SetColumn(text, 0);
+            Grid.SetColumn(_corner, 1);
             row.Children.Add(text);
             row.Children.Add(_corner);
 
-            // The dim part: head and switch row. The corner (Try it) is a child of the row but
-            // stays readable because the row only fades its text and switch, see Paint.
+            _modeLineHost.Child = _modeLine;
+            _modeLineHost.RenderTransform = _modeLineRise;
+
+            // The dim part: head, name row, the pick and its line. The corner (Try it) is a child of
+            // the row but stays readable because the box only fades its text and the pick, see Paint.
             _superPart.Children.Add(head);
             _superPart.Children.Add(row);
+            _superPart.Children.Add(_picker);
+            _superPart.Children.Add(_modeLineHost);
+            _superPart.Children.Add(_baseOff);
 
             var root = new StackPanel();
             root.Children.Add(_superPart);
@@ -181,7 +187,7 @@ namespace ConditioningControlPanel.Controls
                 SuperAccess.HookBaseEvents();
                 SuperAccess.Changed += OnAccessChanged;
                 SuperPreview.StateChanged += OnPreviewChanged;
-                SuperSwitch.LockedPoke += OnLockedPoke;
+                SuperModePicker.LockedPoke += OnLockedPoke;
                 Refresh();
                 ArmSheen();
             };
@@ -189,7 +195,7 @@ namespace ConditioningControlPanel.Controls
             {
                 SuperAccess.Changed -= OnAccessChanged;
                 SuperPreview.StateChanged -= OnPreviewChanged;
-                SuperSwitch.LockedPoke -= OnLockedPoke;
+                SuperModePicker.LockedPoke -= OnLockedPoke;
                 StopRing();
                 StopSheen();
             };
@@ -198,15 +204,18 @@ namespace ConditioningControlPanel.Controls
             Paint(lit: false);
         }
 
-        /// <summary>The quiet switch inside the box (tests and hosts).</summary>
-        public SuperSwitch Switch => _switch;
+        /// <summary>The Classic / Both / Super only row inside the box (tests and hosts).</summary>
+        public SuperModePicker Picker => _picker;
+
+        /// <summary>The line under the row: what the shown pick does.</summary>
+        public string ModeLine => _modeLine.Text;
 
         /// <summary>True when the box draws lit (tier or a running try), false when dim.</summary>
         public bool IsLit { get; private set; }
 
         private void OnEffectChanged()
         {
-            _switch.Effect = Effect;
+            _picker.Effect = Effect;
             Refresh();
         }
 
@@ -223,7 +232,7 @@ namespace ConditioningControlPanel.Controls
         private void OnLockedPoke(SuperEffect e)
         {
             if (e != Effect || IsLit) return;
-            Ui(() => SuperSwitch.Shake(_signHost));
+            Ui(() => SuperChrome.Shake(_signHost));
         }
 
         private void Ui(Action a)
@@ -240,15 +249,16 @@ namespace ConditioningControlPanel.Controls
             int ms = IsLoaded && _painted && lit != IsLit ? SuperChromeJuice.ChangeMs(MotionFx.Level) : 0;
             _painted = true;
             IsLit = lit;
-            SuperSwitch.Tween(_borderBrush, SolidColorBrush.ColorProperty, Color.FromArgb(lit ? (byte)0xB3 : (byte)0x4D, Gold.R, Gold.G, Gold.B), ms);
-            SuperSwitch.Tween(_backBrush, SolidColorBrush.ColorProperty, Color.FromArgb(lit ? (byte)0x1C : (byte)0x0C, Gold.R, Gold.G, Gold.B), ms);
+            SuperChrome.Tween(_borderBrush, SolidColorBrush.ColorProperty, Color.FromArgb(lit ? (byte)0xB3 : (byte)0x4D, Gold.R, Gold.G, Gold.B), ms);
+            SuperChrome.Tween(_backBrush, SolidColorBrush.ColorProperty, Color.FromArgb(lit ? (byte)0x1C : (byte)0x0C, Gold.R, Gold.G, Gold.B), ms);
             double o = lit ? 1.0 : DimOpacity;
-            SuperSwitch.TweenOpacity(_title, o, ms);
-            SuperSwitch.TweenOpacity(_twist, 0.7 * o, ms);
-            SuperSwitch.TweenOpacity(_v2Tag, o, ms);
-            SuperSwitch.TweenOpacity(_switch, lit ? 1.0 : 0.75, ms);
+            SuperChrome.TweenOpacity(_title, o, ms);
+            SuperChrome.TweenOpacity(_twist, 0.7 * o, ms);
+            SuperChrome.TweenOpacity(_v2Tag, o, ms);
+            SuperChrome.TweenOpacity(_picker, lit ? 1.0 : 0.75, ms);
+            SuperChrome.TweenOpacity(_modeLine, 0.7 * o, ms);
             // The supporter sign is what a free player is asked for, so it stays readable.
-            SuperSwitch.TweenOpacity(_signHost, lit ? 0.85 : 0.9, ms);
+            SuperChrome.TweenOpacity(_signHost, lit ? 0.85 : 0.9, ms);
         }
 
         /// <summary>Arm the next sheen across the supporter sign, 8-13 s out, phased per box.</summary>
@@ -320,9 +330,10 @@ namespace ConditioningControlPanel.Controls
             // Only worth saying when the add-on would otherwise run: a dim box has its own story.
             _baseOff.Visibility = !baseOn && (trying || (unlocked && SuperAccess.IsSwitchedOn(effect)))
                 ? Visibility.Visible : Visibility.Collapsed;
-            // The box usually hears a change first: let the switch ease and thud for it, or the
-            // switch's own handler would find nothing left to animate.
-            _switch.Refresh(animate: IsLoaded);
+            // The box usually hears a change first: let the pick slide and thud for it, or the
+            // row's own handler would find nothing left to animate.
+            _picker.Refresh(animate: IsLoaded);
+            ShowModeLine(Loc.Get(SuperModePick.LineKey(_picker.ShownMode)));
 
             _corner.Children.Clear();
             StopRing();
@@ -337,7 +348,7 @@ namespace ConditioningControlPanel.Controls
             {
                 _corner.Children.Add(MakeChip(Loc.Get("super_try"), Mint, () =>
                 {
-                    if (!SuperPreview.TryStart(effect)) SuperSwitch.Shake(_switch);
+                    if (!SuperPreview.TryStart(effect)) SuperChrome.Shake(_picker);
                 }));
             }
             else
@@ -353,6 +364,21 @@ namespace ConditioningControlPanel.Controls
                 _corner.Children.Add(MakeChip(Loc.Get("super_get_basic"), Gold, () =>
                     TierGate.DemandPremium(Loc.GetF("super_switch_name", name))));
             }
+        }
+
+        /// <summary>The line under the pick. A new line rises 3 px and fades in over 180 ms (half
+        /// the rise when reduced, a plain swap when motion is off); the first paint just lands.</summary>
+        private void ShowModeLine(string line)
+        {
+            if (_modeLine.Text == line) return;
+            bool animate = IsLoaded && _modeLine.Text.Length > 0 && MotionFx.AllowTransitions;
+            _modeLine.Text = line;
+            if (!animate) return;
+            var dur = TimeSpan.FromMilliseconds(180);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            double rise = 3 * SuperChromeJuice.Amount(MotionFx.Level);
+            _modeLineRise.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(rise, 0, dur) { EasingFunction = ease, FillBehavior = FillBehavior.Stop });
+            _modeLineHost.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, dur) { EasingFunction = ease, FillBehavior = FillBehavior.Stop });
         }
 
         /// <summary>A small outlined chip in the box's own colours: tinted fill, thin ring, coloured text.</summary>

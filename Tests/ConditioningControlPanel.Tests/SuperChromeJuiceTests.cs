@@ -63,19 +63,19 @@ public class SuperChromeJuiceTests
         WpfRenderHarness.OnStaThread(() =>
         {
             var b = new SolidColorBrush(Colors.Black);
-            SuperSwitch.Tween(b, SolidColorBrush.ColorProperty, Colors.Gold, 220);
+            SuperChrome.Tween(b, SolidColorBrush.ColorProperty, Colors.Gold, 220);
             Assert.Equal(Colors.Gold, (Color)b.ReadLocalValue(SolidColorBrush.ColorProperty));
             Assert.True(b.HasAnimatedProperties);
             // A silent repaint to the same target leaves the running tween alone.
-            SuperSwitch.Tween(b, SolidColorBrush.ColorProperty, Colors.Gold, 0);
+            SuperChrome.Tween(b, SolidColorBrush.ColorProperty, Colors.Gold, 0);
             Assert.True(b.HasAnimatedProperties);
             // A silent repaint somewhere else lands at once.
-            SuperSwitch.Tween(b, SolidColorBrush.ColorProperty, Colors.Red, 0);
+            SuperChrome.Tween(b, SolidColorBrush.ColorProperty, Colors.Red, 0);
             Assert.False(b.HasAnimatedProperties);
             Assert.Equal(Colors.Red, b.Color);
 
             var e = new UIElement();
-            SuperSwitch.TweenOpacity(e, 0.5, 0);
+            SuperChrome.TweenOpacity(e, 0.5, 0);
             Assert.Equal(0.5, e.Opacity);
         });
     }
