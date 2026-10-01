@@ -1184,3 +1184,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/web-assets-host: +282
 - WebAssetServer: token-gated loopback HTTP over Resources/web (WebKitGTK has no custom scheme in Avalonia 12.1); Assets/web shipped with
   WPF's subset (+~158 MB). Hardened (constant-time token, per-port cookie, nosniff/no-referrer, symlink confinement). Fail-proven tests.
+
+## avalonia-port/webcam-calibration: +993
+- Webcam slice 5 part 1: Core WebcamCalibrationFit (WPF delegates); the Avalonia 16-point calibration window; Calibrate enabled. Merge with part 2.
