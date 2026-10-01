@@ -103,6 +103,42 @@ public sealed class EmiRingWiringTests
         });
     });
 
+    /// <summary>Privacy: the desktop-wide keymap is never kept. No field of X11Pointer may hold a buffer.</summary>
+    [Fact]
+    public void PointerReaderKeepsNoKeyState()
+    {
+        var t = typeof(global::ConditioningControlPanel.Avalonia.App).Assembly
+            .GetType("ConditioningControlPanel.Avalonia.Platform.X11Pointer")!;
+        var fields = t.GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance
+                                 | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotEmpty(fields);
+        Assert.DoesNotContain(fields, f => f.FieldType.IsArray || f.FieldType == typeof(System.Memory<byte>));
+    }
+
+    [Fact]
+    public Task OptionsStopPollingOnCloseAndSurviveANullRead() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        int reads = 0;
+        var win = new EmiOptionsWindow { ReadPointer = () => { reads++; return null; } };
+        async Task Wait() { for (int i = 0; i < 10; i++) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); } }
+
+        win.OpenPanel();
+        await Wait();
+        int first = reads;
+        Assert.True(first > 0);
+        await Wait();
+        Assert.True(reads > first);          // a null read (another X screen) does not stop the poll
+        win.ClosePanel();
+        int closed = reads;
+        await Wait();
+        Assert.Equal(closed, reads);         // closed: no more reads
+        win.Close();
+    });
+
     [Fact]
     public Task OptionsFoldOnAClickAwayOrEscapeButNotOnItself() => AvaloniaTestDispatcher.RunAsync(() =>
     {

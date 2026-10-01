@@ -669,7 +669,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 var r = ReadPointer();
-                if (r == null) { RemoveHooks(); return; }   // no X display: nothing will ever answer
+                if (r == null) return;   // pointer on another X screen (or no display): keep polling
                 var (at, down, esc) = r.Value;
                 bool press = down && !_wasDown, escape = esc && !_wasEsc;
                 _wasDown = down;
