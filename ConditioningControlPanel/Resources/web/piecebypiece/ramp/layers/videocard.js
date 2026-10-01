@@ -7,12 +7,13 @@
  * FULLSCREEN picture that fades in, holds semi-transparent over everything,
  * and fades out: the board stays readable through it, it just moves.
  *
- * It fires on every `turn`, for the side that just moved and is now WAITING, so
- * the wash covers exactly the stretch where the player has nothing to do but
- * look. Hold time is scaled by that side's meter (RAMP_TUNING.videoCard, 4s to
- * 13s). Click-through like every other layer. The kind is still called
- * `videoCard` and the element still wears `pbp-card`, so the schedule, the veil
- * damping and the open/close sounds keep working untouched.
+ * It rides the THINK (owner, 2026-10-01): it rises once the mover has sat on a
+ * move for a while (RAMP_TUNING.think.cardAtMs) and drops away fast the moment
+ * the move is made (clear({ fast: true }), the snap). On a long think the next
+ * wash follows the last one. Hold time is scaled by the meter
+ * (RAMP_TUNING.videoCard, 4s to 13s). Click-through like every other layer. The
+ * kind is still called `videoCard` and the element still wears `pbp-card`, so
+ * the schedule, the veil damping and the open/close sounds keep working.
  *
  * Picture: a gif from the pool (an online gif is a clip and plays as a muted
  * looping <video> child through clip.js, which unloads it on removal); a still
@@ -23,6 +24,7 @@ import { dressBox, undressBox } from './clip.js';
 
 const FADE_IN_MS = 700;    // matches .pbp-card's opacity transition
 const FADE_OUT_MS = 900;   // matches .pbp-card.is-out
+const SNAP_OUT_MS = 220;   // matches .pbp-card.is-out.is-snap: the move was made
 
 export function createVideoCard(ctx) {
   let card = null;      // the one live wash
@@ -44,18 +46,19 @@ export function createVideoCard(ctx) {
     card = wrap;
 
     let removed = false;
-    function remove() {
+    function remove(fast = false) {
       if (removed) return;
       removed = true;
-      try { wrap.classList.remove('is-in'); wrap.classList.add('is-out'); } catch { /* gone */ }
+      const outMs = fast ? SNAP_OUT_MS : FADE_OUT_MS;
+      try { wrap.classList.remove('is-in'); wrap.classList.add('is-out'); if (fast) wrap.classList.add('is-snap'); } catch { /* gone */ }
       // the picture is on screen until the fade out is over; untracked, so a clear cannot drop it
-      ctx.releaseLater(url, FADE_OUT_MS + 60);
+      ctx.releaseLater(url, outMs + 60);
       // untracked too: a clear that lands mid-fade must not strand the wash on screen
       setTimeout(() => {
         undressBox(wrap);
         try { wrap.remove(); } catch { /* gone */ }
         if (card === wrap) card = null;
-      }, FADE_OUT_MS + 60);
+      }, outMs + 60);
     }
 
     // fade in on the next frame, hold, fade out
@@ -66,11 +69,12 @@ export function createVideoCard(ctx) {
     card._url = url;
   }
 
-  function clear() {
+  /** Take the wash down. `fast` is the snap: the move was made, it leaves in a blink. */
+  function clear(opts = {}) {
     untrack();
     if (card) {
       const c = card;
-      try { if (c._remove) c._remove(); else c.remove(); } catch { /* gone */ }
+      try { if (c._remove) c._remove(!!opts.fast); else c.remove(); } catch { /* gone */ }
       if (card === c) card = null;
     }
   }

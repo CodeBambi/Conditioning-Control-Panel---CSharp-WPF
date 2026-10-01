@@ -5,6 +5,12 @@
  * how many pieces that side has TAKEN, and how many it has LOST. Taking ramps
  * you harder than losing (captureWeight 1.5 vs lossWeight 1.0) - the player who
  * is winning on the board gets the worse screen. Both sides end up melted.
+ * That number is the FLOOR.
+ *
+ * THINKING MAKES IT WORSE (owner, 2026-10-01): on your own move the screen
+ * climbs from that floor toward full the longer you sit on it (full at 20 s),
+ * and the moment the move is made it drops straight back to the floor. To play
+ * well you have to think, and thinking pulls you under.
  *
  * Pure and deterministic: every function takes the clock/counters it needs and
  * `now` is passed in, so smoke tests replay the same numbers without a timer.
@@ -65,7 +71,59 @@ export const RAMP_TUNING = Object.freeze({
 
   // --- the effect-free share, ported from the Arcademy plainShare ramp ------
   plain: Object.freeze({ early: 0.80, floor: 0.30 }),
+
+  // --- the think ramp (owner, 2026-10-01: "20 sec to the max") ---------------
+  // curve > 1 eases in: a quick move stays clean, a long think piles on at the
+  // end (5 s 0.13, 10 s 0.35, 15 s 0.65, 20 s 1). The wash rises once a think
+  // passes cardAtMs and rides until the move. snapFrom: a move only snaps the
+  // screen down when the think had lifted it at least this much. maxStepMs: one
+  // beat never adds more than this, so a hidden tab cannot bank a full ramp.
+  think: Object.freeze({ fullMs: 20000, curve: 1.5, cardAtMs: 12000, cardGapMs: 900, snapFrom: 0.08, snapMs: 600, maxStepMs: 250 }),
+
+  // --- the fall: a local loss brings everything up at once, then drains -------
+  surge: Object.freeze({ holdMs: 1200, drainMs: 1400 }),
 });
+
+/** How far a think of `ms` lifts the screen from its floor toward full, 0..1. */
+export function thinkLift(ms, tuning = RAMP_TUNING) {
+  const { fullMs, curve } = tuning.think;
+  return Math.pow(clamp01(ms / fullMs), curve);
+}
+
+/** The floor, lifted `lift` of the way to a full meter. */
+export const liftMeter = (floor, lift) => clamp01(clamp01(floor) + (1 - clamp01(floor)) * clamp01(lift));
+
+/** The loss surge at `ms` after game over: full for holdMs, then a straight drain to nothing. */
+export function surgeLevel(ms, tuning = RAMP_TUNING) {
+  const { holdMs, drainMs } = tuning.surge;
+  if (!(ms >= 0)) return 0;
+  if (ms <= holdMs) return 1;
+  return clamp01(1 - (ms - holdMs) / drainMs);
+}
+
+/**
+ * createThinkClock({ tuning }) - how long the mover has been sitting on this move.
+ *
+ * The ramp advances it once a beat, and only counts a beat when the mover is
+ * looking at a live board (their move, no pause card, no full-screen replay).
+ * reset() is the move: back to zero, and true when that drop should snap.
+ */
+export function createThinkClock({ tuning = RAMP_TUNING } = {}) {
+  let ms = 0;
+  return {
+    get ms() { return ms; },
+    lift: () => thinkLift(ms, tuning),
+    advance(dtMs, counting) {
+      if (counting && dtMs > 0) ms += Math.min(dtMs, tuning.think.maxStepMs);
+      return ms;
+    },
+    reset() {
+      const snap = thinkLift(ms, tuning) >= tuning.think.snapFrom;
+      ms = 0;
+      return snap;
+    },
+  };
+}
 
 /** Share of beats that must stay effect-free, so effects read as a spill and
  *  not as a metronome. Ported from arcademy/engine/curves.js plainShare(). */
