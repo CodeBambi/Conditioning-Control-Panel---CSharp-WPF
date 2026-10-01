@@ -1,9 +1,11 @@
 // node smoke/fall-smoke.mjs - the end card's IQ recap: whose seat it shows, the move
 // numbers, the "Gone at move" line, the curve, and what the shelf and the profile keep.
 import assert from 'node:assert/strict';
-import { FALL, seatsShown, moveNumber, worstOf, goneLine, endOf, curvePoints, recapRows, recapHtml, plainIq, iqFromApi } from '../door/fall.js';
+import { readFileSync } from 'node:fs';
+import { FALL, seatsShown, moveNumber, worstOf, goneLine, endOf, curvePoints, recapRows, recapHtml, plainIq, iqFromApi, fallPlan } from '../door/fall.js';
 import { profileStats, finalIq, seatIq } from '../door/store.js';
 import { createIqTracker, IQ } from '../game/iq.js';
+import { opponentWord, fallHeadline, fallSubline, boardBefore, fallCardModel } from '../door/fall-card.js';
 
 const grade = (ply, san, best, loss, value, side = ply % 2 ? 'w' : 'b') => ({ ply, side, san, best, cp: loss * 12, loss, value, fen: 'not kept' });
 const white = { start: 140, end: 61, low: 61, moves: [grade(1, 'e4', 'e4', 0, 140), grade(3, 'Qh5', 'Nf3', 4, 136), grade(37, 'Qxd5', 'Nf3', 30, 106), grade(39, 'Kh1', 'Rd1', 30, 76), grade(41, 'Rxe8', 'Rxe8', 15, 61)] };
@@ -110,4 +112,55 @@ assert.equal(seatIq(games[2]), null);
 assert.equal(profileStats(games).lowIq, 61);
 assert.equal(profileStats([games[3]]).lowIq, null, 'no graded game, no stat');
 
-console.log('fall: seats, move numbers, the gone line, the curve, the markup and the shelf passed');
+// Watch the fall, and the picture: a real game. 3...Nf6 lets 4.Qxf7 mate.
+const scholar = { mode: 'solo', me: 'b', opponent: 'Computer \u00b7 Beginner', plies: 7, result: { result: 'checkmate', winner: 'w', reason: 'checkmate' },
+  moves: ['e4', 'e5', 'Bc4', 'Nc6', 'Qh5', 'Nf6', 'Qxf7#'],
+  iq: { b: { start: 140, end: 110, low: 110, moves: [grade(2, 'e5', 'e5', 0, 140), grade(4, 'Nc6', 'Nc6', 0, 140), grade(6, 'Nf6', 'g6', 30, 110)] } } };
+const plan = fallPlan(scholar);
+assert.deepEqual([plan.from, plan.to, plan.punish, plan.worst.san], [5, 7, 7, 'Nf6'], 'from just before the move, through the capture that punished it');
+assert.equal(fallPlan({ ...scholar, moves: scholar.moves.slice(0, 5), plies: 5 }), null, 'a worst move the record does not reach is not watched');
+assert.deepEqual([fallPlan({ ...scholar, moves: scholar.moves.slice(0, 6), plies: 6 }).to, fallPlan({ ...scholar, moves: scholar.moves.slice(0, 6), plies: 6 }).punish], [6, null], 'the last move of the game: just that move');
+const quiet = { ...scholar, moves: ['e4', 'e5', 'Bc4', 'Nc6', 'Qh5', 'Nf6', 'Qd1', 'd6', 'Qe2'], plies: 9 };
+assert.deepEqual([fallPlan(quiet).to, fallPlan(quiet).punish], [7, null], 'nothing taken: through their one reply');
+const late = { ...scholar, moves: ['e4', 'e5', 'Bc4', 'Nc6', 'Qh5', 'Nf6', 'd3', 'a6', 'Qxf7#'], plies: 9 };
+assert.equal(fallPlan(late).punish, 9, 'a capture on their second move after it still counts');
+assert.equal(fallPlan({ ...scholar, mode: 'hotseat', me: null }), null, 'two players here: no fall to watch');
+assert.equal(fallPlan({ ...scholar, iq: { b: { ...scholar.iq.b, moves: [grade(2, 'e5', 'e5', 0, 140)] } } }), null, 'no loss, no fall');
+
+assert.equal(opponentWord('Computer \u00b7 Beginner'), 'the Beginner computer');
+assert.equal(opponentWord('Sam'), 'Sam'); assert.equal(opponentWord(''), 'a friend');
+assert.equal(fallHeadline(scholar), 'Lost to the Beginner computer');
+assert.equal(fallHeadline({ ...scholar, result: { winner: 'b', reason: 'resign' }, opponent: 'Sam' }), 'Beat Sam');
+assert.equal(fallHeadline({ ...scholar, result: { winner: null, reason: 'stalemate' } }), 'Drew with the Beginner computer');
+assert.equal(fallSubline(scholar), 'by checkmate, 4 moves');
+const scholarHere = { ...scholar, mode: 'hotseat', me: null, opponent: 'a friend here' };
+assert.equal(fallHeadline(scholarHere, 'b'), 'Black lost by checkmate', 'two players here: from the seat on the picture');
+assert.equal(fallHeadline(scholarHere, 'w'), 'White won by checkmate');
+assert.equal(fallSubline(scholarHere), '4 moves', 'the reason is not said twice');
+
+const before = boardBefore(scholar, plan.worst);
+assert.deepEqual(before.played, { from: 'g8', to: 'f6' }, 'what was played, in pink');
+assert.deepEqual(before.better, { from: 'g7', to: 'g6' }, 'the better move, ringed');
+assert.deepEqual(before.rows[3][7], { type: 'q', side: 'w' }, 'the queen stands on h5 before the move');
+assert.equal(before.rows[2][5], null, 'f6 is still empty');
+assert.equal(boardBefore(scholar, { ...plan.worst, best: 'Nf6' }).better, null, 'no ring when the move was the best one');
+assert.equal(boardBefore({ ...scholar, moves: ['e4', 'nonsense'] }, plan.worst), null, 'a broken record draws no board');
+
+const model = fallCardModel(scholar);
+assert.deepEqual([model.side, model.flip, model.start, model.end], ['b', true, 140, 110]);
+assert.equal(model.line, 'Gone at move 3: Nf6. Better: g6.');
+assert.equal(model.boardLabel, 'move 3, before Nf6');
+assert.equal(fallCardModel({ ...scholar, iq: null }), null, 'no fall, no picture');
+const twoHere = fallCardModel({ ...scholar, mode: 'hotseat', me: null, iq: { w: white, b: scholar.iq.b } });
+assert.equal(twoHere.side, 'b', 'two players here: the picture is about the side that lost');
+assert.equal(twoHere.headline, 'Black lost by checkmate');
+for (const s of [model.headline, model.subline, model.line, model.boardLabel]) assert.ok(!/[\u2013\u2014!]/.test(s), 'plain copy');
+
+// The director lets the fall's review play its replay, and only while it is open.
+const director = readFileSync(new URL('../board/director.js', import.meta.url), 'utf8');
+assert.match(director, /const menuUp = \(\) => !underDoor && /, 'the door stands the replay down unless the fall is being watched');
+assert.match(director, /allowUnderDoor\(on\) \{ underDoor = !!on; if \(!underDoor\) dropReplay\(\); \}/);
+const door = readFileSync(new URL('../door/door.js', import.meta.url), 'utf8');
+assert.match(door, /function closeReplay\(\) \{\s+stopReplay\(\);\s+replay = null;\s+try \{ board\.director\?\.allowUnderDoor\?\.\(false\); \}/, 'closing any review turns it off again');
+
+console.log('fall: seats, move numbers, the gone line, the curve, the markup, the shelf, the watch plan and the picture passed');

@@ -122,6 +122,23 @@ export function recapHtml(record, { extra = '' } = {}) {
   return `<div class="fall${two ? ' two' : ''}">${body}${extra}</div>`;
 }
 
+/**
+ * "Watch the fall": the review from the position before your worst move,
+ * through the capture that punished it (the first capture among the
+ * opponent's next two moves), or through their one reply when nothing was
+ * taken. Your own seat only: null for two players here, and for no loss.
+ */
+export function fallPlan(record) {
+  const me = record && (record.me === 'w' || record.me === 'b') ? record.me : null;
+  const t = me && record.iq ? record.iq[me] : null;
+  if (!isTrack(t)) return null;
+  const worst = (t.worst && t.worst.loss > 0) ? t.worst : worstOf(t.moves);
+  const moves = Array.isArray(record.moves) ? record.moves : [];
+  if (!worst || !(worst.ply >= 1) || worst.ply > moves.length) return null;
+  const punish = [worst.ply + 1, worst.ply + 3].find((p) => p <= moves.length && String(moves[p - 1]).includes('x')) || null;
+  return { from: worst.ply - 1, to: punish || Math.min(moves.length, worst.ply + 1), punish, worst };
+}
+
 /** A grade with only the fields a saved record keeps. */
 function plainGrade(g) {
   if (!g || typeof g !== 'object') return null;

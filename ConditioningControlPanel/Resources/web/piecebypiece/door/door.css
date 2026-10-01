@@ -230,6 +230,10 @@
 .fall.two .fall-iq { font-size: 24px; }
 .fall.two .fall-curve { width: min(180px, 60vw); }
 .fall.two .fall-line { font-size: 12px; }
+/* watch the fall, save the picture, copy it; one quiet line says how it went */
+.fall-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 2px; }
+.fall-note { margin: 0; font-size: 11px; letter-spacing: 0.06em; opacity: 0.7; }
+.fall-note:empty { display: none; }
 
 /* --- profile --- */
 .door-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }

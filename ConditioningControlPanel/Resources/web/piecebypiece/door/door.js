@@ -53,7 +53,8 @@ import { requestRematch } from '../net/rematch.js';
 import { isHosted, identity, whenIdentity, postToHost, onHostMessage } from '../bridge.js';
 import { createStake, pills as stakePills, stakeLabel, refusalText, sameStake, isNone } from '../net/stake.js';
 import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen, finalIq } from './store.js';
-import { recapHtml, iqFromApi, plainIq } from './fall.js';
+import { recapHtml, iqFromApi, plainIq, fallPlan, goneLine } from './fall.js';
+import { saveFallCard, copyFallCard } from './fall-card.js';
 import { pictureChoice } from '../ui/pictures.js';
 
 /** Every number the door decides with. */
@@ -475,7 +476,7 @@ export function createDoor(opts = {}) {
         <button type="button" class="door-btn door-ico ${r.timer ? 'primary' : ''}" data-act="rplay" title="play" aria-label="play">${r.timer ? '&#10074;&#10074;' : '&#9654;&#9654;'}</button>
       </div>
       <input class="door-scrub" type="range" min="0" max="${r.moves.length}" value="${n}" aria-label="move">
-      <div class="door-foot"><span>esc - back to the shelf</span><span>${esc(r.title)}</span></div>`;
+      <div class="door-foot"><span>${r.fall ? 'esc - back' : 'esc - back to the shelf'}</span><span>${esc(r.title)}</span></div>`;
   }
 
   function end() {
@@ -666,7 +667,51 @@ export function createDoor(opts = {}) {
 
   // ---------------------------------------------------------------- the fall (IQ recap)
   /** The end card's IQ recap (door/fall.js): your own seat only, nothing for a game with no grades. */
-  function recap() { return lastEnd ? recapHtml(lastEnd) : ''; }
+  function recap() { return lastEnd ? recapHtml(lastEnd, { extra: fallActs() }) : ''; }
+  /** Under the recap: watch the fall (a loss with a worst move of yours), then the picture. */
+  function fallActs() {
+    const watch = outcome(lastEnd) === 'loss' && fallPlan(lastEnd)
+      ? '<button type="button" class="door-pill" data-act="fallwatch">Watch the fall</button>' : '';
+    return `<div class="fall-acts">${watch}<button type="button" class="door-pill" data-act="fallsave">Save picture</button>`
+      + '<button type="button" class="door-pill" data-act="fallcopy">Copy</button></div><p class="fall-note" role="status"></p>';
+  }
+  /**
+   * Watch the fall: the review from just before your worst move, through the
+   * capture that punished it (door/fall.js fallPlan), with the live capture
+   * choreography and, the director allowing, its replay. Esc goes back to the
+   * end card rather than the shelf.
+   */
+  function watchFall() {
+    const g = lastEnd;
+    const plan = g && g.id ? fallPlan(g) : null;
+    if (!plan) return;
+    openReplay(g.id);
+    if (!replay || screen !== 'replay') return;
+    replay.fall = plan;
+    replay.title = goneLine(plan.worst);
+    stepReplay(plan.from);
+    try { board.director?.allowUnderDoor?.(true); } catch { /* an older director: the moves still play */ }
+    replay.stopAt = plan.to;
+    playReplay();
+  }
+  /** Out of the fall, back to the end card, with the finished position under it again. */
+  function backToEnd() {
+    const last = replay ? replay.positions[replay.positions.length - 1] : null;
+    const side = replay ? replay.side : 'w';
+    show('end');   // closes the review, which puts the referee and the board back at the start
+    try { if (last) { board.pieces.setPosition(last); board.setSide(side, true); } } catch { /* the board stays as it is */ }
+  }
+  /** Save or copy the picture (door/fall-card.js) and say how it went, in one line. */
+  function shareFall(how) {
+    const g = lastEnd;
+    if (!g) return;
+    const say = (text) => { const n = screen === 'end' && card.querySelector('.fall-note'); if (n) n.textContent = text; };
+    const job = how === 'copy' ? copyFallCard(g) : saveFallCard(g);
+    Promise.resolve(job).then((ok) => {
+      if (how === 'copy') say(ok ? 'Copied.' : 'Copy is not allowed here. Save it instead.');
+      else say(ok ? 'Saved to your downloads.' : 'Could not make the picture.');
+    }).catch(() => say('Could not make the picture.'));
+  }
   function paintRecap() {
     const slot = screen === 'end' && card.querySelector('#door-recap');
     if (slot) slot.innerHTML = recap();
@@ -738,6 +783,7 @@ export function createDoor(opts = {}) {
     if (!replay) return;
     showReplayStep(board, replay, i, animate && !still());
     if (replay.i === replay.moves.length && replay.timer) stopReplay();
+    if (replay.stopAt != null && replay.i >= replay.stopAt && replay.timer) { stopReplay(); replay.stopAt = null; }
     if (screen === 'replay') render();
   }
   function playReplay() {
@@ -745,7 +791,9 @@ export function createDoor(opts = {}) {
     if (replay.i >= replay.moves.length) stepReplay(0);
     const tickFn = () => {
       if (!replay || !replay.timer) return;
-      if (board.anim?.busy?.()) { replay.timer = later(tickFn, 150); return; }
+      // the fall also waits out the director's replay of a capture, so the next move never cuts it
+      const director = replay.fall ? board.director : null;
+      if (board.anim?.busy?.() || director?.holding?.() || director?.active?.()) { replay.timer = later(tickFn, 150); return; }
       stepReplay(replay.i + 1, true);
       if (replay?.timer) replay.timer = later(tickFn, T.replayStepMs);
     };
@@ -756,6 +804,7 @@ export function createDoor(opts = {}) {
   function closeReplay() {
     stopReplay();
     replay = null;
+    try { board.director?.allowUnderDoor?.(false); } catch { /* an older director */ }
     board.anim?.setClock?.(() => game.clock);
     board.anim?.skip?.();
     game.switchBack?.();
@@ -801,6 +850,9 @@ export function createDoor(opts = {}) {
       case 'rplay': if (replay && replay.timer) { stopReplay(); render(); } else playReplay(); break;
       case 'rematch': gate(rematch); break;
       case 'menu': toMenu(); break;
+      case 'fallwatch': watchFall(); break;
+      case 'fallsave': shareFall('save'); break;
+      case 'fallcopy': shareFall('copy'); break;
       default: break;
     }
   }
@@ -821,7 +873,7 @@ export function createDoor(opts = {}) {
     e.preventDefault();
     if (screen === 'found') { if (countTimer) { clearTimeout(countTimer); timers.delete(countTimer); countTimer = null; } current = null; stake.withdraw(); stake.clear(); show('lobby'); return; }
     if (screen === 'end') { toMenu(); return; }
-    if (screen === 'replay') { show('games'); return; }
+    if (screen === 'replay') { if (replay && replay.fall) backToEnd(); else show('games'); return; }
     show('menu');
   }
   // a tap on the board during the countdown means "now"

@@ -122,7 +122,8 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
   }
   const mineSide = side => !game?.seats || game.seats.includes(side);
   const paused = () => !!globalThis.window?.PBP?.isPaused?.();
-  const menuUp = () => !!globalThis.window?.PBP?.door?.isUp?.();
+  let underDoor = false;   // the end card's "watch the fall" review: see allowUnderDoor()
+  const menuUp = () => !underDoor && !!globalThis.window?.PBP?.door?.isUp?.();
 
   function canFollow() { return prefs().followCam !== false && !reducedNow() && leastMs() >= 10000 && !menuUp(); }
 
@@ -539,6 +540,9 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
       return !!(rec && !rec.done && rec.hit != null && allowedNow() === 'full');
     },
     active: () => !!replay,
+    /** The end card's "watch the fall" (door/door.js): its review may play the capture replay and
+     *  the follow camera, which otherwise stand down while the door is up. Off again when it closes. */
+    allowUnderDoor(on) { underDoor = !!on; if (!underDoor) dropReplay(); },
     stats: () => ({ follow: follow ? { weight, capture: follow.capture, mine: follow.mine } : null,
       recording: rec ? { t: rec.t, frames: rec.frames.length, hit: rec.hit } : null,
       replay: replay ? { layout: replay.layout, t: replay.t, end: replay.end, clip: replay.clip.duration, hit: replay.clip.hit, shots: replay.shots } : null }),
