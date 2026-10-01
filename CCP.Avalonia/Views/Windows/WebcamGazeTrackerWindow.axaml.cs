@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using ConditioningControlPanel.Avalonia.Platform;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -14,31 +15,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// service or persist anything. Useful for eyeballing tracking precision
     /// after calibration.
     ///
-    /// Caller must ensure App.Webcam is running AND has a calibration loaded
-    /// (the dot's position comes from OnGazeMove, which only fires when a
-    /// homography is available).
-    ///
-    /// PORTED from ConditioningControlPanel/Windows/WebcamGazeTrackerWindow.xaml.cs. Deviations:
-    ///  - Loaded -> <see cref="OnOpened"/>, and the KeyDown / Click handlers are wired in the
-    ///    constructor rather than in markup, per the porting convention.
-    ///  - <c>ActualWidth</c>/<c>ActualHeight</c> -> <c>Bounds.Width</c>/<c>Bounds.Height</c>.
-    ///  - <c>OnWebcamStateChanged</c> is gone with its <c>WebcamTrackingState</c> enum, which lives
-    ///    in the WPF head's Services/Webcam and may not be referenced from here.
-    ///  - <c>Window_Closed</c> only unsubscribed from the service, so it goes with the
-    ///    subscription; there is nothing left for it to do.
-    ///
-    /// <para><b>NO OPENER, DELIBERATELY.</b> WPF opens this from
-    /// <c>MainWindow.BtnWebcamDebugTrackerTest_Click</c> (MainWindow.LabTab.cs:1059) and only after
-    /// two preconditions it can evaluate and this head cannot: the tracking service is RUNNING
-    /// (starting it here if needed) and <c>svc.Calibration != null</c>. Neither exists on this head
-    /// — Services/Webcam/WebcamTrackingService.cs is the device; Core holds WebcamConsent, the frame-free
-    /// blink/gaze pipeline and calibration (Services/Webcam) but no capture
-    /// plus CoreWebcam (capability + revoke, no feed) — so a button wired to this window would put
-    /// up a full-screen "gaze
-    /// tracker" whose dot can never move, with the two checks that would have refused honestly
-    /// silently dropped. That is the judgement already recorded for the Lab status pills
-    /// (MainShellWindow.LabTab.cs) and it holds here. The window stays reachable only from
-    /// <c>--render-view</c> until a tracker seam lands.</para>
+    /// PORTED from ConditioningControlPanel/Windows/WebcamGazeTrackerWindow.xaml.cs over
+    /// Platform/WebcamTracker. Deviations: Loaded -> OnOpened, handlers wired in the constructor,
+    /// ActualWidth/Height -> Bounds, and WPF's OnTrackingStateChanged(Stopped/Error/...) close
+    /// becomes "close when the tracker is no longer running" (StateChanged).
     /// </summary>
     public partial class WebcamGazeTrackerWindow : Window
     {
@@ -70,23 +50,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             base.OnOpened(e);
 
-            // ponytail: needs ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs
-            // (IsRunning / Calibration / OnGazeMove / OnTrackingStateChanged). It is head-only by
-            // construction. CoreWebcam now exists but carries capability + consent-revoke ONLY,
-            // deliberately not IsRunning/Calibration - see its class doc. Gating on those two alone
-            // would be the worse half-port: the preconditions would pass and the dot would still
-            // never move, because OnGazeMove is what draws it. With the feed back, this checks both
-            // preconditions, subscribes OnGazeMove and closes the window when the service stops.
-            // Without it there is no tracking to visualise, which is exactly the WPF original's
-            // first error path, so it takes that path verbatim.
-            ShowError("Webcam tracking is not running. Start tracking before opening the tracker test.");
+            var tracker = WebcamTracker.Instance;
+            if (!tracker.IsRunning)
+            {
+                ShowError("Webcam tracking is not running. Start tracking before opening the tracker test.");
+                return;
+            }
+            if (tracker.Calibration == null)
+            {
+                ShowError("No calibration loaded. Run Calibrate (16-point) first — the tracker test needs a calibration to project gaze onto the screen.");
+                return;
+            }
+            tracker.OnGazeMove += OnGazeMove;
+            tracker.StateChanged += OnTrackerStateChanged;
         }
 
-        /// <summary>
-        /// Pure view maths, kept intact: it averages the last <see cref="SmoothFrames"/> gaze
-        /// projections, clips the dot to the window and moves it. Unreachable until the service
-        /// above is back to raise it.
-        /// </summary>
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            WebcamTracker.Instance.OnGazeMove -= OnGazeMove;
+            WebcamTracker.Instance.StateChanged -= OnTrackerStateChanged;
+        }
+
+        private void OnTrackerStateChanged()
+        {
+            if (!WebcamTracker.Instance.IsRunning) Close();
+        }
+
         private void OnGazeMove(Point screenPoint)
         {
             // OnGazeMove is marshalled onto the UI thread by the service (Service.Dispatch),

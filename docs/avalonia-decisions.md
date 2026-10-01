@@ -312,3 +312,15 @@ passes its two providers' `TierChanged` (WPF App.xaml.cs; Avalonia `AccountSeed.
 providers exist). A second call re-points the hook at the new providers instead of being a no-op.
 Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate lives on
 `GradedIntakeTabView` rather than the shell, because this head's shell cannot reach x:Name fields.
+## 2026-10-01: webcam gaze on Avalonia (webcam slice 4)
+- Question: how does the gaze half of WebcamTrackingService reach the Avalonia tracker without a second copy, and what fits one slice?
+- Choice: the stateful frame-free chain moved to Core `GazeEngine` (one instance per tracker, capture thread only) and WPF's
+  ProcessFrame/EmitGazeEvents/HandleNoFace delegate to it, keeping WPF-only stages (gaze lock-on, long stare, mouth/tongue,
+  pre-lock snapshot) in place and the call order unchanged. solvePnP stays in each head: Core compiles against OpenCvSharp 4.9
+  (WPF's version) and 4.13 on the Avalonia head renamed `SolvePnPFlags` to `SolvePnPMethod`, so a Core call throws
+  MissingMethodException there (found by `WebcamGazeTests.HeadPose_TracksAYawTurn`); Core owns the model points, Euler
+  extraction and smoothing. Calibration is WPF's profile file (`WebcamCalibrationData.FilePath`), read once on first use;
+  revoke deletes it and drops the in-memory copy. Tracker Test and Quick Recal are ported; the 16-point calibration window
+  (WPF ~2.1k LOC plus mouth/tongue validation and the bubble test) does not fit the line cap and is the next slice, so
+  Calibrate stays disabled with a reason.
+- Advisor: worker (supervisor informed).

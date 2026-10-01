@@ -1150,3 +1150,15 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/graded-intake: +397
 - IntakePassService in Core (each head passes its entitlement hooks; Avalonia hooks them in AccountSeed.Seed); the Graded Intake tab paints
   WPF's four pass gates and Begin Intake's checks. GradedIntakeGateTests (4), fail-proven. The intake run itself isn't ported yet.
+
+## avalonia-port/friends-drawer: +1002
+- Core FriendsService (IUiTimer seam; WPF FriendsServiceApp); Avalonia friends rail chip + drawer (presence, requests, block/remove with
+  confirm, report, add by code), loopback-only in a sandbox, disposed on exit. FriendsDrawerTests (11), fail-proven. Rows stub.
+
+## avalonia-port/chaos-shelves: +660
+- Chaos slice 2: ChaosMeta/Upgrades/Boons/Lessons/Reveal in Core, ChaosBench; WPF run effects keyed by id; the Avalonia hub's shelves spend
+  and save the active slot (one atomic save per buy); rendering never writes. Fail-proven tests. Rows stay stub.
+
+## avalonia-port/webcam-gaze: +988
+- Webcam slice 4 part 1: Core GazeEngine (WPF delegates); tracker gaze/face/head-pose feed with the WPF-profile calibration; Tracker Test
+  and Quick Recal ported. Synthetic-frame tests, fail-proven. Merge with part 2.

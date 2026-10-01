@@ -22,8 +22,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///
     /// PORTED from ConditioningControlPanel/Chaos/ChaosSlotPickerWindow.xaml.cs. Deviations:
     ///  - <c>ChaosMeta.AllSlotSummaries/DeleteSlot/ActiveSlot</c> read Core's <c>ChaosMetaStore</c>
-    ///    directly (the WPF facade delegates to the same calls); ChaosMeta's live State reload on
-    ///    switch stays WPF-side, so a chosen slot is persisted via <c>ChaosMetaStore.SetActiveSlot</c>.
+    ///    directly (the WPF facade delegates to the same calls); a chosen slot commits through
+    ///    Core's <c>ChaosMeta.SwitchSlot</c>, as WPF's caller does.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>; <see cref="Pick"/> is async, because
     ///    Avalonia's <c>ShowDialog</c> is.
     ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>; <c>MouseLeftButtonUp</c> ->
@@ -86,8 +86,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 return null;   // ponytail: needs an owner to be modal against; callers always have one.
             }
             if (await w.ShowDialog<bool?>(owner) != true) return null;
-            // WPF's caller commits via ChaosMeta.SwitchSlot; its settings half is all this head has.
-            return ChaosMetaStore.SetActiveSlot(w.ChosenSlot);
+            // WPF's caller commits via ChaosMeta.SwitchSlot: remember the slot, reload its save.
+            ChaosMeta.SwitchSlot(w.ChosenSlot);
+            return ChaosMeta.ActiveSlot;
         }
 
         private void RebuildCards()
