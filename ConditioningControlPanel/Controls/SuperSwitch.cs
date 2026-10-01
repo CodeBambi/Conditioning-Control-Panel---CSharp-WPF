@@ -40,7 +40,6 @@ namespace ConditioningControlPanel.Controls
         private static readonly Color LockedRing = Color.FromArgb(0x80, 0xFF, 0xCF, 0x6B);
         private static readonly Color LockedKnob = Color.FromRgb(0x8A, 0x74, 0x48);
 
-        private static readonly Brush OnBgBrush = Freeze(new LinearGradientBrush(GoldDeep, Gold, 0));
 
         private static readonly Geometry LockGeo = Geometry.Parse(
             "M7,10 V8 A5,5 0 0 1 17,8 V10 H18 A1,1 0 0 1 19,11 V20 A1,1 0 0 1 18,21 H6 A1,1 0 0 1 5,20 V11 A1,1 0 0 1 6,10 Z M9,10 H15 V8 A3,3 0 0 0 9,8 Z");
@@ -73,6 +72,12 @@ namespace ConditioningControlPanel.Controls
         private readonly Path _lock;
         private readonly Grid _knobHost;
         private readonly TranslateTransform _knobShift = new();
+        private readonly ScaleTransform _knobSquash = new() { CenterX = KnobD / 2, CenterY = KnobD / 2 };
+        private readonly ScaleTransform _lockPop = new() { CenterX = 4, CenterY = 4 };
+        // One brush per part, recoloured by tween, so lit, dim and on/off ease instead of cutting.
+        private readonly GradientStop _bgFrom = new(OffBg, 0), _bgTo = new(OffBg, 1);
+        private readonly SolidColorBrush _ringBrush = new(OffRing);
+        private readonly SolidColorBrush _knobBrush = new(OffKnob);
         private readonly TranslateTransform _shakeShift = new();
         private readonly RotateTransform _shakeTilt = new();
         private readonly Border _focusRing;
@@ -82,6 +87,7 @@ namespace ConditioningControlPanel.Controls
         private bool _glowAllowed;
         private bool _pressed;
         private bool? _lastOn;
+        private bool _lastLocked;
 
         public SuperSwitch()
         {
@@ -108,23 +114,24 @@ namespace ConditioningControlPanel.Controls
             {
                 CornerRadius = new CornerRadius(TrackH / 2),
                 BorderThickness = new Thickness(1),
-                Background = new SolidColorBrush(OffBg),
-                BorderBrush = new SolidColorBrush(OffRing),
+                Background = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5), GradientStops = { _bgFrom, _bgTo } },
+                BorderBrush = _ringBrush,
                 Opacity = 0.92,
                 Effect = _glow,
             };
             Children.Add(_track);
 
-            _knob = new Ellipse { Width = KnobD, Height = KnobD, Fill = new SolidColorBrush(OffKnob) };
+            _knob = new Ellipse { Width = KnobD, Height = KnobD, Fill = _knobBrush };
             _lock = new Path
             {
                 Data = LockGeo,
                 Width = 8, Height = 8,
                 Stretch = Stretch.Uniform,
-                Fill = new SolidColorBrush(OffBg),
+                Fill = Freeze(new SolidColorBrush(OffBg)),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 Visibility = Visibility.Collapsed,
+                RenderTransform = _lockPop,
             };
             _knobHost = new Grid
             {
@@ -132,7 +139,7 @@ namespace ConditioningControlPanel.Controls
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(KnobInset, (TrackH - KnobD) / 2, 0, 0),
-                RenderTransform = _knobShift,
+                RenderTransform = new TransformGroup { Children = { _knobSquash, _knobShift } },
                 IsHitTestVisible = false,
             };
             _knobHost.Children.Add(_knob);
@@ -181,48 +188,40 @@ namespace ConditioningControlPanel.Controls
             string name = SuperNames.Name(Effect);
             AutomationProperties.SetName(this, Loc.GetF("super_switch_name", name));
             ToolTip = locked ? Loc.GetF("super_switch_locked_tip", name) : null;
-            _glow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
             _glowAllowed = PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier);
 
-            if (on)
-            {
-                _track.Background = OnBgBrush;
-                _track.BorderBrush = new SolidColorBrush(Gold);
-                _glow.Opacity = _glowAllowed ? 0.35 : 0;
-                _knob.Fill = new SolidColorBrush(Cream);
-                _lock.Visibility = Visibility.Collapsed;
-            }
-            else if (locked)
-            {
-                _track.Background = new SolidColorBrush(OffBg);
-                _track.BorderBrush = new SolidColorBrush(LockedRing);
-                _glow.Opacity = 0;
-                _knob.Fill = new SolidColorBrush(LockedKnob);
-                _lock.Fill = new SolidColorBrush(OffBg);
-                _lock.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                _track.Background = new SolidColorBrush(OffBg);
-                _track.BorderBrush = new SolidColorBrush(OffRing);
-                _glow.Opacity = 0;
-                _knob.Fill = new SolidColorBrush(OffKnob);
-                _lock.Visibility = Visibility.Collapsed;
-            }
+            // Colour and glow ease over 220 ms (120 ms when motion is off) on a real change; a
+            // first paint or a silent repaint lands at once.
+            bool changed = animate && _lastOn != null && (_lastOn != on || _lastLocked != locked);
+            int ms = changed ? SuperChromeJuice.ChangeMs(MotionFx.Level) : 0;
+            Color bgA = on ? GoldDeep : OffBg, bgB = on ? Gold : OffBg;
+            Color ring = on ? Gold : locked ? LockedRing : OffRing;
+            Color knob = on ? Cream : locked ? LockedKnob : OffKnob;
+            double glow = on && _glowAllowed ? 0.35 : 0;
+            Tween(_bgFrom, GradientStop.ColorProperty, bgA, ms);
+            Tween(_bgTo, GradientStop.ColorProperty, bgB, ms);
+            Tween(_ringBrush, SolidColorBrush.ColorProperty, ring, ms);
+            Tween(_knobBrush, SolidColorBrush.ColorProperty, knob, ms);
+            Tween(_glow, DropShadowEffect.OpacityProperty, glow, ms);
+            _lock.Visibility = locked && !on ? Visibility.Visible : Visibility.Collapsed;
+            _lastLocked = locked;
 
-            _restGlow = _glow.Opacity;
+            _restGlow = glow;
             double to = on ? KnobTravel : 0;
-            // Only the moment of switching on earns the small gold burst.
-            if (animate && _lastOn == false && on) Burst();
+            // Only the moment of switching on earns the small gold burst and the knob's thud.
+            if (animate && _lastOn == false && on) { Burst(); Thud(); }
             if (animate && _lastOn != null && _lastOn != on && MotionFx.AllowTransitions)
             {
-                var slide = new DoubleAnimation(to, TimeSpan.FromMilliseconds(180))
+                double from = _knobShift.X;
+                _knobShift.X = to; // base first: the slide stops onto it, so a repaint never fights it
+                var slide = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(180))
                 {
                     EasingFunction = new BackEase { Amplitude = 0.3, EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.Stop,
                 };
                 _knobShift.BeginAnimation(TranslateTransform.XProperty, slide);
             }
-            else
+            else if (!Equals(_knobShift.ReadLocalValue(TranslateTransform.XProperty), to))
             {
                 _knobShift.BeginAnimation(TranslateTransform.XProperty, null);
                 _knobShift.X = to;
@@ -277,6 +276,93 @@ namespace ConditioningControlPanel.Controls
             }
         }
 
+        /// <summary>The knob lands with weight as the slide arrives: flat along the slide, one small
+        /// overshoot back, rest (<see cref="SuperChromeJuice.ThudKeys"/>). Halved when reduced, none when off.</summary>
+        private void Thud()
+        {
+            var keys = SuperChromeJuice.ThudKeys(SuperChromeJuice.Amount(MotionFx.Level));
+            if (keys.Length == 0) return;
+            var x = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(SuperChromeJuice.ThudMs), BeginTime = TimeSpan.FromMilliseconds(SuperChromeJuice.ThudDelayMs) };
+            var y = new DoubleAnimationUsingKeyFrames { Duration = x.Duration, BeginTime = x.BeginTime };
+            foreach (var (t, sx, sy) in keys)
+            {
+                var at = KeyTime.FromPercent(t);
+                x.KeyFrames.Add(new EasingDoubleKeyFrame(sx, at, new SineEase { EasingMode = EasingMode.EaseInOut }));
+                y.KeyFrames.Add(new EasingDoubleKeyFrame(sy, at, new SineEase { EasingMode = EasingMode.EaseInOut }));
+            }
+            x.FillBehavior = y.FillBehavior = FillBehavior.Stop;
+            _knobSquash.BeginAnimation(ScaleTransform.ScaleXProperty, x);
+            _knobSquash.BeginAnimation(ScaleTransform.ScaleYProperty, y);
+        }
+
+        /// <summary>A refused click: the lock on the knob pops and the ring blinks gold once (a
+        /// single swell, never a flash). The pop sizes with motion; the blink is colour only.</summary>
+        private void Nudge()
+        {
+            var keys = SuperChromeJuice.LockPopKeys(SuperChromeJuice.Amount(MotionFx.Level));
+            if (keys.Length > 0)
+            {
+                var pop = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(SuperChromeJuice.LockPopMs), FillBehavior = FillBehavior.Stop };
+                foreach (var (t, s) in keys)
+                    pop.KeyFrames.Add(new EasingDoubleKeyFrame(s, KeyTime.FromPercent(t), new CubicEase { EasingMode = EasingMode.EaseOut }));
+                _lockPop.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                _lockPop.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
+            var rest = (Color)_ringBrush.GetValue(SolidColorBrush.ColorProperty);
+            var blink = new ColorAnimation(rest, Gold, TimeSpan.FromMilliseconds(SuperChromeJuice.RingBlinkMs / 2))
+            {
+                AutoReverse = true,
+                FillBehavior = FillBehavior.Stop,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+            };
+            _ringBrush.BeginAnimation(SolidColorBrush.ColorProperty, blink);
+        }
+
+        /// <summary>
+        /// Ease a colour or a double to <paramref name="to"/> over <paramref name="ms"/>. The base value
+        /// is written first and the tween stops onto it, so hover or a repaint never fights a held
+        /// animation. 0 ms lands at once, but leaves a running tween alone when it already heads there.
+        /// </summary>
+        internal static void Tween(Animatable target, DependencyProperty prop, object to, int ms)
+        {
+            object current = target.GetValue(prop);
+            bool headingThere = Equals(target.ReadLocalValue(prop), to);
+            if (ms <= 0)
+            {
+                if (headingThere) return;
+                target.BeginAnimation(prop, null);
+                target.SetValue(prop, to);
+                return;
+            }
+            if (headingThere && Equals(current, to)) return;
+            target.SetValue(prop, to);
+            AnimationTimeline anim = to is Color c
+                ? new ColorAnimation((Color)current, c, TimeSpan.FromMilliseconds(ms)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }, FillBehavior = FillBehavior.Stop }
+                : new DoubleAnimation((double)current, (double)to, TimeSpan.FromMilliseconds(ms)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }, FillBehavior = FillBehavior.Stop };
+            target.BeginAnimation(prop, anim);
+        }
+
+        /// <summary><see cref="Tween(Animatable, DependencyProperty, object, int)"/> for an element's opacity.</summary>
+        internal static void TweenOpacity(UIElement e, double to, int ms)
+        {
+            double current = e.Opacity;
+            bool headingThere = Equals(e.ReadLocalValue(OpacityProperty), to);
+            if (ms <= 0)
+            {
+                if (headingThere) return;
+                e.BeginAnimation(OpacityProperty, null);
+                e.Opacity = to;
+                return;
+            }
+            if (headingThere && current == to) return;
+            e.Opacity = to;
+            e.BeginAnimation(OpacityProperty, new DoubleAnimation(current, to, TimeSpan.FromMilliseconds(ms))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                FillBehavior = FillBehavior.Stop,
+            });
+        }
+
         private const int SparkCount = 6;
         private static readonly Brush SparkBrush = Freeze(new SolidColorBrush(Gold));
 
@@ -319,6 +405,7 @@ namespace ConditioningControlPanel.Controls
             if (IsLockedNow)
             {
                 Shake(this);
+                Nudge();
                 try { LockedPoke?.Invoke(effect); } catch (Exception ex) { App.Logger?.Debug("SuperSwitch poke: {E}", ex.Message); }
                 RaiseEvent(new RoutedEventArgs(LockedClickEvent, this));
                 TierGate.DemandPremium(Loc.GetF("super_switch_name", SuperNames.Name(effect)));

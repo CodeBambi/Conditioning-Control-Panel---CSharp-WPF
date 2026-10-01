@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
@@ -71,6 +72,14 @@ namespace ConditioningControlPanel.Controls
         private readonly TextBlock _ringText = new() { FontSize = 8.5, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Mint), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         private readonly Grid _ring;
         private DispatcherTimer? _ringTimer;
+        private readonly SolidColorBrush _borderBrush = new();
+        private readonly SolidColorBrush _backBrush = new();
+        private bool _painted;
+        // The supporter sign's rare sheen: a warm band masked by the sign itself.
+        private readonly TranslateTransform _sheenShift = new() { X = -1 };
+        private readonly Rectangle _sheen = new() { IsHitTestVisible = false, Opacity = 0, Visibility = Visibility.Collapsed };
+        private readonly VisualBrush _sheenMask;
+        private DispatcherTimer? _sheenTimer;
 
         public SuperBox()
         {
@@ -95,8 +104,32 @@ namespace ConditioningControlPanel.Controls
                     Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xE0, 0x8A)),
                 },
             };
-            _signHost.Child = _sign;
+            BorderBrush = _borderBrush;
+            Background = _backBrush;
+
             _sign.HorizontalAlignment = HorizontalAlignment.Right;
+            var cream = Color.FromRgb(0xFF, 0xF6, 0xE0);
+            _sheen.Fill = new LinearGradientBrush
+            {
+                StartPoint = new Point(0, 0.2), EndPoint = new Point(1, 0.8),
+                RelativeTransform = _sheenShift,
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(0, cream.R, cream.G, cream.B), 0.38),
+                    new GradientStop(cream, 0.5),
+                    new GradientStop(Color.FromArgb(0, cream.R, cream.G, cream.B), 0.62),
+                },
+            };
+            _sheenMask = new VisualBrush(_sign)
+            {
+                Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top,
+                ViewboxUnits = BrushMappingMode.Absolute, ViewportUnits = BrushMappingMode.Absolute,
+            };
+            _sheen.OpacityMask = _sheenMask;
+            var signGrid = new Grid { HorizontalAlignment = HorizontalAlignment.Right };
+            signGrid.Children.Add(_sign);
+            signGrid.Children.Add(_sheen);
+            _signHost.Child = signGrid;
 
             var head = new Grid { Margin = new Thickness(0, 0, 0, 6), MinHeight = 22 };
             head.Children.Add(_v2Tag);
@@ -150,6 +183,7 @@ namespace ConditioningControlPanel.Controls
                 SuperPreview.StateChanged += OnPreviewChanged;
                 SuperSwitch.LockedPoke += OnLockedPoke;
                 Refresh();
+                ArmSheen();
             };
             Unloaded += (_, _) =>
             {
@@ -157,6 +191,7 @@ namespace ConditioningControlPanel.Controls
                 SuperPreview.StateChanged -= OnPreviewChanged;
                 SuperSwitch.LockedPoke -= OnLockedPoke;
                 StopRing();
+                StopSheen();
             };
 
             OnBodyChanged(null);
@@ -200,16 +235,70 @@ namespace ConditioningControlPanel.Controls
         /// <summary>LIT or DIM: the gold border, the background and the Super part's fade.</summary>
         internal void Paint(bool lit)
         {
+            // A real lit/dim change on a shown box eases over 220 ms (120 ms when motion is off);
+            // the first paint, and any offscreen paint, lands at once.
+            int ms = IsLoaded && _painted && lit != IsLit ? SuperChromeJuice.ChangeMs(MotionFx.Level) : 0;
+            _painted = true;
             IsLit = lit;
-            BorderBrush = new SolidColorBrush(Color.FromArgb(lit ? (byte)0xB3 : (byte)0x4D, Gold.R, Gold.G, Gold.B));
-            Background = new SolidColorBrush(Color.FromArgb(lit ? (byte)0x1C : (byte)0x0C, Gold.R, Gold.G, Gold.B));
+            SuperSwitch.Tween(_borderBrush, SolidColorBrush.ColorProperty, Color.FromArgb(lit ? (byte)0xB3 : (byte)0x4D, Gold.R, Gold.G, Gold.B), ms);
+            SuperSwitch.Tween(_backBrush, SolidColorBrush.ColorProperty, Color.FromArgb(lit ? (byte)0x1C : (byte)0x0C, Gold.R, Gold.G, Gold.B), ms);
             double o = lit ? 1.0 : DimOpacity;
-            _title.Opacity = o;
-            _twist.Opacity = 0.7 * o;
-            _v2Tag.Opacity = o;
-            _switch.Opacity = lit ? 1.0 : 0.75;
+            SuperSwitch.TweenOpacity(_title, o, ms);
+            SuperSwitch.TweenOpacity(_twist, 0.7 * o, ms);
+            SuperSwitch.TweenOpacity(_v2Tag, o, ms);
+            SuperSwitch.TweenOpacity(_switch, lit ? 1.0 : 0.75, ms);
             // The supporter sign is what a free player is asked for, so it stays readable.
-            _signHost.Opacity = lit ? 0.85 : 0.9;
+            SuperSwitch.TweenOpacity(_signHost, lit ? 0.85 : 0.9, ms);
+        }
+
+        /// <summary>Arm the next sheen across the supporter sign, 8-13 s out, phased per box.</summary>
+        private void ArmSheen()
+        {
+            _sheenTimer ??= new DispatcherTimer(DispatcherPriority.Background);
+            _sheenTimer.Stop();
+            _sheenTimer.Tick -= OnSheenTick;
+            _sheenTimer.Tick += OnSheenTick;
+            _sheenTimer.Interval = TimeSpan.FromSeconds(SuperChromeJuice.SheenDelay(Random.Shared.NextDouble()));
+            _sheenTimer.Start();
+        }
+
+        private void OnSheenTick(object? sender, EventArgs e)
+        {
+            ArmSheen();
+            if (!IsVisible || !SuperChromeJuice.SheenAllowed(MotionFx.AllowAmbientLoops, MotionFx.Level)) return;
+            PlaySheen();
+        }
+
+        /// <summary>One faint warm band across the sign's own pixels (masked by the sign).</summary>
+        internal void PlaySheen()
+        {
+            double w = _sign.ActualWidth, h = _sign.ActualHeight;
+            if (w <= 0 || h <= 0) return;
+            _sheenMask.Viewbox = _sheenMask.Viewport = new Rect(0, 0, w, h);
+            var sweep = new DoubleAnimation(SuperChromeJuice.SheenOffset(0) - 0.5, SuperChromeJuice.SheenOffset(1) - 0.5,
+                TimeSpan.FromMilliseconds(SuperChromeJuice.SheenMs))
+            {
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                FillBehavior = FillBehavior.Stop,
+            };
+            var fade = new DoubleAnimationUsingKeyFrames { Duration = sweep.Duration, FillBehavior = FillBehavior.Stop };
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(SuperChromeJuice.SheenPeak, KeyTime.FromPercent(0.3)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(SuperChromeJuice.SheenPeak, KeyTime.FromPercent(0.7)));
+            fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
+            // Shown only for the sweep, so the sign-masked brush never renders the rest of the time.
+            fade.Completed += (_, _) => _sheen.Visibility = Visibility.Collapsed;
+            _sheen.Visibility = Visibility.Visible;
+            _sheenShift.BeginAnimation(TranslateTransform.XProperty, sweep);
+            _sheen.BeginAnimation(OpacityProperty, fade);
+        }
+
+        private void StopSheen()
+        {
+            _sheenTimer?.Stop();
+            _sheenShift.BeginAnimation(TranslateTransform.XProperty, null);
+            _sheen.BeginAnimation(OpacityProperty, null);
+            _sheen.Visibility = Visibility.Collapsed;
         }
 
         /// <summary>Repaint every part from <see cref="SuperAccess"/> and <see cref="SuperPreview"/>.</summary>
@@ -231,7 +320,9 @@ namespace ConditioningControlPanel.Controls
             // Only worth saying when the add-on would otherwise run: a dim box has its own story.
             _baseOff.Visibility = !baseOn && (trying || (unlocked && SuperAccess.IsSwitchedOn(effect)))
                 ? Visibility.Visible : Visibility.Collapsed;
-            _switch.Refresh(animate: false);
+            // The box usually hears a change first: let the switch ease and thud for it, or the
+            // switch's own handler would find nothing left to animate.
+            _switch.Refresh(animate: IsLoaded);
 
             _corner.Children.Clear();
             StopRing();
