@@ -70,10 +70,14 @@ namespace ConditioningControlPanel.Services.Super
         public static void HookTierEvents()
         {
             if (_tierHooked) return;
+            // Latch only once the tier services exist: a switch loaded before App wires them must
+            // not leave the lapse teardown unhooked for the whole session.
+            if (App.Patreon == null) return;
             _tierHooked = true;
             try
             {
-                if (App.Patreon != null) App.Patreon.TierChanged += (_, _) => RaiseAll();
+                App.Patreon.TierChanged += (_, _) => RaiseAll();
+                if (App.SubscribeStar != null) App.SubscribeStar.TierChanged += (_, _) => RaiseAll();
                 App.UnifiedIdentityChanged += (_, _) => RaiseAll();
             }
             catch (Exception ex) { App.Logger?.Debug("SuperAccess.HookTierEvents: {E}", ex.Message); }

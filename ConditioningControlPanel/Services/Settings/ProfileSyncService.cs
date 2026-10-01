@@ -4704,6 +4704,8 @@ namespace ConditioningControlPanel.Services
             // Documented local only: a restore on another PC must not switch presence sharing on.
             nameof(AppSettings.FriendsPresenceShared),
             nameof(AppSettings.ModPersonalityPreset),
+            // The weekly free Super try is machine-wide: a restore must not hand back a spent week.
+            nameof(AppSettings.SuperPreviewUsedWeek),
         };
 
         /// <summary>
@@ -4742,6 +4744,7 @@ namespace ConditioningControlPanel.Services
             restored.LastSeenUtc = current.LastSeenUtc;
             restored.FriendsPresenceShared = current.FriendsPresenceShared;
             restored.ModPersonalityPreset = current.ModPersonalityPreset; // the setter copies
+            restored.SuperPreviewUsedWeek = current.SuperPreviewUsedWeek;
             // A backup over budget leaves out the per-file asset lists (SettingsBackupBudget), so
             // an empty list in the restore may just mean "not carried": keep this PC's own.
             if (restored.DisabledAssetPaths.Count == 0 && current.DisabledAssetPaths.Count > 0)

@@ -16,8 +16,19 @@ namespace ConditioningControlPanel.Services.Super
     {
         private static DispatcherTimer? _timer;
 
-        /// <summary>The effect being tried right now, or null.</summary>
-        public static SuperEffect? Trying { get; private set; }
+        private static SuperEffect? _trying;
+        private static long _startedTick;
+
+        /// <summary>Monotonic seconds since the try started (immune to clock changes and resyncs).</summary>
+        private static double Elapsed => (Environment.TickCount64 - _startedTick) / 1000.0;
+
+        /// <summary>
+        /// The effect being tried right now, or null. Past the try's length plus a second of slack
+        /// this reads null even if the end timer has not fired yet (busy UI thread, sleep), so a
+        /// late timer can never stretch a free try.
+        /// </summary>
+        public static SuperEffect? Trying
+            => _trying is SuperEffect e && SuperPreviewRule.TryStillRunning(Elapsed) ? e : null;
 
         /// <summary>Server-clock time the current try started.</summary>
         public static DateTimeOffset StartedAt { get; private set; }
@@ -42,7 +53,7 @@ namespace ConditioningControlPanel.Services.Super
         public static bool UsedThisWeek => SuperPreviewRule.UsedThisWeek(UsedWeek, Now);
 
         /// <summary>Seconds left in the running try (0 when none runs).</summary>
-        public static double SecondsLeft => Trying == null ? 0 : SuperPreviewRule.SecondsLeft(StartedAt, Now);
+        public static double SecondsLeft => Trying == null ? 0 : SuperPreviewRule.SecondsLeftAfter(Elapsed);
 
         /// <summary>A free account that may start a try of <paramref name="effect"/> now.</summary>
         public static bool CanTry(SuperEffect effect)
@@ -60,7 +71,8 @@ namespace ConditioningControlPanel.Services.Super
             s.SuperPreviewUsedWeek = SuperPreviewRule.WeekIndex(Now);
             try { App.Settings?.Save(); } catch (Exception ex) { App.Logger?.Debug("SuperPreview: save failed: {E}", ex.Message); }
 
-            Trying = effect;
+            _trying = effect;
+            _startedTick = Environment.TickCount64;
             StartedAt = Now;
             EndedByPanic = false;
             App.Logger?.Information("SuperPreview: weekly try of {Effect} started", effect);
@@ -83,8 +95,9 @@ namespace ConditioningControlPanel.Services.Super
         {
             _timer?.Stop();
             _timer = null;
-            if (Trying is not SuperEffect effect) return;
-            Trying = null;
+            // Read the field, not Trying: a try the backstop already hides must still raise its end.
+            if (_trying is not SuperEffect effect) return;
+            _trying = null;
             EndedByPanic = panic;
             App.Logger?.Information("SuperPreview: weekly try of {Effect} ended ({How})", effect, panic ? "panic" : "time");
             StateChanged?.Invoke();
