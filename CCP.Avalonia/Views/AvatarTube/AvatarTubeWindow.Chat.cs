@@ -71,7 +71,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         }
 
         /// <summary>Cancels any in-flight thinking animation. Safe to call repeatedly.</summary>
-        private void StopThinkingAnimation()
+        internal void StopThinkingAnimation()
         {
             _thinkingGeneration++;
             _thinkingTimer?.Stop();

@@ -235,6 +235,57 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
 MantraService is in Core (git mv; App.Progression/App.Quests/App.Chaster -> `CoreProgression.AddXP("Mantra")`, new `CoreProgression.TrackMantraCompletedProvider`, `MantraService.ChasterNote`, seeded by both heads). WPF's NAudio SignalGenerators become synthesised 16-bit WAVs (`CCP.Avalonia/Platform/ToneWav.cs`, per-process temp dir): tones through `CoreAudio.PlayOneShot` at WPF's 0.15 gain; the drone (90 Hz + 0.4 x 180 Hz, 10 s of whole cycles) as a looping `LayeredAudio.VlcLayerPlayer` whose volume follows WPF's gain ramp x MantraDroneVolume. No NAudio on Linux. `MainShellWindow.StartMantraSession` is ported with no caller, exactly as WPF (MainWindow.PlayTab.cs:~264; the Mantras card left the Play page 2026-08-12); where the game lives is still an owner call. Its WPF failure MessageBox is dropped on this head (logged only). The drone player starts muted and unmutes once its first volume sticks (no full-volume blip); exit closes the window and deletes the temp WAVs.
 - Test: `Tests/CCP.Core.Tests/MantraServiceTests.cs`, `Tests/CCP.Avalonia.Tests/MantraWindowSessionTests.cs` (fail-proven x7).
 - Advisor: none (worker).
+## 2026-10-01: WebHost live URL and the catalogue lookup trigger
+- Question: where does the Avalonia head fire the HT catalogue lookup, and with which URL?
+- Choice: WebHost gains CurrentUrl + NavigationCompleted (from NativeWebView.NavigationCompleted, raised for failed
+  completions too, like WPF BrowserService.cs:1435-1443); the shell's OnBrowserNavigationCompleted sets the status line and
+  fires the lookup with the live URL (Uri.AbsoluteUri, escaped like CoreWebView2.Source). The lookup no longer fires from
+  NavigateBrowser with the requested URL, so with no web engine nothing is looked up, as on WPF with no browser.
+  Headless tests drive the internal WebHost.OnNavigationCompleted seam. IsBrowserShowingKnownSite stays unwritten until
+  its caller SyncSiteRadiosToActiveMod is ported. DashboardFold reads no URL, so it is untouched.
+
+## 2026-10-01: sandbox rule for the catalogue lookup; clients still outside it (known gap)
+- CatalogueLookup (by-ht-url lookup and bundle download) now resolves its base URL through CatalogueClient.ResolveBaseUrl:
+  loopback CCP_CATALOGUE_BASE_URL only; a CCP_USERDATA_DIR sandbox without one sends nothing; under a loopback override a
+  non-loopback bundle FileUrl is refused (`CatalogueLookupTests.SandboxWithoutAnOverrideSendsNothingAndALoopbackOverrideIsWhereItGoes`).
+- Known gap, a separate branch will add a shared HTTP-layer guard. These still reach real servers from a sandbox:
+  CCP.Core/Services/BugReportService.cs:24; CCP.Core/Services/Descent/DescentCountdownService.cs:101;
+  CCP.Core/Services/Progression/QuestDefinitionService.cs:20; CCP.Core/Services/Progression/LeaderboardClient.cs:17;
+  CCP.Core/Services/Account/V2AuthService.cs:30; CCP.Core/Services/Account/ProviderSubscription.cs:23;
+  CCP.Core/Services/Account/SyncPush.cs:30; CCP.Core/Services/Account/DiscordAccount.cs:53 (ProviderSubscription.ProxyBaseUrl);
+  CCP.Avalonia/Views/Dialogs/LoginDialog.axaml.cs:58; CCP.Avalonia/Views/Dialogs/UsernamePickerDialog.axaml.cs:49;
+  web views loading fixed hosts (SpiralTabView.axaml.cs:85 embed, MainShellWindow.Browser.cs:77-78 site homes,
+  MainShellWindow.TabNavigation.cs:346).
+  Not audited (HTTP with a caller-supplied URL, so the rule depends on the caller): FriendsApi, ServerClock, HtMetadataFetcher,
+  EnhancementFetcher, GoonContracts, ChasterLadderApi, AnnouncementPopup, MainShellWindow.Marquee, EnhancementPlayerWindow.
+  Already under the rule: CatalogueClient, CatalogueLookup, RemoteRelay, AiService, ReleaseContentService, DailyFreeService,
+  AppUpdater, ChasterHead.
+## 2026-09-30: EmiDesk ring/codex/book slice (emidesk-ring)
+- Question: which of ring, codex, book, options, summon count/placement fits one layer honestly?
+- Choice: the pure data half of WPF `EmiCodex` (chapter models, fail-soft `Read(dir)`, bookmark) moved to Core
+  `EmiCodexChapters` (WPF delegates; the WebView2 host stays head-side); the Avalonia plain reader drops its placeholder
+  chapters and reads the shipped `Assets/web/codex/chapters` (linked as Content). Summon counts through `EmiState.NoteSummon`
+  and placement round-trips through EmiState; the monitor key is `Screen.DisplayName`, or the screen's bounds when the
+  platform names none (headless, some X11), since WinForms DeviceName has no Avalonia twin.
+- Not in this slice: ring opener (needs EmiTargets openers + EmiSuggester composition, WPF head), codex opener (only the
+  bookOffer moment opens it in WPF), book demos/cards, options' global click-away, `RefreshOutfit` (Arcademy outfit store is
+  head-only) and `StopPresentation` (no presentation mode on this head). Ledger rows stay stub.
+- Advisor: worker.
+## 2026-09-30: Launcher slice 1 (avalonia-port/launcher-core)
+- Question: the WPF launcher's cards are games whose hosts (Back Room, Breakout, Piece by Piece, Racing, DtRH, Arcademy, Goon)
+  do not exist on Avalonia. Draw them, or not?
+- Choice: the card table (ids, order, art, glyph, hue, account/new flags) moved to Core `LauncherCards`, with the close/Play rules
+  in `LauncherRules`; WPF `LauncherCatalogue`/`LauncherHost` build and act on them unchanged. The Avalonia `LauncherWindow` draws
+  only cards with a destination on this head (`LauncherWindow.Destinations`: today only Graded Intake, a panel tab); a game card
+  appears when its host lands. Nothing is faked. The launcher is reached from the shell's title-bar "CC Labs" door (WPF
+  `BtnBackToLauncher`); the boot surface, skip-to-panel box and tray row are slice 2 (~/ccp-port/briefs/launcher-plan.md).
+- Deviation: WPF hides the launcher behind the panel's tray icon when something still runs. A Linux desktop may have no tray host,
+  so when the panel is hidden and no StatusNotifierWatcher is present the close button minimizes instead of hiding, keeping a way
+  back. A user close is routed through the rule; a `Close()` from code (shutdown, tests) goes through.
+- Closing the shell closes the launcher (LauncherWindow.BackToLauncher hooks the panel's Closed), so a hidden launcher never keeps a trayless process alive.
+- Test: `Tests/CCP.Core.Tests/LauncherRulesTests.cs`, `Tests/CCP.Avalonia.Tests/LauncherWindowTests.cs` (each behaviour fail-proven by a deliberate break).
+- WindowControlButton/WindowCloseButton hoisted from MainShellWindow.axaml into Theme/Styles.xaml (its ponytail note: second caller).
+- Advisor: none (worker, per branch brief).
 
 ## graded-intake: IntakePassService in Core takes its entitlement hooks from the head
 `IntakePassService` moved to Core unchanged except for one seam: `AttachEntitlementSources()` read

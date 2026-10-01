@@ -187,7 +187,6 @@ public static class LauncherCatalogue
         }
     }
 
-    private static Color Tile(byte r, byte g, byte b) => Color.FromRgb(r, g, b);
     private static bool Always() => true;
     private static bool Never() => false;
 
@@ -205,83 +204,83 @@ public static class LauncherCatalogue
 
     private static List<LauncherEntry> Build()
     {
-        var list = new List<LauncherEntry>();
-
-        void G(string id, string? art, string glyph, Color hue, Func<bool> available, Func<bool> locked,
-               Action launch, Func<bool> active, Func<bool>? revealed = null,
-               bool requiresAccount = true, bool isNew = false)
+        // The face, the order and the account rule are Core's LauncherCards; this head adds how
+        // each one starts. A card this head has no host for is left out.
+        var hosts = new Dictionary<string, (Func<bool> available, Func<bool> locked, Action launch,
+            Func<bool> active, Func<bool>? revealed)>(StringComparer.OrdinalIgnoreCase)
         {
-            list.Add(new LauncherEntry(id, "launcher_game_" + id + "_title", "launcher_game_" + id + "_blurb",
-                art, glyph, hue, available, locked, launch, active, revealed, requiresAccount, isNew));
+            // The Back Room: free, no gate, no account needed (the SP relay just goes quiet signed out).
+            ["backroom"] = (Always, Never,
+                () => BackRoom.BackRoomHostService.Launch(),
+                () => BackRoom.BackRoomHostService.IsRoomActive, null),
+
+            ["breakoutdemo"] = (Always, Never,
+                () => BackRoom.BreakoutHostService.LaunchDemo(),
+                () => BackRoom.BackRoomHostService.IsBreakoutDemoActive, null),
+            ["breakout"] = (Always,
+                () => !BackRoom.BreakoutAccess.FullAllowed,
+                () => BackRoom.BreakoutHostService.LaunchFull(),
+                () => BackRoom.BackRoomHostService.IsBreakoutFullActive, null),
+
+            // Piece by Piece: free for everyone (owner, 2026-09-27), so no lock and no account: the
+            // computer plays anyone, and the board's own lobby asks a signed-out player to sign in.
+            ["piecebypiece"] = (() => PieceByPieceAvailable, Never,
+                () => PieceByPiece.PieceByPieceHostService.Launch(),
+                () => PieceByPiece.PieceByPieceHostService.IsActive, null),
+
+            // Racing Thoughts: a Back Room unlock since 2026-09-18. Without a track the tile is the
+            // mystery card pointing at the counter; the entry stays Available so a shortcut still
+            // reaches Launch, where CaucusHostService refuses on the same door (RacingAccess).
+            ["race"] = (Always, Never,
+                () => Chaos.CaucusHostService.Launch(),
+                () => Chaos.CaucusHostService.IsActive,
+                () => Race.RacingAccess.CanLaunch),
+
+            // Down the Rabbit Hole: Lab tier. The Play handler gates it; Launch does not, so the tile
+            // asks the gate itself and lets DemandLab paint the refusal.
+            ["dtrh"] = (Always,
+                () => !LabOk("launcher_game_dtrh_title", "dtrh"),
+                () =>
+                {
+                    var gate = TierGate.RequiresLab(Loc.Get("launcher_game_dtrh_title"), "dtrh");
+                    if (gate.Allowed) Chaos.DtrhHostService.Launch();
+                    else TierGate.DemandLab(Loc.Get("launcher_game_dtrh_title"), "dtrh");
+                },
+                () => Chaos.DtrhHostService.IsActive, null),
+
+            // The Arcademy: Launch owns the build flag, the Lab gate and the audio-only refusal.
+            // The art is the Arcademy's own entrance-gates plate, copied into Resources/features/
+            // because the web tree is Content (copied to disk) and only a WPF Resource resolves
+            // through a pack:// uri - pointed at the web path the tile drew the glyph plate instead.
+            ["arcademy"] = (() => Arcademy.ArcademyHostService.DoorAvailable,
+                () => !LabOk("launcher_game_arcademy_title", null),
+                () => Arcademy.ArcademyHostService.Launch(),
+                () => Arcademy.ArcademyHostService.IsActive, null),
+
+            // Goon Game: free to join. The launcher has already tucked the panel away, so the game
+            // must not duck it a second time.
+            ["goon"] = (Always, Never,
+                () => GoonGame.GoonHostService.Launch(duckMainWindow: false),
+                () => GoonGame.GoonHostService.IsActive, null),
+
+            // Graded Intake: a panel tab, not a window, so Launch opens the panel on it and IsActive
+            // never reports a window (the launcher does not wait for the panel). Locked when the
+            // weekly free pass is spent and the account is below tier 2; the click still opens the
+            // tab, whose gate explains the pass, so the tile is never a dead end.
+            ["intake"] = (Always,
+                () => !(App.IntakePass?.CanStartIntake ?? false),
+                () => LauncherHost.OpenPanelTab("gradedintake"),
+                Never, null),
+        };
+
+        var list = new List<LauncherEntry>();
+        foreach (var c in LauncherCards.All)
+        {
+            if (!hosts.TryGetValue(c.Id, out var h)) continue;
+            list.Add(new LauncherEntry(c.Id, c.TitleKey, c.BlurbKey, c.ArtPath, c.Glyph,
+                Color.FromRgb(c.R, c.G, c.B), h.available, h.locked, h.launch, h.active, h.revealed,
+                c.RequiresAccount, c.IsNew));
         }
-
-        // Order is the order on the launcher: the newest, loudest room first, the quiet ones last.
-
-        // The Back Room: free, no gate, no account needed (the SP relay just goes quiet signed out).
-        G("backroom", "features/backroom.png", "♦", Tile(0xB9, 0x5C, 0xD8), Always, Never,
-            () => BackRoom.BackRoomHostService.Launch(),
-            () => BackRoom.BackRoomHostService.IsRoomActive);
-
-        G("breakoutdemo", null, "●", Tile(0x8C, 0xF5, 0xC8), Always, Never,
-            () => BackRoom.BreakoutHostService.LaunchDemo(),
-            () => BackRoom.BackRoomHostService.IsBreakoutDemoActive, requiresAccount: false, isNew: true);
-        G("breakout", null, "●", Tile(0x55, 0xB7, 0xFF), Always,
-            () => !BackRoom.BreakoutAccess.FullAllowed,
-            () => BackRoom.BreakoutHostService.LaunchFull(),
-            () => BackRoom.BackRoomHostService.IsBreakoutFullActive, isNew: true);
-
-        // Piece by Piece: free for everyone (owner, 2026-09-27), so no lock and no account: the
-        // computer plays anyone, and the board's own lobby asks a signed-out player to sign in.
-        G("piecebypiece", "features/piecebypiece.png", "♟", Tile(0x7B, 0x5C, 0xFF),
-            () => PieceByPieceAvailable, Never,
-            () => PieceByPiece.PieceByPieceHostService.Launch(),
-            () => PieceByPiece.PieceByPieceHostService.IsActive, requiresAccount: false, isNew: true);
-
-        // Racing Thoughts: a Back Room unlock since 2026-09-18. Without a track the tile is the
-        // mystery card pointing at the counter; the entry stays Available so a shortcut still
-        // reaches Launch, where CaucusHostService refuses on the same door (RacingAccess).
-        G("race", "features/race.png", "☕", Tile(0xFF, 0xB3, 0x6B), Always, Never,
-            () => Chaos.CaucusHostService.Launch(),
-            () => Chaos.CaucusHostService.IsActive,
-            revealed: () => Race.RacingAccess.CanLaunch);
-
-        // Down the Rabbit Hole: Lab tier. The Play handler gates it; Launch does not, so the tile
-        // asks the gate itself and lets DemandLab paint the refusal.
-        G("dtrh", "features/dtrh.png", "▼", Tile(0x8C, 0xF5, 0xC8), Always,
-            () => !LabOk("launcher_game_dtrh_title", "dtrh"),
-            () =>
-            {
-                var gate = TierGate.RequiresLab(Loc.Get("launcher_game_dtrh_title"), "dtrh");
-                if (gate.Allowed) Chaos.DtrhHostService.Launch();
-                else TierGate.DemandLab(Loc.Get("launcher_game_dtrh_title"), "dtrh");
-            },
-            () => Chaos.DtrhHostService.IsActive);
-
-        // The Arcademy: Launch owns the build flag, the Lab gate and the audio-only refusal.
-        // The art is the Arcademy's own entrance-gates plate, copied into Resources/features/
-        // because the web tree is Content (copied to disk) and only a WPF Resource resolves
-        // through a pack:// uri - pointed at the web path the tile drew the glyph plate instead.
-        G("arcademy", "features/arcademy.png", "★", Tile(0xFF, 0x69, 0xB4),
-            () => Arcademy.ArcademyHostService.DoorAvailable,
-            () => !LabOk("launcher_game_arcademy_title", null),
-            () => Arcademy.ArcademyHostService.Launch(),
-            () => Arcademy.ArcademyHostService.IsActive);
-
-        // Goon Game: free to join. The launcher has already tucked the panel away, so the game
-        // must not duck it a second time.
-        G("goon", "features/goon_game_tile.png", "●", Tile(0x76, 0xC8, 0x93), Always, Never,
-            () => GoonGame.GoonHostService.Launch(duckMainWindow: false),
-            () => GoonGame.GoonHostService.IsActive);
-
-        // Graded Intake: a panel tab, not a window, so Launch opens the panel on it and IsActive
-        // never reports a window (the launcher does not wait for the panel). Locked when the
-        // weekly free pass is spent and the account is below tier 2; the click still opens the
-        // tab, whose gate explains the pass, so the tile is never a dead end.
-        G("intake", "features/lab_quiz_hero.png", "❓", Tile(0x8E, 0x7C, 0xF2), Always,
-            () => !(App.IntakePass?.CanStartIntake ?? false),
-            () => LauncherHost.OpenPanelTab("gradedintake"),
-            Never);
-
         return list;
     }
 }

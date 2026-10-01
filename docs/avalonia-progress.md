@@ -1130,3 +1130,19 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - MantraService moved to Core (WPF seeds XP/quest/Chaster seams); Avalonia MantraWindow on App.Mantra with synthesised tones and a LibVLC
   drone at WPF's volumes; exit cleanup; mantra favourite in memory signals.
 - Evidence: MantraServiceTests, MantraWindowSessionTests, fail-proven. win-mantra stays stub (no opener, animations).
+
+## avalonia-port/webhost-live-url: +240
+- WebHost live URL (CurrentUrl, NavigationCompleted, always-navigate Navigate); site buttons/Reload navigate; the HT catalogue lookup fires on
+  completion at WPF's point; CatalogueLookup obeys the sandbox/loopback rule. Fail-proven tests; completion not seen live (no web engine here).
+
+## avalonia-port/emidesk-ring: +310
+- Core EmiCodexChapters (WPF EmiCodex delegates); the Avalonia Codex reads the shipped chapters and keeps its bookmark; EmiDesk summon count
+  and placement through EmiState. Fail-proven tests. Ring/Book/Options and the Codex opener stay stub.
+
+## avalonia-port/launcher-core: +999
+- Launcher slice 1: Core LauncherCards + rules (WPF builds tiles from them); Avalonia LauncherWindow with the openable cards, the CC Labs
+  door and WPF's close rule. Fail-proven tests; Keincheck live. Rows missing -> stub.
+
+## avalonia-port/takeover-actions: +480
+- Takeover performs Pink Filter pulse (handed back on every stop path incl. app exit), Bubble Count, Comment (AI or WPF-style Giggle preset)
+  and seeded Mind Wipe; unavailable actions are never picked. Wallpaper picker and voice hint. TakeoverTests (7), fail-proven.

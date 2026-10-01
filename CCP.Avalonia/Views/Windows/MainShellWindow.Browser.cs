@@ -9,8 +9,9 @@
 // WHY NAVIGATION IS PORTABLE AT ALL. The blanket "this whole file is WebView2" header that used
 // to sit here was wrong. SettingsTabView.axaml already carries <controls:WebHost x:Name=
 // "BrowserWebHost"/>, which wraps Avalonia's NativeWebView and draws a legible fallback panel
-// naming the page where no engine is installed. Setting its Source IS the navigation. What
-// WebHost does NOT expose is a script channel, a live URL, a mute or a fullscreen signal - and
+// naming the page where no engine is installed. Setting its Source IS the navigation, and its
+// NavigationCompleted carries the live URL (OnBrowserNavigationCompleted). What WebHost does NOT
+// expose is a document-script channel, a mute or a fullscreen signal - and
 // every member that needed one of those is still a note, not a half-port.
 //
 // TWO DELIBERATE DEVIATIONS, both because WebHost is narrower than CoreWebView2:
@@ -28,10 +29,8 @@
 // out. A stub until WebHost exposes IsAudioMuted.
 //
 // CALLERS STILL MISSING, each one line in a file this layer does not own:
-//   * CCP.Avalonia/Views/Tabs/SettingsTabView.axaml's RbBambiCloud / RbHypnoTube /
-//     BtnReloadBrowser carry no Click=. A Click= there can only name a method on
-//     SettingsTabView's OWN code-behind, so the forward goes in SettingsTabView.axaml.cs:
-//     `(TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BrowserSiteToggle_Click(sender, e)`.
+//   * (Resolved) SettingsTabView forwards RbBambiCloud / RbHypnoTube / BtnReloadBrowser and the
+//     WebHost's NavigationCompleted to this partial.
 //   * CCP.Avalonia/Views/Tabs/DiscordTabView.axaml.cs:BtnClearProfile_Click now forwards
 //     (`Host?.BtnClearProfile_Click`), which wires
 //     ClearProfileViewer -> SetProfileViewingSelf. NavigateToUrlInBrowser stays public for
@@ -56,10 +55,8 @@
 //     BtnProfileDiscord_Click, BtnChangeDisplayName_Click, BtnDeleteProfile_Click (writes/art).
 //   * CoreMods (1): SyncSiteRadiosToActiveMod needs ShowBambiCloudOption() and
 //     GetDefaultBrowserUrl(); CCP.Core/CoreMods.cs carries neither yet. Its IsBrowserShowingKnownSite
-//     helper is NOT restored either, and not because it cannot be: WebHost exposes only the Source
-//     we set, never the live document, so the answer here would be "what we last requested" - a
-//     different question from WPF's, with no caller to want it. Write it with the caller, and
-//     write that difference into the radios' meaning when you do.
+//     helper is NOT restored either: WebHost.CurrentUrl now answers it, but its only caller is
+//     SyncSiteRadiosToActiveMod, so write it with that caller.
 
 using System;
 using Avalonia.Controls;
@@ -119,9 +116,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var host = BrowserView;
                 if (host == null) return false;
-                host.Source = new Uri(url);
+                host.Navigate(new Uri(url));   // even when equal: WPF #867, re-click goes home
                 Log.Information("Browser navigated to {Url}", url);
-                TriggerCatalogueLookupForNavigation(url);   // WPF: on NavigationCompleted (see DeeperTab)
                 return true;
             }
             catch (Exception ex)
@@ -129,6 +125,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Log.Warning(ex, "Browser navigation failed for {Url}", url);
                 return false;
             }
+        }
+
+        /// <summary>WPF's <c>_browser.NavigationCompleted</c> handler (MainWindow.Browser.cs:132-160),
+        /// minus the audio-sync injection (no document script channel on WebHost). Forwarded by
+        /// SettingsTabView from its WebHost with the LIVE url, so a link clicked inside the page
+        /// is looked up too, not just the URL we asked for.</summary>
+        internal void OnBrowserNavigationCompleted(Uri url)
+        {
+            if (BrowserPage?.FindControl<TextBlock>("TxtBrowserStatus") is { } status)
+            {
+                // Bound, not assigned: a local Text under {loc:Str} is undone on a language change.
+                status.Bind(TextBlock.TextProperty, new global::Avalonia.Data.Binding("[label_connected_2]")
+                    { Source = LocalizationManager.Instance, Mode = global::Avalonia.Data.BindingMode.OneWay });
+                status.Foreground = new global::Avalonia.Media.SolidColorBrush(global::Avalonia.Media.Color.FromRgb(0, 230, 118));
+            }
+            TriggerCatalogueLookupForNavigation(url.AbsoluteUri);   // escaped, like CoreWebView2.Source
         }
 
         /// <summary>Back to the selected site's homepage. Shared by the reload button and the

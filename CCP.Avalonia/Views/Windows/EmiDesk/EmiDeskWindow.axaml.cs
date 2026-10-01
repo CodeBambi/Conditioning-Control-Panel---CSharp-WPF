@@ -642,20 +642,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// into that monitor's work area. A monitor that is gone, or no saved rect at all, parks her
         /// bottom right on the main window's monitor.
         /// </summary>
-        // ponytail: needs EmiState (Services/EmiDesk/EmiState.cs) for the saved rect and the
-        // monitor name. It is NOT in Core and it is NOT pure, but it is two seam swaps away and
-        // nothing else: App.UserDataPath -> CorePaths on line 231, and the 500 ms debounce's
-        // Application.Current.Dispatcher / DispatcherTimer -> CoreDispatch. Every other line of its
-        // 680 is Newtonsoft on a POCO. Until that lands she is parked by default on every summon,
-        // which is what a first run does anyway. The WIDTH half of the WPF body is ported: it lives
-        // in the setting, not in EmiState, and re-reading it here is what puts a change made while
-        // she was away - the shrink offer, the settings slider - on her the next time she comes out.
+        // WPF EmiDeskWindow.xaml.cs:659. The monitor is matched on MonitorKey where WPF used the
+        // WinForms DeviceName.
         public void RestorePlacement()
         {
             try
             {
+                var st = EmiState.Current;
                 double wantW = CoreSettings.Current.EmiDeskWidth;
                 if (Math.Abs(wantW - _bodyWidth) > 0.5) ApplyBodyWidth(wantW);
+
+                bool monitorThere = false;
+                if (!string.IsNullOrWhiteSpace(st.Monitor) && Screens is { } screens)
+                    foreach (var sc in screens.All)
+                        if (string.Equals(MonitorKey(sc), st.Monitor, StringComparison.OrdinalIgnoreCase)) { monitorThere = true; break; }
+
+                if (monitorThere && !double.IsNaN(st.WinLeftPx) && !double.IsNaN(st.WinTopPx))
+                {
+                    SetBodyPhysical(st.WinLeftPx, st.WinTopPx);
+                    ClampIntoWorkArea();
+                    return;
+                }
                 ParkBottomRightOfMain();
             }
             catch (Exception ex)
@@ -664,6 +671,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 try { ParkBottomRightOfMain(); } catch { /* out of options */ }
             }
         }
+
+        /// <summary>The platform's monitor name, or its bounds where the platform names none
+        /// (headless, some X11 setups): either way a gone monitor stops matching.</summary>
+        private static string MonitorKey(Screen sc) =>
+            string.IsNullOrWhiteSpace(sc.DisplayName) ? sc.Bounds.ToString() : sc.DisplayName;
 
         private void SetBodyPhysical(double bodyLeftPx, double bodyTopPx)
         {
@@ -765,11 +777,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
         /// <summary>Persist where she is and how big, in physical pixels plus the monitor's name.</summary>
-        // ponytail: needs EmiState (Services/EmiDesk/EmiState.cs) - see RestorePlacement above for
-        // the exact two seam swaps that move it. The geometry it would persist is BodyScreenRect
-        // plus Screens.ScreenFromPoint(...).DisplayName.
+        // WPF :785. No PresentationActive guard: this head has no presentation mode to exempt.
         public void SavePlacement()
         {
+            try
+            {
+                var body = BodyScreenRect;
+                var st = EmiState.Current;
+                st.WinLeftPx = body.X;
+                st.WinTopPx = body.Y;
+                var centre = new PixelPoint((int)Math.Round(body.X + body.Width / 2), (int)Math.Round(body.Y + body.Height / 2));
+                if (Screens?.ScreenFromPoint(centre) is { } sc) st.Monitor = MonitorKey(sc);
+                EmiState.SaveSoon();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] SavePlacement failed");
+            }
         }
 
         // ---------------------------------------------------------------- face + pose
