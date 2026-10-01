@@ -1193,3 +1193,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/companion-brain-effects-safety: +319
 - getbacktome follow-ups re-gated at fire time (3 per follow-up), every panic route on both heads cancels pending AI follow-ups and drops a late reply.
+
+## avalonia-port/emidesk-ring-2: +822
+- EmiSuggester + EmiDoors in Core; the Avalonia desk opens the ring with real openers (surface-less doors hidden); Options click-away via
+  an X11 poll that keeps no key state; Book TAKE ME THERE. Fail-proven tests. Rows stay stub.
