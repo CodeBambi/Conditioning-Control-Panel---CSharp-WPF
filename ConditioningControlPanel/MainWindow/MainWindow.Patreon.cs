@@ -1780,6 +1780,7 @@ namespace ConditioningControlPanel
             }
 
             s.AllowAiToControlEffects = on;
+            if (!on) ConditioningControlPanel.Services.Commands.AiCommandService.CancelAll();   // pending follow-ups die with the consent
             if (CompanionTab.EffectPermsPanel != null) CompanionTab.EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             App.Settings.Save();
         }

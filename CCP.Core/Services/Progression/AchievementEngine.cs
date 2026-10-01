@@ -198,6 +198,35 @@ internal sealed class AchievementEngine
         _isDirty = true;
     }
 
+    /// <summary>A graded run finished (WPF GamificationBridge.OnQuizCompleted, the QuizService.QuizCompleted
+    /// subscriber): breaks the walk-out streak and feeds teachers_pet / held_back / top_of_the_class / honor_roll.</summary>
+    public void TrackQuizCompleted(bool passed, bool perfect, string? category)
+    {
+        Progress.IntakeQuitStreak = 0;
+        if (passed)
+        {
+            Progress.QuizFailStreak = 0;
+            if (++Progress.QuizzesPassed >= AchievementRules.TeachersPetPasses) TryUnlockExclusive("teachers_pet");
+        }
+        else if (++Progress.QuizFailStreak >= AchievementRules.HeldBackFailStreak) TryUnlockExclusive("held_back");
+
+        if (perfect)
+        {
+            TryUnlockExclusive("top_of_the_class");
+            if (!string.IsNullOrEmpty(category) && Progress.PerfectedQuizCategories.Add(category)
+                && Progress.PerfectedQuizCategories.Count >= AchievementRules.HonorRollCategories)
+                TryUnlockExclusive("honor_roll");
+        }
+        _isDirty = true;
+    }
+
+    /// <summary>A graded run was walked out of (WPF GamificationBridge.OnQuizAbandoned).</summary>
+    public void TrackQuizAbandoned()
+    {
+        if (++Progress.IntakeQuitStreak >= AchievementRules.HeldBackQuitStreak) TryUnlockExclusive("held_back");
+        _isDirty = true;
+    }
+
     /// <summary>
     /// Unlock count filtered by exclusivity. The free (false) and patron (true) counts are
     /// deliberately separate and must never be summed. An earned IsPremiumFeature badge counts

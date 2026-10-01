@@ -58,35 +58,8 @@ namespace ConditioningControlPanel.Services.Quiz
         /// <param name="modId">Active mod id, or null when there is no mod service yet.</param>
         /// <param name="tags">Active mod's manifest tags, for third-party .ccpmod files.</param>
         /// <param name="sissyContentMode">The legacy enum's one positive reading.</param>
-        internal static string Resolve(string? modId, IEnumerable<string>? tags, bool sissyContentMode)
-        {
-            // BambiSleep ships its own pass card and prompt bank, so it names its own niche here
-            // like every other themed built-in. It was the Fallback until 6.9.4 made the fallback
-            // neutral, which left "bambi" unreachable from every code path.
-            if (modId == BuiltInMods.BambiSleepId) return "bambi";
-            if (modId == BuiltInMods.DronificationId) return "drone";
-            if (modId == BuiltInMods.SissyHypnoId) return "sissy";
-            if (modId == BuiltInMods.LockedId) return "circe";
-
-            // Locked's own tags ("locked"/"chastity") read as circe too.
-            if (tags != null)
-            {
-                foreach (var tag in tags)
-                {
-                    if (string.Equals(tag, "bambi", StringComparison.OrdinalIgnoreCase)) return "bambi";
-                    if (string.Equals(tag, "drone", StringComparison.OrdinalIgnoreCase)) return "drone";
-                    if (string.Equals(tag, "sissy", StringComparison.OrdinalIgnoreCase)) return "sissy";
-                    if (string.Equals(tag, "circe", StringComparison.OrdinalIgnoreCase)) return "circe";
-                    if (string.Equals(tag, "locked", StringComparison.OrdinalIgnoreCase)) return "circe";
-                    if (string.Equals(tag, "chastity", StringComparison.OrdinalIgnoreCase)) return "circe";
-                }
-            }
-
-            // Only the positive SissyHypno reading counts. ContentMode's other value means
-            // "no sissy mod", not "bambi", so everything else lands on the neutral niche.
-            if (sissyContentMode) return "sissy";
-            return Fallback;
-        }
+        internal static string Resolve(string? modId, IEnumerable<string>? tags, bool sissyContentMode) =>
+            IntakeRun.ResolveNiche(modId, tags, sissyContentMode);   // moved to Core so every head resolves it once
 
         /// <summary>
         /// Art for the weekly pass card in the CURRENT niche, shared by the Dashboard tile face and

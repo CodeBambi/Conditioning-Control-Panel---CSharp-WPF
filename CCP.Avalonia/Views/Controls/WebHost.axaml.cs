@@ -231,6 +231,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             catch (Exception ex) { Log.Debug("WebHost: Navigate failed: {Error}", ex.Message); }
         }
 
+        /// <summary>The URL as the fallback panel names it: WebAssetServer's ccp_t token never reaches the screen.</summary>
+        internal static string WithoutToken(Uri src)
+        {
+            if (!src.IsAbsoluteUri || src.Query.Length < 2) return src.ToString();
+            var query = string.Join('&', src.Query[1..].Split('&').Where(p => !p.StartsWith("ccp_t=", StringComparison.Ordinal)));
+            return new UriBuilder(src) { Query = query }.Uri.ToString();
+        }
+
         /// <summary>Count of <see cref="Navigate"/> calls; a headless test's view of them.</summary>
         internal int NavigationRequests { get; private set; }
 
@@ -258,7 +266,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 return;
             }
             // No engine: the panel at least names the page that was meant to load.
-            _txtSource.Text = src?.ToString() ?? "";
+            _txtSource.Text = src is null ? "" : WithoutToken(src);
             _txtSource.IsVisible = src is not null;
         }
 

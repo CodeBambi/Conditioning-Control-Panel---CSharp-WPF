@@ -91,6 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void VoicePanic()
         {
             Log.Information("Panic triggered by voice");
+            CancelPendingAi();
             try { CoreHaptics.Service?.PanicStop(); } catch (Exception ex) { Log.Warning(ex, "Voice panic: haptics stop failed"); }
             StopAutonomyForPanic();
             StopEngine();

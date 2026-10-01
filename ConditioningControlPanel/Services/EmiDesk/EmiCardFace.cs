@@ -67,7 +67,7 @@ internal static class EmiCardFace
                 });
                 grid.Children.Add(new Rectangle
                 {
-                    Fill = new SolidColorBrush(t.Hue) { Opacity = 0.14 },
+                    Fill = new SolidColorBrush(Color.FromRgb((byte)(t.Hue >> 16), (byte)(t.Hue >> 8), (byte)t.Hue)) { Opacity = 0.14 },
                     IsHitTestVisible = false,
                 });
 
@@ -106,7 +106,7 @@ internal static class EmiCardFace
 
         grid.Children.Add(new Rectangle
         {
-            Fill = new SolidColorBrush(t.Hue) { Opacity = locked ? 0.28 : 0.62 },
+            Fill = new SolidColorBrush(Color.FromRgb((byte)(t.Hue >> 16), (byte)(t.Hue >> 8), (byte)t.Hue)) { Opacity = locked ? 0.28 : 0.62 },
             IsHitTestVisible = false,
         });
     }

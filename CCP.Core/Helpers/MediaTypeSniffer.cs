@@ -91,6 +91,9 @@ public static class MediaTypeSniffer
         ".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac",
     };
 
+    /// <summary>The image/video/audio extensions the asset library recognises (WebAssetServer's ccp.assets/ allowlist).</summary>
+    public static IReadOnlySet<string> MediaExtensions => KnownExtensions;
+
     private static readonly char[] UrlTail = { '?', '#' };
 
     // ---- 1. response header ----------------------------------------------------------

@@ -1,5 +1,9 @@
 using System;
+using System.IO;
+using System.Linq;
 using Avalonia.Controls;
+using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Models;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Services;
@@ -16,17 +20,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///   page -&gt; host: <c>window.invokeCSharpAction(json)</c> (engine-injected; web-shim.js treats it
     ///                  as its string carrier) -&gt; <see cref="WebHost.WebMessage"/> -&gt; <see cref="HandleMessage"/>
     ///   host -&gt; page: <c>window.__ccpRnPush(json)</c> through <see cref="WebHost.InvokeScriptAsync"/>.
+    /// The page is served by <see cref="WebAssetServer"/> (WPF's https://ccp.game virtual host) and the
+    /// user's asset library under its <see cref="WebAssetServer.AssetsPrefix"/> (WPF's ccp.assets).
     ///
-    /// ponytail: not opened by Begin Intake yet - nothing serves the page on this head (no ccp.game
-    /// virtual host, Assets/web/intake not shipped), so a window would be dead UI. Slice 2
-    /// (~/ccp-port/briefs/intake-plan.md, docs/avalonia-decisions.md) serves it and then also ports
-    /// the init payload, heartbeat watchdog/relaunch, fullscreen-set, duck/restore, loom-save,
-    /// intake-save-image, need-remote and the speech bridge; the QuizCompleted/QuizAbandoned
-    /// achievement bridge, the drafted-session toast + Sessions refresh and the punch card follow.
+    /// ponytail: not ported yet - heartbeat watchdog/relaunch, fullscreen-set, duck/restore main,
+    /// loom-save, intake-save-image, need-remote (remoteMedia=false), the speech bridge, the
+    /// bubble sprite / subliminal pool in init, ccp.content packs (no audio ships on this head), the
+    /// punch card. Next slices in ~/ccp-port/briefs/intake-plan.md.
     /// </summary>
     internal sealed class IntakeHostWindow : Window
     {
         private static readonly TimeSpan ExitWatchdog = TimeSpan.FromMilliseconds(1200);   // WPF ArmExitWatchdog
+        private const int Protocol = 1;                                                     // WPF IntakeHostService.Protocol
+        private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";          // WPF IntakeHostService.ProxyBaseUrl
 
         internal IntakeRun Run { get; } = new();
         internal WebHost Web { get; } = new();
@@ -42,7 +48,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Height = 800;
             Content = Web;
             Web.WebMessage += OnPageMessage;
+            // The page never leaves the served origin; anything else is refused before the engine loads it.
+            Web.AllowNavigation = url => PageUrl != null && SameOrigin(url, PageUrl);
         }
+
+        /// <summary>WPF StartUrl https://ccp.game/intake/index.html, here on the loopback server.</summary>
+        internal void Load(WebAssetServer server)
+        {
+            PageUrl = new Uri(server.Url("intake/index.html"));
+            AssetsBase = $"{PageUrl.GetLeftPart(UriPartial.Authority)}/{WebAssetServer.AssetsPrefix}";
+            Web.Navigate(PageUrl);
+        }
+
+        /// <summary>Where the media manifest points (WPF https://ccp.assets/).</summary>
+        internal string AssetsBase { get; private set; } = "";
+
+        internal static bool SameOrigin(Uri a, Uri b) =>
+            a.IsAbsoluteUri && b.IsAbsoluteUri && a.Scheme == b.Scheme && a.Authority == b.Authority;
 
         /// <summary>WPF ChaosWebViewHost.OnWebMessage's SameDocument guard. The engine's message args
         /// carry no source, so the source is the page the web view last finished navigating to.</summary>
@@ -62,7 +84,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             switch ((string?)o["type"])
             {
-                case "ready":
+                case "ready":   // WPF ChaosWebViewHost "ready" -> IntakeHostService.OnPageReady
+                    Run.Beat();
+                    SendInit();
+                    break;
+                case "log":
+                    Log.Debug("IntakeHost page: {Msg}", (string?)o["msg"]);
+                    break;
                 case "heartbeat":
                 case "pong":
                     Run.Beat();
@@ -75,12 +103,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Close();
                     break;
                 case "exit":   // page-initiated wind-down: its own exit-done, or the watchdog
-                    Run.TakeWalkOut();
+                    ReportWalkOutIfUnfinished();
                     Run.Exiting = true;
                     DispatcherTimer.RunOnce(Close, ExitWatchdog);
                     break;
                 case "intake-close":   // "are you sure? -> Yes": an abort, nothing is earned
-                    Run.TakeWalkOut();
+                    ReportWalkOutIfUnfinished();
                     Run.Exiting = true;
                     Close();
                     break;
@@ -90,15 +118,77 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
+        /// <summary>WPF ReportWalkOutIfUnfinished: QuizService.RaiseQuizAbandoned -> GamificationBridge.</summary>
+        private void ReportWalkOutIfUnfinished()
+        {
+            if (Run.TakeWalkOut()) App.Achievements?.TrackQuizAbandoned();
+        }
+
+        /// <summary>WPF IntakeHostService.OnQuizResult: achievements, pass, draft, then the app and the page are told.</summary>
         private void OnQuizResult(JObject o)
         {
             var run = Run.AcceptResult(o);
             if (run == null) return;
-            // quizCompleted: null - the achievement bridge (WPF QuizService.RaiseQuizCompleted ->
-            // GamificationBridge) is head-side and not on this head yet (see QuizWindow).
             var (session, path) = IntakeRun.Complete(run, SessionsFolder,
-                () => App.IntakePass.ConsumeForCompletedIntake(), null);
+                () => App.IntakePass.ConsumeForCompletedIntake(),
+                (_, passed, perfect, category) => App.Achievements?.TrackQuizCompleted(passed, perfect, category));
+            if (session != null && path != null) Drafted?.Invoke(session, path);
             Post(new { type = "session-drafted", ok = session != null, name = session?.Name, path });
+        }
+
+        /// <summary>A session was drafted and saved; the opener refreshes Sessions and toasts it.</summary>
+        internal event Action<Session, string>? Drafted;
+
+        /// <summary>WPF IntakeHostService.OnPageReady: web-shim.fromHostInit wants { type:'init', config, ai }.</summary>
+        private void SendInit()
+        {
+            Post(InitMessage());
+            Post(new { type = "fullscreen", on = WindowState == WindowState.FullScreen });
+        }
+
+        internal object InitMessage()
+        {
+            var settings = CoreSettings.Current;
+            var want = IntakeRun.ResolveNiche(App.Mods?.ActiveModId, App.Mods?.ActiveMod?.Manifest?.Tags,
+                settings.ContentMode == ContentMode.SissyHypno);
+            // WPF SafeNiche: a niche with no prompt bank serves the default one.
+            var niche = File.Exists(Path.Combine(AppContext.BaseDirectory, "Resources", "web", "intake", "banks", want + ".json"))
+                ? want : IntakeRun.FallbackNiche;
+            object? media = null;
+            try
+            {
+                var (gifs, images) = IntakeRun.SampleMedia(CorePaths.EffectiveAssets, settings.DisabledAssetPaths);
+                if (gifs.Length + images.Length > 0)
+                    media = new { gifs = gifs.Select(r => AssetsBase + r).ToArray(), images = images.Select(r => AssetsBase + r).ToArray() };
+            }
+            catch (Exception ex) { Log.Debug("IntakeHost: media manifest: {E}", ex.Message); }
+
+            // A sandbox never reaches the real AI server: no serverBase -> the page's local stub.
+            var ai = SandboxNet.Allows(new Uri(ProxyBaseUrl))
+                ? new { serverBase = ProxyBaseUrl, authToken = AccountSeed.Patreon?.GetAccessToken() ?? "" }
+                : null;
+            Log.Information("IntakeHost: sending init (niche={N})", niche);
+            return new
+            {
+                type = "init",
+                protocol = Protocol,
+                config = new
+                {
+                    niche,
+                    caps = new { flashRate = 1.0, flashOpacity = 1.0, subDensity = 1.0, duckDepth = 1.0,
+                                 bubbleRate = 1.0, binauralDepth = 1.0, bgIntensity = 1.0, masterIntensity = 1.0 },
+                    endless = false,
+                    steerValve = 1.0,
+                    priorRun = (object?)null,
+                    m2Test = false,
+                    micEnabled = settings.MicConsentGiven,
+                    media,
+                    remoteMedia = false,
+                    subjectId = IntakeRun.SubjectId(CorePaths.UserData),
+                    subliminals = (object?)null,
+                },
+                ai,
+            };
         }
 
         /// <summary>Host -&gt; page (WPF ChaosWebViewHost.Post): the page's string carrier entry point.</summary>

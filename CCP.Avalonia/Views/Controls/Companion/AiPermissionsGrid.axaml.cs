@@ -202,6 +202,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             var p = CoreSettings.Current.CompanionPrompt;
             if (p == null) return;
             p.AllowAiToControlEffects = on;
+            if (!on) ConditioningControlPanel.Services.Commands.AiCommandService.CancelAll();   // pending follow-ups die with the consent
             CoreSettings.Save();
         }
 

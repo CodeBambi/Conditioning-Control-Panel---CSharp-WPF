@@ -1190,3 +1190,24 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/webcam-calibration-fixes: +69
 - A revoke during calibration stands; atomic calibration save (both heads); failed save keeps the old calibration. Row back to stub.
+
+## avalonia-port/companion-brain-effects-safety: +319
+- getbacktome follow-ups re-gated at fire time (3 per follow-up), every panic route on both heads cancels pending AI follow-ups and drops a late reply.
+
+## avalonia-port/emidesk-ring-2: +822
+- EmiSuggester + EmiDoors in Core; the Avalonia desk opens the ring with real openers (surface-less doors hidden); Options click-away via
+  an X11 poll that keeps no key state; Book TAKE ME THERE. Fail-proven tests. Rows stay stub.
+
+## avalonia-port/companion-awareness-brain: +229
+- Awareness reactions take WPF's legacy AI-first route only with v2 off + consent + chat + AI; v2 on stays preset-only and sends nothing.
+  Privacy tests (loopback), fail-proven. Arbiter chain stays WPF-only (decision logged).
+
+## avalonia-port/chaster-ladder: +835
+- Chaster tab ladder: clock, raffle card, top-ten scrap with opt-ins off by default (nothing posted until opted in); loopback-only in a sandbox.
+
+## avalonia-port/intake-page: +655
+- Graded Intake slice 2: Begin Intake opens the served intake page (origin-fenced, same-document); media served media-only and never from
+  the profile; completion signals; pass only on a parsed result. Fail-proven tests; the page itself not run live (no web engine here).
+
+## avalonia-port/calib-flake: +46
+- Calibration window timing behind a TimeProvider; the test steps a manual clock (no sleeps). Full suite 3x green under load.

@@ -809,20 +809,11 @@ namespace ConditioningControlPanel.Services.Quiz
         /// <c>FlashService.GetMediaFiles</c> — separator-agnostic and case-insensitive — so the same
         /// uncheck that hides an image from the flashes hides it from the intake page too.
         /// </summary>
-        internal static HashSet<string> BuildDisabledAssetSet(IEnumerable<string>? disabledPaths) => new(
-            (disabledPaths ?? Enumerable.Empty<string>()).Select(p => (p ?? "").Replace('\\', '/')),
-            StringComparer.OrdinalIgnoreCase);
+        internal static HashSet<string> BuildDisabledAssetSet(IEnumerable<string>? disabledPaths) =>
+            IntakeRun.DisabledAssetSet(disabledPaths);   // moved to Core so every head filters once
 
-        /// <summary>True when <paramref name="fullPath"/> is still enabled for the user's preset.
-        /// Empty set = nothing deselected = everything active (identical to the pre-fix behavior).</summary>
-        internal static bool IsAssetActive(HashSet<string> disabled, string root, string fullPath)
-        {
-            if (disabled.Count == 0) return true;
-            string rel;
-            try { rel = Path.GetRelativePath(root, fullPath).Replace('\\', '/'); }
-            catch { return true; }   // unrelatable path: never silently drop content over a path quirk
-            return !disabled.Contains(rel);
-        }
+        internal static bool IsAssetActive(HashSet<string> disabled, string root, string fullPath) =>
+            IntakeRun.IsAssetActive(disabled, root, fullPath);
 
         /// <summary>MediaManifest (contracts.js): a small random sample of the user's flash images,
         /// split gifs/stills, as ccp.assets URLs. Null on any failure — the page's effect layer
@@ -841,55 +832,24 @@ namespace ConditioningControlPanel.Services.Quiz
         {
             try
             {
-                var gifs = new List<string>();
-                var stills = new List<string>();
-                var assetsRoot = App.EffectiveAssetsPath;
-                var imagesRoot = Path.Combine(assetsRoot, "images");
-                var disabled = BuildDisabledAssetSet(App.Settings?.Current?.DisabledAssetPaths);
-                if (Directory.Exists(imagesRoot))
-                {
-                    foreach (var file in Directory.EnumerateFiles(imagesRoot, "*", SearchOption.AllDirectories))
-                    {
-                        var ext = Path.GetExtension(file).ToLowerInvariant();
-                        if (ext != ".gif" && ext is not (".png" or ".jpg" or ".jpeg" or ".webp")) continue;
-                        if (!IsAssetActive(disabled, assetsRoot, file)) continue;   // unchecked in the Assets tree
-                        if (ext == ".gif") gifs.Add(file);
-                        else stills.Add(file);
-                    }
-                }
+                // The walk, the DisabledAssetPaths filter and the 18-item samples are Core
+                // (IntakeRun.SampleMedia), shared with the Avalonia host; only the origin is ours.
+                var (gifs, stills) = IntakeRun.SampleMedia(App.EffectiveAssetsPath, App.Settings?.Current?.DisabledAssetPaths);
 
                 // The bubble sprite + subliminal phrases ride the manifest too, so the page can
                 // still get them when the user has no images folder at all.
                 var bubbleSprite = BuildBubbleSpriteDataUri();
                 var subliminals = SampleActiveSubliminals();
-                if (gifs.Count == 0 && stills.Count == 0 && bubbleSprite == null && subliminals == null)
+                if (gifs.Length == 0 && stills.Length == 0 && bubbleSprite == null && subliminals == null)
                     return null;
-
-                var rng = new Random();
-                static List<string> Sample(List<string> pool, Random r, int take)
-                {
-                    // partial Fisher-Yates: take random items without shuffling the whole list
-                    for (int i = 0; i < Math.Min(take, pool.Count); i++)
-                    {
-                        int j = r.Next(i, pool.Count);
-                        (pool[i], pool[j]) = (pool[j], pool[i]);
-                    }
-                    return pool.GetRange(0, Math.Min(take, pool.Count));
-                }
-                string ToUrl(string file)
-                {
-                    var rel = Path.GetRelativePath(App.EffectiveAssetsPath, file).Replace('\\', '/');
-                    var escaped = string.Join('/', rel.Split('/').Select(Uri.EscapeDataString));
-                    return "https://ccp.assets/" + escaped;
-                }
 
                 return new
                 {
                     // 18 samples (was 10): the captcha grid items want 15-20 mounted
                     // assets so tiles don't repeat within a 3x3; gifs/stills split is
                     // unchanged. Host-side only (PROTOCOL 1 + web-shim.js untouched).
-                    gifs = Sample(gifs, rng, 18).Select(ToUrl).ToArray(),
-                    images = Sample(stills, rng, 18).Select(ToUrl).ToArray(),
+                    gifs = gifs.Select(rel => "https://ccp.assets/" + rel).ToArray(),
+                    images = stills.Select(rel => "https://ccp.assets/" + rel).ToArray(),
                     bubbleSprite,
                     subliminals,
                 };
@@ -1177,23 +1137,7 @@ namespace ConditioningControlPanel.Services.Quiz
 
         /// <summary>Stable per-install subject number (4 digits, e.g. "0417") persisted beside the
         /// user data. Kept OUT of AppSettings on purpose: it is pure fiction, not a setting.</summary>
-        private static string GetSubjectId()
-        {
-            try
-            {
-                var path = Path.Combine(App.UserDataPath, "intake_subject.txt");
-                if (File.Exists(path))
-                {
-                    var existing = File.ReadAllText(path).Trim();
-                    if (existing.Length is > 0 and <= 8) return existing;
-                }
-                var id = new Random().Next(1, 10000).ToString("D4");
-                Directory.CreateDirectory(App.UserDataPath);
-                File.WriteAllText(path, id);
-                return id;
-            }
-            catch { return "0000"; }
-        }
+        private static string GetSubjectId() => IntakeRun.SubjectId(App.UserDataPath);   // moved to Core
 
         // ============================ watchdogs / recovery ============================
 
