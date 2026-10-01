@@ -94,7 +94,26 @@ public sealed class BrainDrainLayer : BaseLayer
     private bool _dirty = true;
     private int _lastSeenFrames = -1;
 
-    public BrainDrainLayer(CompositorEngine engine) : base(engine) { }
+    // ---- Super Undertow (Services/Super/CONTRACT.md): a feathered sharp lens punched through this
+    // layer's blur. The blur (and the melt warp, which lives in the same image) is simply not drawn
+    // inside it, so the real screen shows through; the self-capture guard is untouched because
+    // nothing new is captured. Off = this layer byte-identical to before (RenderUndertow never runs).
+    private readonly Super.UndertowState _undertow = new();
+    private bool _undertowOn;                   // UI thread; re-read on Start and on SuperAccess.Changed
+    private volatile bool _undertowStale = true;
+    private GlobalMouseHook? _undertowHook;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<System.Windows.Point> _undertowClicks = new();
+    private double _undertowScreenWidth = 1920;
+    private SKPaint? _maskPaint;                // DstOut, unit radial gradient scaled by the canvas
+    // (click waves: see BeginWaves)
+
+    public BrainDrainLayer(CompositorEngine engine) : base(engine)
+    {
+        // Any Changed re-asks, not only Undertow's own: a tier change or the weekly preview ending
+        // may be raised with whichever effect the sender had in hand. The drift check re-asks
+        // once a second too, so a lapse nobody announces still tears the lens down.
+        Super.SuperAccess.Changed += _ => _undertowStale = true;
+    }
 
     public override int ZIndex => CompositorLayers.BrainDrain;
     public override bool ExcludeFromCapture => true;
@@ -121,6 +140,8 @@ public sealed class BrainDrainLayer : BaseLayer
                                           _requestedScreens, Sigma, _meltAmplitude);
         _lastSeenFrames = -1;   // fresh pump: its counter restarts at 0, so never match a stale one
         _dirty = true;
+        _undertow.Reset();
+        _undertowStale = true;  // a fresh run asks the switch again
         SetActive(true);
         ArmFirstFrameWatchdog(intensity, melt);
     }
@@ -319,9 +340,12 @@ public sealed class BrainDrainLayer : BaseLayer
         int published = _pump?.FramesPublished ?? _lastSeenFrames;
         if (published != _lastSeenFrames) { _lastSeenFrames = published; _dirty = true; }
 
+        if (_pump != null) UpdateUndertow(delta);
+
         _sinceDriftCheck += delta;
         if (_sinceDriftCheck < DriftCheckInterval) return;
         _sinceDriftCheck = TimeSpan.Zero;
+        _undertowStale = true;   // cheap re-ask of SuperAccess.IsOn, once a second
 
         try
         {
@@ -370,10 +394,249 @@ public sealed class BrainDrainLayer : BaseLayer
         // Set per frame - Render, SetIntensity and Pulse are all on the UI thread, so this can
         // never read a half-written value, and it keeps the ramp path free of paint bookkeeping.
         _drawPaint.Color = SKColors.White.WithAlpha(_drawAlpha);
-        canvas.DrawImage(frame.Image,
-            new SKRect(captureBounds.X, captureBounds.Y, captureBounds.Right, captureBounds.Bottom),
-            _drawPaint);
+        var dest = new SKRect(captureBounds.X, captureBounds.Y, captureBounds.Right, captureBounds.Bottom);
+        if (_undertowOn && _undertow.Placed)
+            RenderUndertow(canvas, frame.Image, dest, dpiScale);
+        else
+            canvas.DrawImage(frame.Image, dest, _drawPaint);
     }
+
+    // ================================================================================
+    //  Super Undertow
+    // ================================================================================
+
+    private static Super.UndertowMotion UndertowMotionNow() => MotionFx.Level switch
+    {
+        Models.MotionLevel.Off => Super.UndertowMotion.Off,
+        Models.MotionLevel.Reduced => Super.UndertowMotion.Reduced,
+        _ => Super.UndertowMotion.Full,
+    };
+
+    /// <summary>UI thread, once per tick while the pump runs: re-read the switch when it flipped,
+    /// follow the cursor, pay out clicks, shrink. Only the lens being alive keeps the layer dirty.</summary>
+    private void UpdateUndertow(TimeSpan delta)
+    {
+        if (_undertowStale)
+        {
+            _undertowStale = false;
+            bool on = false;
+            try { on = Super.SuperAccess.IsOn(Super.SuperEffect.Undertow); } catch { }
+            if (on != _undertowOn)
+            {
+                _dirty = true;
+                if (on) StartUndertowHook(); else StopUndertow();
+                _undertowOn = on;
+            }
+        }
+        if (!_undertowOn) return;
+
+        if (!GetCursorPos(out var pt)) return;
+        _undertowScreenWidth = ScreenWidthAt(pt.X, pt.Y);
+        var motion = UndertowMotionNow();
+
+        // Repaint only when the lens or a ripple visibly moved: a still lens under a still cursor
+        // (MotionFx Off, or a parked mouse) must not force a full-screen redraw every tick.
+        bool changed = Super.UndertowLens.Step(_undertow, delta.TotalSeconds, pt.X, pt.Y, _undertowScreenWidth, motion);
+        while (_undertowClicks.TryDequeue(out var click))
+        {
+            Super.UndertowLens.Click(_undertow, click.X, click.Y, _undertowScreenWidth, motion);
+            changed = true;
+        }
+
+        if (changed) _dirty = true;
+    }
+
+    private double ScreenWidthAt(int x, int y)
+    {
+        var screens = _requestedScreens;
+        foreach (var s in screens)
+            if (s.Contains(x, y)) return Math.Max(1, s.Width);
+        return screens.Length > 0 ? Math.Max(1, screens[0].Width) : _undertowScreenWidth;
+    }
+
+    private void StartUndertowHook()
+    {
+        _undertow.Reset();
+        while (_undertowClicks.TryDequeue(out _)) { }
+        try
+        {
+            // HOOK THREAD: enqueue only, and never swallow - the click still reaches the app under it.
+            _undertowHook = new GlobalMouseHook { LeftDown = p => { _undertowClicks.Enqueue(p); return false; } };
+            _undertowHook.Start();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Undertow mouse hook: {E}", ex.Message);
+        }
+    }
+
+    private void StopUndertow()
+    {
+        var hook = _undertowHook;
+        _undertowHook = null;
+        try { hook?.Dispose(); } catch { }
+        while (_undertowClicks.TryDequeue(out _)) { }
+        _undertow.Reset();
+        _undertowOn = false;
+        _undertowStale = true;
+    }
+
+    /// <summary>Draws the blur with the feathered lens left out, then the click ripples. The
+    /// outside of the lens box draws straight; only the lens box goes through an offscreen layer
+    /// (bounded, so a DstOut can never erase layers below this one).</summary>
+    private void RenderUndertow(SKCanvas canvas, SKImage image, SKRect dest, double dpiScale)
+    {
+        float r = (float)_undertow.Radius;
+        float x = (float)_undertow.X, y = (float)_undertow.Y;
+        var lens = new SKRect(x - r, y - r, x + r, y + r);
+
+        // Click waves bend the image itself (a runtime shader), so they ripple the lens and the blur
+        // alike. No live wave, or no shader support: the plain image, byte-identical to before.
+        var wave = BeginWaves(image, dest, dpiScale);
+
+        if (r < 1f || !lens.IntersectsWith(dest))
+        {
+            DrawBase(canvas, image, dest, wave);
+        }
+        else
+        {
+            canvas.Save();
+            canvas.ClipRect(lens, SKClipOperation.Difference);
+            DrawBase(canvas, image, dest, wave);
+            canvas.Restore();
+
+            canvas.SaveLayer(lens, null);
+            canvas.ClipRect(lens);
+            DrawBase(canvas, image, dest, wave);
+            canvas.Translate(x, y);
+            canvas.Scale(r);
+            canvas.DrawCircle(0, 0, 1, MaskPaint());
+            canvas.Restore();
+        }
+        EndWaves();
+    }
+
+    private void DrawBase(SKCanvas canvas, SKImage image, SKRect dest, SKPaint? wave)
+    {
+        if (wave != null) canvas.DrawRect(dest, wave);
+        else canvas.DrawImage(image, dest, _drawPaint);
+    }
+
+    // SkSL: displace the sample point along the radial direction by a sine train that is sharp at the
+    // front and fades behind it, plus a little crest lighting so the water reads as water.
+    private const string WaveSksl = @"
+uniform shader src;
+uniform float4 w[6];   // x, y, front radius, amplitude (px)
+uniform float3 p;      // wavelength, trailing band, amplitude reference
+half4 main(float2 c) {
+    float2 off = float2(0.0);
+    float hi = 0.0;
+    for (int i = 0; i < 6; i++) {
+        float amp = w[i].w;
+        if (amp > 0.0) {
+            float2 d = c - w[i].xy;
+            float dist = length(d);
+            if (dist > 0.5) {
+                float x = dist - w[i].z;
+                float env = x > 0.0 ? exp(-pow(x / (p.x * 0.5), 2.0)) : exp(x / p.y);
+                float ph = x * 6.2831853 / p.x;
+                off += (d / dist) * sin(ph) * amp * env;
+                hi += cos(ph) * env * (amp / p.z);
+            }
+        }
+    }
+    half4 col = src.eval(c + off);
+    col.rgb *= half(1.0 + 0.12 * clamp(hi, -1.0, 1.0));
+    return col;
+}";
+
+    private static SKRuntimeEffect? _waveEffect;
+    private static bool _waveEffectTried;
+    private SKPaint? _wavePaint;
+    private SKShader? _waveShader, _waveSrc;
+    private readonly float[] _waveData = new float[6 * 4];
+
+    private SKPaint? BeginWaves(SKImage image, SKRect dest, double dpiScale)
+    {
+        if (!_waveEffectTried)
+        {
+            _waveEffectTried = true;
+            try
+            {
+                _waveEffect = SKRuntimeEffect.Create(WaveSksl, out var err);
+                if (_waveEffect == null) App.Logger?.Debug("Undertow wave shader: {E}", err);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Undertow wave shader: {E}", ex.Message); }
+        }
+        if (_waveEffect == null) return null;
+
+        var motion = UndertowMotionNow();
+        Array.Clear(_waveData);
+        double maxAmp = 0, wl = 0, band = 0;
+        bool any = false;
+        int n = 0;
+        foreach (var rp in _undertow.Ripples)
+        {
+            if (!rp.Live || n >= 6) continue;
+            if (!Super.UndertowLens.WaveAt(rp.Age, _undertowScreenWidth, motion, dpiScale,
+                                           out double front, out double amp, out wl, out band)) continue;
+            _waveData[n * 4] = (float)rp.X; _waveData[n * 4 + 1] = (float)rp.Y;
+            _waveData[n * 4 + 2] = (float)front; _waveData[n * 4 + 3] = (float)amp;
+            if (amp > maxAmp) maxAmp = amp;
+            n++; any = true;
+        }
+        if (!any) return null;
+
+        try
+        {
+            var m = SKMatrix.CreateScale(dest.Width / image.Width, dest.Height / image.Height);
+            m = m.PostConcat(SKMatrix.CreateTranslation(dest.Left, dest.Top));
+            _waveSrc = image.ToShader(SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, m);
+            var uniforms = new SKRuntimeEffectUniforms(_waveEffect) { ["w"] = _waveData, ["p"] = new float[] { (float)wl, (float)band, (float)Math.Max(1, maxAmp) } };
+            var children = new SKRuntimeEffectChildren(_waveEffect) { ["src"] = _waveSrc };
+            _waveShader = _waveEffect.ToShader(false, uniforms, children);
+            _wavePaint ??= new SKPaint { IsAntialias = false };
+            _wavePaint.Shader = _waveShader;
+            _wavePaint.Color = SKColors.White.WithAlpha(_drawPaint.Color.Alpha);
+            return _wavePaint;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Undertow wave draw: {E}", ex.Message);
+            EndWaves();
+            return null;
+        }
+    }
+
+    private void EndWaves()
+    {
+        if (_wavePaint != null) _wavePaint.Shader = null;
+        _waveShader?.Dispose(); _waveShader = null;
+        _waveSrc?.Dispose(); _waveSrc = null;
+    }
+
+    private SKPaint MaskPaint()
+    {
+        if (_maskPaint != null) return _maskPaint;
+        var colors = new SKColor[Super.UndertowLens.MaskAlpha.Length];
+        for (int i = 0; i < colors.Length; i++)
+            colors[i] = SKColors.Black.WithAlpha((byte)Math.Round(Super.UndertowLens.MaskAlpha[i] * 255));
+        _maskPaint = new SKPaint
+        {
+            IsAntialias = true,
+            BlendMode = SKBlendMode.DstOut,
+            Shader = SKShader.CreateRadialGradient(new SKPoint(0, 0), 1f, colors,
+                                                    Super.UndertowLens.MaskPositions, SKShaderTileMode.Clamp),
+        };
+        return _maskPaint;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int X; public int Y; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT point);
 
     private UiFrame GetOrAddFrame(System.Drawing.Rectangle bounds)
     {
@@ -408,6 +671,8 @@ public sealed class BrainDrainLayer : BaseLayer
     /// may be inside a stalled desktop blt would re-create the very freeze #777 is about.</summary>
     private void ReleaseCaptures()
     {
+        // Panic, emergency exit and every stop land here: the lens dies with the blur it rides.
+        StopUndertow();
         StopPump();
         ReleaseUiFrames();
         _requestedScreens = Array.Empty<System.Drawing.Rectangle>();
