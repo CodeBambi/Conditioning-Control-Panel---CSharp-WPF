@@ -21,6 +21,9 @@ namespace ConditioningControlPanel.Services.Speech
         public Action<string> PromptStarted = _ => { };
         public Action<PhraseResult> PromptFinished = _ => { };
         public Func<TimeSpan, CancellationToken, Task> Delay = Task.Delay;
+        /// <summary>Completes when the clip of the last <see cref="Say"/> has finished playing. Awaited
+        /// (capped) before every listen so the recognizer never hears her. Null (WPF) = timings only.</summary>
+        public Func<CancellationToken, Task>? WaitSpoken;
     }
 
     /// <summary>
@@ -62,7 +65,7 @@ namespace ConditioningControlPanel.Services.Speech
                 // A beat longer than the old 8s so it's easier to get the whole phrase out in time.
                 var listenWindow = TimeSpan.FromSeconds(10);
 
-                ct.ThrowIfCancellationRequested();
+                await WaitSpokenAsync().ConfigureAwait(false);
                 var result = await host.Recognize(phrase, new RecognizeOptions { Timeout = listenWindow }).ConfigureAwait(false);
 
                 // One gentle retry on ANY non-match — too quiet, misheard, or nothing said — as long as
@@ -78,7 +81,7 @@ namespace ConditioningControlPanel.Services.Speech
                     await host.Delay(TimeSpan.FromMilliseconds(900), ct).ConfigureAwait(false);
                     for (int i = 0; i < 40 && host.IsSpeaking(); i++)
                         await host.Delay(TimeSpan.FromMilliseconds(75), ct).ConfigureAwait(false);
-                    ct.ThrowIfCancellationRequested();
+                    await WaitSpokenAsync().ConfigureAwait(false);
                     result = await host.Recognize(phrase, new RecognizeOptions { Timeout = listenWindow }).ConfigureAwait(false);
                 }
 
@@ -119,6 +122,14 @@ namespace ConditioningControlPanel.Services.Speech
             catch (Exception ex)
             {
                 Log.Warning("AutonomyService: SpokenMantra failed: {Error}", ex.Message);
+            }
+
+            // Hold the mic shut until her clip ended; 30 s caps a lost finished callback.
+            async Task WaitSpokenAsync()
+            {
+                if (host.WaitSpoken is { } wait)
+                    await Task.WhenAny(wait(ct), host.Delay(TimeSpan.FromSeconds(30), ct)).ConfigureAwait(false);
+                ct.ThrowIfCancellationRequested();
             }
 
             // A shared retry/timeout line (voiced if it ships audio), else plain text.
