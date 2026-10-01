@@ -57,15 +57,32 @@ namespace ConditioningControlPanel.Services.Super
         /// <summary>
         /// May this account start a try of <paramref name="effect"/> now? Only this week's effect,
         /// only once a week (<paramref name="usedWeek"/> is the week index of the last try).
+        /// A stamp from a LATER week also refuses: a try taken with the clock wound forward must
+        /// not be handed out again when the clock is set back.
         /// </summary>
         public static bool CanTry(SuperEffect effect, int usedWeek, DateTimeOffset now)
         {
             int week = WeekIndex(now);
-            return effect == EffectForWeek(week) && usedWeek != week;
+            return effect == EffectForWeek(week) && usedWeek < week;
         }
 
-        /// <summary>The try for this week is already spent.</summary>
-        public static bool UsedThisWeek(int usedWeek, DateTimeOffset now) => usedWeek == WeekIndex(now);
+        /// <summary>The try for this week is already spent (or stamped in a later week).</summary>
+        public static bool UsedThisWeek(int usedWeek, DateTimeOffset now) => usedWeek >= WeekIndex(now);
+
+        /// <summary>
+        /// A try still counts as running after <paramref name="elapsedSeconds"/> on a monotonic
+        /// clock. The service's timer ends it at <see cref="TrySeconds"/>; this is the backstop if
+        /// that timer is late (busy UI thread, sleep), so a stalled timer never makes a try last.
+        /// </summary>
+        public static bool TryStillRunning(double elapsedSeconds)
+            => elapsedSeconds >= 0 && elapsedSeconds < TrySeconds + TryGraceSeconds;
+
+        /// <summary>Slack past <see cref="TrySeconds"/> before the backstop ends a try.</summary>
+        public const double TryGraceSeconds = 1.0;
+
+        /// <summary>Seconds left after <paramref name="elapsedSeconds"/>, clamped to [0, TrySeconds].</summary>
+        public static double SecondsLeftAfter(double elapsedSeconds)
+            => Math.Clamp(TrySeconds - elapsedSeconds, 0, TrySeconds);
 
         /// <summary>
         /// The Super gate in one line, so the truth table is testable without App:

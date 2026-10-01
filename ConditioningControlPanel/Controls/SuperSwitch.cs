@@ -77,6 +77,11 @@ namespace ConditioningControlPanel.Controls
         private readonly TranslateTransform _knobShift = new();
         private readonly TranslateTransform _shakeShift = new();
         private readonly RotateTransform _shakeTilt = new();
+        private readonly ScaleTransform _hoverScale = new(1, 1);
+        private readonly Border _focusRing;
+        private readonly Canvas _sparks = new() { IsHitTestVisible = false, ClipToBounds = false };
+        private double _restGlow;
+        private bool _glowAllowed;
         private readonly DropShadowEffect _glow = new() { ShadowDepth = 0, BlurRadius = 16, Opacity = 0 };
         private bool _pressed;
         private bool? _lastOn;
@@ -89,7 +94,20 @@ namespace ConditioningControlPanel.Controls
             Focusable = true;
             FocusVisualStyle = null;
             RenderTransformOrigin = new Point(0.5, 0.5);
-            RenderTransform = new TransformGroup { Children = { _shakeTilt, _shakeShift } };
+            RenderTransform = new TransformGroup { Children = { _hoverScale, _shakeTilt, _shakeShift } };
+
+            // FocusVisualStyle is off (the default dashed box reads as a bug on a pill), so keyboard
+            // focus gets its own ring instead of nothing.
+            _focusRing = new Border
+            {
+                CornerRadius = new CornerRadius(PillH / 2 + 3),
+                BorderThickness = new Thickness(2),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF)),
+                Margin = new Thickness(-4),
+                IsHitTestVisible = false,
+                Visibility = Visibility.Collapsed,
+            };
+            Children.Add(_focusRing);
 
             _pill = new Border
             {
@@ -123,6 +141,7 @@ namespace ConditioningControlPanel.Controls
             _knobHost.Children.Add(_knob);
             _knobHost.Children.Add(_glyph);
             Children.Add(_knobHost);
+            Children.Add(_sparks);
 
             Loaded += (_, _) =>
             {
@@ -162,6 +181,8 @@ namespace ConditioningControlPanel.Controls
             string name = SuperNames.Name(Effect);
             AutomationProperties.SetName(this, Loc.GetF("super_switch_name", name));
             ToolTip = locked ? Loc.GetF("super_switch_locked_tip", name) : Loc.GetF("super_switch_name", name);
+            // A bloom still running would hide every Opacity write below.
+            _glow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
 
 
             if (on)
@@ -196,7 +217,13 @@ namespace ConditioningControlPanel.Controls
                 _glyph.Data = BoltGeo;
             }
 
+            _glowAllowed = PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier);
+            _restGlow = _glow.Opacity;
+            if (IsMouseOver) ApplyHover(true);
+
             double to = on ? KnobTravel : 0;
+            // Switching on (or a weekly try starting) earns a small burst: the conversion moment.
+            if (animate && _lastOn == false && on) Burst();
             if (animate && _lastOn != on && MotionFx.AllowTransitions)
             {
                 // cubic-bezier(.2,1.6,.4,1) over 220 ms: a small overshoot past the end.
@@ -213,6 +240,92 @@ namespace ConditioningControlPanel.Controls
             }
             _lastOn = on;
         }
+
+        protected override void OnMouseEnter(MouseEventArgs e) { base.OnMouseEnter(e); ApplyHover(true); }
+
+        protected override void OnMouseLeave(MouseEventArgs e) { base.OnMouseLeave(e); ApplyHover(false); }
+
+        protected override void OnIsKeyboardFocusedChanged(DependencyPropertyChangedEventArgs e)
+        {
+            base.OnIsKeyboardFocusedChanged(e);
+            _focusRing.Visibility = IsKeyboardFocused ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>Hover: the glow lifts (gold when locked, lilac when off, pink when on) and the
+        /// pill grows 4%. The grow is skipped with motion off; the glow follows the perf tier.</summary>
+        private void ApplyHover(bool over)
+        {
+            if (_glowAllowed)
+            {
+                if (over)
+                {
+                    if (_glow.Opacity <= 0.01) _glow.Color = OffRing;
+                    _glow.Opacity = Math.Min(0.9, Math.Max(_restGlow + 0.3, 0.4));
+                }
+                else
+                {
+                    _glow.Opacity = _restGlow;
+                }
+            }
+            double scale = over && MotionFx.AllowTransitions ? 1.04 : 1.0;
+            if (MotionFx.AllowTransitions)
+            {
+                var a = new DoubleAnimation(scale, TimeSpan.FromMilliseconds(140)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+                _hoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, a);
+                _hoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, a);
+            }
+            else
+            {
+                _hoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                _hoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                _hoverScale.ScaleX = _hoverScale.ScaleY = 1;
+            }
+        }
+
+        /// <summary>
+        /// Eight sparks fly off the knob and fade over 520 ms. Reduced motion = half the distance,
+        /// motion off = none. Purely visual, nothing hit-testable.
+        /// </summary>
+        private void Burst()
+        {
+            if (!MotionFx.AllowTransitions) return;
+            _sparks.Children.Clear();
+            double reach = MotionFx.Level == MotionLevel.Reduced ? 0.5 : 1.0;
+            double cx = 2.5 + KnobTravel + KnobD / 2, cy = PillH / 2;
+            var dur = TimeSpan.FromMilliseconds(520);
+            for (int i = 0; i < SparkCount; i++)
+            {
+                double ang = i * (2 * Math.PI / SparkCount) + 0.3;
+                double dist = (18 + (i % 3) * 6) * reach;
+                double size = i % 2 == 0 ? 4 : 3;
+                var dot = new Ellipse
+                {
+                    Width = size, Height = size,
+                    Fill = i % 3 == 0 ? Brushes.White : SparkBrush,
+                };
+                Canvas.SetLeft(dot, cx - size / 2);
+                Canvas.SetTop(dot, cy - size / 2);
+                var move = new TranslateTransform();
+                dot.RenderTransform = move;
+                _sparks.Children.Add(dot);
+                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+                move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, Math.Cos(ang) * dist, dur) { EasingFunction = ease });
+                move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, Math.Sin(ang) * dist, dur) { EasingFunction = ease });
+                var fade = new DoubleAnimation(1, 0, dur) { BeginTime = TimeSpan.FromMilliseconds(120) };
+                if (i == SparkCount - 1) fade.Completed += (_, _) => _sparks.Children.Clear();
+                dot.BeginAnimation(OpacityProperty, fade);
+            }
+            if (_glowAllowed)
+            {
+                // One bloom of the glow on top of the sparks, back to rest.
+                var bloom = new DoubleAnimation(0.95, _restGlow, TimeSpan.FromMilliseconds(600)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+                bloom.Completed += (_, _) => { _glow.BeginAnimation(DropShadowEffect.OpacityProperty, null); _glow.Opacity = IsMouseOver ? Math.Max(_restGlow + 0.3, 0.4) : _restGlow; };
+                _glow.BeginAnimation(DropShadowEffect.OpacityProperty, bloom);
+            }
+        }
+
+        private const int SparkCount = 8;
+        private static readonly Brush SparkBrush = Freeze(new SolidColorBrush(Color.FromRgb(0xFF, 0xA3, 0xD4)));
 
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
