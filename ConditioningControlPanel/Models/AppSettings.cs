@@ -9406,6 +9406,18 @@ namespace ConditioningControlPanel.Models
             set { _deeperPlayerWindowHeight = value; OnPropertyChanged(); }
         }
 
+        private List<string> _superEffectsOn = new();
+        /// <summary>
+        /// Super effects the player has switched on, as <c>SuperEffect</c> names. Read only through
+        /// <c>SuperAccess</c>, which also asks the tier gate; a name left here after a lapse is inert.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> SuperEffectsOn
+        {
+            get => _superEffectsOn;
+            set { _superEffectsOn = value ?? new(); OnPropertyChanged(); }
+        }
+
         private bool _companionAsksEnabled = true;
         /// <summary>The companion now and then asks a question with a few answer buttons.</summary>
         [JsonProperty]
