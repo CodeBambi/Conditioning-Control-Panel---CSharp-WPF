@@ -674,12 +674,15 @@ namespace ConditioningControlPanel.Avalonia
                     bool activated = shell.ShowActivated, inTaskbar = shell.ShowInTaskbar;
                     shell.ShowActivated = false;
                     shell.ShowInTaskbar = false;
+                    shell.BuildingHiddenForBoot = true;
                     void Route(object? s, EventArgs e)
                     {
                         shell.Opened -= Route;
+                        Views.Windows.LauncherWindow.RouteBoot(shell);
+                        // Restored only once the panel is tucked away, so it never reaches the taskbar.
+                        shell.BuildingHiddenForBoot = false;
                         shell.ShowActivated = activated;
                         shell.ShowInTaskbar = inTaskbar;
-                        Views.Windows.LauncherWindow.RouteBoot(shell);
                     }
                     shell.Opened += Route;
                 }

@@ -280,4 +280,24 @@ public sealed class LauncherWindowTests
         box.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Assert.True(CoreSettings.Current.LauncherSkipToPanel);
     });
+
+    [Fact]
+    public void BootHiddenPanel_KeepsTheCompanionTubeDown() => Run(_ =>
+    {
+        var old = CoreSettings.Current.AvatarEnabled;
+        CoreSettings.Current.AvatarEnabled = true;
+        var panel = new MainShellWindow { BuildingHiddenForBoot = true };   // as App's launcher boot
+        try
+        {
+            panel.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotNull(panel.Tube);                 // built, as WPF does on load
+            Assert.False(panel.Tube!.IsVisible);        // but never on screen before the launcher
+        }
+        finally
+        {
+            panel.Close();
+            CoreSettings.Current.AvatarEnabled = old;
+        }
+    });
 }
