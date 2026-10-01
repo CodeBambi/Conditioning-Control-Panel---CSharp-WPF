@@ -177,6 +177,8 @@ internal static class EmergencyExitHostService
 
             if (!preview)
             {
+                // The weekly free Super try ends at once, like the panic key.
+                try { Super.SuperPreview.End(panic: true); } catch (Exception ex) { Diag.Swallowed(ex); }
                 // Circe's tab: opening the exit never costs, and nothing adds while it is up.
                 try { App.Chaster?.NoteSafetyExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 try { App.Bark?.NotifyEmergencyExitOpened(_game, _attempt); }

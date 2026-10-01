@@ -31,15 +31,16 @@ namespace ConditioningControlPanel.Services.Super
         public static event Action<SuperEffect>? Changed;
 
         /// <summary>
-        /// Basic (tier 1) or higher, or this week's free preview. The preview is added by the
-        /// scaffold lane; DEBUG honours CCP_SUPER_ALL=1 so a lane can run an effect without an account.
+        /// Basic (tier 1) or higher, or this week's free preview while its 10 s try runs
+        /// (<see cref="SuperPreview"/>). DEBUG honours CCP_SUPER_ALL=1 so a lane can run an effect
+        /// without an account.
         /// </summary>
         public static bool IsUnlocked(SuperEffect effect)
         {
 #if DEBUG
             if (Environment.GetEnvironmentVariable("CCP_SUPER_ALL") == "1") return true;
 #endif
-            return TierGate.HasPremium;
+            return SuperPreviewRule.IsUnlocked(TierGate.HasPremium, effect, SuperPreview.Trying);
         }
 
         /// <summary>Unlocked AND switched on. Cheap enough to call per spawn.</summary>
@@ -49,7 +50,38 @@ namespace ConditioningControlPanel.Services.Super
             if (Environment.GetEnvironmentVariable("CCP_SUPER_ALL") == "1") return true;
 #endif
             var on = App.Settings?.Current?.SuperEffectsOn;
-            return on != null && on.Contains(effect.ToString()) && IsUnlocked(effect);
+            bool switchedOn = on != null && on.Contains(effect.ToString());
+            return SuperPreviewRule.IsOn(TierGate.HasPremium, switchedOn, effect, SuperPreview.Trying);
+        }
+
+        /// <summary>The player's own switch position, ignoring the gate (the switch UI draws it).</summary>
+        public static bool IsSwitchedOn(SuperEffect effect)
+            => App.Settings?.Current?.SuperEffectsOn?.Contains(effect.ToString()) == true;
+
+        /// <summary>For <see cref="SuperPreview"/>: a try started or ended.</summary>
+        internal static void RaiseChanged(SuperEffect effect) => Changed?.Invoke(effect);
+
+        private static bool _tierHooked;
+
+        /// <summary>
+        /// Fire <see cref="Changed"/> for every effect when the tier or the account changes, so a
+        /// lapse tears every Super effect down. Idempotent; the switch calls it when it loads.
+        /// </summary>
+        public static void HookTierEvents()
+        {
+            if (_tierHooked) return;
+            _tierHooked = true;
+            try
+            {
+                if (App.Patreon != null) App.Patreon.TierChanged += (_, _) => RaiseAll();
+                App.UnifiedIdentityChanged += (_, _) => RaiseAll();
+            }
+            catch (Exception ex) { App.Logger?.Debug("SuperAccess.HookTierEvents: {E}", ex.Message); }
+        }
+
+        private static void RaiseAll()
+        {
+            foreach (SuperEffect e in Enum.GetValues(typeof(SuperEffect))) Changed?.Invoke(e);
         }
 
         /// <summary>The player's switch. Does not check the gate; the UI refuses before calling this.</summary>

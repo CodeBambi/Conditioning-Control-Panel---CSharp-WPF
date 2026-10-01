@@ -9418,6 +9418,18 @@ namespace ConditioningControlPanel.Models
             set { _superEffectsOn = value ?? new(); OnPropertyChanged(); }
         }
 
+        private int _superPreviewUsedWeek = -1;
+        /// <summary>
+        /// Week index (<c>SuperPreviewRule.WeekIndex</c>, Monday UTC weeks) of the last weekly free
+        /// Super try. -1 = never. One 10 second try per week.
+        /// </summary>
+        [JsonProperty]
+        public int SuperPreviewUsedWeek
+        {
+            get => _superPreviewUsedWeek;
+            set { _superPreviewUsedWeek = value; OnPropertyChanged(); }
+        }
+
         private bool _companionAsksEnabled = true;
         /// <summary>The companion now and then asks a question with a few answer buttons.</summary>
         [JsonProperty]
