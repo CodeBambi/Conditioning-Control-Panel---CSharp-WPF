@@ -45,6 +45,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         internal static bool CanShowTint => !_refused && X11Overlay.IsAvailable && X11Overlay.IsCompositing;
 
         private static readonly List<TintOverlayWindow> Windows = new();
+
+        /// <summary>The tint is on screen now.</summary>
+        internal static bool IsShowing => Windows.Count > 0;
         private static int[] _shownOn = Array.Empty<int>();
         private static Window? _hookedOwner;
 

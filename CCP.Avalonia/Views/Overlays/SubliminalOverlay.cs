@@ -39,8 +39,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <summary>WPF: "Duration in frames * ~16.6ms per frame, minimum 100ms".</summary>
         internal static int HoldMs(int frames) => Math.Max(100, frames * 17);
 
-        /// <summary>Draw one card for <paramref name="text"/> on every targeted screen.</summary>
-        public static void Show(Visual host, string text)
+        /// <summary>Draw one card for <paramref name="text"/> on every targeted screen; <paramref name="opacity"/>
+        /// (percent) overrides the setting, as WPF FlashSubliminalCustom's does.</summary>
+        public static void Show(Visual host, string text, int? opacity = null)
         {
             if (!X11Overlay.IsAvailable)
             {
@@ -55,7 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var s = CoreSettings.Current;
             var primary = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
             var hold = TimeSpan.FromMilliseconds(HoldMs(s.SubliminalDuration));
-            var alpha = Math.Clamp(s.SubliminalOpacity / 100.0, 0, 1);
+            var alpha = Math.Clamp((opacity ?? s.SubliminalOpacity) / 100.0, 0, 1);
             foreach (var i in PinkFilterOverlay.ResolveScreenIndices(s.GlobalTargetMonitor, s.DualMonitorEnabled, screens.Count, primary))
             {
                 var w = new SubliminalOverlayWindow(text);

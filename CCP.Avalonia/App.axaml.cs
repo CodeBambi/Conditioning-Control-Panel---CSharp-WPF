@@ -132,7 +132,7 @@ namespace ConditioningControlPanel.Avalonia
                     try { Notifications.Show(message, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(12)); }
                     catch (Exception ex) { Serilog.Log.Debug("PromptAssembler: oversize notice failed to show: {Error}", ex.Message); }
                 });
-            // Only when a card can really follow here (no launcher: Session/Game/Quests cards may not build).
+            // Only when a card can really follow here (no session launcher: Session cards never build).
             ConditioningControlPanel.Services.Companion.ConversationDelivery.AskCardsShown =
                 ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.CanOfferFor;
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BrainProvider = () => Brain;
@@ -508,13 +508,14 @@ namespace ConditioningControlPanel.Avalonia
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
                 // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
-                // echo (no bark engine here: CoreBark is a doorbell), command executor and activities stay
-                // unseeded (head services not here). SeedMemorySignals seeds UserMessageSent for the memory
+                // echo stays unseeded (no bark engine here: CoreBark is a doorbell); command executor and
+                // activities are CompanionEffects (seeded below). SeedMemorySignals seeds UserMessageSent for the memory
                 // chat counter only; no companion-chat achievement listens to it on this head yet.
                 SeedMemorySignals();
                 try { if (Ai != null) Brain = new ConditioningControlPanel.Services.Companion.Brain.CompanionBrain(Ai); }
                 catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
                 SeedCompanionTubeSeams();
+                CompanionEffects.Seed();
                 //
                 // CoreModerationLog's record half stays unseeded, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes

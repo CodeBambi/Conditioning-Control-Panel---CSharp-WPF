@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models.CommandData;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Commands
 {
@@ -14,6 +15,13 @@ namespace ConditioningControlPanel.Services.Commands
     {
         // Cap delay so AI can't schedule things hours from now.
         public const int MaxDelaySec = 600;
+
+        /// <summary>The head's AI transport (WPF App.Ai). Unseeded: the follow-up asks nothing.</summary>
+        public static volatile Func<AIService.IAiService?>? AiProvider;
+
+        /// <summary>The companion's priority line, marshalled to her UI thread (WPF
+        /// App.AvatarWindow.GigglePriority, playSound). Args: text, aiGenerated.</summary>
+        public static volatile Action<string, bool>? SaySurface;
 
         private readonly GetBackToMe _data;
         private readonly CancellationToken _cancellationToken;
@@ -30,7 +38,7 @@ namespace ConditioningControlPanel.Services.Commands
         {
             if (_depth >= CommandFactory.MaxGetBackToMeDepth)
             {
-                App.Logger?.Information("GetBackToMeCommand: depth cap reached ({Depth}) — refusing further nesting", _depth);
+                Log.Information("GetBackToMeCommand: depth cap reached ({Depth}) — refusing further nesting", _depth);
                 return false;
             }
 
@@ -38,7 +46,7 @@ namespace ConditioningControlPanel.Services.Commands
 
             try
             {
-                App.Logger?.Debug("GetBackToMeCommand: scheduled in {Delay}s (depth={Depth}, token={Token})",
+                Log.Debug("GetBackToMeCommand: scheduled in {Delay}s (depth={Depth}, token={Token})",
                     delay, _depth, _data.Token);
                 await Task.Delay(delay * 1000, _cancellationToken);
 
@@ -64,7 +72,7 @@ namespace ConditioningControlPanel.Services.Commands
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "GetBackToMeCommand failed");
+                Log.Warning(ex, "GetBackToMeCommand failed");
                 return false;
             }
         }
@@ -81,7 +89,8 @@ namespace ConditioningControlPanel.Services.Commands
             // POLICY bubble would surprise them). Downstream guard already logged via
             // ModerationLog. IsAiGenerated propagates so canned fallbacks don't wear
             // the AI badge.
-            var result = await App.Ai.GetBambiReplyExAsync($"[Token={token}, JsonOnly={jsonOnly}]");
+            if (AiProvider?.Invoke() is not { } ai) return;
+            var result = await ai.GetBambiReplyExAsync($"[Token={token}, JsonOnly={jsonOnly}]");
             if (!jsonOnly && result.Refusal == null && !string.IsNullOrEmpty(result.Text))
             {
                 ShowAvatarMessage(result.Text, aiGenerated: result.IsAiGenerated);
@@ -90,13 +99,8 @@ namespace ConditioningControlPanel.Services.Commands
 
         private static void ShowAvatarMessage(string text, bool aiGenerated = false)
         {
-            var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-            dispatcher.BeginInvoke(new Action(() =>
-            {
-                try { App.AvatarWindow?.GigglePriority(text, playSound: true, aiGenerated: aiGenerated); }
-                catch (Exception ex) { App.Logger?.Debug("GetBackToMeCommand: avatar speak failed: {Error}", ex.Message); }
-            }));
+            try { SaySurface?.Invoke(text, aiGenerated); }
+            catch (Exception ex) { Log.Debug("GetBackToMeCommand: avatar speak failed: {Error}", ex.Message); }
         }
     }
 }

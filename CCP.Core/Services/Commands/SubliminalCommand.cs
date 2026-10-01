@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using System.Windows;
+using Serilog;
 using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services.Commands
@@ -13,6 +13,10 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly Subliminal _data;
         public SubliminalCommand(Subliminal data) { _data = data; }
 
+        /// <summary>Head surface: (text, opacity) on the UI thread (WPF
+        /// App.Subliminal.FlashSubliminalCustom). False when nothing could show. Unseeded: refused.</summary>
+        public static volatile Func<string, int, bool>? Surface;
+
         public Task<bool> ExecuteAsync()
         {
             var opacity = Math.Clamp(_data.Opacity, 0, MaxOpacity);
@@ -22,15 +26,11 @@ namespace ConditioningControlPanel.Services.Commands
 
             try
             {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    App.Subliminal?.FlashSubliminalCustom(text, opacity);
-                });
-                return Task.FromResult(true);
+                return Task.FromResult(Surface?.Invoke(text, opacity) == true);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "SubliminalCommand failed");
+                Log.Warning(ex, "SubliminalCommand failed");
                 return Task.FromResult(false);
             }
         }

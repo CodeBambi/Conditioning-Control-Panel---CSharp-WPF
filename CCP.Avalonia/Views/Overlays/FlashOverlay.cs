@@ -54,8 +54,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         /// <summary>Fire one burst. Any attached visual works as <paramref name="host"/>; it only
         /// reaches <c>Screens</c>. Like WPF's _isBusy, a second press is ignored from the click
-        /// until the burst's last flash has spawned.</summary>
-        public static async void TriggerOnce(Visual host)
+        /// until the burst's last flash has spawned. The overrides are WPF TriggerFlashOnce's
+        /// (amount, duration ms, size %); null keeps the user's setting.</summary>
+        public static async void TriggerOnce(Visual host, int? amount = null, int? durationMs = null, int? size = null)
         {
             if (_busy) return;
             if (!X11Overlay.IsAvailable)
@@ -76,7 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var primary = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
                 var targets = PinkFilterOverlay.ResolveScreenIndices(s.GlobalTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
                 var occupied = Active.Select(a => a.Rect).ToList();
-                var flashes = await Task.Run(() => LoadPictures(s.SimultaneousImages, screens, targets, s, occupied));
+                var flashes = await Task.Run(() => LoadPictures(amount ?? s.SimultaneousImages, screens, targets, s, occupied, size));
                 if (flashes.Count == 0)
                 {
                     if (!_warnedEmpty) Log.Warning("Flash: no images found in {Path}", ImagesPath());
@@ -84,7 +85,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     return;
                 }
 
-                var lifetime = TimeSpan.FromMilliseconds(s.FlashDuration * 1000 + 1000);
+                var lifetime = TimeSpan.FromMilliseconds((durationMs ?? s.FlashDuration * 1000) + 1000);
                 var fade = TimeSpan.FromSeconds(s.FadeDuration * FlashPlacement.FadeSecondsPerPercent);
                 var alpha = Math.Clamp(s.FlashOpacity / 100.0, 0, 1);
 
@@ -126,11 +127,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// scales the answer back onto the screen.
         /// </summary>
         internal static PixelRect Place(PixelRect screen, double scaling, int imgW, int imgH, AppSettings s, Random rng,
-            IEnumerable<PixelRect> occupied)
+            IEnumerable<PixelRect> occupied, int? size = null)
         {
             var k = scaling > 0 ? scaling : 1.0;
             int monW = (int)(screen.Width / k), monH = (int)(screen.Height / k);
-            var (w, h) = FlashPlacement.FitSize(imgW, imgH, monW, monH, s.ImageScale / 100.0);
+            var (w, h) = FlashPlacement.FitSize(imgW, imgH, monW, monH, (size ?? s.ImageScale) / 100.0);
 
             PixelRect ToPx(int x, int y) => new(screen.X + (int)(x * k), screen.Y + (int)(y * k), (int)(w * k), (int)(h * k));
             var others = occupied.Select(r => (r.X, r.Y, r.Width, r.Height)).ToList();
@@ -191,7 +192,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// decode-at-display-size - never a full-resolution source held per window.
         /// </summary>
         private static List<(Bitmap Bitmap, PixelRect Rect, string Path)> LoadPictures(int count, IReadOnlyList<Screen> screens,
-            int[] targets, AppSettings s, List<PixelRect> occupied)
+            int[] targets, AppSettings s, List<PixelRect> occupied, int? size)
         {
             var root = CorePaths.EffectiveAssets;
             var dir = Path.Combine(root, "images");
@@ -216,7 +217,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                         info = codec.Info;
                     }
                     var screen = screens[targets[Rng.Next(targets.Length)]];
-                    var rect = Place(screen.Bounds, screen.Scaling, info.Width, info.Height, s, Rng, occupied);
+                    var rect = Place(screen.Bounds, screen.Scaling, info.Width, info.Height, s, Rng, occupied, size);
                     using var stream = File.OpenRead(path);
                     result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, path));
                     occupied.Add(rect);
