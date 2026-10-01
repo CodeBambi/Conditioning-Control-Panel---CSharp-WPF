@@ -43,6 +43,11 @@ public sealed class VortexLayer : BaseLayer
     private SKImage[]? _deck;              // the next gif's frames, loaded off-thread
     private SKImage[]? _showing;           // the gif on screen now
     private volatile bool _deckLoading;
+    private double _deckTriedAt = double.NegativeInfinity;
+    private const double DeckRetrySec = 10;   // an empty or interrupted load tries again, not forever
+    private PerformanceTier _tier = PerformanceTier.Quality;
+    private double _sincePaint;
+    private bool _changed;
     private int _generation;
 
     public VortexLayer(CompositorEngine engine) : base(engine) { }
@@ -57,7 +62,7 @@ public sealed class VortexLayer : BaseLayer
                screenBoundsPx);
 
     public override bool Dirty => _dirty;
-    public override void ClearDirty() => _dirty = false;
+    public override void ClearDirty() { if (_dirty) _sincePaint = 0; _dirty = false; }
 
     /// <summary>Start (or keep) the vortex. UI thread.</summary>
     public void Start()
@@ -65,6 +70,8 @@ public sealed class VortexLayer : BaseLayer
         if (IsActive) return;
         _sim = new VortexSim();
         _screenPx = default;
+        _deckTriedAt = double.NegativeInfinity;
+        _tier = PerformanceProfile.CurrentTier;   // read at start, never per frame
         Interlocked.Exchange(ref _pendingClicks, 0);
         try
         {
@@ -84,6 +91,7 @@ public sealed class VortexLayer : BaseLayer
     /// <summary>Stop at once (panic, spiral off, Super switched off). UI thread.</summary>
     public void Stop()
     {
+        if (!IsActive && _hook == null) return;   // the 500 ms reconciler calls this while off
         Interlocked.Increment(ref _generation);
         try { _hook?.Dispose(); } catch { }
         _hook = null;
@@ -131,9 +139,15 @@ public sealed class VortexLayer : BaseLayer
         _sim.Step(dt, cur.X, cur.Y, _level);
         bool gifUp = _showing != null && VortexMath.GifFrame(_sim.Time - _sim.GifBorn, _flicker, out _, out _, out _);
         if (_showing != null && !gifUp) Dispose(ref _showing);
+        if (_deck == null && !_deckLoading && _sim.Time - _deckTriedAt >= DeckRetrySec) LoadDeck();
+
+        // Remember a change even on a frame the repaint gate skips, so the last move of a burst
+        // is never left unpainted.
         if (x != _sim.X || y != _sim.Y || size != _sim.Size || rot != _sim.Rot || gifUp || clicks > 0
             || Array.Exists(_sim.Motes, m => m.Alive))
-            _dirty = true;
+            _changed = true;
+        _sincePaint += dt;
+        if (_changed && VortexMath.ShouldRepaint(_sincePaint, _tier)) { _dirty = true; _changed = false; }
     }
 
     public override void Render(SKCanvas canvas, SKRectI boundsPx, double dpiScale, TimeSpan elapsed)
@@ -236,9 +250,9 @@ public sealed class VortexLayer : BaseLayer
 
     /// <summary>
     /// The next gif's frames, from the player's own picture pool through the flash loader: the
-    /// first frames of a gif, or three stills. Local and pack pictures only (a remote URL is
-    /// skipped), so no new fetch and no consent question. An empty pool leaves the deck null and
-    /// the click simply skips the flicker.
+    /// first frames of a gif, or three stills. Remote picks come from the pool's warm, consented
+    /// stills, so there is no new fetch and no new consent question. An empty pool leaves the
+    /// deck null, the click simply skips the flicker, and Update tries again after a while.
     /// </summary>
     private void LoadDeck()
     {
@@ -246,19 +260,36 @@ public sealed class VortexLayer : BaseLayer
         var flash = App.Flash;
         if (flash == null) return;
         _deckLoading = true;
+        _deckTriedAt = _sim.Time;
         int gen = Volatile.Read(ref _generation);
-        Task.Run(() =>
+        Task.Run(async () =>
         {
             SKImage[]? frames = null;
             try
             {
-                var paths = flash.GetChaosImagePaths(DeckSize)
-                    .Where(p => !FlashService.IsRemotePath(p) && File.Exists(p)).ToList();
-                var gif = paths.FirstOrDefault(AnimatedWebp.IsAnimated);
+                var picks = flash.GetChaosImagePaths(DeckSize);
+                var paths = picks.Where(p => !FlashService.IsRemotePath(p) && File.Exists(p)).ToList();
+                // A real .gif or an animated .webp; SKCodec decodes both. A one-frame file
+                // falls through to the stills below.
+                var gif = paths.FirstOrDefault(p => p.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
+                                                    || AnimatedWebp.IsAnimated(p));
                 if (gif != null && AnimatedWebp.DecodeFrames(gif, DeckMaxDim, DeckSize, 12.0) is { } d && d.Frames.Count > 0)
                     frames = d.Frames.Select(SkiaWpfInterop.ToSKImage).ToArray();
                 else
-                    frames = paths.Select(DecodeStill).Where(i => i != null).Select(i => i!).ToArray();
+                {
+                    var stills = new List<SKImage>();
+                    foreach (var p in picks)
+                    {
+                        // The pool only hands out a remote URL when the player's source and consent
+                        // allow it, and its bytes are already warm; drawing it here (rather than
+                        // dropping it) is what keeps an online-only player from losing pictures.
+                        SKImage? img = FlashService.IsRemotePath(p)
+                            ? await LoadRemoteStill(p).ConfigureAwait(false)
+                            : File.Exists(p) ? DecodeStill(p) : null;
+                        if (img != null) stills.Add(img);
+                    }
+                    frames = stills.ToArray();
+                }
                 if (frames.Length == 0) frames = null;
             }
             catch (Exception ex) { App.Logger?.Debug("VortexLayer: deck load failed: {E}", ex.Message); }
@@ -272,6 +303,16 @@ public sealed class VortexLayer : BaseLayer
                 _deck = frames;
             });
         });
+    }
+
+    private static async Task<SKImage?> LoadRemoteStill(string url)
+    {
+        try
+        {
+            var bmp = await FlashService.LoadRemoteStillForOverlayAsync(url, DeckMaxDim).ConfigureAwait(false);
+            return bmp == null ? null : SkiaWpfInterop.ToSKImage(bmp);
+        }
+        catch { return null; }
     }
 
     private static SKImage? DecodeStill(string path)

@@ -189,10 +189,36 @@ public class VortexMathTests
         Run(sim, 2, MotionLevel.Off);
         Assert.Equal(0, sim.Rot, 6);
         Assert.DoesNotContain(sim.Motes, m => m.Alive);
+        // Off does not swell either, and a click neither jumps nor squeezes it.
+        Assert.Equal(VortexMath.StartSize, sim.Size, 6);
+        Assert.Equal(VortexMath.StartSize, sim.Target, 6);
         sim.Click(MotionLevel.Off, 0.99);
-        Assert.Equal(sim.Target, sim.Size, 6);
+        Assert.Equal(VortexMath.StartSize, sim.Size, 6);
+        Assert.Equal(VortexMath.StartSize, sim.Target, 6);
         Assert.Equal(0, sim.Velocity, 6);
         Assert.DoesNotContain(sim.Motes, m => m.Alive);
+        Assert.DoesNotContain(sim.RingBorn, b => b > -1e8);
+    }
+
+    [Fact]
+    public void Motion_off_still_lets_a_rolled_gif_through_as_a_soft_fade()
+    {
+        var sim = Sim();
+        Run(sim, 0.5, MotionLevel.Off);
+        Assert.True(sim.Click(MotionLevel.Off, 0.01));
+        // The layer never cycles frames below Full motion, so this is the one soft fade.
+        Assert.True(VortexMath.GifFrame(0.2, false, out var f, out var a, out var g));
+        Assert.Equal(0, f); Assert.False(g); Assert.InRange(a, 0.01, 0.8);
+    }
+
+    [Fact]
+    public void Quality_repaints_every_frame_and_the_cheaper_tiers_cap_at_thirty()
+    {
+        Assert.True(VortexMath.ShouldRepaint(1 / 144.0, PerformanceTier.Quality));
+        Assert.False(VortexMath.ShouldRepaint(1 / 60.0, PerformanceTier.Balanced));
+        Assert.False(VortexMath.ShouldRepaint(1 / 60.0, PerformanceTier.Performance));
+        Assert.True(VortexMath.ShouldRepaint(2 / 60.0, PerformanceTier.Balanced));
+        Assert.True(VortexMath.ShouldRepaint(1 / 30.0, PerformanceTier.Performance));
     }
 
     [Fact]

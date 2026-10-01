@@ -170,10 +170,7 @@ public class OverlayService : IDisposable
         if (App.Settings != null) App.Settings.CurrentReplaced += OnSettingsCurrentReplaced;
 
         // Super Vortex rides the spiral: a switch flip or a tier change starts or tears it down.
-        Super.SuperAccess.Changed += e =>
-        {
-            if (e == Super.SuperEffect.Vortex) DispatcherHelper.RunOnUI(SyncVortex);
-        };
+        Super.SuperAccess.Changed += OnSuperChanged;
     }
 
     private void HookSettings(Models.AppSettings? settings)
@@ -258,8 +255,13 @@ public class OverlayService : IDisposable
     // Super Vortex: an add-on layer over the spiral. Runs while a spiral is showing (either render
     // path) and the Super switch is on; StopSpiral stops it, so panic and the emergency exit do too.
     private Compositor.VortexLayer? _vortexLayer;
+    private void OnSuperChanged(Super.SuperEffect e)
+    {
+        if (e == Super.SuperEffect.Vortex) DispatcherHelper.RunOnUI(SyncVortex);
+    }
     private void SyncVortex()
     {
+        if (_isDisposed) { _vortexLayer?.Stop(); return; }
         bool want = UseCompositor && SpiralShowing && Super.SuperAccess.IsOn(Super.SuperEffect.Vortex);
         if (want)
         {
@@ -775,6 +777,9 @@ public class OverlayService : IDisposable
         else if (SpiralShowing)
         {
             UpdateSpiralOpacity();
+            // Self-heal the Super add-on too: a tier lapse, a cloud restore of the switches or a
+            // compositor flag flip may not raise SuperAccess.Changed. Idempotent and cheap.
+            SyncVortex();
         }
 
         // #975: Brain Drain was the ONE overlay this 500ms reconciler never touched. Pink and
@@ -3850,6 +3855,9 @@ public class OverlayService : IDisposable
         _brainDrainImages.Clear();
         CleanupCaptureResources();
         try { _brainDrainLayer?.Stop(); } catch { /* shutdown path - GDI freed by OS anyway */ }
+        // Super Vortex holds a global mouse hook; release it with the service.
+        Super.SuperAccess.Changed -= OnSuperChanged;
+        try { _vortexLayer?.Stop(); } catch { }
 
         // Unsubscribe from settings changes. Detach from the instance we actually hooked, not from
         // whatever App.Settings.Current happens to be now - a restore may have swapped it.

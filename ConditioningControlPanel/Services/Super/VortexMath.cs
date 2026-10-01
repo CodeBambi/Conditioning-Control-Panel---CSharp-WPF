@@ -116,6 +116,13 @@ public static class VortexMath
         return true;
     }
 
+    /// <summary>
+    /// Repaint gate: Quality repaints every engine frame; Balanced and Performance cap the vortex
+    /// at 30 fps, because one always-moving layer re-rasters the whole shared surface it sits on.
+    /// </summary>
+    public static bool ShouldRepaint(double sinceLastPaint, PerformanceTier tier)
+        => tier == PerformanceTier.Quality || sinceLastPaint >= 1.0 / 30 - 1e-6;
+
     /// <summary>Motion levels: Reduced halves speed and amplitude; Off is still.</summary>
     public static double SpeedScale(MotionLevel level) => level switch
     {
@@ -190,7 +197,8 @@ public sealed class VortexSim
             X += (cursorX - X) * f; Y += (cursorY - Y) * f;
         }
 
-        Target = VortexMath.GrowTarget(Target, Still, dt);
+        // Off is still: the vortex keeps the size it has instead of swelling.
+        if (!still) Target = VortexMath.GrowTarget(Target, Still, dt);
         double prev = Size;
         if (still) { Size = Target; _velocity = 0; }
         else Size = VortexMath.SpringStep(Size, ref _velocity, Target, dt);
@@ -241,13 +249,11 @@ public sealed class VortexSim
     /// </summary>
     public bool Click(MotionLevel level, double gifRoll)
     {
-        Target = VortexMath.ClickTarget(Target);
-        if (level == MotionLevel.Off)
+        // Off is still: a click neither jumps nor collapses it (the gif may still show, as one
+        // soft fade, because the layer never cycles frames below Full motion).
+        if (level != MotionLevel.Off)
         {
-            Size = Target; _velocity = 0;
-        }
-        else
-        {
+            Target = VortexMath.ClickTarget(Target);
             _velocity += VortexMath.ClickKick * VortexMath.SpeedScale(level);
             int slot = 0;
             for (int i = 1; i < RingBorn.Length; i++) if (RingBorn[i] < RingBorn[slot]) slot = i;
