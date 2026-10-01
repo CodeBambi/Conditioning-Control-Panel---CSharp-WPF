@@ -182,11 +182,11 @@ namespace ConditioningControlPanel.Services.Super
             motion == MotionLevel.Off ? 0 : motion == MotionLevel.Reduced ? 0.5 : 1;
 
         /// <summary>Halo strength 0..1: brightest at landing, settles to a slow breath. Off holds a steady 0.35.</summary>
-        public static double AfterglowStrength(double age, double life, MotionLevel motion)
+        public static double AfterglowStrength(double age, double life, MotionLevel motion, double phase = 0)
         {
             if (motion == MotionLevel.Off) return 0.35;
             double settle = 0.3 + 0.7 * Math.Exp(-age * 1.1);
-            double breath = 1 + 0.18 * LeftoverMotion(motion) * Math.Sin(age * 2.2);
+            double breath = 1 + 0.18 * LeftoverMotion(motion) * Math.Sin(age * 2.2 + phase);
             return Math.Clamp(settle * breath, 0, 1);
         }
 
@@ -214,6 +214,104 @@ namespace ConditioningControlPanel.Services.Super
             if (motion == MotionLevel.Off || life <= 0) return 0;
             double start = (MeltStart + delay01 * DripDelaySpread) * life;
             return Math.Clamp((age - start) / Math.Max(0.001, life - start), 0, 1);
+        }
+
+        // Juice round: the stamp lands with a squash and one springy settle, bounces throw sparks in
+        // the word's ink, a landed stamp splats a few ink drops, leftovers breathe and fade ease-in.
+        public const double LandSquash = 0.07;          // flatten along the wall normal at contact
+        public const double LandWiden = 0.6;            // across = 1 + squash x this (area roughly kept)
+        public const double SlamSquashGain = 1.15;
+        public const double SettleLife = 0.32, SettleDamp = 9.0, SettleFreq = 26.0;
+        public const int BounceSparks = 6, SplatSparks = 7;
+        public const double BounceSparkSpeed = 150, BounceSparkLife = 0.32, BounceSparkCone = 0.9;  // cone: half-angle, rad
+        public const double SplatSpeed = 95, SplatLife = 0.42, SplatFlatten = 0.45, SplatGravity = 260;
+        public const double GlowIn = 0.06;              // s for the wall glow to come up
+        public const double BreathAmp = 0.018, BreathHz = 0.28, BreathDelay = 0.4, BreathRamp = 0.8;
+        public const double DripWobble = 0.06, DripWobbleHz = 1.7;   // x fs, sideways sway of a falling drip
+        public const double LabelIn = 0.34, LabelFrom = 0.6, LabelAlphaIn = 0.08;
+
+        /// <summary>When the press-in meets the wall, in seconds after the hit.</summary>
+        public static double ContactTime(bool slam) => 1 / (slam ? SlamPressRate : PressRate);
+
+        /// <summary>
+        /// The landing punch in stamp space: an ease-in drop from the press-in scale to the wall
+        /// (the stamp accelerates into it), then at contact a flatten along the wall normal with a
+        /// widen across it that springs back once. Along = the wall-normal axis, Across = the text axis.
+        /// Reduced halves every amplitude; Off is still.
+        /// </summary>
+        public static (double Along, double Across) LandPunch(double age, bool slam, MotionLevel motion)
+        {
+            if (motion == MotionLevel.Off || age < 0) return (1, 1);
+            double m = LeftoverMotion(motion), dur = ContactTime(slam);
+            if (age < dur)
+            {
+                double u = age / dur, s = 1 + (slam ? SlamPressAmp : PressAmp) * m * (1 - u * u);
+                return (s, s);
+            }
+            double v = age - dur;
+            if (v >= SettleLife) return (1, 1);
+            double k = Math.Exp(-SettleDamp * v) * Math.Cos(SettleFreq * v) * (1 - v / SettleLife);
+            double sq = LandSquash * m * (slam ? SlamSquashGain : 1);
+            return (1 - sq * k, 1 + sq * LandWiden * k);
+        }
+
+        /// <summary>A leftover stamp's opacity: an ease-in fade (holds, then lets go), flared after a slam like <see cref="StampAlpha"/>.</summary>
+        public static double LeftoverAlpha(double age, double life, double pulseAge)
+        {
+            double u = Math.Clamp(age / life, 0, 1), a = 1 - u * u;
+            if (pulseAge >= 0) a = Math.Min(1, a * (1 + PulseGain * Math.Max(0, 1 - pulseAge / PulseLife)));
+            return a;
+        }
+
+        /// <summary>The wall glow's opacity: up over 60 ms (ease-out), then falls off fast-first. Never one frame on.</summary>
+        public static double GlowAlphaAt(double age)
+        {
+            if (age < 0 || age >= GlowLife) return 0;
+            if (age < GlowIn) { double r = 1 - age / GlowIn; return 1 - r * r; }
+            double f = 1 - (age - GlowIn) / (GlowLife - GlowIn);
+            return f * f;
+        }
+
+        /// <summary>Spark count for a motion level: Off none, Reduced half (rounded up), Full all.</summary>
+        public static int SparkCount(int n, MotionLevel motion) =>
+            motion == MotionLevel.Off ? 0 : motion == MotionLevel.Reduced ? (n + 1) / 2 : n;
+
+        /// <summary>The direction a bounce spark flies: into the field off the wall it hit, inside a cone (<paramref name="unit"/> -1..1).</summary>
+        public static double BounceSparkAngle(ScrawlWall wall, double unit)
+        {
+            double n = wall switch
+            {
+                ScrawlWall.Left => 0,
+                ScrawlWall.Right => Math.PI,
+                ScrawlWall.Top => Math.PI / 2,     // screen y grows down
+                _ => -Math.PI / 2,
+            };
+            return n + Math.Clamp(unit, -1, 1) * BounceSparkCone;
+        }
+
+        /// <summary>Idle breath of a leftover stamp (uniform scale), phased per stamp, eased in once the landing has settled. Off is still.</summary>
+        public static double IdleBreath(double age, double phase, MotionLevel motion)
+        {
+            if (motion == MotionLevel.Off) return 1;
+            double ramp = Ease((age - BreathDelay) / BreathRamp);
+            return 1 + BreathAmp * LeftoverMotion(motion) * ramp * Math.Sin(2 * Math.PI * BreathHz * age + phase);
+        }
+
+        /// <summary>A falling drip's sideways sway in fs: grows in over the first quarter of the fall. Off is still.</summary>
+        public static double DripSway(double age, double phase, double t, MotionLevel motion)
+        {
+            if (motion == MotionLevel.Off || t <= 0) return 0;
+            return DripWobble * LeftoverMotion(motion) * Math.Min(1, t * 4) * Math.Sin(2 * Math.PI * DripWobbleHz * age + phase);
+        }
+
+        /// <summary>The CORNER label's entrance: from 0.6 to 1 with a small back-ease overshoot (about 4 percent). Reduced starts at 0.8, Off at 1.</summary>
+        public static double LabelScale(double age, MotionLevel motion)
+        {
+            if (motion == MotionLevel.Off || age >= LabelIn) return 1;
+            double from = motion == MotionLevel.Reduced ? 1 - (1 - LabelFrom) / 2 : LabelFrom;
+            double u = Math.Clamp(age / LabelIn, 0, 1) - 1;
+            const double c1 = 1.70158, c3 = c1 + 1;
+            return from + (1 - from) * (1 + c3 * u * u * u + c1 * u * u);
         }
 
         /// <summary>Smoothstep, the mockup's ease.</summary>
