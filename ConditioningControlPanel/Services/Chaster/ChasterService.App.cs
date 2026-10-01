@@ -18,6 +18,11 @@ public sealed partial class ChasterService
     private bool _pushArmed;
     private volatile bool _live;
 
+    /// <summary>The DEBUG demo service (fake Chaster). Its lock lives only in memory: a pick on
+    /// the page must never reach the real settings, or a desk demo run strands the real install
+    /// on the fake lock's id.</summary>
+    public bool IsDemo { get; private init; }
+
     public static ChasterService CreateForApp()
     {
         Func<ChasterOptions> options = () =>
@@ -79,6 +84,7 @@ public sealed partial class ChasterService
         var svc = new ChasterService(new ChasterClient(new DemoChaster()), new DemoTokens(), tabPath,
             () => options() with { LockId = "demo-lock" })
         {
+            IsDemo = true,
             LadderApi = new DemoRaffle(Environment.GetEnvironmentVariable(DemoEnvVar)),
             RafflePostDays = () => App.Settings?.Current?.ChasterRafflePostDays == true,
             LadderShowName = () => App.Settings?.Current?.ChasterLadderShowName == true,

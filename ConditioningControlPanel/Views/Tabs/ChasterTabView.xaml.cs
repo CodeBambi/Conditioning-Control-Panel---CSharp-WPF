@@ -1030,8 +1030,12 @@ namespace ConditioningControlPanel.Views.Tabs
         private void PickLock(string id)
         {
             if (App.Settings?.Current is not { } settings) return;
-            settings.ChasterLockId = id;
-            App.Settings?.Save();
+            // The demo picks its fake lock for itself (ChasterService.IsDemo).
+            if (App.Chaster?.IsDemo != true)
+            {
+                settings.ChasterLockId = id;
+                App.Settings?.Save();
+            }
             UseLockPill.Visibility = Visibility.Collapsed;
             // The hero is showing the old lock until this lands; a waiting balance can go now.
             _ = RepickAsync();

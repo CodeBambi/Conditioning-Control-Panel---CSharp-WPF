@@ -458,7 +458,10 @@ public sealed partial class ChasterService : IDisposable
             // Only ever the lock the player picked (security pass 2): not even the only one there
             // is. With none picked the balance waits on the tab and the page asks.
             var lockId = options.LockId;
-            if (string.IsNullOrEmpty(lockId)) return SettleOutcome.NoLockChosen;
+            // An id the client would refuse is no lock at all. Checked here, before the pending
+            // mark: AddTimeAsync throws on it before sending, and a mark left behind by a throw
+            // was counted as landed at the next settle, so the tab booked time Chaster never got.
+            if (!ChasterClient.IsLockId(lockId)) return SettleOutcome.NoLockChosen;
 
             // A push onto a lock whose timer has run out locks it again from now (LockRelock).
             if (await LockRanOutAsync(lockId!, options.RelockPastEnd, ct).ConfigureAwait(false))
