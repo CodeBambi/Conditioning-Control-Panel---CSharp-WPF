@@ -1208,3 +1208,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/intake-page: +655
 - Graded Intake slice 2: Begin Intake opens the served intake page (origin-fenced, same-document); media served media-only and never from
   the profile; completion signals; pass only on a parsed result. Fail-proven tests; the page itself not run live (no web engine here).
+
+## avalonia-port/calib-flake: +46
+- Calibration window timing behind a TimeProvider; the test steps a manual clock (no sleeps). Full suite 3x green under load.
