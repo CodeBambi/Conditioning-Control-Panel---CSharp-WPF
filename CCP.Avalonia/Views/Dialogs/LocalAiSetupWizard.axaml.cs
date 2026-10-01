@@ -313,11 +313,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             try
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = ManualInstallUrl,
-                    UseShellExecute = true
-                });
+                Platform.ExternalOpener.Open(ManualInstallUrl);
             }
             catch (Exception ex)
             {

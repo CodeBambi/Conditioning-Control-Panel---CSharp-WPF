@@ -877,11 +877,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "https://linktr.ee/CodeBambi",
-                    UseShellExecute = true
-                });
+                Platform.ExternalOpener.Open("https://linktr.ee/CodeBambi");
             }
             catch { /* no browser, or the user has no shell handler */ }
         }

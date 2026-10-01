@@ -1,7 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -12,32 +18,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// projection so the cursor lands where the user is actually looking - no full 16-point
     /// recalibration needed.
     ///
-    /// PORTED from ConditioningControlPanel/Windows/WebcamQuickRecalWindow.xaml.cs. Deviations:
-    ///  - The whole sampling sequence is gone. It only exists to talk to WebcamTrackingService
-    ///    (OnGazeMove / SetRuntimeOffset / Calibration) and CalibrationSoundService, all still in
-    ///    the WPF head, so there is nothing left for the median math or the offset write to act
-    ///    on. <see cref="OnOpened"/> shows the dot and the opening status line instead, which is
-    ///    the state the sequence starts in.
-    ///  - WPF's <c>DialogResult = x; Close();</c> becomes <c>Close(x)</c>: Avalonia carries the
-    ///    result through <c>ShowDialog&lt;bool?&gt;</c>.
-    ///  - Loaded -> Opened, and the KeyDown / Click handlers are wired in the constructor rather
-    ///    than in markup, per the porting convention.
-    ///
-    /// <para><b>NO OPENER, DELIBERATELY.</b> All three WPF call sites
-    /// (MainWindow.LabTab.cs:1116, MainWindow.BlinkTrainer.cs:1427, MainWindow.xaml.cs:1462) first
-    /// require the tracking service to be RUNNING — each starts it itself and refuses if the start
-    /// fails — and the Lab one additionally refuses when <c>svc.Calibration == null</c>, because
-    /// Quick Recal only nudges an existing calibration. Two of the three then READ THE RESULT: the
-    /// Lab handler reports the applied offset and the hotkey path logs applied-vs-cancelled. On this head
-    /// the sampling sequence is gone with WebcamTrackingService, so the window would show its dot,
-    /// count nothing, and close having "recalibrated" a calibration that does not exist. A control
-    /// that reports a recal it never performed is worse than a door that is shut, so the door stays
-    /// shut; the Avalonia call sites (MainShellWindow.LabTab.cs's dropped
-    /// BtnWebcamDebugQuickRecal_Click, DeeperTabView.BtnDeeperWebcamQuickRecal_Click) stay stubs.
-    /// </para>
+    /// PORTED from ConditioningControlPanel/Windows/WebcamQuickRecalWindow.xaml.cs over
+    /// Platform/WebcamTracker (OnGazeMove / Calibration / SetRuntimeOffset); the median maths is
+    /// Core GazeEngine.MedianAfterSaccadeSettle, which WPF also calls. Deviations: DialogResult
+    /// becomes Close(x) (ShowDialog&lt;bool?&gt;); the hotkey hint is hidden (below).
     /// </summary>
     public partial class WebcamQuickRecalWindow : Window
     {
+        private const int ReadyMs = 600;
+        private const int SampleMs = 2000;
+        private const int FinishHoldMs = 350;
+
+        private readonly List<(double X, double Y)> _samples = new();
+        private bool _collecting, _cancelled, _completedOk;
+        private RuntimeOffsetData? _savedOffset;
+        private static WebcamTracker Tracker => WebcamTracker.Instance;
+
         private readonly Ellipse _dot;
         private readonly TextBlock _txtStatus, _txtHotkeyHint, _txtErrorDetail;
         private readonly Border _errorPanel;
@@ -67,28 +63,99 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // key that does nothing. An empty hint is a gap; a taught dead key is a lie.
             _txtHotkeyHint.IsVisible = false;
 
-            // WPF closed with `DialogResult = _completedOk`, but the error panel is only ever
-            // shown on a failure path, so that flag was false every time this button was
-            // reachable. It comes back with the sampling sequence.
-            this.FindControl<Button>("BtnErrorClose")!.Click += (_, _) => Close(false);
-            KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(false); };
+            this.FindControl<Button>("BtnErrorClose")!.Click += (_, _) => Close(_completedOk);
+            KeyDown += (_, e) => { if (e.Key == Key.Escape) { _cancelled = true; _collecting = false; Close(false); } };
         }
 
-        protected override void OnOpened(System.EventArgs e)
+        protected override async void OnOpened(EventArgs e)
         {
             base.OnOpened(e);
+            if (!Tracker.IsRunning)
+            {
+                ShowError("Webcam tracking is not running. Start tracking before quick-recalibrating.");
+                return;
+            }
+            if (Tracker.Calibration == null)
+            {
+                ShowError("No calibration loaded. Run the full Calibrate (16-point) flow first — quick recal only nudges an existing calibration.");
+                return;
+            }
+            // Sample the raw projection: park the old offset, restore it unless we finish.
+            _savedOffset = Tracker.Calibration.RuntimeOffset;
+            Tracker.SetRuntimeOffset(null, persist: false);
+            Tracker.OnGazeMove += OnGazeMove;
+            Tracker.StateChanged += OnTrackerStateChanged;
+            try { await RunSequenceAsync(); }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "WebcamQuickRecalWindow: quick-recal sequence threw");
+                ShowError("Quick recal failed unexpectedly. See logs/app.log for details.");
+            }
+        }
 
-            // ponytail: needs ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs
-            // (IsRunning / Calibration / OnGazeMove / SetRuntimeOffset) plus
-            // ConditioningControlPanel/Services/CalibrationSoundService.cs. Neither is in Core.
-            // CoreWebcam carries capability + consent-revoke only, deliberately not the gaze feed
-            // (see its class doc): sampling is the whole of this window, so a capability flag alone
-            // unblocks nothing here. With those back this shows the dot,
-            // samples for 2 s, takes the per-axis median after dropping the saccade onto the
-            // dot, and writes (window centre - median) as the runtime offset. Without them
-            // there is nothing to sample, so the window just parks in its opening state.
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            Tracker.OnGazeMove -= OnGazeMove;
+            Tracker.StateChanged -= OnTrackerStateChanged;
+            if (!_completedOk && _savedOffset != null) Tracker.SetRuntimeOffset(_savedOffset, persist: false);
+        }
+
+        private void OnTrackerStateChanged()
+        {
+            if (Tracker.IsRunning) return;
+            _cancelled = true;
+            _collecting = false;
+            Close(false);
+        }
+
+        private void OnGazeMove(global::Avalonia.Point p)
+        {
+            if (_collecting) _samples.Add((p.X, p.Y));
+        }
+
+        private async Task RunSequenceAsync()
+        {
             _dot.IsVisible = true;
             _txtStatus.Text = "Get comfortable, then look at the pink dot.";
+            await Task.Delay(ReadyMs);
+            if (_cancelled) return;
+
+            _txtStatus.Text = "Hold your gaze on the dot…";
+            _samples.Clear();
+            Play("lvup.mp3", 0.25f);   // CalibrationSoundService.DotSampleStart
+            _collecting = true;
+            await Task.Delay(SampleMs);
+            _collecting = false;
+            if (_cancelled) return;
+
+            if (_samples.Count < 15)
+            {
+                ShowError($"Didn't capture enough gaze samples ({_samples.Count}). Make sure your face is visible and try again.");
+                return;
+            }
+            var (mx, my) = GazeEngine.MedianAfterSaccadeSettle(_samples, dropFirst: 10);
+            double dx = Bounds.Width / 2.0 - mx, dy = Bounds.Height / 2.0 - my;
+            Tracker.SetRuntimeOffset(new RuntimeOffsetData { Dx = dx, Dy = dy, CapturedAt = DateTime.UtcNow }, persist: true);
+            Log.Information("WebcamQuickRecalWindow: offset captured dx={Dx:F1} dy={Dy:F1} from {N} samples", dx, dy, _samples.Count);
+
+            _completedOk = true;
+            Play("chime3.mp3", 0.55f);   // CalibrationSoundService.QuickRecalComplete
+            _txtStatus.Text = $"Done. Cursor nudged by ({dx:F0}, {dy:F0}) px.";
+            await Task.Delay(FinishHoldMs);
+            Close(true);
+        }
+
+        /// <summary>CalibrationSoundService.Play: master volume on the ^1.5 curve, silence when missing.</summary>
+        private static void Play(string file, float multiplier)
+        {
+            try
+            {
+                float v = (float)Math.Pow(CoreSettings.Current.MasterVolume / 100f * multiplier, 1.5);
+                var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", file);
+                if (v > 0.001f && System.IO.File.Exists(path)) CoreAudio.PlayOneShot(path, v, "calibration");
+            }
+            catch (Exception ex) { Log.Debug("Quick recal sound {File} failed: {Error}", file, ex.Message); }
         }
 
         /// <summary>The WPF original's error path: no tracking, or no calibration to nudge.</summary>

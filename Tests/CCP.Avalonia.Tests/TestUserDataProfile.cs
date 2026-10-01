@@ -16,6 +16,7 @@ internal static class TestUserDataProfile
     {
         Directory.CreateDirectory(Root);
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", Root);
+        _ = ConditioningControlPanel.CorePaths.UserData;   // installs the SandboxNet guard before any test runs
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             try { Directory.Delete(Root, recursive: true); } catch { }

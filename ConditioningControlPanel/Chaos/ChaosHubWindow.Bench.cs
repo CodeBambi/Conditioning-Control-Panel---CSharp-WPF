@@ -16,70 +16,15 @@ namespace ConditioningControlPanel;
 /// </summary>
 public partial class ChaosHubWindow
 {
-    // ---- gold prices (tunable) ----
-    private const int GOLD_TOY_POCKET_1 = 50;
-    private const int GOLD_ACC_POCKET_1 = 150;
-    private const int GOLD_START_MANTRA = 200;
-    private const int GOLD_DIARY        = 150;
-    private const int GOLD_STATS_PANEL  = 100;
-    private const int GOLD_TOY_POCKET_2 = 2000;
-    private const int GOLD_ACC_POCKET_2 = 2500;
-
     /// <summary>[LOCKED] tooltip for a bench row that is visible but rank-short.</summary>
     private const string DEEPER_TIP = "she'll sell this to someone deeper.";
     /// <summary>[LOCKED] tooltip on the Claimed-reserved rows.</summary>
     private const string BOTTOM_TIP = "the bottom is not where you think it is.";
 
-    private sealed class BenchItem
-    {
-        public string Id = "";
-        public string Glyph = "👝";
-        public string Label = "";
-        public string Line = "";
-        public int Cost;
-        /// <summary>Rank required to buy (row shows rank-locked below it).</summary>
-        public ChaosRank? RankNeed;
-        /// <summary>Reveal id that keeps the row hazy (???) until it unlocks.</summary>
-        public string? RevealGate;
-        public Action? ApplyEffect;
-    }
-
-    private List<BenchItem>? _benchItems;
-
-    private List<BenchItem> BenchItems => _benchItems ??= new List<BenchItem>
-    {
-        new() { Id = BenchIds.ToyPocket1, Glyph = "👝", Label = "first toy pocket",
-                Line = "she sews you a pocket.", Cost = GOLD_TOY_POCKET_1,
-                ApplyEffect = () => ChaosMeta.State.ToyPockets++ },
-        new() { Id = BenchIds.AccPocket1, Glyph = "👝", Label = "first accessory pocket",
-                Line = "she only has two hands. she found a third.", Cost = GOLD_ACC_POCKET_1,
-                ApplyEffect = () => ChaosMeta.State.AccessoryPockets++ },
-        new() { Id = BenchIds.StartMantra, Glyph = "◈", Label = "the starting mantra",
-                Line = "fall in holding something.", Cost = GOLD_START_MANTRA },
-        new() { Id = BenchIds.Diary, Glyph = "📓", Label = "the diary",
-                Line = "she keeps notes on what you meet down there.", Cost = GOLD_DIARY },
-        new() { Id = BenchIds.StatsPanel, Glyph = "🕰", Label = "the stats panel",
-                Line = "the numbers, if you want them.", Cost = GOLD_STATS_PANEL },
-        new() { Id = BenchIds.ToyPocket2, Glyph = "👝", Label = "second toy pocket",
-                Line = "she found room for one more.", Cost = GOLD_TOY_POCKET_2,
-                RankNeed = ChaosRank.Devoted, RevealGate = RevealIds.BenchToyPocket2,
-                ApplyEffect = () => ChaosMeta.State.ToyPockets++ },
-        new() { Id = BenchIds.AccPocket2, Glyph = "👝", Label = "second accessory pocket",
-                Line = "a fourth hand. don't ask.", Cost = GOLD_ACC_POCKET_2,
-                RankNeed = ChaosRank.Devoted, RevealGate = RevealIds.BenchAccPocket2,
-                ApplyEffect = () => ChaosMeta.State.AccessoryPockets++ },
-    };
-
-    /// <summary>Reserved hazy rows: names on the bench, nothing behind them yet.</summary>
-    private static readonly string[] ReservedRows =
-    {
-        "the clocks", "descent ledger", "payout eyes", "the fine print",
-        "fall right in", "held breath", "soft landing", "no countdown",
-        "dollhouse wallpapers", "recap frames", "a chattier companion", "the pact",
-    };
-
-    /// <summary>Claimed-reserved rows: visible only at Devoted+.</summary>
-    private static readonly string[] ClaimedReservedRows = { "daily descent", "leaderboard", "prestige" };
+    /// <summary>The bench catalogue, prices and purchase rules live in Core (<see cref="ChaosBench"/>).</summary>
+    private static IReadOnlyList<ChaosBenchItem> BenchItems => ChaosBench.Items;
+    private static string[] ReservedRows => ChaosBench.ReservedRows;
+    private static string[] ClaimedReservedRows => ChaosBench.ClaimedReservedRows;
 
     /// <summary>The full bench into the Looking Glass shelf.</summary>
     private void BuildBench()
@@ -126,7 +71,7 @@ public partial class ChaosHubWindow
 
     /// <summary>One bench row in its current state: hazy (reveal-gated), rank-locked,
     /// owned, or for sale.</summary>
-    private Border BenchRow(BenchItem item)
+    private Border BenchRow(ChaosBenchItem item)
     {
         bool revealed = item.RevealGate == null || RevealService.IsUnlocked(item.RevealGate);
         if (!revealed) return HazyRow("???", WALL_TIP);
@@ -257,32 +202,18 @@ public partial class ChaosHubWindow
         var id = (sender as Button)?.Tag?.ToString();
         if (string.IsNullOrEmpty(id)) return;
         var item = BenchItems.FirstOrDefault(i => i.Id == id);
-        if (item == null || ChaosMeta.State.BenchPurchases.Contains(item.Id)) return;
-        if (item.RankNeed.HasValue && !ChaosMeta.AtLeast(item.RankNeed.Value)) return;
-        if (item.RevealGate != null && !RevealService.IsUnlocked(item.RevealGate)) return;
+        if (item == null) return;
 
-        bool paid = ChaosMeta.TrySpendGold(item.Cost);
-        if (!paid)
+        var bought = ChaosBench.TryBuy(item.Id);   // gold + purchase + effect, one save
+        if (bought == ChaosBenchBuy.Denied)
         {
-            // THE GIFT: the very first short buy on the first toy pocket, she covers it. Once.
-            if (item.Id == BenchIds.ToyPocket1 && !ChaosMeta.State.GiftGiven)
-            {
-                ChaosMeta.State.GiftGiven = true;
-                ChaosMeta.State.Gold = 0;
-                paid = true;
-                try { App.Bark?.NotifyChaosGiftGiven(); } catch { }
-            }
-            else
-            {
+            // Owned / rank-short / hazy rows are silent, as before; a short buy is denied.
+            if (!ChaosBench.IsOwned(item) && !ChaosBench.IsRankShort(item) && !ChaosBench.IsHazy(item))
                 ChaosSfx.Play("ui_denied", 0.45f);
-                return;
-            }
+            return;
         }
+        if (bought == ChaosBenchBuy.Gift) { try { App.Bark?.NotifyChaosGiftGiven(); } catch { } }
 
-        ChaosMeta.State.BenchPurchases.Add(item.Id);
-        try { item.ApplyEffect?.Invoke(); }
-        catch (Exception ex) { App.Logger?.Warning("Bench effect {Id} failed ({E})", item.Id, ex.Message); }
-        ChaosMeta.Save();
         // Pocket buys get their cue from the unlock card below — no doubled sting.
         bool cardFollows = item.Id is BenchIds.ToyPocket1 or BenchIds.ToyPocket2
                                    or BenchIds.AccPocket1 or BenchIds.AccPocket2;

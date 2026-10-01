@@ -295,7 +295,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
-                    Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                    Platform.ExternalOpener.Open(dir);
             }
             catch (Exception ex) { Log.Warning(ex, "MediaHistoryWindow: failed to open folder for {Path}", path); }
         }
@@ -307,7 +307,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (_mediaList.SelectedItem is not MediaHistoryRow row) return;
             if (string.IsNullOrEmpty(row.FilePath) || !File.Exists(row.FilePath)) return;
-            try { Process.Start(new ProcessStartInfo { FileName = row.FilePath, UseShellExecute = true }); }
+            try { Platform.ExternalOpener.Open(row.FilePath); }
             catch (Exception ex) { Log.Warning(ex, "MediaHistoryWindow: failed to open {Path}", row.FilePath); }
         }
 

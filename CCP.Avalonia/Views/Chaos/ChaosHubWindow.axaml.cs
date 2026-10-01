@@ -26,25 +26,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///
     /// PORTED from ConditioningControlPanel/Chaos/ChaosHubWindow.xaml.cs. What changed and why:
     ///
-    ///  - Balances, rank and lifetime stats read the active slot via Core ChaosMetaStore/ChaosRanks.
-    ///    Every shelf, tile, mantra, diary entry and bench row is built from the sample data at
-    ///    the bottom of this file instead of <c>ChaosMeta</c> / <c>ChaosUpgrades</c> /
-    ///    <c>ChaosLifetimeBoons</c> / <c>ChaosBoonPool</c> / <c>ChaosBubbleVariants</c> /
-    ///    <c>ChaosArt</c>, which are WPF-head services. The samples deliberately hit EVERY visual
-    ///    state each builder branches on (equipped / owned / locked / rank-locked / empty;
-    ///    trained-on / trained-off / untrained; seen / unseen / sin; sewn / for-sale / rank-short
-    ///    / hazy), so the render proves the builders rather than one branch of them.
-    ///    ponytail: needs the Chaos services. Every one of them is under
-    ///    ConditioningControlPanel/Services/Chaos/ - ChaosUpgrades.cs (<c>ChaosMeta</c>),
-    ///    ChaosLifetimeBoons.cs, ChaosBubbleVariants.cs,
-    ///    ChaosLessons.cs, ChaosModeService.cs, ChaosRevealService.cs - except <c>ChaosArt</c>,
-    ///    which is ConditioningControlPanel/Services/Chaos/ChaosArt.cs but returns
-    ///    <c>System.Windows.Media.ImageSource</c>, so only its path half can ever move. The
-    ///    per-member notes below name the symbol; this is where to find it.
+    ///  - Balances, rank, stats, habits, toys, accessories, charms and her bench read the active
+    ///    slot through Core (<c>ChaosMeta</c>, <c>ChaosUpgrades</c>, <c>ChaosLifetimeBoons</c>,
+    ///    <c>ChaosBench</c>, <c>RevealService</c>), and train / unlock / deepen / equip / habit
+    ///    switch / bench buy spend and save it with WPF's prices and gates (see <c>Shelf</c>).
+    ///    The constructor reloads the save via <c>ChaosMeta.Init</c>, except under
+    ///    <c>RenderProof.Rendering</c>, where it draws the in-memory state and writes nothing.
+    ///    Still sample data: mantras and the codex (ChaosBoonPool / ChaosBubbleVariants are
+    ///    run-engine, head-side). ponytail: <c>ChaosArt</c> returns
+    ///    <c>System.Windows.Media.ImageSource</c>, so only its path half can ever move; unlock
+    ///    and capstone cards, ChaosSfx cues and lesson/script-locked row dressing are not ported.
     ///  - The four partials the WPF class spans (Bench / Reveals / Lessons / Debug) are NOT in
-    ///    this layer. <c>BuildBench</c> is inlined here because <c>ImprovementsHost</c> must not
-    ///    render empty; the reveal framework, the lesson gates and the CCP_CHAOS_DEBUG strip are
-    ///    dropped, so every pill and header renders in its revealed state.
+    ///    this layer. <c>BuildBench</c> is inlined here over Core <c>ChaosBench</c>; reveal
+    ///    flashes, the lesson panel and the CCP_CHAOS_DEBUG strip are dropped, so pills and
+    ///    headers render in their revealed state.
     ///  - The whole Skia menu scene (fog, per-frame glint masks, blooms, the crossfading
     ///    flipbook) and the NAudio menu music are gone: no SkiaSharp and no NAudio on this head,
     ///    and a view layer may not add a package. <c>SetupMenuMotion</c>'s breathing/wobble/glow
@@ -106,7 +101,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         public ChaosHubWindow()
         {
-            Live = ChaosMetaStore.Load();
+            // Init runs WPF's on-load refunds/sanitize, which can save. A render draws the
+            // in-memory state instead, so --render-all never writes a real profile.
+            if (!RenderProof.Rendering) ChaosMeta.Init();
             AvaloniaXamlLoader.Load(this);
 
             _dollhouseView = Part<Grid>("DollhouseView");
@@ -372,19 +369,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// boon level-ups — the same gates the shelf buttons enforce.</summary>
         private static int CountAffordableToybox()
         {
-            int n = Sample.Habits.Count(u => !u.Owned && Live.Sparks >= u.Cost);
-            foreach (var b in Sample.Boons)
+            // WPF xaml.cs:249, same gates the shelf buttons enforce (lesson, rank, her script).
+            int n = 0;
+            foreach (var u in ChaosUpgrades.All)
+                if (!ChaosMeta.IsOwned(u.Id) && !ChaosMeta.IsPurchaseRankLocked(u.Id)
+                    && !ChaosLessons.IsLessonBlocked(u.Id) && ChaosMeta.CanAfford(u.Id)) n++;
+            foreach (var b in ChaosLifetimeBoons.LegacyAll)
             {
-                if (b.RankLocked) continue;
-                if (b.Level <= 0) { if (Live.Sparks >= b.UnlockCost) n++; }
-                else if (b.Level < b.MaxLevel && Live.Sparks >= b.UpgradeCost) n++;
+                int level = ChaosMeta.BoonLevel(b.Id);
+                if (level <= 0)
+                {
+                    if (!ChaosMeta.IsBoonRankLocked(b.Id) && !ChaosMeta.IsAccessoryScriptLocked(b.Id)
+                        && !ChaosLessons.IsLessonBlocked(b.Id) && ChaosMeta.CanAffordUnlock(b.Id)) n++;
+                }
+                else if (level < b.MaxLevel && !ChaosMeta.IsCapstonePurchaseRankLocked(b.Id)
+                         && ChaosMeta.CanAffordUpgrade(b.Id)) n++;
             }
             return n;
         }
 
         /// <summary>Gold purchases buyable this instant at her bench (rank + reveal gated).</summary>
         private static int CountAffordableBench() =>
-            Sample.Bench.Count(i => !i.Owned && !i.RankShort && !i.Hazy && Live.Gold >= i.Cost);
+            ChaosBench.Items.Count(i => !ChaosBench.IsOwned(i) && !ChaosBench.IsRankShort(i) && !ChaosBench.IsHazy(i) && Live.Gold >= i.Cost);
 
         /// <summary>Roll a top-bar balance from its last shown value to the new one (~500ms) so
         /// spending visibly *costs* — first paint just snaps. WPF layered a soft tick cue under
@@ -462,8 +468,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private void BuildHabits()
         {
             _habitsHost.Children.Clear();
-            foreach (var u in Sample.Habits) _habitsHost.Children.Add(BuildUpgradeRow(u));
-            foreach (var b in Sample.Charms) _habitsHost.Children.Add(BuildLifetimeBoonRow(b, habitVoice: true));
+            foreach (var u in Shelf.Habits) _habitsHost.Children.Add(BuildUpgradeRow(u));
+            foreach (var b in Shelf.Charms) _habitsHost.Children.Add(BuildLifetimeBoonRow(b, habitVoice: true));
         }
 
         /// <summary>One habit card, in the same dress as the boon rows (72px art, big card,
@@ -567,16 +573,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             }
         };
 
-        // ponytail: needs ChaosMeta.TryPurchase + the unlock-card queue, wired when they move to
-        // Core. Until then a buy is a no-op that says so rather than silently spending nothing.
-        private void Buy_Click(object? sender, RoutedEventArgs e) =>
-            Log.Debug("ChaosHub: train {Id} requested; no ChaosMeta on this head yet", (sender as Button)?.Tag);
+        /// <summary>WPF xaml.cs:503. ponytail: the unlock card, reveal flashes and ChaosSfx cues
+        /// are head services not on this head yet; the purchase itself is real.</summary>
+        private void Buy_Click(object? sender, RoutedEventArgs e)
+        {
+            var id = (sender as Button)?.Tag?.ToString();
+            if (string.IsNullOrEmpty(id)) return;
+            if (!ChaosMeta.TryPurchase(id!)) { Log.Debug("ChaosHub: train {Id} denied", id); return; }
+            if (id == "extreme_tier") ApplyExtremeGate();
+            BuildHabits();
+            BuildLoadoutTiles();
+            RefreshTopBar();
+            RefreshStats();
+            RevealService.Sync("purchase");
+        }
 
         private void HabitToggle_Click(object? sender, RoutedEventArgs e)
         {
             var id = (sender as Button)?.Tag?.ToString();
             if (string.IsNullOrEmpty(id)) return;
-            Sample.ToggleHabit(id!);
+            Shelf.ToggleHabit(id!);
             BuildHabits();
             BuildLoadoutTiles();
         }
@@ -593,7 +609,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private void BuildBoonShelf(Panel host, string category)
         {
             host.Children.Clear();
-            var boons = Sample.Boons.Where(b => b.Category == category).ToList();
+            var boons = Shelf.Boons.Where(b => b.Category == category).ToList();
             if (boons.Count == 0)
             {
                 host.Children.Add(new Border
@@ -707,7 +723,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 // Equip semantics instead of an ambiguous ON/OFF: the badge shows the STATE,
                 // the button is always the ACTION. Pockets cap Toys/Accessories at 2 each.
                 if (active) right.Children.Add(StateBadge(habitVoice ? "ON ✓" : "EQUIPPED ✓"));
-                bool pocketFree = active || Sample.HasFreePocket(b.Category);
+                bool pocketFree = active || Shelf.HasFreePocket(b.Category);
                 var equip = StepperButton(
                     active ? (habitVoice ? "switch off" : "Unequip")
                            : pocketFree ? (habitVoice ? "switch on" : "Equip") : "pockets full",
@@ -795,16 +811,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         {
             var id = (sender as Button)?.Tag?.ToString();
             if (string.IsNullOrEmpty(id)) return;
-            Sample.ToggleBoon(id!);
+            Shelf.ToggleBoon(id!);
             AfterBoonChange();
         }
 
-        // ponytail: needs ChaosMeta.TryUnlockBoon / TryUpgradeBoon, wired when they move to Core.
-        private void BoonUnlock_Click(object? sender, RoutedEventArgs e) =>
-            Log.Debug("ChaosHub: unlock {Id} requested; no ChaosMeta on this head yet", (sender as Button)?.Tag);
+        /// <summary>WPF xaml.cs:832/846 (unlock / deepen). ponytail: unlock + capstone cards and
+        /// ChaosSfx cues are head services not on this head yet.</summary>
+        private void BoonUnlock_Click(object? sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.Tag is string id && ChaosMeta.TryUnlockBoon(id)) AfterBoonChange();
+        }
 
-        private void BoonUpgrade_Click(object? sender, RoutedEventArgs e) =>
-            Log.Debug("ChaosHub: deepen {Id} requested; no ChaosMeta on this head yet", (sender as Button)?.Tag);
+        private void BoonUpgrade_Click(object? sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.Tag is string id && ChaosMeta.TryUpgradeBoon(id)) AfterBoonChange();
+        }
+
+        /// <summary>WPF Bench.cs BenchBuy_Click: Core prices, gates, the gift and the save.</summary>
+        private void BenchBuy(string id)
+        {
+            if (ChaosBench.TryBuy(id) == ChaosBenchBuy.Denied) return;
+            RevealService.Sync("purchase");
+            BuildBench();
+            if (_herCornerCard.IsVisible) BuildHerCorner();
+            BuildLifetimeBoons();
+            BuildLoadoutTiles();
+            RefreshTopBar();
+            RefreshStats();
+        }
 
         private void AfterBoonChange()
         {
@@ -842,20 +876,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             // ---- collections ----
             FillCategoryTiles(_tilesAccessories, "Accessory", padTo: 8);
             FillCategoryTiles(_tilesSkills, "Skill", padTo: 8);
-            _txtAccCount.Text = $"{Sample.EquippedCountIn("Accessory")}/{Sample.SlotsFor("Accessory")} equipped";
-            _txtSkillCount.Text = $"{Sample.EquippedCountIn("Skill")}/{Sample.SlotsFor("Skill")} equipped";
+            _txtAccCount.Text = $"{Shelf.EquippedCountIn("Accessory")}/{Shelf.SlotsFor("Accessory")} equipped";
+            _txtSkillCount.Text = $"{Shelf.EquippedCountIn("Skill")}/{Shelf.SlotsFor("Skill")} equipped";
 
             // ---- habits 4x4 (trained = on/off toggle; click an untrained one to go train it) ----
             _tilesHabits.Children.Clear();
             int trained = 0, switchedOn = 0;
-            foreach (var u in Sample.Habits)
+            foreach (var u in Shelf.Habits)
             {
                 string id = u.Id;
                 bool owned = u.Owned, on = owned && u.On;
                 if (owned) trained++;
                 if (on) switchedOn++;
                 Action onClick = owned
-                    ? () => { Sample.ToggleHabit(id); BuildHabits(); BuildLoadoutTiles(); }
+                    ? () => { Shelf.ToggleHabit(id); BuildHabits(); BuildLoadoutTiles(); }
                     : () => JumpToTab("enhance");
                 _tilesHabits.Children.Add(LoadoutTile(u.Glyph, u.Name, u.Desc,
                     on ? "click to switch off" : owned ? "click to switch on" : $"train for ✦{u.Cost} in the Toybox",
@@ -866,14 +900,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     flavor: u.Flavor));
             }
             // Charms live with the habits: leveled, always-on once worn, toggled like a habit.
-            foreach (var b in Sample.Charms)
+            foreach (var b in Shelf.Charms)
             {
                 string bid = b.Id;
                 bool unlocked = b.Level >= 1, active = b.Active, charmRankLocked = b.RankLocked;
                 if (unlocked) trained++;
                 if (active) switchedOn++;
                 Action onClick = unlocked
-                    ? () => { Sample.ToggleBoon(bid); BuildHabits(); BuildLoadoutTiles(); }
+                    ? () => { Shelf.ToggleBoon(bid); BuildHabits(); BuildLoadoutTiles(); }
                     : () => JumpToTab("enhance");
                 _tilesHabits.Children.Add(LoadoutTile(charmRankLocked ? "?" : b.Glyph,
                     charmRankLocked ? "? ? ?" : unlocked ? $"{b.Name} · L{b.Level}" : b.Name,
@@ -886,7 +920,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     cornerBadge: active ? "✓" : null,
                     flavor: charmRankLocked ? null : b.Flavor));
             }
-            int shown = Sample.Habits.Count + Sample.Charms.Count;
+            int shown = Shelf.Habits.Count + Shelf.Charms.Count;
             int target = Math.Max(16, ((shown + 3) / 4) * 4);
             for (int i = shown; i < target; i++)
                 _tilesHabits.Children.Add(LoadoutTile("+", "a habit not yet formed",
@@ -899,7 +933,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// free slots. Null when the category has no pockets sewn (and nothing stale equipped).</summary>
         private Control? PocketGroup(string label, string category)
         {
-            if (Sample.SlotsFor(category) <= 0 && Sample.EquippedCountIn(category) == 0) return null;
+            if (Shelf.SlotsFor(category) <= 0 && Shelf.EquippedCountIn(category) == 0) return null;
             var col = new StackPanel { Margin = new Thickness(0, 0, 30, 0) };
             col.Children.Add(new TextBlock
             {
@@ -908,18 +942,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 Margin = new Thickness(0, 0, 0, 6)
             });
             var row = new StackPanel { Orientation = Orientation.Horizontal };
-            var equipped = Sample.Boons.Where(b => b.Category == category && b.Active).ToList();
+            var equipped = Shelf.Boons.Where(b => b.Category == category && b.Active).ToList();
             foreach (var b in equipped)
             {
                 string id = b.Id;
                 var cell = LoadoutTile(b.Glyph, $"{b.Name} · L{b.Level}", b.Desc,
                     "click to unequip", BoonAccent, TileState.Equipped,
-                    () => { Sample.ToggleBoon(id); AfterBoonChange(); },
+                    () => { Shelf.ToggleBoon(id); AfterBoonChange(); },
                     size: 114, flavor: b.Flavor);
                 cell.Margin = new Thickness(0, 0, 24, 0);
                 row.Children.Add(cell);
             }
-            for (int i = equipped.Count; i < Sample.SlotsFor(category); i++)
+            for (int i = equipped.Count; i < Shelf.SlotsFor(category); i++)
             {
                 var cell = LoadoutTile("+", $"empty {label.ToLowerInvariant()} pocket",
                     "pick one from the shelf below, or go shopping in the Toybox.", null,
@@ -937,14 +971,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private void FillCategoryTiles(Panel host, string category, int padTo)
         {
             host.Children.Clear();
-            var boons = Sample.Boons.Where(b => b.Category == category).ToList();
+            var boons = Shelf.Boons.Where(b => b.Category == category).ToList();
             foreach (var b in boons)
             {
                 string id = b.Id;
                 bool unlocked = b.Level >= 1, active = b.Active, rankLocked = b.RankLocked;
                 var state = active ? TileState.Equipped : unlocked ? TileState.Owned : TileState.Locked;
-                Action onClick = active ? () => { Sample.ToggleBoon(id); AfterBoonChange(); }
-                    : unlocked ? () => { Sample.EquipSwapping(id, category); AfterBoonChange(); }
+                Action onClick = active ? () => { Shelf.ToggleBoon(id); AfterBoonChange(); }
+                    : unlocked ? () => { Shelf.EquipSwapping(id, category); AfterBoonChange(); }
                     : () => JumpToTab("enhance");
                 // Rank-locked → mystery: "???" everywhere, the depth gate instead of a price.
                 string extra = active ? "click to unequip"
@@ -1073,8 +1107,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         {
             _improvementsHost.Children.Clear();
             _improvementsHost.Children.Add(GoldBalanceLine());
-            foreach (var item in Sample.Bench) _improvementsHost.Children.Add(BenchRow(item));
-            foreach (var name in Sample.ReservedRows) _improvementsHost.Children.Add(HazyRow(name, WallTip));
+            foreach (var item in ChaosBench.Items) _improvementsHost.Children.Add(BenchRow(item));
+            foreach (var name in ChaosBench.ReservedRows) _improvementsHost.Children.Add(HazyRow(name, WallTip));
+            if (ChaosMeta.AtLeast(ChaosRank.Devoted))
+                foreach (var name in ChaosBench.ClaimedReservedRows) _improvementsHost.Children.Add(HazyRow(name, BottomTip));
         }
 
         /// <summary>Her corner inside the Toybox: just the two first-pocket rows, sold early.</summary>
@@ -1082,12 +1118,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         {
             _herCornerHost.Children.Clear();
             _herCornerHost.Children.Add(GoldBalanceLine());
-            foreach (var item in Sample.Bench.Take(2)) _herCornerHost.Children.Add(BenchRow(item));
-            _herCornerCard.IsVisible = true;   // WPF gates this on RevealIds.HerCorner
+            foreach (var item in ChaosBench.Items.Take(2)) _herCornerHost.Children.Add(BenchRow(item));
+            // WPF (Reveals.cs:91) gates the card on RevealIds.HerCorner, retired in the v3 gold
+            // cutover, so it never opens on a real save.
+            _herCornerCard.IsVisible = RevealService.IsUnlocked(RevealIds.HerCorner);
         }
 
         private const string WallTip = "not yet. she hasn't decided what it costs.";
         private const string DeeperTip = "she'll sell this to someone deeper.";
+        private const string BottomTip = "the bottom is not where you think it is.";
 
         private static TextBlock GoldBalanceLine() => new()
         {
@@ -1099,9 +1138,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         /// <summary>One bench row in its current state: hazy (reveal-gated), rank-locked,
         /// owned, or for sale.</summary>
-        private Border BenchRow(SampleBench item)
+        private Border BenchRow(ChaosBenchItem item)
         {
-            if (item.Hazy) return HazyRow("???", WallTip);
+            if (ChaosBench.IsHazy(item)) return HazyRow("???", WallTip);
+            bool owned = ChaosBench.IsOwned(item), rankShort = ChaosBench.IsRankShort(item);
 
             var goldColor = Color.FromRgb(0xE8, 0xB4, 0x43);
             var grid = new Grid();
@@ -1112,7 +1152,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             var glyph = new TextBlock
             {
                 Text = item.Glyph, FontSize = 16, VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 10, 0), Opacity = item.Owned ? 1.0 : 0.7,
+                Margin = new Thickness(0, 0, 10, 0), Opacity = owned ? 1.0 : 0.7,
             };
             Grid.SetColumn(glyph, 0);
             grid.Children.Add(glyph);
@@ -1121,7 +1161,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             mid.Children.Add(new TextBlock
             {
                 Text = item.Label,
-                Foreground = item.Owned ? White : new SolidColorBrush(Color.FromRgb(0xC8, 0xC8, 0xE0)),
+                Foreground = owned ? White : new SolidColorBrush(Color.FromRgb(0xC8, 0xC8, 0xE0)),
                 FontSize = 12, FontWeight = FontWeight.SemiBold,
             });
             mid.Children.Add(new TextBlock
@@ -1134,7 +1174,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             grid.Children.Add(mid);
 
             Control right;
-            if (item.Owned)
+            if (owned)
                 right = new TextBlock
                 {
                     Text = "sewn ✓",
@@ -1142,7 +1182,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     FontSize = 11, FontWeight = FontWeight.Bold,
                     VerticalAlignment = VerticalAlignment.Center,
                 };
-            else if (item.RankShort)
+            else if (rankShort)
             {
                 right = new TextBlock { Text = "🔒", FontSize = 13, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center };
                 ToolTip.SetTip(right, DeeperTip);
@@ -1165,8 +1205,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     CornerRadius = new CornerRadius(9),
                     VerticalAlignment = VerticalAlignment.Center,
                 };
-                // ponytail: needs ChaosMeta bench purchases, wired when they move to Core.
-                buy.Click += (_, _) => Log.Debug("ChaosHub: bench buy {Id} requested; no ChaosMeta on this head yet", item.Id);
+                buy.Click += (_, _) => BenchBuy(item.Id);
                 right = buy;
             }
             Grid.SetColumn(right, 2);
@@ -1176,7 +1215,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             {
                 Child = grid,
                 Background = RowBg,
-                BorderBrush = new SolidColorBrush(Color.FromArgb(item.Owned ? (byte)70 : (byte)30, 0xE8, 0xB4, 0x43)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(owned ? (byte)70 : (byte)30, 0xE8, 0xB4, 0x43)),
                 BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(10),
@@ -1492,7 +1531,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// <summary>Lock/unlock the Extreme difficulty pill from meta state; fall back off it when locked.</summary>
         private void ApplyExtremeGate()
         {
-            bool unlocked = Sample.ExtremeUnlocked;
+            bool unlocked = Shelf.ExtremeUnlocked;
             _segExtreme.IsEnabled = unlocked;
             _segExtreme.Content = unlocked ? "Inescapable" : "Inescapable 🔒";
             if (!unlocked)
@@ -1504,11 +1543,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             ApplyDifficultyPillTips(extremeUnlocked: unlocked);
             if (!unlocked && _segExtreme.IsChecked == true)
             {
-                // WPF's gate reads the real ChaosMeta, so its clamp IS the truth and persisting it
-                // is correct. Here Sample.ExtremeUnlocked is a hard-false stand-in, so the clamp is
-                // a guess about a save this head cannot read: it must show on screen and must never
-                // be written over a real saved "Extreme". Same mechanism WPF uses for its reveal
-                // clamps (_diffAutoClamped); a real click on a pill clears it.
+                // Shelf.ExtremeUnlocked now reads the real ChaosMeta, as WPF's gate does. The clamp
+                // still shows on screen only and is never written over a saved "Extreme" (same
+                // mechanism WPF uses for its reveal clamps, _diffAutoClamped); a real click clears it.
                 SetSegment(_grpDifficulty, "Hard");
                 _diffAutoClamped = true;
             }
@@ -1642,7 +1679,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             var diffs = new List<string> { "Easy" };
             if (_segMedium.IsVisible) diffs.Add("Medium");
             if (_segHard.IsVisible) diffs.Add("Hard");
-            if (Sample.ExtremeUnlocked) diffs.Add("Extreme");
+            if (Shelf.ExtremeUnlocked) diffs.Add("Extreme");
             SetSegment(_grpDifficulty, diffs[_rng.Next(diffs.Count)]);
             SetSegment(_grpLength, new[] { "120", "180", "300" }[_rng.Next(3)]);
             SetSegment(_grpMotion, new[] { "Mixed", "FloatUp", "RainDown", "RoamBounce" }[_rng.Next(4)]);
@@ -1954,10 +1991,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             foreach (var t in grp.Children.OfType<ToggleButton>()) t.IsChecked = t.Tag?.ToString() == tag;
         }
 
-        /// <summary>The active save slot's meta (WPF: <c>ChaosMeta.State</c>), re-read from Core's
-        /// <see cref="ChaosMetaStore"/> each time the hub opens. Balances, rank and lifetime stats
-        /// are real; the shelves below are still <see cref="Sample"/>.</summary>
-        internal static ChaosMetaState Live = new();
+        /// <summary>The active save slot's meta: Core's <see cref="ChaosMeta.State"/>, reloaded
+        /// (refunds + pocket sanitize, as WPF's startup Init) each time the hub opens.</summary>
+        internal static ChaosMetaState Live => ChaosMeta.State;
 
         private static string LiveRank => ChaosRanks.Name(ChaosRanks.For(Live.RunsCompleted));
 
@@ -1968,9 +2004,66 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             ChaosRanks.RankSpecifics(Enum.TryParse<ChaosRank>(rank, true, out var r) ? r : ChaosRank.Curious,
                                      Live.RunsCompleted);
 
+        // ============================ the real shelves ============================
+        /// <summary>Habits, toys, accessories and charms of the active save, projected from Core's
+        /// <see cref="ChaosMeta"/> into the row records the builders take; every mutation goes
+        /// through ChaosMeta, which prices, gates and persists exactly as the WPF hub does.</summary>
+        private static class Shelf
+        {
+            // WPF ChaosHubWindow.xaml.cs:365 "happy path" starter view (after run 1, before run 2).
+            private static readonly string[] StarterShelfIds = { "start_resistance", "blank_eyes", "slow_fuses" };
+
+            private static bool OnShelfNow(string id) =>
+                ChaosMeta.State.RunsCompleted >= 2 || Array.IndexOf(StarterShelfIds, id) >= 0;
+
+            public static bool ExtremeUnlocked => ChaosMeta.State.ExtremeUnlocked;
+
+            public static List<SampleHabit> Habits => ChaosUpgrades.All.Where(u => OnShelfNow(u.Id))
+                .Select(u => new SampleHabit(u.Id, u.Glyph, u.Name, u.Desc, u.Flavor, u.Branch.ToString(), u.Cost,
+                                             ChaosMeta.IsOwned(u.Id), ChaosMeta.IsUpgradeActive(u.Id))).ToList();
+
+            public static List<SampleBoon> Boons => ChaosLifetimeBoons.LegacyAll
+                .Where(b => b.Category != ChaosBoonCategory.Utility).Select(Row).ToList();
+
+            public static List<SampleBoon> Charms => ChaosLifetimeBoons.LegacyInCategory(ChaosBoonCategory.Utility)
+                .Where(b => OnShelfNow(b.Id)).Select(Row).ToList();
+
+            private static SampleBoon Row(ChaosLifetimeBoon b)
+            {
+                int level = ChaosMeta.BoonLevel(b.Id);
+                // WPF xaml.cs:669 formats the label with the value at the current level.
+                string value = level >= 1 ? string.Format(b.ValueLabel, b.ValueAt(level)) : "";
+                return new SampleBoon(b.Id, b.Glyph, b.Name, b.Desc, b.Flavor, b.Category.ToString(), value,
+                    level, b.MaxLevel, ChaosMeta.IsBoonActive(b.Id), b.UnlockCost, ChaosMeta.NextUpgradeCostOf(b.Id) ?? 0,
+                    ChaosMeta.IsBoonRankLocked(b.Id), b.RankFloor.ToString(), b.CapstoneDesc, b.IsActiveUse, b.UseCooldownSec);
+            }
+
+            private static ChaosBoonCategory Cat(string category) =>
+                Enum.TryParse<ChaosBoonCategory>(category, out var c) ? c : ChaosBoonCategory.Utility;
+
+            public static int SlotsFor(string category) => ChaosMeta.SlotsFor(Cat(category));
+            public static int EquippedCountIn(string category) => ChaosMeta.EquippedCountIn(Cat(category));
+            public static bool HasFreePocket(string category) => ChaosMeta.HasFreePocket(Cat(category));
+
+            public static void ToggleHabit(string id) => ChaosMeta.SetUpgradeActive(id, !ChaosMeta.IsUpgradeActive(id));
+            public static void ToggleBoon(string id) => ChaosMeta.SetBoonActive(id, !ChaosMeta.IsBoonActive(id));
+
+            /// <summary>WPF xaml.cs:1127: equip into a full pocket by swapping the occupant out.</summary>
+            public static void EquipSwapping(string id, string category)
+            {
+                var cat = Cat(category);
+                if (!ChaosMeta.HasFreePocket(cat))
+                {
+                    var current = ChaosLifetimeBoons.LegacyInCategory(cat).FirstOrDefault(b => ChaosMeta.IsBoonActive(b.Id));
+                    if (current != null) ChaosMeta.SetBoonActive(current.Id, false);
+                }
+                ChaosMeta.SetBoonActive(id, true);
+            }
+        }
+
         // ============================ sample data ============================
-        // Everything below stands in for the Chaos services. It is deliberately shaped to hit
-        // every branch each builder above can take, so the render proves all of them at once.
+        // Mantras and the codex still stand in for head-side services (ChaosBoonPool and the
+        // bubble variants); the row records above are shared with the real shelves.
 
         private sealed record SampleHabit(string Id, string Glyph, string Name, string Desc, string Flavor,
                                           string Branch, int Cost, bool Owned, bool On);
@@ -1985,45 +2078,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         private sealed record SampleCodexEntry(string Name, string Desc, string Glyph, Color Accent, bool Seen);
 
-        private sealed record SampleBench(string Id, string Glyph, string Label, string Line, int Cost,
-                                          bool Owned, bool RankShort, bool Hazy);
-
-        /// <summary>A played save partway down: two pockets sewn, one toy worn, one accessory
-        /// still on the shelf, one habit trained and switched on, one trained and off, one
-        /// untrained, and one charm behind the rank wall.</summary>
+        /// <summary>Mantras + codex stand-ins. ponytail: needs ChaosBoonPool / ChaosBubbleVariants
+        /// (head-side, run engine), wired when they move to Core.</summary>
         private static class Sample
         {
-            public static readonly bool ExtremeUnlocked = false;
-
             public static string? StartMantra = "soft_focus";
-
-            public static readonly List<SampleHabit> Habits = new()
-            {
-                new("start_resistance", "🛡", "It would never work on me...", "fall in with 20 resistance already spent.", "you said that last time, too.", "Control", 120, true, true),
-                new("blank_eyes", "👁", "Blank Eyes", "trances hold ~15% longer before they let go.", "nobody's home. that's the point.", "Depth", 180, true, false),
-                new("slow_fuses", "🕯", "Slow Fuses", "live bubbles take an extra half second to go off.", "she likes to watch you decide.", "Control", 260, false, false),
-            };
-
-            public static readonly List<SampleBoon> Boons = new()
-            {
-                new("the_spanker", "🪄", "The Spanker", "swat the white rabbit into the field instead of chasing it.",
-                    "she calls it a training aid.", "Skill", "3 uses per descent", 2, 3, true, 400, 750, false, "", "the field flinches when you raise it.", true, 12),
-                new("the_ripple", "🌊", "The Ripple", "your wave reaches a little further from the cursor.",
-                    "one good push and the whole room moves.", "Skill", "+18% radius", 1, 3, false, 500, 900, false, "", "", false, 0),
-                new("deep_pockets", "👛", "Deep Pockets", "treats pay 10% more gold.",
-                    "", "Accessory", "+10% gold", 1, 3, true, 300, 600, false, "", "", false, 0),
-                new("the_collar", "⛓", "The Collar", "focus refunds on a clean snap.",
-                    "it isn't locked. it doesn't need to be.", "Accessory", "+8 focus", 0, 3, false, 850, 0, false, "", "", false, 0),
-                new("porcelain_mask", "🎭", "???", "", "", "Accessory", "", 0, 3, false, 0, 0, true, "Devoted", "", false, 0),
-            };
-
-            /// <summary>Utility charms — they train on the Habits shelf, not the toy shelves.</summary>
-            public static readonly List<SampleBoon> Charms = new()
-            {
-                new("rabbits_foot", "🍀", "Rabbit's Foot", "lucky bubbles surface a little more often.",
-                    "worn smooth already.", "Utility", "+6% lucky rate", 2, 3, true, 250, 500, false, "", "", false, 0),
-                new("the_pact", "🖋", "???", "", "", "Utility", "", 0, 3, false, 0, 0, true, "Entranced", "", false, 0),
-            };
 
             public static readonly List<SampleMantra> Mantras = new()
             {
@@ -2046,54 +2105,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 new("The Bound", "it hunts on relentless.", "⛓", Color.FromRgb(0xFF, 0x69, 0xB4), false),
                 new("The Brittle", "one touch and it shatters into three.", "◇", Color.FromRgb(0xD9, 0xEF, 0xFF), false),
             };
-
-            public static readonly List<SampleBench> Bench = new()
-            {
-                new("toy_pocket_1", "👝", "first toy pocket", "she sews you a pocket.", 50, true, false, false),
-                new("acc_pocket_1", "👝", "first accessory pocket", "she only has two hands. she found a third.", 150, true, false, false),
-                new("start_mantra", "◈", "the starting mantra", "fall in holding something.", 200, false, false, false),
-                new("diary", "📓", "the diary", "she keeps notes on what you meet down there.", 150, false, false, false),
-                new("stats_panel", "🕰", "the stats panel", "the numbers, if you want them.", 100, false, false, false),
-                new("toy_pocket_2", "👝", "second toy pocket", "she found room for one more.", 2000, false, true, false),
-                new("acc_pocket_2", "👝", "second accessory pocket", "a fourth hand. don't ask.", 2500, false, false, true),
-            };
-
-            /// <summary>Reserved hazy rows: names on the bench, nothing behind them yet.</summary>
-            public static readonly string[] ReservedRows =
-            {
-                "the clocks", "descent ledger", "payout eyes", "the fine print",
-                "fall right in", "held breath", "soft landing", "no countdown",
-            };
-
-            public static int SlotsFor(string category) => category == "Skill" ? 1 : 1;
-
-            public static int EquippedCountIn(string category) => Boons.Count(b => b.Category == category && b.Active);
-
-            public static bool HasFreePocket(string category) => EquippedCountIn(category) < SlotsFor(category);
-
-            public static void ToggleHabit(string id)
-            {
-                for (int i = 0; i < Habits.Count; i++)
-                    if (Habits[i].Id == id) Habits[i] = Habits[i] with { On = !Habits[i].On };
-            }
-
-            public static void ToggleBoon(string id)
-            {
-                for (int i = 0; i < Boons.Count; i++)
-                    if (Boons[i].Id == id) Boons[i] = Boons[i] with { Active = !Boons[i].Active };
-                for (int i = 0; i < Charms.Count; i++)
-                    if (Charms[i].Id == id) Charms[i] = Charms[i] with { Active = !Charms[i].Active };
-            }
-
-            /// <summary>Equip into a full 1-slot pocket by quietly swapping the occupant out.</summary>
-            public static void EquipSwapping(string id, string category)
-            {
-                if (!HasFreePocket(category))
-                    for (int i = 0; i < Boons.Count; i++)
-                        if (Boons[i].Category == category && Boons[i].Active) Boons[i] = Boons[i] with { Active = false };
-                for (int i = 0; i < Boons.Count; i++)
-                    if (Boons[i].Id == id) Boons[i] = Boons[i] with { Active = true };
-            }
         }
     }
 }

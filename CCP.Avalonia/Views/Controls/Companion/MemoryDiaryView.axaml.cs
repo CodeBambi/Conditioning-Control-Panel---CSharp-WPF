@@ -389,7 +389,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             {
                 var dir = System.IO.Path.Combine(CorePaths.UserData, "companion");
                 System.IO.Directory.CreateDirectory(dir);
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                Platform.ExternalOpener.Open(dir);
             }
             catch (Exception ex) { Serilog.Log.Debug("open memory folder failed: {E}", ex.Message); }
         });

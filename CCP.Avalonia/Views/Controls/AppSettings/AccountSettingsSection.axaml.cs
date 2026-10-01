@@ -116,19 +116,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             }
         }
 
-        private async void OpenUrl(string url)
-        {
-            try
-            {
-                var launcher = TopLevel.GetTopLevel(this)?.Launcher;
-                if (launcher == null) return;
-                await launcher.LaunchUriAsync(new Uri(url));
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "AccountSettingsSection: failed to open {Url}", url);
-            }
-        }
+        private void OpenUrl(string url) => _ = Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), url);
 
         // ponytail: the OAuth halves. Each needs a provider service this head does not have -
         // PatreonService owns an HttpListener callback, and Discord/SubscribeStar the same shape.

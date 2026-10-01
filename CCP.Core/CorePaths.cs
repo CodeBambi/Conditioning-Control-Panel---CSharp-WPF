@@ -27,13 +27,16 @@ namespace ConditioningControlPanel
 
         private static string ResolveUserData()
         {
-            try
-            {
-                var overrideDir = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR");
-                if (!string.IsNullOrWhiteSpace(overrideDir) && Path.IsPathRooted(overrideDir))
-                    return overrideDir;
-            }
+            string? overrideDir = null;
+            try { overrideDir = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"); }
             catch { }
+            if (!string.IsNullOrWhiteSpace(overrideDir) && Path.IsPathRooted(overrideDir))
+            {
+                // A sandbox never reaches a real server. Outside any catch on purpose: a guard that
+                // failed must fail loudly, never fall back quietly to the real profile.
+                Services.SandboxNet.Install();
+                return overrideDir;
+            }
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "ConditioningControlPanel");

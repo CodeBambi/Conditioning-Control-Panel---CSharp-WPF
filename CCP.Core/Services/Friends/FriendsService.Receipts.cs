@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Friends;
 
@@ -53,7 +54,7 @@ public sealed partial class FriendsService
     {
         if (receipts == null || receipts.Count == 0) return;
         try { ReceiptsArrived?.Invoke(receipts); }
-        catch (Exception ex) { App.Logger?.Debug("Friends receipts handler failed: {E}", ex.Message); }
+        catch (Exception ex) { Log.Debug("Friends receipts handler failed: {E}", ex.Message); }
         foreach (var r in receipts)
             if (FeedLine(r) is { } line) RaiseHappened(line);
     }
@@ -61,7 +62,7 @@ public sealed partial class FriendsService
     private void RaiseHappened(FriendEvent e)
     {
         try { Happened?.Invoke(e); }
-        catch (Exception ex) { App.Logger?.Debug("Friends feed handler failed: {E}", ex.Message); }
+        catch (Exception ex) { Log.Debug("Friends feed handler failed: {E}", ex.Message); }
     }
 
     /// <summary>Called once from the constructor: the service's own events become feed lines.</summary>
