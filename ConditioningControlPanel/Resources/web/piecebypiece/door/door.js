@@ -53,7 +53,7 @@ import { requestRematch } from '../net/rematch.js';
 import { isHosted, identity, whenIdentity, postToHost, onHostMessage } from '../bridge.js';
 import { createStake, pills as stakePills, stakeLabel, refusalText, sameStake, isNone } from '../net/stake.js';
 import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen, finalIq } from './store.js';
-import { recapHtml, iqFromApi, plainIq, fallPlan, goneLine } from './fall.js';
+import { recapHtml, keptIq, plainIq, fallPlan, goneLine } from './fall.js';
 import { saveFallCard, copyFallCard } from './fall-card.js';
 import { pictureChoice } from '../ui/pictures.js';
 
@@ -720,15 +720,16 @@ export function createDoor(opts = {}) {
    * The grader (window.PBP.iq) works in a worker, so the last move's grade can
    * land after the game does. Wait for it (bounded), then keep the fall on the
    * saved game and paint it into the card in place. A game dealt meanwhile owns
-   * the grader by then, so only what the record already carried is kept.
+   * the grader by then, and so does the menu (its reset starts the trackers
+   * over), so only what the record already carried is kept.
    */
   function settleIq(saved, fromRecord) {
     const api = window.PBP && window.PBP.iq;
-    let settled = null;
+    let epoch = null, settled = null;
+    try { epoch = api && typeof api.epoch === 'function' ? api.epoch() : null; } catch { epoch = null; }
     try { settled = api && typeof api.settled === 'function' ? api.settled(T.iqSettleMs) : null; } catch { settled = null; }
     Promise.race([Promise.resolve(settled), new Promise((r) => later(r, T.iqSettleMs + 500))]).catch(() => {}).then(() => {
-      const fresh = lastEnd === saved && !current;
-      const iq = (fresh && iqFromApi(window.PBP && window.PBP.iq)) || plainIq(fromRecord);
+      const iq = keptIq(api, epoch, fromRecord, lastEnd === saved && !current);
       if (!iq) return;
       saved.iq = iq;
       const { rematchOf, ...plain } = saved;   // the finished match object is not shelf material

@@ -201,7 +201,9 @@ export function gradeMove({ fen, move, depth = GRADE.depth, budget = GRADE.budge
       break;
     }
     done = { top, best, mine, d };
-    if (top > 99000) break;   // a mate is in sight; deeper only finds the same one
+    // A mate is in sight. Stop only once the played move mates too: a slower
+    // mate (Rb1, Kg8, Rb8#) only shows a pass or two deeper, and it is no blunder.
+    if (top > 99000 && mine > 99000) break;
   }
   if (!done) return null;
   const clamp = s => Math.max(-GRADE.mateCp, Math.min(GRADE.mateCp, s));

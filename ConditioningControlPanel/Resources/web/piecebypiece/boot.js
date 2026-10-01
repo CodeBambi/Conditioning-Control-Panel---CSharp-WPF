@@ -241,8 +241,10 @@ function main() {
     const record = game.record;
     game.record = (...a) => { const r = record.apply(game, a); const fall = iq.record(); return fall ? { ...r, iq: fall } : r; };
     bus.on('gameover', () => {
-      const plies = game.plies(), last = game.rules.chess.history().pop();
+      const plies = game.plies(), last = game.rules.chess.history().pop(), epoch = iq.epoch();
       iq.settled().then(() => {
+        // a rematch or the menu before the last grade came in: the trackers belong to the next game now
+        if (iq.epoch() !== epoch) return;
         const fall = iq.record(), top = listGames()[0];
         if (!fall || !top || top.plies !== plies || (top.moves || [])[plies - 1] !== last || Date.now() - Date.parse(top.at) > 60000) return;
         saveGame({ ...top, iq: fall });
