@@ -5258,6 +5258,8 @@
   "super_name_undertow": "Undertow",
   "super_switch_name": "Super {0}",
   "super_switch_locked_tip": "Super {0}. A partir do Basic.",
+  "super_free_week": "grátis esta semana",
+  "super_free_week_short": "grátis",
   "tiergate_denied_lab": "{0} é um extra do Nível 2 - aumente seu apoio para liberar.",
   "tiergate_see_tiers": "Ver níveis",
   "tiergate_denied_reconnect": "Reconecte o Patreon para atualizar seu acesso.",

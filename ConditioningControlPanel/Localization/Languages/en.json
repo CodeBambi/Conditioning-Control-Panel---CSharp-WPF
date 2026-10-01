@@ -5816,6 +5816,8 @@
   "super_name_undertow": "Undertow",
   "super_switch_name": "Super {0}",
   "super_switch_locked_tip": "Super {0}. Basic and up.",
+  "super_free_week": "free this week",
+  "super_free_week_short": "free",
   "tiergate_denied_lab": "{0} is a Tier 2 perk - upgrade your pledge to unlock it.",
   "tiergate_see_tiers": "See tiers",
   "tiergate_denied_reconnect": "Reconnect Patreon to refresh your access.",

@@ -5770,6 +5770,8 @@
   "super_name_undertow": "Undertow",
   "super_switch_name": "Super {0}",
   "super_switch_locked_tip": "Super {0}。Basic 及以上。",
+  "super_free_week": "本周免费",
+  "super_free_week_short": "免费",
   "tiergate_denied_lab": "{0} 是二级权益 - 提升你的赞助等级即可解锁。",
   "tiergate_see_tiers": "查看等级",
   "tiergate_denied_reconnect": "重新连接 Patreon 以刷新访问权限。",
