@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Services.Compositor;
 /// immutable, never-freed SKImages (decode-once cache); per-bubble tease frames are owned by
 /// the item and disposed on <see cref="Remove"/>.
 /// </summary>
-public sealed class BubbleLayer : BaseLayer
+public sealed partial class BubbleLayer : BaseLayer
 {
     // Decode-once cache for the shared base sprites (bubble.png + the variant sprites from
     // ChaosArt). Keyed by the frozen WPF BitmapSource (ChaosArt hands out one shared frozen
@@ -110,7 +110,7 @@ public sealed class BubbleLayer : BaseLayer
     // UI thread only, like every other member of this class (see the Threading note above).
     private bool _dirty = true;
 
-    public override bool Dirty => _dirty;
+    public override bool Dirty => _dirty || _bloomFx.Count > 0;
     public override void ClearDirty() => _dirty = false;
 
     /// <summary>A live bubble's draw state just changed (Bubble.SyncLayerItem's per-step copy).
@@ -131,7 +131,7 @@ public sealed class BubbleLayer : BaseLayer
         item.ReleaseEffectCaches();
         _items.Remove(item);
         _dirty = true;      // the survivors must be repainted without this one
-        if (_items.Count == 0) SetActive(false);
+        if (_items.Count == 0 && _bloomFx.Count == 0) SetActive(false);
     }
 
     public void Clear()
@@ -145,6 +145,7 @@ public sealed class BubbleLayer : BaseLayer
         _items.Clear();
         foreach (var fx in _dashCache.Values) { try { fx.Dispose(); } catch { } }
         _dashCache.Clear();
+        ClearBlooms();
         SetActive(false);
     }
 
@@ -162,6 +163,10 @@ public sealed class BubbleLayer : BaseLayer
                            + item.GlowBlurDip + 20f) * s;
             if (cx + reach < boundsPx.Left || cx - reach > boundsPx.Right
                 || cy + reach < boundsPx.Top || cy - reach > boundsPx.Bottom) continue;
+
+            // Super Inner Bloom: a popped bloom is drawn by its burst; a live one is film, not sprite.
+            if (item.HideBody) continue;
+            if (item.Bloom != null) { DrawBloomItem(canvas, item, cx, cy); continue; }
 
             byte ga = (byte)Math.Clamp(item.Opacity * 255f, 0, 255);   // group alpha
             float half = item.SizeDip * 0.5f * s;                      // body radius (unscaled) in px
@@ -385,6 +390,7 @@ public sealed class BubbleLayer : BaseLayer
             if (!string.IsNullOrEmpty(item.HintText) && item.HintOpacity > 0.003f)
                 DrawHint(canvas, item, cx, cy, s);
         }
+        if (_bloomFx.Count > 0) DrawBloomFx(canvas);
     }
 
     private void DrawHint(SKCanvas canvas, BubbleItem item, float cx, float cy, float s)
@@ -460,6 +466,9 @@ public sealed class BubbleLayer : BaseLayer
         public float RedWash;
         /// <summary>Natasha's favourite held: 0..1 of the mint ring drawn round it (0 = none).</summary>
         public float HoldRing;
+        /// <summary>Super Inner Bloom: this bubble carries kids (drawn as soap film), and once popped hides for its burst.</summary>
+        public Super.InnerBloom.Node? Bloom;
+        public bool HideBody;
         public SKImage? PrismGhost;         // shared, cached, never disposed here
         public SKPoint[][]? Cracks;         // DIP points in the 0.._size box
         public string? HintText;
