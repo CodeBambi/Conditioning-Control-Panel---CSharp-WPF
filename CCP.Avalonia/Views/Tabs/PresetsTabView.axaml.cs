@@ -269,6 +269,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Replaces the offline built-in source with an already-loaded manager. Loading
         /// stays in App's desktop composition so constructing a view for render/nav never touches
         /// the user's session folders.</summary>
+        /// <summary>WPF MainWindow.RegisterExternallySavedSession (#614): a session written to CustomSessions
+        /// after startup (the Graded Intake draft) joins the library and the rack now, not next launch.</summary>
+        internal void RegisterExternallySavedSession(Session session, string filePath)
+        {
+            var lib = SessionLibrary();
+            if (lib.GetSession(session.Id) == null) lib.AddNewSession(session, filePath);
+            UseSessionManager(lib);
+        }
+
+        /// <summary>WPF RevealSessionInLibrary: select the session by id; null when it is not in the rack.</summary>
+        internal Session? RevealSession(string sessionId)
+        {
+            var found = _availableSessions.FirstOrDefault(s => s.Id == sessionId);
+            if (found != null) SelectSession(found);
+            return found;
+        }
+
         internal void UseSessionManager(SessionManager manager)
         {
             ArgumentNullException.ThrowIfNull(manager);

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json.Linq;
@@ -19,6 +21,108 @@ namespace ConditioningControlPanel.Services.Quiz
 
         /// <summary>Neutral niche (WPF IntakeNiche.Fallback).</summary>
         public const string FallbackNiche = "default";
+
+        /// <summary>The niche the active mod asks for (WPF IntakeNiche.Resolve): mod id, then manifest
+        /// tags, then the legacy SissyHypno reading; otherwise the neutral <see cref="FallbackNiche"/>.</summary>
+        public static string ResolveNiche(string? modId, IEnumerable<string>? tags, bool sissyContentMode)
+        {
+            // BambiSleep ships its own pass card and prompt bank, so it names its own niche here
+            // like every other themed built-in. It was the Fallback until 6.9.4 made the fallback
+            // neutral, which left "bambi" unreachable from every code path.
+            if (modId == BuiltInMods.BambiSleepId) return "bambi";
+            if (modId == BuiltInMods.DronificationId) return "drone";
+            if (modId == BuiltInMods.SissyHypnoId) return "sissy";
+            if (modId == BuiltInMods.LockedId) return "circe";
+
+            // Locked's own tags ("locked"/"chastity") read as circe too.
+            if (tags != null)
+            {
+                foreach (var tag in tags)
+                {
+                    if (string.Equals(tag, "bambi", StringComparison.OrdinalIgnoreCase)) return "bambi";
+                    if (string.Equals(tag, "drone", StringComparison.OrdinalIgnoreCase)) return "drone";
+                    if (string.Equals(tag, "sissy", StringComparison.OrdinalIgnoreCase)) return "sissy";
+                    if (string.Equals(tag, "circe", StringComparison.OrdinalIgnoreCase)) return "circe";
+                    if (string.Equals(tag, "locked", StringComparison.OrdinalIgnoreCase)) return "circe";
+                    if (string.Equals(tag, "chastity", StringComparison.OrdinalIgnoreCase)) return "circe";
+                }
+            }
+
+            // Only the positive SissyHypno reading counts. ContentMode's other value means
+            // "no sissy mod", not "bambi", so everything else lands on the neutral niche.
+            if (sissyContentMode) return "sissy";
+            return FallbackNiche;
+        }
+
+        /// <summary>DisabledAssetPaths as a lookup of root-relative forward-slash paths (WPF
+        /// IntakeHostService.BuildDisabledAssetSet, #762/#798/#619).</summary>
+        public static HashSet<string> DisabledAssetSet(IEnumerable<string>? disabledPaths) => new(
+            (disabledPaths ?? Enumerable.Empty<string>()).Select(p => (p ?? "").Replace('\\', '/')),
+            StringComparer.OrdinalIgnoreCase);
+
+        public static bool IsAssetActive(HashSet<string> disabled, string root, string fullPath)
+        {
+            if (disabled.Count == 0) return true;
+            string rel;
+            try { rel = Path.GetRelativePath(root, fullPath).Replace('\\', '/'); }
+            catch { return true; }   // unrelatable path: never silently drop content over a path quirk
+            return !disabled.Contains(rel);
+        }
+
+        /// <summary>The page's MediaManifest gifs/images (contracts.js): a random sample of up to
+        /// <paramref name="take"/> active files of each kind under <c>images/</c>, as escaped paths
+        /// relative to <paramref name="assetsRoot"/>. Each head prefixes its own origin for them.</summary>
+        public static (string[] Gifs, string[] Images) SampleMedia(
+            string assetsRoot, IEnumerable<string>? disabledPaths, int take = 18)
+        {
+            var gifs = new List<string>();
+            var stills = new List<string>();
+            var imagesRoot = Path.Combine(assetsRoot, "images");
+            var disabled = DisabledAssetSet(disabledPaths);
+            if (Directory.Exists(imagesRoot))
+            {
+                foreach (var file in Directory.EnumerateFiles(imagesRoot, "*", SearchOption.AllDirectories))
+                {
+                    var ext = Path.GetExtension(file).ToLowerInvariant();
+                    if (ext != ".gif" && ext is not (".png" or ".jpg" or ".jpeg" or ".webp")) continue;
+                    if (!IsAssetActive(disabled, assetsRoot, file)) continue;   // unchecked in the Assets tree
+                    (ext == ".gif" ? gifs : stills).Add(file);
+                }
+            }
+            string[] Sample(List<string> pool)
+            {
+                // partial Fisher-Yates: take random items without shuffling the whole list
+                for (int i = 0; i < Math.Min(take, pool.Count); i++)
+                {
+                    int j = Random.Shared.Next(i, pool.Count);
+                    (pool[i], pool[j]) = (pool[j], pool[i]);
+                }
+                return pool.GetRange(0, Math.Min(take, pool.Count)).Select(file =>
+                    string.Join('/', Path.GetRelativePath(assetsRoot, file).Replace('\\', '/')
+                        .Split('/').Select(Uri.EscapeDataString))).ToArray();
+            }
+            return (Sample(gifs), Sample(stills));
+        }
+
+        /// <summary>Stable per-install fiction id ("Subject #0417"), kept in intake_subject.txt under
+        /// <paramref name="userDataDir"/> (WPF IntakeHostService.GetSubjectId).</summary>
+        public static string SubjectId(string userDataDir)
+        {
+            try
+            {
+                var path = Path.Combine(userDataDir, "intake_subject.txt");
+                if (File.Exists(path))
+                {
+                    var existing = File.ReadAllText(path).Trim();
+                    if (existing.Length is > 0 and <= 8) return existing;
+                }
+                var id = Random.Shared.Next(1, 10000).ToString("D4");
+                Directory.CreateDirectory(userDataDir);
+                File.WriteAllText(path, id);
+                return id;
+            }
+            catch { return "0000"; }
+        }
 
         /// <summary>Page silent this long after ready -> recover (WPF StartHeartbeatWatch).</summary>
         public static readonly TimeSpan HeartbeatTimeout = TimeSpan.FromSeconds(20);

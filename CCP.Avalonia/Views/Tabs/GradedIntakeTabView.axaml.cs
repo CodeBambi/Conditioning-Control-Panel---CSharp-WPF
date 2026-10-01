@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Serilog;
 
@@ -183,10 +184,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
 
-            // ponytail: Windows/IntakeHostWindow (page protocol, spends the pass on quiz-result) exists
-            // but is not opened: nothing serves the intake page on this head yet, so it would be dead
-            // UI. Slice 2 serves it and opens it here (~/ccp-port/briefs/intake-plan.md).
-            Log.Information("Graded Intake: gates passed, but the intake page is not served on this head yet");
+            // ponytail: WPF ducks (minimises) the main window unless this is a first-ever run; not ported.
+            OpenIntake(owner as Windows.MainShellWindow);
+        }
+
+        /// <summary>WPF IntakeHostService.Launch: one live run at a time, focused if already open.</summary>
+        internal static Windows.IntakeHostWindow OpenIntake(Windows.MainShellWindow? shell)
+        {
+            var lifetime = Application.Current?.ApplicationLifetime as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+            if (lifetime?.Windows.OfType<Windows.IntakeHostWindow>().FirstOrDefault() is { } live)
+            {
+                live.Activate();
+                return live;
+            }
+            var intake = new Windows.IntakeHostWindow();
+            intake.Drafted += (session, path) => OnSessionDrafted(shell, session, path);
+            intake.Load(Platform.WebAssetServer.Shared);
+            intake.Show();
+            return intake;
+        }
+
+        /// <summary>WPF IntakeHostService.OnQuizResult after the draft: Sessions list refresh, then the
+        /// "Run it now" toast. Separate try blocks, as there: a refresh failure never hides the toast.</summary>
+        internal static void OnSessionDrafted(Windows.MainShellWindow? shell, Session session, string path)
+        {
+            var presets = shell?.Named<PresetsTabView>("PresetsTab");
+            try { presets?.RegisterExternallySavedSession(session, path); }
+            catch (Exception ex) { Log.Warning(ex, "IntakeHost: drafted session saved but the Sessions list refresh failed"); }
+
+            var sessionId = session.Id;
+            App.Notifications.Show(
+                $"Session drafted: \"{session.Name}\" - run it to stamp your punch card.",
+                Helpers.NotificationType.Success, TimeSpan.FromSeconds(12), "Run it now",
+                () =>
+                {
+                    if (shell == null || presets?.RevealSession(sessionId) is not { } found) return;
+                    shell.ShowTab("presets");
+                    shell.BtnStartSession_Click(found);
+                });
         }
 
         /// <summary>WPF MainWindow.Lab.cs:116. The button is IsVisible="False" on both heads ("pending
