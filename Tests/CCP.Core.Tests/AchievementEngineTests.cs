@@ -241,4 +241,35 @@ public sealed class AchievementEngineTests : IDisposable
         }
         finally { CoreEntitlement.HasPremiumProvider = previous; }
     }
+
+    /// <summary>WPF GamificationBridge.OnQuizCompleted / OnQuizAbandoned, now Core so the Avalonia intake fires them.</summary>
+    [Fact]
+    public void GradedRunsFeedTheQuizAchievementsLikeTheWpfBridge()
+    {
+        var previous = CoreEntitlement.HasPremiumProvider;
+        try
+        {
+            CoreEntitlement.HasPremiumProvider = () => true;
+            var engine = new AchievementEngine(new AchievementStore(MainPath)) { SuppressPopups = true };
+            engine.TrackQuizAbandoned();
+            engine.TrackQuizAbandoned();
+            engine.TrackQuizCompleted(passed: true, perfect: false, "bambi");   // a finish breaks the walk-out streak
+            Assert.Equal(0, engine.Progress.IntakeQuitStreak);
+            for (int i = 0; i < 3; i++) engine.TrackQuizAbandoned();
+            Assert.True(engine.Progress.IsUnlocked("held_back"));
+
+            engine.TrackQuizCompleted(true, perfect: true, "bambi");
+            Assert.True(engine.Progress.IsUnlocked("top_of_the_class"));
+            engine.TrackQuizCompleted(true, true, "drone");
+            Assert.False(engine.Progress.IsUnlocked("honor_roll"));
+            engine.TrackQuizCompleted(true, true, "sissy");
+            Assert.True(engine.Progress.IsUnlocked("honor_roll"));
+            for (int i = 0; i < 5; i++) engine.TrackQuizCompleted(true, false, null);   // nine passes so far
+            Assert.False(engine.Progress.IsUnlocked("teachers_pet"));
+            engine.TrackQuizCompleted(true, false, null);   // the tenth pass
+            Assert.True(engine.Progress.IsUnlocked("teachers_pet"));
+            Assert.True(engine.IsDirty);
+        }
+        finally { CoreEntitlement.HasPremiumProvider = previous; }
+    }
 }

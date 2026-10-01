@@ -1201,3 +1201,17 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/companion-awareness-brain: +229
 - Awareness reactions take WPF's legacy AI-first route only with v2 off + consent + chat + AI; v2 on stays preset-only and sends nothing.
   Privacy tests (loopback), fail-proven. Arbiter chain stays WPF-only (decision logged).
+
+## avalonia-port/chaster-ladder: +835
+- Chaster tab ladder: clock, raffle card, top-ten scrap with opt-ins off by default (nothing posted until opted in); loopback-only in a sandbox.
+
+## avalonia-port/intake-page: +655
+- Graded Intake slice 2: Begin Intake opens the served intake page (origin-fenced, same-document); media served media-only and never from
+  the profile; completion signals; pass only on a parsed result. Fail-proven tests; the page itself not run live (no web engine here).
+
+## avalonia-port/calib-flake: +46
+- Calibration window timing behind a TimeProvider; the test steps a manual clock (no sleeps). Full suite 3x green under load.
+
+## avalonia-port/spoken-mantras: +577
+- Spoken mantras: Core SpokenMantra + MantraVoiceService (WPF delegates); Takeover Spoken Mantra and the wake/PTT fallback; the mic opens only
+  after her clip ends; panic/revoke close it. WAV + fake-mic tests, fail-proven.

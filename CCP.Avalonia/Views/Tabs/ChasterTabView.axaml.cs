@@ -5,7 +5,7 @@
 // ponytail: Circe's mood is a line (WPF chaster_mood_peek wording), not the CircesMoodMeter heat
 // row, and CirceSays lines are not shown. The ground (spiral/glow/ambient), hero art, paper tag,
 // calendar, LockTitle letters, the numbers, the receipt, limits, menu,
-// presets, ladder, trailer and all Fx (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
+// presets, trailer and all Fx. The heads-up clock, raffle card and ladder scrap are ChasterTabView.Ladder.cs (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
 // bursts included) are later slices. Unlink, the switch + consent and pause are real (slice 2).
 using System;
 using System.Collections.Generic;
@@ -47,7 +47,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _tick.Tick += (_, _) => { PaintHeroClock(); PaintChasterChip(ChasterHead.Service); };
             AttachedToVisualTree += (_, _) => Subscribe(true);
             DetachedFromVisualTree += (_, _) => Subscribe(false);
+            LadderInit();
             Refresh();
+            LadderRenderSample();
         }
 
         /// <summary>ShowTab calls this on every visit. Cheap parts now; the lock list and the lock
@@ -55,6 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public void OnTabShown()
         {
             Refresh();
+            LadderOnShown();
             _ = LoadLocksAsync();
             _ = ChasterHead.Service?.RefreshLockAsync();
         }
@@ -82,7 +85,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // All three arrive on whatever thread found out.
         private void OnLinkChanged() => Dispatcher.UIThread.Post(OnTabShown);
         private void OnLockChanged() => Dispatcher.UIThread.Post(RefreshHero);
-        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(RefreshHero);
+        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); });
 
         internal void Refresh()
         {
@@ -91,6 +94,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             UnlinkedPanel.IsVisible = !linked;
             FactRow.IsVisible = !linked;
             AccountStrip.IsVisible = linked;
+            AddedRow.IsVisible = linked;
+            if (linked) RefreshAdded(); else HideLadder();
             SwitchPill.IsVisible = linked;
             PausePill.IsVisible = linked;
             PaintPause(CoreSettings.Current.ChasterPaused);

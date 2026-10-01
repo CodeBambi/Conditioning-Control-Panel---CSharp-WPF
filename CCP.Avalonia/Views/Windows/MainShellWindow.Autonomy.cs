@@ -9,8 +9,8 @@
 // and available, else a preset phrase through the tube), Mind Wipe (only once CoreMindWipe is
 // seeded). Never picked here (CanPerform false, exactly as WPF skips an unavailable action):
 // ponytail: Spiral pulse and Brain Drain pulse (no spiral / blur overlay on this head), Web Video
-// (no browser media service), Wallpaper (Win32 WallpaperService), Spoken Mantra (MantraVoiceService
-// not ported). Add each to CanPerformAutonomy the day its surface lands.
+// (no browser media service), Wallpaper (Win32 WallpaperService). Spoken Mantra runs through the
+// voice funnel (MainShellWindow.VoiceCommands.cs, Core SpokenMantra). Add each to CanPerformAutonomy the day its surface lands.
 // Also not here: the TakeoverAnnouncerOverlay banner (overlay-takeover-announcer), the avatar
 // countdown bar, the announcement's event audio (CompanionPhraseService), the diagnostic Test
 // dialogs and Force Start (debug). Voice/PTT/wake word: MainShellWindow.VoiceCommands.cs.
@@ -72,6 +72,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             AutonomyActionType.Video => CoreEngine.Video != null,
             AutonomyActionType.StartBubbles => CoreBubbles.StartAction != null,
             AutonomyActionType.BouncingText => CoreBouncingText.StartAction != null,
+            // WPF SelectAction's mantraOk: engine up and idle, no prompt in flight, the tube shown and the
+            // active mod ships mantras. Consent and "no wake word / PTT" are Core Candidates' half.
+            AutonomyActionType.SpokenMantra => VoiceSpeech is { IsAvailable: true, IsListening: false }
+                                               && !VoicePromptActive && _avatarTubeWindow != null
+                                               && App.MantraVoice.HasMantras(),
             _ => false,
         };
 
@@ -105,6 +110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 case AutonomyActionType.BubbleCount: CoreEngine.BubbleCount?.Trigger(forceTest: true); break;
                 case AutonomyActionType.Comment: MakeAutonomyComment(); break;
                 case AutonomyActionType.MindWipe: CoreMindWipe.TriggerOnce(); break;
+                case AutonomyActionType.SpokenMantra: _ = RequestVoiceCommandAsync(allowCommands: false); break;
             }
         }
 

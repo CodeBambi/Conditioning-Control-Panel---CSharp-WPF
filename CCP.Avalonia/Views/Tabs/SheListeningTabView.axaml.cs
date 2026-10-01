@@ -26,9 +26,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// across the seam.</para>
     ///
     /// <para>Every button forwards to MainShellWindow.SheListening.cs, as WPF forwards to
-    /// MainWindow.SheListening.cs. ponytail: the Test button (WPF BtnTestVoice_Click ->
-    /// AutonomyService.TestVoiceCommand) runs a spoken mantra, and MantraVoiceService is not on this
-    /// head, so it says so (sl_mantras_not_on_this_build).</para>
+    /// MainWindow.SheListening.cs. The Test button (WPF BtnTestVoice_Click ->
+    /// AutonomyService.TestVoiceCommand) asks one spoken mantra (MainShellWindow.TestSpokenMantra).</para>
     /// </summary>
     public partial class SheListeningTabView : UserControl
     {
@@ -76,11 +75,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnSL_MicMaster.Click += (_, _) => Main?.ToggleVoiceMic();
             BtnSL_OpenDeviceSettings.Click += (_, _) => Main?.OpenDeviceSettings();
             BtnSL_Calibrate.Click += (_, _) => Main?.SL_Calibrate_Click();
-            BtnSL_TestMantra.Click += (_, _) =>
-            {
-                if (Main is { } mw)
-                    _ = Dialogs.MessageDialog.ShowAsync(mw, "She's Listening", ConditioningControlPanel.Localization.Loc.Get("sl_mantras_not_on_this_build"));
-            };
+            BtnSL_TestMantra.Click += (_, _) => Main?.TestSpokenMantra();
             BtnSL_RevokeConsent.Click += (_, _) => Main?.SL_RevokeMicConsent_Click();
             BtnSL_GateUnlock.Click += (s, e) => Main?.BtnGateUnlock_Click(s, e);
             ChkSL_Mantras.IsCheckedChanged += (_, _) => Main?.SL_Mantras_Changed();

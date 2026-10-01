@@ -397,6 +397,37 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Not moved: `AwarenessV2Routing`/`AwarenessSpeech`/`ReactionArbiter` stay in the WPF head. Dry-run into Core needs AwarenessReactionService, AwarenessPromptBuilder (AwarenessAngleCards, AwarenessProjection, CompanionPhraseService), WorthinessScorer -> ActivityLedger and ~25 App.* sites, and they only consume v2 observer frames, so on this head they would be dead code. Bark echo stays a gap (no Core bark hosted).
 - Tests: `Tests/CCP.Avalonia.Tests/AwarenessAiRoutingTests.cs` (denied/incognito never reach the fake AI; v2 on sends nothing; revoked consent sends nothing; fail-proven).
 - Advisor: supervisor.
+## 2026-10-01: Graded Intake page served and wired (avalonia-port/intake-page)
+- Begin Intake opens `IntakeHostWindow` after WPF's pass + AI gates; it loads `WebAssetServer.Shared.Url("intake/index.html")`
+  (the token URL) and never navigates off that origin (`WebHost.AllowNavigation` = same scheme + authority). Page messages count
+  only from the served document (Core `IntakeRun.SameDocument`: scheme, authority incl. port, path).
+- Bridge: no injection seam needed. Avalonia.Controls.WebView 12.1's `GtkWebViewAdapter` adds `invokeCSharpAction` with
+  `webkit_user_script_new(..., ALL_FRAMES=0, INJECT_AT_DOCUMENT_START=0, ...)` (read from the IL,
+  ~/ccp-port/evidence/avalonia-port/intake-page/bridge-injection-time.txt), so it exists before web-shim.js evaluates.
+- ccp.assets -> `WebAssetServer.AssetsPrefix` ("ccp.assets/") over `CorePaths.EffectiveAssets`, same token/cookie rule and
+  confinement, narrowed to library media: only MediaTypeSniffer.MediaExtensions, no dot-folders (.temp/.packs), no
+  DisabledAssetPaths entry, and a root that is or contains CorePaths.UserData is refused (logged once). The no-engine fallback
+  panel prints the URL without ccp_t. ccp.content is a hard-coded origin in intake/core/audioSrc.js and no audio ships on this head, so it is not mapped
+  (the page's silent-missing-audio path, as on a WPF install without packs).
+- init: WPF's payload minus bubble sprite, subliminal pool, speech bridge and remote media (remoteMedia=false). In a
+  CCP_USERDATA_DIR sandbox `ai` is null (the page's local stub) so a live run never reaches the AI server.
+- Pure halves moved to Core with WPF delegating: `IntakeRun.ResolveNiche` (IntakeNiche.Resolve), `DisabledAssetSet`/`IsAssetActive`/
+  `SampleMedia` (BuildMediaManifest's walk), `SubjectId` (GetSubjectId); GamificationBridge's quiz handlers became
+  `AchievementEngine.TrackQuizCompleted/TrackQuizAbandoned` for this head (WPF's bridge unchanged).
+- Advisor: worker.
+## spoken-mantras
+- WPF `RunSpokenMantraAsync` extracted to Core `SpokenMantra.RunAsync` with a small host (recognize, say, speaking,
+  duration, credit, prompt events); WPF delegates with its exact previous calls, text and timings. `MantraVoiceService`
+  git mv'd to Core (CoreMods/ContentLocator/Serilog); its NAudio `GetAudioDuration` stays in WPF as an extension, so
+  WPF callers are unchanged. Avalonia passes no duration but sets `WaitSpoken`: the tube's GigglePriority `onSpoken`
+  completes from CoreAudio.PlayOneShot's onFinished, and Core awaits it (30 s cap) before every listen (review P1).
+  WPF passes null, so it keeps its NAudio-duration timing. RefreshVoiceInputModes cancels only a wake/PTT turn (or any
+  prompt once consent is gone); Takeover's mantra is not that session.
+- Entitlement for the surprise mantra is Takeover's own (WPF adds no voice check there); the wake/PTT fallback is
+  already behind VoiceInputRules (consent + armed + premium/voice day). Panic cancels the prompt token before the listen.
+- Live voice panel partials/level are subscribed for the mantra prompt only (WPF subscribes always; the panel is only
+  visible during a mantra prompt, so nothing differs on screen). MantraChantService is not used by this path: out of scope.
+- Advisor: worker (supervisor informed).
 ## 2026-10-01: Her Room chat and memory diary over the brain (avalonia-port/her-room-chat)
 - Question: how to put Z2 (ChatThresholdRuntimeVm) and Z3 (MemoryDiaryRuntimeVm) on the Avalonia brain without a second copy of their logic.
 - Choice: `CompanionMemoryViewModel` is a pure git mv into `CCP.Core/ViewModels/` (dry-run: 0 errors). The runtime VMs read `App.*`

@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -74,7 +76,7 @@ public sealed class WebcamCalibrationTests
         var tracker = WebcamTracker.Instance;
         var oldCal = tracker.Calibration;
         var sentinel = new WebcamCalibrationData { Mode = "Sentinel" };
-        WebcamCalibrationWindow.TimeDivisor = 20;
+        WebcamCalibrationWindow.Time = Clock = new ManualClock();
         try
         {
             s.WebcamConsentGiven = true;
@@ -87,7 +89,7 @@ public sealed class WebcamCalibrationTests
         }
         finally
         {
-            WebcamCalibrationWindow.TimeDivisor = 1;
+            WebcamCalibrationWindow.Time = TimeProvider.System;
             tracker.Stop();
             WebcamCalibrationData.DeleteIfExists();
             tracker.Calibration = oldCal;
@@ -104,11 +106,41 @@ public sealed class WebcamCalibrationTests
         return win;
     }
 
-    /// <summary>Looks at whichever dot is up, feeding iris samples, until <paramref name="done"/>.</summary>
-    private static bool Gaze(WebcamCalibrationWindow win, Func<bool> done, int ms = 15000)
+    private static ManualClock Clock = new();
+
+    /// <summary>The window's clock, stepped by the test: a wait ends exactly when the test advances past it,
+    /// whatever the machine load, so the flow never depends on wall-clock time.</summary>
+    private sealed class ManualClock : TimeProvider
+    {
+        private long _now;
+        private readonly List<(long Due, TimerCallback Cb, object? State)> _timers = new();
+        public override long TimestampFrequency => 1000;
+        public override long GetTimestamp() => _now;
+        public override ITimer CreateTimer(TimerCallback cb, object? state, TimeSpan due, TimeSpan period)
+        {
+            var t = (_now + (long)due.TotalMilliseconds, cb, state);
+            _timers.Add(t);
+            return new Handle(() => _timers.Remove(t));
+        }
+        public void Advance(int ms)
+        {
+            _now += ms;
+            foreach (var t in _timers.Where(t => t.Due <= _now).ToList()) { _timers.Remove(t); t.Cb(t.State); }
+        }
+        private sealed class Handle(Action remove) : ITimer
+        {
+            public bool Change(TimeSpan due, TimeSpan period) => false;
+            public void Dispose() => remove();
+            public ValueTask DisposeAsync() { remove(); return default; }
+        }
+    }
+
+    /// <summary>Looks at whichever dot is up, feeding one iris sample per 10 ms of window time, until
+    /// <paramref name="done"/> or <paramref name="ms"/> of window time have passed.</summary>
+    private static bool Gaze(WebcamCalibrationWindow win, Func<bool> done, int ms = 60000)
     {
         int k = 0;
-        for (var sw = System.Diagnostics.Stopwatch.StartNew(); sw.ElapsedMilliseconds < ms; Thread.Sleep(10))
+        for (int t = 0; t < ms; t += 10, Clock.Advance(10))
         {
             if (win.ActiveDotIndex is var i and >= 0 && i < win.Positions.Length)
             {
