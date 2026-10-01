@@ -32,6 +32,9 @@ public class WebAssetServerTests
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal("text/html", first.Content.Headers.ContentType!.MediaType);
         Assert.Equal("<p>hi</p>", await first.Content.ReadAsStringAsync());
+        Assert.Equal("nosniff", Assert.Single(first.Headers.GetValues("X-Content-Type-Options")));
+        Assert.Equal("no-referrer", Assert.Single(first.Headers.GetValues("Referrer-Policy")));
+        Assert.StartsWith($"ccp_t_{s.Port}=", Assert.Single(first.Headers.GetValues("Set-Cookie")));
         // A root-relative load from the page carries no query: the cookie must authorise it.
         var second = await http.GetAsync($"http://127.0.0.1:{s.Port}/game/");
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
@@ -61,6 +64,22 @@ public class WebAssetServerTests
             Assert.Null(s.ResolveFile("/%2e%2e/secret.txt"));
             Assert.Null(s.ResolveFile("/game/%2e%2e/%2e%2e/secret.txt"));
             Assert.Null(s.ResolveFile("/" + Path.Combine(Path.GetDirectoryName(root)!, "secret.txt")));
+        }
+    }
+
+    [Fact]
+    public void RefusesSymlinksThatLeaveTheRoot()
+    {
+        var (s, root) = Make();
+        using (s)
+        {
+            var outside = Path.Combine(Path.GetDirectoryName(root)!, "secret.txt");
+            File.CreateSymbolicLink(Path.Combine(root, "leak.txt"), outside);
+            Directory.CreateSymbolicLink(Path.Combine(root, "up"), Path.GetDirectoryName(root)!);
+            File.CreateSymbolicLink(Path.Combine(root, "ok.html"), Path.Combine(root, "game", "index.html"));
+            Assert.Null(s.ResolveFile("/leak.txt"));
+            Assert.Null(s.ResolveFile("/up/secret.txt"));
+            Assert.NotNull(s.ResolveFile("/ok.html"));
         }
     }
 

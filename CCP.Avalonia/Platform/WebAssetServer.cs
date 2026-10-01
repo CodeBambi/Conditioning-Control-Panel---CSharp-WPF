@@ -4,6 +4,8 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 
@@ -20,13 +22,20 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 /// </summary>
 public sealed class WebAssetServer : IDisposable
 {
-    const string TokenName = "ccp_t";
+    static readonly object _sharedLock = new();
+    static WebAssetServer? _shared;
 
-    static readonly Lazy<WebAssetServer> _shared = new(() =>
-        new WebAssetServer(Path.Combine(AppContext.BaseDirectory, "Resources", "web")));
+    /// <summary>The app-wide server over Resources/web, started on first use; a failed start is retried next time.</summary>
+    public static WebAssetServer Shared
+    {
+        get
+        {
+            lock (_sharedLock)
+                return _shared ??= new WebAssetServer(Path.Combine(AppContext.BaseDirectory, "Resources", "web"));
+        }
+    }
 
-    /// <summary>The app-wide server over Resources/web, started on first use.</summary>
-    public static WebAssetServer Shared => _shared.Value;
+    readonly SemaphoreSlim _inFlight = new(16);
 
     static readonly Dictionary<string, string> Types = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -61,7 +70,14 @@ public sealed class WebAssetServer : IDisposable
 
     /// <summary>The URL a web view navigates to for a page under the root, e.g. "intake/index.html".</summary>
     public string Url(string relativePath) =>
-        $"http://127.0.0.1:{Port}/{relativePath.TrimStart('/')}?{TokenName}={Token}";
+        $"http://127.0.0.1:{Port}/{relativePath.TrimStart('/')}?ccp_t={Token}";
+
+    /// <summary>Per-port so two runs on 127.0.0.1 (cookies ignore the port) never overwrite each other.</summary>
+    string CookieName => $"ccp_t_{Port}";
+
+    bool IsToken(string? candidate) =>
+        candidate != null && CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(candidate), Encoding.UTF8.GetBytes(Token));
 
     async Task Loop()
     {
@@ -70,9 +86,13 @@ public sealed class WebAssetServer : IDisposable
             HttpListenerContext ctx;
             try { ctx = await _listener.GetContextAsync().ConfigureAwait(false); }
             catch (Exception) { return; } // listener stopped
-            try { Serve(ctx); }
-            catch (Exception ex) { Log.Debug(ex, "WebAssetServer: request failed"); }
-            finally { try { ctx.Response.Close(); } catch { } }
+            await _inFlight.WaitAsync().ConfigureAwait(false);
+            _ = Task.Run(() =>
+            {
+                try { Serve(ctx); }
+                catch (Exception ex) { Log.Debug(ex, "WebAssetServer: request failed"); }
+                finally { try { ctx.Response.Close(); } catch { } _inFlight.Release(); }
+            });
         }
     }
 
@@ -80,8 +100,8 @@ public sealed class WebAssetServer : IDisposable
     {
         var req = ctx.Request;
         var res = ctx.Response;
-        bool queryToken = req.QueryString[TokenName] == Token;
-        bool cookieToken = req.Cookies[TokenName]?.Value == Token;
+        bool queryToken = IsToken(req.QueryString["ccp_t"]);
+        bool cookieToken = IsToken(req.Cookies[CookieName]?.Value);
         // A foreign Host header (DNS rebinding) never gets here: HttpListener 404s it against the 127.0.0.1 prefix.
         if (!IPAddress.IsLoopback(req.RemoteEndPoint.Address)
             || !(queryToken || cookieToken)
@@ -95,23 +115,41 @@ public sealed class WebAssetServer : IDisposable
         if (path == null) { res.StatusCode = 404; return; }
 
         if (queryToken)
-            res.Headers.Add("Set-Cookie", $"{TokenName}={Token}; Path=/; HttpOnly; SameSite=Strict");
+            res.Headers.Add("Set-Cookie", $"{CookieName}={Token}; Path=/; HttpOnly; SameSite=Strict");
         res.ContentType = Types.GetValueOrDefault(Path.GetExtension(path), "application/octet-stream");
         res.Headers.Add("Cache-Control", "no-cache");
+        res.Headers.Add("X-Content-Type-Options", "nosniff");
+        res.Headers.Add("Referrer-Policy", "no-referrer");
         // ponytail: whole-file responses, no Range; add 206 handling if a page needs to seek long media.
         using var file = File.OpenRead(path);
         res.ContentLength64 = file.Length;
         if (req.HttpMethod == "GET") file.CopyTo(res.OutputStream);
     }
 
-    /// <summary>The file a URL path names, or null if it is missing or lies outside the root.</summary>
+    /// <summary>The file a URL path names, or null if it is missing or lies outside the root, symlinks followed.</summary>
     internal string? ResolveFile(string urlPath)
     {
         var rel = Uri.UnescapeDataString(urlPath).TrimStart('/');
         if (rel.Length == 0 || rel.EndsWith('/')) rel += "index.html";
         if (rel.Contains('\0')) return null;
         var full = Path.GetFullPath(Path.Combine(_root, rel));
-        return full.StartsWith(_root, StringComparison.Ordinal) && File.Exists(full) ? full : null;
+        return Inside(full) && File.Exists(full) && LinksStayInside(full) ? full : null;
+    }
+
+    bool Inside(string full) => full.StartsWith(_root, StringComparison.Ordinal);
+
+    /// <summary>Every link on the way from the root down to the file must land inside the root.</summary>
+    bool LinksStayInside(string full)
+    {
+        for (var p = full; p.Length > _root.Length; p = Path.GetDirectoryName(p)!)
+        {
+            FileSystemInfo info = Directory.Exists(p) ? new DirectoryInfo(p) : new FileInfo(p);
+            if (info.LinkTarget != null && info.ResolveLinkTarget(returnFinalTarget: true) is { } target
+                && !Inside(Path.GetFullPath(target.FullName))
+                && Path.GetFullPath(target.FullName) + Path.DirectorySeparatorChar != _root)
+                return false;
+        }
+        return true;
     }
 
     public void Dispose() => _listener.Close();
