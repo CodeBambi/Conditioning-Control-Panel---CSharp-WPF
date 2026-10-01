@@ -47,7 +47,8 @@ namespace ConditioningControlPanel.Services.Super
         public static bool IsOn(SuperEffect effect)
         {
 #if DEBUG
-            if (Environment.GetEnvironmentVariable("CCP_SUPER_ALL") == "1") return true;
+            // Unlocks the gate only: the player's own switch still decides.
+            if (Environment.GetEnvironmentVariable("CCP_SUPER_ALL") == "1") return IsSwitchedOn(effect);
 #endif
             var on = App.Settings?.Current?.SuperEffectsOn;
             bool switchedOn = on != null && on.Contains(effect.ToString());
