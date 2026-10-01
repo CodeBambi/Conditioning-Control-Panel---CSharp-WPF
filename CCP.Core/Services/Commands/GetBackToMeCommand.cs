@@ -107,6 +107,8 @@ namespace ConditioningControlPanel.Services.Commands
             // the AI badge.
             if (AiProvider?.Invoke() is not { } ai) return;
             var result = await ai.GetBambiReplyExAsync($"[Token={token}, JsonOnly={jsonOnly}]");
+            // A panic or switch-off during the AI round trip drops the reply and the nested commands.
+            _cancellationToken.ThrowIfCancellationRequested();
             if (!jsonOnly && result.Refusal == null && !string.IsNullOrEmpty(result.Text))
             {
                 ShowAvatarMessage(result.Text, aiGenerated: result.IsAiGenerated);

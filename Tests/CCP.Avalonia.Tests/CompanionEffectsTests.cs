@@ -79,13 +79,24 @@ public sealed class CompanionEffectsTests
                 Assert.True(LockCardWindow.IsAnyOpen());
                 Assert.False(MantraLockScreenCommand.Surface!("again", 1));
                 LockCardWindow.ForceCloseAll();
-                AiCommandService.CancelAll();                       // a panic: a deferred start is dropped
+
+                // Held behind the portal panic bind, then a panic: the start must be dropped when released.
+                System.Action? held = null;
+                CompanionEffects.StartEffect = start => held = start;
+                Assert.True(MantraLockScreenCommand.Surface!("held", 1));   // requested, not yet shown
+                Assert.False(LockCardWindow.IsAnyOpen());
+                MainShellWindow.CancelPendingAi();
+                held!();
+                Assert.False(LockCardWindow.IsAnyOpen());
+                CompanionEffects.StartEffect = MainShellWindow.StartEffect;
+
                 service.Current.CompanionPrompt.AllowAiToControlEffects = false;
                 Assert.False(MantraLockScreenCommand.Surface!("no consent", 1));
                 Assert.False(LockCardWindow.IsAnyOpen());
             }
             finally
             {
+                CompanionEffects.StartEffect = MainShellWindow.StartEffect;
                 LockCardWindow.ForceCloseAll();
                 (CoreSettings.ServiceProvider, CoreAccount.HasLabAccessProvider) = (provider, lab);
             }

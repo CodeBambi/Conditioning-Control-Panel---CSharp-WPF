@@ -80,6 +80,7 @@ namespace ConditioningControlPanel.Services
         /// key on. Only <paramref name="force"/> (trigger_panic) takes the subject's own engine down (#878).</summary>
         public static void StopEffects(bool force)
         {
+            if (force) Commands.AiCommandService.CancelAll();   // a remote panic cancels pending AI follow-ups too
             try { CoreHaptics.Service?.PanicStop(); } catch { }
             CoreAudio.Unduck();
             if (force) CoreEngine.Stop();

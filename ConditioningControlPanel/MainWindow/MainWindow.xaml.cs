@@ -1071,6 +1071,7 @@ namespace ConditioningControlPanel
                 VideoDiag.Log("PANIC", "FALLBACK firing — the UI thread never drained the queued handler");
 
                 try { App.Haptics?.PanicStop(); }        catch (Exception ex) { LogPanicFallbackStep("haptics", ex); }
+                CancelPendingAi();
                 // Conditional, matching the designed panic path in StopEverything (#668): with the
                 // standalone Audio Layers master on, the bed is the user's, not the session's.
                 try
@@ -1516,8 +1517,7 @@ namespace ConditioningControlPanel
             // arm EMI's silence, the Chaster safety hold or the stop pass.
             if (TryRacePauseOnEscape()) return;
             Services.FirstShow.FirstShowService.Stop();
-            // Pending AI follow-ups (getbacktome delays and their nested effects) never outlive a panic.
-            try { Services.Commands.AiCommandService.CancelAll(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            CancelPendingAi();
 
             // EMI Desk (MOMENTS 4.B): FIRST LINE, before any of the ladder below. panicPressed is a
             // HOLD with a five-minute silence tail, and it has to be armed even if something further

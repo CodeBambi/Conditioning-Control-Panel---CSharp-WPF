@@ -38,11 +38,14 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>A desktop-effect start, through MainShellWindow.StartEffect so the portal panic
         /// shortcut is bound first on native Wayland. A start deferred behind that bind is dropped if a
         /// panic or switch-off came meanwhile, and reported as requested; inline, it reports what showed.</summary>
+        /// <summary>The effect-start door (MainShellWindow.StartEffect); a test holds starts here as the portal bind would.</summary>
+        internal static Action<Action> StartEffect = MainShellWindow.StartEffect;
+
         internal static bool Start(Func<bool> show) => OnUi(() =>
         {
             var generation = AiCommandService.CancelGeneration;
             bool? shown = null;
-            MainShellWindow.StartEffect(() =>
+            StartEffect(() =>
             {
                 if (generation == AiCommandService.CancelGeneration && AiEffectControlGate.IsOnNow) shown = show();
                 else shown = false;

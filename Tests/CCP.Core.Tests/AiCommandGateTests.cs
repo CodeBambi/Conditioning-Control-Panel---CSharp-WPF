@@ -46,6 +46,8 @@ public sealed class AiCommandGateTests : IDisposable
         FlashImageCommand.Surface = null;
         MediaCommand.VideoSurface = null;
         AiCommandService.LiveActionSink = null;
+        GetBackToMeCommand.AiProvider = null;
+        GetBackToMeCommand.SaySurface = null;
     }
 
     private static AiCommandData Flash(int amount = 3) =>
@@ -126,7 +128,7 @@ public sealed class AiCommandGateTests : IDisposable
         Data = new GetBackToMe(1, "t" + Guid.NewGuid().ToString("N"), nested.ToList(), null, JsonOnly: true),
     };
 
-    private static Task PastTheDelay() => Task.Delay(1800);
+    private static Task PastTheDelay() => Task.Delay(3000);   // the 1 s minimum delay, with a wide margin
 
     [Fact]
     public async Task NestedCommandWithItsToggleOffIsRefused()
@@ -161,6 +163,41 @@ public sealed class AiCommandGateTests : IDisposable
         Run(FollowUp(Flash()));
         _service.Current.CompanionPrompt.AllowAiToControlEffects = false;
         await PastTheDelay();
+        Assert.Empty(_flashes);
+    }
+
+    /// <summary>An AI stand-in whose follow-up reply waits until the test releases it.</summary>
+    public class HeldAi : System.Reflection.DispatchProxy
+    {
+        public readonly TaskCompletionSource<ConditioningControlPanel.Services.Moderation.AiReplyResult> Reply = new();
+        public volatile bool Asked;
+        protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args)
+        {
+            if (method?.Name == "GetBambiReplyExAsync") { Asked = true; return Reply.Task; }
+            var t = method?.ReturnType;
+            return t != null && t.IsValueType && t != typeof(void) ? Activator.CreateInstance(t) : null;
+        }
+    }
+
+    [Fact]
+    public async Task PanicDuringTheAiReplyDropsTheReplyAndTheNestedCommands()
+    {
+        var ai = System.Reflection.DispatchProxy.Create<ConditioningControlPanel.Services.AIService.IAiService, HeldAi>();
+        var held = (HeldAi)(object)ai;
+        var said = new List<string>();
+        GetBackToMeCommand.AiProvider = () => ai;
+        GetBackToMeCommand.SaySurface = (text, _) => said.Add(text);
+        Run(new AiCommandData
+        {
+            Command = AICommandType.getbacktome,
+            Data = new GetBackToMe(1, "t" + Guid.NewGuid().ToString("N"), new List<AiCommandData> { Flash() }, null, JsonOnly: false),
+        });
+        for (var i = 0; i < 100 && !held.Asked; i++) await Task.Delay(50);
+        Assert.True(held.Asked);
+        AiCommandService.CancelAll();                                // panic while the AI is answering
+        held.Reply.SetResult(new ConditioningControlPanel.Services.Moderation.AiReplyResult("hi", true, null));
+        await Task.Delay(300);
+        Assert.Empty(said);
         Assert.Empty(_flashes);
     }
 }
