@@ -21,6 +21,9 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>In-app corner toasts (WPF App.Notifications). Queues until the shell attaches it.</summary>
         public static Helpers.NotificationService Notifications { get; } = new();
 
+        /// <summary>Weekly free-tier pass for the Graded Intake (WPF App.IntakePass).</summary>
+        public static IntakePassService IntakePass { get; } = new();
+
         /// <summary>HT-URL lookup + download (WPF App.CatalogueLookup). The shell registers the opener.</summary>
         internal static CatalogueLookup CatalogueLookup { get; set; } = new(
             () => Services.Deeper.DeeperLocalLibrary.DefaultFolder, CoreReleaseContent.AppVersion, OnUiThread);
@@ -396,6 +399,9 @@ namespace ConditioningControlPanel.Avalonia
                     fetchOverride: string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")));
                 _ = dailyFree.RefreshAsync();
                 CoreEntitlement.IsFreeTodayProvider = dailyFree.IsFreeToday;
+                // WPF App.xaml.cs:494: the weekly Graded Intake pass. Its TierChanged hooks are
+                // attached by AccountSeed.Seed() below, once the providers exist.
+                CoreEntitlement.IntakePassAvailableProvider = () => IntakePass.IsPassAvailable;
                 // WPF App.xaml.cs:2875/2941: the one HapticService, gated (premium / daily free) in its
                 // mixer. Connects only to what the user runs (Intiface at ButtplugUrl, Lovense Remote).
                 // ponytail: no MockToast (mock toys log only), no funscript playhead (FunScriptService.
@@ -632,6 +638,13 @@ namespace ConditioningControlPanel.Avalonia
                     shell.RefreshNavPremiumTags();
                 });
                 dailyFree.TodayChanged += RepaintVeils;
+                // WPF NavPremiumTags.cs:118 / Lab.cs:435: a spent or refunded pass moves the star and the vault.
+                // Not RepaintVeils: that persists the lapse pass, and sign-in/out raises this at startup.
+                IntakePass.PassStateChanged += (_, _) => Dispatcher.UIThread.Post(() =>
+                {
+                    shell.RefreshExclusivesTab();
+                    shell.RefreshNavPremiumTags();
+                });
                 if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
@@ -787,6 +800,15 @@ namespace ConditioningControlPanel.Avalonia
             return media;
         }
 
+        /// <summary>The exit save, after Takeover hands back what a pulse borrowed - else a boosted
+        /// pink tint is saved as the user's own (WPF StopEngine cancels pulses before the save).</summary>
+        internal static void SaveSettingsOnExit(Views.Windows.MainShellWindow? shell, Action save)
+        {
+            try { shell?.CancelAutonomyPulses(); } catch (Exception ex) { Serilog.Log.Debug("Exit pulse cancel failed: {E}", ex.Message); }
+            try { save(); }
+            catch { /* SettingsService logs save failures; exit must continue */ }
+        }
+
         /// <summary>Exit path (tray Exit and every other shutdown): close any MantraWindow, whose OnClosed
         /// stops the drone and ends the session, end the service as WPF App.OnExit's Mantra?.Dispose(),
         /// and delete the synthesised WAVs.</summary>
@@ -825,8 +847,8 @@ namespace ConditioningControlPanel.Avalonia
 
             // Flush while the dispatcher is still usable. In particular, a serialize retry from a
             // background save must not see the shutdown-safe drop provider below.
-            try { Settings?.SaveImmediate(); }
-            catch { /* SettingsService logs save failures; exit must continue */ }
+            var shell = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as Views.Windows.MainShellWindow;
+            SaveSettingsOnExit(shell, () => Settings?.SaveImmediate());
 
             // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.

@@ -15,8 +15,8 @@
 // fails to NO TAG, as the WPF original does.
 //
 // Repaint triggers: the rail init (MainShellWindow.NavRail.cs) and App.axaml.cs RepaintVeils (either
-// provider's TierChanged + DailyFreeService.TodayChanged), WPF HookNavPremiumTags' subscriptions.
-// ponytail: no IntakePass.PassStateChanged - Core has no IntakePassService.
+// provider's TierChanged + DailyFreeService.TodayChanged + IntakePass.PassStateChanged), WPF
+// HookNavPremiumTags' subscriptions.
 //
 // Callers this layer does not own: InitializeNavRail and RefreshNavPremiumTags' repaint callers
 // live in MainShellWindow.NavRail.cs / MainShellWindow.PremiumRail.cs, and the collapse fade that

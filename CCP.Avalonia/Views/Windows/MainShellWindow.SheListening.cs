@@ -82,6 +82,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             // First, tab or no tab: WPF pairs every arm/Stop/revoke/lapse with RefreshVoiceInputModes.
             RefreshVoiceInputModes();
+            Named<Tabs.BambiTakeoverTabView>("BambiTakeoverTab")?.RefreshAutonomyVoiceHint();   // WPF SheListening.cs:294
             var tab = SheListeningPage;
             if (tab == null) return;
             var s = CoreSettings.Current;

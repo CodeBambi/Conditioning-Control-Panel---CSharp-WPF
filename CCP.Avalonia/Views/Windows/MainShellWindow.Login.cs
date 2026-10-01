@@ -51,6 +51,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 UpdateLevelDisplay();
                 // WPF UpdatePatreonUI -> RefreshEntitlementVeils: an account change moves every veil.
                 RefreshEntitlementVeils(persist: accountChanged);
+                // WPF Patreon.cs:294: the pass is per-account, so sign-in/out moves the intake door.
+                App.IntakePass.RaiseChanged();
             }
             catch (Exception ex)
             {
@@ -62,16 +64,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF OpenUnifiedLoginDialog, up to the sync it starts (units 6-7). Then, once per run,
         /// the "sign-in not remembered" notice when the tokens could only be kept in memory.</summary>
-        internal async Task OpenUnifiedLoginDialog()
+        internal async Task OpenUnifiedLoginDialog(Window? owner = null)
         {
             var dialog = new LoginDialog();
-            if (await dialog.ShowDialog<bool>(this) && dialog.Result is not null)
+            if (await dialog.ShowDialog<bool>(owner ?? this) && dialog.Result is not null)
             {
                 UpdateQuickLoginUI(accountChanged: true);
                 if (SecretStore.NotRemembered && !_notRememberedShown)
                 {
                     _notRememberedShown = true;
-                    await MessageDialog.ShowAsync(this, Loc.Get("login_not_remembered_title"), Loc.Get("login_not_remembered_body"));
+                    await MessageDialog.ShowAsync(owner ?? this, Loc.Get("login_not_remembered_title"), Loc.Get("login_not_remembered_body"));
                 }
                 // The cloud profile may adopt a different level (WPF OnProfileLoaded -> UpdateLevelDisplay).
                 try { await dialog.ProfileLoad; } catch (Exception ex) { Serilog.Log.Debug("ProfileLoad: {E}", ex.Message); }

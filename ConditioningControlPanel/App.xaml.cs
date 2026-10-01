@@ -2934,7 +2934,9 @@ namespace ConditioningControlPanel
             // which only resolves once the async validation below returns. Hook both providers now
             // that they exist so the pass re-evaluates (and every listener repaints) the moment the
             // answer lands, instead of leaving a patron looking free until something else refreshes.
-            IntakePass?.AttachEntitlementSources();
+            IntakePass?.AttachEntitlementSources(
+                h => { if (Patreon != null) Patreon.TierChanged += h; if (SubscribeStar != null) SubscribeStar.TierChanged += h; },
+                h => { if (Patreon != null) Patreon.TierChanged -= h; if (SubscribeStar != null) SubscribeStar.TierChanged -= h; });
             ProfileSync = new ProfileSyncService();
             // THE XP NUDGE (pitch "The tap holds", 2026-08-30): an earn outside a
             // running session schedules one coalesced sync inside the existing 30s
