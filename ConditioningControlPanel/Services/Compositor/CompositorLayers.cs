@@ -7,6 +7,9 @@ namespace ConditioningControlPanel.Services.Compositor;
 /// </summary>
 public static class CompositorLayers
 {
+    // Super Creep's pink fog: under every video and flash, above the desktop. WPF-only for now
+    // (Creep has no Avalonia twin yet); 5 is free in both tables.
+    public const int Creep = 5;
     public const int Video = 10;
     public const int MandatoryVideo = 15;
     public const int LockCard = 20;

@@ -127,6 +127,43 @@
                         </StackPanel>
                     </Grid>
                 </Border>
+
+                <!-- Super Creep sub-settings. Shown only while the Creep switch is on and unlocked
+                     (Features/PinkFilterFeatureControl.Creep.cs); the switch itself is the scaffold's. -->
+                <Border x:Name="CreepCard" Style="{StaticResource SettingCardStyle}" Visibility="Collapsed"
+                        Loaded="CreepCard_Loaded" Unloaded="CreepCard_Unloaded">
+                    <StackPanel Margin="16,8,16,8">
+                        <TextBlock Text="{loc:Str super_creep_title}" FontSize="13" FontWeight="Bold"
+                                   Foreground="{StaticResource TextLightBrush}"/>
+                        <TextBlock Text="{loc:Str super_creep_desc}" FontSize="11.5" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,4"/>
+                        <Grid Height="36" Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str super_creep_speed}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" x:Name="CmbCreepSpeed" Width="180" VerticalAlignment="Center"
+                                      Style="{DynamicResource DarkComboBoxStyle}"
+                                      SelectionChanged="CmbCreepSpeed_Changed"/>
+                        </Grid>
+                        <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_super_creep_cap}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto" MinWidth="56"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str super_creep_cap}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                            <Slider Grid.Column="1" x:Name="SliderCreepCap" Minimum="20" Maximum="90" Value="90"
+                                    VerticalAlignment="Center" Margin="14,0" ValueChanged="SliderCreepCap_Changed"/>
+                            <TextBlock Grid.Column="2" x:Name="TxtCreepCap" Text="90%" HorizontalAlignment="Right"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="13" FontWeight="Bold"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
             </StackPanel>
 
             <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its

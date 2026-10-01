@@ -2056,6 +2056,7 @@ namespace ConditioningControlPanel
                 App.Overlay?.RefreshOverlays();
                 App.Overlay?.StopPinkFilter();
                 App.Overlay?.StopSpiral();
+                Services.Super.CreepController.Stop();
             }
             catch (Exception ex)
             {
