@@ -52,6 +52,11 @@ namespace ConditioningControlPanel.Services
         // Focus-steal still falls back to the classic windows (the host is NOACTIVATE).
         private Compositor.SubliminalLayer? _layer;
         private static bool UseCompositor => App.CompositorEnabled;
+        // SUPER AFTERGLOW: ghosts of the words the cards showed. An add-on, never instead of the
+        // card. Lazily created on the first ghost; cleared wherever a card is.
+        private Compositor.AfterglowLayer? _afterglow;
+        // Words the cursor woke: +1 weight each for the NEXT pick only (UI thread).
+        private readonly Dictionary<string, int> _afterglowBonus = new();
         // One ref-counted hold on the shared host while any card could be up — NOT per show
         // (host churn is exactly what solid mode exists to remove). Released on Stop/Dispose,
         // or when a one-shot's card fades out with the service not running.
@@ -104,6 +109,51 @@ namespace ConditioningControlPanel.Services
 
             _timer = new DispatcherTimer();
             _timer.Tick += Timer_Tick;
+            Super.SuperAccess.Changed += OnSuperChanged;
+        }
+
+        private void OnSuperChanged(Super.SuperEffect effect)
+        {
+            if (effect != Super.SuperEffect.Afterglow || Super.SuperAccess.IsOn(effect)) return;
+            DispatcherHelper.RunOnUI(ClearAfterglow);
+        }
+
+        /// <summary>Panic, Stop, switch off: every ghost and spark goes at once.</summary>
+        private void ClearAfterglow()
+        {
+            try { _afterglow?.Clear(); } catch { }
+            lock (_afterglowBonus) _afterglowBonus.Clear();
+        }
+
+        /// <summary>SUPER AFTERGLOW: leave a ghost of <paramref name="text"/> on every screen the card
+        /// covered, taking over as the card starts to fade out. Only with the compositor up; the
+        /// card itself is untouched whichever path drew it.</summary>
+        private void SpawnAfterglow(System.Windows.Forms.Screen?[] screens, string text, double targetOpacity, int handoverMs)
+        {
+            try
+            {
+                if (!Super.SuperAccess.IsOn(Super.SuperEffect.Afterglow) || !UseCompositor || App.Compositor == null) return;
+                var placements = new List<Compositor.SubliminalLayer.Placement>(screens.Length);
+                foreach (var screen in screens)
+                {
+                    if (screen == null) continue;
+                    var b = screen.Bounds;
+                    placements.Add(new Compositor.SubliminalLayer.Placement(
+                        new SkiaSharp.SKRectI(b.X, b.Y, b.Right, b.Bottom), (float)(GetMonitorDpi(screen) / 96.0)));
+                }
+                if (placements.Count == 0) return;
+                if (_afterglow == null)
+                {
+                    _afterglow = new Compositor.AfterglowLayer(App.Compositor);
+                    _afterglow.Woke += word => { lock (_afterglowBonus) _afterglowBonus[word] = _afterglowBonus.GetValueOrDefault(word) + 1; };
+                    App.Compositor.RegisterLayer(_afterglow);
+                }
+                _afterglow.Spawn(placements, text, targetOpacity, handoverMs / 1000.0);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Subliminal afterglow failed: {E}", ex.Message);
+            }
         }
 
         /// <summary>
@@ -154,6 +204,7 @@ namespace ConditioningControlPanel.Services
             // flag flip must not strand a fading card on the shared host).
             if (_layer?.IsActive == true)
                 _layer.Clear();
+            ClearAfterglow();
 
             StopAudio();
 
@@ -213,6 +264,7 @@ namespace ConditioningControlPanel.Services
             }
             RemoveHostedCard(_ => true);
             if (_layer?.IsActive == true) _layer.Clear();
+            ClearAfterglow();
             StopAudio();
         }
 
@@ -284,7 +336,18 @@ namespace ConditioningControlPanel.Services
                 return;
             }
             
-            var text = activeTexts[_random.Next(activeTexts.Count)];
+            string text;
+            if (Super.SuperAccess.IsOn(Super.SuperEffect.Afterglow))
+            {
+                // Afterglow: a word the cursor woke weighs a little more, for this pick only.
+                lock (_afterglowBonus)
+                {
+                    text = activeTexts[Super.AfterglowField.PickWeighted(activeTexts, _afterglowBonus, _random.NextDouble())];
+                    _afterglowBonus.Clear();
+                }
+            }
+            else
+                text = activeTexts[_random.Next(activeTexts.Count)];
             
             // Check for linked audio
             string? audioPath = FindLinkedAudio(text);
@@ -737,6 +800,7 @@ namespace ConditioningControlPanel.Services
                 ShowCompositorSubliminal(screens, text, bgColor, textColor, borderColor,
                     bgTransparent, targetOpacity, durationMs, fadeIn, fadeOut))
             {
+                SpawnAfterglow(screens, text, targetOpacity, fadeIn + durationMs);
                 App.InvalidateCcpWindowRectsCache();
                 return;
             }
@@ -766,6 +830,7 @@ namespace ConditioningControlPanel.Services
                 PositionSubliminalText(win);
                 AnimateSubliminal(win, targetOpacity, durationMs, fadeIn, fadeOut);
             }
+            SpawnAfterglow(screens, text, targetOpacity, fadeIn + durationMs);
 
             // Subliminal cards now record (capture-exclusion dropped), so the awareness OCR
             // relies on the text rect from GetActiveTextScreenRects to skip them. Force the OCR
@@ -1246,6 +1311,9 @@ namespace ConditioningControlPanel.Services
                 // metrics it measured at Flash time.
                 if (_layer?.IsActive == true)
                     rects.AddRange(_layer.GetActiveTextRectsPx());
+                // Super Afterglow ghosts are drawn text too.
+                if (_afterglow?.IsActive == true)
+                    rects.AddRange(_afterglow.GetActiveTextRectsPx());
             }
             catch (Exception ex)
             {
@@ -1456,6 +1524,7 @@ namespace ConditioningControlPanel.Services
             _disposed = true;
 
             Stop();
+            Super.SuperAccess.Changed -= OnSuperChanged;
             try { _layer?.Clear(); } catch { }
             // App shutdown: the only place the keep-alive windows actually close.
             foreach (var win in _screenWindows.Values)
