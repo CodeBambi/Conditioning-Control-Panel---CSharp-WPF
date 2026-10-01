@@ -25,6 +25,9 @@ import { createPauseHush } from './ui/pause-hush.js';
 import { createHostEscape, HOST_ESCAPE } from './ui/host-escape.js';
 import { presentation } from './game/preferences.js';
 import { pictureChoice } from './ui/pictures.js';
+import { createIqLive } from './game/iq.js';
+import { readSolo, setSoloIq, patchSoloIq } from './game/save.js';
+import { listGames, saveGame } from './door/store.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -217,6 +220,36 @@ function main() {
     bus.on('local', () => { if (marks) marks.setLastMove(null); });
   }
   // --- end K ---
+  // --- IQ (lane B) ---
+  // Every move a local player makes is graded off the main thread and costs them IQ (game/iq.js);
+  // the opponent's never are. window.PBP.iq is the read side for the HUD and the end card.
+  // game.record() carries the fall, a solo save carries it across a resume, and the shelf's copy
+  // is brought up to date once the last grade is in: the door saves the moment the game ends,
+  // which can be before the final move's grade has come back.
+  {
+    const iq = createIqLive({ bus, game });
+    window.PBP.iq = iq;
+    let mode = null;
+    setSoloIq(() => (mode === 'solo' ? iq.record() : null));
+    bus.on('local', (p) => {
+      mode = p?.mode || null;
+      if (mode !== 'solo' || !game.plies()) return;
+      const saved = readSolo();
+      if (saved?.iq) iq.restore(saved.iq);
+    });
+    bus.on('iq', () => { if (mode === 'solo') patchSoloIq(); });
+    const record = game.record;
+    game.record = (...a) => { const r = record.apply(game, a); const fall = iq.record(); return fall ? { ...r, iq: fall } : r; };
+    bus.on('gameover', () => {
+      const plies = game.plies(), last = game.rules.chess.history().pop();
+      iq.settled().then(() => {
+        const fall = iq.record(), top = listGames()[0];
+        if (!fall || !top || top.plies !== plies || (top.moves || [])[plies - 1] !== last || Date.now() - Date.parse(top.at) > 60000) return;
+        saveGame({ ...top, iq: fall });
+      });
+    });
+  }
+  // --- end IQ ---
   // --- L: the HUD (corner clocks, sliding light, tally, meter vignette) ---
   // The chain never replaces what is already there: another lane may want the
   // meter too. hudL is filled in when the module lands; until then the meter is

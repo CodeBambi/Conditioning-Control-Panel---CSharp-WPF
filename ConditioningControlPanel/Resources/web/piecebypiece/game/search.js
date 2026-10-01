@@ -130,6 +130,86 @@ export function chooseMove({ moves = [], fen, level = 'club' } = {}, now = () =>
 }
 
 /**
+ * Grade one move for the IQ score (game/iq.js): how many centipawns it gave away against the best
+ * move in the same position. The same evaluate and quiescence the computer plays with, so "best"
+ * means what this engine can see and no more. Iterative to `depth` inside `budget` ms; the deepest
+ * finished pass wins. The played move is searched first with a full window, so its score is exact;
+ * the rest only have to beat the best so far. A mate either way is clamped to `mateCp`, so a missed
+ * mate costs the cap rather than a number nobody can read. Null when the move is not legal here.
+ */
+export const GRADE = Object.freeze({ depth: 3, budget: 400, mateCp: 2000 });
+export function gradeMove({ fen, move, depth = GRADE.depth, budget = GRADE.budget } = {}, now = () => performance.now()) {
+  const chess = fen ? new Chess(fen) : new Chess();
+  const all = chess._moves({ legal: true });
+  const want = move || {};
+  const played = all.find(m => square(m.from) === want.from && square(m.to) === want.to
+    && (!m.promotion || m.promotion === (want.promotion || 'q')));
+  if (!played) return null;
+  const san = m => chess._moveToSan(m, all);
+  if (all.length === 1) return { best: san(played), cp: 0, depth: 0 };
+  const deadline = now() + budget, timeout = {};
+  let nodes = 0;
+  const tick = () => { if ((++nodes & 15) === 0 && now() >= deadline) throw timeout; };
+  const play = m => chess._makeMove(m), unplay = () => chess._undoMove();
+  function quiesce(alpha, beta, ply, left) {
+    tick();
+    const stand = evaluate(chess);
+    if (stand >= beta || left <= 0) return stand;
+    if (stand > alpha) alpha = stand;
+    const moves = chess._moves({ legal: true });
+    if (!moves.length) return chess.isCheck() ? -100000 + ply : 0;
+    for (const m of moves.filter(x => x.captured || x.promotion).sort(byPriority)) {
+      if (!m.promotion && stand + VALUE[m.captured] + 200 < alpha) continue;
+      play(m);
+      let score;
+      try { score = -quiesce(-beta, -alpha, ply + 1, left - 1); } finally { unplay(); }
+      if (score >= beta) return score;
+      if (score > alpha) alpha = score;
+    }
+    return alpha;
+  }
+  function search(d, alpha, beta, ply) {
+    tick();
+    const moves = chess._moves({ legal: true });
+    if (!moves.length) return chess.isCheck() ? -100000 + ply : 0;
+    if (d <= 0) return quiesce(alpha, beta, ply, QUIET_PLIES);
+    let best = -Infinity;
+    for (const m of moves.sort(byPriority)) {
+      play(m);
+      let score;
+      try { score = -search(d - 1, -beta, -alpha, ply + 1); } finally { unplay(); }
+      if (score > best) best = score;
+      if (score > alpha) alpha = score;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+  const order = [played, ...all.filter(m => m !== played).sort(byPriority)];
+  let done = null;
+  for (let d = 1; d <= depth; d++) {
+    let top = -Infinity, best = null, mine = 0;
+    try {
+      for (const m of order) {
+        play(m);
+        let score;
+        try { score = -search(d - 1, -Infinity, -top, 1); } finally { unplay(); }
+        if (m === played) mine = score;
+        if (score > top) { top = score; best = m; }
+      }
+    } catch (e) {
+      if (e !== timeout) throw e;
+      break;
+    }
+    done = { top, best, mine, d };
+    if (top > 99000) break;   // a mate is in sight; deeper only finds the same one
+  }
+  if (!done) return null;
+  const clamp = s => Math.max(-GRADE.mateCp, Math.min(GRADE.mateCp, s));
+  const cp = done.best === played ? 0 : Math.max(0, Math.round(clamp(done.top) - clamp(done.mine)));
+  return { best: san(done.best), cp, depth: done.d };
+}
+
+/**
  * How long the computer sits over the board after the turn card, in seconds (owner, 2026-09-30:
  * "they happen too fast like the AI wasnt thinking"). The worker has usually answered long
  * before; this is the pause a player reads as thinking. A stronger level takes longer, a
