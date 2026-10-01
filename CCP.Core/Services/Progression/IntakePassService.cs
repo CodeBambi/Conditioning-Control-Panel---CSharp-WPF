@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using Serilog;
 
 namespace ConditioningControlPanel.Services;
 
@@ -92,7 +93,7 @@ public class IntakePassService : IDisposable
 
     /// <summary>Unlimited runs are tier 2 (PatreonService.HasLabAccess), not tier 1. The
     /// Exclusives gate and the Lab tab fallback read the same tier.</summary>
-    private static bool IsPremium => App.Patreon?.HasLabAccess == true;
+    private static bool IsPremium => CoreAccount.HasLabAccess;
 
     /// <summary>True when the spend stamp sits in the future by more than
     /// <see cref="FutureSkewTolerance"/> - i.e. the machine clock moved backwards after a run.
@@ -102,7 +103,7 @@ public class IntakePassService : IDisposable
     {
         get
         {
-            var spent = App.Settings?.Current?.IntakePassSpentUtc;
+            var spent = CoreSettings.Service?.Current?.IntakePassSpentUtc;
             return spent.HasValue && spent.Value > DateTime.UtcNow.Add(FutureSkewTolerance);
         }
     }
@@ -115,10 +116,10 @@ public class IntakePassService : IDisposable
             try
             {
                 if (IsPremium) return IntakePassState.Premium;
-                if (!App.IsLoggedIn) return IntakePassState.NeedsLogin;
+                if (!CoreAccount.IsLoggedIn) return IntakePassState.NeedsLogin;
                 if (ClockLooksRolledBack) return IntakePassState.Spent;
 
-                var spentWeek = App.Settings?.Current?.IntakePassSpentWeek ?? "";
+                var spentWeek = CoreSettings.Service?.Current?.IntakePassSpentWeek ?? "";
                 return string.Equals(spentWeek, CurrentWeekKey(), StringComparison.Ordinal)
                     ? IntakePassState.Spent
                     : IntakePassState.Available;
@@ -128,7 +129,7 @@ public class IntakePassService : IDisposable
                 // Never let a settings hiccup wedge the Exclusives page. Closed is the safe
                 // default: premium users are unaffected, and a free user sees the normal
                 // "come back next week" copy rather than a broken panel.
-                App.Logger?.Debug("IntakePassService.State: {E}", ex.Message);
+                Log.Debug("IntakePassService.State: {E}", ex.Message);
                 return IntakePassState.Spent;
             }
         }
@@ -169,18 +170,18 @@ public class IntakePassService : IDisposable
         {
             if (IsPremium) return;
 
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Service?.Current;
             if (settings == null) return;
 
             settings.IntakePassSpentWeek = CurrentWeekKey();
             settings.IntakePassSpentUtc = DateTime.UtcNow;
             _spentThisSession = true;
-            App.Settings?.Save();
+            CoreSettings.Save();
 
-            App.Logger?.Information("IntakePassService: weekly pass spent for {Week}", settings.IntakePassSpentWeek);
+            Log.Information("IntakePassService: weekly pass spent for {Week}", settings.IntakePassSpentWeek);
             RaiseChanged();
         }
-        catch (Exception ex) { App.Logger?.Warning("IntakePassService.ConsumeForCompletedIntake: {E}", ex.Message); }
+        catch (Exception ex) { Log.Warning("IntakePassService.ConsumeForCompletedIntake: {E}", ex.Message); }
     }
 
     /// <summary>Tell listeners the door may look different now - login, logout, or a
@@ -188,7 +189,7 @@ public class IntakePassService : IDisposable
     public void RaiseChanged()
     {
         try { PassStateChanged?.Invoke(this, EventArgs.Empty); }
-        catch (Exception ex) { App.Logger?.Debug("IntakePassService.RaiseChanged: {E}", ex.Message); }
+        catch (Exception ex) { Log.Debug("IntakePassService.RaiseChanged: {E}", ex.Message); }
     }
 
     // ============================ entitlement plumbing ============================
@@ -216,32 +217,32 @@ public class IntakePassService : IDisposable
     /// <see cref="Dispose"/> can detach exactly what it attached.</summary>
     private bool _entitlementHooked;
     private EventHandler<ConditioningControlPanel.Models.PatreonTier>? _entitlementHandler;
+    private Action<EventHandler<ConditioningControlPanel.Models.PatreonTier>>? _detachEntitlement;
 
     /// <summary>
     /// Subscribe to the subscription providers so the door re-evaluates whenever entitlement
     /// resolves, changes, or is torn down by a logout. Idempotent and safe to call once the
     /// providers exist - which is LATER in App.OnStartup than this service is constructed, hence
-    /// a separate call rather than constructor work.
+    /// a separate call rather than constructor work. The providers are head services, so the
+    /// head passes how to hook (<paramref name="attach"/>) and unhook (<paramref name="detach"/>)
+    /// the handler on both Patreon and SubscribeStar's TierChanged. A second call re-points the
+    /// hook at the new providers (detaching the old ones) - WPF calls it once; the Avalonia head
+    /// calls it from each <c>AccountSeed.Seed()</c>, which is where its providers are built.
     /// </summary>
-    public void AttachEntitlementSources()
+    public void AttachEntitlementSources(
+        Action<EventHandler<ConditioningControlPanel.Models.PatreonTier>> attach,
+        Action<EventHandler<ConditioningControlPanel.Models.PatreonTier>> detach)
     {
-        if (_entitlementHooked) return;
+        if (_entitlementHooked && _entitlementHandler != null)
+        {
+            try { _detachEntitlement?.Invoke(_entitlementHandler); } catch { }
+        }
         _entitlementHooked = true;
-        _entitlementHandler = OnEntitlementChanged;
+        _entitlementHandler ??= OnEntitlementChanged;
+        _detachEntitlement = detach;
 
-        try
-        {
-            var patreon = App.Patreon;
-            if (patreon != null) patreon.TierChanged += _entitlementHandler;
-        }
-        catch (Exception ex) { App.Logger?.Debug("IntakePassService: Patreon hook failed: {E}", ex.Message); }
-
-        try
-        {
-            var subscribeStar = App.SubscribeStar;
-            if (subscribeStar != null) subscribeStar.TierChanged += _entitlementHandler;
-        }
-        catch (Exception ex) { App.Logger?.Debug("IntakePassService: SubscribeStar hook failed: {E}", ex.Message); }
+        try { attach(_entitlementHandler); }
+        catch (Exception ex) { Log.Debug("IntakePassService: entitlement hook failed: {E}", ex.Message); }
     }
 
     /// <summary>
@@ -254,10 +255,10 @@ public class IntakePassService : IDisposable
         try
         {
             RefundLateResolvedPremium();
-            App.Logger?.Debug("IntakePassService: entitlement changed (tier {Tier}) -> pass state {State}", tier, State);
+            Log.Debug("IntakePassService: entitlement changed (tier {Tier}) -> pass state {State}", tier, State);
             RaiseChanged();
         }
-        catch (Exception ex) { App.Logger?.Debug("IntakePassService.OnEntitlementChanged: {E}", ex.Message); }
+        catch (Exception ex) { Log.Debug("IntakePassService.OnEntitlementChanged: {E}", ex.Message); }
     }
 
     /// <summary>
@@ -280,7 +281,7 @@ public class IntakePassService : IDisposable
         {
             if (!_spentThisSession || !IsPremium) return;
 
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Service?.Current;
             if (settings == null) return;
 
             // Only the week we just charged. Anything else is not ours to give back.
@@ -293,12 +294,12 @@ public class IntakePassService : IDisposable
             settings.IntakePassSpentWeek = "";
             settings.IntakePassSpentUtc = null;
             _spentThisSession = false;
-            App.Settings?.Save();
+            CoreSettings.Save();
 
-            App.Logger?.Information(
+            Log.Information(
                 "IntakePassService: premium resolved after a run this session - weekly pass refunded (it was never theirs to spend)");
         }
-        catch (Exception ex) { App.Logger?.Debug("IntakePassService.RefundLateResolvedPremium: {E}", ex.Message); }
+        catch (Exception ex) { Log.Debug("IntakePassService.RefundLateResolvedPremium: {E}", ex.Message); }
     }
 
     /// <summary>Detach the tier hooks. The service outlives every window, but the providers
@@ -311,13 +312,13 @@ public class IntakePassService : IDisposable
         {
             if (_entitlementHandler != null)
             {
-                try { var p = App.Patreon; if (p != null) p.TierChanged -= _entitlementHandler; } catch { }
-                try { var s = App.SubscribeStar; if (s != null) s.TierChanged -= _entitlementHandler; } catch { }
+                try { _detachEntitlement?.Invoke(_entitlementHandler); } catch { }
                 _entitlementHandler = null;
+                _detachEntitlement = null;
             }
             _entitlementHooked = false;
             PassStateChanged = null;
         }
-        catch (Exception ex) { App.Logger?.Debug("IntakePassService.Dispose: {E}", ex.Message); }
+        catch (Exception ex) { Log.Debug("IntakePassService.Dispose: {E}", ex.Message); }
     }
 }

@@ -22,8 +22,9 @@
 //   write each - PopQuizEnabled and PopQuizFrequency are both in Core, and the slider needs the
 //   `_isLoading` guard because Avalonia raises ValueChanged on a programmatic set too. Restoring
 //   them HERE would be a second copy no click can reach; they belong in that view's layer.
-//   RefreshGradedIntakeGate / SetGradedIntakeGateCopy / EnsureIntakePassHooked stay blocked
-//   wherever they land: IntakePassService and App.Patreon.HasPremiumAccess are the gate.
+//   RefreshGradedIntakeGate / SetGradedIntakeGateCopy / EnsureIntakePassHooked / BtnStartIntake_Click
+//   live in GradedIntakeTabView now (IntakePassService moved to Core); only the launch
+//   (IntakeHostService) is still missing.
 //
 //   THE ACTIVITY LAUNCHERS are all "new SomeWindow(...).Show()" over a service: quiz, intake,
 //   bureau, goon, chaos, arcademy, the FYP feed. Windows and services both, so both blocked -
@@ -33,7 +34,7 @@
 //   private void InitializeLockdown(…)
 //   internal void BtnActivateLockdown_Click(…)
 //   internal void BtnStartQuiz_Click(…)          -> GradedIntakeTabView
-//   internal void BtnStartIntake_Click(…)
+//   internal void BtnStartIntake_Click(…) -> GradedIntakeTabView
 //   internal void BtnStartBureau_Click(…)
 //   internal void BtnStartGoon_Click(…)
 //   internal void BtnStartChaos_Click(…)
@@ -41,10 +42,10 @@
 //   internal void BtnStartArcademy_Click(…)
 //   internal void BtnQuickStartChaos_Click(…)
 //   private bool _intakePassHooked
-//   internal void RefreshGradedIntakeGate(…)
-//   private void SetGradedIntakeGateCopy(…)
-//   private void EnsureIntakePassHooked(…)
-//   private void OnIntakePassStateChanged(…)
+//   internal void RefreshGradedIntakeGate(…) -> GradedIntakeTabView
+//   private void SetGradedIntakeGateCopy(…) -> GradedIntakeTabView
+//   private void EnsureIntakePassHooked(…) -> GradedIntakeTabView
+//   private void OnIntakePassStateChanged(…) -> GradedIntakeTabView
 //   private void RefreshPastQuizzes(…)          -> GradedIntakeTabView
 //   internal void ChkPopQuizEnabled_Changed(…)
 //   internal void SliderPopQuizFrequency_ValueChanged(…)
