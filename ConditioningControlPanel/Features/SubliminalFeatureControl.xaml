@@ -195,7 +195,7 @@
 
                 <!-- The gold V2 box (Controls/SuperBox): Super switch, BASIC sign, weekly try. -->
                 <ctl:SuperBox x:Name="SuperBoxMain" Effect="Afterglow">
-                    <!-- host Afterglow options here -->
+                    <ctl:AfterglowOptionsBox/>
                 </ctl:SuperBox>
             </StackPanel>
 

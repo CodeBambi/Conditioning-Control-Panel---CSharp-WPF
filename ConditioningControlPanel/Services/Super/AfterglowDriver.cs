@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
@@ -73,7 +74,7 @@ namespace ConditioningControlPanel.Services.Super
                 return;
             }
             if (_tick.IsEnabled) return;
-            _untilSpawn = AfterglowField.NextInterval(_rng.NextDouble());
+            _untilSpawn = AfterglowOptions.NextInterval(App.Settings?.Current?.AfterglowFrequency ?? AfterglowOptions.FrequencyDefault, _rng.NextDouble());
             _untilRecheck = RecheckS;
             _last = DateTime.UtcNow;
             _layer?.ResetCursor();
@@ -102,13 +103,15 @@ namespace ConditioningControlPanel.Services.Super
 
                 _untilSpawn -= dt;
                 if (_untilSpawn > 0) return;
-                _untilSpawn = AfterglowField.NextInterval(_rng.NextDouble());
+                // Read live: a frequency or count change takes effect on the next pop.
+                var s = App.Settings?.Current;
+                _untilSpawn = AfterglowOptions.NextInterval(s?.AfterglowFrequency ?? AfterglowOptions.FrequencyDefault, _rng.NextDouble());
 
-                var text = PickWord();
-                if (text == null) return;
+                var words = PickWords(AfterglowOptions.ClampCount(s?.AfterglowCount ?? AfterglowOptions.CountDefault));
+                if (words.Count == 0) return;
                 var screen = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(cur.X, cur.Y));
                 var b = screen.Bounds;
-                layer.Spawn(text, cur.X, cur.Y, MonitorScale(cur), new SkiaSharp.SKRectI(b.Left, b.Top, b.Right, b.Bottom));
+                layer.Spawn(words, cur.X, cur.Y, MonitorScale(cur), new SkiaSharp.SKRectI(b.Left, b.Top, b.Right, b.Bottom));
             }
             catch (Exception ex)
             {
@@ -126,18 +129,21 @@ namespace ConditioningControlPanel.Services.Super
             return _layer;
         }
 
-        /// <summary>A random word from the ACTIVE pool (same source as FlashSubliminal); null if none.</summary>
-        private string? PickWord()
+        /// <summary>
+        /// <paramref name="count"/> random words from the ACTIVE pool (same source as FlashSubliminal),
+        /// all different while the pool has enough; empty if the pool is.
+        /// </summary>
+        private List<string> PickWords(int count)
         {
+            var result = new List<string>(count);
             var pool = App.Settings?.Current?.SubliminalPool;
-            if (pool == null) return null;
-            int n = 0;
-            foreach (var kv in pool) if (kv.Value) n++;
-            if (n == 0) return null;
-            int pick = _rng.Next(n);
-            foreach (var kv in pool)
-                if (kv.Value && pick-- == 0) return kv.Key;
-            return null;
+            if (pool == null) return result;
+            var active = new List<string>();
+            foreach (var kv in pool) if (kv.Value) active.Add(kv.Key);
+            if (active.Count == 0) return result;
+            foreach (var i in AfterglowOptions.PickIndices(active.Count, count, _rng.NextDouble))
+                result.Add(active[i]);
+            return result;
         }
 
         private static double MonitorScale(POINT pt)

@@ -9434,6 +9434,53 @@ namespace ConditioningControlPanel.Models
             set { _superEffectsOn = value ?? new(); OnPropertyChanged(); }
         }
 
+        // Super Afterglow's own option box (Services/Super/AfterglowOptions). Defaults are the effect as
+        // it shipped. Cosmetic: they travel with the cloud profile like every neighbour.
+        private int _afterglowFrequency = Services.Super.AfterglowOptions.FrequencyDefault;
+        /// <summary>Afterglow pops, 1 (rare) to 10 (often). Its own clock, not the main subliminal's. 5 = 1.5..4.5 s.</summary>
+        [JsonProperty]
+        public int AfterglowFrequency
+        {
+            get => _afterglowFrequency;
+            set { _afterglowFrequency = Services.Super.AfterglowOptions.ClampFrequency(value); OnPropertyChanged(); }
+        }
+
+        private int _afterglowCount = Services.Super.AfterglowOptions.CountDefault;
+        /// <summary>Words per Afterglow pop, 1 to 4 (a small burst).</summary>
+        [JsonProperty]
+        public int AfterglowCount
+        {
+            get => _afterglowCount;
+            set { _afterglowCount = Services.Super.AfterglowOptions.ClampCount(value); OnPropertyChanged(); }
+        }
+
+        private int _afterglowSize = Services.Super.AfterglowOptions.SizeDefault;
+        /// <summary>Afterglow word size, 1 (20 DIP) to 10 (90 DIP). 5 = 40 DIP.</summary>
+        [JsonProperty]
+        public int AfterglowSize
+        {
+            get => _afterglowSize;
+            set { _afterglowSize = Services.Super.AfterglowOptions.ClampSize(value); OnPropertyChanged(); }
+        }
+
+        private string _afterglowColorA = Services.Super.AfterglowOptions.ColorADefault;
+        /// <summary>First Afterglow glow colour, "#RRGGBB". A bad value falls back to pink.</summary>
+        [JsonProperty]
+        public string AfterglowColorA
+        {
+            get => _afterglowColorA;
+            set { _afterglowColorA = Services.Super.AfterglowOptions.Normalise(value, Services.Super.AfterglowOptions.ColorADefault); OnPropertyChanged(); }
+        }
+
+        private string _afterglowColorB = Services.Super.AfterglowOptions.ColorBDefault;
+        /// <summary>Second Afterglow glow colour, "#RRGGBB". A bad value falls back to mint.</summary>
+        [JsonProperty]
+        public string AfterglowColorB
+        {
+            get => _afterglowColorB;
+            set { _afterglowColorB = Services.Super.AfterglowOptions.Normalise(value, Services.Super.AfterglowOptions.ColorBDefault); OnPropertyChanged(); }
+        }
+
         private int _superPreviewUsedWeek = -1;
         /// <summary>
         /// Week index (<c>SuperPreviewRule.WeekIndex</c>, Monday UTC weeks) of the last weekly free
