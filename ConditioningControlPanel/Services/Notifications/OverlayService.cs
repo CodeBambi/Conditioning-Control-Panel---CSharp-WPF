@@ -168,6 +168,12 @@ public class OverlayService : IDisposable
         // BrainDrainEnabled/BlurStrength hook below) - silently, with not one line in the log.
         // ModService and every rack panel already follow this event; this service never did.
         if (App.Settings != null) App.Settings.CurrentReplaced += OnSettingsCurrentReplaced;
+
+        // Super Vortex rides the spiral: a switch flip or a tier change starts or tears it down.
+        Super.SuperAccess.Changed += e =>
+        {
+            if (e == Super.SuperEffect.Vortex) DispatcherHelper.RunOnUI(SyncVortex);
+        };
     }
 
     private void HookSettings(Models.AppSettings? settings)
@@ -248,6 +254,23 @@ public class OverlayService : IDisposable
             App.Compositor!.RegisterLayer(_spiralLayer);
         }
         return _spiralLayer;
+    }
+    // Super Vortex: an add-on layer over the spiral. Runs while a spiral is showing (either render
+    // path) and the Super switch is on; StopSpiral stops it, so panic and the emergency exit do too.
+    private Compositor.VortexLayer? _vortexLayer;
+    private void SyncVortex()
+    {
+        bool want = UseCompositor && SpiralShowing && Super.SuperAccess.IsOn(Super.SuperEffect.Vortex);
+        if (want)
+        {
+            if (_vortexLayer == null)
+            {
+                _vortexLayer = new Compositor.VortexLayer(App.Compositor!);
+                App.Compositor!.RegisterLayer(_vortexLayer);
+            }
+            _vortexLayer.Start();
+        }
+        else _vortexLayer?.Stop();
     }
     private Compositor.BrainDrainLayer? _brainDrainLayer;
     private Compositor.BrainDrainLayer GetBrainDrainLayer()
@@ -1480,6 +1503,12 @@ public class OverlayService : IDisposable
 
     private void StartSpiral()
     {
+        StartSpiralCore();
+        SyncVortex();
+    }
+
+    private void StartSpiralCore()
+    {
         if (SpiralShowing) return;
 
         _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
@@ -2033,6 +2062,7 @@ public class OverlayService : IDisposable
 
     internal void StopSpiral()
     {
+        _vortexLayer?.Stop();   // Super Vortex goes with the spiral it rides (panic included)
         _spiralLayer?.Hide(); // both paths cleared unconditionally - the flag may have flipped mid-run
         _gifFrameTimer?.Stop();
         _gifFrameTimer = null;
