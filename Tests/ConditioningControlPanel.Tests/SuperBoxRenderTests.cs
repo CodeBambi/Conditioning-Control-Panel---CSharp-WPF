@@ -39,9 +39,27 @@ public class SuperBoxRenderTests
                 box.Refresh();
                 Assert.True(box.ActualHeight > 0);
                 Assert.False(box.IsLit);
-                Assert.True(box.Switch.IsLockedNow);
-                Assert.Equal(e, box.Switch.Effect);
+                Assert.True(box.Picker.IsLockedNow);
+                Assert.Equal(e, box.Picker.Effect);
+                // Locked: Classic is what runs, so Classic is what the row and its line show.
+                Assert.Equal(SuperMode.Classic, box.Picker.ShownMode);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get(SuperModePick.LineKey(SuperMode.Classic)), box.ModeLine);
             }
+        });
+    }
+
+    [Fact]
+    public void A_locked_press_on_a_super_segment_stores_nothing_and_classic_stays_shown()
+    {
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            if (Environment.GetEnvironmentVariable("CCP_SUPER_ALL") == "1") return;
+            var box = new SuperBox { Effect = SuperEffect.Vortex };
+            Realize(box);
+            box.Picker.Activate(SuperMode.Both);
+            box.Picker.Activate(SuperMode.SuperOnly);
+            box.Picker.Activate(SuperMode.Classic); // Classic stays pressable: already shown, a no-op
+            Assert.Equal(SuperMode.Classic, box.Picker.ShownMode);
         });
     }
 
@@ -71,15 +89,31 @@ public class SuperBoxRenderTests
     }
 
     [Fact]
-    public void Quiet_switch_is_a_36_by_20_track()
+    public void The_pick_is_one_thin_row_and_super_only_appears_only_where_it_can_replace()
     {
         WpfRenderHarness.OnStaThread(() =>
         {
-            var sw = new SuperSwitch { Effect = SuperEffect.Vortex };
-            Realize(sw, 100, 60);
-            Assert.Equal(36, sw.ActualWidth);
-            Assert.Equal(20, sw.ActualHeight);
+            foreach (var e in Enum.GetValues<SuperEffect>())
+            {
+                var picker = new SuperModePicker { Effect = e };
+                Realize(picker, 400, 60);
+                Assert.Equal(SuperModeRule.Offered(e), picker.Modes);
+                Assert.Equal(SuperModeRule.CanReplace(e), picker.Modes.Contains(SuperMode.SuperOnly));
+                Assert.InRange(picker.ActualHeight, 16, 26); // one pill row, subtle
+                Assert.True(picker.ActualWidth < 300);
+                Assert.True(picker.Focusable);
+            }
         });
+    }
+
+    [Fact]
+    public void The_old_switch_and_the_use_only_afterglow_box_are_gone()
+    {
+        var root = SourceRoot();
+        Assert.False(File.Exists(Path.Combine(root, "Controls", "SuperSwitch.cs")));
+        var box = File.ReadAllText(Path.Combine(root, "Controls", "Super", "AfterglowOptionsBox.xaml"));
+        Assert.DoesNotContain("super_afterglow_only", box);
+        Assert.DoesNotContain("ChkOnly", box);
     }
 
     private static string SourceRoot()

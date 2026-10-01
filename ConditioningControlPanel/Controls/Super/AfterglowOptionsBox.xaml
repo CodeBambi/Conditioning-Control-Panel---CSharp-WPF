@@ -32,11 +32,6 @@
             </Button>
 
             <StackPanel x:Name="Body" Visibility="Collapsed" Margin="0,2,0,4">
-                <CheckBox x:Name="ChkOnly" Content="{loc:Str super_afterglow_only}" Margin="0,2,0,6"
-                          Foreground="{StaticResource TextLightBrush}" FontSize="13"
-                          ToolTip="{loc:Str super_afterglow_only_tip}"
-                          Checked="ChkOnly_Changed" Unchecked="ChkOnly_Changed"
-                          AutomationProperties.AutomationId="AfterglowOnly"/>
                 <Grid Height="34" Background="Transparent" ToolTip="{loc:Str super_afterglow_frequency_tip}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" MinWidth="110"/>

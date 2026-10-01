@@ -64,7 +64,6 @@ namespace ConditioningControlPanel.Controls
                 SliderFrequency.Value = s?.AfterglowFrequency ?? AfterglowOptions.FrequencyDefault;
                 SliderCount.Value = s?.AfterglowCount ?? AfterglowOptions.CountDefault;
                 SliderSize.Value = s?.AfterglowSize ?? AfterglowOptions.SizeDefault;
-                ChkOnly.IsChecked = s?.AfterglowOnly == true;
                 SliderDuration.Value = s?.AfterglowDuration ?? AfterglowOptions.DurationDefault;
                 SliderOpacity.Value = s?.AfterglowOpacity ?? AfterglowOptions.OpacityDefault;
                 SliderTilt.Value = s?.AfterglowTilt ?? AfterglowOptions.TiltSliderDefault;
@@ -99,9 +98,6 @@ namespace ConditioningControlPanel.Controls
             TxtTilt.Text = ((int)SliderTilt.Value).ToString();
             Write(s => s.AfterglowTilt = (int)SliderTilt.Value);
         }
-
-        private void ChkOnly_Changed(object sender, RoutedEventArgs e)
-            => Write(s => s.AfterglowOnly = ChkOnly.IsChecked == true);
 
         private void BtnHeader_Click(object sender, RoutedEventArgs e) => SetOpen(!IsOpen);
 
