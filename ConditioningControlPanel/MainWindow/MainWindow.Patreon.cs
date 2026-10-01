@@ -1276,9 +1276,12 @@ namespace ConditioningControlPanel
         internal void BtnDetachCompanion_Click(object sender, RoutedEventArgs e)
         {
             try { App.Bark?.NotifyUiAction("detach_companion"); } catch { }
-            if (_avatarTubeWindow == null) return;
 
-            _avatarTubeWindow.ToggleDetached();
+            // Popping out a switched-off companion wakes it, popped out, as the tray's Wake does.
+            // It used to do nothing here, and the v2 page had no other way to turn it back on.
+            if (App.Settings?.Current?.AvatarEnabled != true) WakeBambiUp();
+            else _avatarTubeWindow?.ToggleDetached();
+            if (_avatarTubeWindow == null) return;
 
             // The hero's Detach chip carries a fixed label and the tooltip reads the status text,
             // so only the (hidden, compat) status line is written now.

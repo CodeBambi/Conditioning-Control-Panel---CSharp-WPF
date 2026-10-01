@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Services
 {
@@ -375,11 +376,21 @@ namespace ConditioningControlPanel.Services
                     "Voice Test — Not Available");
                 return;
             }
+            // Usually the companion was switched off (Dismiss sticks across restarts), and 7.0.1
+            // had no switch in the app to turn it back on. Offer it right here, then carry on.
+            if (App.AvatarWindow == null && App.Settings?.Current?.AvatarEnabled != true
+                && System.Windows.MessageBox.Show(
+                       Loc.Get("voice_test_companion_off_body"),
+                       Loc.Get("voice_test_companion_off_title"),
+                       System.Windows.MessageBoxButton.YesNo) == System.Windows.MessageBoxResult.Yes)
+                App.MainWindowRef?.SetAvatarEnabled(true);
             if (App.AvatarWindow == null)
             {
-                System.Windows.MessageBox.Show(
-                    "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.",
-                    "Voice Test — No Avatar");
+                // Declined: nothing to say. Switched on and still no tube: the old note.
+                if (App.Settings?.Current?.AvatarEnabled == true)
+                    System.Windows.MessageBox.Show(
+                        "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.",
+                        "Voice Test — No Avatar");
                 return;
             }
             if (App.MantraVoice?.HasMantras() != true)
