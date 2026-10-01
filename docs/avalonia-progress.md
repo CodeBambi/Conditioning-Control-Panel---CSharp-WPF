@@ -1197,3 +1197,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/emidesk-ring-2: +822
 - EmiSuggester + EmiDoors in Core; the Avalonia desk opens the ring with real openers (surface-less doors hidden); Options click-away via
   an X11 poll that keeps no key state; Book TAKE ME THERE. Fail-proven tests. Rows stay stub.
+
+## avalonia-port/companion-awareness-brain: +229
+- Awareness reactions take WPF's legacy AI-first route only with v2 off + consent + chat + AI; v2 on stays preset-only and sends nothing.
+  Privacy tests (loopback), fail-proven. Arbiter chain stays WPF-only (decision logged).
