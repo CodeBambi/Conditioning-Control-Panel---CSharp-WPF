@@ -18,6 +18,17 @@ namespace ConditioningControlPanel.Services;
 /// </summary>
 public class BouncingTextService : IDisposable
 {
+    /// <summary>
+    /// The speed slider (1-10) as a multiplier on the 180-300 DIP/s base. 1-5 is the old 0.1-0.5;
+    /// 6-10 climb to 2.0 (owner: double the top end), so the default 5 and everything below it keep
+    /// their feel and only the fast end moves.
+    /// </summary>
+    public static double SpeedMultiplier(int slider)
+    {
+        int s = Math.Clamp(slider, 1, 10);
+        return s <= 5 ? s / 10.0 : 0.5 + (s - 5) * 0.3;
+    }
+
     private readonly Random _random = new();
     private readonly List<BouncingTextWindow> _windows = new();
     private bool _isRunning;
@@ -189,7 +200,7 @@ public class BouncingTextService : IDisposable
             // Random velocity in DIP/second (speed based on setting). The base is the
             // old 3-5 px/tick value scaled by 60 so the on-screen feel is unchanged at
             // 60 FPS, but motion is now delta-time driven so it stays correct at any rate.
-            var speed = settings.BouncingTextSpeed / 10.0; // 1-10 maps to 0.1-1.0 multiplier
+            var speed = SpeedMultiplier(settings.BouncingTextSpeed);
             var baseSpeed = (3.0 + _random.NextDouble() * 2.0) * 60.0; // 180-300 DIP/sec
             logo.VelX = baseSpeed * speed * (_random.Next(2) == 0 ? 1 : -1);
             logo.VelY = baseSpeed * speed * (_random.Next(2) == 0 ? 1 : -1);
@@ -824,7 +835,7 @@ public class BouncingTextService : IDisposable
         var settings = App.Settings.Current;
 
         // Update speed
-        var speed = settings.BouncingTextSpeed / 10.0;
+        var speed = SpeedMultiplier(settings.BouncingTextSpeed);
         foreach (var l in _logos)
         {
             var currentSpeed = Math.Sqrt(l.VelX * l.VelX + l.VelY * l.VelY);
