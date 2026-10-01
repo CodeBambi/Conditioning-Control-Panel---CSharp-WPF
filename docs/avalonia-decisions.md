@@ -408,3 +408,7 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Not taken: History (transcript window), link chips (CompanionLinkLauncher needs the embedded browser), local-provider history clear (slice 7).
 - Tests: `Tests/CCP.Avalonia.Tests/HerRoomChatMemoryTests.cs` (loopback fake model; fail-proven on send, forget and the switch).
 - Advisor: supervisor.
+- Follow-up (review): `MemoryStore.Wipe` also deletes temp/backup siblings (`<store>.*`, e.g. memory.json.tmp) of every file it
+  wipes - shared Core, so WPF gains it (`Tests/CCP.Core.Tests/MemoryWipeSiblingsTests.cs`, fail-proven). Avalonia chat VMs
+  `Detach` from `TurnsChanged` when the view's VM is replaced; the diary clears the tube bubble log through the
+  `MemoryDiaryViewModel.TubeBubbleLog` seam (headless tests have no desktop lifetime for `AvatarTubeWindow.Live`). Both fail-proven.

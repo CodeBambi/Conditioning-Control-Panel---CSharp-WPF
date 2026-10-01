@@ -44,12 +44,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     {
         private INotifyCollectionChanged? _watchedTurns;
         private bool _shimmerPlayed;
+        private ChatThresholdViewModel? _vm;
 
         public ChatThresholdView()
         {
             InitializeComponent();
-            DataContext = new ChatThresholdViewModel();
-            DataContextChanged += (_, _) => WatchTurns((DataContext as ChatThresholdViewModel)?.Turns);
+            DataContext = _vm = new ChatThresholdViewModel();
+            DataContextChanged += (_, _) =>
+            {
+                // A replaced viewmodel stops listening to the brain's turn log (WPF Detach on teardown).
+                if (!ReferenceEquals(_vm, DataContext)) _vm?.Detach();
+                _vm = DataContext as ChatThresholdViewModel;
+                WatchTurns(_vm?.Turns);
+            };
             Loaded += OnLoaded;
             Unloaded += (_, _) => WatchTurns(null);
         }
@@ -318,6 +325,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Companion room: chat sync failed"); }
         }
+
+        /// <summary>Stops listening to the brain's turn log, so a replaced viewmodel is not pinned by a live session.</summary>
+        public void Detach() => AttachSession(null);
+
+        /// <summary>True while subscribed to a session's TurnsChanged (for tests).</summary>
+        internal bool IsAttached => _session != null;
 
         private void AttachSession(ChatSession? session)
         {

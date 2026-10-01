@@ -349,6 +349,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public MemoryDiaryViewModel() : this(ArtboardFacts(), ArtboardStats()) { }
 
         // ---- live (WPF MemoryDiaryRuntimeVm over App.Brain.Memory) ----
+        /// <summary>The tube's on-screen bubble log the wipe clears. A seam only because a headless test
+        /// has no desktop lifetime for <c>AvatarTubeWindow.Live</c> to find.</summary>
+        internal static Func<ICollection<Views.AvatarTube.ChatMessage>?> TubeBubbleLog =
+            () => Views.AvatarTube.AvatarTubeWindow.Live?.ChatHistory;
         private bool _live;
         private Brain.IMemoryStore? _store;
         private CompanionMemoryViewModel? _inner;
@@ -522,7 +526,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 // the conversation through CompanionBrain.Forget, plus the tube's bubble log.
                 CoreBark.NotifyUiAction("reset_memory");
                 _inner?.ForgetEverything();
-                Views.AvatarTube.AvatarTubeWindow.Live?.ChatHistory.Clear();
+                TubeBubbleLog()?.Clear();
                 Serilog.Log.Information("Companion memory wiped from the diary");
                 Sync();
                 return;

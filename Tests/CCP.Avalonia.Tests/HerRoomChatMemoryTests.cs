@@ -100,6 +100,18 @@ public sealed class HerRoomChatMemoryTests
             Assert.True(vm.Turns[1].IsHer && vm.Turns[1].IsAiGenerated);
             Assert.NotEqual(string.Empty, vm.LastHeardCopy);
 
+            // Before the wipe the line really is on disk, so "gone" below proves a deletion.
+            var session = Path.Combine(dir, "session.json");
+            brain.Flush();
+            Assert.Contains("hello you", File.ReadAllText(session));
+
+            // A replaced viewmodel stops listening to the brain's turn log (WPF Detach).
+            Assert.True(vm.IsAttached);
+            var view = new ChatThresholdView { ViewModel = vm };
+            view.ViewModel = ChatThresholdViewModel.CreateLive();
+            Assert.False(vm.IsAttached);
+            Assert.True(view.ViewModel!.IsAttached);
+
             // The Engine Room memory switch: OFF erases the saved conversation, as WPF does.
             var grid = new AiPermissionsGrid();
             grid.SyncFromSettings();
@@ -107,7 +119,6 @@ public sealed class HerRoomChatMemoryTests
             Dispatcher.UIThread.RunJobs();
             Assert.False(CoreSettings.Current.CompanionPrompt.ChatMemoryEnabled);
             Assert.Empty(brain.Session.Turns);
-            var session = Path.Combine(dir, "session.json");
             Assert.True(!File.Exists(session) || !File.ReadAllText(session).Contains("hello you"));
         }
         finally { (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain); }
@@ -138,7 +149,14 @@ public sealed class HerRoomChatMemoryTests
             Assert.Contains("level 50", File.ReadAllText(path));
             Assert.DoesNotContain(vm.Facts, f => f.Text.Contains("Beans"));
 
-            vm.ForgetEverythingCommand.Execute(null);
+            // Forget everything also clears the tube's on-screen bubble log (WPF ChatHistory.Clear).
+            var tube = new ConditioningControlPanel.Avalonia.Views.AvatarTube.AvatarTubeWindow(null);
+            var previousLog = MemoryDiaryViewModel.TubeBubbleLog;
+            MemoryDiaryViewModel.TubeBubbleLog = () => tube.ChatHistory;
+            tube.ChatHistory.Add(new ConditioningControlPanel.Avalonia.Views.AvatarTube.ChatMessage { Text = "old bubble", IsUser = true });
+            try { vm.ForgetEverythingCommand.Execute(null); }
+            finally { MemoryDiaryViewModel.TubeBubbleLog = previousLog; }
+            Assert.Empty(tube.ChatHistory);
             store = (MemoryStore)brain.Memory;
             store.SaveNow();
             Assert.DoesNotContain("level 50", File.ReadAllText(path));
