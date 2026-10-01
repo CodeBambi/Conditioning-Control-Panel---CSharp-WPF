@@ -4,8 +4,7 @@
 //
 // The mic opens only under WPF's conditions: VoiceInputRules.ModesToRun (consent + an armed mode +
 // premium or the "voice" free day + an available engine), re-read at every reconcile.
-// ponytail: no sherpa KWS spotter (the Vosk wake grammar is WPF's fallback path), no spoken-mantra
-// fallback (MantraVoiceService is not on this head), no bark voice lines (text confirmations), no
+// ponytail: no sherpa KWS spotter (the Vosk wake grammar is WPF's fallback path), no bark voice lines (text confirmations), no
 // echo wait on her clip (confirmations here are text-only; a 300 ms tail stands in). Intents with no
 // seam here (spiral, pink, mind wipe, quiz, keyword triggers, bubble count, shake, deeper,
 // session pause/resume, volume/mute, video pause/resume) are left out of the grammar.
@@ -147,11 +146,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (VoiceCmds.TryHandleInlineCommand(heard, VoiceInputRules.WakeWords(CoreSettings.Current.SpeechWakeWords))) return;
             VoiceCmds.PrepareWake();
-            _ = RequestVoiceCommandAsync();
+            _ = RequestVoiceCommandAsync(allowCommands: true);
         }
 
-        /// <summary>WPF RequestVoiceCommand: claim the mic, free the wake loop's hold, run one prompt.</summary>
-        internal async Task RequestVoiceCommandAsync()
+        /// <summary>WPF RequestVoiceCommand: claim the mic, free the wake loop's hold, run one prompt.
+        /// Wake / push-to-talk (<paramref name="allowCommands"/>) try a command first and fall back to a
+        /// mantra only with on-demand mantras on; Takeover's surprise mantra always asks one.</summary>
+        internal async Task RequestVoiceCommandAsync(bool allowCommands)
         {
             var sp = VoiceSpeech;
             if (sp?.IsAvailable != true || _avatarTubeWindow == null) return;
@@ -162,7 +163,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 _wakeWaitCts?.Cancel();
                 for (int i = 0; i < 24 && sp.IsListening; i++) await Task.Delay(25).ConfigureAwait(false);
-                await VoiceCmds.TryHandleVoiceCommandAsync(cts.Token).ConfigureAwait(false);
+                if (allowCommands)
+                {
+                    if (await VoiceCmds.TryHandleVoiceCommandAsync(cts.Token).ConfigureAwait(false)) return;
+                    if (!CoreSettings.Current.SpokenMantrasEnabled) return;
+                }
+                if (cts.IsCancellationRequested) return;
+                // WPF OnSpeechPartial / OnSpeechLevel, for this prompt only.
+                EventHandler<string> partial = (_, t) => Dispatcher.UIThread.Post(() => ShowVoiceHeard(t));
+                EventHandler<double> level = (_, l) => Dispatcher.UIThread.Post(() => SetVoiceLevel(l));
+                sp.PartialTranscript += partial;
+                sp.LevelChanged += level;
+                try { await SpokenMantra.RunAsync(App.MantraVoice, MantraHost(sp, cts.Token), cts.Token).ConfigureAwait(false); }
+                finally { sp.PartialTranscript -= partial; sp.LevelChanged -= level; }
             }
             catch (Exception ex) { Log.Warning(ex, "RequestVoiceCommand failed"); }
             finally
@@ -172,6 +185,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Volatile.Write(ref _voiceBusyFlag, 0);
             }
         }
+
+        // ponytail: no clip-duration probe (WPF reads it with NAudio), so a voiced prompt settles on
+        // WPF's unknown-duration 1.4 s plus the IsSpeaking spin; add a LibVLC probe if she self-matches.
+        private SpokenMantraHost MantraHost(SpeechEngine sp, CancellationToken ct) => new()
+        {
+            Recognize = (phrase, opts) => sp.RecognizePhraseAsync(phrase, opts, ct),
+            Say = (text, audio) => Dispatcher.UIThread.Post(() => _avatarTubeWindow?.GigglePriority(text,
+                playSound: audio != null, aiGenerated: false, phraseAudioPath: audio, barkVoice: audio != null)),
+            IsSpeaking = () => _avatarTubeWindow?.IsSpeaking == true,
+            Credit = () => { if (!App.Mantra.TryCompleteMantra()) App.Mantra.CreditExternalMantra(); },
+            PromptStarted = phrase => Dispatcher.UIThread.Post(() => ShowVoicePrompt(phrase)),
+            PromptFinished = r => Dispatcher.UIThread.Post(() => ShowVoiceVerdict(r)),
+        };
 
         private void StartWakeLoop()
         {

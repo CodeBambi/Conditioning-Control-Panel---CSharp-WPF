@@ -3,7 +3,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
+using ConditioningControlPanel.Models;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
@@ -160,6 +162,76 @@ public sealed class VoiceCommandsTests
         }
         await Task.CompletedTask;
     });
+
+    /// <summary>Takeover's surprise Spoken Mantra (WPF RunSpokenMantraAsync): only picked when the mod
+    /// ships mantras; the WAV says the phrase, so it matches, credits 30 XP and paints the verdict.</summary>
+    [Fact]
+    public Task TakeoverSpokenMantraHeardInTheWavCreditsXp() => WithMantras(async (shell, mic, engine, xp) =>
+    {
+        CoreProgression.TrackMantraCompletedProvider = () => xp.Add(-1);
+        shell.PerformAutonomy(AutonomyActionType.SpokenMantra);
+        await Until(() => { Dispatcher.UIThread.RunJobs(); return xp.Contains(30); }, 30);
+        Assert.Contains(-1, xp);                         // the quest/program verifier too
+        Dispatcher.UIThread.RunJobs();
+        var tab = shell.FindControl<Control>("BambiTakeoverTab")!;
+        Assert.Equal("\u2713 MATCHED", tab.FindControl<TextBlock>("TxtVoiceVerdict")!.Text);
+        Assert.True(tab.FindControl<Border>("VoiceVerdictChip")!.IsVisible);
+    });
+
+    /// <summary>Panic while she is still saying the prompt: the mic never opens, nothing is credited.</summary>
+    [Fact]
+    public Task PanicBeforeTheMantraListenKeepsTheMicShut() => WithMantras(async (shell, mic, engine, xp) =>
+    {
+        var s = CoreSettings.Current;
+        (s.PanicKeyEnabled, s.PanicKey) = (true, "F8");
+        var starts = mic.Starts;
+        shell.PerformAutonomy(AutonomyActionType.SpokenMantra);
+        await Until(() => shell.VoicePromptActive, 3);
+        shell.HandlePanicKeyPress(DateTime.Now);
+        await Until(() => !shell.VoicePromptActive, 3);
+        await Task.Delay(2500);
+        Assert.Equal(starts, mic.Starts);
+        Assert.Empty(xp);
+    });
+
+    private static Task WithMantras(Func<MainShellWindow, WavMic, SpeechEngine, System.Collections.Generic.List<double>, Task> body) =>
+        Run(async (shell, mic, engine) =>
+        {
+            var s = CoreSettings.Current;
+            s.SpeechWakeWordEnabled = false;             // Takeover's mantra only while the user is not driving the mic
+            shell.RefreshVoiceInputModes();
+            await Until(() => !engine.IsListening, 5);
+            var dir = System.IO.Directory.CreateTempSubdirectory("ccp-mantras-").FullName;
+            var audio = System.IO.Path.Combine(dir, "resources", "sounds", "companion_audio");
+            System.IO.Directory.CreateDirectory(audio);
+            var (pkg, id) = (CoreMods.ActiveModPackageProvider, CoreMods.ActiveModIdProvider);
+            var (addXp, track) = (CoreProgression.AddXPProvider, CoreProgression.TrackMantraCompletedProvider);
+            var xp = new System.Collections.Generic.List<double>();
+            var shotId = "spoken-mantra-test-" + Guid.NewGuid().ToString("N");
+            CoreMods.ActiveModIdProvider = () => shotId;
+            CoreMods.ActiveModPackageProvider = () => new ModPackage(new ModManifest { Id = shotId }, dir, isBuiltIn: false);
+            s.AutonomyConsentGiven = true;
+            try
+            {
+                Assert.False(shell.Autonomy.CanPerform(AutonomyActionType.SpokenMantra));   // no mantras.json: never picked
+                System.IO.File.WriteAllText(System.IO.Path.Combine(audio, "mantras.json"),
+                    "{\"mantras\":[{\"id\":\"m1\",\"phrase\":\"" + WavPhrase + "\",\"promptText\":\"Say it\"}]}");
+                shotId += "-2";                              // a fresh mod id reloads the set
+                Assert.True(shell.Autonomy.CanPerform(AutonomyActionType.SpokenMantra));
+                Assert.True(shell.SetAutonomyEnabled(true));
+                Dispatcher.UIThread.RunJobs();
+                CoreProgression.AddXPProvider = (amount, _) => { lock (xp) xp.Add(amount); };
+                await body(shell, mic, engine, xp);
+            }
+            finally
+            {
+                (CoreProgression.AddXPProvider, CoreProgression.TrackMantraCompletedProvider) = (addXp, track);
+                shell.Autonomy.Stop();
+                (CoreMods.ActiveModPackageProvider, CoreMods.ActiveModIdProvider) = (pkg, id);
+                (s.AutonomyModeEnabled, s.AutonomyConsentGiven) = (false, false);
+                System.IO.Directory.Delete(dir, true);
+            }
+        });
 
     private static Task Run(Func<MainShellWindow, WavMic, SpeechEngine, Task> body) =>
         AvaloniaTestDispatcher.RunAsync(async () =>

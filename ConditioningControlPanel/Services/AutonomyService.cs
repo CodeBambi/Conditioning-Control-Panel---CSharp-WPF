@@ -1628,128 +1628,37 @@ namespace ConditioningControlPanel.Services
             RequestVoiceCommand();
         }
 
-        private async Task RunSpokenMantraAsync()
+        // The flow is Core SpokenMantra (shared with the Avalonia head); this is the WPF host.
+        private Task RunSpokenMantraAsync()
         {
-            try
+            var voice = App.MantraVoice;
+            if (voice == null) { App.Logger?.Information("AutonomyService: SpokenMantra — no mantra to ask"); return Task.CompletedTask; }
+            return Services.Speech.SpokenMantra.RunAsync(voice, new Services.Speech.SpokenMantraHost
             {
-                var mantra = App.MantraVoice?.NextMantra();
-                if (mantra == null)
+                Recognize = (phrase, opts) => App.Speech!.RecognizePhraseAsync(phrase, opts),
+                // Marshaled to the UI thread since the funnel may invoke us off-thread (wake-word / PTT).
+                // Voiced when a clip resolved (bark voice path); text-only otherwise.
+                Say = (text, audioPath) =>
                 {
-                    App.Logger?.Information("AutonomyService: SpokenMantra — no mantra to ask");
-                    return;
-                }
-
-                var phrase = mantra.Phrase;
-                try { VoicePromptStarted?.Invoke(this, phrase); } catch { }
-
-                // She delivers the whole prompt (voiced if the clip ships, else text-only). Marshaled to
-                // the UI thread since the funnel may invoke us off-thread (wake-word / PTT).
-                var promptAudio = App.MantraVoice?.ResolveAudio(mantra.PromptAudio);
-                Speak(mantra.PromptText, promptAudio);
-
-                // CRITICAL: open the mic only AFTER she finishes saying the phrase — otherwise the
-                // recognizer hears her own delivery and self-matches. Wait for the clip's measured
-                // duration (+ a beat), then spin briefly until the avatar reports it's done speaking.
-                var dur = App.MantraVoice?.GetAudioDuration(promptAudio);
-                var settleMs = dur.HasValue ? (int)dur.Value.TotalMilliseconds + 600 : 1400;
-                await Task.Delay(settleMs).ConfigureAwait(false);
-                for (int i = 0; i < 40 && (App.AvatarWindow?.IsSpeaking ?? false); i++)
-                    await Task.Delay(75).ConfigureAwait(false);
-
-                // A beat longer than the old 8s so it's easier to get the whole phrase out in time.
-                var listenWindow = TimeSpan.FromSeconds(10);
-
-                var result = await App.Speech!.RecognizePhraseAsync(
-                    phrase, new Services.Speech.RecognizeOptions { Timeout = listenWindow })
-                    .ConfigureAwait(false);
-
-                // One gentle retry on ANY non-match — too quiet, misheard, or nothing said — as long as
-                // the engine is still available. Makes it much easier to land the phrase; only a clean
-                // match (or an unavailable engine) skips the second try. The prompt fits the reason.
-                if (!result.Matched && !result.Unavailable)
-                {
-                    var retryLine = result.LoudEnough == false
-                        ? "Louder for me~ say it like you mean it."
-                        : result.TimedOut && string.IsNullOrWhiteSpace(result.Transcript)
-                            ? "Take your time~ say it again for me."
-                            : "Mmm, almost~ say it once more, just for me.";
-                    SpeakLine(App.MantraVoice?.GetRetry(), retryLine);
-                    await Task.Delay(900).ConfigureAwait(false);
-                    for (int i = 0; i < 40 && (App.AvatarWindow?.IsSpeaking ?? false); i++)
-                        await Task.Delay(75).ConfigureAwait(false);
-                    result = await App.Speech!.RecognizePhraseAsync(
-                        phrase, new Services.Speech.RecognizeOptions { Timeout = listenWindow })
-                        .ConfigureAwait(false);
-                }
-
-                if (result.Unavailable)
-                {
-                    App.Logger?.Information("AutonomyService: SpokenMantra — speech went unavailable mid-action");
-                    return;
-                }
-
-                try { VoicePromptFinished?.Invoke(this, result); } catch { }
-
-                if (result.Matched)
-                {
-                    // Bespoke voiced success response for this exact mantra.
-                    var respAudio = App.MantraVoice?.ResolveAudio(mantra.ResponseAudio);
-                    // No custom response on this mantra: neutral praise, with the pet name coming
-                    // from the active mod via {petname}.
-                    Speak(string.IsNullOrWhiteSpace(mantra.Response)
-                        ? Localization.VocabTokens.Apply("Perfect, {petname}~")
-                        : mantra.Response, respAudio);
-                    // Typed-minigame credit if it happens to be running; otherwise credit the
-                    // spoken completion directly - TryCompleteMantra() bails when the minigame
-                    // is closed, which used to mean a mic-verified mantra credited nothing
-                    // (no XP, no quest, no program day).
-                    if (App.Mantra?.TryCompleteMantra() != true)
-                        App.Mantra?.CreditExternalMantra();
-                    App.Logger?.Information("AutonomyService: SpokenMantra matched ({Chars} chars, score={Score:0.00}, conf={Conf:0.00})",
-                        (phrase ?? "").Length, result.Score, result.Confidence);
-                }
-                else if (result.TimedOut && string.IsNullOrWhiteSpace(result.Transcript))
-                {
-                    SpeakLine(App.MantraVoice?.GetTimeout(), "Too shy? I'll ask again later~");
-                    App.Logger?.Information("AutonomyService: SpokenMantra timed out, no speech ({Chars} chars)", (phrase ?? "").Length);
-                }
-                else
-                {
-                    SpeakLine(App.MantraVoice?.GetRetry(), "Mmm, not quite. Next time say it just for me~");
-                    // Never the transcript: that is a recording of the user's own voice in text
-                    // form, and it is the one thing in this method they did not choose to write down.
-                    App.Logger?.Information("AutonomyService: SpokenMantra miss ({Chars} chars, heard {HeardChars} chars, score={Score:0.00})",
-                        (phrase ?? "").Length, (result.Transcript ?? "").Length, result.Score);
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning("AutonomyService: SpokenMantra failed: {Error}", ex.Message);
-            }
-
-            // Play a shared retry/timeout line (voiced if it ships audio), else fall back to plain text.
-            void SpeakLine(Models.MantraLine? line, string fallback)
-            {
-                if (line != null && !string.IsNullOrWhiteSpace(line.Text))
-                    Speak(line.Text, App.MantraVoice?.ResolveAudio(line.Audio));
-                else
-                    Speak(fallback, null);
-            }
-
-            void Speak(string text, string? audioPath)
-            {
-                if (Application.Current?.Dispatcher == null) return;
-                Application.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    try
+                    if (Application.Current?.Dispatcher == null) return;
+                    Application.Current.Dispatcher.BeginInvoke(() =>
                     {
-                        // Voiced when a clip resolved (bark voice path); text-only otherwise.
-                        App.AvatarWindow?.GigglePriority(text, playSound: audioPath != null, aiGenerated: false,
-                            phraseAudioPath: audioPath, barkVoice: audioPath != null);
-                    }
-                    catch { }
-                });
-            }
+                        try
+                        {
+                            App.AvatarWindow?.GigglePriority(text, playSound: audioPath != null, aiGenerated: false,
+                                phraseAudioPath: audioPath, barkVoice: audioPath != null);
+                        }
+                        catch { }
+                    });
+                },
+                IsSpeaking = () => App.AvatarWindow?.IsSpeaking ?? false,
+                AudioDuration = path => voice.GetAudioDuration(path),
+                // Typed-minigame credit if it happens to be running; otherwise credit the spoken
+                // completion directly - TryCompleteMantra() bails when the minigame is closed.
+                Credit = () => { if (App.Mantra?.TryCompleteMantra() != true) App.Mantra?.CreditExternalMantra(); },
+                PromptStarted = phrase => VoicePromptStarted?.Invoke(this, phrase),
+                PromptFinished = result => VoicePromptFinished?.Invoke(this, result),
+            });
         }
 
         #endregion

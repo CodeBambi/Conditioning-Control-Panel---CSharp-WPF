@@ -381,3 +381,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   (WPF leaves the unsaved candidate live in memory). Mouth/tongue detectors and the verify cursor/bubble test are not ported:
   the mouth prompts time out to WPF's "moving on" text and Verify runs its countdown only.
 - Advisor: worker (supervisor informed).
+
+## spoken-mantras
+- WPF `RunSpokenMantraAsync` extracted to Core `SpokenMantra.RunAsync` with a small host (recognize, say, speaking,
+  duration, credit, prompt events); WPF delegates with its exact previous calls, text and timings. `MantraVoiceService`
+  git mv'd to Core (CoreMods/ContentLocator/Serilog); its NAudio `GetAudioDuration` stays in WPF as an extension, so
+  WPF callers are unchanged. Avalonia passes no duration (WPF's unknown-duration path: 1.4 s + IsSpeaking spin).
+- Entitlement for the surprise mantra is Takeover's own (WPF adds no voice check there); the wake/PTT fallback is
+  already behind VoiceInputRules (consent + armed + premium/voice day). Panic cancels the prompt token before the listen.
+- Live voice panel partials/level are subscribed for the mantra prompt only (WPF subscribes always; the panel is only
+  visible during a mantra prompt, so nothing differs on screen). MantraChantService is not used by this path: out of scope.
+- Advisor: worker (supervisor informed).
