@@ -167,6 +167,55 @@ namespace ConditioningControlPanel.Services.Super
             return 1 + amp * Math.Max(0, 1 - age * rate);
         }
 
+        // Leftover stamps (owner: afterglow and a little melt). A glow that breathes after landing, a
+        // one-off ghost echo, then a slow sag with drips in the second half of the stamp's life.
+        public const double MeltStart = 0.4;            // share of the life before the melt begins
+        public const double MeltSag = 0.32;             // x fs, how far the stamp sinks at full melt
+        public const double MeltStretch = 0.55;         // extra height at full melt
+        public const double EchoLife = 1.1, EchoGrow = 0.14, EchoAlpha = 0.35;
+        public const int MaxDrips = 4;
+        public const double DripDelaySpread = 0.25;     // share of the life the drips start over
+        public const double DripReach = 1.3;            // x fs a drip travels over its life
+
+        /// <summary>Leftover motion factor: Off 0 (still), Reduced half, Full 1.</summary>
+        public static double LeftoverMotion(MotionLevel motion) =>
+            motion == MotionLevel.Off ? 0 : motion == MotionLevel.Reduced ? 0.5 : 1;
+
+        /// <summary>Halo strength 0..1: brightest at landing, settles to a slow breath. Off holds a steady 0.35.</summary>
+        public static double AfterglowStrength(double age, double life, MotionLevel motion)
+        {
+            if (motion == MotionLevel.Off) return 0.35;
+            double settle = 0.3 + 0.7 * Math.Exp(-age * 1.1);
+            double breath = 1 + 0.18 * LeftoverMotion(motion) * Math.Sin(age * 2.2);
+            return Math.Clamp(settle * breath, 0, 1);
+        }
+
+        /// <summary>The ghost echo right after landing: grows by 14 percent and fades over 1.1 s. False when none.</summary>
+        public static bool EchoAt(double age, MotionLevel motion, out double scale, out double alpha)
+        {
+            scale = 1; alpha = 0;
+            if (motion == MotionLevel.Off || age < 0 || age >= EchoLife) return false;
+            double u = age / EchoLife;
+            scale = 1 + EchoGrow * LeftoverMotion(motion) * Ease(u);
+            alpha = EchoAlpha * (1 - u);
+            return true;
+        }
+
+        /// <summary>How melted a stamp is, 0..1: nothing until 40 percent of its life, then a smooth sag.</summary>
+        public static double MeltAmount(double age, double life, MotionLevel motion)
+        {
+            if (motion == MotionLevel.Off || life <= 0) return 0;
+            return Ease((age / life - MeltStart) / (1 - MeltStart));
+        }
+
+        /// <summary>Drip travel 0..1 for one drip (delay is 0..1 of DripDelaySpread); 0 until it starts.</summary>
+        public static double DripProgress(double age, double life, double delay01, MotionLevel motion)
+        {
+            if (motion == MotionLevel.Off || life <= 0) return 0;
+            double start = (MeltStart + delay01 * DripDelaySpread) * life;
+            return Math.Clamp((age - start) / Math.Max(0.001, life - start), 0, 1);
+        }
+
         /// <summary>Smoothstep, the mockup's ease.</summary>
         public static double Ease(double x)
         {
