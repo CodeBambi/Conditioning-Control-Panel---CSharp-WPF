@@ -147,7 +147,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>CalibrationSoundService.Play: master volume on the ^1.5 curve, silence when missing.</summary>
-        private static void Play(string file, float multiplier)
+        internal static void Play(string file, float multiplier)
         {
             try
             {

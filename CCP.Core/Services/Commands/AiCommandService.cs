@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using System.Windows;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Commands
 {
@@ -19,7 +19,8 @@ namespace ConditioningControlPanel.Services.Commands
         // emits. Counter is reset by <see cref="BeginBatch"/>.
         public const int MaxCommandsPerResponse = 3;
 
-        private static readonly Dictionary<string, CancellationTokenSource> TokenCancellationSources = new();
+        // Every in-flight command, keyed by its token or a synthetic key; panic / switch-off cancel them all.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> TokenCancellationSources = new();
         private int _batchCount;
 
         public void BeginBatch()
@@ -31,57 +32,45 @@ namespace ConditioningControlPanel.Services.Commands
         {
             if (commandData.Data == null) return;
 
-            var settings = App.Settings?.Current?.CompanionPrompt;
-            if (settings == null)
+            if (Refusal(commandData.Command) is { } refusal)
             {
-                App.Logger?.Debug("AiCommandService: no settings — dropping command {Cmd}", commandData.Command);
-                return;
-            }
-
-            // Master gate.
-            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOn(settings, App.Patreon?.HasLabAccess == true))
-            {
-                App.Logger?.Information("AiCommandService: master toggle off or no Tier 2 - dropping {Cmd}", commandData.Command);
-                return;
-            }
-
-            // Per-effect gate.
-            if (!IsEffectAllowed(commandData.Command, settings))
-            {
-                App.Logger?.Information("AiCommandService: effect {Cmd} disabled by user — dropping", commandData.Command);
+                Log.Information("AiCommandService: {Reason} - dropping {Cmd}", refusal, commandData.Command);
                 return;
             }
 
             // Per-batch cap.
             if (Interlocked.Increment(ref _batchCount) > MaxCommandsPerResponse)
             {
-                App.Logger?.Information("AiCommandService: batch cap reached ({Cap}) — dropping {Cmd}",
+                Log.Information("AiCommandService: batch cap reached ({Cap}) — dropping {Cmd}",
                     MaxCommandsPerResponse, commandData.Command);
                 return;
             }
 
-            App.Logger?.Information("AiCommandService: dispatching {Cmd}", commandData.Command);
+            Log.Information("AiCommandService: dispatching {Cmd}", commandData.Command);
 
             // Surface a human-readable line in the AI Brain "Live actions" feed. This is the
             // request; a second line follows after execution if the effect did not fire.
             AppendLiveAction(FormatLiveAction(commandData));
 
+            // Every command is cancellable (panic, switch-off); an untokened one gets a synthetic key.
             var token = commandData.Data.Token;
-            CancellationTokenSource? cts = null;
-
-            if (!string.IsNullOrEmpty(token))
-            {
-                CancelToken(token);
-                cts = new CancellationTokenSource();
-                TokenCancellationSources[token] = cts;
-            }
+            if (string.IsNullOrEmpty(token)) token = "#" + Guid.NewGuid().ToString("N");
+            else CancelToken(token);
+            var cts = new CancellationTokenSource();
+            TokenCancellationSources[token] = cts;
 
             try
             {
-                var command = CommandFactory.CreateCommand(commandData, cts?.Token ?? default, depth: 0);
-                if (command != null)
+                var command = CommandFactory.CreateCommand(commandData, cts.Token, depth: 0);
+                if (command == null)
                 {
-                    App.Logger?.Debug("AiCommandService: executing {Cmd}", commandData.Command);
+                    // Unreachable on WPF (the per-effect gate refuses every type the factory lacks);
+                    // kept so a request line is never left standing as if it fired.
+                    AppendLiveAction(FormatFailedAction(commandData));
+                }
+                else
+                {
+                    Log.Debug("AiCommandService: executing {Cmd}", commandData.Command);
                     var fired = await command.ExecuteAsync();
                     if (!fired)
                     {
@@ -89,56 +78,62 @@ namespace ConditioningControlPanel.Services.Commands
                         // the effect never happened (empty assets/audio folder, video already
                         // playing, feature off), so follow up instead of leaving a feed line
                         // that reads like it played (#1120).
-                        App.Logger?.Warning("AiCommandService: {Cmd} did not fire", commandData.Command);
+                        Log.Warning("AiCommandService: {Cmd} did not fire", commandData.Command);
                         AppendLiveAction(FormatFailedAction(commandData));
                     }
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "AiCommandService: command {Cmd} threw", commandData.Command);
+                Log.Error(ex, "AiCommandService: command {Cmd} threw", commandData.Command);
             }
             finally
             {
-                if (!string.IsNullOrEmpty(token))
-                {
-                    RemoveToken(token);
-                }
+                RemoveToken(token, cts);
             }
         }
 
-        public void CancelAllCommands()
+        public void CancelAllCommands() => CancelAll();
+
+        /// <summary>Cancels every pending command: getbacktome delays and their remaining nested
+        /// commands. Panic on every head and switching AI effects off call this.</summary>
+        /// <summary>Bumped by every <see cref="CancelAll"/>, so a head can drop an effect start it had to defer.</summary>
+        public static int CancelGeneration => Volatile.Read(ref _cancelGeneration);
+        private static int _cancelGeneration;
+
+        public static void CancelAll()
         {
-            var tokens = new List<string>(TokenCancellationSources.Keys);
-            foreach (var token in tokens)
-            {
-                CancelToken(token);
-            }
+            Interlocked.Increment(ref _cancelGeneration);
+            foreach (var token in TokenCancellationSources.Keys) CancelToken(token);
         }
 
-        // Last-N feed cap so the list doesn't grow forever in long sessions.
-        private const int MaxLiveActions = 30;
+        /// <summary>The one gate every AI command passes at the moment it fires, nested getbacktome
+        /// commands included: settings, the AI-effects switch AND live Lab access, then the effect's
+        /// own toggle. Null = allowed; else a log-safe reason.</summary>
+        public static string? Refusal(AICommandType command)
+        {
+            var settings = CoreSettings.Current?.CompanionPrompt;
+            if (settings == null) return "no settings";
+            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOn(settings, CoreAccount.HasLabAccess))
+                return "master toggle off or no Tier 2";
+            if (!IsEffectAllowed(command, settings)) return $"effect {command} disabled by user";
+            return null;
+        }
 
-        /// <summary>
-        /// Appends a user-readable line to <see cref="App.AiLiveActions"/> (bound to the
-        /// AI Brain "Live actions" panel on the Companion tab). Marshals to the UI
-        /// thread because ObservableCollection updates aren't allowed off-thread.
-        /// </summary>
+        /// <summary>A Live actions line for a refused follow-up command (no avatar bubble).</summary>
+        internal static void NoteBlockedFollowUp(AICommandType command) => AppendLiveAction($"⛔ Follow-up {command} blocked");
+
+        /// <summary>Last-N feed cap so the list doesn't grow forever in long sessions.</summary>
+        public const int MaxLiveActions = 30;
+
+        /// <summary>The AI Brain "Live actions" feed (WPF App.AiLiveActions, marshalled to its UI
+        /// thread). Unseeded: the line is logged only, as on a head without that panel.</summary>
+        public static volatile Action<string>? LiveActionSink;
+
         private static void AppendLiveAction(string line)
         {
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null) return;
-
-            void Apply()
-            {
-                var list = App.AiLiveActions;
-                var stamped = $"[{DateTime.Now:HH:mm:ss}] {line}";
-                list.Add(stamped);
-                while (list.Count > MaxLiveActions) list.RemoveAt(0);
-            }
-
-            if (dispatcher.CheckAccess()) Apply();
-            else dispatcher.BeginInvoke((Action)Apply);
+            try { LiveActionSink?.Invoke(line); }
+            catch (Exception ex) { Log.Debug("AiCommandService: live action feed failed: {Error}", ex.Message); }
         }
 
         /// <summary>
@@ -210,7 +205,7 @@ namespace ConditioningControlPanel.Services.Commands
                 AICommandType.flash_image => s.AllowAiFlash,
                 // Videos also require the main Videos feature toggle (#512) — gating here
                 // (not just in MediaCommand) keeps blocked videos out of the Live actions feed.
-                AICommandType.video => s.AllowAiVideo && App.Settings?.Current?.MandatoryVideosEnabled == true,
+                AICommandType.video => s.AllowAiVideo && CoreSettings.Current?.MandatoryVideosEnabled == true,
                 AICommandType.audio => s.AllowAiAudio,
                 AICommandType.bubbles => s.AllowAiBubbles,
                 AICommandType.subliminal => s.AllowAiSubliminal,
@@ -227,24 +222,17 @@ namespace ConditioningControlPanel.Services.Commands
 
         private static void CancelToken(string token)
         {
-            if (TokenCancellationSources.TryGetValue(token, out var cts))
-            {
-                try { cts.Cancel(); }
-                finally
-                {
-                    cts.Dispose();
-                    TokenCancellationSources.Remove(token);
-                }
-            }
+            if (!TokenCancellationSources.TryRemove(token, out var cts)) return;
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
+            finally { cts.Dispose(); }
         }
 
-        private static void RemoveToken(string token)
+        private static void RemoveToken(string token, CancellationTokenSource mine)
         {
-            if (TokenCancellationSources.TryGetValue(token, out var cts))
-            {
-                cts.Dispose();
-                TokenCancellationSources.Remove(token);
-            }
+            // Only our own source: a newer command may have reused the token meanwhile.
+            if (TokenCancellationSources.TryRemove(new KeyValuePair<string, CancellationTokenSource>(token, mine)))
+                mine.Dispose();
         }
     }
 }

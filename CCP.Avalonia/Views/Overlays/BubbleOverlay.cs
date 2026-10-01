@@ -59,7 +59,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public static bool IsRunning => _running;
         internal static bool IsFrameOwner(BubbleOverlayWindow w) => Windows.Count > 0 && Windows[0] == w;
 
-        public static void Start(Visual host)
+        /// <summary><paramref name="frequency"/> per minute overrides the setting (WPF Start's).</summary>
+        public static void Start(Visual host, int? frequency = null)
         {
             if (_running) return;
             if (!X11Overlay.IsAvailable) { Log.Warning("Bubbles: this platform cannot show click-through overlays; skipped"); return; }
@@ -85,12 +86,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
             _running = true;
             _lastStep = null;
-            _spawnTimer = new DispatcherTimer { Interval = AmbientBubbleField.SpawnInterval(s.BubblesFrequency) };
+            _spawnTimer = new DispatcherTimer { Interval = AmbientBubbleField.SpawnInterval(frequency ?? s.BubblesFrequency) };
             _spawnTimer.Tick += (_, _) => Spawn();
             _spawnTimer.Start();
             Spawn();   // WPF: first bubble immediately (and wakes the frame loop)
             if (Stats) StatClock.Restart();
-            Log.Information("BubbleService started - {Freq} bubbles/min", s.BubblesFrequency);
+            Log.Information("BubbleService started - {Freq} bubbles/min", frequency ?? s.BubblesFrequency);
         }
 
         public static void Stop()

@@ -54,6 +54,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF MainWindow.xaml.cs:888: Lockdown ignores every GLOBAL key, whatever LockdownDisablePanicKey
             // says. Only this listener layer: window and TextBox input (the secret phrase) are untouched.
             if (LockdownActive) { Serilog.Log.Information("Panic key ignored under Lockdown"); return; }
+            CancelPendingAi();
 
             // Same evaluation order as WPF: asking the palette closes it, so never ask with a card up.
             bool lockCardOpen = LockCardWindow.IsAnyOpen();
@@ -126,6 +127,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>Every desktop-effect start goes through here. <paramref name="start"/> must re-check
         /// that the effect is still wanted: it can run up to 30 s later, after a panic or an untick.</summary>
+        /// <summary>Every panic route calls this: pending AI follow-ups are cancelled and
+        /// AiCommandService.CancelGeneration moves on, so an AI start deferred in <see cref="StartEffect"/>
+        /// is dropped. Never throws.</summary>
+        internal static void CancelPendingAi()
+        {
+            try { ConditioningControlPanel.Services.Commands.AiCommandService.CancelAll(); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "AI command cancel on panic failed"); }
+        }
+
         internal static void StartEffect(Action start)
         {
             if (!_portalAllowed || PortalPanicShortcut.IsBound || _portalFailed || !CoreSettings.Current.PanicKeyEnabled

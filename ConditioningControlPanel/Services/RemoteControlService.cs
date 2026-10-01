@@ -931,6 +931,7 @@ namespace ConditioningControlPanel.Services
         /// </param>
         private void StopAllRemoteEffects(bool force)
         {
+            if (force) MainWindow.CancelPendingAi();   // a remote panic cancels pending AI follow-ups too
             try
             {
                 App.Logger?.Information("[RemoteControl] Stopping all remote effects (force={Force})", force);

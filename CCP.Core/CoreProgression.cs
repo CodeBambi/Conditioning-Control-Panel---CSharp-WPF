@@ -41,9 +41,10 @@ namespace ConditioningControlPanel
         /// is charged to <c>Other</c> by the head rather than dropped. Swallows provider faults - a
         /// throwing progression service must never take the awarding view down with it.
         /// </summary>
-        public static void AddXP(double amount, string source = "Other")
+        /// <returns>False only when the provider threw (no provider is not a failure).</returns>
+        public static bool AddXP(double amount, string source = "Other")
         {
-            try { AddXPProvider?.Invoke(amount, source); } catch { }
+            try { AddXPProvider?.Invoke(amount, source); return true; } catch { return false; }
         }
 
         /// <summary>

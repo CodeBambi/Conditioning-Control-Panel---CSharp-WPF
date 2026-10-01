@@ -140,6 +140,12 @@
         </Grid>
 
         <!-- ================= bottom row ================= -->
-        <Border Grid.Row="2" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0" Margin="28,0,28,0"/>
+        <!-- ponytail: the friends chip and the What's New link (WPF left side) are not here yet. -->
+        <Border Grid.Row="2" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0" Margin="28,0,28,0">
+            <CheckBox x:Name="SkipToPanel" HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Click="SkipToPanel_Click">
+                <TextBlock Text="{loc:Str launcher_skip_to_panel}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+            </CheckBox>
+        </Border>
     </Grid>
 </Window>

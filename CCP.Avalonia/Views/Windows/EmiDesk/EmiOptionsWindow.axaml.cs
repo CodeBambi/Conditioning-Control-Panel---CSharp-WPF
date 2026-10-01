@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Localization;
 using Serilog;
@@ -47,8 +48,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///         equivalent in one respect worth naming: WS_EX_NOACTIVATE makes activation
     ///         *impossible*, where <c>ShowActivated="False"</c> only declines it at show time - a
     ///         click on this panel can still focus it on X11.</item>
-    ///   <item><b>The two global hooks have no equivalent on this head</b> and are stubbed. See
-    ///         <see cref="InstallHooks"/> for exactly which two behaviours that costs.</item>
+    ///   <item><b>The two global hooks are a poll here</b> (X11Pointer, non-consuming). See
+    ///         <see cref="InstallHooks"/> for what that does and does not cover.</item>
     ///   <item><b>The owner is optional.</b> <c>EmiDeskWindow</c> is the widget this panel hangs
     ///         off and it is ported, so the constructor takes it and every <c>_owner.*</c> call is
     ///         real. It stays NULLABLE for one reason: <c>--render-view</c> needs a parameterless
@@ -602,53 +603,80 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
         /// <summary>
-        /// Freeze the rectangles a click-away hook is allowed to read - the panel itself and her
-        /// body - so the hook never walks a live visual tree.
+        /// Freeze the rectangles a click-away is allowed to land in without folding the panel - the
+        /// panel itself and her body - in PHYSICAL pixels, the space <see cref="X11Pointer"/> reports.
         /// </summary>
-        // ponytail: dead until InstallHooks has something to install. The snapshot exists only to
-        // be read on a hook thread, and there is no hook thread on this head; rebuilding it here
-        // would be arithmetic nobody reads. Restore the WPF body with the hook.
-        private void UpdateHotRects() { }
+        private void UpdateHotRects()
+        {
+            try
+            {
+                double s = DipScale;
+                if (s <= 0) s = 1.0;
+                var size = new Size(Math.Max(1, Bounds.Width > 1 ? Bounds.Width : Width), Math.Max(1, Bounds.Height));
+                var panel = new PixelRect(Position, PixelSize.FromSize(size, s));
+                var hot = new[] { panel };
+                if (_owner != null)
+                {
+                    var b = _owner.BodyScreenRect;
+                    hot = new[] { panel, new PixelRect((int)b.X, (int)b.Y, Math.Max(1, (int)b.Width), Math.Max(1, (int)b.Height)) };
+                }
+                _hotPx = hot;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] options hot-rect snapshot failed");
+                _hotPx = Array.Empty<PixelRect>();
+            }
+        }
 
-        // ---------------------------------------------------------------- the hooks
+        // ---------------------------------------------------------------- click-away and Escape
+
+        private PixelRect[] _hotPx = Array.Empty<PixelRect>();
+        private DispatcherTimer? _awayPoll;
+        private bool _wasDown, _wasEsc;
+
+        /// <summary>The desktop-wide pointer read. A seam only so a test can play a click.</summary>
+        internal Func<(PixelPoint At, bool Pressed, bool Escape)?> ReadPointer = X11Pointer.Read;
 
         /// <summary>
-        /// WPF installed a low-level mouse hook and a low-level keyboard hook here, both
-        /// <c>SetWindowsHookEx</c> in <c>Services.GlobalMouseHook</c> / <c>GlobalKeyboardHook</c>.
+        /// WPF installed a low-level mouse hook and a low-level keyboard hook here: a click anywhere
+        /// off the panel and off her body, or Escape anywhere, folds it. This head POLLS the same two
+        /// facts instead (<see cref="X11Pointer"/>, non-consuming like the hook), every 30 ms while
+        /// the panel is open.
         ///
-        /// <para>ponytail: no equivalent on this head. X11 has no supported desktop-wide input hook
-        /// (XRecord is a debugging extension, not something to ship, and Wayland forbids it
-        /// outright), so BOTH behaviours the hooks bought are lost for now:</para>
-        /// <list type="bullet">
-        ///   <item><b>Click-away no longer folds the panel.</b> A click anywhere off the panel and
-        ///         off her body closed it; now only the x, "Open her cards", or the caller does.</item>
-        ///   <item><b>Escape no longer folds the panel.</b> It was a GLOBAL Escape, deliberately:
-        ///         the window can never hold the keyboard, so a local <c>KeyDown</c> here would not
-        ///         be the same feature and is not offered as one.</item>
-        /// </list>
-        /// <para>ponytail: POSSIBLE in principle and NOT a compositor's to grant, which the old
-        /// wording here had backwards. Neither half is a "hook" problem on X11: the primitive to
-        /// evaluate is a POINTER GRAB (<c>XGrabPointer</c>, or a passive XI2 grab), a client-side
-        /// ask this process can make for itself - unlike <c>SetWindowsHookEx</c>, which is what
-        /// makes the WPF original unportable. It belongs beside <c>SetClickThrough</c> in
-        /// CCP.Avalonia/Platform/X11Overlay.cs, which exposes no grab today, so it is a Platform/
-        /// layer rather than a view one. Wayland is the case that really does need the compositor:
-        /// there the answer is a layer-shell surface, not a grab.</para>
-        ///
-        /// <para>Escape stays lost either way while this window is <c>ShowActivated="False"</c> and
-        /// never holds focus - a local <c>KeyDown</c> here would receive nothing. The ring's own
-        /// recovery (a click landing INSIDE the window's transparent gaps folds it) does not
-        /// transfer: this panel is opaque edge to edge, so there is no in-window click that means
-        /// "dismiss".</para>
-        ///
-        /// <para>WPF's <c>OnGlobalDown</c>, <c>OnGlobalKey</c> and the <c>Post</c> helper that
-        /// marshalled them back onto the UI thread go with the hooks: they existed only to be
-        /// called from a hook thread. On Avalonia that marshalling is one
-        /// <c>Dispatcher.UIThread.Post</c> when there is finally something to marshal.</para>
+        /// <para>ponytail: a poll, not a hook, so a press-and-release faster than one tick is missed
+        /// (a real click is ~100 ms). Wayland-native windows are invisible to it; the answer there is
+        /// a layer-shell surface, not this.</para>
         /// </summary>
-        private void InstallHooks() { }
+        private void InstallHooks()
+        {
+            if (_awayPoll != null) return;
+            // Armed as "already down": the click that opened the panel is still held right now.
+            _wasDown = _wasEsc = true;
+            _awayPoll = new DispatcherTimer(TimeSpan.FromMilliseconds(30), DispatcherPriority.Background, (_, _) => PollClickAway());
+            _awayPoll.Start();
+        }
 
-        /// <summary>Symmetrical stub. See <see cref="InstallHooks"/>.</summary>
-        private void RemoveHooks() { }
+        private void RemoveHooks()
+        {
+            _awayPoll?.Stop();
+            _awayPoll = null;
+        }
+
+        /// <summary>One poll: fold on a NEW press outside the hot rects, or a NEW Escape (WPF OnGlobalDown / OnGlobalKey).</summary>
+        internal void PollClickAway()
+        {
+            try
+            {
+                var r = ReadPointer();
+                if (r == null) return;   // pointer on another X screen (or no display): keep polling
+                var (at, down, esc) = r.Value;
+                bool press = down && !_wasDown, escape = esc && !_wasEsc;
+                _wasDown = down;
+                _wasEsc = esc;
+                if (escape || (press && Array.TrueForAll(_hotPx, h => !h.Contains(at)))) ClosePanel();
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options click-away poll failed"); }
+        }
     }
 }

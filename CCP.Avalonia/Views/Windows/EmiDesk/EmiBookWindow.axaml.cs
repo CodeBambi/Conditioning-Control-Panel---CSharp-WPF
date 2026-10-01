@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -862,11 +862,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
             if (card.Target != null)
             {
-                // ponytail: needs EmiTargets.Find (WPF head, Services/EmiDesk) for the door's
-                // Available flag, wired when it moves to Core. Enabled here, so the card's full
-                // shape is what renders.
+                // A door this head hides (no surface) is dark here, as an unavailable one is in WPF.
+                var t = EmiTargets.Find(card.Target);
                 _btnGo.Content = new TextBlock { Text = Book.L("emi_book_go", "TAKE ME THERE") };
-                _btnGo.IsEnabled = true;
+                _btnGo.IsEnabled = t != null && t.Available;
                 return;
             }
 
@@ -906,14 +905,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// say so. <c>CoreTutorial.Start(tourName)</c> is in Core; what is missing is that this head
         /// leaves the seam UNSEEDED (CCP.Avalonia/App.axaml.cs), so <c>Start</c> is a silent no-op
         /// and calling it would give a button that looks like it walked you somewhere. The door half
-        /// is <c>EmiTargets.Open</c> (ConditioningControlPanel/Services/EmiDesk/EmiTargets.cs),
-        /// which is deeply head-bound and moves with EmiSuggester. Both ends of the button are a
-        /// detour into the app, so there is still nothing view-local to port here.
+        /// is <c>EmiTargets.Open</c>. Both ends of the button are a
+        /// detour into the app. The door half is wired: straight through <see cref="EmiTargets"/>,
+        /// the ring's own Pick, so a door opened from the book is a door used. The
+        /// <c>effectFired</c> moment WPF fires after it has no <c>App.EmiDesk.Fire</c> here.
         private void Go()
         {
             var cards = Book.All;
             if (_index < 0 || _index >= cards.Count) return;
-            Log.Debug("[EmiDesk] book detour for {Card} is not wired on this head", cards[_index].Id);
+            var card = cards[_index];
+            if (card.Target != null) { EmiTargets.Find(card.Target)?.Open(); return; }
+            Log.Debug("[EmiDesk] book tour for {Card} is not wired on this head", card.Id);
         }
 
         private void RenderTabs()

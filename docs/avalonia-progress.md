@@ -1169,3 +1169,31 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/friends-drawer-fixes: +78
 - Friends review fixes: dispose on exit, sandbox URL tests, presence marks the ask, remove/report tests, manual-tick timer test, ledger stubs.
+
+## avalonia-port/intake-host: +574
+- Graded Intake host slice 1: Core IntakeRun (latches, heartbeat, grading, caps, drafting, pass only on a parsed result; WPF delegates);
+  Avalonia IntakeHostWindow + WebHost message bridge, not opened yet (page serving is slice 2). Fail-proven tests.
+
+## avalonia-port/companion-brain-effects: +701
+- CompanionBrain slice 4 part 1: AI command gate + 11 effect commands in Core (head Surface hooks); Avalonia executor and activities.
+
+## avalonia-port/launcher-boot: +355
+- Launcher slice 2: WPF's boot decision (Lockdown/18+/fresh install → panel), skip box, tray Back to CC Labs, second-instance handoff;
+  the tube stays down during a hidden boot. Fail-proven tests; Keincheck live boot + handoffs.
+
+## avalonia-port/web-assets-host: +282
+- WebAssetServer: token-gated loopback HTTP over Resources/web (WebKitGTK has no custom scheme in Avalonia 12.1); Assets/web shipped with
+  WPF's subset (+~158 MB). Hardened (constant-time token, per-port cookie, nosniff/no-referrer, symlink confinement). Fail-proven tests.
+
+## avalonia-port/webcam-calibration: +993
+- Webcam slice 5 part 1: Core WebcamCalibrationFit (WPF delegates); the Avalonia 16-point calibration window; Calibrate enabled. Merge with part 2.
+
+## avalonia-port/webcam-calibration-fixes: +69
+- A revoke during calibration stands; atomic calibration save (both heads); failed save keeps the old calibration. Row back to stub.
+
+## avalonia-port/companion-brain-effects-safety: +319
+- getbacktome follow-ups re-gated at fire time (3 per follow-up), every panic route on both heads cancels pending AI follow-ups and drops a late reply.
+
+## avalonia-port/emidesk-ring-2: +822
+- EmiSuggester + EmiDoors in Core; the Avalonia desk opens the ring with real openers (surface-less doors hidden); Options click-away via
+  an X11 poll that keeps no key state; Book TAKE ME THERE. Fail-proven tests. Rows stay stub.

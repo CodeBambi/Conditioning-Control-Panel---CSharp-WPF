@@ -11,8 +11,6 @@
 //   - With no tray host (Linux desktop without a StatusNotifierWatcher) Avalonia's tray falls back
 //     silently, so X would hide the window behind nothing. X is gated on a host probe: no host, X exits.
 // The first-minimize balloon (TrayIconService.cs:165-171) goes through Platform/OsNotifications.
-// ponytail: "launcher_back_to_client" is omitted until the boot surface lands (launcher slice 2): WPF
-// shows it while LauncherHost.SurfaceInPlay; here the title-bar door (LauncherWindow.BackToLauncher) is the way.
 
 using System;
 using System.Threading.Tasks;
@@ -55,11 +53,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return Tray;
         }
 
-        /// <summary>WPF order: Show, Wake, separator, Exit - with Stop everything above Exit.</summary>
+        /// <summary>WPF order: Show, Back to CC Labs, Wake, separator, Exit - with Stop everything above Exit.</summary>
         internal NativeMenu BuildTrayMenu()
         {
             var menu = new NativeMenu();
             menu.Add(Item("tray_show", ShowFromTray));
+            // WPF TrayIconService.cs:102: the way back to the launcher, only while it is part of this
+            // run, greyed under Lockdown (BackToLauncher refuses anyway).
+            var back = Item("launcher_back_to_client", () => LauncherWindow.BackToLauncher(this));
+            void RefreshBack(object? s, EventArgs e) { back.IsVisible = LauncherWindow.SurfaceInPlay; back.IsEnabled = !LockdownActive; }
+            RefreshBack(null, EventArgs.Empty);
+            menu.Opening += RefreshBack;
+            menu.NeedsUpdate += RefreshBack;
+            menu.Add(back);
             // WPF reads the label once at tray creation (TrayIconService.cs Initialize);
             // App.Mods.IsBambiMode there is the active-mod check AppSettings.IsBambiMode makes here.
             menu.Add(Item(CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", WakeBambiUp));
@@ -78,6 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             Serilog.Log.Information("Tray: Stop everything");
             if (RefuseStopUnderLockdown()) return;   // WPF refuses every Stop under Lockdown (StartStop.cs:45)
+            CancelPendingAi();
             try { CoreHaptics.Service?.PanicStop(); } catch (System.Exception ex) { Serilog.Log.Warning(ex, "Tray stop: haptics stop failed"); }
             Current?.StopAutonomyForPanic();
             StopEngine();

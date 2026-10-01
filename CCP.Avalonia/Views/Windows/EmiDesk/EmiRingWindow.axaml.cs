@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 using Avalonia;
@@ -13,6 +14,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
@@ -20,12 +22,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// <summary>
     /// One card on the ring.
     ///
-    /// <para>ponytail: stands in for <c>EmiRingSlot</c> + <c>EmiTarget</c>
-    /// (ConditioningControlPanel/Services/EmiDesk/EmiSuggester.cs and EmiTargets.cs), which are
-    /// still in the WPF head and drag <c>App</c>, the premium rail and every feature door in with
-    /// them. This is the part of a slot the RING actually draws: a label key, a tile hue, and the
-    /// two flags that change how the card looks. Delete it and take <c>EmiRingSlot</c> when the
-    /// EmiDesk services move to Core.</para>
+    /// <para>The drawn projection of a Core <c>EmiRingSlot</c> (CCP.Core/Services/EmiDesk/EmiSuggester.cs):
+    /// a label key, an Avalonia tile hue, and the two flags that change how the card looks.
+    /// <see cref="EmiRingWindow"/>'s Compose maps one to the other.</para>
     /// </summary>
     /// <param name="Id">The target id, used as the label of last resort and in the logs.</param>
     /// <param name="LabelKey">Loc key for the card's visible name.</param>
@@ -91,7 +90,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///    because <c>EmiDeskWindow.Ring.cs</c> subscribes for the pin-nudge latch and the pin is
     ///    made from her options menu. Neither end of that exists on this head yet, so it would be
     ///    an unraised member with no subscriber; take it back with EmiDeskWindow.
-    ///  - <b>The services.</b> <c>EmiSuggester.Compose</c>, <c>EmiRingLayout.Solve</c>,
+    ///  - <b>The services.</b> <c>EmiSuggester.Compose</c> is Core and wired. <c>EmiRingLayout.Solve</c>,
     ///    <c>EmiSfx</c>, <c>EmiFace.PixelFont</c> and <c>ModResourceResolver</c> are all still in
     ///    the WPF head; each is a stub or a named placeholder below.
     /// </summary>
@@ -550,12 +549,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
         }
 
-        // ponytail: needs EmiSuggester.Compose() (WPF head, Services/EmiDesk/EmiSuggester.cs), which
-        // scores every target by decayed usage and fills the six slots pins-first. It reaches
-        // EmiState, EmiTargets, App and the premium rail, so it moves to Core as one piece. Until
-        // then the ring composes nothing and OpenRing stays shut - the same road the real Compose
-        // takes when every door is unavailable.
-        private static IReadOnlyList<EmiRingCard> Compose() => Array.Empty<EmiRingCard>();
+        // Core EmiSuggester over this head's catalogue: pins first, then decayed usage, at most one
+        // locked card. Doors this head cannot open are not in EmiTargets.All, so never on the fan.
+        private static IReadOnlyList<EmiRingCard> Compose() =>
+            EmiSuggester.Compose(EmiTargets.All).Select(s => new EmiRingCard(s.Target.Id, s.Target.LabelKey,
+                Color.FromRgb((byte)(s.Target.Hue >> 16), (byte)(s.Target.Hue >> 8), (byte)s.Target.Hue),
+                s.Locked, s.Pinned)).ToList();
 
         // ---------------------------------------------------------------- placement
 
