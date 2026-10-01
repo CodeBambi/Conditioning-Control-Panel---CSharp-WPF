@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using System.Windows;
+using Serilog;
 using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services.Commands
@@ -15,6 +15,10 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly FlashImage _data;
         public FlashImageCommand(FlashImage data) { _data = data; }
 
+        /// <summary>Head surface: (amount, durationMs, sizePct) on the UI thread (WPF
+        /// App.Flash.TriggerFlashOnce). False when nothing could show. Unseeded: refused.</summary>
+        public static volatile Func<int, int, int, bool>? Surface;
+
         public Task<bool> ExecuteAsync()
         {
             var amount = Math.Clamp(_data.Amount, 0, MaxAmount);
@@ -25,15 +29,11 @@ namespace ConditioningControlPanel.Services.Commands
 
             try
             {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    App.Flash?.TriggerFlashOnce(amount, durationMs, size);
-                });
-                return Task.FromResult(true);
+                return Task.FromResult(Surface?.Invoke(amount, durationMs, size) == true);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "FlashImageCommand failed");
+                Log.Warning(ex, "FlashImageCommand failed");
                 return Task.FromResult(false);
             }
         }
