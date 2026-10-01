@@ -85,6 +85,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         }
 
         /// <summary>
+        /// A string the page posted (<c>window.invokeCSharpAction</c>, which the engine injects; it
+        /// JSON-stringifies objects). The stand-in for WPF's <c>CoreWebView2.WebMessageReceived</c>.
+        /// </summary>
+        public event Action<string>? WebMessage;
+
+        /// <summary>The seam the engine's WebMessageReceived routes through (headless tests drive it).</summary>
+        internal void OnWebMessage(string? body)
+        {
+            if (!string.IsNullOrEmpty(body)) WebMessage?.Invoke(body);
+        }
+
+        /// <summary>
         /// True when THIS instance built an adapter. <see cref="IsAvailable"/> is the process-wide
         /// probe; the constructor can still fail after it passes, and a caller about to drive the
         /// page through script needs to know about this control, not about the machine.
@@ -155,6 +167,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                     // the predicate and the Source in that order would otherwise race the engine.
                     _web.NavigationStarted += OnNavigationStarted;
                     _web.NavigationCompleted += (_, e) => OnNavigationCompleted(e.Request ?? _web?.Source);
+                    _web.WebMessageReceived += (_, e) => OnWebMessage(e.Body);
                     _webSlot.Children.Add(_web);
                 }
                 catch (Exception ex)

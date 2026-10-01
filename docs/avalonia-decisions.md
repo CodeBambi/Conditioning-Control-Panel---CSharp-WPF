@@ -324,3 +324,25 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   (WPF ~2.1k LOC plus mouth/tongue validation and the bubble test) does not fit the line cap and is the next slice, so
   Calibrate stays disabled with a reason.
 - Advisor: worker (supervisor informed).
+
+## 2026-10-01: Graded Intake host slice 1 (avalonia-port/intake-host)
+- Question: WPF `IntakeHostService` runs the intake page in WebView2 with a `ccp.game` virtual host and the
+  `chrome.webview` bridge. Avalonia's `NativeWebView` (WebKitGTK here) runs scripts but has neither, and the page's
+  `web-shim.js` knows only `chrome.webview` and `ReactNativeWebView`.
+- Choice: the run's rules (result/walk-out latches, heartbeat timeout, grade + 90% top marks, XP/mantra caps, pass
+  spent ONLY by a parsed quiz-result and before the draft, collision-safe session path, PNG check, same-document
+  check) moved to Core `IntakeRun`; WPF `IntakeHostService` delegates (latches, heartbeat stamp + 20 s silence rule,
+  grading, completion; its DispatcherTimer and its own ChaosWebViewHost.SameDocument stay head-side). A failed XP grant
+  still skips the mantra credit: `CoreProgression.AddXP` now returns false when the provider throws.
+  The Avalonia host drops page messages unless the web view's last completed navigation is the document it loaded
+  (`NativeWebView`'s message args carry no source, unlike WebView2's). Bridge seam: page -> host over the engine-injected
+  `window.invokeCSharpAction(string)`, which `web-shim.js` now takes as a third string carrier, only when
+  `chrome.webview` is absent (the shim's text changed; WPF behaviour did not:
+  `IntakeRunTests.WebShimKeepsWebView2FirstAndGatesTheAvaloniaCarrier`, node probe in
+  ~/ccp-port/evidence/avalonia-port/intake-host/web-shim-carrier-probe.txt); host -> page via `InvokeScriptAsync`
+  calling the shim's existing `window.__ccpRnPush(json)`. `WebHost` passes `WebMessageReceived` through as `WebMessage`.
+- Deferred (supervisor): Begin Intake does NOT open `IntakeHostWindow` yet - nothing serves the page on this head, so
+  the window would be dead UI. Serving (loopback static server or WebResourceRequested) and shipping Assets/web in
+  CCP.Avalonia.csproj are slice 2 and get their own oracle decision, since that serving is shared with Chaos/DtRH/Spiral.
+  Plan: ~/ccp-port/briefs/intake-plan.md.
+- Advisor: supervisor (need_decision).
