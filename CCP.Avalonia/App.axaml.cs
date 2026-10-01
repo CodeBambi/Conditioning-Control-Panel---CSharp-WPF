@@ -608,6 +608,9 @@ namespace ConditioningControlPanel.Avalonia
                     Serilog.Log.Warning(ex, "Session catalogue could not be loaded; showing built-in fallback");
                 }
 
+                // WPF decides with `Welcomed && !FirstRunClaimedThisLaunch`: the shell's constructor
+                // claims Welcomed on a fresh install, so read it before the shell exists.
+                bool welcomed = Settings.Current.Welcomed;
                 desktop.MainWindow = sessions is null
                     ? new Views.Windows.MainShellWindow()
                     : new Views.Windows.MainShellWindow(sessions);
@@ -663,13 +666,47 @@ namespace ConditioningControlPanel.Avalonia
                     StopDesktopOverlays();
                     Views.Windows.LockCardWindow.ForceCloseAll();
                 };
+                // Boot surface (WPF App.xaml.cs:3403-3419): the launcher, a game or the panel. A boot
+                // into the launcher shows the panel unactivated and off the taskbar only so its Opened
+                // work runs (WPF ShowHiddenForBoot), then RouteBoot tucks it away. A Lockdown in force
+                // keeps the panel up (PanelStartsHidden); any routing failure shows it.
+                try
+                {
+                    Views.Windows.LauncherWindow.Boot = Services.Launcher.LauncherBoot.Decide(desktop.Args, welcomed,
+                        Settings.Current.HasAcceptedAgeVerification, Settings.Current.LauncherSkipToPanel);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning(ex, "[Launcher] boot decision failed; booting the panel");
+                    Views.Windows.LauncherWindow.Boot = Services.Launcher.BootDecision.PanelFirst;
+                }
+                var boot = Views.Windows.LauncherWindow.Boot;
+                bool panelHidden = Services.Launcher.LauncherBoot.PanelStartsHidden(boot, Views.Windows.MainShellWindow.LockdownActive);
+                Serilog.Log.Information("[Launcher] boot surface {Surface} game {GameId}, panel shown: {Shown}", boot.Surface, boot.GameId, !panelHidden);
+                if (panelHidden)
+                {
+                    bool activated = shell.ShowActivated, inTaskbar = shell.ShowInTaskbar;
+                    shell.ShowActivated = false;
+                    shell.ShowInTaskbar = false;
+                    shell.BuildingHiddenForBoot = true;
+                    void Route(object? s, EventArgs e)
+                    {
+                        shell.Opened -= Route;
+                        Views.Windows.LauncherWindow.RouteBoot(shell);
+                        // Restored only once the panel is tucked away, so it never reaches the taskbar.
+                        shell.BuildingHiddenForBoot = false;
+                        shell.ShowActivated = activated;
+                        shell.ShowInTaskbar = inTaskbar;
+                    }
+                    shell.Opened += Route;
+                }
                 // Tray: restore, wake, Stop everything (the no-hotkey panic control) and the real Exit.
                 try
                 {
                     shell.CreateTray();
                     // WPF MainWindow.xaml.cs:3594: StartMinimized sends the shown window to the tray.
                     // Only with a tray host to come back through; without one the window stays up.
-                    if (Settings.Current.StartMinimized && shell.TrayHostPresent())
+                    if (!panelHidden && Settings.Current.StartMinimized && shell.TrayHostPresent())
                     {
                         void ToTray(object? s, EventArgs e) { shell.Opened -= ToTray; shell.Hide(); }
                         shell.Opened += ToTray;
