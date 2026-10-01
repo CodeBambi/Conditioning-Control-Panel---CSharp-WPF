@@ -1180,3 +1180,13 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/launcher-boot: +355
 - Launcher slice 2: WPF's boot decision (Lockdown/18+/fresh install → panel), skip box, tray Back to CC Labs, second-instance handoff;
   the tube stays down during a hidden boot. Fail-proven tests; Keincheck live boot + handoffs.
+
+## avalonia-port/web-assets-host: +282
+- WebAssetServer: token-gated loopback HTTP over Resources/web (WebKitGTK has no custom scheme in Avalonia 12.1); Assets/web shipped with
+  WPF's subset (+~158 MB). Hardened (constant-time token, per-port cookie, nosniff/no-referrer, symlink confinement). Fail-proven tests.
+
+## avalonia-port/webcam-calibration: +993
+- Webcam slice 5 part 1: Core WebcamCalibrationFit (WPF delegates); the Avalonia 16-point calibration window; Calibrate enabled. Merge with part 2.
+
+## avalonia-port/webcam-calibration-fixes: +69
+- A revoke during calibration stands; atomic calibration save (both heads); failed save keeps the old calibration. Row back to stub.

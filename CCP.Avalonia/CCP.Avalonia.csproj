@@ -92,8 +92,16 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
-    <!-- EmiCodexWindow's plain reader: the same chapter files the WPF head ships under Resources\web\codex. -->
-    <Content Include="..\Assets\web\codex\chapters\*.json" Link="Resources\web\codex\chapters\%(Filename)%(Extension)">
+    <!-- The web pages (intake, dtrh, arcademy, codex chapters, ...), served by WebAssetServer on loopback in place of
+         WPF's WebView2 virtual hosts. Same subset WPF ships (ConditioningControlPanel.csproj ArcademyHarnessExclude,
+         RemixTestExclude, ContentPackWebExclude): dev harnesses, node tests, notes and content-pack mp3s stay out. -->
+    <Content Include="..\Assets\web\**\*" Link="Resources\web\%(RecursiveDir)%(Filename)%(Extension)"
+             Exclude="..\Assets\web\**\*.md;..\Assets\web\**\smoke\**\*;..\Assets\web\**\tests\**\*;..\Assets\web\remix\test\**\*;
+                      ..\Assets\web\**\*demo.html;..\Assets\web\backroom\stations\breakout\**\*.test.js;
+                      ..\Assets\web\backroom\stations\breakout\dev.html;..\Assets\web\backroom\stations\breakout\showcase*;
+                      ..\Assets\web\piecebypiece\dev\**\*;..\Assets\web\piecebypiece\package.json;
+                      ..\Assets\web\intake\assets\vo\**\*.mp3;..\Assets\web\intake\assets\sfx\**\*.mp3;
+                      ..\Assets\web\intake\assets\music\**\*.mp3;..\Assets\web\dtrh\assets\**\*.mp3">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>

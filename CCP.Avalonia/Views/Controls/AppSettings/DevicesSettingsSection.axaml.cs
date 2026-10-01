@@ -57,6 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnWebcamReviewPrivacy.Click += BtnWebcamReviewPrivacy_Click;
             BtnWebcamDebugStart.Click += BtnWebcamDebugStart_Click;
             BtnWebcamDebugQuickRecal.Click += BtnWebcamDebugQuickRecal_Click;
+            BtnWebcamDebugCalibrate.Click += BtnWebcamDebugCalibrate_Click;
             BtnWebcamDebugTrackerTest.Click += BtnWebcamDebugTrackerTest_Click;
 
             SyncFromSettings();
@@ -227,9 +228,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Platform/WebcamTracker). Privacy info, Start tracking and Revoke are live.
         ///
         /// Quick Recal and Tracker Test are live over the tracker's gaze feed.
-        /// <para>ponytail: the device/monitor combos, calibrate and the debug cursor stay DISABLED with a
-        /// stated reason: device enumeration, the 16-point calibration window and the cursor overlay are
-        /// not ported. The status pill stays
+        /// <para>ponytail: the device/monitor combos and the debug cursor stay DISABLED with a
+        /// stated reason: device enumeration and the cursor overlay are not ported. The status pill stays
         /// at its <c>rf_webcam_stopped</c> literal for the same reason (no OnTrackingStateChanged).</para>
         /// </summary>
         private void RefreshWebcamAvailability()
@@ -240,11 +240,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnWebcamRevokeConsent.IsEnabled = has;
             BtnWebcamDebugQuickRecal.IsEnabled = has;
             BtnWebcamDebugTrackerTest.IsEnabled = has;
-            foreach (var c in new Control[] { CmbWebcamDevice, BtnWebcamDeviceRefresh, CmbWebcamMonitor, BtnWebcamDebugCalibrate, ChkWebcamDebugCursor })
+            BtnWebcamDebugCalibrate.IsEnabled = has;
+            foreach (var c in new Control[] { CmbWebcamDevice, BtnWebcamDeviceRefresh, CmbWebcamMonitor, ChkWebcamDebugCursor })
             {
                 c.IsEnabled = false;   // IsEnabled only - never IsChecked, which would fire the handler
                 ToolTip.SetShowOnDisabled(c, true);
-                ToolTip.SetTip(c, "Not available on this build yet (needs device selection or the 16-point calibration window).");
+                ToolTip.SetTip(c, "Not available on this build yet (needs device selection or the gaze cursor overlay).");
             }
             if (!has)
                 AppendWebcamDebugLog("No webcam tracking engine on this build — camera controls are unavailable.");
@@ -307,6 +308,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     "Opening tracker test window…", _ => "Tracker test closed.");
             }
             catch (Exception ex) { Log.Warning(ex, "Webcam tracker test failed"); }
+        }
+
+        /// <summary>WPF BtnWebcamDebugCalibrate_Click (MainWindow.LabTab.cs:754): consent when stale,
+        /// start tracking if off (left running, as WPF), then the 16-point window.</summary>
+        private async void BtnWebcamDebugCalibrate_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                var tracker = Platform.WebcamTracker.Instance;
+                if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
+                {
+                    AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                    await new WebcamConsentDialog().ShowDialog(owner);
+                    if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined."); return; }
+                }
+                if (!tracker.IsRunning)
+                {
+                    if (!await tracker.StartAsync()) { AppendWebcamDebugLog($"Couldn't start tracking. {tracker.LastError}"); return; }
+                    RefreshWebcamStartLabel();
+                }
+                AppendWebcamDebugLog("Opening calibration window…");
+                var result = await WebcamCalibrationWindow.ShowDialogWithRecalibrate(owner);
+                AppendWebcamDebugLog(result == true ? "Calibration applied. Gaze classification should now be much more accurate." : "Calibration cancelled or failed.");
+            }
+            catch (Exception ex) { Log.Warning(ex, "Webcam calibrate failed"); }
         }
 
         /// <summary>WPF BtnWebcamDebugQuickRecal_Click (MainWindow.LabTab.cs:1153).</summary>
