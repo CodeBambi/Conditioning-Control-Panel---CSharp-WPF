@@ -441,27 +441,27 @@
                  RefreshMysteryTile() writes today's feature name over it on every repaint. -->
 
             <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
-            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal" Super="FlickerDeck"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
                                   Title="Flash Images"
                                   Icon="pack://application:,,,/Resources/features/flash.png"
                                   HelpSectionId="FlashImages"
                                   Click="CardFlash_Click"
                                   DimWhenInactive="True"
                                   ToggleRequested="CardFlash_Toggle"/>
-            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal" SuperA="LightsDown"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal"
                                        TitleA="Mandatory Video" TitleB="Bubble Count" HelpSectionIdA="Video" HelpSectionIdB="BubbleCount"
                                        IconA="pack://application:,,,/Resources/features/mandatory_videos.png"
                                        IconB="pack://application:,,,/Resources/features/Bubble_count.png"
                                        ClickA="ComboVideoBubble_ClickA" ClickB="ComboVideoBubble_ClickB"
                                        ToggleA="ComboVideoBubble_ToggleA" ToggleB="ComboVideoBubble_ToggleB"/>
-            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" x:FieldModifier="internal" Super="Afterglow"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" x:FieldModifier="internal"
                                   Title="Subliminals"
                                   Icon="pack://application:,,,/Resources/features/subliminal.png"
                                   HelpSectionId="Subliminals"
                                   Click="CardSubliminal_Click"
                                   DimWhenInactive="True"
                                   ToggleRequested="CardSubliminal_Toggle"/>
-            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" x:FieldModifier="internal" Super="Scrawl"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" x:FieldModifier="internal"
                                   Title="Bouncing Text"
                                   Icon="pack://application:,,,/Resources/features/bouncing_text.png"
                                   HelpSectionId="BouncingText"
@@ -756,7 +756,7 @@
                 </Grid>
             </Border>
     
-            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" x:FieldModifier="internal" SuperA="Vortex" SuperB="Creep"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" x:FieldModifier="internal"
                                        TitleA="Spiral Overlay" TitleB="Pink Filter" HelpSectionIdA="SpiralOverlay" HelpSectionIdB="PinkFilter"
                                        IconA="pack://application:,,,/Resources/features/spiral_overlay.png"
                                        IconB="pack://application:,,,/Resources/features/Pink_filter.png"
@@ -885,7 +885,7 @@
                 <TextBlock Text="{loc:Str mosaic_new_today}"
                            Foreground="#3A2A00" FontSize="10" FontWeight="Black"/>
             </Border>
-            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal" SuperB="Undertow"
+            <features:SplitFeatureCard DashboardDepth="True" Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal"
                                        TitleA="Mind Wipe" TitleB="Brain Drain" HelpSectionIdA="MindWipe" HelpSectionIdB="BrainDrain"
                                        IconA="pack://application:,,,/Resources/features/Mind_Wipers.png"
                                        IconB="pack://application:,,,/Resources/features/brain_drain.png"
@@ -926,7 +926,7 @@
                                       BlurRadius="14" ShadowDepth="0" Opacity="0.95"/>
                 </TextBlock.Effect>
             </TextBlock>
-            <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" x:FieldModifier="internal" Super="InnerBloom"
+            <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" x:FieldModifier="internal"
                                   Title="Bubble Pop"
                                   Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
                                   HelpSectionId="BubblePop"

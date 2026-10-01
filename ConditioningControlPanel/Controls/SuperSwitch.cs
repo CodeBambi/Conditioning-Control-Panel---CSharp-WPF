@@ -15,35 +15,33 @@ using ConditioningControlPanel.Services.Super;
 namespace ConditioningControlPanel.Controls
 {
     /// <summary>
-    /// The Super switch: a 54x30 pill with a bolt knob (handoff-1001 mockup, `.sw`). On = pink
-    /// gradient with a glow and the knob slid right; off = dark; LOCKED (free account, no try
-    /// running) = gold ring and a lock glyph on the knob.
+    /// The Super switch, the quiet version (owner, 2026-10-01: "not subtle enough"). A 36x20 thin
+    /// track with a plain knob and no icon. Off = muted lilac on dark; on = gold with a soft gold
+    /// glow; LOCKED (free account, no try running) = dim, with a tiny lock on the knob. It lives
+    /// only inside <see cref="SuperBox"/> on a feature page, never on a dashboard tile.
     ///
-    /// <para>It reads and writes only through <see cref="SuperAccess"/>. A click while locked
-    /// never flips anything: it shakes the switch, pokes every BASIC sign showing this effect
-    /// (<see cref="LockedPoke"/>), raises <see cref="LockedClickEvent"/> so a host tile can open
-    /// the feature, and shows the normal TierGate refusal.</para>
-    ///
-    /// <para>The switch eats its own mouse buttons (left AND right), so a click on it never
-    /// reaches the tile underneath and never toggles the base effect.</para>
+    /// <para>It reads and writes only through <see cref="SuperAccess"/>. The knob draws the
+    /// player's own choice (<see cref="SuperAccess.IsSelected"/>), not whether the base feature is
+    /// on, so switching a base off never makes this switch look flipped. A click while locked never
+    /// flips anything: it shakes the switch, pokes every BASIC sign showing this effect
+    /// (<see cref="LockedPoke"/>), raises <see cref="LockedClickEvent"/> and shows the normal
+    /// TierGate refusal.</para>
     /// </summary>
     public sealed class SuperSwitch : Grid
     {
-        private const double PillW = 54, PillH = 30, KnobD = 23, KnobTravel = 24;
+        private const double TrackW = 36, TrackH = 20, KnobD = 14, KnobInset = 3, KnobTravel = TrackW - KnobD - 2 * KnobInset;
 
-        private static readonly Color OffBg = Color.FromRgb(0x0E, 0x08, 0x20);
-        private static readonly Color OffRing = Color.FromRgb(0x4A, 0x3A, 0x70);
-        private static readonly Color OffKnob = Color.FromRgb(0x6A, 0x5A, 0x90);
-        private static readonly Color OnRing = Color.FromRgb(0xFF, 0xA3, 0xD4);
-        private static readonly Color OnGlyph = Color.FromRgb(0xD6, 0x3A, 0x86);
+        private static readonly Color OffBg = Color.FromRgb(0x16, 0x10, 0x28);
+        private static readonly Color OffRing = Color.FromRgb(0x3A, 0x30, 0x52);
+        private static readonly Color OffKnob = Color.FromRgb(0x74, 0x68, 0x90);
         private static readonly Color Gold = Color.FromRgb(0xFF, 0xCF, 0x6B);
-        private static readonly Color GoldGlyph = Color.FromRgb(0x2B, 0x1A, 0x00);
-        private static readonly Color PinkGlow = Color.FromRgb(0xFF, 0x4F, 0xA3);
+        private static readonly Color GoldDeep = Color.FromRgb(0x8A, 0x63, 0x1E);
+        private static readonly Color Cream = Color.FromRgb(0xFF, 0xF6, 0xE0);
+        private static readonly Color LockedRing = Color.FromArgb(0x80, 0xFF, 0xCF, 0x6B);
+        private static readonly Color LockedKnob = Color.FromRgb(0x8A, 0x74, 0x48);
 
-        private static readonly Brush OnBgBrush = Freeze(new LinearGradientBrush(
-            Color.FromRgb(0xC0, 0x28, 0x7A), Color.FromRgb(0xFF, 0x5F, 0xB0), 0));
+        private static readonly Brush OnBgBrush = Freeze(new LinearGradientBrush(GoldDeep, Gold, 0));
 
-        private static readonly Geometry BoltGeo = Geometry.Parse("M13,2 L4,14 L10,14 L9,22 L18,10 L12,10 Z");
         private static readonly Geometry LockGeo = Geometry.Parse(
             "M7,10 V8 A5,5 0 0 1 17,8 V10 H18 A1,1 0 0 1 19,11 V20 A1,1 0 0 1 18,21 H6 A1,1 0 0 1 5,20 V11 A1,1 0 0 1 6,10 Z M9,10 H15 V8 A3,3 0 0 0 9,8 Z");
 
@@ -53,7 +51,7 @@ namespace ConditioningControlPanel.Controls
         public static readonly RoutedEvent LockedClickEvent = EventManager.RegisterRoutedEvent(
             nameof(LockedClick), RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(SuperSwitch));
 
-        /// <summary>Bubbles from a locked click so the host tile can open its feature.</summary>
+        /// <summary>Bubbles from a locked click so a host can react.</summary>
         public event RoutedEventHandler LockedClick
         {
             add => AddHandler(LockedClickEvent, value);
@@ -70,76 +68,75 @@ namespace ConditioningControlPanel.Controls
             set => SetValue(EffectProperty, value);
         }
 
-        private readonly Border _pill;
+        private readonly Border _track;
         private readonly Ellipse _knob;
-        private readonly Path _glyph;
+        private readonly Path _lock;
         private readonly Grid _knobHost;
         private readonly TranslateTransform _knobShift = new();
         private readonly TranslateTransform _shakeShift = new();
         private readonly RotateTransform _shakeTilt = new();
-        private readonly ScaleTransform _hoverScale = new(1, 1);
         private readonly Border _focusRing;
         private readonly Canvas _sparks = new() { IsHitTestVisible = false, ClipToBounds = false };
+        private readonly DropShadowEffect _glow = new() { ShadowDepth = 0, BlurRadius = 10, Opacity = 0, Color = Gold };
         private double _restGlow;
         private bool _glowAllowed;
-        private readonly DropShadowEffect _glow = new() { ShadowDepth = 0, BlurRadius = 16, Opacity = 0 };
         private bool _pressed;
         private bool? _lastOn;
 
         public SuperSwitch()
         {
-            Width = PillW;
-            Height = PillH;
+            Width = TrackW;
+            Height = TrackH;
             Cursor = Cursors.Hand;
             Focusable = true;
             FocusVisualStyle = null;
             RenderTransformOrigin = new Point(0.5, 0.5);
-            RenderTransform = new TransformGroup { Children = { _hoverScale, _shakeTilt, _shakeShift } };
+            RenderTransform = new TransformGroup { Children = { _shakeTilt, _shakeShift } };
 
-            // FocusVisualStyle is off (the default dashed box reads as a bug on a pill), so keyboard
-            // focus gets its own ring instead of nothing.
             _focusRing = new Border
             {
-                CornerRadius = new CornerRadius(PillH / 2 + 3),
-                BorderThickness = new Thickness(2),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF)),
-                Margin = new Thickness(-4),
+                CornerRadius = new CornerRadius(TrackH / 2 + 2),
+                BorderThickness = new Thickness(1.5),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+                Margin = new Thickness(-3),
                 IsHitTestVisible = false,
                 Visibility = Visibility.Collapsed,
             };
             Children.Add(_focusRing);
 
-            _pill = new Border
+            _track = new Border
             {
-                CornerRadius = new CornerRadius(PillH / 2),
-                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(TrackH / 2),
+                BorderThickness = new Thickness(1),
                 Background = new SolidColorBrush(OffBg),
                 BorderBrush = new SolidColorBrush(OffRing),
+                Opacity = 0.92,
                 Effect = _glow,
             };
-            Children.Add(_pill);
+            Children.Add(_track);
 
             _knob = new Ellipse { Width = KnobD, Height = KnobD, Fill = new SolidColorBrush(OffKnob) };
-            _glyph = new Path
+            _lock = new Path
             {
-                Data = BoltGeo,
-                Width = 12, Height = 12,
+                Data = LockGeo,
+                Width = 8, Height = 8,
                 Stretch = Stretch.Uniform,
                 Fill = new SolidColorBrush(OffBg),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
+                Visibility = Visibility.Collapsed,
             };
             _knobHost = new Grid
             {
                 Width = KnobD, Height = KnobD,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(2.5, 2.5, 0, 0),
+                Margin = new Thickness(KnobInset, (TrackH - KnobD) / 2, 0, 0),
                 RenderTransform = _knobShift,
                 IsHitTestVisible = false,
             };
             _knobHost.Children.Add(_knob);
-            _knobHost.Children.Add(_glyph);
+            _knobHost.Children.Add(_lock);
             Children.Add(_knobHost);
             Children.Add(_sparks);
 
@@ -160,6 +157,9 @@ namespace ConditioningControlPanel.Controls
         /// <summary>Unlocked = paid tier or this effect's weekly try running.</summary>
         public bool IsLockedNow => !SuperAccess.IsUnlocked(Effect);
 
+        /// <summary>The knob sits on the on side (the player's choice, or a running try).</summary>
+        public bool ShowsOn => _lastOn == true;
+
         private void OnChanged(SuperEffect e)
         {
             if (e != Effect) return;
@@ -177,59 +177,48 @@ namespace ConditioningControlPanel.Controls
         public void Refresh(bool animate)
         {
             bool locked = IsLockedNow;
-            bool on = !locked && SuperAccess.IsOn(Effect);
+            bool on = !locked && SuperAccess.IsSelected(Effect);
             string name = SuperNames.Name(Effect);
             AutomationProperties.SetName(this, Loc.GetF("super_switch_name", name));
-            ToolTip = locked ? Loc.GetF("super_switch_locked_tip", name) : Loc.GetF("super_switch_name", name);
-            // A bloom still running would hide every Opacity write below.
+            ToolTip = locked ? Loc.GetF("super_switch_locked_tip", name) : null;
             _glow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
-
+            _glowAllowed = PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier);
 
             if (on)
             {
-                _pill.Background = OnBgBrush;
-                _pill.BorderBrush = new SolidColorBrush(OnRing);
-                _glow.Color = PinkGlow;
-                _glow.BlurRadius = 16;
-                _glow.Opacity = PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier) ? 0.55 : 0;
-                _knob.Fill = Brushes.White;
-                _glyph.Fill = new SolidColorBrush(OnGlyph);
-                _glyph.Data = BoltGeo;
+                _track.Background = OnBgBrush;
+                _track.BorderBrush = new SolidColorBrush(Gold);
+                _glow.Opacity = _glowAllowed ? 0.35 : 0;
+                _knob.Fill = new SolidColorBrush(Cream);
+                _lock.Visibility = Visibility.Collapsed;
             }
             else if (locked)
             {
-                _pill.Background = new SolidColorBrush(OffBg);
-                _pill.BorderBrush = new SolidColorBrush(Gold);
-                _glow.Color = Gold;
-                _glow.BlurRadius = 12;
-                _glow.Opacity = PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier) ? 0.3 : 0;
-                _knob.Fill = new SolidColorBrush(Gold);
-                _glyph.Fill = new SolidColorBrush(GoldGlyph);
-                _glyph.Data = LockGeo;
+                _track.Background = new SolidColorBrush(OffBg);
+                _track.BorderBrush = new SolidColorBrush(LockedRing);
+                _glow.Opacity = 0;
+                _knob.Fill = new SolidColorBrush(LockedKnob);
+                _lock.Fill = new SolidColorBrush(OffBg);
+                _lock.Visibility = Visibility.Visible;
             }
             else
             {
-                _pill.Background = new SolidColorBrush(OffBg);
-                _pill.BorderBrush = new SolidColorBrush(OffRing);
+                _track.Background = new SolidColorBrush(OffBg);
+                _track.BorderBrush = new SolidColorBrush(OffRing);
                 _glow.Opacity = 0;
                 _knob.Fill = new SolidColorBrush(OffKnob);
-                _glyph.Fill = new SolidColorBrush(OffBg);
-                _glyph.Data = BoltGeo;
+                _lock.Visibility = Visibility.Collapsed;
             }
 
-            _glowAllowed = PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier);
             _restGlow = _glow.Opacity;
-            if (IsMouseOver) ApplyHover(true);
-
             double to = on ? KnobTravel : 0;
-            // Switching on (or a weekly try starting) earns a small burst: the conversion moment.
+            // Only the moment of switching on earns the small gold burst.
             if (animate && _lastOn == false && on) Burst();
-            if (animate && _lastOn != on && MotionFx.AllowTransitions)
+            if (animate && _lastOn != null && _lastOn != on && MotionFx.AllowTransitions)
             {
-                // cubic-bezier(.2,1.6,.4,1) over 220 ms: a small overshoot past the end.
-                var slide = new DoubleAnimation(to, TimeSpan.FromMilliseconds(220))
+                var slide = new DoubleAnimation(to, TimeSpan.FromMilliseconds(180))
                 {
-                    EasingFunction = new BackEase { Amplitude = 0.45, EasingMode = EasingMode.EaseOut },
+                    EasingFunction = new BackEase { Amplitude = 0.3, EasingMode = EasingMode.EaseOut },
                 };
                 _knobShift.BeginAnimation(TranslateTransform.XProperty, slide);
             }
@@ -239,6 +228,7 @@ namespace ConditioningControlPanel.Controls
                 _knobShift.X = to;
             }
             _lastOn = on;
+            if (IsMouseOver) ApplyHover(true);
         }
 
         protected override void OnMouseEnter(MouseEventArgs e) { base.OnMouseEnter(e); ApplyHover(true); }
@@ -251,81 +241,44 @@ namespace ConditioningControlPanel.Controls
             _focusRing.Visibility = IsKeyboardFocused ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        /// <summary>Hover: the glow lifts (gold when locked, lilac when off, pink when on) and the
-        /// pill grows 4%. The grow is skipped with motion off; the glow follows the perf tier.</summary>
+        /// <summary>Hover lifts the track a touch; the gold glow only rises when on.</summary>
         private void ApplyHover(bool over)
         {
-            if (_glowAllowed)
-            {
-                if (over)
-                {
-                    if (_glow.Opacity <= 0.01) _glow.Color = OffRing;
-                    _glow.Opacity = Math.Min(0.9, Math.Max(_restGlow + 0.3, 0.4));
-                }
-                else
-                {
-                    _glow.Opacity = _restGlow;
-                }
-            }
-            double scale = over && MotionFx.AllowTransitions ? 1.04 : 1.0;
-            if (MotionFx.AllowTransitions)
-            {
-                var a = new DoubleAnimation(scale, TimeSpan.FromMilliseconds(140)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
-                _hoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, a);
-                _hoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, a);
-            }
-            else
-            {
-                _hoverScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                _hoverScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                _hoverScale.ScaleX = _hoverScale.ScaleY = 1;
-            }
+            if (_glowAllowed && _lastOn == true)
+                _glow.Opacity = over ? Math.Min(0.6, _restGlow + 0.15) : _restGlow;
+            _track.Opacity = over ? 1.0 : 0.92;
         }
 
-        /// <summary>
-        /// Eight sparks fly off the knob and fade over 520 ms. Reduced motion = half the distance,
-        /// motion off = none. Purely visual, nothing hit-testable.
-        /// </summary>
+        /// <summary>Six small gold sparks off the knob over 420 ms, only at the moment of switching
+        /// on. Reduced motion = half the distance, motion off = none.</summary>
         private void Burst()
         {
             if (!MotionFx.AllowTransitions) return;
             _sparks.Children.Clear();
             double reach = MotionFx.Level == MotionLevel.Reduced ? 0.5 : 1.0;
-            double cx = 2.5 + KnobTravel + KnobD / 2, cy = PillH / 2;
-            var dur = TimeSpan.FromMilliseconds(520);
+            double cx = KnobInset + KnobTravel + KnobD / 2, cy = TrackH / 2;
+            var dur = TimeSpan.FromMilliseconds(420);
             for (int i = 0; i < SparkCount; i++)
             {
-                double ang = i * (2 * Math.PI / SparkCount) + 0.3;
-                double dist = (18 + (i % 3) * 6) * reach;
-                double size = i % 2 == 0 ? 4 : 3;
-                var dot = new Ellipse
-                {
-                    Width = size, Height = size,
-                    Fill = i % 3 == 0 ? Brushes.White : SparkBrush,
-                };
-                Canvas.SetLeft(dot, cx - size / 2);
-                Canvas.SetTop(dot, cy - size / 2);
+                double ang = i * (2 * Math.PI / SparkCount) + 0.4;
+                double dist = (11 + (i % 2) * 4) * reach;
+                var dot = new Ellipse { Width = 2.5, Height = 2.5, Fill = SparkBrush };
+                Canvas.SetLeft(dot, cx - 1.25);
+                Canvas.SetTop(dot, cy - 1.25);
                 var move = new TranslateTransform();
                 dot.RenderTransform = move;
                 _sparks.Children.Add(dot);
                 var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
                 move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, Math.Cos(ang) * dist, dur) { EasingFunction = ease });
                 move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, Math.Sin(ang) * dist, dur) { EasingFunction = ease });
-                var fade = new DoubleAnimation(1, 0, dur) { BeginTime = TimeSpan.FromMilliseconds(120) };
+                var fade = new DoubleAnimation(0.9, 0, dur) { BeginTime = TimeSpan.FromMilliseconds(80) };
                 if (i == SparkCount - 1) fade.Completed += (_, _) => _sparks.Children.Clear();
                 dot.BeginAnimation(OpacityProperty, fade);
             }
-            if (_glowAllowed)
-            {
-                // One bloom of the glow on top of the sparks, back to rest.
-                var bloom = new DoubleAnimation(0.95, _restGlow, TimeSpan.FromMilliseconds(600)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
-                bloom.Completed += (_, _) => { _glow.BeginAnimation(DropShadowEffect.OpacityProperty, null); _glow.Opacity = IsMouseOver ? Math.Max(_restGlow + 0.3, 0.4) : _restGlow; };
-                _glow.BeginAnimation(DropShadowEffect.OpacityProperty, bloom);
-            }
         }
 
-        private const int SparkCount = 8;
-        private static readonly Brush SparkBrush = Freeze(new SolidColorBrush(Color.FromRgb(0xFF, 0xA3, 0xD4)));
+        private const int SparkCount = 6;
+        private static readonly Brush SparkBrush = Freeze(new SolidColorBrush(Gold));
 
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
@@ -378,7 +331,7 @@ namespace ConditioningControlPanel.Controls
         }
 
         /// <summary>The mockup's `.shake`: 400 ms, -4/+4/-3/+2 px with a 1.5 degree rock. Skipped
-        /// when motion is off.</summary>
+        /// when motion is off, halved when reduced.</summary>
         public static void Shake(UIElement target)
         {
             if (!MotionFx.AllowTransitions) return;

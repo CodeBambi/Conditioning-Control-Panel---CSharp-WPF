@@ -43,8 +43,23 @@ namespace ConditioningControlPanel.Services.Super
             return SuperPreviewRule.IsUnlocked(TierGate.HasPremium, effect, SuperPreview.Trying);
         }
 
-        /// <summary>Unlocked AND switched on. Cheap enough to call per spawn.</summary>
+        /// <summary>
+        /// Unlocked AND switched on AND its base feature is on (<see cref="SuperBase"/>). Cheap
+        /// enough to call per spawn. A base switched off reads false here and leaves the player's
+        /// own Super switch alone, so the add-on comes back with the base.
+        /// </summary>
         public static bool IsOn(SuperEffect effect)
+        {
+            EnsureHooks();
+            if (!IsBaseOn(effect)) return false;
+            return IsSelected(effect);
+        }
+
+        /// <summary>
+        /// Unlocked AND switched on (or this week's try), ignoring the base feature. The switch UI
+        /// draws this, so turning the base off never makes the Super switch look flipped.
+        /// </summary>
+        public static bool IsSelected(SuperEffect effect)
         {
 #if DEBUG
             // Unlocks the gate only: the player's own switch still decides.
@@ -53,6 +68,70 @@ namespace ConditioningControlPanel.Services.Super
             var on = App.Settings?.Current?.SuperEffectsOn;
             bool switchedOn = on != null && on.Contains(effect.ToString());
             return SuperPreviewRule.IsOn(TierGate.HasPremium, switchedOn, effect, SuperPreview.Trying);
+        }
+
+        /// <summary>Is the effect's base feature main toggle on right now.</summary>
+        public static bool IsBaseOn(SuperEffect effect) => SuperBase.IsBaseOn(effect, App.Settings?.Current);
+
+        private static readonly object BaseGate = new();
+        private static bool _baseHooked;
+        private static Models.AppSettings? _baseSettings;
+
+        /// <summary>Both hooks, idempotent and cheap: a reference compare once hooked.</summary>
+        private static void EnsureHooks()
+        {
+            if (!_tierHooked) HookTierEvents();
+            HookBaseEvents();
+        }
+
+        /// <summary>
+        /// Fire <see cref="Changed"/> for an effect when its base toggle flips, so a running add-on
+        /// tears down with its base (Creep stops with the pink filter). Follows a settings swap
+        /// (cloud restore, reset). Idempotent; <see cref="IsOn"/> calls it, so the first spawn
+        /// question wires it even if no panel was ever opened.
+        /// </summary>
+        public static void HookBaseEvents()
+        {
+            var svc = App.Settings;
+            if (svc == null) return;
+            if (_baseHooked && ReferenceEquals(_baseSettings, svc.Current)) return;
+            bool swapped;
+            lock (BaseGate)
+            {
+                if (!_baseHooked)
+                {
+                    _baseHooked = true;
+                    try { svc.CurrentReplaced += OnSettingsReplaced; }
+                    catch (Exception ex) { App.Logger?.Debug("SuperAccess.HookBaseEvents: {E}", ex.Message); }
+                }
+                swapped = RebindBase();
+            }
+            if (swapped) RaiseAll();
+        }
+
+        private static void OnSettingsReplaced()
+        {
+            bool swapped;
+            lock (BaseGate) swapped = RebindBase();
+            if (swapped) RaiseAll();
+        }
+
+        /// <summary>Under <see cref="BaseGate"/>: point the hook at the live settings object.
+        /// True when it moved from one object to another (every base may have changed).</summary>
+        private static bool RebindBase()
+        {
+            var current = App.Settings?.Current;
+            if (ReferenceEquals(_baseSettings, current)) return false;
+            bool hadOne = _baseSettings != null;
+            if (_baseSettings != null) _baseSettings.PropertyChanged -= OnBasePropertyChanged;
+            _baseSettings = current;
+            if (current != null) current.PropertyChanged += OnBasePropertyChanged;
+            return hadOne;
+        }
+
+        private static void OnBasePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (SuperBase.EffectFor(e.PropertyName) is SuperEffect effect) Changed?.Invoke(effect);
         }
 
         /// <summary>The player's own switch position, ignoring the gate (the switch UI draws it).</summary>

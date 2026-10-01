@@ -59,9 +59,6 @@
                 </Grid>
             </Border>
 
-            <!-- Super add-on: switch, BASIC sign and the weekly free try (Controls/SuperRow). -->
-            <ctl:SuperRow Effect="Scrawl"/>
-
             <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
                  slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
                  buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
@@ -316,6 +313,9 @@
 
                     <Button Content="{loc:Str btn_edit_phrases}" Style="{DynamicResource OutlineButton}"
                             Click="BtnEditPhrases_Click"/>
+
+                    <!-- The gold V2 box (Controls/SuperBox): Super switch, BASIC sign, weekly try. -->
+                    <ctl:SuperBox x:Name="SuperBoxMain" Effect="Scrawl"/>
                 </StackPanel>
 
                 <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its

@@ -54,9 +54,6 @@
             </Grid>
         </Border>
 
-        <!-- Super add-on: switch, BASIC sign and the weekly free try (Controls/SuperRow). -->
-        <ctl:SuperRow Effect="InnerBloom"/>
-
         <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
              slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
              buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
@@ -109,7 +106,6 @@
                                            VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
-
 
                             <!-- Size. Sits with Per Min / Speed rather than under an advanced
                                  header because "these are too big" is a first-minute reaction, and
@@ -188,47 +184,6 @@
                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                           Checked="ChkTriggers_Changed" Unchecked="ChkTriggers_Changed"/>
                             </Grid>
-
-                            <!-- Bubbles v2 (Back Room prizes): its own box, so what the prizes added
-                                 reads as a thing you bought and not as two more dials lost among the
-                                 sliders. The whole box collapses when no v2 grant is owned - the
-                                 code-behind drives V2Box.Visibility from PrizeGrants and refreshes it
-                                 on GrantsChanged. The champagne pill in the header is the same badge
-                                 the feature cards wear (FeatureCard.NewV2Badge), injected by code. -->
-                            <Border x:Name="V2Box" Visibility="Collapsed" Margin="0,8,0,2"
-                                    CornerRadius="10" Padding="12,8,12,8"
-                                    Background="#14FFE08A" BorderBrush="#33FFE08A" BorderThickness="1">
-                                <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                        <TextBlock Text="{loc:Str label_bubbles_v2_box}" FontSize="12.5" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                        <ContentControl x:Name="V2BoxBadge" Margin="7,0,0,0" VerticalAlignment="Center"/>
-                                    </StackPanel>
-
-                                    <!-- The standalone way in (owner decision, 2026-09-19): the same
-                                         counter prize at the same price, bought from here for the
-                                         people who never open the Back Room. It hides itself once the
-                                         prize lands and the rows below take over. -->
-                                    <ctl:V2GetItRow x:Name="RowGetBubblesV2"/>
-
-                                    <Grid x:Name="MotionRow" Height="36" Background="Transparent"
-                                          ToolTip="{loc:Str tooltip_bubble_motion}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_motion}" FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                        <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="150" feat:SessionLock.Owned="True"
-                                                  VerticalAlignment="Center"
-                                                  Style="{DynamicResource DarkComboBoxStyle}"
-                                                  SelectionChanged="CmbMotion_Changed"/>
-                                    </Grid>
-
-
-
-                                </StackPanel>
-                            </Border>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -316,6 +271,38 @@
                         </Grid>
                     </Border>
                 </StackPanel>
+
+                <!-- The gold V2 box (Controls/SuperBox): Super switch, BASIC sign, weekly try. -->
+                <ctl:SuperBox x:Name="SuperBoxMain" Effect="InnerBloom">
+                    <!-- The Back Room v2 prize rows, merged into the gold box under the Super switch.
+                         Each row is lit by its own ownership (PrizeGrants), never by the tier; the
+                         section collapses while nothing in it applies. See RefreshV2Box / RebuildMotionPicker. -->
+                    <StackPanel x:Name="V2Box" Visibility="Collapsed">
+                        <Border Height="1" Background="#33FFE08A" Margin="0,2,0,6"/>
+                        <TextBlock Text="{loc:Str label_bubbles_v2_box}" FontSize="11.5" FontWeight="SemiBold"
+                                   Foreground="#FFE08A" Opacity="0.85" Margin="0,0,0,2"/>
+
+                        <!-- The standalone way in (owner decision, 2026-09-19): the same
+                             counter prize at the same price, bought from here for the
+                             people who never open the Back Room. It hides itself once the
+                             prize lands and the rows below take over. -->
+                        <ctl:V2GetItRow x:Name="RowGetBubblesV2"/>
+
+                        <Grid x:Name="MotionRow" Height="36" Background="Transparent"
+                              ToolTip="{loc:Str tooltip_bubble_motion}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_motion}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="150" feat:SessionLock.Owned="True"
+                                      VerticalAlignment="Center"
+                                      Style="{DynamicResource DarkComboBoxStyle}"
+                                      SelectionChanged="CmbMotion_Changed"/>
+                        </Grid>
+                    </StackPanel>
+                </ctl:SuperBox>
             </StackPanel>
 
             <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its

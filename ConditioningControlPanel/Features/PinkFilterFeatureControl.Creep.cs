@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Features
             _creepLoading = true;
             try
             {
-                CreepCard.Visibility = SuperAccess.IsOn(SuperEffect.Creep) ? Visibility.Visible : Visibility.Collapsed;
+                CreepCard.Visibility = SuperAccess.IsSelected(SuperEffect.Creep) ? Visibility.Visible : Visibility.Collapsed;
                 if (CmbCreepSpeed.Items.Count == 0)
                 {
                     // DarkComboBoxStyle has a dark popup, so the items take the light brush.

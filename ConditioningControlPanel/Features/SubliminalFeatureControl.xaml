@@ -48,9 +48,6 @@
             </Grid>
         </Border>
 
-        <!-- Super add-on: switch, BASIC sign and the weekly free try (Controls/SuperRow). -->
-        <ctl:SuperRow Effect="Afterglow"/>
-
         <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
              slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
              buys back becomes ONE big art card instead of dead margin. Everything below column 0 is
@@ -195,6 +192,11 @@
                             Style="{DynamicResource OutlineButton}" Click="BtnAdvanced_Click"
                             ToolTip="{loc:Str tooltip_advanced_subliminal_visual_settings}"/>
                 </Grid>
+
+                <!-- The gold V2 box (Controls/SuperBox): Super switch, BASIC sign, weekly try. -->
+                <ctl:SuperBox x:Name="SuperBoxMain" Effect="Afterglow">
+                    <!-- host Afterglow options here -->
+                </ctl:SuperBox>
             </StackPanel>
 
             <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its

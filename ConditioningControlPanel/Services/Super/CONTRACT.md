@@ -17,6 +17,11 @@ https://claude.ai/artifact/2bZLs83jd5AuuSqaoqK69m . Port the feel, not the canva
   spawns or ticks. When false, behaviour must be byte-identical to today (the base effect is untouched).
 - `SuperAccess.Changed` fires when a switch flips or the tier changes: tear the effect down cleanly.
 - Never read `AppSettings.SuperEffectsOn` or the tier directly.
+- `IsOn` is also false while the effect's BASE feature main toggle is off (`SuperBase`, owner 2026-10-01):
+  the stored Super switch is left alone and `Changed` fires when the base flips, so the add-on tears
+  down with its base and comes back with it. The switch UI draws `IsSelected` (the player's choice).
+- The switch lives ONLY in the gold V2 box at the foot of each feature page (`Controls/SuperBox`),
+  never on a dashboard tile. Effect sub-options go in that box's body.
 
 ## Hard rules (each was broken once)
 
@@ -53,5 +58,5 @@ https://claude.ai/artifact/2bZLs83jd5AuuSqaoqK69m . Port the feel, not the canva
 | Scrawl | bouncing text | Services/Subliminal/BouncingTextService.cs, Features/BouncingTextFeatureControl |
 | Undertow | brain drain and melt | Compositor/BrainDrainLayer.cs, BrainDrainCapturePump.cs |
 
-The scaffold lane (switch control on tiles and panels, weekly preview, loc keys) is separate; lanes expose
+The scaffold lane (the switch in the gold V2 box on each feature page, weekly preview, loc keys) is separate; lanes expose
 their own settings only for sub-options and wire the switch through `SuperAccess.Set`.
