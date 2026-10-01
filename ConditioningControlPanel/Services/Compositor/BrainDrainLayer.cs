@@ -94,7 +94,26 @@ public sealed class BrainDrainLayer : BaseLayer
     private bool _dirty = true;
     private int _lastSeenFrames = -1;
 
-    public BrainDrainLayer(CompositorEngine engine) : base(engine) { }
+    // ---- Super Undertow (Services/Super/CONTRACT.md): a feathered sharp lens punched through this
+    // layer's blur. The blur (and the melt warp, which lives in the same image) is simply not drawn
+    // inside it, so the real screen shows through; the self-capture guard is untouched because
+    // nothing new is captured. Off = this layer byte-identical to before (RenderUndertow never runs).
+    private readonly Super.UndertowState _undertow = new();
+    private bool _undertowOn;                   // UI thread; re-read on Start and on SuperAccess.Changed
+    private volatile bool _undertowStale = true;
+    private GlobalMouseHook? _undertowHook;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<System.Windows.Point> _undertowClicks = new();
+    private double _undertowScreenWidth = 1920;
+    private SKPaint? _maskPaint;                // DstOut, unit radial gradient scaled by the canvas
+    private SKPaint? _ringPaint;
+
+    public BrainDrainLayer(CompositorEngine engine) : base(engine)
+    {
+        // Any Changed re-asks, not only Undertow's own: a tier change or the weekly preview ending
+        // may be raised with whichever effect the sender had in hand. The drift check re-asks
+        // once a second too, so a lapse nobody announces still tears the lens down.
+        Super.SuperAccess.Changed += _ => _undertowStale = true;
+    }
 
     public override int ZIndex => CompositorLayers.BrainDrain;
     public override bool ExcludeFromCapture => true;
@@ -121,6 +140,8 @@ public sealed class BrainDrainLayer : BaseLayer
                                           _requestedScreens, Sigma, _meltAmplitude);
         _lastSeenFrames = -1;   // fresh pump: its counter restarts at 0, so never match a stale one
         _dirty = true;
+        _undertow.Reset();
+        _undertowStale = true;  // a fresh run asks the switch again
         SetActive(true);
         ArmFirstFrameWatchdog(intensity, melt);
     }
@@ -319,9 +340,12 @@ public sealed class BrainDrainLayer : BaseLayer
         int published = _pump?.FramesPublished ?? _lastSeenFrames;
         if (published != _lastSeenFrames) { _lastSeenFrames = published; _dirty = true; }
 
+        if (_pump != null) UpdateUndertow(delta);
+
         _sinceDriftCheck += delta;
         if (_sinceDriftCheck < DriftCheckInterval) return;
         _sinceDriftCheck = TimeSpan.Zero;
+        _undertowStale = true;   // cheap re-ask of SuperAccess.IsOn, once a second
 
         try
         {
@@ -370,10 +394,167 @@ public sealed class BrainDrainLayer : BaseLayer
         // Set per frame - Render, SetIntensity and Pulse are all on the UI thread, so this can
         // never read a half-written value, and it keeps the ramp path free of paint bookkeeping.
         _drawPaint.Color = SKColors.White.WithAlpha(_drawAlpha);
-        canvas.DrawImage(frame.Image,
-            new SKRect(captureBounds.X, captureBounds.Y, captureBounds.Right, captureBounds.Bottom),
-            _drawPaint);
+        var dest = new SKRect(captureBounds.X, captureBounds.Y, captureBounds.Right, captureBounds.Bottom);
+        if (_undertowOn && _undertow.Placed)
+            RenderUndertow(canvas, frame.Image, dest, dpiScale);
+        else
+            canvas.DrawImage(frame.Image, dest, _drawPaint);
     }
+
+    // ================================================================================
+    //  Super Undertow
+    // ================================================================================
+
+    private static Super.UndertowMotion UndertowMotionNow() => MotionFx.Level switch
+    {
+        Models.MotionLevel.Off => Super.UndertowMotion.Off,
+        Models.MotionLevel.Reduced => Super.UndertowMotion.Reduced,
+        _ => Super.UndertowMotion.Full,
+    };
+
+    /// <summary>UI thread, once per tick while the pump runs: re-read the switch when it flipped,
+    /// follow the cursor, pay out clicks, shrink. Only the lens being alive keeps the layer dirty.</summary>
+    private void UpdateUndertow(TimeSpan delta)
+    {
+        if (_undertowStale)
+        {
+            _undertowStale = false;
+            bool on = false;
+            try { on = Super.SuperAccess.IsOn(Super.SuperEffect.Undertow); } catch { }
+            if (on != _undertowOn)
+            {
+                _dirty = true;
+                if (on) StartUndertowHook(); else StopUndertow();
+                _undertowOn = on;
+            }
+        }
+        if (!_undertowOn) return;
+
+        if (!GetCursorPos(out var pt)) return;
+        _undertowScreenWidth = ScreenWidthAt(pt.X, pt.Y);
+        var motion = UndertowMotionNow();
+
+        // Repaint only when the lens or a ripple visibly moved: a still lens under a still cursor
+        // (MotionFx Off, or a parked mouse) must not force a full-screen redraw every tick.
+        bool changed = Super.UndertowLens.Step(_undertow, delta.TotalSeconds, pt.X, pt.Y, _undertowScreenWidth, motion);
+        while (_undertowClicks.TryDequeue(out var click))
+        {
+            Super.UndertowLens.Click(_undertow, click.X, click.Y, _undertowScreenWidth, motion);
+            changed = true;
+        }
+
+        if (changed) _dirty = true;
+    }
+
+    private double ScreenWidthAt(int x, int y)
+    {
+        var screens = _requestedScreens;
+        foreach (var s in screens)
+            if (s.Contains(x, y)) return Math.Max(1, s.Width);
+        return screens.Length > 0 ? Math.Max(1, screens[0].Width) : _undertowScreenWidth;
+    }
+
+    private void StartUndertowHook()
+    {
+        _undertow.Reset();
+        while (_undertowClicks.TryDequeue(out _)) { }
+        try
+        {
+            // HOOK THREAD: enqueue only, and never swallow - the click still reaches the app under it.
+            _undertowHook = new GlobalMouseHook { LeftDown = p => { _undertowClicks.Enqueue(p); return false; } };
+            _undertowHook.Start();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Undertow mouse hook: {E}", ex.Message);
+        }
+    }
+
+    private void StopUndertow()
+    {
+        var hook = _undertowHook;
+        _undertowHook = null;
+        try { hook?.Dispose(); } catch { }
+        while (_undertowClicks.TryDequeue(out _)) { }
+        _undertow.Reset();
+        _undertowOn = false;
+        _undertowStale = true;
+    }
+
+    /// <summary>Draws the blur with the feathered lens left out, then the click ripples. The
+    /// outside of the lens box draws straight; only the lens box goes through an offscreen layer
+    /// (bounded, so a DstOut can never erase layers below this one).</summary>
+    private void RenderUndertow(SKCanvas canvas, SKImage image, SKRect dest, double dpiScale)
+    {
+        float r = (float)_undertow.Radius;
+        float x = (float)_undertow.X, y = (float)_undertow.Y;
+        var lens = new SKRect(x - r, y - r, x + r, y + r);
+
+        if (r < 1f || !lens.IntersectsWith(dest))
+        {
+            canvas.DrawImage(image, dest, _drawPaint);
+        }
+        else
+        {
+            canvas.Save();
+            canvas.ClipRect(lens, SKClipOperation.Difference);
+            canvas.DrawImage(image, dest, _drawPaint);
+            canvas.Restore();
+
+            canvas.SaveLayer(lens, null);
+            canvas.ClipRect(lens);
+            canvas.DrawImage(image, dest, _drawPaint);
+            canvas.Translate(x, y);
+            canvas.Scale(r);
+            canvas.DrawCircle(0, 0, 1, MaskPaint());
+            canvas.Restore();
+        }
+
+        var motion = UndertowMotionNow();
+        SKPaint? ring = null;
+        foreach (var rp in _undertow.Ripples)
+        {
+            if (!rp.Live) continue;
+            for (int j = 0; j < 2; j++)
+            {
+                if (!Super.UndertowLens.RingAt(rp.Age, j, _undertowScreenWidth, motion,
+                                                out double rr, out double a, out double w, dpiScale)) continue;
+                ring ??= RingPaint();
+                ring.StrokeWidth = (float)w;
+                ring.Color = SKColors.White.WithAlpha((byte)Math.Clamp(Math.Round(a * 255), 0, 255));
+                canvas.DrawCircle((float)rp.X, (float)rp.Y, (float)rr, ring);
+            }
+        }
+    }
+
+    private SKPaint MaskPaint()
+    {
+        if (_maskPaint != null) return _maskPaint;
+        var colors = new SKColor[Super.UndertowLens.MaskAlpha.Length];
+        for (int i = 0; i < colors.Length; i++)
+            colors[i] = SKColors.Black.WithAlpha((byte)Math.Round(Super.UndertowLens.MaskAlpha[i] * 255));
+        _maskPaint = new SKPaint
+        {
+            IsAntialias = true,
+            BlendMode = SKBlendMode.DstOut,
+            Shader = SKShader.CreateRadialGradient(new SKPoint(0, 0), 1f, colors,
+                                                    Super.UndertowLens.MaskPositions, SKShaderTileMode.Clamp),
+        };
+        return _maskPaint;
+    }
+
+    private SKPaint RingPaint() => _ringPaint ??= new SKPaint
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+    };
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int X; public int Y; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT point);
 
     private UiFrame GetOrAddFrame(System.Drawing.Rectangle bounds)
     {
@@ -408,6 +589,8 @@ public sealed class BrainDrainLayer : BaseLayer
     /// may be inside a stalled desktop blt would re-create the very freeze #777 is about.</summary>
     private void ReleaseCaptures()
     {
+        // Panic, emergency exit and every stop land here: the lens dies with the blur it rides.
+        StopUndertow();
         StopPump();
         ReleaseUiFrames();
         _requestedScreens = Array.Empty<System.Drawing.Rectangle>();
