@@ -187,6 +187,7 @@ public sealed class FriendsDrawer : Border
     {
         if (_svc?.Available != true) return;
         try { _svc.PresenceShared = !_svc.PresenceShared; } catch (Exception ex) { Serilog.Log.Debug("[Friends] presence write failed: {E}", ex.Message); }
+        PresenceAsk.MarkAsked(); // WPF FriendsPresenceSetting.Write: answering here counts as answering the ask
         Render();
     }
     private void RenderList(FriendsSnapshot snap)
@@ -626,4 +627,13 @@ public sealed class FriendsDrawer : Border
             });
         return g;
     }
+}
+
+/// <summary>WPF PresenceAsk: the once-only presence question's marker, beside the settings. The ask
+/// strip itself is not on this head yet; the switch still marks it, so it never nags once it is.</summary>
+internal static class PresenceAsk
+{
+    internal static Func<bool> Asked { get; set; } = () => { try { return System.IO.File.Exists(MarkerPath); } catch { return false; } };
+    internal static Action MarkAsked { get; set; } = () => { try { System.IO.File.WriteAllText(MarkerPath, DateTime.UtcNow.ToString("o")); } catch { } };
+    private static string MarkerPath => System.IO.Path.Combine(CorePaths.UserData, "friends_presence_asked.flag");
 }
