@@ -709,7 +709,8 @@ export function createDoor(opts = {}) {
     const job = how === 'copy' ? copyFallCard(g) : saveFallCard(g);
     Promise.resolve(job).then((ok) => {
       if (how === 'copy') say(ok ? 'Copied.' : 'Copy is not allowed here. Save it instead.');
-      else say(ok ? 'Saved to your downloads.' : 'Could not make the picture.');
+      // the page only hands the file over; the host's own download tray says whether it landed
+      else say(ok ? 'Sent to your downloads.' : 'Could not make the picture.');
     }).catch(() => say('Could not make the picture.'));
   }
   function paintRecap() {

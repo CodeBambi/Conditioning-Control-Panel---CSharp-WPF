@@ -157,12 +157,14 @@ assert.equal(twoHere.side, 'b', 'two players here: the picture is about the side
 assert.equal(twoHere.headline, 'Black lost by checkmate');
 for (const s of [model.headline, model.subline, model.line, model.boardLabel]) assert.ok(!/[\u2013\u2014!]/.test(s), 'plain copy');
 
-// The director lets the fall's review play its replay, and only while it is open.
+// SOURCE checks, not behaviour: the director and the door need a board and a page, so these only
+// pin the lines that let the fall's review play its replay, and only while it is open. The review
+// itself (watchFall, backToEnd, stopAt) is owed a run in the app.
 const director = readFileSync(new URL('../board/director.js', import.meta.url), 'utf8');
-assert.match(director, /const menuUp = \(\) => !underDoor && /, 'the door stands the replay down unless the fall is being watched');
-assert.match(director, /allowUnderDoor\(on\) \{ underDoor = !!on; if \(!underDoor\) dropReplay\(\); \}/);
+assert.match(director, /const menuUp = \(\) => !underDoor && /, 'source: the menu gate gives way while the fall is watched');
+assert.match(director, /allowUnderDoor\(on\) \{ underDoor = !!on; if \(!underDoor\) dropReplay\(\); \}/, 'source: switching it off drops a running replay');
 const door = readFileSync(new URL('../door/door.js', import.meta.url), 'utf8');
-assert.match(door, /function closeReplay\(\) \{\s+stopReplay\(\);\s+replay = null;\s+try \{ board\.director\?\.allowUnderDoor\?\.\(false\); \}/, 'closing any review turns it off again');
+assert.match(door, /function closeReplay\(\) \{\s+stopReplay\(\);\s+replay = null;\s+try \{ board\.director\?\.allowUnderDoor\?\.\(false\); \}/, 'source: closing any review switches it off');
 
 // The settle (door.js settleIq): the menu or a rematch before the last grade came in starts the
 // grader over, and the card and the shelf keep the record's fall, never the next game's empty one.
