@@ -5279,6 +5279,8 @@
   "super_afterglow_color_1": "Cor 1",
   "super_afterglow_color_2": "Cor 2",
   "super_afterglow_colors_tip": "Cada palavra brilha em uma das duas, ao acaso.",
+  "super_afterglow_only": "Usar só o Afterglow",
+  "super_afterglow_only_tip": "Deixar os cartões subliminares normais em repouso e mostrar só as palavras perto do mouse.",
   "super_try": "Testar, 10 s",
   "super_try_left": "{0}s",
   "super_back_monday": "Usado. Volta na segunda",

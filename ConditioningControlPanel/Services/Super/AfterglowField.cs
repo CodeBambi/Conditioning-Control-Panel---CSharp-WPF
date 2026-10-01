@@ -16,6 +16,8 @@ namespace ConditioningControlPanel.Services.Super
         public double Scale = 1;
         /// <summary>Glow colour: 0 = the player's colour 1, 1 = colour 2 (AfterglowColorA / B).</summary>
         public int Hue;
+        /// <summary>Slight tilt in radians the word is drawn at (burst words). 0 for a single pop.</summary>
+        public double Tilt;
         /// <summary>Trail ring buffer: recent centres, newest at <see cref="TrailHead"/>.</summary>
         public readonly double[] TrailX = new double[AfterglowField.TrailLen];
         public readonly double[] TrailY = new double[AfterglowField.TrailLen];

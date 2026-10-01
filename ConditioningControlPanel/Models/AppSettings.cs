@@ -9481,6 +9481,18 @@ namespace ConditioningControlPanel.Models
             set { _afterglowColorB = Services.Super.AfterglowOptions.Normalise(value, Services.Super.AfterglowOptions.ColorBDefault); OnPropertyChanged(); }
         }
 
+        private bool _afterglowOnly;
+        /// <summary>
+        /// "Use only Afterglow": while Afterglow runs, the normal subliminal cards are not shown, only
+        /// the near-cursor words. Off by default; ignored whenever Afterglow itself is not running.
+        /// </summary>
+        [JsonProperty]
+        public bool AfterglowOnly
+        {
+            get => _afterglowOnly;
+            set { _afterglowOnly = value; OnPropertyChanged(); }
+        }
+
         private int _superPreviewUsedWeek = -1;
         /// <summary>
         /// Week index (<c>SuperPreviewRule.WeekIndex</c>, Monday UTC weeks) of the last weekly free

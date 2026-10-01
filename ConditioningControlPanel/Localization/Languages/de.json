@@ -5279,6 +5279,8 @@
   "super_afterglow_color_1": "Farbe 1",
   "super_afterglow_color_2": "Farbe 2",
   "super_afterglow_colors_tip": "Jedes Wort leuchtet zufällig in einer der beiden.",
+  "super_afterglow_only": "Nur Afterglow verwenden",
+  "super_afterglow_only_tip": "Die normalen Subliminal-Karten ruhen lassen und nur die Wörter an der Maus zeigen.",
   "super_try": "Testen, 10 s",
   "super_try_left": "{0}s",
   "super_back_monday": "Verbraucht. Montag wieder",

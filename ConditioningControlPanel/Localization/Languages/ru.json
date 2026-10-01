@@ -5279,6 +5279,8 @@
   "super_afterglow_color_1": "Цвет 1",
   "super_afterglow_color_2": "Цвет 2",
   "super_afterglow_colors_tip": "Каждое слово светится одним из двух цветов, случайно.",
+  "super_afterglow_only": "Только Afterglow",
+  "super_afterglow_only_tip": "Не показывать обычные подсознательные карточки, только слова возле мыши.",
   "super_try": "Попробовать, 10 с",
   "super_try_left": "{0}с",
   "super_back_monday": "Использовано. Снова в понедельник",

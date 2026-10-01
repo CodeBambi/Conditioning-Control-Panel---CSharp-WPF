@@ -84,29 +84,48 @@ public class AfterglowOptionsTests
     }
 
     [Theory]
-    [InlineData(2)]
-    [InlineData(3)]
-    [InlineData(4)]
-    public void A_burst_stacks_on_distinct_lines_and_staggers_fifty_to_ninety_ms(int count)
+    [InlineData(2, 1)]
+    [InlineData(3, 2)]
+    [InlineData(4, 2)]
+    public void A_burst_spreads_wraps_to_two_lines_and_staggers_fifty_to_ninety_ms(int count, int rows)
     {
         var rng = new Random(count);
         for (int run = 0; run < 50; run++)
         {
             var plan = AfterglowOptions.BurstPlan(count, rng.NextDouble);
             Assert.Equal(count, plan.Length);
+            Assert.Equal(rows, AfterglowOptions.RowsFor(count));
             Assert.Equal(0, plan[0].DelayS);
             for (int k = 1; k < count; k++)
                 Assert.InRange(plan[k].DelayS - plan[k - 1].DelayS, 0.05 - 1e-9, 0.09 + 1e-9);
 
-            // Lines one LineSpacing apart: no two words share a band, however wide they are.
-            var lines = plan.Select(p => p.Line).OrderBy(x => x).ToArray();
-            for (int k = 1; k < count; k++)
-                Assert.Equal(AfterglowOptions.LineSpacing, lines[k] - lines[k - 1], 6);
-            Assert.True(AfterglowOptions.LineSpacing > 1, "a line must be taller than a word");
-            Assert.Equal(0, lines.Sum(), 6);   // centred on the burst point
+            // Every (row, col) place is used exactly once, at most two words per row.
+            var places = plan.Select(p => (p.Row, p.Col)).ToArray();
+            Assert.Equal(count, places.Distinct().Count());
+            Assert.All(plan, p => Assert.InRange(p.RowSize, 1, AfterglowOptions.WordsPerRow));
+            Assert.Equal(rows, plan.Select(p => p.Row).Distinct().Count());
+
+            // Rows sit well apart: even with jitter, two rows never come closer than one font size.
+            if (rows == 2)
+            {
+                double top = plan.Where(p => p.Row == 0).Max(p => p.Line);
+                double bottom = plan.Where(p => p.Row == 1).Min(p => p.Line);
+                Assert.True(bottom - top >= AfterglowOptions.LineSpacing - 2 * AfterglowOptions.LineJitter - 1e-9);
+                Assert.True(bottom - top > 1.2, "rows must not touch");
+            }
             Assert.All(plan, p => Assert.InRange(p.Nudge, -AfterglowOptions.NudgeSpan, AfterglowOptions.NudgeSpan));
-            Assert.True(AfterglowOptions.BurstHalfLines(count) * 2 >= lines[^1] - lines[0] + 1 - 1e-9);
+            Assert.All(plan, p => Assert.InRange(p.Tilt, -AfterglowOptions.TiltMax, AfterglowOptions.TiltMax));
+            Assert.All(plan, p => Assert.True(Math.Abs(p.Line) <= AfterglowOptions.BurstHalfLines(count) + 1e-9));
         }
+    }
+
+    [Fact]
+    public void Burst_words_carry_a_slight_tilt_but_one_word_is_straight()
+    {
+        Assert.Equal(0, AfterglowOptions.BurstPlan(1, Seq(0.9))[0].Tilt);
+        var plan = AfterglowOptions.BurstPlan(4, new Random(7).NextDouble);
+        Assert.Contains(plan, p => Math.Abs(p.Tilt) > 0.01);
+        Assert.True(AfterglowOptions.TiltMax is > 0.05 and < 0.25, "slight, not a spin");
     }
 
     [Fact]

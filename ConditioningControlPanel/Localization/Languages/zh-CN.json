@@ -5791,6 +5791,8 @@
   "super_afterglow_color_1": "颜色 1",
   "super_afterglow_color_2": "颜色 2",
   "super_afterglow_colors_tip": "每个文字随机以两种颜色之一发光。",
+  "super_afterglow_only": "仅使用 Afterglow",
+  "super_afterglow_only_tip": "不显示普通潜意识卡片，只显示鼠标旁的文字。",
   "super_try": "试用 10 秒",
   "super_try_left": "{0}秒",
   "super_back_monday": "已用。周一再来",

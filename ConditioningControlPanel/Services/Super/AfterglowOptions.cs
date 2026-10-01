@@ -3,19 +3,23 @@ using System.Globalization;
 
 namespace ConditioningControlPanel.Services.Super
 {
-    /// <summary>One word of a burst: where it sits against the burst centre and when it pops.</summary>
+    /// <summary>One word of a burst: which row and column it sits in, where against the burst centre, its tilt and when it pops.</summary>
     public readonly struct AfterglowBurstSlot
     {
-        /// <summary>Vertical place in lines (1 = one font size), 0 = the centre line.</summary>
+        /// <summary>Vertical place in lines (1 = one font size), 0 = the centre line. Includes a small jitter.</summary>
         public readonly double Line;
-        /// <summary>Sideways nudge in font sizes (small, so the stack does not read as a list).</summary>
+        /// <summary>Small sideways jitter in font sizes, so a row does not read as a table.</summary>
         public readonly double Nudge;
         /// <summary>Seconds after the first word.</summary>
         public readonly double DelayS;
+        /// <summary>Row index (0 = top) and how many words share this row; Col is the place in the row, left to right.</summary>
+        public readonly int Row, Col, RowSize;
+        /// <summary>Slight tilt in radians, either way.</summary>
+        public readonly double Tilt;
 
-        public AfterglowBurstSlot(double line, double nudge, double delayS)
+        public AfterglowBurstSlot(double line, double nudge, double delayS, int row = 0, int col = 0, int rowSize = 1, double tilt = 0)
         {
-            Line = line; Nudge = nudge; DelayS = delayS;
+            Line = line; Nudge = nudge; DelayS = delayS; Row = row; Col = col; RowSize = rowSize; Tilt = tilt;
         }
     }
 
@@ -32,10 +36,16 @@ namespace ConditioningControlPanel.Services.Super
         public const string ColorADefault = "#FF5FB0";   // pink (mockup palette)
         public const string ColorBDefault = "#5FFFD0";   // mint
 
-        /// <summary>Line spacing of a burst, in font sizes: words never touch vertically.</summary>
-        public const double LineSpacing = 1.25;
-        /// <summary>Sideways nudge, +- this many font sizes.</summary>
-        public const double NudgeSpan = 0.6;
+        /// <summary>Row spacing of a burst, in font sizes: rows sit well apart so the words are spread out.</summary>
+        public const double LineSpacing = 2.6;
+        /// <summary>Gap between two words on one row, in font sizes.</summary>
+        public const double GapFonts = 1.6;
+        /// <summary>Sideways jitter, +- this many font sizes, and vertical jitter on top of the row.</summary>
+        public const double NudgeSpan = 0.3, LineJitter = 0.35;
+        /// <summary>Slight tilt of every burst word, +- this many radians (about 8 degrees).</summary>
+        public const double TiltMax = 0.14;
+        /// <summary>Up to two words share a row; more than that wraps onto a second line.</summary>
+        public const int WordsPerRow = 2;
         public const double StaggerMinS = 0.05, StaggerMaxS = 0.09;
 
         public static int ClampFrequency(int v) => Math.Clamp(v, FrequencyMin, FrequencyMax);
@@ -78,21 +88,30 @@ namespace ConditioningControlPanel.Services.Super
         public static int MaxAlive(int count) => AfterglowField.MaxAlive * ClampCount(count);
 
         /// <summary>
-        /// A burst of <paramref name="count"/> words: stacked one line apart around the centre (so
-        /// no two overlap however wide the words are), each nudged a little sideways, popping
-        /// 50..90 ms after the one before in a random order. One word = the old single pop.
+        /// A burst of <paramref name="count"/> words, spread out: one word is the old single pop; two
+        /// sit side by side; three or four wrap onto two lines (two per row). Each word gets a slight
+        /// tilt and a little jitter, and pops 50..90 ms after the one before in a random order.
         /// </summary>
         public static AfterglowBurstSlot[] BurstPlan(int count, Func<double> rnd)
         {
             int n = ClampCount(count);
-            if (n == 1) return new[] { new AfterglowBurstSlot(0, 0, 0) };
+            if (n == 1) return new[] { new AfterglowBurstSlot(0, 0, 0, 0, 0, 1, 0) };
 
-            // Lines centred on 0: n=2 -> -0.625, 0.625 ...; pop order shuffled.
+            int rows = RowsFor(n);
+            var rowSize = new int[rows];
+            for (int i = 0; i < n; i++) rowSize[i % rows]++;     // 3 -> 2+1, 4 -> 2+2, 2 -> 2
+
+            // Slot places in reading order, then the pop order is a shuffle of them.
+            var place = new (int Row, int Col)[n];
+            int k0 = 0;
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < rowSize[r]; c++) place[k0++] = (r, c);
+
             var order = new int[n];
             for (int i = 0; i < n; i++) order[i] = i;
             for (int i = n - 1; i > 0; i--)
             {
-                int j = Math.Min(i, (int)(rnd() * (i + 1)));
+                int j = Math.Min(i, (int)(Math.Clamp(rnd(), 0, 1) * (i + 1)));
                 (order[i], order[j]) = (order[j], order[i]);
             }
 
@@ -100,13 +119,19 @@ namespace ConditioningControlPanel.Services.Super
             double t = 0;
             for (int k = 0; k < n; k++)
             {
-                int line = order[k];
+                var (row, col) = place[order[k]];
                 if (k > 0) t += StaggerMinS + Math.Clamp(rnd(), 0, 1) * (StaggerMaxS - StaggerMinS);
+                double jitterY = (Math.Clamp(rnd(), 0, 1) * 2 - 1) * LineJitter;
                 double nudge = (Math.Clamp(rnd(), 0, 1) * 2 - 1) * NudgeSpan;
-                slots[k] = new AfterglowBurstSlot((line - (n - 1) / 2.0) * LineSpacing, nudge, t);
+                double tilt = (Math.Clamp(rnd(), 0, 1) * 2 - 1) * TiltMax;
+                double line = (row - (rows - 1) / 2.0) * LineSpacing + jitterY;
+                slots[k] = new AfterglowBurstSlot(line, nudge, t, row, col, rowSize[row], tilt);
             }
             return slots;
         }
+
+        /// <summary>Rows a burst of <paramref name="count"/> words uses: 1 for one or two words, 2 beyond that.</summary>
+        public static int RowsFor(int count) => ClampCount(count) <= WordsPerRow ? 1 : 2;
 
         /// <summary>
         /// <paramref name="count"/> indices into a pool of <paramref name="poolSize"/>: all different
@@ -132,7 +157,7 @@ namespace ConditioningControlPanel.Services.Super
         }
 
         /// <summary>Half the burst's height in font sizes (for clamping the stack on screen).</summary>
-        public static double BurstHalfLines(int count) => ((ClampCount(count) - 1) * LineSpacing + 1) / 2.0;
+        public static double BurstHalfLines(int count) => ((RowsFor(count) - 1) * LineSpacing + 1) / 2.0 + LineJitter;
 
         /// <summary>
         /// "#RRGGBB" or "RRGGBB" (also "#AARRGGBB", alpha ignored) to RGB. Anything else gives

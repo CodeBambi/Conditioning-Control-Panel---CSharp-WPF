@@ -37,6 +37,7 @@ public sealed class AfterglowLayer : BaseLayer
         public string Text;
         public Draw Draw;
         public double X, Y, Scale, At;
+        public double Tilt;
     }
 
     private readonly AfterglowField _field = new();
@@ -143,19 +144,53 @@ public sealed class AfterglowLayer : BaseLayer
 
             _field.Capacity = AfterglowOptions.MaxAlive(count);
             var plan = AfterglowOptions.BurstPlan(count, _rnd);
+
+            // Row widths: words on one row sit side by side with a wide gap, centred on the burst point.
+            float gap = (float)(AfterglowOptions.GapFonts * fontPx);
+            int rowCount = AfterglowOptions.RowsFor(count);
+            var rowTotal = new float[rowCount];
+            for (int k = 0; k < plan.Length; k++)
+            {
+                var dk = draws[k];
+                if (dk == null) continue;
+                var sl = plan[k];
+                rowTotal[sl.Row] += dk.Total + (sl.Col > 0 ? gap : 0);
+            }
+            var rowCursor = new float[rowCount];
+            // Column order inside a row is the slot's Col, not the pop order: place by Col.
+            var xByWord = new double[plan.Length];
+            for (int r = 0; r < rowCount; r++)
+            {
+                float run = 0;
+                for (int c = 0; c < AfterglowOptions.WordsPerRow; c++)
+                {
+                    for (int k = 0; k < plan.Length; k++)
+                    {
+                        if (plan[k].Row != r || plan[k].Col != c || draws[k] == null) continue;
+                        float w = draws[k]!.Total;
+                        xByWord[k] = bx - rowTotal[r] / 2 + run + w / 2;
+                        run += w + gap;
+                    }
+                }
+            }
+
             for (int k = 0; k < plan.Length; k++)
             {
                 var d = draws[k];
                 if (d == null) continue;
                 var slot = plan[k];
                 double lo = screenPx.Left + d.Total / 2 + pad, hi = screenPx.Right - d.Total / 2 - pad;
-                double x = bx + slot.Nudge * fontPx;
+                double x = xByWord[k] + slot.Nudge * fontPx;
                 x = lo > hi ? (lo + hi) / 2 : Math.Clamp(x, lo, hi);
                 double y = by + slot.Line * fontPx;
+                double tilt = _level == MotionLevel.Off ? 0 : slot.Tilt;
                 if (slot.DelayS <= 0)
-                    _field.Spawn(words[k], x, y, scale, level, photosafe, _rnd).Payload = d;
+                {
+                    var pop = _field.Spawn(words[k], x, y, scale, level, photosafe, _rnd);
+                    pop.Payload = d; pop.Tilt = tilt;
+                }
                 else
-                    _pending.Add(new Pending { Text = words[k], Draw = d, X = x, Y = y, Scale = scale, At = _field.Now + slot.DelayS });
+                    _pending.Add(new Pending { Text = words[k], Draw = d, X = x, Y = y, Scale = scale, At = _field.Now + slot.DelayS, Tilt = tilt });
             }
             // Under the lock: an off-thread Update that just found the field empty must not switch
             // the layer off after this pop went in.
@@ -212,7 +247,8 @@ public sealed class AfterglowLayer : BaseLayer
             {
                 var w = _pending[i];
                 if (w.At > _field.Now) continue;
-                _field.Spawn(w.Text, w.X, w.Y, w.Scale, _level, _photosafe, _rnd).Payload = w.Draw;
+                var np = _field.Spawn(w.Text, w.X, w.Y, w.Scale, _level, _photosafe, _rnd);
+                np.Payload = w.Draw; np.Tilt = w.Tilt;
                 _pending.RemoveAt(i--);
             }
             if (_field.IsEmpty && _pending.Count == 0) SetActive(false);
@@ -244,6 +280,7 @@ public sealed class AfterglowLayer : BaseLayer
                 if (a <= 0.004) continue;
                 _text.TextSize = d.FontPx;
                 var glow = _glow[p.Hue & 1];
+                bool tilted = Math.Abs(p.Tilt) > 1e-6;
 
                 // Trail: echoes oldest first, glow colour only. Echo 0 sits on the word itself.
                 for (int k = p.TrailCount - 1; k >= 1; k--)
@@ -252,17 +289,22 @@ public sealed class AfterglowLayer : BaseLayer
                     var ea = AfterglowField.TrailAlpha(k - 1) * a;
                     if (ea <= 0.004) continue;
                     _text.Color = glow.WithAlpha((byte)Math.Clamp(ea * 255, 0, 255));
+                    if (tilted) canvas.Save();
+                    if (tilted) canvas.RotateRadians((float)p.Tilt, (float)tx, (float)ty);
                     GlyphFallback.DrawCentered(canvas, d.Runs, (float)tx, (float)ty + d.BaselineOffset, _text, d.Widths, d.Total);
+                    if (tilted) canvas.Restore();
                 }
 
                 var alpha = (byte)Math.Clamp(a * 255, 0, 255);
                 float baseline = (float)p.Y + d.BaselineOffset;
+                if (tilted) { canvas.Save(); canvas.RotateRadians((float)p.Tilt, (float)p.X, (float)p.Y); }
                 _text.MaskFilter = d.Blur;
                 _text.Color = glow.WithAlpha(alpha);
                 GlyphFallback.DrawCentered(canvas, d.Runs, (float)p.X, baseline, _text, d.Widths, d.Total);
                 _text.MaskFilter = null;
                 _text.Color = WordFill.WithAlpha(alpha);
                 GlyphFallback.DrawCentered(canvas, d.Runs, (float)p.X, baseline, _text, d.Widths, d.Total);
+                if (tilted) canvas.Restore();
             }
         }
     }

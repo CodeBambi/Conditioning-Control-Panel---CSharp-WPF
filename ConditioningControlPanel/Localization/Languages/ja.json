@@ -5279,6 +5279,8 @@
   "super_afterglow_color_1": "色1",
   "super_afterglow_color_2": "色2",
   "super_afterglow_colors_tip": "言葉はこの2色のどちらかでランダムに光ります。",
+  "super_afterglow_only": "Afterglow のみ使う",
+  "super_afterglow_only_tip": "通常のサブリミナルカードは出さず、マウスのそばの言葉だけを表示します。",
   "super_try": "10秒お試し",
   "super_try_left": "{0}秒",
   "super_back_monday": "使用済み。月曜に復活",

@@ -5837,6 +5837,8 @@
   "super_afterglow_color_1": "Colour 1",
   "super_afterglow_color_2": "Colour 2",
   "super_afterglow_colors_tip": "Each word glows in one of these two, at random.",
+  "super_afterglow_only": "Use only Afterglow",
+  "super_afterglow_only_tip": "Rest the normal subliminal cards and show only the words by the mouse.",
   "super_try": "Try it, 10 s",
   "super_try_left": "{0}s",
   "super_back_monday": "Used. Back Monday",

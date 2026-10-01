@@ -64,6 +64,7 @@ namespace ConditioningControlPanel.Controls
                 SliderFrequency.Value = s?.AfterglowFrequency ?? AfterglowOptions.FrequencyDefault;
                 SliderCount.Value = s?.AfterglowCount ?? AfterglowOptions.CountDefault;
                 SliderSize.Value = s?.AfterglowSize ?? AfterglowOptions.SizeDefault;
+                ChkOnly.IsChecked = s?.AfterglowOnly == true;
                 TxtFrequency.Text = ((int)SliderFrequency.Value).ToString();
                 TxtCount.Text = ((int)SliderCount.Value).ToString();
                 TxtSize.Text = ((int)SliderSize.Value).ToString();
@@ -71,6 +72,9 @@ namespace ConditioningControlPanel.Controls
             finally { _loading = false; }
             UpdateSwatches();
         }
+
+        private void ChkOnly_Changed(object sender, RoutedEventArgs e)
+            => Write(s => s.AfterglowOnly = ChkOnly.IsChecked == true);
 
         private void BtnHeader_Click(object sender, RoutedEventArgs e) => SetOpen(!IsOpen);
 
