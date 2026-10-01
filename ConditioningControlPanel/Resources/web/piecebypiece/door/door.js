@@ -654,6 +654,7 @@ export function createDoor(opts = {}) {
       mode: current.mode, me: seat, opponent: rec.opponent || (m ? m.opponent.name : 'a friend here'),
       moves: rec.moves || [], plies: rec.plies || 0, result: rec.result || null, fen: rec.fen || history[0]?.before,
       durationMs: rec.durationMs ?? (Date.now() - current.startedAt), captures, clocks: rec.clocks || null,
+      iq: plainIq(rec.iq),   // the fall so far; settleIq() brings in the last grade
     });
     settleIq(lastEnd, rec.iq);
     if (current.mode === 'online' && m && m.id) stake.end(m.id);

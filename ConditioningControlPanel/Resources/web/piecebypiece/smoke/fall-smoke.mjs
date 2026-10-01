@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { FALL, seatsShown, moveNumber, worstOf, goneLine, endOf, curvePoints, recapRows, recapHtml, plainIq, iqFromApi } from '../door/fall.js';
 import { profileStats, finalIq, seatIq } from '../door/store.js';
+import { createIqTracker, IQ } from '../game/iq.js';
 
 const grade = (ply, san, best, loss, value, side = ply % 2 ? 'w' : 'b') => ({ ply, side, san, best, cp: loss * 12, loss, value, fen: 'not kept' });
 const white = { start: 140, end: 61, low: 61, moves: [grade(1, 'e4', 'e4', 0, 140), grade(3, 'Qh5', 'Nf3', 4, 136), grade(37, 'Qxd5', 'Nf3', 30, 106), grade(39, 'Kh1', 'Rd1', 30, 76), grade(41, 'Rxe8', 'Rxe8', 15, 61)] };
@@ -15,6 +16,7 @@ assert.equal(moveNumber(0), 1, 'never a move zero');
 // The worst grade is the biggest loss, the earliest on a tie, and only a real loss counts.
 assert.equal(worstOf(white.moves).ply, 37, 'a tie goes to the earlier move: that is where it went');
 assert.equal(worstOf([grade(1, 'e4', 'e4', 0, 140)]), null, 'nothing lost, nothing worst');
+assert.equal(worstOf([{ ...grade(3, 'a3', 'e4', 25, 115), cp: 500 }, { ...grade(5, 'Qh5', 'Nf3', 25, 90), cp: 900 }]).ply, 5, 'a bigger cp breaks a tie first, as game/iq.js does');
 assert.equal(worstOf(null), null);
 
 // The line: the better move only when there was one.
@@ -41,6 +43,7 @@ assert.equal(c.points.at(-1)[0], FALL.curve.w - FALL.curve.pad, 'ends at the rig
 assert.equal(c.points[0][1], FALL.curve.pad, 'the start sits at the top');
 for (let i = 1; i < c.points.length; i++) assert.ok(c.points[i][1] >= c.points[i - 1][1], 'a drain only goes down');
 assert.deepEqual(c.worst, c.points[3], 'the dot sits on the worst move');
+assert.deepEqual(curvePoints({ ...white, worst: white.moves[3] }).worst, c.points[4], "the track's own worst move wins");
 assert.match(c.path, /^M5 5 L/);
 const floorY = FALL.curve.h - FALL.curve.pad;
 const small = curvePoints({ start: 140, moves: [grade(1, 'a3', 'e4', 10, 130)] });
@@ -81,6 +84,19 @@ assert.deepEqual(Object.keys(fromApi), ['b']);
 assert.equal(fromApi.b.end, 120); assert.equal(fromApi.b.worst.san, 'Nc6');
 assert.equal(iqFromApi(null), null);
 assert.equal(iqFromApi({ sides: () => { throw new Error('gone'); }, track: () => null }), null);
+
+// The grader's own record (game/iq.js) reads straight into the recap: the contract, end to end.
+const tracker = createIqTracker();
+tracker.note({ ply: 1, side: 'w', san: 'e4', best: 'e4', cp: 0 });
+tracker.note({ ply: 3, side: 'w', san: 'Qh5', best: 'Nf3', cp: 140 });
+tracker.note({ ply: 5, side: 'w', san: 'Qxf7', best: 'Nf3', cp: 900 });
+const graded = { mode: 'solo', me: 'w', iq: plainIq({ w: tracker.toRecord() }) };
+const [row] = recapRows(graded);
+assert.equal(row.start, IQ.start);
+assert.equal(row.end, tracker.value, "the card's end is the grader's value");
+assert.equal(row.worst.ply, 5);
+assert.equal(row.line, 'Gone at move 3: Qxf7. Better: Nf3.');
+assert.equal(finalIq(graded), tracker.value);
 
 // The shelf and the profile: your seat's final IQ; the lowest across games; hotseat counts for neither.
 const games = [

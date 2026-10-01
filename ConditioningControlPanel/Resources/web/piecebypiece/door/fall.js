@@ -42,12 +42,14 @@ export function seatsShown(record) {
 /** The full-move number of the move that made the game `ply` half-moves long. */
 export const moveNumber = (ply) => Math.max(1, Math.ceil((Number(ply) || 0) / 2));
 
-/** The grade that cost the most, earliest on a tie; null when nothing was lost. */
+/** The grade that cost the most; a bigger cp breaks a tie, then the earlier move (game/iq.js
+ *  picks the same way). Null when nothing was lost. */
 export function worstOf(moves) {
   let worst = null;
   for (const m of Array.isArray(moves) ? moves : []) {
     if (!m || !(m.loss > 0)) continue;
-    if (!worst || m.loss > worst.loss || (m.loss === worst.loss && m.ply < worst.ply)) worst = m;
+    const cp = Number(m.cp) || 0, wcp = worst ? Number(worst.cp) || 0 : 0;
+    if (!worst || m.loss > worst.loss || (m.loss === worst.loss && (cp > wcp || (cp === wcp && m.ply < worst.ply)))) worst = m;
   }
   return worst;
 }
@@ -82,8 +84,9 @@ export function curvePoints(track, { w = FALL.curve.w, h = FALL.curve.h, pad = F
   const x = (i) => (n === 1 ? pad : pad + (i * (w - 2 * pad)) / (n - 1));
   const y = (v) => pad + ((top - v) / span) * (h - 2 * pad);
   const points = values.map((v, i) => [Math.round(x(i) * 10) / 10, Math.round(y(v) * 10) / 10]);
-  const worst = worstOf(moves);
-  const wi = worst ? moves.indexOf(worst) + 1 : -1;
+  // the dot goes where the track says its worst move was, else where the grades say
+  const worst = (track && track.worst && track.worst.loss > 0) ? track.worst : worstOf(moves);
+  const wi = worst ? moves.findIndex((m) => m.ply === worst.ply) + 1 : -1;
   return {
     w, h, points,
     path: points.map(([px, py], i) => `${i ? 'L' : 'M'}${px} ${py}`).join(' '),
