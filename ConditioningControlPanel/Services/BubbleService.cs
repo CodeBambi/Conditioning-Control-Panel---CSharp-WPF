@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Services;
 /// <summary>
 /// Bubble popping game - bubbles float up from bottom of screen, user pops them by clicking
 /// </summary>
-public class BubbleService : IDisposable
+public partial class BubbleService : IDisposable
 {
     private const int MAX_BUBBLES = 3;          // per-window fallback cap (SetWindowPos-bound — keep small)
     private const int MAX_BUBBLES_HOST = 40;    // shared-host cap: a dense ambient field is cheap on the Canvas
@@ -508,6 +508,8 @@ public class BubbleService : IDisposable
         // self-handles its own exceptions. (Throttle disabled by leaving the queue empty when not chaos.)
         for (int s = 0; s < MaxSpawnsPerFrame && _chaosActive && _spawnQueue.Count > 0; s++)
             _spawnQueue.Dequeue()();
+
+        StepBlooms();   // Super Inner Bloom: release kids whose bloom has finished squeezing
 
         // NOTE: a freeze does NOT skip this loop — bubbles must keep rendering so the freeze aura
         // pulses, the shudder plays, and any in-flight pop finishes. Each bubble holds its own
@@ -1025,13 +1027,18 @@ public class BubbleService : IDisposable
         });
     }
 
-    private void OnPop(Bubble bubble) => AwardAmbientPop(bubble);
+    private void OnPop(Bubble bubble)
+    {
+        AwardAmbientPop(bubble);   // a bloom, a carrier and every kid each pay exactly one normal pop
+        OnBloomPopped(bubble);
+    }
 
     /// <summary>Natasha's favourite: about one ambient bubble in ten wears red, and only while
     /// that price can actually land (tab on, linked, row on, no safety hold). Rolled per spawn
     /// so a field never carries a cue it cannot charge.</summary>
     private void MarkIfNatasha(Bubble bubble)
     {
+        if (bubble.BloomRoot != 0) return;   // a bloom draws its own film; no red cue on it
         try
         {
             if (App.Chaster?.CanBook(Chaster.NatashasFavourite.EventId) == true
@@ -1251,7 +1258,8 @@ public class BubbleService : IDisposable
             && _bubbles.Count(b => b.IsAmbientTriggerBubble || b.IsAmbientEffectBubble) >= MAX_TRIGGER_WINDOWS)
             spec = null;
         if (spec == null)
-            return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable,
+            return TryCreateBloom(screen, isClickable)
+                ?? new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable,
                               ambientMotion: AmbientBubbleMotion.RollForSpawn(_random));
         // Trigger bubbles ride the shared ambient host like plain bubbles (hook-based pops via the
         // UsesHost/HostHitClickable snapshots). forceWindowMode was a relic of the host being
@@ -1377,6 +1385,7 @@ public class BubbleService : IDisposable
     {
         // Bubble floated off screen - remove immediately (no animation needed)
         _bubbles.Remove(bubble);
+        NoteBloomLost(bubble);
         OnBubbleMissed?.Invoke();
         StopAnimationTimerIfIdle();
     }
@@ -2262,6 +2271,7 @@ public class BubbleService : IDisposable
         // Cancel any in-flight avatar easter egg first, so its claim is released and the claimed
         // bubble doesn't get stranded by the claim-pop guard during teardown.
         CancelAvatarEgg();
+        ClearBloomState();   // panic, Stop and pause all land here: Inner Bloom stops with the field
         try
         {
             // Safety check for shutdown scenarios
@@ -2309,6 +2319,7 @@ public class BubbleService : IDisposable
     public void Dispose()
     {
         Stop();
+        UnhookBlooms();
 
         // Close pooled bubble window shells (static pool holds hidden HWNDs for the process life).
         try { DispatcherHelper.RunOnUI(Bubble.DrainWindowPool); } catch (Exception ex) { Diag.Swallowed(ex); }
@@ -2358,6 +2369,8 @@ internal class Bubble
     // compositor's BubbleLayer instead: same hook-pop input contract (UsesHost stays true, hit
     // discs are renderer-agnostic), just Skia draw calls in place of a WPF _grid on a Canvas.
     private static Compositor.BubbleLayer? s_layer;
+    /// <summary>The compositor bubble layer, when it is up (Super Inner Bloom draws its pops there).</summary>
+    internal static Compositor.BubbleLayer? Layer => s_layer;
     internal static bool UseCompositor => App.CompositorEnabled;
     /// <summary>Lazily create + register the shared BubbleLayer. Null if the compositor is off.</summary>
     private static Compositor.BubbleLayer? EnsureLayer()
@@ -2792,6 +2805,79 @@ internal class Bubble
 
     internal bool IsNatasha => _isNatasha;
 
+    // ---- Super Inner Bloom (Services/Super/InnerBloom.cs is the maths) ----
+    private Super.InnerBloom.Node? _bloom;   // this bubble carries kids: the big bloom or a carrier
+    private bool _bloomHidden;               // popped: the layer's burst draws it from here on
+    private double _bloomAngle;              // a released kid: the way it was thrown
+    private double _bloomAgeS = -1;          // a released kid: seconds since release (-1 = never released)
+    private double _bloomDx, _bloomDy;       // the release travel already applied (DIP)
+    private double _bloomAlpha = 1;          // an escaping small fades
+    private bool _bloomEscaper;
+    private Action<Bubble>? _onBloomEscaped;
+    internal Super.InnerBloom.Node? Bloom => _bloom;
+    /// <summary>Non-zero: this bubble belongs to bloom number <c>BloomRoot</c> (the root, a carrier or a released kid).</summary>
+    internal int BloomRoot { get; private set; }
+    internal bool IsBloomKid => _bloomAgeS >= 0;
+    internal Point CenterDip => new(_posX + _size / 2.0, _posY + _size / 2.0);
+    internal double SizeDip => _size;
+    internal double DpiScale => _dpiScale;
+
+    internal void AttachBloom(Super.InnerBloom.Node node, int root)
+    {
+        _bloom = node;
+        BloomRoot = root;
+        if (_layerItem != null) _layerItem.Bloom = node;
+    }
+
+    /// <summary>Popped: stop drawing this body (the burst takes over in the layer).</summary>
+    internal void HideForBloomBurst()
+    {
+        _bloomHidden = true;
+        if (_layerItem != null) _layerItem.HideBody = true;
+    }
+
+    /// <summary>A kid leaves its bloom: centred on the given DIP point, thrown along <paramref name="angle"/>,
+    /// wearing <paramref name="picturePath"/> (null = pick from the pool) unless it carries kids of its own.</summary>
+    internal void ReleaseFromBloom(int root, Point centerDip, double angle, string? picturePath, bool escaper,
+                                   Action<Bubble> onEscaped)
+    {
+        BloomRoot = root;
+        _posX = _startX = centerDip.X - _size / 2.0;
+        _posY = centerDip.Y - _size / 2.0;
+        _bloomAngle = angle;
+        _bloomAgeS = 0;
+        _bloomEscaper = escaper;
+        _onBloomEscaped = onEscaped;
+        if (_bloom == null)
+        {
+            if (picturePath != null) { _flashFacePath = picturePath; BuildBubbleFace(picturePath); }
+            else PrepareFlashFace();
+        }
+        if (_layerItem != null)
+        {
+            _layerItem.CenterXPx = centerDip.X * _dpiScale;
+            _layerItem.CenterYPx = centerDip.Y * _dpiScale;
+        }
+    }
+
+    /// <summary>One step of a released kid: the outward throw, and a small's escape. True = it got away.</summary>
+    private bool StepBloomRelease(double ts)
+    {
+        _bloomAgeS += 0.032 * ts;
+        var m = Super.InnerBloom.Motion.For(MotionFx.Level);
+        var (dx, dy) = Super.InnerBloom.ReleaseOffset(_bloomAngle, _bloomAgeS, m);
+        if (_bloomEscaper)
+        {
+            var (ey, a) = Super.InnerBloom.Escape(_bloomAgeS, m);
+            dy += ey;
+            _bloomAlpha = a;
+        }
+        _posX += dx - _bloomDx; _startX += dx - _bloomDx;
+        _posY += dy - _bloomDy;
+        _bloomDx = dx; _bloomDy = dy;
+        return _bloomEscaper && _bloomAlpha <= 0;
+    }
+
     /// <summary>Who ended this red bubble; read by <see cref="BubbleService.NoteNatashaEnd"/>.</summary>
     internal Chaster.NatashasFavourite.PopCause NatashaCause => _natashaCause;
 
@@ -3131,6 +3217,8 @@ internal class Bubble
         it.Opacity = (float)opacity;
         it.RedWash = _isNatasha && !_isPopping ? (float)Chaster.NatashasFavourite.BubbleWashAt(_timeAlive, MotionFx.AllowAmbientLoops) : 0f;
         it.HoldRing = _isResisting && !_isPopping ? (float)_resistProgress : 0f;
+        it.Bloom = _bloom;
+        it.HideBody = _bloomHidden;
 
         if (_fuseRing != null)
         {
@@ -3213,7 +3301,8 @@ internal class Bubble
                   Action<Bubble>? onTeaseTouched = null, Action<Bubble>? onTeaseDenied = null,
                   Action<Bubble>? onBrittleShattered = null, bool forceWindowMode = false,
                   bool ambientTrigger = false,
-                  BubbleMotionStyle ambientMotion = BubbleMotionStyle.FloatUp)
+                  BubbleMotionStyle ambientMotion = BubbleMotionStyle.FloatUp,
+                  double sizeMult = 1.0, int sizeDip = 0)
     {
         _random = random;
         _onPop = onPop;
@@ -3280,6 +3369,10 @@ internal class Bubble
                   random.Next(BubbleSizing.BaseMinDip, BubbleSizing.BaseMaxDip),
                   App.Settings?.Current?.BubblesSize ?? BubbleSizing.UserPercentDefault,
                   App.Mods?.ActiveMod?.Manifest?.BubbleScale);
+        // Super Inner Bloom: the big bloom is a grown ambient bubble, a released kid is sized to
+        // the bubble it was inside. Plain spawns pass neither and are untouched.
+        if (sizeDip > 0) _size = sizeDip;
+        else if (sizeMult != 1.0) _size = (int)Math.Round(_size * sizeMult);
         // Magic Wand boon / Mesmer Reach upgrade: enlarge the click target around the visual.
         // Darters/freeze pickups keep their natural hitbox (precision catches stay precision).
         // Blindfold: effect bubbles render translucent; pickups stay fully visible (they're rewards).
@@ -4127,6 +4220,15 @@ internal class Bubble
                     break;
             }
 
+            // Super Inner Bloom: a released kid rides its throw on top of the float; an unpopped
+            // small escapes and leaves quietly (no miss: it was never the player's to lose).
+            if (_bloomAgeS >= 0 && !_isPopping && StepBloomRelease(ts))
+            {
+                _onBloomEscaped?.Invoke(this);
+                Destroy();
+                return;
+            }
+
             // The Pull: the whole field leans toward the cursor (chaos bubbles only; ambient
             // untouched). Cam Girl flips the sign — bubbles FLEE a nearby cursor (and with both
             // active the two simply cancel toward zero: the tug-of-war is the content).
@@ -4350,7 +4452,7 @@ internal class Bubble
 
             // Blindfold: translucent effect bubbles. Magic Wand capstone: bubbles inside your
             // (enlarged) reach shimmer — cursor was sampled once for the whole tick.
-            double opacity = _fadeAlpha * _baseOpacity * _spiralFade;
+            double opacity = _fadeAlpha * _baseOpacity * _spiralFade * _bloomAlpha;
             if (BubbleService.WandShimmerOn && _spec != null && !_isDarter && !_isPopping)
             {
                 double cx = BubbleService.CursorPxX / _dpiScale, cy = BubbleService.CursorPxY / _dpiScale;
