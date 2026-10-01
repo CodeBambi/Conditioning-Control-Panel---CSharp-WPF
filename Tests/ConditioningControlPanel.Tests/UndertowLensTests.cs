@@ -244,10 +244,169 @@ public class UndertowLensTests
     {
         var s = Placed();
         UndertowLens.Click(s, 1, 2, W, UndertowMotion.Full);
+        UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
         s.Reset();
         Assert.Equal(0, s.Radius);
         Assert.Equal(0, s.Kick);
         Assert.False(s.Placed);
         Assert.False(s.Animating);
+        Assert.Equal(0, s.DrawRadius);
+        Assert.Equal(-1, s.KnockAge);
+        foreach (var d in s.Drops) Assert.False(d.Live);
+        Assert.Equal(0, UndertowLens.RimAlpha(s, W, UndertowMotion.Full));
+    }
+
+    // ---- juice ----
+
+    private static double PeakDrawOverRadius(UndertowMotion motion)
+    {
+        var s = Placed(motion);
+        double peakDraw = 0, peakR = 0;
+        for (int i = 0; i < 180; i++)
+        {
+            UndertowLens.Step(s, Dt, 500, 400, W, motion);
+            peakDraw = Math.Max(peakDraw, UndertowLens.DrawnRadius(s, W, motion));
+            peakR = Math.Max(peakR, s.Radius);
+        }
+        return peakDraw / peakR;
+    }
+
+    [Fact]
+    public void Opening_overshoots_a_few_percent_then_settles_on_the_logical_radius()
+    {
+        double full = PeakDrawOverRadius(UndertowMotion.Full);
+        Assert.InRange(full, 1.03, 1.08);
+        double reduced = PeakDrawOverRadius(UndertowMotion.Reduced);
+        Assert.True(reduced - 1 < (full - 1) * 0.6, $"reduced {reduced:F3} vs full {full:F3}");
+
+        var s = Placed();
+        s.Kick = 0;
+        for (int i = 0; i < 60 * 40; i++) UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
+        Assert.Equal(s.Radius, s.DrawRadius, 6);
+    }
+
+    [Fact]
+    public void Drawn_lens_never_closes_under_the_minimum_clear_area()
+    {
+        var s = Placed();
+        for (int i = 0; i < 60 * 30; i++)
+        {
+            if (i % 37 == 0) UndertowLens.Click(s, 500, 400, W, UndertowMotion.Full);
+            UndertowLens.Step(s, Dt, 500 + (i % 90) * 7, 400, W, UndertowMotion.Full);
+            Assert.True(UndertowLens.DrawnRadius(s, W, UndertowMotion.Full) >= UndertowLens.MinRadius * W - 1e-9);
+        }
+    }
+
+    [Fact]
+    public void A_click_knocks_the_rim_out_and_back_with_one_small_settle()
+    {
+        Assert.Equal(0, UndertowLens.KnockShape(0));
+        Assert.Equal(1, UndertowLens.KnockShape(0.2), 6);
+        Assert.Equal(-0.25, UndertowLens.KnockShape(0.7), 6);
+        Assert.Equal(0, UndertowLens.KnockShape(1));
+
+        double peak = UndertowLens.KnockPulse(UndertowLens.KnockLife * 0.2, W, UndertowMotion.Full);
+        Assert.Equal(UndertowLens.KnockAmp * W, peak, 6);
+        Assert.Equal(peak / 2, UndertowLens.KnockPulse(UndertowLens.KnockLife * 2 * 0.2, W, UndertowMotion.Reduced), 6);
+        Assert.Equal(0, UndertowLens.KnockPulse(0.05, W, UndertowMotion.Off));
+
+        var s = Placed();
+        UndertowLens.Click(s, 500, 400, W, UndertowMotion.Full);
+        Assert.Equal(0, s.KnockAge);
+        for (int i = 0; i < 30; i++) UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
+        Assert.Equal(-1, s.KnockAge);   // spent inside the life
+    }
+
+    [Fact]
+    public void Rim_fades_in_breathes_slowly_and_stays_soft()
+    {
+        var s = Placed();
+        Assert.Equal(0, UndertowLens.RimAlpha(s, W, UndertowMotion.Full), 6);   // never pops in
+        double lo = 1, hi = 0;
+        for (int i = 0; i < 60 * 12; i++)
+        {
+            UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
+            double a = UndertowLens.RimAlpha(s, W, UndertowMotion.Full);
+            Assert.InRange(a, 0, UndertowLens.RimMax);
+            if (s.Age > 3) { lo = Math.Min(lo, a); hi = Math.Max(hi, a); }
+        }
+        Assert.True(hi - lo > 0.08, $"breath {lo:F3}..{hi:F3}");
+        Assert.True(UndertowLens.RimBreathHz < 3);
+
+        // Off: a steady glow after a 120 ms fade, no breath
+        var o = Placed(UndertowMotion.Off);
+        UndertowLens.Step(o, 0.06, 500, 400, W, UndertowMotion.Off);
+        Assert.Equal(UndertowLens.RimBase / 2, UndertowLens.RimAlpha(o, W, UndertowMotion.Off), 6);
+        UndertowLens.Step(o, 1, 500, 400, W, UndertowMotion.Off);
+        double steady = UndertowLens.RimAlpha(o, W, UndertowMotion.Off);
+        UndertowLens.Step(o, 1.3, 500, 400, W, UndertowMotion.Off);
+        Assert.Equal(steady, UndertowLens.RimAlpha(o, W, UndertowMotion.Off), 9);
+    }
+
+    [Fact]
+    public void Rim_stretches_only_along_fast_motion_and_relaxes_when_the_cursor_stops()
+    {
+        Assert.Equal(0, UndertowLens.Stretch(0, 0, W, UndertowMotion.Full));
+        Assert.Equal(UndertowLens.MaxStretch, UndertowLens.Stretch(W * 10, 0, W, UndertowMotion.Full), 9);
+        Assert.Equal(UndertowLens.MaxStretch / 2, UndertowLens.Stretch(W * 10, 0, W, UndertowMotion.Reduced), 9);
+        Assert.Equal(0, UndertowLens.Stretch(W * 10, 0, W, UndertowMotion.Off));
+
+        var s = Placed();
+        for (int i = 0; i < 30; i++) UndertowLens.Step(s, Dt, 500 + i * 30, 400, W, UndertowMotion.Full);
+        Assert.True(UndertowLens.Stretch(s.Vx, s.Vy, W, UndertowMotion.Full) > 0.02);
+        for (int i = 0; i < 240; i++) UndertowLens.Step(s, Dt, 1400, 400, W, UndertowMotion.Full);
+        Assert.Equal(0, UndertowLens.Stretch(s.Vx, s.Vy, W, UndertowMotion.Full));
+    }
+
+    [Fact]
+    public void A_click_throws_a_few_droplets_up_that_fall_and_end_with_the_pool_capped()
+    {
+        var s = Placed();
+        UndertowLens.Click(s, 700, 500, W, UndertowMotion.Full);
+        int live = 0;
+        foreach (var d in s.Drops) if (d.Live) { live++; Assert.True(d.Vy < 0); }   // thrown upward
+        Assert.Equal(UndertowLens.DropsFull, live);
+
+        for (int c = 0; c < 20; c++) UndertowLens.Click(s, 700, 500, W, UndertowMotion.Full);
+        Assert.Equal(UndertowState.MaxDrops, s.Drops.Length);
+
+        int ticks = (int)(UndertowLens.DropLife / Dt) + 2;
+        for (int i = 0; i < ticks; i++) UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
+        foreach (var d in s.Drops) Assert.False(d.Live);
+
+        Assert.Equal(UndertowLens.DropsReduced, UndertowLens.DropsFor(UndertowMotion.Reduced));
+        Assert.Equal(0, UndertowLens.DropsFor(UndertowMotion.Off));
+    }
+
+    [Fact]
+    public void Crest_fades_once_and_spam_clicks_get_fainter_crests_photosafe()
+    {
+        Assert.Equal(UndertowLens.CrestPeak, UndertowLens.CrestAt(0, 1, UndertowMotion.Full), 9);
+        Assert.True(UndertowLens.CrestAt(0.5, 1, UndertowMotion.Full) < UndertowLens.CrestAt(0.1, 1, UndertowMotion.Full));
+        Assert.Equal(UndertowLens.CrestPeak / 2, UndertowLens.CrestAt(0, 1, UndertowMotion.Reduced), 9);
+        Assert.Equal(0, UndertowLens.CrestAt(0, 1, UndertowMotion.Off));
+
+        var s = Placed();
+        UndertowLens.Click(s, 500, 400, W, UndertowMotion.Full);
+        Assert.Equal(1, s.Ripples[0].Crest, 9);
+        UndertowLens.Step(s, 0.1, 500, 400, W, UndertowMotion.Full);   // 10 clicks a second
+        UndertowLens.Click(s, 500, 400, W, UndertowMotion.Full);
+        Assert.Equal(0.3, s.Ripples[1].Crest, 6);
+    }
+
+    [Fact]
+    public void Off_has_no_knock_no_droplets_and_a_resting_lens_still_stops_repainting()
+    {
+        var s = Placed(UndertowMotion.Off);
+        UndertowLens.Click(s, 800, 600, W, UndertowMotion.Off);
+        Assert.Equal(-1, s.KnockAge);
+        foreach (var d in s.Drops) Assert.False(d.Live);
+        Assert.Equal(s.Radius, UndertowLens.DrawnRadius(s, W, UndertowMotion.Off));
+
+        // Full, settled: the rim breath alone never forces a full-screen repaint
+        var f = Placed();
+        f.Kick = 0;
+        for (int i = 0; i < 60 * 40; i++) UndertowLens.Step(f, Dt, 500, 400, W, UndertowMotion.Full);
+        for (int i = 0; i < 120; i++) Assert.False(UndertowLens.Step(f, Dt, 500, 400, W, UndertowMotion.Full));
     }
 }

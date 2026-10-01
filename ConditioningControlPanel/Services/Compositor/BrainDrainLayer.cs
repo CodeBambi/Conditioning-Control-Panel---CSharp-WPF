@@ -486,9 +486,15 @@ public sealed class BrainDrainLayer : BaseLayer
     /// (bounded, so a DstOut can never erase layers below this one).</summary>
     private void RenderUndertow(SKCanvas canvas, SKImage image, SKRect dest, double dpiScale)
     {
-        float r = (float)_undertow.Radius;
+        var motion = UndertowMotionNow();
+        float r = (float)Super.UndertowLens.DrawnRadius(_undertow, _undertowScreenWidth, motion);
         float x = (float)_undertow.X, y = (float)_undertow.Y;
-        var lens = new SKRect(x - r, y - r, x + r, y + r);
+        // Cosmetic stretch along cursor motion: only ever LONGER along the motion, never narrower
+        // across it, so the minimum clear area around the mouse holds.
+        float stretch = (float)Super.UndertowLens.Stretch(_undertow.Vx, _undertow.Vy, _undertowScreenWidth, motion);
+        float angle = stretch > 0 ? (float)Math.Atan2(_undertow.Vy, _undertow.Vx) : 0f;
+        float box = r * (1f + stretch);
+        var lens = new SKRect(x - box, y - box, x + box, y + box);
 
         // Click waves bend the image itself (a runtime shader), so they ripple the lens and the blur
         // alike. No live wave, or no shader support: the plain image, byte-identical to before.
@@ -509,11 +515,57 @@ public sealed class BrainDrainLayer : BaseLayer
             canvas.ClipRect(lens);
             DrawBase(canvas, image, dest, wave);
             canvas.Translate(x, y);
-            canvas.Scale(r);
+            canvas.RotateRadians(angle);
+            canvas.Scale(r * (1f + stretch), r);
             canvas.DrawCircle(0, 0, 1, MaskPaint());
             canvas.Restore();
+
+            DrawRim(canvas, x, y, r, stretch, angle, motion);
         }
         EndWaves();
+        DrawDrops(canvas, dpiScale);
+    }
+
+    // ---- Undertow juice: rim glow and droplet sparks. Reused paints, no per-frame allocations. ----
+    private static readonly SKColor UndertowTint = new(0xFF, 0xA8, 0xDC);   // soft pink, screened at low alpha
+    private SKPaint? _rimPaint, _dropPaint;
+
+    private void DrawRim(SKCanvas canvas, float x, float y, float r, float stretch, float angle, Super.UndertowMotion motion)
+    {
+        double a = Super.UndertowLens.RimAlpha(_undertow, _undertowScreenWidth, motion) * (_drawAlpha / 255.0);
+        byte alpha = (byte)Math.Clamp(Math.Round(a * 255), 0, 255);
+        if (alpha == 0) return;
+        _rimPaint ??= new SKPaint
+        {
+            IsAntialias = true,
+            BlendMode = SKBlendMode.Screen,   // tinted and low: it can only lift the feather, never wash it white
+            Shader = SKShader.CreateRadialGradient(new SKPoint(0, 0), 1f,
+                new[] { UndertowTint.WithAlpha(0), UndertowTint.WithAlpha(0), UndertowTint, UndertowTint.WithAlpha(0) },
+                new[] { 0f, 0.58f, 0.8f, 1f }, SKShaderTileMode.Clamp),
+        };
+        _rimPaint.Color = SKColors.White.WithAlpha(alpha);
+        canvas.Save();
+        canvas.Translate(x, y);
+        canvas.RotateRadians(angle);
+        canvas.Scale(r * (1f + stretch), r);
+        canvas.DrawCircle(0, 0, 1, _rimPaint);
+        canvas.Restore();
+    }
+
+    private void DrawDrops(SKCanvas canvas, double dpiScale)
+    {
+        _dropPaint ??= new SKPaint { IsAntialias = true, BlendMode = SKBlendMode.Screen };
+        float px = (float)(dpiScale > 0 ? dpiScale : 1.0);
+        foreach (var d in _undertow.Drops)
+        {
+            if (!d.Live) continue;
+            double u = Math.Clamp(d.Age / Super.UndertowLens.DropLife, 0, 1);
+            double fadeIn = Math.Min(1, d.Age / 0.06);   // grows in over a few frames, never pops
+            byte a = (byte)Math.Clamp(Math.Round(200 * fadeIn * (1 - u) * (1 - u) * (_drawAlpha / 255.0)), 0, 255);
+            if (a == 0) continue;
+            _dropPaint.Color = new SKColor(0xFF, 0xE4, 0xF4, a);
+            canvas.DrawCircle((float)d.X, (float)d.Y, 2.4f * px * (float)(1 - 0.5 * u), _dropPaint);
+        }
     }
 
     private void DrawBase(SKCanvas canvas, SKImage image, SKRect dest, SKPaint? wave)
@@ -528,9 +580,11 @@ public sealed class BrainDrainLayer : BaseLayer
 uniform shader src;
 uniform float4 w[6];   // x, y, front radius, amplitude (px)
 uniform float3 p;      // wavelength, trailing band, amplitude reference
+uniform float4 k[6];   // x = specular crest strength (one fade from the click, photosafe-capped)
 half4 main(float2 c) {
     float2 off = float2(0.0);
     float hi = 0.0;
+    float spec = 0.0;
     for (int i = 0; i < 6; i++) {
         float amp = w[i].w;
         if (amp > 0.0) {
@@ -542,11 +596,14 @@ half4 main(float2 c) {
                 float ph = x * 6.2831853 / p.x;
                 off += (d / dist) * sin(ph) * amp * env;
                 hi += cos(ph) * env * (amp / p.z);
+                float lead = exp(-pow(x / (p.x * 0.6), 2.0));
+                spec += k[i].x * lead * pow(max(cos(ph), 0.0), 6.0);
             }
         }
     }
     half4 col = src.eval(c + off);
     col.rgb *= half(1.0 + 0.12 * clamp(hi, -1.0, 1.0));
+    col.rgb += half3(1.0, 0.86, 0.95) * half(clamp(spec, 0.0, 0.3)) * col.a;
     return col;
 }";
 
@@ -555,6 +612,8 @@ half4 main(float2 c) {
     private SKPaint? _wavePaint;
     private SKShader? _waveShader, _waveSrc;
     private readonly float[] _waveData = new float[6 * 4];
+    private readonly float[] _waveCrest = new float[6 * 4];
+    private readonly float[] _waveP = new float[3];
 
     private SKPaint? BeginWaves(SKImage image, SKRect dest, double dpiScale)
     {
@@ -572,6 +631,7 @@ half4 main(float2 c) {
 
         var motion = UndertowMotionNow();
         Array.Clear(_waveData);
+        Array.Clear(_waveCrest);
         double maxAmp = 0, wl = 0, band = 0;
         bool any = false;
         int n = 0;
@@ -582,6 +642,7 @@ half4 main(float2 c) {
                                            out double front, out double amp, out wl, out band)) continue;
             _waveData[n * 4] = (float)rp.X; _waveData[n * 4 + 1] = (float)rp.Y;
             _waveData[n * 4 + 2] = (float)front; _waveData[n * 4 + 3] = (float)amp;
+            _waveCrest[n * 4] = (float)Super.UndertowLens.CrestAt(rp.Age, rp.Crest, motion);
             if (amp > maxAmp) maxAmp = amp;
             n++; any = true;
         }
@@ -592,7 +653,8 @@ half4 main(float2 c) {
             var m = SKMatrix.CreateScale(dest.Width / image.Width, dest.Height / image.Height);
             m = m.PostConcat(SKMatrix.CreateTranslation(dest.Left, dest.Top));
             _waveSrc = image.ToShader(SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, m);
-            var uniforms = new SKRuntimeEffectUniforms(_waveEffect) { ["w"] = _waveData, ["p"] = new float[] { (float)wl, (float)band, (float)Math.Max(1, maxAmp) } };
+            _waveP[0] = (float)wl; _waveP[1] = (float)band; _waveP[2] = (float)Math.Max(1, maxAmp);
+            var uniforms = new SKRuntimeEffectUniforms(_waveEffect) { ["w"] = _waveData, ["p"] = _waveP, ["k"] = _waveCrest };
             var children = new SKRuntimeEffectChildren(_waveEffect) { ["src"] = _waveSrc };
             _waveShader = _waveEffect.ToShader(false, uniforms, children);
             _wavePaint ??= new SKPaint { IsAntialias = false };
