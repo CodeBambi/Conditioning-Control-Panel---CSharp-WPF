@@ -50,7 +50,8 @@ namespace ConditioningControlPanel.Services.Super
         private readonly List<Wave> _waves = new();
         private readonly Spark[] _sparks = new Spark[MaxSparks];
         private int _sparkCount;
-        private FormattedText? _label;
+        private Geometry? _label;                                   // the CORNER label, built once per corner hit
+        private readonly TranslateTransform _labelMove = new();     // where it floats this frame
         private double _labelX, _labelY, _labelAge = -1;
         private readonly Random _rng = new();
         private readonly Typeface _typeface;
@@ -98,8 +99,10 @@ namespace ConditioningControlPanel.Services.Super
                 Emit(sx, sy, ScrawlRules.CornerSparks, Gold, 280, 1.0);
                 Emit(sx, sy, ScrawlRules.CornerWhiteSparks, White, 200, 0.8);
                 _shake = Math.Max(_shake, ScrawlRules.ShakeCorner);
-                _label = new FormattedText(Localization.Loc.Get("super_scrawl_corner"), CultureInfo.CurrentUICulture,
+                var ft = new FormattedText(Localization.Loc.Get("super_scrawl_corner"), CultureInfo.CurrentUICulture,
                     FlowDirection.LeftToRight, _typeface, _fs * 0.9, LabelBrush, _ppd);
+                _label = ft.BuildGeometry(new Point(-ft.Width / 2, -ft.Height / 2));
+                _label.Freeze();
                 _labelX = labelAt.X; _labelY = labelAt.Y; _labelAge = 0;
                 return;
             }
@@ -214,8 +217,13 @@ namespace ConditioningControlPanel.Services.Super
             if (_label != null && _labelAge >= 0)
             {
                 double u = _labelAge / ScrawlRules.FloatLife;
+                _labelMove.X = _labelX;
+                _labelMove.Y = _labelY - u * _fs * 2;
+                dc.PushTransform(_labelMove);
                 dc.PushOpacity(1 - u * u);
-                dc.DrawText(_label, new Point(_labelX - _label.Width / 2, _labelY - _label.Height / 2 - u * _fs * 2));
+                dc.DrawGeometry(null, _haloPens[Gold], _label);   // the mockup's gold glow
+                dc.DrawGeometry(LabelBrush, null, _label);
+                dc.Pop();
                 dc.Pop();
             }
         }
