@@ -55,17 +55,32 @@ public sealed class ChaosHubStateTests
                 Assert.Equal("Slipping", hub.FindControl<TextBlock>("MenuRank")!.Text);
                 Assert.Equal("10", hub.FindControl<TextBlock>("StRuns")!.Text);
                 Assert.Equal("321", hub.FindControl<TextBlock>("MenuSparks")!.Text);
+
+                // The shelves are the real catalogue and their buttons spend the real save.
+                Click(hub, "blank_eyes", "Unlock  \u2726120");
+                Click(hub, BenchIds.ToyPocket1, "buy  \U0001FA99 50");
+                var disk = ChaosMetaStore.Load(1);
+                Assert.Equal((201, 1), (disk.Sparks, disk.LifetimeBoonLevels["blank_eyes"]));
+                Assert.Equal((5, 1), (disk.Gold, disk.ToyPockets));
+                Assert.Equal("201", hub.FindControl<TextBlock>("MenuSparks")!.Text);
             }
             finally
             {
                 picker?.Close();
                 hub?.Close();
-                ChaosHubWindow.Live = new ChaosMetaState();
                 for (int s = 1; s <= 3; s++) ChaosMetaStore.Delete(s);
+                ChaosMeta.Init();   // fresh in-memory state for the next test
                 CoreSettings.Current.ChaosActiveSlot = old;
             }
             return Task.CompletedTask;
         });
+    }
+
+    private static void Click(Control root, string tag, string label)
+    {
+        var button = root.GetLogicalDescendants().OfType<Button>()
+            .First(b => b.Tag as string == tag && (b.Content as TextBlock)?.Text == label);
+        button.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     }
 
     private static List<string> Texts(Control root) =>

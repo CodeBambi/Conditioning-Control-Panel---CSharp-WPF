@@ -2579,6 +2579,8 @@ namespace ConditioningControlPanel
             // Suggestion #659 — layered audio mixer. Inert until Start() (used by the Audio
             // Layers window and by #668 audio-only sessions), so constructing it is free.
             LayeredAudio = new Services.Audio.LayeredAudioService();
+            Services.Chaos.ChaosLessons.LessonBark = id => App.Bark?.NotifyChaosLessonComplete(id);
+            Services.Chaos.ChaosLessons.FirstTimeBark = id => App.Bark?.NotifyChaosFirstTime(id);
             Services.Chaos.ChaosMeta.Init();   // load persistent Chaos meta-progression before the run service
             Chaos = new Services.Chaos.ChaosModeService();
             InteractionQueue = new InteractionQueueService();
