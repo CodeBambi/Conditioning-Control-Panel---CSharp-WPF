@@ -1166,3 +1166,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sandbox-net-guard: +615
 - Core SandboxNet: a sandbox sends every non-loopback HTTP/websocket request to http://127.0.0.1:0/ (refused, no DNS); ExternalOpener is the
   only link/file opener and refuses remote and UNC targets in a sandbox; SafeHyperlinkButton; scan tests block new bypasses. Fail-proven.
+
+## avalonia-port/friends-drawer-fixes: +78
+- Friends review fixes: dispose on exit, sandbox URL tests, presence marks the ask, remove/report tests, manual-tick timer test, ledger stubs.
