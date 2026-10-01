@@ -204,11 +204,13 @@ namespace ConditioningControlPanel.Services.Super
         }
 
         /// <summary>Radius of aperture layer <paramref name="layer"/> (0..3): from 0.95 x the screen's
-        /// long side down to 0.64 x the picture width as <paramref name="close"/> goes 0 -> 1.</summary>
-        public static double ApertureRadius(double screenW, double screenH, double pictureW, double close, int layer)
+        /// long side down to 0.64 x the picture's long side as <paramref name="close"/> goes 0 -> 1.
+        /// The mockup says picture width; it only drew landscape pictures, and on a portrait clip
+        /// the width would close the iris over the top and bottom of the picture itself.</summary>
+        public static double ApertureRadius(double screenW, double screenH, double pictureLong, double close, int layer)
         {
             double open = Math.Max(screenW, screenH) * ApertureOpen;
-            double shut = pictureW * ApertureShut;
+            double shut = pictureLong * ApertureShut;
             double r = open + (shut - open) * Math.Clamp(close, 0, 1);
             return r * (1 + layer * ApertureLayerStep);
         }
