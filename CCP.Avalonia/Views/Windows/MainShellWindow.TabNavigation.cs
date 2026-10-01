@@ -346,7 +346,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             const string url = "https://app.cclabs.app";
             try
             {
-                if (!await Launcher.LaunchUriAsync(new Uri(url)))
+                if (!await Platform.ExternalOpener.OpenAsync(this, url))
                 {
                     try { if (Clipboard is { } cb) await cb.SetTextAsync(url); } catch { /* clipboard may be unavailable */ }
                     await Dialogs.MessageDialog.ShowAsync(this, Loc.Get("title_open_link_in_browser"),

@@ -61,6 +61,8 @@ namespace ConditioningControlPanel.Services.Deeper
             if (uri == null) return false;
             if (uri.Scheme != Uri.UriSchemeHttps) return false;
             if (string.IsNullOrEmpty(uri.Host)) return false;
+            // A sandbox reaches no public host (SandboxNet), so skip the DNS pre-flight: it would leak the lookup.
+            if (SandboxNet.Active) return false;
 
             try
             {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -8,8 +9,9 @@ namespace ConditioningControlPanel.Services.Chaos;
 public enum ChaosBranch { Control, Greed, Depth }
 
 /// <summary>
-/// One permanent, purchasable upgrade. <see cref="Apply"/> mutates a freshly-built
-/// <see cref="ChaosRunConfig"/> at run start — owning the upgrade shapes every run.
+/// One permanent, purchasable upgrade. Its run effect (head-side <c>ChaosRunEffects.Habits</c>,
+/// keyed by <see cref="Id"/>) mutates a freshly-built <c>ChaosRunConfig</c> at run start —
+/// owning the upgrade shapes every run.
 /// </summary>
 public sealed class ChaosUpgrade
 {
@@ -23,7 +25,6 @@ public sealed class ChaosUpgrade
     /// <summary>Placeholder for the square tile until real art lands at assets/Chaos/upgrades/{id}.png.</summary>
     public string Glyph = "✦";
     public int Cost;                            // in Sparks
-    public Action<ChaosRunConfig> Apply = _ => { };
     /// <summary>Optional icon path; null falls back to a vector placeholder. Wired in phase 5.</summary>
     public string? IconPath = null;
 }
@@ -52,25 +53,25 @@ public static class ChaosUpgrades
         new() { Id = "slow_fuses",      Branch = ChaosBranch.Control, Name = "Slower Trance",    Cost = COST_SLOW_FUSES, Glyph = "⏳",
                 Desc = "live bubbles hold their trance 15% longer before they trigger.",
                 Flavor = "a little more time to change your mind. you won't.",
-                Apply = c => c.FuseTimeMult *= 1.15 },
+                },
         // bigger_hitboxes (Soft Focus) + magnet (Mesmer Reach) merged into silk_touch 2026-06-10;
         // shield_recharge (Slow Recovery) reborn as the leveled slow_recovery Utility charm
         // (pop-based regen). Owners are refunded at load — never reuse the ids.
         new() { Id = "silk_touch",      Branch = ChaosBranch.Control, Name = "Silk Touch", Cost = COST_SILK_TOUCH, Glyph = "🪶",
                 Desc = "bubble hitboxes grow 25%, and a near-miss on a live one still counts as a touch.",
                 Flavor = "silk doesn't try. it just lands.",
-                Apply = c => { c.HitboxScale = 1.25; c.MagnetEnabled = true; } },
+                },
         new() { Id = "popup_notification", Branch = ChaosBranch.Control, Name = "Pop-up Notification", Cost = COST_POPUP_NOTIF, Glyph = "💖",
                 Desc = "once per loop, 60% of the time, a heart drifts down mid-loop. catch it for +1 resistance and +10 focus. missing it costs nothing.",
                 Flavor = "you opted in. you always opt in.",
-                Apply = c => c.PopupHeartEnabled = true },
+                },
         // Re-gated 2026-06-11: the swing was briefly a free event for everyone; now it's a
         // trained habit again. NEW id on purpose — "pendulum" sits in the refund-scrub table
         // forever, so reusing it would refund/strip the purchase at every load.
         new() { Id = "pendulum_swing",  Branch = ChaosBranch.Control, Name = "Pendulum", Cost = COST_PENDULUM, Glyph = "🕰",
                 Desc = "once per loop, at a random beat, the pendulum swings: 2.5 seconds of slow motion. the \"Focus here...\" mantra turns that swing into a x3 pay window.",
                 Flavor = "tick. tock. you looked.",
-                Apply = c => c.PendulumSwing = true },
+                },
         // More 2026-06-10 conversions (owners refunded at load — never reuse the ids):
         //   start_shield → "It would never work on me..." charm (leveled +1/+2/+3; base is now 0)
         //   collar       → Collar charm (leveled 1/2/3 saves)
@@ -85,22 +86,22 @@ public static class ChaosUpgrades
         new() { Id = "draft4",          Branch = ChaosBranch.Depth,   Name = "4-Mantra Draft",    Cost = COST_DRAFT4, Glyph = "🃏",
                 Desc = "mantra drafts offer four choices instead of three.",
                 Flavor = "more ways to say yes.",
-                Apply = c => c.DraftChoices = 4 },
+                },
         new() { Id = "extreme_tier",    Branch = ChaosBranch.Depth,   Name = "Inescapable Tier",    Cost = COST_EXTREME_TIER, Glyph = "🌀",
                 Desc = "opens the inescapable difficulty in the descent setup.",
                 Flavor = "the last door was never locked.",
-                Apply = _ => { } },                                       // flag stored at purchase time
+                },                                       // flag stored at purchase time
         // The Hourglass + The Bottomless Fall (2026-07-17): descent-shape unlocks, not in-run
         // effects — like extreme_tier they only open a control in the setup, so Apply is a no-op
         // and they're filtered out of the HUD habit rail (DtrhHost.BuildRunConfig).
         new() { Id = "custom_duration", Branch = ChaosBranch.Depth,   Name = "The Hourglass",       Cost = COST_CUSTOM_DURATION, Glyph = "⌛",
                 Desc = "unlocks a free length dial in the descent setup — set any fall from 2 minutes to 2 hours.",
                 Flavor = "you decide how long you stay under. she likes that you keep deciding to stay longer.",
-                Apply = _ => { } },                                       // duration clamp + slider read ownership; no in-run effect
+                },                                       // duration clamp + slider read ownership; no in-run effect
         new() { Id = "endless_mode",    Branch = ChaosBranch.Depth,   Name = "The Bottomless Fall", Cost = COST_ENDLESS, Glyph = "∞",
                 Desc = "unlocks the ∞ endless toggle in setup: descend with no clock. the regions loop and deepen, the boons keep coming, and you rise only when you choose to wake.",
                 Flavor = "there was never a bottom. you only assumed there was.",
-                Apply = _ => { } },                                       // per-run toggle (setup.endless); no always-on effect
+                },                                       // per-run toggle (setup.endless); no always-on effect
     };
 
     public static ChaosUpgrade? ById(string id) => All.FirstOrDefault(u => u.Id == id);
@@ -145,12 +146,12 @@ public static class ChaosMeta
                     if (keep > 0) { keep--; continue; }
                     State.ActiveLifetimeBoons!.Remove(b.Id);
                     changed = true;
-                    App.Logger?.Information("Chaos: unequipped {Id} (over the {Cat} pocket cap)", b.Id, cat);
+                    Log.Information("Chaos: unequipped {Id} (over the {Cat} pocket cap)", b.Id, cat);
                 }
             }
             if (changed) Save();
         }
-        catch (Exception ex) { App.Logger?.Warning("Chaos: pocket sanitize failed ({E})", ex.Message); }
+        catch (Exception ex) { Log.Warning("Chaos: pocket sanitize failed ({E})", ex.Message); }
     }
 
     /// <summary>DEBUG ONLY (CCP_CHAOS_DEBUG dev strip): throw the meta state away and start
@@ -159,7 +160,7 @@ public static class ChaosMeta
     {
         State = new ChaosMetaState();
         Save();
-        App.Logger?.Warning("ChaosMeta: state RESET via debug strip");
+        Log.Warning("ChaosMeta: state RESET via debug strip");
     }
 
     /// <summary>Cumulative Spark cost by level (unlock + upgrades) for boons removed from the
@@ -184,7 +185,7 @@ public static class ChaosMeta
                     State.Sparks += refund;
                     State.LifetimeBoonLevels.Remove(id);
                     changed = true;
-                    App.Logger?.Information("Chaos: retired boon {Id} (L{Lvl}) refunded ✦{Refund}", id, lvl, refund);
+                    Log.Information("Chaos: retired boon {Id} (L{Lvl}) refunded ✦{Refund}", id, lvl, refund);
                 }
                 if (State.ActiveLifetimeBoons?.Remove(id) == true) changed = true;
             }
@@ -207,7 +208,7 @@ public static class ChaosMeta
                 {
                     State.Sparks += refund;
                     changed = true;
-                    App.Logger?.Information("Chaos: retired habit {Id} refunded ✦{Refund}", id, refund);
+                    Log.Information("Chaos: retired habit {Id} refunded ✦{Refund}", id, refund);
                 }
                 if (State.DisabledUpgrades?.Remove(id) == true) changed = true;
             }
@@ -221,7 +222,7 @@ public static class ChaosMeta
             }
             if (changed) Save();
         }
-        catch (Exception ex) { App.Logger?.Warning("Chaos: retired-boon refund failed ({E})", ex.Message); }
+        catch (Exception ex) { Log.Warning("Chaos: retired-boon refund failed ({E})", ex.Message); }
     }
 
     /// <summary>Persist the current state (after a mutation made directly on State).</summary>
@@ -246,7 +247,7 @@ public static class ChaosMeta
         State = ChaosMetaStore.Load(slot);
         RefundRetiredBoons();
         SanitizePockets();
-        App.Logger?.Information("ChaosMeta: live save is now slot {Slot}", slot);
+        Log.Information("ChaosMeta: live save is now slot {Slot}", slot);
     }
 
     /// <summary>Headline stats for every slot, for the pre-descent picker. Pure read — the active
@@ -264,7 +265,7 @@ public static class ChaosMeta
     public static bool DeleteSlot(int slot)
     {
         bool removed = ChaosMetaStore.Delete(slot);
-        if (removed) App.Logger?.Information("ChaosMeta: deleted save slot {Slot}", slot);
+        if (removed) Log.Information("ChaosMeta: deleted save slot {Slot}", slot);
         return removed;
     }
 
@@ -362,14 +363,7 @@ public static class ChaosMeta
         return true;
     }
 
-    /// <summary>Apply every owned-and-switched-on upgrade's effect to a freshly-built run config.</summary>
-    public static void ApplyTo(ChaosRunConfig config)
-    {
-        if (config == null) return;
-        foreach (var id in State.PurchasedUpgrades)
-            if (IsUpgradeActive(id))
-                ChaosUpgrades.ById(id)?.Apply(config);
-    }
+    // ApplyTo(ChaosRunConfig) lives head-side in ChaosRunEffects: the run config is head-side.
 
     // ---- lifetime boons (Skills / Accessories / Utility): unlock + level + equip ----
     // Permanent, leveled boons bought with Sparks; applied to a run at start when EQUIPPED.
@@ -523,48 +517,8 @@ public static class ChaosMeta
         return true;
     }
 
-    /// <summary>Apply every active+unlocked lifetime boon (at its current level) to the run state.</summary>
-    public static void ApplyLifetimeBoons(ChaosRunState run)
-    {
-        if (run == null || State.ActiveLifetimeBoons == null) return;
-        foreach (var id in State.ActiveLifetimeBoons)
-        {
-            int lvl = BoonLevel(id);
-            var b = ChaosLifetimeBoons.ById(id);
-            if (b != null && lvl >= 1)
-            {
-                b.Apply(run, b.ValueAt(lvl));
-                if (lvl >= b.MaxLevel) run.MaxedBoons.Add(b.Id);   // capstone effects key off this
-            }
-        }
-    }
-
-    /// <summary>
-    /// Bank Sparks + update lifetime stats at the end of a completed run, then persist.
-    /// Formula (2026-06-12 economy rework, Hades pacing — full collection ≈ 100 descents):
-    /// <c>round((1.5·√score + 35·diff·min(1, durMin/3)) * SparkGainMult)</c>.
-    /// The square root compresses the late-game multiplier explosion (×10-20 score over a
-    /// fresh save → ×3-4 drops) and self-normalizes duration (double-length run ≈ ×1.4).
-    /// Difficulty is NOT re-applied to the score part — DifficultyMult already multiplies
-    /// every pop inside TotalMult, so the old <c>score/100·diff</c> double-dipped
-    /// (Inescapable paid ~×4.8 Gentle). The completion bonus keeps the linear diff scalar
-    /// and scales down below 3 minutes so 60-second runs can't farm the flat floor.
-    /// Returns the Sparks banked so the recap card can show the haul.
-    /// </summary>
-    public static int AwardRunRewards(ChaosRunState run)
-    {
-        if (run == null) return 0;
-        return AwardRunRewards(new ChaosRunRewardInput(
-            RunDurationSec: run.RunDurationSec,
-            DifficultyMult: run.Config.DifficultyMult,
-            SparkGainMult: run.Config.SparkGainMult,
-            Score: run.Score,
-            TrickleDrops: run.TrickleDrops,
-            DripFeedMaxed: run.MaxedBoons.Contains("drip_feed"),
-            BestCombo: run.BestCombo,
-            Defused: run.Defused,
-            ElapsedSec: run.ElapsedSec));
-    }
+    // ApplyLifetimeBoons(ChaosRunState) and AwardRunRewards(ChaosRunState) live head-side in
+    // ChaosRunEffects (the run state is head-side); the formula below is the shared one.
 
     /// <summary>THE SHOT (crafted, repeatable): +4% drops payout per shot in the system,
     /// stacking to +40% at the 10-shot saturation cap. 1.0 with none crafted.</summary>

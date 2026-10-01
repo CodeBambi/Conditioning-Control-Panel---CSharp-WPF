@@ -38,6 +38,7 @@ internal static class TestProfile
     {
         Directory.CreateDirectory(DirectoryPath);
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", DirectoryPath);
+        _ = ConditioningControlPanel.CorePaths.UserData;   // installs the SandboxNet guard before any test runs
     }
 }
 

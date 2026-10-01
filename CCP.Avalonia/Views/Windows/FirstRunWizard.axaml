@@ -170,10 +170,10 @@
                                     <StackPanel Grid.Column="1">
                                         <TextBlock x:Name="TxtAgeConfirm" Foreground="White" FontSize="13.5"
                                                    TextWrapping="Wrap" LineHeight="20" Cursor="Hand"/>
-                                        <HyperlinkButton Padding="0" Margin="0,6,0,0" Foreground="{DynamicResource PinkBrush}"
+                                        <hover:SafeHyperlinkButton Padding="0" Margin="0,6,0,0" Foreground="{DynamicResource PinkBrush}"
                                                          NavigateUri="https://app.cclabs.app/policies/prohibited-content">
                                             <TextBlock x:Name="TxtContentPolicy" FontSize="12.5" TextDecorations="Underline"/>
-                                        </HyperlinkButton>
+                                        </hover:SafeHyperlinkButton>
                                     </StackPanel>
                                 </Grid>
                             </Border>

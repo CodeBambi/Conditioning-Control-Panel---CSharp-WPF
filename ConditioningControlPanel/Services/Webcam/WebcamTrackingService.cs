@@ -201,7 +201,6 @@ namespace ConditioningControlPanel.Services
         private long _irisRoiPxSum;
         private int _irisRoiPxCount;
         private const int MaxConsecutiveReadFails = 30;            // ~1s at 30fps
-        private const int FaceLostFramesThreshold = 15;            // ~0.5s
 
         // A solid-colour / black feed reads as a perfectly valid non-empty Mat but
         // contains no detectable face — the failure mode behind BUG-F2XJE2E7X9
@@ -351,8 +350,6 @@ namespace ConditioningControlPanel.Services
         private const int LongStareDurationMs = 3000;
         private const double LongStareMaxDeviationPx = 60.0;
         private const int LongStareCooldownMs = 5000;
-        private const int IrisSmoothFrames = 12;             // rolling-mean window over raw iris vector (~400ms at ~30fps)
-        private const int SideStabilityFrames = 3;           // consecutive frames of same classification before emitting (filters Center pass-through)
 
         // One-Euro filter tunables for the cursor-projection path. The rolling-mean
         // buffer above still feeds the gaze-side classifier (which has its own
@@ -364,9 +361,6 @@ namespace ConditioningControlPanel.Services
         // MinCutoff at 1.4 Hz is on the smooth side of the Casiez sweet-spot
         // because webcam iris detection has more frame-to-frame jitter than the
         // touch-input scenarios the original paper targeted.
-        private const double OneEuroMinCutoff = 1.4;
-        private const double OneEuroBeta = 0.007;
-        private const double OneEuroDCutoff = 1.0;
 
         private readonly object _stateLock = new();
         private volatile bool _disposed;
@@ -611,11 +605,9 @@ namespace ConditioningControlPanel.Services
         // Gaze-side stability filter — require N consecutive frames of the same
         // classification before emitting, so that transient passes through Center
         // during a Left↔Right movement don't fire spurious Center events.
-        private GazeSide _lastEmittedSide = GazeSide.Center;
-        private GazeSide _pendingSide = GazeSide.Center;
-        private int _pendingSideStreak;
-        private bool _faceWasFound;
-        private int _consecutiveNoFaceFrames;
+        // The frame-free gaze chain (smoothing, gates, side stability, projection, follower,
+        // face-lost counting, head pose) lives in Core GazeEngine; the tuning notes stay here.
+        private readonly GazeEngine _gaze = new();
         private DateTime _lastLongStareAt = DateTime.MinValue;
         private readonly Queue<(DateTime Time, System.Windows.Point ScreenPoint)> _gazeBuffer = new();
         private CvRect? _lastFaceRect;
@@ -626,13 +618,9 @@ namespace ConditioningControlPanel.Services
         // jitter from Haar eye-box wobble that was causing Gaze side to flicker
         // Left↔Right around the classifier midpoint. Feeds the side classifier;
         // the cursor-projection path uses the One-Euro filters below.
-        private readonly Queue<double> _irisDxSmoothBuffer = new();
-        private readonly Queue<double> _irisDySmoothBuffer = new();
 
         // Velocity-adaptive smoothing for the cursor-projection path. See
         // OneEuroMinCutoff/Beta/DCutoff above for tuning notes.
-        private readonly OneEuroFilter _irisDxFilter = new(OneEuroMinCutoff, OneEuroBeta, OneEuroDCutoff);
-        private readonly OneEuroFilter _irisDyFilter = new(OneEuroMinCutoff, OneEuroBeta, OneEuroDCutoff);
 
         // Eye-corner reference-frame smoothing. NormalizeIrisVector expresses
         // the iris position relative to the eye-corner midpoint and scales it
@@ -644,13 +632,6 @@ namespace ConditioningControlPanel.Services
         // only the EYES move — so a short rolling mean of the reference frame
         // (midpoint cx/cy + width w) strips that jitter with negligible gaze
         // lag. The fast-moving iris center itself is NOT smoothed here.
-        private const int EyeRefSmoothFrames = 6;
-        private readonly Queue<double> _leftRefCxBuffer = new();
-        private readonly Queue<double> _leftRefCyBuffer = new();
-        private readonly Queue<double> _leftRefWBuffer = new();
-        private readonly Queue<double> _rightRefCxBuffer = new();
-        private readonly Queue<double> _rightRefCyBuffer = new();
-        private readonly Queue<double> _rightRefWBuffer = new();
 
         // Median pre-filter on the raw iris vector, applied before any other
         // smoothing (and before OnRawIris fires, so calibration samples the
@@ -678,9 +659,6 @@ namespace ConditioningControlPanel.Services
         //      existing fits were trained on — a real regression risk for
         //      zero measurable win.
         // Do not "optimize" this to 2 without addressing (1) first.
-        private const int IrisMedianFrames = 3;
-        private readonly Queue<double> _irisDxMedianBuffer = new();
-        private readonly Queue<double> _irisDyMedianBuffer = new();
 
         // Screen-space One-Euro, applied AFTER the polynomial projection. The
         // iris-space One-Euro (_irisD*Filter) can't smooth uniformly: the
@@ -710,7 +688,6 @@ namespace ConditioningControlPanel.Services
         // tradeoff: marginally more visible jitter DURING movement (nobody is
         // trying to read a pixel position mid-saccade) in exchange for the
         // cursor stopping where the eye already stopped.
-        private const double ScreenOneEuroMinCutoff = 1.5;
 
         /// <summary>
         /// Default screen-space One-Euro Beta (DIP/s units — see the units
@@ -718,20 +695,6 @@ namespace ConditioningControlPanel.Services
         /// <see cref="Models.AppSettings.GazeScreenOneEuroBeta"/>; this value
         /// is the fallback when there is no settings file.
         /// </summary>
-        private const double ScreenOneEuroBetaDefault = 0.06;
-
-        /// <summary>Live screen-space Beta — settings-backed, clamped to a sane band.</summary>
-        private static double ScreenOneEuroBeta
-        {
-            get
-            {
-                double v = App.Settings?.Current?.GazeScreenOneEuroBeta ?? ScreenOneEuroBetaDefault;
-                return double.IsFinite(v) ? Math.Clamp(v, 0.0, 1.0) : ScreenOneEuroBetaDefault;
-            }
-        }
-
-        private readonly OneEuroFilter _screenXFilter = new(ScreenOneEuroMinCutoff, ScreenOneEuroBetaDefault, OneEuroDCutoff);
-        private readonly OneEuroFilter _screenYFilter = new(ScreenOneEuroMinCutoff, ScreenOneEuroBetaDefault, OneEuroDCutoff);
 
         // Two-eye consistency gate. The projected gaze is the AVERAGE of the
         // two per-eye iris vectors, so a single-eye failure (glasses glare,
@@ -751,11 +714,6 @@ namespace ConditioningControlPanel.Services
         // Both gates fail open after MaxGateSkipFrames consecutive skips so a
         // genuine regime change (user turned, new glasses) can't mute gaze
         // output forever.
-        private const int EyeDisagreementBaselineFrames = 90;
-        private const int EyeDisagreementMinSamples = 15;
-        private const double EyeDisagreementRatio = 3.0;   // spike = baseline×ratio + floor
-        private const double EyeDisagreementFloor = 0.04;  // iris units; below this never gate
-        private const int TwoEyeStreakRequired = 15;       // frames of 2-eye before 1-eye counts as transient
         // Short fail-open budget (~270ms at 30fps). Head movement legitimately
         // shifts how the two eyes disagree (foreshortening hits the far eye
         // harder), so a long budget turned every head turn into freeze-then-
@@ -764,10 +722,6 @@ namespace ConditioningControlPanel.Services
         // single-frame glint/lash spikes it exists for, while a sustained
         // regime change passes through quickly enough for the smoothing chain
         // to absorb it as a glide instead of a snap.
-        private const int MaxGateSkipFrames = 8;
-        private readonly Queue<double> _eyeDisagreementBuffer = new();
-        private int _twoEyeStreak;
-        private int _gateSkipStreak;
 
         // Gaze lock-on — an optional "the user is trying to hit THIS" hint
         // set by UI flows that know the current target (the calibration
@@ -838,18 +792,15 @@ namespace ConditioningControlPanel.Services
         // to keep looking at the same screen point, so the iris vector shifts
         // even though gaze didn't move. Subtracting a sin(deltaPose)-scaled
         // offset puts the cursor back roughly where gaze actually points.
-        private readonly Queue<double> _yawSmoothBuffer = new();
-        private readonly Queue<double> _pitchSmoothBuffer = new();
-        private bool _headPoseValid;
 
         /// <summary>
         /// Smoothed head yaw in radians. Sign and magnitude follow whatever
         /// solvePnP returns for the canonical 3D model below — empirical, used
         /// as a relative measure (delta from calibration baseline).
         /// </summary>
-        public double LastYaw { get; private set; }
-        public double LastPitch { get; private set; }
-        public bool HasHeadPose => _headPoseValid;
+        public double LastYaw => _gaze.LastYaw;
+        public double LastPitch => _gaze.LastPitch;
+        public bool HasHeadPose => _gaze.HeadPoseValid;
 
         /// <summary>Fires every processed frame with the latest smoothed (yaw, pitch). Used by the calibration window to capture the baseline.</summary>
         public event Action<double, double>? OnHeadPose;
@@ -870,20 +821,7 @@ namespace ConditioningControlPanel.Services
         // right on an unmirrored frame), +Y up, +Z toward camera. solvePnP
         // figures out the rotation that maps these to the per-frame 2D
         // landmarks, and we extract Euler yaw/pitch from that.
-        private static readonly Point3f[] HeadPoseModelPoints = new[]
-        {
-            new Point3f(0f,     0f,     0f),       // 0: nose tip      (FaceMesh idx 1)
-            new Point3f(0f,     -330f,  -65f),     // 1: chin          (FaceMesh idx 152)
-            new Point3f(225f,   170f,   -135f),    // 2: subject's left eye outer  (FaceMesh idx 33)
-            new Point3f(-225f,  170f,   -135f),    // 3: subject's right eye outer (FaceMesh idx 263)
-            new Point3f(150f,   -150f,  -125f),    // 4: subject's left mouth corner  (FaceMesh idx 61)
-            new Point3f(-150f,  -150f,  -125f),    // 5: subject's right mouth corner (FaceMesh idx 291)
-        };
-        private static readonly int[] HeadPoseLandmarkIndices = new[] { 1, 152, 33, 263, 61, 291 };
-
-        // Hysteresis state for gaze-side classification — keeps the side from
-        // toggling on tiny crossings of the midpoint band.
-        private GazeSide _lastGazeSide = GazeSide.Center;
+        // (model points and landmark indices: Core GazeEngine)
 
         public WebcamTrackingService()
         {
@@ -1090,7 +1028,7 @@ namespace ConditioningControlPanel.Services
         {
             data.Save();
             Calibration = data;
-            _lastGazeSide = GazeSide.Center;
+            _gaze.ResetSideHysteresis();
             App.Logger?.Information("WebcamTrackingService: calibration applied (mode={Mode})", data.Mode);
         }
 
@@ -1104,7 +1042,7 @@ namespace ConditioningControlPanel.Services
         public void SetCalibrationLive(WebcamCalibrationData? data)
         {
             Calibration = data;
-            _lastGazeSide = GazeSide.Center;
+            _gaze.ResetSideHysteresis();
         }
 
         public void ClearCalibration()
@@ -1669,8 +1607,7 @@ namespace ConditioningControlPanel.Services
         private void ResetHeuristicState()
         {
             _gazeBuffer.Clear();
-            _faceWasFound = false;
-            _consecutiveNoFaceFrames = 0;
+            _gaze.Reset();
             _lastFaceRect = null;
             _lastLeftEyeRect = null;
             _lastRightEyeRect = null;
@@ -1693,26 +1630,6 @@ namespace ConditioningControlPanel.Services
             _tongueOutCount = 0;
             _diagTongueSum = _diagTeethSum = _diagShadowSum = _diagOtherSum = 0;
             _diagTongueFrames = 0;
-            _irisDxSmoothBuffer.Clear();
-            _irisDySmoothBuffer.Clear();
-            _irisDxFilter.Reset();
-            _irisDyFilter.Reset();
-            _leftRefCxBuffer.Clear(); _leftRefCyBuffer.Clear(); _leftRefWBuffer.Clear();
-            _rightRefCxBuffer.Clear(); _rightRefCyBuffer.Clear(); _rightRefWBuffer.Clear();
-            _irisDxMedianBuffer.Clear(); _irisDyMedianBuffer.Clear();
-            _screenXFilter.Reset(); _screenYFilter.Reset();
-            _eyeDisagreementBuffer.Clear();
-            _twoEyeStreak = 0;
-            _gateSkipStreak = 0;
-            _yawSmoothBuffer.Clear();
-            _pitchSmoothBuffer.Clear();
-            _headPoseValid = false;
-            LastYaw = 0;
-            LastPitch = 0;
-            _lastGazeSide = GazeSide.Center;
-            _lastEmittedSide = GazeSide.Center;
-            _pendingSide = GazeSide.Center;
-            _pendingSideStreak = 0;
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -1928,212 +1845,49 @@ namespace ConditioningControlPanel.Services
             //    eye-corner midpoint and scaled by corner-to-corner distance).
             //    Gated for two-eye consistency before it feeds the smoothing
             //    chain — see the gate constants block for the model.
-            (double Dx, double Dy)? vLeft = null, vRight = null;
-            if (leftEye != null)
-            {
-                vLeft = NormalizeIrisVectorSmoothed(leftEye.IrisCenter, landmarks[LeftEyeOuterIdx], landmarks[LeftEyeInnerIdx],
-                    _leftRefCxBuffer, _leftRefCyBuffer, _leftRefWBuffer);
-            }
-            if (rightEye != null)
-            {
-                vRight = NormalizeIrisVectorSmoothed(rightEye.IrisCenter, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx],
-                    _rightRefCxBuffer, _rightRefCyBuffer, _rightRefWBuffer);
-            }
-
-            if (vLeft.HasValue && vRight.HasValue)
-            {
-                double ddx = vLeft.Value.Dx - vRight.Value.Dx;
-                double ddy = vLeft.Value.Dy - vRight.Value.Dy;
-                double disagreement = Math.Sqrt(ddx * ddx + ddy * ddy);
-
-                bool spike = false;
-                if (_eyeDisagreementBuffer.Count >= EyeDisagreementMinSamples)
-                {
-                    double baseline = PercentileOf(_eyeDisagreementBuffer, 0.50);
-                    spike = disagreement > baseline * EyeDisagreementRatio + EyeDisagreementFloor;
-                }
-
-                if (spike && _gateSkipStreak < MaxGateSkipFrames)
-                {
-                    // One eye is off (glint, lash, partial lid) — the average
-                    // would jump. Hold the last output instead; don't feed the
-                    // outlier into the baseline either.
-                    _gateSkipStreak++;
-                    return;
-                }
-
-                _gateSkipStreak = 0;
-                _twoEyeStreak++;
-                EnqueueWithCap(_eyeDisagreementBuffer, disagreement, EyeDisagreementBaselineFrames);
-                EmitGazeEvents(
-                    (vLeft.Value.Dx + vRight.Value.Dx) / 2.0,
-                    (vLeft.Value.Dy + vRight.Value.Dy) / 2.0);
-            }
-            else
-            {
-                var v = vLeft ?? vRight;
-                if (!v.HasValue) return;
-
-                if (_twoEyeStreak >= TwoEyeStreakRequired && _gateSkipStreak < MaxGateSkipFrames)
-                {
-                    // Sudden one-eye frame after a healthy two-eye run —
-                    // transient occlusion. Skipping (holding last output)
-                    // beats emitting the one-eye average, which sits at a
-                    // different point than the two-eye average and reads as
-                    // a cursor jump. Persistent one-eye falls through once
-                    // the skip budget is spent.
-                    _gateSkipStreak++;
-                    return;
-                }
-
-                _gateSkipStreak = 0;
-                _twoEyeStreak = 0;
-                EmitGazeEvents(v.Value.Dx, v.Value.Dy);
-            }
+            (double Dx, double Dy)? vLeft = leftEye == null ? null
+                : _gaze.NormalizeIris(leftEye.IrisCenter, landmarks[LeftEyeOuterIdx], landmarks[LeftEyeInnerIdx], rightEye: false);
+            (double Dx, double Dy)? vRight = rightEye == null ? null
+                : _gaze.NormalizeIris(rightEye.IrisCenter, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx], rightEye: true);
+            if (_gaze.CombineEyes(vLeft, vRight) is { } v) EmitGazeEvents(v.Dx, v.Dy);
         }
 
         /// <summary>
-        /// Convert an iris-center pixel position into a head-pose-stable iris
-        /// vector relative to the eye-corner midpoint, scaled by corner-to-corner
-        /// distance. Output is roughly in [-0.5, +0.5] for normal gaze ranges.
-        ///
-        /// The eye-corner reference frame (midpoint + width) is smoothed over a
-        /// short rolling window before it's applied, using the per-eye buffers
-        /// passed in. This strips the per-frame FaceMesh corner jitter that
-        /// would otherwise shift the vector's origin and scale every frame (see
-        /// EyeRefSmoothFrames). The iris center itself is left un-smoothed so
-        /// gaze stays responsive.
-        /// </summary>
-        private (double Dx, double Dy) NormalizeIrisVectorSmoothed(
-            (double X, double Y) iris, float[] outerCorner, float[] innerCorner,
-            Queue<double> cxBuf, Queue<double> cyBuf, Queue<double> wBuf)
-        {
-            double cx = (outerCorner[0] + innerCorner[0]) / 2.0;
-            double cy = (outerCorner[1] + innerCorner[1]) / 2.0;
-            double w = Math.Sqrt(
-                (outerCorner[0] - innerCorner[0]) * (outerCorner[0] - innerCorner[0]) +
-                (outerCorner[1] - innerCorner[1]) * (outerCorner[1] - innerCorner[1]));
-            if (w < 1.0) return (0, 0);
-
-            EnqueueWithCap(cxBuf, cx, EyeRefSmoothFrames);
-            EnqueueWithCap(cyBuf, cy, EyeRefSmoothFrames);
-            EnqueueWithCap(wBuf, w, EyeRefSmoothFrames);
-            double scx = Average(cxBuf);
-            double scy = Average(cyBuf);
-            double sw = Average(wBuf);
-            if (sw < 1.0) return (0, 0);
-
-            return ((iris.X - scx) / sw, (iris.Y - scy) / sw);
-        }
-
-        private static double Average(Queue<double> q)
-        {
-            if (q.Count == 0) return 0;
-            double s = 0;
-            foreach (var v in q) s += v;
-            return s / q.Count;
-        }
-
-        private static double MedianFilter(Queue<double> buffer, double value, int window)
-        {
-            buffer.Enqueue(value);
-            while (buffer.Count > window) buffer.Dequeue();
-            var arr = buffer.ToArray();
-            Array.Sort(arr);
-            return arr[arr.Length / 2];
-        }
-
-        /// <summary>
-        /// Run solvePnP on 6 stable FaceMesh landmarks (nose tip, chin, both
-        /// outer eye corners, both mouth corners) against the canonical 3D
-        /// model, extract Euler yaw/pitch from the rotation matrix, and feed
-        /// the smoothing buffers. Failures (degenerate landmarks, solvePnP
-        /// returning false) leave the previous smoothed value in place — the
-        /// downstream comp falls back to "no compensation" via _headPoseValid.
+        /// Run solvePnP on 6 stable FaceMesh landmarks against Core GazeEngine's canonical 3D model;
+        /// the engine extracts and smooths yaw/pitch. Failures (degenerate landmarks, solvePnP
+        /// throwing or leaving rvec empty) keep the previous smoothed value and clear HasHeadPose.
         /// </summary>
         private void UpdateHeadPose(float[][] landmarks, int frameW, int frameH)
         {
-            if (landmarks == null || landmarks.Length < 468) { _headPoseValid = false; return; }
-
             try
             {
-                // 2D image points matching HeadPoseModelPoints, in source-frame
-                // pixel coords. Drop in early if any landmark is missing/NaN.
-                var imagePoints = new Point2f[HeadPoseLandmarkIndices.Length];
-                for (int i = 0; i < HeadPoseLandmarkIndices.Length; i++)
-                {
-                    var lm = landmarks[HeadPoseLandmarkIndices[i]];
-                    if (lm == null || lm.Length < 2) { _headPoseValid = false; return; }
-                    if (float.IsNaN(lm[0]) || float.IsNaN(lm[1])) { _headPoseValid = false; return; }
-                    imagePoints[i] = new Point2f(lm[0], lm[1]);
-                }
-
-                // Pinhole approximation: focal length ≈ frame width, principal
-                // point at frame center, no distortion. Good enough for
-                // consumer webcams; the absolute angles aren't important —
-                // only deltas relative to calibration are.
-                double fx = frameW;
-                double fy = frameW;
-                double pcx = frameW / 2.0;
-                double pcy = frameH / 2.0;
-                using var cameraMatrix = new Mat(3, 3, MatType.CV_64FC1);
-                cameraMatrix.Set(0, 0, fx); cameraMatrix.Set(0, 1, 0.0); cameraMatrix.Set(0, 2, pcx);
-                cameraMatrix.Set(1, 0, 0.0); cameraMatrix.Set(1, 1, fy); cameraMatrix.Set(1, 2, pcy);
-                cameraMatrix.Set(2, 0, 0.0); cameraMatrix.Set(2, 1, 0.0); cameraMatrix.Set(2, 2, 1.0);
+                var imagePoints = _gaze.HeadPoseImagePoints(landmarks);
+                if (imagePoints == null) return;
+                using var cameraMatrix = new Mat(3, 3, MatType.CV_64FC1, GazeEngine.HeadPoseCameraMatrix(frameW, frameH));
                 using var distCoeffs = new Mat(4, 1, MatType.CV_64FC1, new double[] { 0, 0, 0, 0 });
-                using var objPoints = InputArray.Create(HeadPoseModelPoints);
+                using var objPoints = InputArray.Create(GazeEngine.HeadPoseModelPoints);
                 using var imgPoints = InputArray.Create(imagePoints);
                 using var rvec = new Mat();
                 using var tvec = new Mat();
-
-                // SolvePnP overload returns void in this OpenCvSharp version
-                // — failures throw or leave rvec degenerate, and we catch both
-                // via the try/catch + downstream NaN guard.
                 Cv2.SolvePnP(objPoints, imgPoints, cameraMatrix, distCoeffs, rvec, tvec,
                     useExtrinsicGuess: false, flags: SolvePnPFlags.Iterative);
-                if (rvec.Empty() || rvec.Total() < 3) { _headPoseValid = false; return; }
-
+                if (rvec.Empty() || rvec.Total() < 3) { _gaze.HeadPoseFailed(); return; }
                 using var rotMat = new Mat();
                 Cv2.Rodrigues(rvec, rotMat);
-
-                // Euler-angle extraction from R (Y-X-Z order, picking yaw=Y,
-                // pitch=X). Values in radians. Sign convention is whatever
-                // solvePnP gave us — irrelevant for the relative-delta path
-                // we use downstream.
-                double r20 = rotMat.At<double>(2, 0);
-                double r21 = rotMat.At<double>(2, 1);
-                double r22 = rotMat.At<double>(2, 2);
-                double pitch = Math.Atan2(r21, r22);
-                double yaw   = Math.Atan2(-r20, Math.Sqrt(r21 * r21 + r22 * r22));
-
-                if (double.IsNaN(yaw) || double.IsNaN(pitch)) { _headPoseValid = false; return; }
-
-                EnqueueWithCap(_yawSmoothBuffer,   yaw,   IrisSmoothFrames);
-                EnqueueWithCap(_pitchSmoothBuffer, pitch, IrisSmoothFrames);
-                double sumY = 0, sumP = 0;
-                foreach (var v in _yawSmoothBuffer)   sumY += v;
-                foreach (var v in _pitchSmoothBuffer) sumP += v;
-                LastYaw   = sumY / _yawSmoothBuffer.Count;
-                LastPitch = sumP / _pitchSmoothBuffer.Count;
-                _headPoseValid = true;
-
-                var emitYaw = LastYaw;
-                var emitPitch = LastPitch;
-                Dispatch(() => OnHeadPose?.Invoke(emitYaw, emitPitch));
+                if (_gaze.UpdateHeadPose(rotMat.At<double>(2, 0), rotMat.At<double>(2, 1), rotMat.At<double>(2, 2)) is { } pose)
+                    Dispatch(() => OnHeadPose?.Invoke(pose.Yaw, pose.Pitch));
             }
             catch (Exception ex)
             {
-                _headPoseValid = false;
+                _gaze.HeadPoseFailed();
                 App.Logger?.Debug("UpdateHeadPose failed: {Error}", ex.Message);
             }
         }
 
         private void HandleNoFace()
         {
-            _consecutiveNoFaceFrames++;
-            if (_faceWasFound && _consecutiveNoFaceFrames >= FaceLostFramesThreshold)
+            if (_gaze.FaceMissing())
             {
-                _faceWasFound = false;
                 SetState(WebcamTrackingState.FaceLost);
                 Dispatch(() => OnFaceLost?.Invoke());
             }
@@ -2143,24 +1897,14 @@ namespace ConditioningControlPanel.Services
             // mid-blink state so a face-loss can't be misread as a giant blink.
             _lastLeftEyeRect = null;
             _lastRightEyeRect = null;
-            _headPoseValid = false;
-            _yawSmoothBuffer.Clear();
-            _pitchSmoothBuffer.Clear();
             _blink.CancelClosure();
             _mouthOpen = false;
             _mouthOpenedAt = null;
             _marSmoothBuffer.Clear();   // drop stale MAR so the median doesn't blip on face re-acquire
             _tongueOut = false;
             _tongueOutSince = null;
-            // Drop stale gaze-smoothing state so the cursor doesn't average
-            // across the face-loss gap (which would yank it on re-acquire).
-            _leftRefCxBuffer.Clear(); _leftRefCyBuffer.Clear(); _leftRefWBuffer.Clear();
-            _rightRefCxBuffer.Clear(); _rightRefCyBuffer.Clear(); _rightRefWBuffer.Clear();
-            _irisDxMedianBuffer.Clear(); _irisDyMedianBuffer.Clear();
-            _screenXFilter.Reset(); _screenYFilter.Reset();
-            _twoEyeStreak = 0;
-            _gateSkipStreak = 0;
-            if (_consecutiveNoFaceFrames > FaceLostFramesThreshold * 2)
+            // (GazeEngine.FaceMissing dropped the gaze-smoothing state above.)
+            if (_gaze.NoFaceFrames > GazeEngine.FaceLostFramesThreshold * 2)
             {
                 _gazeBuffer.Clear();
                 _lastFaceRect = null;
@@ -2169,10 +1913,8 @@ namespace ConditioningControlPanel.Services
 
         private void HandleFaceFound()
         {
-            _consecutiveNoFaceFrames = 0;
-            if (!_faceWasFound)
+            if (_gaze.FaceSeen())
             {
-                _faceWasFound = true;
                 if (State == WebcamTrackingState.FaceLost)
                 {
                     SetState(WebcamTrackingState.Tracking);
@@ -2204,8 +1946,7 @@ namespace ConditioningControlPanel.Services
             // projects — calibration and runtime must agree on the input
             // transform or the trained mapping is fed a different signal than
             // it was fit against.
-            irisDx = MedianFilter(_irisDxMedianBuffer, irisDx, IrisMedianFrames);
-            irisDy = MedianFilter(_irisDyMedianBuffer, irisDy, IrisMedianFrames);
+            (irisDx, irisDy) = _gaze.PreFilter(irisDx, irisDy);
 
             // Raw iris vector — used by the calibration window to sample reference
             // points. Always fires (when eyes are open); calibration consumers
@@ -2237,145 +1978,12 @@ namespace ConditioningControlPanel.Services
             //                   eye movement (no lag on saccades). Without this
             //                   the cursor wobbled visibly even when the user
             //                   reported sitting perfectly still.
-            EnqueueWithCap(_irisDxSmoothBuffer, irisDx, IrisSmoothFrames);
-            EnqueueWithCap(_irisDySmoothBuffer, irisDy, IrisSmoothFrames);
-            double sumX = 0, sumY = 0;
-            foreach (var v in _irisDxSmoothBuffer) sumX += v;
-            foreach (var v in _irisDySmoothBuffer) sumY += v;
-            var sideSmoothDx = sumX / _irisDxSmoothBuffer.Count;
-
             var nowTicks = Stopwatch.GetTimestamp();
-            var smoothDx = _irisDxFilter.Filter(irisDx, nowTicks);
-            var smoothDy = _irisDyFilter.Filter(irisDy, nowTicks);
-
-            var classifiedSide = ClassifyGazeSide(sideSmoothDx);
-
-            // Stability filter: only switch the *confirmed* side after the new
-            // classification has held for SideStabilityFrames consecutive frames.
-            // We still emit the confirmed side EVERY frame so consumers (like the
-            // calibration validation gate's hold timer) get continuous polling —
-            // they need a per-frame event to advance their elapsed-time check.
-            // Without this stability gate, a fast Left→Right movement passes
-            // through the Center band for a frame or two and the gate's elapsed
-            // timer resets mid-hold.
-            if (classifiedSide == _lastEmittedSide)
-            {
-                _pendingSide = classifiedSide;
-                _pendingSideStreak = 0;
-            }
-            else if (classifiedSide == _pendingSide)
-            {
-                _pendingSideStreak++;
-                if (_pendingSideStreak >= SideStabilityFrames)
-                {
-                    _lastEmittedSide = _pendingSide;
-                    _pendingSideStreak = 0;
-                }
-            }
-            else
-            {
-                _pendingSide = classifiedSide;
-                _pendingSideStreak = 1;
-            }
-            var emit = _lastEmittedSide;
+            var mapped = _gaze.Step(Calibration, irisDx, irisDy, nowTicks, out var emit);
             Dispatch(() => OnGazeSide?.Invoke(emit));
-
-            // (Head-pose compensation, when a guided-motion fit exists, was
-            // already applied to irisDx/irisDy upstream — before the
-            // smoothing split — so both the side classifier and this cursor
-            // path see the corrected signal. An earlier natural-variance comp
-            // that lived at this spot was retired as noise; see the comp
-            // block after the OnRawIris dispatch for the current pipeline.)
-
-            // Clamp the smoothed iris vector to the calibrated range plus a
-            // margin before projecting. The polynomial is only valid inside
-            // the hull it was trained on; its quadratic terms extrapolate
-            // violently outside it, so an iris sample past the calibrated
-            // extremes (glance at the keyboard, residual glint noise) used to
-            // sling the cursor way past the screen and the bounds clamp
-            // pinned it to an edge until the filters recovered. The margin
-            // leaves room to reach the bezel-adjacent strip the EdgeMargin
-            // dots couldn't cover, without letting extrapolation run away.
-            if (Calibration?.IrisRange is { } range)
+            if (mapped is { } m)
             {
-                // Margin is deliberately generous: its job is only to bound the
-                // polynomial's quadratic blow-up, not to fence normal use. A
-                // tight margin (first tried 0.18) saturated as soon as head
-                // drift shifted the iris baseline — every eye movement then
-                // projected to the same clamped extreme and the cursor sat
-                // pinned at a screen edge ("locked to the sides").
-                const double IrisClampMarginFrac = 0.35;
-                double spanX = Math.Max(1e-6, range.MaxX - range.MinX);
-                double spanY = Math.Max(1e-6, range.MaxY - range.MinY);
-                smoothDx = Math.Max(range.MinX - spanX * IrisClampMarginFrac,
-                           Math.Min(range.MaxX + spanX * IrisClampMarginFrac, smoothDx));
-                smoothDy = Math.Max(range.MinY - spanY * IrisClampMarginFrac,
-                           Math.Min(range.MaxY + spanY * IrisClampMarginFrac, smoothDy));
-            }
-
-            var screenPoint = ProjectGazeToScreen(smoothDx, smoothDy);
-            if (screenPoint.HasValue)
-            {
-                var p = screenPoint.Value;
-
-                // Screen-space velocity-adaptive smoothing. The iris-space
-                // One-Euro above is uneven across the screen because the
-                // polynomial slope steepens toward the edges; this second pass
-                // in screen-DIP space evens the jitter out where the user sees
-                // it. Applied before the quick-recal offset and the bounds
-                // clamp so the smoothing operates on raw projected motion, not
-                // on the post-clamp edge plateau (which would otherwise feed
-                // the velocity estimator a string of identical clamped points).
-                //
-                // Beta is re-pointed at the live settings value each frame so
-                // the tuning knob takes effect without a restart once anything
-                // writes the setting. It is not carried filter state, so this
-                // is not a reset and cannot glitch the output.
-                double screenBeta = ScreenOneEuroBeta;
-                _screenXFilter.Beta = screenBeta;
-                _screenYFilter.Beta = screenBeta;
-                p = new System.Windows.Point(
-                    _screenXFilter.Filter(p.X, nowTicks),
-                    _screenYFilter.Filter(p.Y, nowTicks));
-
-                // Quick-recal translational nudge — corrects whole-map drift
-                // captured after the user clicked "Quick Recal" on a center
-                // dot. Null on calibrations that haven't run quick-recal yet.
-                if (Calibration?.RuntimeOffset is { } off)
-                {
-                    p = new System.Windows.Point(p.X + off.Dx, p.Y + off.Dy);
-                }
-
-                // Bubble-test trim — per-axis offset + scale measured against
-                // the test bubbles ("cursor went up but the bubble was
-                // down" → the map is stretched; the trim un-stretches it).
-                // Applied before the pre-lock snapshot so a rerun of the
-                // bubble test measures residuals WITH the trim active and
-                // fits only the remainder (corrections converge instead of
-                // double-applying).
-                if (Calibration?.GazeTrim is { } trim)
-                {
-                    p = new System.Windows.Point(
-                        p.X + trim.X0 + trim.X1 * (p.X - trim.CenterX),
-                        p.Y + trim.Y0 + trim.Y1 * (p.Y - trim.CenterY));
-                }
-
-                // Soft screen edges instead of a hard clamp. Nobody actually
-                // looks at the last few pixels of the bezel — a cursor parked
-                // flat against an edge only ever means the mapping saturated,
-                // and it reads as "stuck" (repeated user report). The outer
-                // band compresses smoothly: motion into it slows down, an
-                // off-screen projection settles a bit short of the edge
-                // instead of pinning flat against it, and normal mid-screen
-                // gaze is untouched.
-                if (Calibration?.MonitorBounds is { } bounds && bounds.Width > 0 && bounds.Height > 0)
-                {
-                    double bandX = Math.Clamp(bounds.Width * 0.055, 28, 90);
-                    double bandY = Math.Clamp(bounds.Height * 0.055, 28, 90);
-                    p = new System.Windows.Point(
-                        SoftEdge(p.X, 0, bounds.Width, bandX),
-                        SoftEdge(p.Y, 0, bounds.Height, bandY));
-                }
+                var p = new System.Windows.Point(m.X, m.Y);
 
                 // Snapshot BEFORE the lock-on so accuracy/residual consumers
                 // (calibration bubble test) can read the unflattered point.
@@ -2383,134 +1991,18 @@ namespace ConditioningControlPanel.Services
 
                 p = ApplyGazeLock(p);
 
-                // Final motion shaping: the emitted cursor is a slowed
-                // follower of the mapped point, not the mapped point itself.
-                // Small deviations are heavily damped (the cursor glides, its
-                // direction stays consistent, residual jitter is fine), while
-                // a genuinely large error — the user snapped their gaze
-                // across the screen — ramps the follow speed up smoothly so
-                // saccades are caught in a beat without ever teleporting.
-                // This also makes the target lock read as natural drift
-                // instead of an obvious magnet snap.
-                p = ShapeCursorMotion(p);
+                // Final motion shaping (Core GazeEngine.Follow): a slowed follower of the
+                // mapped point, never a snap.
+                var f = _gaze.Follow(p.X, p.Y);
+                p = new System.Windows.Point(f.X, f.Y);
 
                 Dispatch(() => OnGazeMove?.Invoke(p));
                 UpdateLongStareHeuristic(p);
             }
         }
 
-        // Output follower state — capture thread only.
-        private double _followX = double.NaN, _followY = double.NaN;
-
-        // ── Follower tuning ──────────────────────────────────────────────────
-        // Defaults for the distance-adaptive follower. Each is overridable at
-        // runtime through AppSettings (see the properties below) so these
-        // numbers can be swept on a real face instead of guessed; the defaults
-        // here are the tuned values and are what runs with no settings file.
-        //
-        // 2026-08-27 settle-latency pass. Symptom: small corrective gaze
-        // movements took ~0.5-0.6s to land, while large saccades felt fine.
-        // Cause: this stage. FollowMin was 0.09, i.e. a ~370ms time constant
-        // at 30fps, and because the ramp to FollowMax is QUADRATIC over
-        // RampDist a small correction gets essentially none of the speed-up —
-        // a 100-DIP move sat at t = 0.21, t² = 0.043, alpha ≈ 0.107, barely
-        // above FollowMin. So the exact moves that needed to land fast were
-        // the ones running at the slowest possible rate, and they did it while
-        // simultaneously fighting the GazeLock attractor of a neighbouring
-        // target. Large saccades were unaffected because the adaptive stages
-        // upstream open up for them.
-        //
-        // FollowMin 0.09 → 0.22: time constant 370ms → ~134ms. This is the
-        // main lever; it is what makes a small move land in a beat instead of
-        // a breath. ACCEPTED TRADEOFF: slightly more visible jitter at
-        // fixation, because the follower now tracks residual wobble that the
-        // slow glide used to average away. That is the intended exchange —
-        // settle latency was the complaint, fixation shimmer was not.
-        //
-        // RampDist 480 → 360: a modest 25% reduction, NOT a rewrite of the
-        // curve. The quadratic ramp is deliberate (it keeps mid-size
-        // corrections calm and reserves real speed for genuine jumps) and is
-        // retained. But with FollowMin raised, 480 left the 150-400 DIP band —
-        // ordinary "look at the other half of the window" corrections — still
-        // riding almost entirely on FollowMin: at 200 DIP the old curve gave
-        // alpha 0.265, the new one gives 0.300. Full catch-up speed now
-        // arrives at 360 DIP, which on any normal display is still a
-        // decisively large movement, so this does not turn noise into speed.
-        // It was kept conservative on purpose: FollowMin does the heavy
-        // lifting for the reported symptom and RampDist is a secondary trim.
-        //
-        // FollowMax stays 0.48 — large jumps already landed fine.
-        //
-        // NEVER let any of these reach 1.0. At alpha = 1 the follower stops
-        // being a follower and becomes a direct assignment, i.e. a snap. The
-        // reverted I-DT fixation lock (see the tombstone by SetGazeAttractor)
-        // is the standing reminder that a hard lock/snap on the general cursor
-        // path is not acceptable here. The clamps below enforce that.
-        private const double FollowMinDefault = 0.22;   // ~134ms time constant at 30fps
-        private const double FollowMaxDefault = 0.48;   // large jumps land in ~4-5 frames, still eased
-        private const double RampDistDefault = 360.0;   // DIPs to reach full catch-up speed
-
-        /// <summary>Live per-frame follow fraction floor. Settings-backed; clamped strictly below 1 so the follower can never become a snap.</summary>
-        private static double FollowMin
-        {
-            get
-            {
-                double v = App.Settings?.Current?.GazeCursorFollowMin ?? FollowMinDefault;
-                return double.IsFinite(v) ? Math.Clamp(v, 0.01, 0.9) : FollowMinDefault;
-            }
-        }
-
-        /// <summary>Live distance (DIPs) at which the follower reaches full catch-up speed. Settings-backed.</summary>
-        private static double RampDist
-        {
-            get
-            {
-                double v = App.Settings?.Current?.GazeCursorRampDist ?? RampDistDefault;
-                return double.IsFinite(v) && v > 1.0 ? Math.Clamp(v, 40.0, 4000.0) : RampDistDefault;
-            }
-        }
-
-        /// <summary>
-        /// Distance-adaptive exponential follower (see the comment at the
-        /// call site). Follow fraction per frame eases quadratically from
-        /// FollowMin (smooth glide) to FollowMax (saccade catch-up) as the
-        /// distance to the mapped point approaches RampDist — quadratic so
-        /// mid-size corrections stay calm and only real gaze jumps get the
-        /// speed. Never snaps: even at max the approach is exponential.
-        /// </summary>
-        private System.Windows.Point ShapeCursorMotion(System.Windows.Point target)
-        {
-            double followMin = FollowMin;
-            double rampDist = RampDist;
-            // FollowMax must stay above the floor even if the floor is tuned up.
-            double followMax = Math.Max(followMin, FollowMaxDefault);
-
-            if (double.IsNaN(_followX)) { _followX = target.X; _followY = target.Y; return target; }
-            double ex = target.X - _followX, ey = target.Y - _followY;
-            double dist = Math.Sqrt(ex * ex + ey * ey);
-            double t = Math.Min(1.0, dist / rampDist);
-            double alpha = followMin + (followMax - followMin) * t * t;
-            _followX += ex * alpha;
-            _followY += ey * alpha;
-            return new System.Windows.Point(_followX, _followY);
-        }
-
-        /// <summary>
-        /// Soft edge compression for one axis. Inside the inner region the
-        /// value passes through untouched; within the outer band it is
-        /// compressed with a tanh so approach slows smoothly; a wildly
-        /// off-screen projection asymptotes ~0.2×band short of the true
-        /// edge — visible, clearly "over there", but never glued flat to
-        /// the bezel.
-        /// </summary>
-        private static double SoftEdge(double v, double lo, double hi, double band)
-        {
-            double innerLo = lo + band, innerHi = hi - band;
-            if (innerHi <= innerLo) return Math.Max(lo, Math.Min(hi, v));
-            if (v < innerLo) return innerLo - band * 0.8 * Math.Tanh((innerLo - v) / band);
-            if (v > innerHi) return innerHi + band * 0.8 * Math.Tanh((v - innerHi) / band);
-            return v;
-        }
+        // Follower tuning (FollowMin 0.22 / FollowMax 0.48 / RampDist 360, settings-backed and
+        // clamped below 1 so it never snaps) and SoftEdge: Core GazeEngine.
 
         /// <summary>
         /// Stateful target lock-on (see the constant block by SetGazeAttractor).
@@ -2576,90 +2068,6 @@ namespace ConditioningControlPanel.Services
             double k = GazeLockMaxStrength * _lockEngage * taper;
             if (k <= 0) return p;
             return new System.Windows.Point(p.X - dx * k, p.Y - dy * k);
-        }
-
-        private GazeSide ClassifyGazeSide(double irisDx)
-            => GazeSideClassifier.Classify(irisDx, Calibration?.LeftRefVec, Calibration?.RightRefVec, ref _lastGazeSide);
-
-        private System.Windows.Point? ProjectGazeToScreen(double irisDx, double irisDy)
-        {
-            // Prefer 2nd-order polynomial when present — captures the
-            // nonlinear iris→screen response. Falls back to homography for
-            // calibrations saved before the polynomial fit was added.
-            //
-            // Two polynomial forms are accepted for forward/backward compat:
-            //   7 coeffs (current): Cerrolaza asymmetric form — adds ix²·iy
-            //                       to X and iy²·ix to Y, ~0.15-0.25° better
-            //                       than the symmetric form on webcam grids.
-            //   6 coeffs (legacy): symmetric 2nd-order — projection still
-            //                       works, just lacks the asymmetric term.
-            var poly = Calibration?.Polynomial;
-            if (poly != null && poly.X != null && poly.Y != null
-                && poly.X.Length == poly.Y.Length
-                && (poly.X.Length == 6 || poly.X.Length == 7))
-            {
-                var ix2 = irisDx * irisDx;
-                var iy2 = irisDy * irisDy;
-                var ixy = irisDx * irisDy;
-                double x, y;
-                if (poly.X.Length == 7)
-                {
-                    // [1, ix, iy, ix·iy, ix², iy², ix²·iy] for X
-                    // [1, ix, iy, ix·iy, ix², iy², iy²·ix] for Y
-                    x = poly.X[0] + poly.X[1] * irisDx + poly.X[2] * irisDy
-                      + poly.X[3] * ixy + poly.X[4] * ix2 + poly.X[5] * iy2
-                      + poly.X[6] * ix2 * irisDy;
-                    y = poly.Y[0] + poly.Y[1] * irisDx + poly.Y[2] * irisDy
-                      + poly.Y[3] * ixy + poly.Y[4] * ix2 + poly.Y[5] * iy2
-                      + poly.Y[6] * iy2 * irisDx;
-                }
-                else
-                {
-                    // Legacy symmetric form: [1, ix, iy, ix², iy², ix·iy]
-                    x = poly.X[0] + poly.X[1] * irisDx + poly.X[2] * irisDy
-                      + poly.X[3] * ix2 + poly.X[4] * iy2 + poly.X[5] * ixy;
-                    y = poly.Y[0] + poly.Y[1] * irisDx + poly.Y[2] * irisDy
-                      + poly.Y[3] * ix2 + poly.Y[4] * iy2 + poly.Y[5] * ixy;
-                }
-                // Axis residual correction — cancels the polynomial's
-                // systematic per-row/per-column bias (measured at calibration
-                // finalize from the grid's own dots). This is what stops the
-                // "everything is skewed toward the top, can't reach the
-                // bottom" failure: without it a bottom row that projects
-                // 150 px high stays 150 px high forever.
-                if (Calibration?.AxisCorrection is { } ac)
-                {
-                    x = ApplyAxisCurve(ac.SrcX, ac.DstX, x);
-                    y = ApplyAxisCurve(ac.SrcY, ac.DstY, y);
-                }
-                return new System.Windows.Point(x, y);
-            }
-
-            var h = Calibration?.Homography;
-            if (h == null || h.Length != 3 || h[0].Length != 3) return null;
-
-            var hx = h[0][0] * irisDx + h[0][1] * irisDy + h[0][2];
-            var hy = h[1][0] * irisDx + h[1][1] * irisDy + h[1][2];
-            var hw = h[2][0] * irisDx + h[2][1] * irisDy + h[2][2];
-            if (Math.Abs(hw) < 1e-9) return null;
-
-            return new System.Windows.Point(hx / hw, hy / hw);
-        }
-
-        /// <summary>
-        /// Piecewise-linear map through calibration anchors (see
-        /// AxisCorrectionData): linear interpolation between anchors,
-        /// end-segment slope beyond them. Anchors are validated monotonic
-        /// and gain-sane at build time, so no guards are needed per frame.
-        /// </summary>
-        private static double ApplyAxisCurve(double[] src, double[] dst, double v)
-        {
-            int n = src.Length;
-            if (n < 2 || dst.Length != n) return v;
-            int i = 1;
-            while (i < n - 1 && v > src[i]) i++;
-            double t = (v - src[i - 1]) / (src[i] - src[i - 1]);
-            return dst[i - 1] + t * (dst[i] - dst[i - 1]);
         }
 
         private void UpdateLongStareHeuristic(System.Windows.Point point)

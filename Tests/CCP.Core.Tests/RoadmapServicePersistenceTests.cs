@@ -21,8 +21,11 @@ internal static class RoadmapTestProfile
         Path.GetTempPath(), "ccp-roadmap-tests-" + Guid.NewGuid().ToString("N"));
 
     [ModuleInitializer]
-    internal static void Initialize() =>
+    internal static void Initialize()
+    {
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", DirectoryPath);
+        _ = ConditioningControlPanel.CorePaths.UserData;   // installs the SandboxNet guard before any test runs
+    }
 }
 
 public sealed class RoadmapServicePersistenceTests

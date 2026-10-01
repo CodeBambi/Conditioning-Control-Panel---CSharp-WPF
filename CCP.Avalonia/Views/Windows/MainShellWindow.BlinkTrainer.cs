@@ -10,8 +10,8 @@
 // Live on the page: the tracker toggle (Platform/WebcamTracker), session start/stop with its countdown
 // (Views/Overlays/BlinkTrainerSession: click-through overlays per screen, swap per blink, duration
 // auto-stop, haptic pulse, quest credit; panic and exit stop it), the live stage preview, consent
-// manage/revoke (WebcamTracker.RevokeConsent, the seeded CoreWebcam verb). STILL REFUSED, each needing
-// the gaze feed or a missing surface: calibrate/quick-recal (disabled with a reason),
+// manage/revoke (WebcamTracker.RevokeConsent, the seeded CoreWebcam verb), Quick Recal over the gaze
+// feed. STILL REFUSED, each needing a missing surface: calibrate (the 16-point window; disabled with a reason),
 // ToggleWebcamFromHotkey, the status pulse, the loading splash, stage video preview and the Deeper
 // hub's webcam twins.
 

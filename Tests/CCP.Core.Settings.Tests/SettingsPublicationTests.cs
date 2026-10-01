@@ -32,6 +32,7 @@ internal static class SettingsPublicationTestProfile
         Directory.CreateDirectory(Root);
         File.WriteAllText(Path.Combine(Root, MarkerName), MarkerValue);
         Environment.SetEnvironmentVariable(EnvironmentName, Root);
+        _ = ConditioningControlPanel.CorePaths.UserData;   // installs the SandboxNet guard before any test runs
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Cleanup();
     }
 

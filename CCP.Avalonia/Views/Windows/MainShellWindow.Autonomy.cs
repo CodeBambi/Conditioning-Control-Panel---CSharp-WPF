@@ -62,7 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private bool CanPerformAutonomy(AutonomyActionType a) => a switch
         {
-            AutonomyActionType.PinkFilterPulse => PinkFilterOverlay.CanShowTint,
+            AutonomyActionType.PinkFilterPulse => PinkFilterOverlay.CanShowTint(this),
             AutonomyActionType.BubbleCount => CoreEngine.BubbleCount != null,
             AutonomyActionType.Comment => _avatarTubeWindow != null,
             AutonomyActionType.MindWipe => CoreMindWipe.TriggerOnceProvider != null,

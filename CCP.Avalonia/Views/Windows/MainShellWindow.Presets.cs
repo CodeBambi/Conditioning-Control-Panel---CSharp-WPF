@@ -165,7 +165,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         internal async void BtnCatalogue_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
-            try { await Launcher.LaunchUriAsync(new Uri("https://app.cclabs.app/catalogue")); }
+            try { await Platform.ExternalOpener.OpenAsync(this, "https://app.cclabs.app/catalogue"); }
             catch (Exception ex) { Log.Warning(ex, "Failed to open CCP Catalogue URL"); }
         }
 

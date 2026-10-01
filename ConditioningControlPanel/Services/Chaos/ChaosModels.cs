@@ -195,7 +195,7 @@ public sealed class ChaosRunConfig
         var s = App.Settings?.Current;
         var cfg = new ChaosRunConfig();
         cfg.SinChance = DefaultSinChance(ChaosMeta.State.RunsCompleted);
-        if (s == null) { ChaosMeta.ApplyTo(cfg); return cfg; }
+        if (s == null) { ChaosRunEffects.ApplyTo(cfg); return cfg; }
         var saved = Enum.TryParse<ChaosDifficulty>(s.ChaosDifficulty, out var d) ? d : ChaosDifficulty.Easy;
         cfg.Difficulty = ClampDifficulty(saved);
         // The Hourglass unlock widens the ceiling from 20 min to 2 hours; without it the old
@@ -213,7 +213,7 @@ public sealed class ChaosRunConfig
         cfg.BoonDraftEnabled = s.ChaosBoonDraftEnabled;
         cfg.AllowCurses = s.ChaosAllowCurses;
         cfg.DartersEnabled = s.ChaosDartersEnabled;
-        ChaosMeta.ApplyTo(cfg);   // owned permanent upgrades shape every run
+        ChaosRunEffects.ApplyTo(cfg);   // owned permanent upgrades shape every run
         return cfg;
     }
 

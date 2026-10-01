@@ -340,8 +340,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <summary>WPF BrowserLauncher.OpenUrlOrPrompt: on failure the link goes to the clipboard. The listener keeps waiting.</summary>
         private async Task OpenBrowserAsync(string url)
         {
-            try { if (await Launcher.LaunchUriAsync(new Uri(url))) return; }
-            catch (Exception ex) { Log.Warning(ex, "Could not open the browser for sign-in"); }
+            // A sandbox never opens a real provider page unless a loopback override points it home (ExternalOpener).
+            if (!ExternalOpener.Allowed(url)) return;
+            if (await ExternalOpener.OpenAsync(this, url)) return;
             try { if (Clipboard is { } c) await c.SetTextAsync(url); } catch { }
             // ponytail: WPF also shows a "link copied" prompt; the clipboard copy is the recovery here.
         }
@@ -796,8 +797,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// cross-platform equivalent and needs no shell assumptions.</summary>
         private async void OpenVerificationUrl()
         {
-            try { await Launcher.LaunchUriAsync(new Uri(VerificationUrl)); }
-            catch (Exception) { /* no browser, or no launcher on this platform - best effort */ }
+            await ExternalOpener.OpenAsync(this, VerificationUrl);   // best effort; a sandbox never opens a real page
         }
 
         private async void BtnDeviceCodeCopy_Click()
