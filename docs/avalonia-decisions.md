@@ -210,6 +210,24 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   Deviations: GIF/animated webp show their first frame; mix mode buckets only already-seen images; no explicit tracking-monitor
   pick (placement = DualMonitorEnabled ? all : primary); no stage video preview; no SeasonRecap credit.
 - Advisor: supervisor (progress update), worker.
+## 2026-09-30: one network guard for every CCP_USERDATA_DIR sandbox
+- Question: ~15 clients (BugReportService, DescentCountdownService, QuestDefinitionService, LeaderboardClient, V2AuthService,
+  ProviderSubscription, SyncPush, LoginDialog, FriendsApi, ServerClock, Marquee, AnnouncementPopup, UsernamePicker, hypnotube
+  HtMetadataFetcher/EnhancementFetcher, the app.cclabs.app spiral embed) had no sandbox rule, so tests/kc/render-all could reach
+  production. Per-client rules (Catalogue, Remote, AI, AppUpdater, Chaster, DailyFree, ReleaseContent) do not scale.
+- Choice: Core `SandboxNet` (CCP.Core/Services/SandboxNet.cs), installed by `CorePaths` whenever it honours CCP_USERDATA_DIR
+  (outside any catch: a failed guard fails loudly). It sets `HttpClient.DefaultProxy` (and `WebRequest.DefaultWebProxy`) to a proxy
+  at 127.0.0.1:0 (nothing can listen on port 0; a bound-but-idle port could be taken over via SO_REUSEADDR/SO_REUSEPORT);
+  only literal loopback IPs and "localhost" as typed bypass it (not .NET's rewritten "loopback"). Every HttpClient / HttpClientHandler /
+  SocketsHttpHandler (incl. UrlSafety's ConnectCallback handler, ServerClockHandler) and ClientWebSocket therefore gets
+  "connection refused" before any DNS or connect to the real host (UrlSafety's DNS pre-flight is skipped in a sandbox); honoured LoopbackUrl overrides still work. Re-grep found no
+  product code that sets UseProxy or its own Proxy; `SandboxNetTests.NoProductCodeOptsOutOfTheDefaultProxy` fails if one appears.
+  Non-HTTP egress asks `SandboxNet.Allows(uri)` (loopback, non-UNC file:, about:, data: only in a sandbox; ExternalOpener also refuses UNC paths there and leaves production launches to the shell as before): Avalonia `WebHost` (source and
+  every navigation), and every link/file/folder launch in the head goes through `Platform/ExternalOpener` (refusals logged;
+  HyperlinkButton NavigateUri via `Controls/SafeHyperlinkButton`); `SandboxNetTests.EveryLaunchGoesThroughExternalOpener` fails on a bypass. LibVLC plays FromPath only (no network MRLs). Production
+  (no CCP_USERDATA_DIR) never installs it.
+- Not covered: the WPF head's own launch sites; WebView subresources of an allowed local page.
+- Advisor: worker (brief sandbox-net-guard).
 
 ## 2026-09-30: panic and the camera (Avalonia only, deliberate WPF deviation)
 - Question: should a panic press stop webcam tracking? WPF leaves the camera running.

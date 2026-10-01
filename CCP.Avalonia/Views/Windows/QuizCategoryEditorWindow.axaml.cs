@@ -478,8 +478,7 @@ Do NOT include any other text before or after the question format. Just the ques
         {
             try
             {
-                Process.Start(new ProcessStartInfo(
-                    "https://app.cclabs.app/policies/prohibited-content") { UseShellExecute = true });
+                Platform.ExternalOpener.Open("https://app.cclabs.app/policies/prohibited-content");
             }
             catch (Exception ex)
             {

@@ -37,8 +37,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         /// <summary>Opens a page in the browser, else copies it (WPF BrowserLauncher). Tests capture it.</summary>
         internal static Func<TopLevel?, string, Task> OpenUrl = async (top, url) =>
         {
-            try { if (top?.Launcher is { } l && await l.LaunchUriAsync(new Uri(url))) return; }
-            catch (Exception ex) { Log.Warning(ex, "Updater: could not open {Url}", url); }
+            if (await ExternalOpener.OpenAsync(top, url)) return;
             try { if (top?.Clipboard is { } c) await c.SetTextAsync(url); } catch { }
         };
 

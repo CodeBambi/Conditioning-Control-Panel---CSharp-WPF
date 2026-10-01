@@ -107,7 +107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             try
             {
-                await Launcher.LaunchUriAsync(new Uri("https://app.cclabs.app/policies/prohibited-content"));
+                await Platform.ExternalOpener.OpenAsync(this, "https://app.cclabs.app/policies/prohibited-content");
             }
             catch (Exception ex)
             {

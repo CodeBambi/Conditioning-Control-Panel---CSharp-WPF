@@ -434,9 +434,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             {
                 var folder = SpiralsFolderPath;
                 Directory.CreateDirectory(folder);
-                var launcher = TopLevel.GetTopLevel(this)?.Launcher;
-                if (launcher is null) return;
-                await launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(folder));
+                await Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), folder);
             }
             catch (Exception ex)
             {

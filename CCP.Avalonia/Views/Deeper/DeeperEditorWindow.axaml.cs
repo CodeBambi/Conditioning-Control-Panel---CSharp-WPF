@@ -2644,7 +2644,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             {
                 var dir = IOPath.GetDirectoryName(_filePath!);
                 if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
-                await Launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(dir!));
+                await Platform.ExternalOpener.OpenAsync(this, dir);
             }
             catch (Exception ex) { Log.Warning(ex, "DeeperEditor: could not open the project folder"); }
         }

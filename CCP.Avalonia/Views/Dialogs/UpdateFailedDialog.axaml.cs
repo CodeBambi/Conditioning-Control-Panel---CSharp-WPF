@@ -117,7 +117,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             var opened = false;
             try
             {
-                opened = await Launcher.LaunchUriAsync(new Uri(ReleasesPageUrl));
+                opened = await Platform.ExternalOpener.OpenAsync(this, ReleasesPageUrl);
             }
             catch (Exception ex)
             {
