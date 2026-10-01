@@ -41,10 +41,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         /// <summary>Whether a tint can actually reach the screen: X11 with click-through, a
         /// compositing manager, and no earlier refusal by <see cref="Accept"/>. Takeover picks its
-        /// pink pulse only on this (WPF never picks an action that would do nothing).</summary>
-        internal static bool CanShowTint => !_refused && X11Overlay.IsAvailable && X11Overlay.IsCompositing;
+        /// pink pulse only on this (WPF never picks an action that would do nothing). <paramref name="host"/>
+        /// proves the windows this process opens are native ones: a reachable DISPLAY says nothing
+        /// about a headless or native-Wayland backend, whose tint <see cref="Accept"/> would refuse.</summary>
+        internal static bool CanShowTint(TopLevel host) =>
+            !_refused && X11Overlay.BackendOf(host.TryGetPlatformHandle()) != OverlayBackend.None
+            && X11Overlay.IsAvailable && X11Overlay.IsCompositing;
 
         private static readonly List<TintOverlayWindow> Windows = new();
+
+        /// <summary>The tint is on screen now.</summary>
+        internal static bool IsShowing => Windows.Count > 0;
         private static int[] _shownOn = Array.Empty<int>();
         private static Window? _hookedOwner;
 

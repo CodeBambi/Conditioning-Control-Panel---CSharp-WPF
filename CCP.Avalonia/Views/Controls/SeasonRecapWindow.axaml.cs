@@ -206,8 +206,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         {
             try
             {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                return true;
+                return Platform.ExternalOpener.Open(url);
             }
             catch (Exception ex)
             {

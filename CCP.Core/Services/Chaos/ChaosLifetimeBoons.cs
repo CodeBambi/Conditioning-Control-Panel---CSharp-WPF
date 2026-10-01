@@ -9,10 +9,11 @@ public enum ChaosBoonCategory { Skill, Accessory, Utility }
 
 /// <summary>
 /// A permanent, leveled, toggleable meta-progression boon — distinct from the in-run
-/// drafted boons (<see cref="ChaosBoonPool"/>, ephemeral), the single
+/// drafted boons (<c>ChaosBoonPool</c>, ephemeral), the single
 /// <c>EquippedStartBoon</c>, and the always-on <see cref="ChaosUpgrade"/>s. Unlocked +
 /// upgraded with Sparks, switched on/off in the Hub, and applied to the live
-/// <see cref="ChaosRunState"/> at run start when active. Data-driven: the shelf grows by
+/// <c>ChaosRunState</c> at run start when active (the run effect lives head-side in
+/// <c>ChaosRunEffects.Boons</c>, keyed by <see cref="Id"/>, because the run state is head-side). Data-driven: the shelf grows by
 /// adding records, not code paths. Art (if present) resolves via
 /// <c>ChaosArt.Resolve("boons", Id)</c>; until then the <see cref="Glyph"/> is the placeholder.
 /// </summary>
@@ -43,7 +44,6 @@ public sealed class ChaosLifetimeBoon
     /// The legacy WPF hub filters these out so it never sells an item it can't honor;
     /// the JS Warren ignores the flag. Dies with the legacy hub (task: legacy retirement).</summary>
     public bool WebOnly;
-    public Action<ChaosRunState, double> Apply = (_, __) => { };
 
     /// <summary>Highest level this boon can reach (length of <see cref="LevelValues"/>).</summary>
     public int MaxLevel => LevelValues.Length;
@@ -70,7 +70,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "{0:0}s buzz",
             CapstoneDesc = "no need to hold. while it buzzes, hovering alone pops.",
             IsActiveUse = true, UseCooldownSec = 20,
-            Apply = (s, v) => s.ToyPower["vibe_popping"] = v,
         },
         new()
         {
@@ -83,7 +82,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "{0:0} uses",
             CapstoneDesc = "each freeze also snaps every live bubble on screen.",
             IsActiveUse = true, UseCooldownSec = 0,               // charge-based
-            Apply = (s, v) => s.ToyPower["freeze_trigger"] = v,
         },
         new()
         {
@@ -96,7 +94,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "{0:0}s playback",
             CapstoneDesc = "two screens.",
             IsActiveUse = true, UseCooldownSec = 60,
-            Apply = (s, v) => s.ToyPower["porn_dvd"] = v,
         },
         new()
         {
@@ -109,7 +106,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "{0:0}s cooldown",
             CapstoneDesc = "the snap clears EVERYTHING — every bubble on screen goes.",
             IsActiveUse = true, UseCooldownSec = 60,              // real cooldown comes from the level value
-            Apply = (s, v) => s.ToyPower["snap_field"] = v,
         },
         new()
         {
@@ -122,7 +118,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "{0:0} rabbits",
             CapstoneDesc = "each whistle also calls a storm — eight more rabbits over the next ten seconds.",
             IsActiveUse = true, UseCooldownSec = 45,
-            Apply = (s, v) => s.ToyPower["rabbit_caller"] = v,
         },
         new()
         {
@@ -135,7 +130,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "{0:0} charged pops",
             CapstoneDesc = "charged pops chain-react — the current leaps on through every bubble close enough, and onward.",
             IsActiveUse = true, UseCooldownSec = 30,
-            Apply = (s, v) => s.ToyPower["e_stim"] = v,
         },
         new()
         {
@@ -151,7 +145,6 @@ public static class ChaosLifetimeBoons
             CapstoneDesc = "the trail takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.",
             IsActiveUse = true, UseCooldownSec = 0,               // charge-based
             WebOnly = true,
-            Apply = (s, v) => s.ToyPower["the_wand"] = v,
         },
         new()
         {
@@ -165,7 +158,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "{0:0}s suction",
             IsActiveUse = true, UseCooldownSec = 45,
             WebOnly = true,
-            Apply = (s, v) => s.ToyPower["the_pump"] = v,
         },
 
         // ---- Accessories (passives that shape the run) ----
@@ -181,7 +173,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "x{0:0.0} card pops",
             CapstoneDesc = "letting go HURLS the card down the tube — a treat shower follows the impact.",
             WebOnly = true,
-            Apply = (s, v) => s.StickyFingersLevel = ChaosMeta.BoonLevel("sticky_fingers"),
         },
         // breast_enlargement moved to Utility 2026-06-10 (it reads as a trained habit, not a
         // pocketed accessory) — same id, levels carry over; Utility pockets are uncapped.
@@ -195,7 +186,6 @@ public static class ChaosLifetimeBoons
             LevelValues  = new[] { 0.05, 0.10, 0.15 },            // extra BoonMult per accepted sin
             ValueLabel = "+{0:0.00}x per sin",
             CapstoneDesc = "every draft offers a sin, saying yes restores +1 resistance, and the first sin you embrace loses its sting entirely.",
-            Apply = (s, v) => s.SinExtraMult = v,
         },
         // muscle_memory + magic_wand retired 2026-06-10 (pure stat passives, both duplicated by
         // habits — Slow Recovery / Soft Focus). ChaosMeta.Init refunds owners; never reuse the ids.
@@ -213,7 +203,6 @@ public static class ChaosLifetimeBoons
             UpgradeCosts = new[] { 120, 160, 220, 300 },          // levels 2..5
             LevelValues  = new[] { 1.2, 1.35, 1.6, 1.8, 2.0 },    // burst reach multiplier per level
             ValueLabel = "{0:0.00}x reach",
-            Apply = (s, v) => s.ChainReactionReach = v,
         },
         new()
         {
@@ -225,13 +214,6 @@ public static class ChaosLifetimeBoons
             LevelValues  = new[] { 1.5, 1.75, 2.0 },              // payout multiplier
             ValueLabel = "x{0:0.00} payout",
             CapstoneDesc = "a heartbeat tells you when one is about to go. listen.",
-            Apply = (s, v) =>
-            {
-                s.BlindfoldPayMult = v;
-                s.BlindfoldActive = true;
-                // The whisper deepens with the level: x1.5 → 40%, x1.75 → 32%, x2.0 → 25%.
-                s.BlindfoldOpacity = v >= 2.0 ? 0.25 : v >= 1.75 ? 0.32 : 0.40;
-            },
         },
         new()
         {
@@ -242,11 +224,6 @@ public static class ChaosLifetimeBoons
             UpgradeCosts = new[] { 350, 550 },                    // levels 2..3
             LevelValues  = new[] { 5.0, 10, 20 },                 // payout mult; the brink window widens with it (0.4/0.6/0.8s)
             ValueLabel = "x{0:0} at the brink",
-            Apply = (s, v) =>
-            {
-                s.LastBreathPayMult = v;
-                s.LastBreathWindowSec = v >= 20 ? 0.8 : v >= 10 ? 0.6 : 0.4;
-            },
         },
         new()
         {
@@ -257,11 +234,6 @@ public static class ChaosLifetimeBoons
             UpgradeCosts = new[] { 300, 500 },                    // levels 2..3
             LevelValues  = new[] { 1.0, 2, 3 },                   // rerolls per descent; the coin also tilts: 50/50 → 45/55 → 40/60
             ValueLabel = "{0:0} rerolls",
-            Apply = (s, v) =>
-            {
-                s.RerollsLeft = (int)v;
-                s.ChanceDoubleOdds = 0.50 + 0.05 * (Math.Clamp(v, 1, 3) - 1);   // P(double pay)
-            },
         },
         new()
         {
@@ -272,7 +244,6 @@ public static class ChaosLifetimeBoons
             UpgradeCosts = new[] { 200, 300, 450, 650 },          // levels 2..5
             LevelValues  = new[] { 0.12, 0.22, 0.32, 0.44, 0.58 },// drift bias (DIPs/frame); rabbits home at all levels
             ValueLabel = "{0:0.00} pull",
-            Apply = (s, v) => s.CursorPullStrength = v,
         },
         new()
         {
@@ -284,7 +255,6 @@ public static class ChaosLifetimeBoons
             LevelValues  = new[] { 1.20, 1.45, 1.70 },            // one-time swell on the first smack
             ValueLabel = "x{0:0.00} swell",
             CapstoneDesc = "the bouncing texts answer to you too — smack them to turn them.",
-            Apply = (s, v) => { s.SpankerActive = true; s.SpankGrowFactor = v; },
         },
         new()
         {
@@ -296,7 +266,6 @@ public static class ChaosLifetimeBoons
             LevelValues  = new[] { 3.0, 4, 5 },                   // seconds each thought lives (one spawns every 5s)
             ValueLabel = "{0:0}s thoughts",
             CapstoneDesc = "a thought that brushes a rabbit splits in two. and those split too. (max 8, +2s)",
-            Apply = (s, v) => s.IntrusiveThoughtsSec = v,
         },
 
         // ---- Utility (charms — quiet, always-on trinkets; pockets are uncapped) ----
@@ -311,7 +280,6 @@ public static class ChaosLifetimeBoons
                                                                   // the gold scales by level too (see GoldenPayRange)
             ValueLabel = "{0:0.0%} lucky",
             CapstoneDesc = "the gold doubles — twenty to forty a bubble.",
-            Apply = (s, v) => s.GoldenChance = v,
         },
         new()
         {
@@ -326,7 +294,6 @@ public static class ChaosLifetimeBoons
             LevelValues  = new[] { 1.0, 2, 3, 4 },                // drops banked per pop (defuses + treats)
             ValueLabel = "+{0:0} a pop",
             CapstoneDesc = "the hole tips you 10% extra on everything gathered when you surface.",
-            Apply = (s, v) => s.DropPerPop = (int)v,
         },
         new()
         {
@@ -336,7 +303,6 @@ public static class ChaosLifetimeBoons
             UnlockCost = 120,
             LevelValues  = new[] { 1.0 },                          // single-rank QoL toggle
             ValueLabel = "on",
-            Apply = (s, _) => s.ShowPopScores = true,
         },
         new()
         {
@@ -347,7 +313,6 @@ public static class ChaosLifetimeBoons
             UpgradeCosts = new[] { 180, 260, 380 },               // levels 2..4
             LevelValues  = new[] { 5.0, 10, 15, 25 },             // % size on every variant bubble
             ValueLabel = "+{0:0}% size",
-            Apply = (s, v) => s.BubbleScale = 1.0 + v / 100.0,
         },
         new()
         {
@@ -360,7 +325,6 @@ public static class ChaosLifetimeBoons
             UpgradeCosts = new[] { 300, 450, 650 },               // levels 2..4
             LevelValues  = new[] { 60.0, 50, 40, 30 },            // pops per regrown resistance point
             ValueLabel = "{0:0} pops a point",
-            Apply = (s, v) => s.ShieldRegenPops = (int)v,
         },
         new()
         {
@@ -375,7 +339,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "+{0:0} resistance",
             // Shields land before BeginRun captures StartShields (the regen cap), and the config
             // bump keeps the HUD's hollow-heart row sized to what you descended with.
-            Apply = (s, v) => { s.Shields += (int)v; s.Config.StartingShields += (int)v; },
         },
         new()
         {
@@ -387,7 +350,6 @@ public static class ChaosLifetimeBoons
             UpgradeCosts = new[] { 300, 450 },                    // levels 2..3
             LevelValues  = new[] { 1.0, 2, 3 },                   // streak saves per descent
             ValueLabel = "{0:0} saves",
-            Apply = (s, v) => s.CollarSaves = (int)v,
         },
         new()
         {
@@ -400,12 +362,6 @@ public static class ChaosLifetimeBoons
             UpgradeCosts = new[] { 250, 400, 600 },               // levels 2..4
             LevelValues  = new[] { 1.1, 1.2, 1.3, 1.45 },         // BaseMult; calm-pop baseline scales with it
             ValueLabel = "x{0:0.00} baseline",
-            Apply = (s, v) =>
-            {
-                s.Config.BaseMult = v;   // state.BaseMult reads through to Config — safe post-ctor
-                // The calm-pop (benign) baseline climbs with the level: 0.45 → 0.50 → 0.55 → 0.60 (unworn 0.40).
-                s.BenignBaseline = v >= 1.45 ? 0.60 : v >= 1.3 ? 0.55 : v >= 1.2 ? 0.50 : 0.45;
-            },
         },
         new()
         {
@@ -419,7 +375,6 @@ public static class ChaosLifetimeBoons
             LevelValues  = new[] { 10.0, 20, 30, 40 },            // % slower fuse burn
             ValueLabel = "{0:0}% slower",
             CapstoneDesc = "snapping one in its final 1.5 seconds pays triple.",
-            Apply = (s, v) => s.FuseTimeMult *= 1.0 + v / 100.0,
         },
         new()
         {
@@ -433,7 +388,6 @@ public static class ChaosLifetimeBoons
             ValueLabel = "tier {0:0}",
             CapstoneDesc = "click the sky — she changes her mind, once per descent.",
             WebOnly = true,
-            Apply = (s, v) => s.MoodRingLevel = (int)v,
         },
         new()
         {
@@ -443,7 +397,6 @@ public static class ChaosLifetimeBoons
             UnlockCost = 150,
             LevelValues  = new[] { 1.0 },                          // single-rank QoL toggle
             ValueLabel = "on",
-            Apply = (s, _) => s.ShowWaveTimer = true,
         },
         new()
         {
@@ -458,13 +411,6 @@ public static class ChaosLifetimeBoons
             LevelValues  = new[] { 13.0, 11, 9, 8 },              // recharge seconds
             ValueLabel = "{0:0}s gather",
             CapstoneDesc = "the stone skips — every cast sends three waves, a second apart.",
-            Apply = (s, v) =>
-            {
-                s.RippleRechargeSec = v;
-                int lvl = ChaosMeta.BoonLevel("skipping_stone");
-                s.RippleRadiusPx = ChaosTuning.RIPPLE_RADIUS_PX + lvl * ChaosTuning.RIPPLE_RADIUS_PER_LVL_PX;
-                s.RippleLifeMs = ChaosTuning.RIPPLE_LIFE_MS + lvl * ChaosTuning.RIPPLE_LIFE_PER_LVL_MS;
-            },
         },
     };
 

@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows;
+using Serilog;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
 
@@ -26,14 +26,23 @@ namespace ConditioningControlPanel.Services.Commands
             _kind = kind;
         }
 
-        public Task<bool> ExecuteAsync()
+        /// <summary>Head video surface on the UI thread: a validated path, or null for a random
+        /// clip (WPF App.Video PlaySpecificVideo(path, strict: false) / TriggerVideo). False when
+        /// nothing started (no player, one already playing). Unseeded: refused.</summary>
+        public static volatile Func<string?, bool>? VideoSurface;
+
+        /// <summary>Head audio surface: plays one file at full volume and answers whether it really
+        /// started (WPF App.Audio.PlaySound, #1120). Unseeded: refused.</summary>
+        public static volatile Func<string, Task<bool>>? AudioSurface;
+
+        public async Task<bool> ExecuteAsync()
         {
             // Random pick — the AI can ask for "any video" / "any audio" without naming a file.
             if (_data.Random || string.IsNullOrEmpty(_data.Path))
             {
                 if (_kind == AICommandType.audio)
-                    return Task.FromResult(PlayRandomAudio());
-                return Task.FromResult(PlayRandomVideo());
+                    return await PlayRandomAudio();
+                return PlayRandomVideo();
             }
 
             var fullPath = GetValidatedPath(_data.Path);
@@ -42,13 +51,13 @@ namespace ConditioningControlPanel.Services.Commands
                 // AI named a file that doesn't exist (or escaped assets). Fall back to a
                 // random pick so the request still produces something audible/visible —
                 // matches what the user sees in the live actions feed.
-                App.Logger?.Information("MediaCommand: path '{Path}' didn't resolve — falling back to random {Kind}",
+                Log.Information("MediaCommand: path '{Path}' didn't resolve — falling back to random {Kind}",
                     _data.Path, _kind);
-                if (_kind == AICommandType.audio) return Task.FromResult(PlayRandomAudio());
-                return Task.FromResult(PlayRandomVideo());
+                if (_kind == AICommandType.audio) return await PlayRandomAudio();
+                return PlayRandomVideo();
             }
 
-            App.Logger?.Information("MediaCommand: AI play media {Path}", fullPath);
+            Log.Information("MediaCommand: AI play media {Path}", fullPath);
 
             var ext = Path.GetExtension(fullPath).ToLowerInvariant();
             if (IsVideo(ext))
@@ -57,63 +66,43 @@ namespace ConditioningControlPanel.Services.Commands
                 // too (#512). Guarded at the playback sink so every path is covered; an
                 // audio-kind request that resolved to a video file still gets its audio
                 // fallback instead of a silent drop.
-                if (App.Settings?.Current?.MandatoryVideosEnabled != true)
+                if (CoreSettings.Current?.MandatoryVideosEnabled != true)
                 {
-                    App.Logger?.Information("MediaCommand: AI video ignored — Videos feature is disabled");
-                    if (_kind == AICommandType.audio) return Task.FromResult(PlayRandomAudio());
-                    return Task.FromResult(false);
+                    Log.Information("MediaCommand: AI video ignored — Videos feature is disabled");
+                    if (_kind == AICommandType.audio) return await PlayRandomAudio();
+                    return false;
                 }
 
-                return Task.FromResult(Application.Current.Dispatcher.Invoke(() =>
-                {
-                    if (App.Video == null) return false;
-                    if (App.Video.IsPlaying)
-                    {
-                        App.Logger?.Information("MediaCommand: video already playing — skipping {Path}", fullPath);
-                        return false;
-                    }
-                    App.Video.PlaySpecificVideo(fullPath, false);
-                    return true;
-                }));
+                return VideoSurface?.Invoke(fullPath) == true;
             }
 
             if (IsAudio(ext))
             {
-                return Task.FromResult(PlayFile(fullPath));
+                return await PlayFile(fullPath);
             }
 
-            App.Logger?.Information("MediaCommand: extension {Ext} not recognized as audio/video — falling back to random {Kind}", ext, _kind);
-            if (_kind == AICommandType.audio) return Task.FromResult(PlayRandomAudio());
-            return Task.FromResult(PlayRandomVideo());
+            Log.Information("MediaCommand: extension {Ext} not recognized as audio/video — falling back to random {Kind}", ext, _kind);
+            if (_kind == AICommandType.audio) return await PlayRandomAudio();
+            return PlayRandomVideo();
         }
 
         private static bool PlayRandomVideo()
         {
             // Playback sink gate: the main Videos feature toggle governs AI videos (#512).
-            if (App.Settings?.Current?.MandatoryVideosEnabled != true)
+            if (CoreSettings.Current?.MandatoryVideosEnabled != true)
             {
-                App.Logger?.Information("MediaCommand: random video ignored — Videos feature is disabled");
+                Log.Information("MediaCommand: random video ignored — Videos feature is disabled");
                 return false;
             }
 
-            return Application.Current.Dispatcher.Invoke(() =>
-            {
-                if (App.Video == null) return false;
-                if (App.Video.IsPlaying)
-                {
-                    App.Logger?.Information("MediaCommand: random video requested but a video is already playing — skipping");
-                    return false;
-                }
-                App.Video.TriggerVideo();
-                return true;
-            });
+            return VideoSurface?.Invoke(null) == true;
         }
 
-        private static bool PlayRandomAudio()
+        private static async Task<bool> PlayRandomAudio()
         {
             try
             {
-                var assetsRoot = App.EffectiveAssetsPath;
+                var assetsRoot = CorePaths.EffectiveAssets;
                 var audioRoot = Path.Combine(assetsRoot, "audio");
                 string[] candidates = Array.Empty<string>();
                 if (Directory.Exists(audioRoot))
@@ -125,33 +114,33 @@ namespace ConditioningControlPanel.Services.Commands
 
                 if (candidates.Length == 0)
                 {
-                    App.Logger?.Warning("MediaCommand: no audio files under {Root} — cannot fulfill random audio", audioRoot);
+                    Log.Warning("MediaCommand: no audio files under {Root} — cannot fulfill random audio", audioRoot);
                     return false;
                 }
 
                 var pick = candidates[new Random().Next(candidates.Length)];
-                App.Logger?.Information("MediaCommand: random audio pick {Path}", pick);
-                return PlayFile(pick);
+                Log.Information("MediaCommand: random audio pick {Path}", pick);
+                return await PlayFile(pick);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "MediaCommand: random audio pick threw");
+                Log.Warning(ex, "MediaCommand: random audio pick threw");
                 return false;
             }
         }
 
         /// <summary>
-        /// Hands one audio file to <see cref="AudioService.PlaySound"/> and reports whether it
+        /// Hands one audio file to the head audio surface (WPF AudioService.PlaySound) and reports whether it
         /// actually started. PlaySound returns the clip duration and 0 when it could not play
         /// (no audio service yet, unreadable file, no output device), so the caller can tell the
         /// user "nothing played" instead of claiming success (#1120).
         /// </summary>
-        private static bool PlayFile(string path)
+        private static async Task<bool> PlayFile(string path)
         {
-            var seconds = Application.Current.Dispatcher.Invoke(() => App.Audio?.PlaySound(path, 100) ?? 0);
-            if (seconds <= 0)
+            var started = AudioSurface is { } play && await play(path);
+            if (!started)
             {
-                App.Logger?.Warning("MediaCommand: audio {Path} did not start playing", path);
+                Log.Warning("MediaCommand: audio {Path} did not start playing", path);
                 return false;
             }
             return true;
@@ -176,7 +165,7 @@ namespace ConditioningControlPanel.Services.Commands
                 // Defense-in-depth: reject obvious traversal attempts up front.
                 if (path.Contains("..", StringComparison.Ordinal)) return null;
 
-                var assetsRoot = Path.GetFullPath(App.EffectiveAssetsPath);
+                var assetsRoot = Path.GetFullPath(CorePaths.EffectiveAssets);
                 var fullPath = Path.IsPathRooted(path)
                     ? Path.GetFullPath(path)
                     : Path.GetFullPath(Path.Combine(assetsRoot, path));
@@ -188,7 +177,7 @@ namespace ConditioningControlPanel.Services.Commands
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "MediaCommand: path validation threw");
+                Log.Warning(ex, "MediaCommand: path validation threw");
                 return null;
             }
         }

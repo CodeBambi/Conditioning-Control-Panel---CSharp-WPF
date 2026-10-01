@@ -193,7 +193,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
                 {
-                    Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                    Platform.ExternalOpener.Open(dir);
                     return;
                 }
 

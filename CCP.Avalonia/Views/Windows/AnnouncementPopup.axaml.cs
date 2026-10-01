@@ -364,7 +364,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 try
                 {
-                    Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+                    Platform.ExternalOpener.Open(uri.AbsoluteUri);
                 }
                 catch (Exception ex)
                 {

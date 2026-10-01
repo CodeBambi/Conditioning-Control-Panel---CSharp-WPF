@@ -610,13 +610,13 @@
                         <!-- ==================== ADVANCED LINK ==================== -->
                         <Grid Margin="0,0,0,0"
                               ToolTip.Tip="Opens a detailed editor for the currently installed preset where you can add/remove keywords, tweak per-trigger actions, and edit phrase pools. If no preset is installed yet, it opens the custom-trigger drawer just above instead, where you can build your own keywords from scratch.">
-                            <HyperlinkButton x:Name="LnkAwarenessAdvanced" HorizontalAlignment="Center" Padding="0"
+                            <hover:SafeHyperlinkButton x:Name="LnkAwarenessAdvanced" HorizontalAlignment="Center" Padding="0"
                                              Foreground="{DynamicResource PinkBrush}"
                                              Click="LnkAwarenessAdvanced_Click">
                                 <TextBlock x:Name="LnkAwarenessAdvancedText"
                                            Text="Customize individual triggers (advanced) →"
                                            TextDecorations="Underline"/>
-                            </HyperlinkButton>
+                            </hover:SafeHyperlinkButton>
                         </Grid>
                     </StackPanel>
 

@@ -132,7 +132,7 @@ namespace ConditioningControlPanel.Avalonia
                     try { Notifications.Show(message, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(12)); }
                     catch (Exception ex) { Serilog.Log.Debug("PromptAssembler: oversize notice failed to show: {Error}", ex.Message); }
                 });
-            // Only when a card can really follow here (no launcher: Session/Game/Quests cards may not build).
+            // Only when a card can really follow here (no session launcher: Session cards never build).
             ConditioningControlPanel.Services.Companion.ConversationDelivery.AskCardsShown =
                 ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.CanOfferFor;
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BrainProvider = () => Brain;
@@ -449,6 +449,19 @@ namespace ConditioningControlPanel.Avalonia
                     (desktop.MainWindow as Views.Windows.MainShellWindow)?.InitializeChasterFlash(Platform.ChasterHead.Service);
                 }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Chaster] service could not be built"); }
+                // WPF App.xaml.cs FRIENDS: no request at build; a new identity is the sign-in moment to poll now.
+                try
+                {
+                    var friends = Platform.FriendsHead.Create(
+                        Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
+                    if (friends != null)
+                    {
+                        Platform.FriendsHead.Service = friends;
+                        CoreAccount.UnifiedIdentityChanged += (_, _) => friends.Kick();
+                        friends.Start(new Platform.FriendsHead.Timer());
+                    }
+                }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "[Friends] service could not be built"); }
                 // WPF App.xaml.cs:2940-2968. EnsureBaselineAsync keeps WPF's rules: no-op on a full
                 // install, under a debugger, in offline mode, or when nothing is missing. A Linux dev
                 // build never reads as a full install (flashes_audio is not shipped here), so an
@@ -508,13 +521,14 @@ namespace ConditioningControlPanel.Avalonia
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
                 // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
-                // echo (no bark engine here: CoreBark is a doorbell), command executor and activities stay
-                // unseeded (head services not here). SeedMemorySignals seeds UserMessageSent for the memory
+                // echo stays unseeded (no bark engine here: CoreBark is a doorbell); command executor and
+                // activities are CompanionEffects (seeded below). SeedMemorySignals seeds UserMessageSent for the memory
                 // chat counter only; no companion-chat achievement listens to it on this head yet.
                 SeedMemorySignals();
                 try { if (Ai != null) Brain = new ConditioningControlPanel.Services.Companion.Brain.CompanionBrain(Ai); }
                 catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
                 SeedCompanionTubeSeams();
+                CompanionEffects.Seed();
                 //
                 // CoreModerationLog's record half stays unseeded, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes
@@ -878,6 +892,7 @@ namespace ConditioningControlPanel.Avalonia
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
+            try { (Platform.FriendsHead.Service as IDisposable)?.Dispose(); } catch { /* WPF App.OnExit: the friends poll stops */ }
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }

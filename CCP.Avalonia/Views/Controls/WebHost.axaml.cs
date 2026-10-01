@@ -85,6 +85,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         }
 
         /// <summary>
+        /// A string the page posted (<c>window.invokeCSharpAction</c>, which the engine injects; it
+        /// JSON-stringifies objects). The stand-in for WPF's <c>CoreWebView2.WebMessageReceived</c>.
+        /// </summary>
+        public event Action<string>? WebMessage;
+
+        /// <summary>The seam the engine's WebMessageReceived routes through (headless tests drive it).</summary>
+        internal void OnWebMessage(string? body)
+        {
+            if (!string.IsNullOrEmpty(body)) WebMessage?.Invoke(body);
+        }
+
+        /// <summary>
         /// True when THIS instance built an adapter. <see cref="IsAvailable"/> is the process-wide
         /// probe; the constructor can still fail after it passes, and a caller about to drive the
         /// page through script needs to know about this control, not about the machine.
@@ -155,6 +167,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                     // the predicate and the Source in that order would otherwise race the engine.
                     _web.NavigationStarted += OnNavigationStarted;
                     _web.NavigationCompleted += (_, e) => OnNavigationCompleted(e.Request ?? _web?.Source);
+                    _web.WebMessageReceived += (_, e) => OnWebMessage(e.Body);
                     _webSlot.Children.Add(_web);
                 }
                 catch (Exception ex)
@@ -187,9 +200,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
         private void OnNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
         {
+            var target = e.Request;
+            // A CCP_USERDATA_DIR sandbox never loads a real site, whatever the caller's gate says.
+            if (!ConditioningControlPanel.Services.SandboxNet.Allows(target)) { e.Cancel = true; return; }
             var gate = AllowNavigation;
             if (gate is null) return;
-            var target = e.Request;
             // No URL to judge: refuse. A navigation the gate cannot see is exactly the one a
             // hostile page would use to slip past it.
             if (target is null) { e.Cancel = true; return; }
@@ -209,13 +224,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             _explicitNavigate = true;
             try { Source = url; } finally { _explicitNavigate = false; }
             NavigationRequests++;
+            // A sandbox never loads a real site (as ApplySource): the panel may name it, the engine never gets it.
+            if (!ConditioningControlPanel.Services.SandboxNet.Allows(url)) { RefusedNavigations++; return; }
             if (_web is null) return;
             try { _web.Navigate(url); }
             catch (Exception ex) { Log.Debug("WebHost: Navigate failed: {Error}", ex.Message); }
         }
 
-        /// <summary>Count of <see cref="Navigate"/> calls handed to the engine; a headless test's view of it.</summary>
+        /// <summary>Count of <see cref="Navigate"/> calls; a headless test's view of them.</summary>
         internal int NavigationRequests { get; private set; }
+
+        /// <summary>Count of <see cref="Navigate"/> calls the sandbox kept from the engine.</summary>
+        internal int RefusedNavigations { get; private set; }
 
         private bool _explicitNavigate;
 
@@ -231,7 +251,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             var src = Source;
             // src! because NativeWebView.Source is annotated non-nullable while its StyledProperty's
             // own default IS null - clearing the page back to null is a real state, not a bug.
-            if (_web is not null) { if (!_explicitNavigate) _web.Source = src!; return; }
+            // A sandbox never loads a real site (see OnNavigationStarted); the panel may still name it.
+            if (_web is not null)
+            {
+                if (!_explicitNavigate) _web.Source = ConditioningControlPanel.Services.SandboxNet.Allows(src) ? src! : null!;
+                return;
+            }
             // No engine: the panel at least names the page that was meant to load.
             _txtSource.Text = src?.ToString() ?? "";
             _txtSource.IsVisible = src is not null;

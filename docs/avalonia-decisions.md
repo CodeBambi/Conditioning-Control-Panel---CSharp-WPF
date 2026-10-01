@@ -210,6 +210,24 @@ Panic / tray 'Stop everything' vs Takeover: Panic stops Takeover (autonomy stays
   Deviations: GIF/animated webp show their first frame; mix mode buckets only already-seen images; no explicit tracking-monitor
   pick (placement = DualMonitorEnabled ? all : primary); no stage video preview; no SeasonRecap credit.
 - Advisor: supervisor (progress update), worker.
+## 2026-09-30: one network guard for every CCP_USERDATA_DIR sandbox
+- Question: ~15 clients (BugReportService, DescentCountdownService, QuestDefinitionService, LeaderboardClient, V2AuthService,
+  ProviderSubscription, SyncPush, LoginDialog, FriendsApi, ServerClock, Marquee, AnnouncementPopup, UsernamePicker, hypnotube
+  HtMetadataFetcher/EnhancementFetcher, the app.cclabs.app spiral embed) had no sandbox rule, so tests/kc/render-all could reach
+  production. Per-client rules (Catalogue, Remote, AI, AppUpdater, Chaster, DailyFree, ReleaseContent) do not scale.
+- Choice: Core `SandboxNet` (CCP.Core/Services/SandboxNet.cs), installed by `CorePaths` whenever it honours CCP_USERDATA_DIR
+  (outside any catch: a failed guard fails loudly). It sets `HttpClient.DefaultProxy` (and `WebRequest.DefaultWebProxy`) to a proxy
+  at 127.0.0.1:0 (nothing can listen on port 0; a bound-but-idle port could be taken over via SO_REUSEADDR/SO_REUSEPORT);
+  only literal loopback IPs and "localhost" as typed bypass it (not .NET's rewritten "loopback"). Every HttpClient / HttpClientHandler /
+  SocketsHttpHandler (incl. UrlSafety's ConnectCallback handler, ServerClockHandler) and ClientWebSocket therefore gets
+  "connection refused" before any DNS or connect to the real host (UrlSafety's DNS pre-flight is skipped in a sandbox); honoured LoopbackUrl overrides still work. Re-grep found no
+  product code that sets UseProxy or its own Proxy; `SandboxNetTests.NoProductCodeOptsOutOfTheDefaultProxy` fails if one appears.
+  Non-HTTP egress asks `SandboxNet.Allows(uri)` (loopback, non-UNC file:, about:, data: only in a sandbox; ExternalOpener also refuses UNC paths there and leaves production launches to the shell as before): Avalonia `WebHost` (source and
+  every navigation), and every link/file/folder launch in the head goes through `Platform/ExternalOpener` (refusals logged;
+  HyperlinkButton NavigateUri via `Controls/SafeHyperlinkButton`); `SandboxNetTests.EveryLaunchGoesThroughExternalOpener` fails on a bypass. LibVLC plays FromPath only (no network MRLs). Production
+  (no CCP_USERDATA_DIR) never installs it.
+- Not covered: the WPF head's own launch sites; WebView subresources of an allowed local page.
+- Advisor: worker (brief sandbox-net-guard).
 
 ## 2026-09-30: panic and the camera (Avalonia only, deliberate WPF deviation)
 - Question: should a panic press stop webcam tracking? WPF leaves the camera running.
@@ -294,6 +312,40 @@ passes its two providers' `TierChanged` (WPF App.xaml.cs; Avalonia `AccountSeed.
 providers exist). A second call re-points the hook at the new providers instead of being a no-op.
 Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate lives on
 `GradedIntakeTabView` rather than the shell, because this head's shell cannot reach x:Name fields.
+## 2026-10-01: webcam gaze on Avalonia (webcam slice 4)
+- Question: how does the gaze half of WebcamTrackingService reach the Avalonia tracker without a second copy, and what fits one slice?
+- Choice: the stateful frame-free chain moved to Core `GazeEngine` (one instance per tracker, capture thread only) and WPF's
+  ProcessFrame/EmitGazeEvents/HandleNoFace delegate to it, keeping WPF-only stages (gaze lock-on, long stare, mouth/tongue,
+  pre-lock snapshot) in place and the call order unchanged. solvePnP stays in each head: Core compiles against OpenCvSharp 4.9
+  (WPF's version) and 4.13 on the Avalonia head renamed `SolvePnPFlags` to `SolvePnPMethod`, so a Core call throws
+  MissingMethodException there (found by `WebcamGazeTests.HeadPose_TracksAYawTurn`); Core owns the model points, Euler
+  extraction and smoothing. Calibration is WPF's profile file (`WebcamCalibrationData.FilePath`), read once on first use;
+  revoke deletes it and drops the in-memory copy. Tracker Test and Quick Recal are ported; the 16-point calibration window
+  (WPF ~2.1k LOC plus mouth/tongue validation and the bubble test) does not fit the line cap and is the next slice, so
+  Calibrate stays disabled with a reason.
+- Advisor: worker (supervisor informed).
+
+## 2026-10-01: Graded Intake host slice 1 (avalonia-port/intake-host)
+- Question: WPF `IntakeHostService` runs the intake page in WebView2 with a `ccp.game` virtual host and the
+  `chrome.webview` bridge. Avalonia's `NativeWebView` (WebKitGTK here) runs scripts but has neither, and the page's
+  `web-shim.js` knows only `chrome.webview` and `ReactNativeWebView`.
+- Choice: the run's rules (result/walk-out latches, heartbeat timeout, grade + 90% top marks, XP/mantra caps, pass
+  spent ONLY by a parsed quiz-result and before the draft, collision-safe session path, PNG check, same-document
+  check) moved to Core `IntakeRun`; WPF `IntakeHostService` delegates (latches, heartbeat stamp + 20 s silence rule,
+  grading, completion; its DispatcherTimer and its own ChaosWebViewHost.SameDocument stay head-side). A failed XP grant
+  still skips the mantra credit: `CoreProgression.AddXP` now returns false when the provider throws.
+  The Avalonia host drops page messages unless the web view's last completed navigation is the document it loaded
+  (`NativeWebView`'s message args carry no source, unlike WebView2's). Bridge seam: page -> host over the engine-injected
+  `window.invokeCSharpAction(string)`, which `web-shim.js` now takes as a third string carrier, only when
+  `chrome.webview` is absent (the shim's text changed; WPF behaviour did not:
+  `IntakeRunTests.WebShimKeepsWebView2FirstAndGatesTheAvaloniaCarrier`, node probe in
+  ~/ccp-port/evidence/avalonia-port/intake-host/web-shim-carrier-probe.txt); host -> page via `InvokeScriptAsync`
+  calling the shim's existing `window.__ccpRnPush(json)`. `WebHost` passes `WebMessageReceived` through as `WebMessage`.
+- Deferred (supervisor): Begin Intake does NOT open `IntakeHostWindow` yet - nothing serves the page on this head, so
+  the window would be dead UI. Serving (loopback static server or WebResourceRequested) and shipping Assets/web in
+  CCP.Avalonia.csproj are slice 2 and get their own oracle decision, since that serving is shared with Chaos/DtRH/Spiral.
+  Plan: ~/ccp-port/briefs/intake-plan.md.
+- Advisor: supervisor (need_decision).
 
 ## 2026-10-01: Launcher slice 2 (avalonia-port/launcher-boot)
 - Boot surface: WPF builds the panel cloaked (DWM) so its Loaded work runs, then hides it. X11 has no cloak; the Avalonia panel is
