@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Services.Super
         public double Born;
         /// <summary>Physical px per DIP on the screen it was born on. Every distance scales off it.</summary>
         public double Scale = 1;
-        /// <summary>Glow colour: 0 pink, 1 mint, 2 lilac.</summary>
+        /// <summary>Glow colour: 0 = the player's colour 1, 1 = colour 2 (AfterglowColorA / B).</summary>
         public int Hue;
         /// <summary>Trail ring buffer: recent centres, newest at <see cref="TrailHead"/>.</summary>
         public readonly double[] TrailX = new double[AfterglowField.TrailLen];
@@ -84,6 +84,9 @@ namespace ConditioningControlPanel.Services.Super
         public const double SparkLifeMin = 0.3, SparkLifeSpan = 0.3;
         public const double SparkDrag = 3;
         public const int MaxParticles = 160;
+
+        /// <summary>Pops alive at once; the option box raises it with the burst size.</summary>
+        public int Capacity = MaxAlive;
 
         public readonly List<AfterglowPop> Pops = new();
         public readonly AfterglowParticle[] Particles = new AfterglowParticle[MaxParticles];
@@ -172,20 +175,20 @@ namespace ConditioningControlPanel.Services.Super
         public void ResetCursor() { _hasLast = false; _cvx = 0; _cvy = 0; }
 
         /// <summary>
-        /// Pop a word at (<paramref name="x"/>, <paramref name="y"/>). Over <see cref="MaxAlive"/>, the
+        /// Pop a word at (<paramref name="x"/>, <paramref name="y"/>). Over <see cref="Capacity"/>, the
         /// oldest goes. It takes 60% of the smoothed cursor velocity (30% at Reduced, none at Off or
         /// photosafe for the jitter) and, at Full and Reduced without photosafe, a small birth burst.
         /// </summary>
         public AfterglowPop Spawn(string text, double x, double y, double scale, MotionLevel level, bool photosafe, Func<double> rnd)
         {
-            while (Pops.Count >= MaxAlive) Pops.RemoveAt(0);
+            while (Pops.Count >= Math.Max(1, Capacity)) Pops.RemoveAt(0);
             double k = MotionScale(level);
             scale = scale <= 0 ? 1 : scale;
             var p = new AfterglowPop
             {
                 Text = text, X = x, Y = y, Born = Now, Scale = scale,
                 Vx = _cvx * Inherit * k, Vy = _cvy * Inherit * k,
-                Hue = Math.Min(2, (int)(rnd() * 3))
+                Hue = rnd() < 0.5 ? 0 : 1
             };
             if (k > 0 && !photosafe)
             {
@@ -201,7 +204,7 @@ namespace ConditioningControlPanel.Services.Super
                 double ang = rnd() * Math.PI * 2;
                 double sp = (BurstSpeedMinDip + rnd() * BurstSpeedSpanDip) * scale * k;
                 Emit(x, y, Math.Cos(ang) * sp + p.Vx * SparkInherit, Math.Sin(ang) * sp + p.Vy * SparkInherit,
-                    SparkLifeMin + rnd() * SparkLifeSpan, scale, (p.Hue + i) % 3);
+                    SparkLifeMin + rnd() * SparkLifeSpan, scale, (p.Hue + i) % 2);
             }
             return p;
         }

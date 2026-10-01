@@ -50,6 +50,7 @@
 
         <!-- Super add-on: switch, BASIC sign and the weekly free try (Controls/SuperRow). -->
         <ctl:SuperRow Effect="Afterglow"/>
+        <ctl:AfterglowOptionsBox/>
 
         <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
              slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
