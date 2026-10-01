@@ -1029,7 +1029,11 @@ public partial class BubbleService : IDisposable
 
     private void OnPop(Bubble bubble)
     {
-        AwardAmbientPop(bubble);   // a bloom, a carrier and every kid each pay exactly one normal pop
+        // Super Inner Bloom is visual only (owner call open: rewards). The bloom stands in for one
+        // ordinary spawn and pays one ordinary pop; the kids it releases pop and sound but pay no XP,
+        // count for no achievement, quest or leash task, and the companion does not react to them.
+        if (bubble.IsBloomKid) PopBloomKidQuietly(bubble);
+        else AwardAmbientPop(bubble);
         OnBloomPopped(bubble);
     }
 
@@ -1386,7 +1390,7 @@ public partial class BubbleService : IDisposable
         // Bubble floated off screen - remove immediately (no animation needed)
         _bubbles.Remove(bubble);
         NoteBloomLost(bubble);
-        OnBubbleMissed?.Invoke();
+        if (!bubble.IsBloomKid) OnBubbleMissed?.Invoke();   // a kid drifting off is not the player's miss
         StopAnimationTimerIfIdle();
     }
 
@@ -2815,6 +2819,8 @@ internal class Bubble
     private bool _bloomEscaper;
     private Action<Bubble>? _onBloomEscaped;
     internal Super.InnerBloom.Node? Bloom => _bloom;
+    /// <summary>A released kid: the hue it wore inside its bloom (its pop sparks wear it).</summary>
+    internal int BloomHue { get; private set; }
     /// <summary>Non-zero: this bubble belongs to bloom number <c>BloomRoot</c> (the root, a carrier or a released kid).</summary>
     internal int BloomRoot { get; private set; }
     internal bool IsBloomKid => _bloomAgeS >= 0;
@@ -2838,10 +2844,11 @@ internal class Bubble
 
     /// <summary>A kid leaves its bloom: centred on the given DIP point, thrown along <paramref name="angle"/>,
     /// wearing <paramref name="picturePath"/> (null = pick from the pool) unless it carries kids of its own.</summary>
-    internal void ReleaseFromBloom(int root, Point centerDip, double angle, string? picturePath, bool escaper,
+    internal void ReleaseFromBloom(int root, int hue, Point centerDip, double angle, string? picturePath, bool escaper,
                                    Action<Bubble> onEscaped)
     {
         BloomRoot = root;
+        BloomHue = hue;
         _posX = _startX = centerDip.X - _size / 2.0;
         _posY = centerDip.Y - _size / 2.0;
         _bloomAngle = angle;

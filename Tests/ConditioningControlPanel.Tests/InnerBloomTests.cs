@@ -191,4 +191,58 @@ public class InnerBloomTests
         Assert.False(s.Popped());
         Assert.True(s.Lost);
     }
+
+    [Fact]
+    public void Kids_on_the_near_side_of_the_orbit_draw_bigger_and_the_far_side_dims()
+    {
+        // The orbit is a tilted ring seen from above: sin(angle) = +1 is nearest the viewer.
+        Assert.Equal(1, InnerBloom.Depth(Math.PI / 2, Full), 9);
+        Assert.Equal(-1, InnerBloom.Depth(-Math.PI / 2, Full), 9);
+        Assert.Equal(1.14, InnerBloom.DepthSize(1), 9);
+        Assert.Equal(.86, InnerBloom.DepthSize(-1), 9);
+        Assert.Equal(1, InnerBloom.DepthAlpha(1), 9);     // only the far half dims
+        Assert.Equal(1, InnerBloom.DepthAlpha(0), 9);
+        Assert.Equal(.65, InnerBloom.DepthAlpha(-1), 9);
+
+        var parent = new InnerBloom.Node(0, new[] { new InnerBloom.Node(1), new InnerBloom.Node(2) }) { IsRoot = true };
+        double near = double.MinValue, far = double.MaxValue;
+        for (double t = 0; t < 10; t += .05)
+        {
+            var p = InnerBloom.Place(parent, 0, t, 100, Full);
+            Assert.Equal(InnerBloom.KidRadius(parent.Kids[0], 100) * InnerBloom.DepthSize(InnerBloom.Depth(p.Angle, Full)), p.Radius, 9);
+            near = Math.Max(near, p.Radius);
+            far = Math.Min(far, p.Radius);
+        }
+        Assert.True(near > 22 * 1.13 && far < 22 * .87);
+    }
+
+    [Fact]
+    public void Depth_follows_motion_amplitude_and_stops_under_off()
+    {
+        var red = InnerBloom.Motion.For(MotionLevel.Reduced);
+        var off = InnerBloom.Motion.For(MotionLevel.Off);
+        Assert.Equal(.5, InnerBloom.Depth(Math.PI / 2, red), 9);
+        Assert.Equal(0, InnerBloom.Depth(Math.PI / 2, off), 9);
+        // Under Off a still kid keeps its plain size, so a release spawns it at the size it showed.
+        var parent = new InnerBloom.Node(0, new[] { new InnerBloom.Node(1), new InnerBloom.Node(2) }) { IsRoot = true, Seed = 1.3 };
+        Assert.Equal(22, InnerBloom.Place(parent, 1, 4, 100, off).Radius, 9);
+    }
+
+    [Fact]
+    public void A_near_carrier_presses_the_film_harder_than_a_far_one()
+    {
+        // One carrier alone, orbit wobble at its widest: compare the bulge with the kid near vs far.
+        var parent = new InnerBloom.Node(0, new[] { new InnerBloom.Node(2, new[] { new InnerBloom.Node(4), new InnerBloom.Node(5) }) }) { IsRoot = true };
+        Span<InnerBloom.Bulge> buf = stackalloc InnerBloom.Bulge[4];
+        double nearMag = 0, farMag = 0;
+        for (double t = 0; t < 40; t += .01)
+        {
+            if (InnerBloom.Bulges(parent, t, 100, 0, Full, buf) == 0) continue;
+            double z = InnerBloom.Depth(buf[0].Angle, Full);
+            if (z > .9) nearMag = Math.Max(nearMag, buf[0].Mag);
+            if (z < -.9) farMag = Math.Max(farMag, buf[0].Mag);
+        }
+        // Far away the carrier sinks inside the film (0.86 size never reaches 0.8R); near, it pushes out.
+        Assert.True(nearMag > farMag && nearMag > 0, $"near {nearMag} far {farMag}");
+    }
 }

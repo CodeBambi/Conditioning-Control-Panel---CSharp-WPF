@@ -96,12 +96,18 @@ public partial class BubbleService
     private void OnBloomPopped(Bubble b)
     {
         if (b.BloomRoot == 0 || !_blooms.TryGetValue(b.BloomRoot, out var track)) return;
-        if (b.IsBloomKid && track.Sweep.Popped() && MotionFx.Level != MotionLevel.Off)
-            Bubble.Layer?.AddBloomClean(track.CenterPx.X, track.CenterPx.Y, track.RadiusPx, Loc.Get("super_bloom_clean"));
-        if (b.Bloom is not { } node) return;
-
+        var motion = InnerBloom.Motion.For(MotionFx.Level);
         var c = b.CenterDip;
         double rDip = b.SizeDip * InnerBloom.GlassOfSprite;
+        if (b.IsBloomKid)
+        {
+            if (!motion.Still && b.Bloom == null)   // a carrier gets the full burst below instead
+                Bubble.Layer?.AddBloomKidPop(c.X * b.DpiScale, c.Y * b.DpiScale, rDip * b.DpiScale, b.BloomHue, motion);
+            if (track.Sweep.Popped() && !motion.Still)
+                Bubble.Layer?.AddBloomClean(track.CenterPx.X, track.CenterPx.Y, track.RadiusPx, Loc.Get("super_bloom_clean"), motion);
+        }
+        if (b.Bloom is not { } node) return;
+
         if (node.IsRoot)
         {
             track.CenterPx = new Point(c.X * b.DpiScale, c.Y * b.DpiScale);
@@ -112,8 +118,14 @@ public partial class BubbleService
             new System.Drawing.Point((int)(c.X * b.DpiScale), (int)(c.Y * b.DpiScale)));
         long now = Environment.TickCount64;
         _bloomReleases.Add(new PendingRelease(b.BloomRoot, node, c, rDip, screen, now));
-        Bubble.Layer?.AddBloomBurst(node, c.X * b.DpiScale, c.Y * b.DpiScale, rDip * b.DpiScale, now,
-                                    InnerBloom.Motion.For(MotionFx.Level));
+        Bubble.Layer?.AddBloomBurst(node, c.X * b.DpiScale, c.Y * b.DpiScale, rDip * b.DpiScale, now, motion);
+    }
+
+    /// <summary>A released kid's pop: the sound and the haptic tap, nothing that pays or counts.</summary>
+    private void PopBloomKidQuietly(Bubble b)
+    {
+        PlayPopSound(false, b.AvatarPopVolumeMult);
+        _ = App.Haptics?.BubblePopAsync();
     }
 
     /// <summary>Once a burst has squeezed (at once under Motion Off) its kids become real bubbles.</summary>
@@ -130,11 +142,22 @@ public partial class BubbleService
             try { ReleaseKids(p, now, m); }
             catch (Exception ex) { App.Logger?.Debug("Inner Bloom release: {E}", ex.Message); }
         }
-        // A bloom is over once nothing of it is alive and nothing waits to be released.
+        // A bloom is over once nothing of it is alive and nothing waits to be released. One bloom
+        // lives at a time, so this is a plain scan with no LINQ, no closure, no array: it runs every frame.
         if (_blooms.Count == 0) return;
-        foreach (var id in _blooms.Keys.ToArray())
-            if (!_bloomReleases.Any(r => r.Root == id) && !_bubbles.Any(b => b.BloomRoot == id && b.IsAlive))
-                _blooms.Remove(id);
+        _bloomDone.Clear();
+        foreach (var id in _blooms.Keys)
+            if (!BloomStillLive(id)) _bloomDone.Add(id);
+        foreach (var id in _bloomDone) _blooms.Remove(id);
+    }
+
+    private readonly List<int> _bloomDone = new();
+
+    private bool BloomStillLive(int id)
+    {
+        foreach (var r in _bloomReleases) if (r.Root == id) return true;
+        foreach (var b in _bubbles) if (b.BloomRoot == id && b.IsAlive) return true;
+        return false;
     }
 
     private void ReleaseKids(PendingRelease p, long now, InnerBloom.Motion m)
@@ -153,7 +176,7 @@ public partial class BubbleService
                 kid.ClockMs = now;
                 kb.AttachBloom(kid, p.Root);
             }
-            kb.ReleaseFromBloom(p.Root, new Point(p.CenterDip.X + at.X, p.CenterDip.Y + at.Y), at.Angle,
+            kb.ReleaseFromBloom(p.Root, kid.Hue, new Point(p.CenterDip.X + at.X, p.CenterDip.Y + at.Y), at.Angle,
                                 kid.PicturePath, escaper: !p.Node.IsRoot, onEscaped: NoteBloomLost);
             _bubbles.Add(kb);
         }
