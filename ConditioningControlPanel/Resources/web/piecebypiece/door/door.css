@@ -208,6 +208,28 @@
 .door-end .tally { margin: 0; font-size: 12px; letter-spacing: 0.16em; opacity: 0.55; text-transform: lowercase; font-variant-numeric: tabular-nums; }
 /* the slot the XP and recap agent fills; empty it takes no room */
 #door-recap:empty { display: none; }
+#door-recap { width: 100%; }
+/* the fall (door/fall.js): where your IQ went, the line it took, the move it left on.
+   The curve draws on once as the card lands; reduced motion gets it drawn. */
+.fall { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.fall-row { display: grid; justify-items: center; gap: 4px; }
+.fall-who { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.5; }
+.fall-iq { margin: 0; font-size: 34px; line-height: 1.1; color: var(--pbp-cream); font-variant-numeric: tabular-nums; }
+.fall-iq .from { font-size: 0.55em; letter-spacing: 0.08em; opacity: 0.6; }
+.fall-iq .arrow { font-size: 0.6em; opacity: 0.45; }
+.fall-iq .to { font-weight: 500; color: var(--pbp-pink); }
+.fall-curve { width: min(220px, 70vw); height: auto; overflow: visible; }
+.fall-curve path { fill: none; stroke: var(--pbp-pink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
+  stroke-dasharray: 1 1; animation: fall-draw 900ms ease-out 200ms both; }
+.fall-curve .base { stroke: rgba(245, 230, 200, 0.18); stroke-width: 1; stroke-dasharray: 2 3; }
+.fall-curve circle { fill: var(--pbp-cream); stroke: var(--pbp-pink); stroke-width: 1.5; animation: door-swap 200ms ease 1000ms both; }
+@keyframes fall-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.fall-line { margin: 0; font-size: 13px; letter-spacing: 0.02em; color: var(--pbp-ink); opacity: 0.85; }
+/* two players here: a compact row each */
+.fall.two { gap: 8px; }
+.fall.two .fall-iq { font-size: 24px; }
+.fall.two .fall-curve { width: min(180px, 60vw); }
+.fall.two .fall-line { font-size: 12px; }
 
 /* --- profile --- */
 .door-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -215,6 +237,7 @@
 .door-stat .n { display: block; font-size: 22px; color: var(--pbp-cream); font-variant-numeric: tabular-nums; }
 .door-stat .n.pink { color: var(--pbp-pink); }
 .door-stat .l { display: block; margin-top: 4px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.45; }
+.door-stat.wide { grid-column: 1 / -1; }
 .door-name { display: flex; align-items: center; gap: 10px; }
 .door-name input {
   flex: 1; min-width: 0; padding: 10px 12px; border-radius: 12px; color: var(--pbp-cream);

@@ -52,7 +52,8 @@ import { LEVELS, LEVEL_ORDER } from '../game/search.js';
 import { requestRematch } from '../net/rematch.js';
 import { isHosted, identity, whenIdentity, postToHost, onHostMessage } from '../bridge.js';
 import { createStake, pills as stakePills, stakeLabel, refusalText, sameStake, isNone } from '../net/stake.js';
-import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen } from './store.js';
+import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen, finalIq } from './store.js';
+import { recapHtml, iqFromApi, plainIq } from './fall.js';
 import { pictureChoice } from '../ui/pictures.js';
 
 /** Every number the door decides with. */
@@ -61,6 +62,7 @@ export const TUNING = Object.freeze({
   countdownStepMs: 700,     // 3 2 1, CHIME LADDER
   askTimeoutMs: 8000,       // an ignored challenge ignores itself
   replayStepMs: 900,        // auto-play cadence in a replay
+  iqSettleMs: 2500,         // the last move's IQ grade may still be in the worker at the end; wait this long for it
   menuSway: 0.3,            // camera drift while the door is up
 });
 const T = TUNING;
@@ -427,10 +429,11 @@ export function createDoor(opts = {}) {
     const rows = list.map((g) => {
       const o = outcome(g);
       const word = o ? o : (g.result ? (g.result.winner ? (g.result.winner === 'w' ? 'white won' : 'black won') : 'draw') : 'unfinished');
+      const iq = finalIq(g);
       return `
       <li class="door-item">
         <span class="who">${esc(g.opponent || 'a friend here')}<br><span class="meta">${esc(fmtWhen(g.at))}</span></span>
-        <span class="meta ${o || ''}">${esc(word)} &middot; ${esc(fmtMoves(g.plies))}</span>
+        <span class="meta ${o || ''}">${esc(word)} &middot; ${esc(fmtMoves(g.plies))}${iq !== null ? ` &middot; iq ${iq}` : ''}</span>
         <button type="button" class="door-pill" data-act="watch" data-id="${esc(g.id)}">watch</button>
       </li>`;
     }).join('');
@@ -454,6 +457,7 @@ export function createDoor(opts = {}) {
         ${stat(s.games, 'games')}${stat(s.wins, 'wins', true)}${stat(s.losses, 'losses')}
         ${stat(s.draws, 'draws')}${stat(s.streak, 'streak', s.streak > 1)}${stat(s.captures, 'taken')}
         ${stat(s.favourite || '-', 'favourite')}${stat(fmtDuration(s.ms), 'at the board')}${stat(fmtMoves(s.plies), 'played')}
+        ${s.lowIq !== null && s.lowIq !== undefined ? `<div class="door-stat wide"><span class="n pink">${s.lowIq}</span><span class="l">lowest iq</span></div>` : ''}
       </div>
       <div class="door-foot"><span>esc - back</span><span>history on this device</span></div>`;
   }
@@ -483,7 +487,7 @@ export function createDoor(opts = {}) {
         <p class="result ${o || ''}">${esc(line)}</p>
         <p class="tally">${esc(fmtMoves(g.plies))} &middot; ${esc(fmtDuration(g.durationMs))}</p>
         ${g.mode === 'online' ? '<p class="stake-result">' + esc(stake.resultLine() || '') + '</p>' : ''}
-        <div id="door-recap"></div>
+        <div id="door-recap">${recap()}</div>
       </div>
       ${ask ? `<div class="door-ask"><span><b>${esc(ask.name)}</b> wants a rematch</span><button type="button" class="door-pill" data-act="accept">Play</button><button type="button" class="door-link" data-act="decline">Decline</button></div>` : ''}
       <button type="button" class="door-btn primary" data-act="rematch">Rematch</button>
@@ -651,11 +655,40 @@ export function createDoor(opts = {}) {
       moves: rec.moves || [], plies: rec.plies || 0, result: rec.result || null, fen: rec.fen || history[0]?.before,
       durationMs: rec.durationMs ?? (Date.now() - current.startedAt), captures, clocks: rec.clocks || null,
     });
+    settleIq(lastEnd, rec.iq);
     if (current.mode === 'online' && m && m.id) stake.end(m.id);
     const finished = current;
     current = null;
     // the board's own end beat first, then the card
     later(() => { if (!current && screen === null) { lastEnd.rematchOf = finished; show('end'); } }, still() ? 0 : T.endCardDelayMs);
+  }
+
+  // ---------------------------------------------------------------- the fall (IQ recap)
+  /** The end card's IQ recap (door/fall.js): your own seat only, nothing for a game with no grades. */
+  function recap() { return lastEnd ? recapHtml(lastEnd) : ''; }
+  function paintRecap() {
+    const slot = screen === 'end' && card.querySelector('#door-recap');
+    if (slot) slot.innerHTML = recap();
+  }
+  /**
+   * The grader (window.PBP.iq) works in a worker, so the last move's grade can
+   * land after the game does. Wait for it (bounded), then keep the fall on the
+   * saved game and paint it into the card in place. A game dealt meanwhile owns
+   * the grader by then, so only what the record already carried is kept.
+   */
+  function settleIq(saved, fromRecord) {
+    const api = window.PBP && window.PBP.iq;
+    let settled = null;
+    try { settled = api && typeof api.settled === 'function' ? api.settled(T.iqSettleMs) : null; } catch { settled = null; }
+    Promise.race([Promise.resolve(settled), new Promise((r) => later(r, T.iqSettleMs + 500))]).catch(() => {}).then(() => {
+      const fresh = lastEnd === saved && !current;
+      const iq = (fresh && iqFromApi(window.PBP && window.PBP.iq)) || plainIq(fromRecord);
+      if (!iq) return;
+      saved.iq = iq;
+      const { rematchOf, ...plain } = saved;   // the finished match object is not shelf material
+      try { saveGame(plain); } catch { /* the shelf is optional */ }
+      if (lastEnd === saved) paintRecap();
+    });
   }
 
   function rematch() {
