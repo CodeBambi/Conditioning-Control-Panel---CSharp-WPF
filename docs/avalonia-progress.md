@@ -1146,3 +1146,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/takeover-actions: +480
 - Takeover performs Pink Filter pulse (handed back on every stop path incl. app exit), Bubble Count, Comment (AI or WPF-style Giggle preset)
   and seeded Mind Wipe; unavailable actions are never picked. Wallpaper picker and voice hint. TakeoverTests (7), fail-proven.
+
+## avalonia-port/graded-intake: +397
+- IntakePassService in Core (each head passes its entitlement hooks; Avalonia hooks them in AccountSeed.Seed); the Graded Intake tab paints
+  WPF's four pass gates and Begin Intake's checks. GradedIntakeGateTests (4), fail-proven. The intake run itself isn't ported yet.
