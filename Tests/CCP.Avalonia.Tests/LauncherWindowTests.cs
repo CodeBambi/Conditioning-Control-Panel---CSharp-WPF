@@ -207,6 +207,8 @@ public sealed class LauncherWindowTests
     [Fact]
     public void SecondInstance_RoutesTheSurfaceItNames() => Run(shell =>
     {
+        // SkipToPanelBox saves true to this run's settings.json, which Run's fresh SettingsService reloads.
+        CoreSettings.Current.LauncherSkipToPanel = false;
         LauncherWindow.RouteHandoff(shell, LauncherHandoff.Encode(new[] { "--launcher" }));
         Dispatcher.UIThread.RunJobs();
         var launcher = LauncherWindow.Instance!;
