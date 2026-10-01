@@ -97,6 +97,37 @@ public static class CreepFog
     public const double OffFadeSeconds = 0.12;   // Motion Off: a click recedes over 120 ms
     public const byte TintR = 255, TintG = 140, TintB = 205;
 
+    /// <summary>
+    /// The most any pixel of fog may cover, however many blobs stack there. Without it the 46
+    /// overlapping blobs reach 99% at the cap and two thirds of a 1080p screen sits past 85%,
+    /// which hides the panel and its panic controls. The pink filter itself stops at 50%; the fog
+    /// is allowed thicker because it is patchy and a click clears it, but never opaque.
+    /// </summary>
+    public const double OpacityCeiling = 0.8;
+
+    /// <summary>The fog is drawn at 1/4 resolution and stretched: it is all soft gradients, and a
+    /// full-res pass is ~20 million blended pixels a frame on one 1080p monitor.</summary>
+    public const int Downscale = 4;
+
+    /// <summary>Radial alpha profile of one blob at normalised radius 0..1 (mockup sprite stops:
+    /// .55 at the centre, .22 halfway, 0 at the rim).</summary>
+    public static double SpriteAlpha(double r)
+    {
+        if (double.IsNaN(r) || r >= 1) return 0;
+        if (r <= 0) return 0.55;
+        return r < 0.5 ? 0.55 + (0.22 - 0.55) * (r / 0.5) : 0.22 * (1 - (r - 0.5) / 0.5);
+    }
+
+    /// <summary>
+    /// Blob alpha inside the fog surface. The surface is drawn at <see cref="OpacityCeiling"/>, so
+    /// the blobs are lifted by 1 / ceiling: a thin fog looks as it did in the mockup and only the
+    /// thick stacks flatten out at the ceiling.
+    /// </summary>
+    public static double LayerAlpha(double coverage) => Math.Min(1, Alpha(coverage) / OpacityCeiling);
+
+    /// <summary>Size of the fog surface for a monitor edge of <paramref name="px"/> device px.</summary>
+    public static int SurfaceSize(int px) => Math.Max(1, (px + Downscale - 1) / Downscale);
+
     /// <summary>Minutes to climb from nothing to the 0.9 cap.</summary>
     public static double RampMinutes(CreepSpeed speed) => speed switch
     {

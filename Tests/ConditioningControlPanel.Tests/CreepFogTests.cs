@@ -276,6 +276,74 @@ public class CreepFogTests
         Assert.Equal(1, CreepFog.Alpha(5), 6);
     }
 
+    /// <summary>Per-pixel fog opacity the way the layer draws it: blobs stacked source-over in the
+    /// fog surface at <paramref name="blobAlpha"/>, the surface laid down at <paramref name="surfaceAlpha"/>.</summary>
+    private static (double max, double mid) Composite(CreepField f, double blobAlpha, double surfaceAlpha)
+    {
+        double max = 0, mid = 0;
+        const int n = 48;
+        for (var gx = 0; gx < n; gx++)
+        for (var gy = 0; gy < n; gy++)
+        {
+            var px = f.X + (gx + 0.5) / n * f.W;
+            var py = f.Y + (gy + 0.5) / n * f.H;
+            var keep = 1.0;
+            foreach (var b in f.Blobs)
+                keep *= 1 - CreepFog.SpriteAlpha(Dist(b, px, py) / (b.DrawSize / 2)) * blobAlpha;
+            var a = (1 - keep) * surfaceAlpha;
+            max = Math.Max(max, a);
+            if (gx == n / 2 && gy == n / 2) mid = a;
+        }
+        return (max, mid);
+    }
+
+    private static CreepField FogAt(double coverage)
+    {
+        var s = new CreepState { Coverage = coverage, Target = coverage };
+        var f = new CreepField(0, 0, 1920, 1080);
+        CreepFog.StepField(s, f, 0, MotionLevel.Off);
+        return f;
+    }
+
+    [Fact]
+    public void NoPixelOfFogPassesTheCeiling()
+    {
+        var f = FogAt(CreepFog.MaxCap);
+        // Without the ceiling the stacked blobs went near opaque: that is the bug this guards.
+        var (rawMax, _) = Composite(f, CreepFog.Alpha(CreepFog.MaxCap), 1);
+        Assert.True(rawMax > 0.95, $"raw stack {rawMax:F3}");
+        var (max, mid) = Composite(f, CreepFog.LayerAlpha(CreepFog.MaxCap), CreepFog.OpacityCeiling);
+        Assert.True(max <= CreepFog.OpacityCeiling + 1e-9, $"fog {max:F3}");
+        Assert.True(mid <= CreepFog.OpacityCeiling + 1e-9);
+        Assert.InRange(CreepFog.OpacityCeiling, 0.5, 0.85);
+    }
+
+    [Theory]
+    [InlineData(CreepFog.StartCoverage)]
+    [InlineData(0.1)]
+    public void AThinFogLooksAsItDidInTheMockup(double coverage)
+    {
+        // The lift by 1 / ceiling cancels the ceiling for one blob: a lone thin blob is unchanged.
+        Assert.Equal(CreepFog.Alpha(coverage), CreepFog.LayerAlpha(coverage) * CreepFog.OpacityCeiling, 6);
+    }
+
+    [Fact]
+    public void TheFogSurfaceIsAQuarterSize()
+    {
+        Assert.Equal(480, CreepFog.SurfaceSize(1920));
+        Assert.Equal(271, CreepFog.SurfaceSize(1081));
+        Assert.Equal(1, CreepFog.SurfaceSize(0));
+    }
+
+    [Fact]
+    public void TheSpriteFollowsTheMockupStops()
+    {
+        Assert.Equal(0.55, CreepFog.SpriteAlpha(0), 6);
+        Assert.Equal(0.22, CreepFog.SpriteAlpha(0.5), 6);
+        Assert.Equal(0, CreepFog.SpriteAlpha(1), 6);
+        Assert.Equal(0, CreepFog.SpriteAlpha(double.NaN), 6);
+    }
+
     private static double Dist(CreepBlob b, double x, double y) => Math.Sqrt((b.Px - x) * (b.Px - x) + (b.Py - y) * (b.Py - y));
     private static double Speed(CreepBlob b) => Math.Sqrt(b.Vx * b.Vx + b.Vy * b.Vy);
 

@@ -2543,6 +2543,22 @@ namespace ConditioningControlPanel.Models
             set { _pinkFilterTargetMonitor = value; OnPropertyChanged(); }
         }
 
+        private Services.Super.CreepSpeed _superCreepSpeed = Services.Super.CreepSpeed.Normal;
+        /// <summary>Super Creep: how fast the pink fog climbs to its cap (Slow 15, Normal 10, Fast 5 minutes).</summary>
+        public Services.Super.CreepSpeed SuperCreepSpeed
+        {
+            get => _superCreepSpeed;
+            set { _superCreepSpeed = value; OnPropertyChanged(); }
+        }
+
+        private double _superCreepCap = 0.9;
+        /// <summary>Super Creep: the most the fog may cover, 0.2..0.9 (clamped where it is read).</summary>
+        public double SuperCreepCap
+        {
+            get => _superCreepCap;
+            set { _superCreepCap = value; OnPropertyChanged(); }
+        }
+
         private bool _fillAllMonitorsWithVideo;
         /// <summary>
         /// On 3+ monitors, give every secondary screen its own video decoder. Each LibVLC
