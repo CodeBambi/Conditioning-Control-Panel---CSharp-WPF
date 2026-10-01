@@ -11,8 +11,8 @@ namespace ConditioningControlPanel.Services.Chaos;
 /// </summary>
 public static class ChaosRunEffects
 {
-    /// <summary>Habit (ChaosUpgrade) effects on a freshly built run config. Unlisted = no-op
-    /// (extreme_tier, custom_duration, endless_mode only open setup controls).</summary>
+    /// <summary>Habit (ChaosUpgrade) effects on a freshly built run config. Every catalogue id
+    /// is listed (ChaosRunEffectsCoverageTests), the setup-only unlocks as explicit no-ops.</summary>
     public static readonly IReadOnlyDictionary<string, Action<ChaosRunConfig>> Habits = new Dictionary<string, Action<ChaosRunConfig>>
     {
         ["slow_fuses"] = c => c.FuseTimeMult *= 1.15,
@@ -20,6 +20,9 @@ public static class ChaosRunEffects
         ["popup_notification"] = c => c.PopupHeartEnabled = true,
         ["pendulum_swing"] = c => c.PendulumSwing = true,
         ["draft4"] = c => c.DraftChoices = 4,
+        ["extreme_tier"] = _ => { },      // flag stored at purchase time
+        ["custom_duration"] = _ => { },   // opens the length dial in setup; no in-run effect
+        ["endless_mode"] = _ => { },      // per-run toggle in setup; no always-on effect
     };
 
     /// <summary>Lifetime-boon effects on the live run state, at the boon's level value.</summary>

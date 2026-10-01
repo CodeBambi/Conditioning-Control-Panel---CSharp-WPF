@@ -26,25 +26,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///
     /// PORTED from ConditioningControlPanel/Chaos/ChaosHubWindow.xaml.cs. What changed and why:
     ///
-    ///  - Balances, rank and lifetime stats read the active slot via Core ChaosMetaStore/ChaosRanks.
-    ///    Every shelf, tile, mantra, diary entry and bench row is built from the sample data at
-    ///    the bottom of this file instead of <c>ChaosMeta</c> / <c>ChaosUpgrades</c> /
-    ///    <c>ChaosLifetimeBoons</c> / <c>ChaosBoonPool</c> / <c>ChaosBubbleVariants</c> /
-    ///    <c>ChaosArt</c>, which are WPF-head services. The samples deliberately hit EVERY visual
-    ///    state each builder branches on (equipped / owned / locked / rank-locked / empty;
-    ///    trained-on / trained-off / untrained; seen / unseen / sin; sewn / for-sale / rank-short
-    ///    / hazy), so the render proves the builders rather than one branch of them.
-    ///    ponytail: needs the Chaos services. Every one of them is under
-    ///    ConditioningControlPanel/Services/Chaos/ - ChaosUpgrades.cs (<c>ChaosMeta</c>),
-    ///    ChaosLifetimeBoons.cs, ChaosBubbleVariants.cs,
-    ///    ChaosLessons.cs, ChaosModeService.cs, ChaosRevealService.cs - except <c>ChaosArt</c>,
-    ///    which is ConditioningControlPanel/Services/Chaos/ChaosArt.cs but returns
-    ///    <c>System.Windows.Media.ImageSource</c>, so only its path half can ever move. The
-    ///    per-member notes below name the symbol; this is where to find it.
+    ///  - Balances, rank, stats, habits, toys, accessories, charms and her bench read the active
+    ///    slot through Core (<c>ChaosMeta</c>, <c>ChaosUpgrades</c>, <c>ChaosLifetimeBoons</c>,
+    ///    <c>ChaosBench</c>, <c>RevealService</c>), and train / unlock / deepen / equip / habit
+    ///    switch / bench buy spend and save it with WPF's prices and gates (see <c>Shelf</c>).
+    ///    The constructor reloads the save via <c>ChaosMeta.Init</c>, except under
+    ///    <c>RenderProof.Rendering</c>, where it draws the in-memory state and writes nothing.
+    ///    Still sample data: mantras and the codex (ChaosBoonPool / ChaosBubbleVariants are
+    ///    run-engine, head-side). ponytail: <c>ChaosArt</c> returns
+    ///    <c>System.Windows.Media.ImageSource</c>, so only its path half can ever move; unlock
+    ///    and capstone cards, ChaosSfx cues and lesson/script-locked row dressing are not ported.
     ///  - The four partials the WPF class spans (Bench / Reveals / Lessons / Debug) are NOT in
-    ///    this layer. <c>BuildBench</c> is inlined here because <c>ImprovementsHost</c> must not
-    ///    render empty; the reveal framework, the lesson gates and the CCP_CHAOS_DEBUG strip are
-    ///    dropped, so every pill and header renders in its revealed state.
+    ///    this layer. <c>BuildBench</c> is inlined here over Core <c>ChaosBench</c>; reveal
+    ///    flashes, the lesson panel and the CCP_CHAOS_DEBUG strip are dropped, so pills and
+    ///    headers render in their revealed state.
     ///  - The whole Skia menu scene (fog, per-frame glint masks, blooms, the crossfading
     ///    flipbook) and the NAudio menu music are gone: no SkiaSharp and no NAudio on this head,
     ///    and a view layer may not add a package. <c>SetupMenuMotion</c>'s breathing/wobble/glow
@@ -106,7 +101,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         public ChaosHubWindow()
         {
-            ChaosMeta.Init();
+            // Init runs WPF's on-load refunds/sanitize, which can save. A render draws the
+            // in-memory state instead, so --render-all never writes a real profile.
+            if (!RenderProof.Rendering) ChaosMeta.Init();
             AvaloniaXamlLoader.Load(this);
 
             _dollhouseView = Part<Grid>("DollhouseView");
