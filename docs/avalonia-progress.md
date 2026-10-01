@@ -1187,3 +1187,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/webcam-calibration: +993
 - Webcam slice 5 part 1: Core WebcamCalibrationFit (WPF delegates); the Avalonia 16-point calibration window; Calibrate enabled. Merge with part 2.
+
+## avalonia-port/webcam-calibration-fixes: +69
+- A revoke during calibration stands; atomic calibration save (both heads); failed save keeps the old calibration. Row back to stub.
