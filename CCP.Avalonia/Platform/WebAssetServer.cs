@@ -31,7 +31,8 @@ public sealed class WebAssetServer : IDisposable
         get
         {
             lock (_sharedLock)
-                return _shared ??= new WebAssetServer(Path.Combine(AppContext.BaseDirectory, "Resources", "web"));
+                return _shared ??= new WebAssetServer(Path.Combine(AppContext.BaseDirectory, "Resources", "web"))
+                    { AssetsRoot = () => ConditioningControlPanel.CorePaths.EffectiveAssets };
         }
     }
 
@@ -126,27 +127,42 @@ public sealed class WebAssetServer : IDisposable
         if (req.HttpMethod == "GET") file.CopyTo(res.OutputStream);
     }
 
-    /// <summary>The file a URL path names, or null if it is missing or lies outside the root, symlinks followed.</summary>
+    /// <summary>URL prefix for the user's asset library, WPF's second virtual host <c>https://ccp.assets/</c>
+    /// (IntakeHostService maps it over App.EffectiveAssetsPath): same server, same token rule.</summary>
+    public const string AssetsPrefix = "ccp.assets/";
+
+    /// <summary>Root behind <see cref="AssetsPrefix"/>, read per request (the user can move the library);
+    /// null = the prefix is not served.</summary>
+    public Func<string?>? AssetsRoot { get; init; }
+
+    /// <summary>The file a URL path names, or null if it is missing or lies outside its root, symlinks followed.</summary>
     internal string? ResolveFile(string urlPath)
     {
         var rel = Uri.UnescapeDataString(urlPath).TrimStart('/');
+        var root = _root;
+        if (rel.StartsWith(AssetsPrefix, StringComparison.Ordinal))
+        {
+            if (AssetsRoot?.Invoke() is not { Length: > 0 } assets) return null;
+            root = Path.GetFullPath(assets).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            rel = rel[AssetsPrefix.Length..];
+        }
         if (rel.Length == 0 || rel.EndsWith('/')) rel += "index.html";
         if (rel.Contains('\0')) return null;
-        var full = Path.GetFullPath(Path.Combine(_root, rel));
-        return Inside(full) && File.Exists(full) && LinksStayInside(full) ? full : null;
+        var full = Path.GetFullPath(Path.Combine(root, rel));
+        return Inside(full, root) && File.Exists(full) && LinksStayInside(full, root) ? full : null;
     }
 
-    bool Inside(string full) => full.StartsWith(_root, StringComparison.Ordinal);
+    static bool Inside(string full, string root) => full.StartsWith(root, StringComparison.Ordinal);
 
     /// <summary>Every link on the way from the root down to the file must land inside the root.</summary>
-    bool LinksStayInside(string full)
+    static bool LinksStayInside(string full, string root)
     {
-        for (var p = full; p.Length > _root.Length; p = Path.GetDirectoryName(p)!)
+        for (var p = full; p.Length > root.Length; p = Path.GetDirectoryName(p)!)
         {
             FileSystemInfo info = Directory.Exists(p) ? new DirectoryInfo(p) : new FileInfo(p);
             if (info.LinkTarget != null && info.ResolveLinkTarget(returnFinalTarget: true) is { } target
-                && !Inside(Path.GetFullPath(target.FullName))
-                && Path.GetFullPath(target.FullName) + Path.DirectorySeparatorChar != _root)
+                && !Inside(Path.GetFullPath(target.FullName), root)
+                && Path.GetFullPath(target.FullName) + Path.DirectorySeparatorChar != root)
                 return false;
         }
         return true;

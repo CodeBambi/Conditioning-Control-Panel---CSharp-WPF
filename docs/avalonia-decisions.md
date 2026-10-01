@@ -381,3 +381,20 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   (WPF leaves the unsaved candidate live in memory). Mouth/tongue detectors and the verify cursor/bubble test are not ported:
   the mouth prompts time out to WPF's "moving on" text and Verify runs its countdown only.
 - Advisor: worker (supervisor informed).
+
+## 2026-10-01: Graded Intake page served and wired (avalonia-port/intake-page)
+- Begin Intake opens `IntakeHostWindow` after WPF's pass + AI gates; it loads `WebAssetServer.Shared.Url("intake/index.html")`
+  (the token URL) and never navigates off that origin (`WebHost.AllowNavigation` = same scheme + authority). Page messages count
+  only from the served document (Core `IntakeRun.SameDocument`: scheme, authority incl. port, path).
+- Bridge: no injection seam needed. Avalonia.Controls.WebView 12.1's `GtkWebViewAdapter` adds `invokeCSharpAction` with
+  `webkit_user_script_new(..., ALL_FRAMES=0, INJECT_AT_DOCUMENT_START=0, ...)` (read from the IL,
+  ~/ccp-port/evidence/avalonia-port/intake-page/bridge-injection-time.txt), so it exists before web-shim.js evaluates.
+- ccp.assets -> `WebAssetServer.AssetsPrefix` ("ccp.assets/") over `CorePaths.EffectiveAssets`, same token/cookie rule and
+  confinement. ccp.content is a hard-coded origin in intake/core/audioSrc.js and no audio ships on this head, so it is not mapped
+  (the page's silent-missing-audio path, as on a WPF install without packs).
+- init: WPF's payload minus bubble sprite, subliminal pool, speech bridge and remote media (remoteMedia=false). In a
+  CCP_USERDATA_DIR sandbox `ai` is null (the page's local stub) so a live run never reaches the AI server.
+- Pure halves moved to Core with WPF delegating: `IntakeRun.ResolveNiche` (IntakeNiche.Resolve), `DisabledAssetSet`/`IsAssetActive`/
+  `SampleMedia` (BuildMediaManifest's walk), `SubjectId` (GetSubjectId); GamificationBridge's quiz handlers became
+  `AchievementEngine.TrackQuizCompleted/TrackQuizAbandoned` for this head (WPF's bridge unchanged).
+- Advisor: worker.
