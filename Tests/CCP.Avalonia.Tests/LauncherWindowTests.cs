@@ -281,6 +281,9 @@ public sealed class LauncherWindowTests
         box.IsChecked = true;
         box.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Assert.True(CoreSettings.Current.LauncherSkipToPanel);
+        // The click saved true to the run's settings.json; put it back so no later test inherits it.
+        CoreSettings.Current.LauncherSkipToPanel = false;
+        (CoreSettings.ServiceProvider?.Invoke() as SettingsService)?.SaveImmediate();
     });
 
     [Fact]
