@@ -7516,6 +7516,10 @@ namespace ConditioningControlPanel.Services
                 System.Threading.Interlocked.Increment(ref _teardownGeneration);
             }
 
+            // Super Lights Down rides this video: its dark goes the moment teardown begins, before
+            // the waits below. A no-op unless it is up.
+            Super.LightsDownService.OnVideoTeardown();
+
             // Credit the minutes actually watched, on EVERY teardown (natural end, manual stop, panic,
             // safety timeout, attention-fail retry) — not just OnEnded. Position-based + watermarked so it
             // can't double-count, so an interrupted video still counts toward the video quest (#447).

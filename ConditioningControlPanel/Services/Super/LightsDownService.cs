@@ -100,6 +100,21 @@ namespace ConditioningControlPanel.Services.Super
             _clock.Reset();
         }
 
+        /// <summary>
+        /// Called by VideoService.CloseAll, the one funnel every teardown reaches (panic, emergency
+        /// exit, skip, natural end, attention retry). The Rendering tick would also notice, but
+        /// CloseAll can hold the dispatcher in a non-pumping wait for up to 500 ms first, so the
+        /// dark goes the moment teardown begins instead. Does nothing when Lights Down is not up.
+        /// </summary>
+        internal static void OnVideoTeardown()
+        {
+            if (!IsActive) return;
+            OnUi(Stop);
+        }
+
+        /// <summary>True while an overlay is up or the frame hook is armed.</summary>
+        internal static bool IsActive => _hooked || _overlays.Count > 0;
+
         private static void OnRendering(object? sender, EventArgs e)
         {
             var v = _video;
@@ -143,7 +158,8 @@ namespace ConditioningControlPanel.Services.Super
             if (rest && _idle) return;
             _idle = rest;
             bool particles = MotionFx.AllowParticles;
-            foreach (var o in _overlays) o.Apply(f, s.Time, dt, particles);
+            double moteSpeed = motion == LightsDownMotion.Reduced ? 0.5 : 1;
+            foreach (var o in _overlays) o.Apply(f, s.Time, dt, particles, moteSpeed);
         }
 
         private static bool IsAttended(VideoService v, double now)
