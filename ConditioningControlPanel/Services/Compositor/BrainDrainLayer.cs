@@ -109,7 +109,10 @@ public sealed class BrainDrainLayer : BaseLayer
 
     public BrainDrainLayer(CompositorEngine engine) : base(engine)
     {
-        Super.SuperAccess.Changed += e => { if (e == Super.SuperEffect.Undertow) _undertowStale = true; };
+        // Any Changed re-asks, not only Undertow's own: a tier change or the weekly preview ending
+        // may be raised with whichever effect the sender had in hand. The drift check re-asks
+        // once a second too, so a lapse nobody announces still tears the lens down.
+        Super.SuperAccess.Changed += _ => _undertowStale = true;
     }
 
     public override int ZIndex => CompositorLayers.BrainDrain;
@@ -342,6 +345,7 @@ public sealed class BrainDrainLayer : BaseLayer
         _sinceDriftCheck += delta;
         if (_sinceDriftCheck < DriftCheckInterval) return;
         _sinceDriftCheck = TimeSpan.Zero;
+        _undertowStale = true;   // cheap re-ask of SuperAccess.IsOn, once a second
 
         try
         {
@@ -392,7 +396,7 @@ public sealed class BrainDrainLayer : BaseLayer
         _drawPaint.Color = SKColors.White.WithAlpha(_drawAlpha);
         var dest = new SKRect(captureBounds.X, captureBounds.Y, captureBounds.Right, captureBounds.Bottom);
         if (_undertowOn && _undertow.Placed)
-            RenderUndertow(canvas, frame.Image, dest);
+            RenderUndertow(canvas, frame.Image, dest, dpiScale);
         else
             canvas.DrawImage(frame.Image, dest, _drawPaint);
     }
@@ -429,13 +433,17 @@ public sealed class BrainDrainLayer : BaseLayer
         if (!GetCursorPos(out var pt)) return;
         _undertowScreenWidth = ScreenWidthAt(pt.X, pt.Y);
         var motion = UndertowMotionNow();
-        bool wasAnimating = _undertow.Animating || !_undertow.Placed;
 
-        Super.UndertowLens.Step(_undertow, delta.TotalSeconds, pt.X, pt.Y, _undertowScreenWidth, motion);
+        // Repaint only when the lens or a ripple visibly moved: a still lens under a still cursor
+        // (MotionFx Off, or a parked mouse) must not force a full-screen redraw every tick.
+        bool changed = Super.UndertowLens.Step(_undertow, delta.TotalSeconds, pt.X, pt.Y, _undertowScreenWidth, motion);
         while (_undertowClicks.TryDequeue(out var click))
+        {
             Super.UndertowLens.Click(_undertow, click.X, click.Y, _undertowScreenWidth, motion);
+            changed = true;
+        }
 
-        if (wasAnimating || _undertow.Animating) _dirty = true;
+        if (changed) _dirty = true;
     }
 
     private double ScreenWidthAt(int x, int y)
@@ -476,7 +484,7 @@ public sealed class BrainDrainLayer : BaseLayer
     /// <summary>Draws the blur with the feathered lens left out, then the click ripples. The
     /// outside of the lens box draws straight; only the lens box goes through an offscreen layer
     /// (bounded, so a DstOut can never erase layers below this one).</summary>
-    private void RenderUndertow(SKCanvas canvas, SKImage image, SKRect dest)
+    private void RenderUndertow(SKCanvas canvas, SKImage image, SKRect dest, double dpiScale)
     {
         float r = (float)_undertow.Radius;
         float x = (float)_undertow.X, y = (float)_undertow.Y;
@@ -510,7 +518,7 @@ public sealed class BrainDrainLayer : BaseLayer
             for (int j = 0; j < 2; j++)
             {
                 if (!Super.UndertowLens.RingAt(rp.Age, j, _undertowScreenWidth, motion,
-                                                out double rr, out double a, out double w)) continue;
+                                                out double rr, out double a, out double w, dpiScale)) continue;
                 ring ??= RingPaint();
                 ring.StrokeWidth = (float)w;
                 ring.Color = SKColors.White.WithAlpha((byte)Math.Clamp(Math.Round(a * 255), 0, 255));

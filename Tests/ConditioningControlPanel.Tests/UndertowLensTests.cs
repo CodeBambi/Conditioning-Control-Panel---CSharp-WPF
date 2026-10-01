@@ -23,12 +23,30 @@ public class UndertowLensTests
     }
 
     [Fact]
-    public void First_step_snaps_to_the_cursor_and_opens_wide()
+    public void First_step_snaps_to_the_cursor_and_the_lens_opens_instead_of_popping_in()
     {
         var s = Placed();
         Assert.Equal(500, s.X);
         Assert.Equal(400, s.Y);
-        Assert.Equal(UndertowLens.MaxRadius * W, s.Radius, 6);
+        Assert.Equal(0, s.Radius);                                 // never a full lens on frame one
+        Assert.Equal(UndertowLens.MaxRadius * W, s.Kick, 6);
+
+        double peak = 0;
+        for (int i = 0; i < 60; i++)
+        {
+            UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
+            peak = Math.Max(peak, s.Radius);
+        }
+        Assert.True(peak > 0.25 * W, $"opened to {peak / W:F3} W");  // a wide lens inside a second
+        Assert.True(peak <= UndertowLens.MaxRadius * W + 1e-9);
+    }
+
+    [Fact]
+    public void Off_opens_at_the_still_lens_at_once()
+    {
+        var s = Placed(UndertowMotion.Off);
+        Assert.Equal(0.18 * W, s.Radius, 6);
+        Assert.Equal(0, s.Kick);
     }
 
     [Fact]
@@ -56,6 +74,8 @@ public class UndertowLensTests
     public void Left_alone_the_lens_shrinks_to_zero_and_stops_animating()
     {
         var s = Placed();
+        s.Kick = 0;
+        s.Radius = UndertowLens.MaxRadius * W;
         double last = s.Radius;
         for (int i = 0; i < 60 * 10; i++)
         {
@@ -80,6 +100,7 @@ public class UndertowLensTests
     {
         var s = Placed();
         s.Radius = 0;
+        s.Kick = 0;
         UndertowLens.Click(s, 500, 400, W, UndertowMotion.Full);
         Assert.Equal(0.15 * W, s.Kick, 6);
         UndertowLens.Step(s, 0.1, 500, 400, W, UndertowMotion.Full);
@@ -98,6 +119,58 @@ public class UndertowLensTests
             UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
             Assert.True(s.Radius <= 0.36 * W + 1e-9);
         }
+    }
+
+    [Fact]
+    public void Click_spam_queues_at_most_one_full_lens_so_it_sinks_soon_after()
+    {
+        var s = Placed();
+        s.Kick = 0;
+        for (int c = 0; c < 20; c++) UndertowLens.Click(s, 500, 400, W, UndertowMotion.Full);
+        Assert.Equal(UndertowLens.MaxKick * W, s.Kick, 6);
+
+        // all owed widening is paid inside MaxKick / KickApplyRate seconds, then the lens sinks
+        double payout = UndertowLens.MaxKick / UndertowLens.KickApplyRate;
+        int ticks = (int)Math.Ceiling(payout / Dt) + 1;
+        for (int i = 0; i < ticks; i++) UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
+        Assert.Equal(0, s.Kick, 6);
+        double r = s.Radius;
+        UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
+        Assert.True(s.Radius < r);
+    }
+
+    [Fact]
+    public void Ripple_sizes_scale_with_dpi_because_the_layer_draws_in_physical_pixels()
+    {
+        Assert.True(UndertowLens.RingAt(0.05, 0, W, UndertowMotion.Full, out double r1, out _, out double w1));
+        Assert.True(UndertowLens.RingAt(0.05, 0, W, UndertowMotion.Full, out double r2, out _, out double w2, 2.0));
+        Assert.Equal(w1 * 2, w2, 6);
+        Assert.Equal(r1 + UndertowLens.RippleBase, r2, 6);   // only the birth radius is in px; the reach is a screen share
+
+        Assert.True(UndertowLens.RingAt(0.06, 0, W, UndertowMotion.Off, out _, out _, out double wo, 1.5));
+        Assert.Equal(4.5, wo, 6);
+    }
+
+    [Fact]
+    public void Step_asks_for_a_repaint_only_when_something_drawn_moved()
+    {
+        var s = new UndertowState();
+        Assert.True(UndertowLens.Step(s, 0, 500, 400, W, UndertowMotion.Off));   // placement
+        Assert.False(UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Off)); // still lens, still cursor
+        Assert.True(UndertowLens.Step(s, Dt, 520, 400, W, UndertowMotion.Off));  // cursor moved
+
+        UndertowLens.Click(s, 520, 400, W, UndertowMotion.Off);
+        Assert.True(UndertowLens.Step(s, Dt, 520, 400, W, UndertowMotion.Off));  // fade ring alive
+
+        // closed lens: a moving cursor alone changes nothing on screen
+        var c = Placed();
+        c.Kick = 0; c.Radius = 0;
+        Assert.False(UndertowLens.Step(c, Dt, 900, 700, W, UndertowMotion.Full));
+
+        // a shrinking open lens repaints every tick
+        var o = Placed();
+        o.Kick = 0; o.Radius = 0.3 * W;
+        Assert.True(UndertowLens.Step(o, Dt, 500, 400, W, UndertowMotion.Full));
     }
 
     [Fact]

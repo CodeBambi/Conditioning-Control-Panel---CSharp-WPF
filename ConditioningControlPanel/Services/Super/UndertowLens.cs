@@ -67,6 +67,8 @@ namespace ConditioningControlPanel.Services.Super
         public const double MaxRadius = 0.36;             // x screen width
         public const double StillRadius = 0.18;           // x screen width, MotionFx Off
         public const double StartRadius = MaxRadius;      // neutral default: the lens opens wide, then sinks
+        public const double MaxKick = MaxRadius;          // x screen width; owed widening never queues past one full lens
+        public const double ChangeEpsilon = 0.25;         // px; movement below this is not worth a repaint
 
         public const double RippleLife = 0.8;             // seconds
         public const double RippleRingGap = 0.1;          // second ring starts this much later
@@ -92,19 +94,31 @@ namespace ConditioningControlPanel.Services.Super
             return Math.Max(0, r);
         }
 
-        /// <summary>Opening radius for a fresh run.</summary>
+        /// <summary>Opening radius for a fresh run. Off sits at the still lens at once; otherwise
+        /// the lens starts closed and <see cref="InitialKick"/> opens it, so it never pops in.</summary>
         public static double InitialRadius(double screenWidth, UndertowMotion motion) =>
-            (motion == UndertowMotion.Off ? StillRadius : StartRadius) * screenWidth;
+            motion == UndertowMotion.Off ? StillRadius * screenWidth : 0;
 
-        /// <summary>One engine tick: follow the cursor, shrink, pay out kick, age ripples.</summary>
-        public static void Step(UndertowState s, double dt, double cursorX, double cursorY,
+        /// <summary>Widening owed at the start of a run: the lens opens at the click rate (about half
+        /// a second), then sinks. Off: none, the still lens is already there.</summary>
+        public static double InitialKick(double screenWidth, UndertowMotion motion) =>
+            motion == UndertowMotion.Off ? 0 : StartRadius * screenWidth;
+
+        /// <summary>One engine tick: follow the cursor, shrink, pay out kick, age ripples. Returns
+        /// true when anything drawn changed (lens moved or resized while open, a ripple alive or just
+        /// gone), so the layer repaints only then.</summary>
+        public static bool Step(UndertowState s, double dt, double cursorX, double cursorY,
                                 double screenWidth, UndertowMotion motion)
         {
             if (dt < 0) dt = 0;
+            double ox = s.X, oy = s.Y, oldR = s.Radius;
+            bool wasPlaced = s.Placed;
+            bool changed = false;
             if (!s.Placed)
             {
                 s.X = cursorX; s.Y = cursorY; s.Placed = true;
                 s.Radius = InitialRadius(screenWidth, motion);
+                s.Kick = InitialKick(screenWidth, motion);
             }
             else if (motion == UndertowMotion.Off)
             {
@@ -135,16 +149,24 @@ namespace ConditioningControlPanel.Services.Super
             for (int i = 0; i < s.Ripples.Length; i++)
             {
                 if (!s.Ripples[i].Live) continue;
+                changed = true;   // alive this tick, or dying now: either way the frame differs
                 s.Ripples[i].Age += dt;
                 if (s.Ripples[i].Age >= life) s.Ripples[i].Live = false;
             }
+
+            if (!wasPlaced) return true;
+            if (Math.Abs(s.Radius - oldR) > ChangeEpsilon) changed = true;
+            else if ((s.Radius > 0 || oldR > 0) &&
+                     (Math.Abs(s.X - ox) > ChangeEpsilon || Math.Abs(s.Y - oy) > ChangeEpsilon)) changed = true;
+            return changed;
         }
 
         /// <summary>A click (never swallowed). Widens the lens and drops a ripple where it landed.
         /// Reduced: widen, no ripple. Off: no widen, one 120 ms fade ring instead of the ripple.</summary>
         public static void Click(UndertowState s, double x, double y, double screenWidth, UndertowMotion motion)
         {
-            if (motion != UndertowMotion.Off) s.Kick += KickPerClick * screenWidth;
+            if (motion != UndertowMotion.Off)
+                s.Kick = Math.Min(MaxKick * screenWidth, s.Kick + KickPerClick * screenWidth);
             if (motion == UndertowMotion.Reduced) return;
 
             int slot = 0;
@@ -163,11 +185,14 @@ namespace ConditioningControlPanel.Services.Super
         /// <summary>
         /// Ring <paramref name="ring"/> (0 or 1) of a ripple at <paramref name="age"/>. Returns false
         /// when that ring is not drawn this frame. Off: ring 0 only, fixed at the still lens radius,
-        /// fading over 120 ms; it never grows.
+        /// fading over 120 ms; it never grows. Pixel sizes (birth radius, stroke) are the mockup's CSS
+        /// px, so they scale by <paramref name="dpiScale"/>: the layer draws in physical pixels.
         /// </summary>
         public static bool RingAt(double age, int ring, double screenWidth, UndertowMotion motion,
-                                  out double radius, out double alpha, out double strokeWidth)
+                                  out double radius, out double alpha, out double strokeWidth,
+                                  double dpiScale = 1.0)
         {
+            double px = dpiScale > 0 ? dpiScale : 1.0;
             radius = alpha = strokeWidth = 0;
             if (motion == UndertowMotion.Reduced) return false;
             if (motion == UndertowMotion.Off)
@@ -175,14 +200,14 @@ namespace ConditioningControlPanel.Services.Super
                 if (ring != 0 || age < 0 || age >= OffFadeSeconds) return false;
                 radius = StillRadius * screenWidth;
                 alpha = RippleAlpha * (1.0 - age / OffFadeSeconds);
-                strokeWidth = 3;
+                strokeWidth = 3 * px;
                 return alpha > 0;
             }
             double u = Math.Clamp((age - ring * RippleRingGap) / RippleGrow, 0, 1);
             if (u <= 0 || age >= RippleLife) return false;
-            radius = u * RippleReach * screenWidth + RippleBase;
+            radius = u * RippleReach * screenWidth + RippleBase * px;
             alpha = RippleAlpha * (1.0 - u);
-            strokeWidth = 3 - ring * 1.5;
+            strokeWidth = (3 - ring * 1.5) * px;
             return alpha > 0;
         }
     }
