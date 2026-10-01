@@ -22,6 +22,11 @@ public sealed class CreepLayer : BaseLayer
     private readonly Dictionary<(int, int, int, int), FieldDraw> _fields = new();
     private readonly List<CreepField> _fieldList = new();
     private readonly SKPaint _blobPaint = new() { FilterQuality = SKFilterQuality.Low };
+    private readonly SKPaint _fogPaint = new()
+    {
+        FilterQuality = SKFilterQuality.Low,
+        Color = new SKColor(255, 255, 255, (byte)Math.Round(CreepFog.OpacityCeiling * 255)),
+    };
     private readonly SKPaint _motePaint = new() { IsAntialias = true };
     private readonly SKPaint _ringPaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2 };
     private readonly Random _rng = new();
@@ -29,11 +34,15 @@ public sealed class CreepLayer : BaseLayer
     private bool _dirty = true;
     private double _sinceFrame;
     private double _lastDrawnCoverage = -1;
+    private double _sinceAccessCheck;
 
     private sealed class FieldDraw
     {
         public readonly CreepField Field;
         public readonly Mote[] Motes = new Mote[MotesPerField];
+        /// <summary>The fog at 1/<see cref="CreepFog.Downscale"/> resolution, reused every frame.</summary>
+        public SKSurface? Fog;
+        public int FogW, FogH;
         public FieldDraw(CreepField f) { Field = f; }
     }
 
@@ -101,6 +110,16 @@ public sealed class CreepLayer : BaseLayer
         if (moving && _sinceFrame >= 1.0 / fps) { _sinceFrame = 0; _dirty = true; }
         if (_state.Rings.Count > 0 && _sinceFrame >= 1.0 / 30) { _sinceFrame = 0; _dirty = true; }
         if (Math.Abs(_state.Coverage - _lastDrawnCoverage) > 0.003) _dirty = true;
+
+        // Belt and braces for a lapsed tier or a switch flipped without a Changed event: once a
+        // second, ask the seam again and let the controller take the fog down if it says no.
+        _sinceAccessCheck += dt;
+        if (_sinceAccessCheck >= 1)
+        {
+            _sinceAccessCheck = 0;
+            if (!SuperAccess.IsOn(SuperEffect.Creep))
+                System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(CreepController.Sync));
+        }
     }
 
     public override void Render(SKCanvas canvas, SKRectI boundsPx, double dpiScale, TimeSpan elapsed)
@@ -116,15 +135,41 @@ public sealed class CreepLayer : BaseLayer
         }
 
         var sprite = _sprite ??= BuildSprite();
-        var a = (byte)Math.Clamp(CreepFog.Alpha(_state.Coverage) * 255, 0, 255);
+        var a = (byte)Math.Clamp(CreepFog.LayerAlpha(_state.Coverage) * 255, 0, 255);
         _blobPaint.Color = new SKColor(255, 255, 255, a);
-        canvas.Save();
-        canvas.ClipRect(new SKRect(boundsPx.Left, boundsPx.Top, boundsPx.Right, boundsPx.Bottom));
-        foreach (var b in fd.Field.Blobs)
+
+        // Blobs stack inside a small reused surface (alpha there tops out at 1), which is then
+        // stretched onto the monitor at the opacity ceiling: no pixel of fog can pass it, and the
+        // 46 big soft blobs cost 1/16 of the fill.
+        var sw = CreepFog.SurfaceSize(boundsPx.Width);
+        var sh = CreepFog.SurfaceSize(boundsPx.Height);
+        if (fd.Fog == null || fd.FogW != sw || fd.FogH != sh)
         {
-            var r = (float)(b.DrawSize / 2);
-            if (r <= 0) continue;
-            canvas.DrawImage(sprite, new SKRect((float)b.Px - r, (float)b.Py - r, (float)b.Px + r, (float)b.Py + r), _blobPaint);
+            fd.Fog?.Dispose();
+            fd.Fog = SKSurface.Create(new SKImageInfo(sw, sh, SKColorType.Bgra8888, SKAlphaType.Premul));
+            fd.FogW = sw; fd.FogH = sh;
+        }
+        var dest = new SKRect(boundsPx.Left, boundsPx.Top, boundsPx.Right, boundsPx.Bottom);
+        canvas.Save();
+        canvas.ClipRect(dest);
+        if (fd.Fog != null)
+        {
+            var fc = fd.Fog.Canvas;
+            fc.Clear(SKColors.Transparent);
+            fc.Save();
+            fc.Scale(sw / (float)Math.Max(1, boundsPx.Width), sh / (float)Math.Max(1, boundsPx.Height));
+            fc.Translate(-boundsPx.Left, -boundsPx.Top);
+            foreach (var b in fd.Field.Blobs)
+            {
+                var r = (float)(b.DrawSize / 2);
+                if (r <= 0) continue;
+                fc.DrawImage(sprite, new SKRect((float)b.Px - r, (float)b.Py - r, (float)b.Px + r, (float)b.Py + r), _blobPaint);
+            }
+            fc.Restore();
+            // Snapshot shares the pixels; disposing it straight after the draw keeps the next
+            // frame's Clear from copying them (the off-thread recorder holds its own ref).
+            using var img = fd.Fog.Snapshot();
+            canvas.DrawImage(img, dest, _fogPaint);
         }
 
         foreach (var m in fd.Motes)
@@ -150,6 +195,7 @@ public sealed class CreepLayer : BaseLayer
     public override void OnDeactivated()
     {
         // Drop the per-monitor fields too, so a display change between runs rebuilds them.
+        foreach (var fd in _fields.Values) { fd.Fog?.Dispose(); fd.Fog = null; }
         _fields.Clear();
         _fieldList.Clear();
     }

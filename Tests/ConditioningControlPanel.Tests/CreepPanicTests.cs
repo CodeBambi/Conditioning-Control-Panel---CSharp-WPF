@@ -27,6 +27,26 @@ public class CreepPanicTests
         Assert.Contains("CreepController.Stop", Body("MainWindow/MainWindow.xaml.cs", "private void StopAdHocEffects()"));
     }
 
+    /// <summary>Click anywhere is notification only: the hook callback must never swallow, or the
+    /// fog would eat the click aimed at the app underneath (the panel's own panic button included).</summary>
+    [Fact]
+    public void TheClickHookNeverSwallows()
+    {
+        var onDown = typeof(ConditioningControlPanel.Services.Super.CreepController)
+            .GetMethod("OnDown", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        Assert.Equal(false, onDown.Invoke(null, new object[] { new System.Windows.Point(10, 10) }));
+    }
+
+    /// <summary>A lapsed tier or a silent switch flip still takes the fog down: the layer asks the
+    /// seam again once a second while it shows.</summary>
+    [Fact]
+    public void TheLayerRechecksTheSeamWhileItShows()
+    {
+        var text = System.IO.File.ReadAllText(System.IO.Path.Combine(SourceRoot(), "Services/Compositor/CreepLayer.cs"));
+        Assert.Contains("SuperAccess.IsOn(SuperEffect.Creep)", text);
+        Assert.Contains("CreepController.Sync", text);
+    }
+
     private static string SourceRoot()
     {
         var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
