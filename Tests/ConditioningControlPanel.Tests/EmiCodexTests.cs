@@ -76,7 +76,6 @@ public class EmiCodexTests
         Assert.NotNull(t);
         Assert.True(t!.Available, "the book must never be hidden from anybody");
         Assert.False(t.Locked, "the book must never be behind a tier gate");
-        Assert.Null(t.Gate);
     }
 
     [Fact]

@@ -9,76 +9,6 @@ using Serilog;
 namespace ConditioningControlPanel.Services.EmiDesk;
 
 /// <summary>
-/// One thing a ring card can point at.
-///
-/// A target is deliberately a bag of delegates rather than a switch: the ring never learns what a
-/// feature IS, only how to ask whether it exists (<see cref="IsAvailable"/>), whether the tier gate
-/// would refuse it (<see cref="IsLocked"/>) and how to open it (<see cref="Open"/>). Every door in
-/// the app therefore lands here as three lambdas and nothing else in the widget changes.
-/// </summary>
-/// <param name="Id">Stable id. It is the usage key, the pin key and the <c>ringPick</c> payload, so
-/// it must never be renamed once shipped: renaming one silently resets that feature's score.</param>
-/// <param name="LabelKey">Localization key, always <c>emi_desk_target_&lt;id&gt;</c>.</param>
-/// <param name="ThumbPath">Resource-relative art path (<c>features/loom.png</c>), resolved through
-/// <c>ModResourceResolver</c> so a .ccpmod can reskin the card. Null means "no art exists, paint the
-/// hue tile instead", and no shipped target may use it: <c>EmiRingCatalogueTests</c> demands art on
-/// every card, because a flat block beside five illustrated ones reads as a broken card.</param>
-/// <param name="Hue">The flat tile colour a card falls back to when its art fails to load at runtime,
-/// and the tint through a medallion plate.</param>
-/// <param name="IsAvailable">False HIDES the card completely (a dark door, a withheld shop). Not the
-/// same as locked: unavailable means the feature is not part of this build or this account at all,
-/// locked means it exists and the tier gate says no.</param>
-/// <param name="IsLocked">True paints the padlock and routes the click to the tier gate prompt.</param>
-/// <param name="Open">Opens the feature. Always goes through <c>Pick</c>, which owns the usage
-/// counter and the moments.</param>
-/// <param name="Gate">The <see cref="PremiumFeature"/> value where one exists, for callers that want
-/// to cross-reference the gated feature. Null for free doors and for Lab doors (the enum has no Lab members).</param>
-/// <param name="ThumbIsIcon">True when <paramref name="ThumbPath"/> is a square icon (a nav door
-/// medallion) rather than scene art: the card draws it centred on a plate instead of cover-cropping
-/// it. See <c>EmiCardFace</c>.</param>
-public sealed record EmiTarget(
-    string Id,
-    string LabelKey,
-    string? ThumbPath,
-    Color Hue,
-    Func<bool> IsAvailable,
-    Func<bool> IsLocked,
-    Action Open,
-    PremiumFeature? Gate,
-    bool ThumbIsIcon = false)
-{
-    /// <summary>The card's visible name.</summary>
-    public string Label
-    {
-        get
-        {
-            try { return Loc.Get(LabelKey); }
-            catch { return Id; }
-        }
-    }
-
-    /// <summary><see cref="IsAvailable"/> wrapped: a probe that throws hides the card.</summary>
-    public bool Available
-    {
-        get
-        {
-            try { return IsAvailable(); }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] availability probe threw for {Target}", Id); return false; }
-        }
-    }
-
-    /// <summary><see cref="IsLocked"/> wrapped: a probe that throws reads as locked, never as free.</summary>
-    public bool Locked
-    {
-        get
-        {
-            try { return IsLocked(); }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] lock probe threw for {Target}", Id); return true; }
-        }
-    }
-}
-
-/// <summary>
 /// The ring's target catalogue: every door EMI can open, in DEFAULT ORDER.
 ///
 /// Catalogue order is load-bearing twice over. It breaks score ties, and before any usage exists at
@@ -162,8 +92,6 @@ public static class EmiTargets
         }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] lab prompt failed"); }
     }
-
-    private static Color Tile(byte r, byte g, byte b) => Color.FromRgb(r, g, b);
 
     private static readonly Func<bool> Always = () => true;
     private static readonly Func<bool> Never = () => false;
@@ -263,132 +191,69 @@ public static class EmiTargets
         }
     }
 
-    private static List<EmiTarget> Build()
+    // Art, hue and order live in Core's EmiDoors table; this is the WPF half: is the door there,
+    // does the tier gate refuse it, and how it opens. Every open goes through Pick.
+    private static List<EmiTarget> Build() => EmiDoors.Build(id =>
+        Door(id) is { } d ? (d.Available, d.Locked, () => Pick(id, d.Locked, d.Open)) : null);
+
+    private static (Func<bool> Available, Func<bool> Locked, Action Open) D(Func<bool> available, Func<bool> locked, Action open)
+        => (available, locked, open);
+
+    private static (Func<bool> Available, Func<bool> Locked, Action Open)? Door(string id) => id switch
     {
-        var list = new List<EmiTarget>();
-
-        void T(string id, string? thumb, Color hue, Func<bool> available, Func<bool> locked,
-               Action open, PremiumFeature? gate = null, bool icon = false)
-        {
-            string key = "emi_desk_target_" + id;
-            list.Add(new EmiTarget(id, key, thumb, hue, available, locked,
-                () => Pick(id, locked, open), gate, icon));
-        }
-
-        // ---- the six she shows a brand new user, in this order ------------------
-
-        // The Arcademy is the one target with no Resources/features art - the dashboard falls back
-        // to a graduation-cap glyph for it (PlayTabView), which is far too fine to read at 112x84.
-        // Its own VN entrance plate is the same pixel palette as the other five cards and crops
-        // cleanly to the card, so the ring borrows that instead of rendering a flat hue tile.
         // The door is a build flag AND a Lab gate, and Launch owns both plus the audio-only refusal.
-        T("arcademy", "web/arcademy/art/vn/vn-01-entrance-gates.png", Tile(0xFF, 0x69, 0xB4),
-            () => Arcademy.ArcademyHostService.DoorAvailable,
+        "arcademy" => D(() => Arcademy.ArcademyHostService.DoorAvailable,
             () => !LabOk("emi_desk_target_arcademy", null),
-            () => Arcademy.ArcademyHostService.Launch());
+            () => Arcademy.ArcademyHostService.Launch()),
 
         // The ONE Loom entry is the Studio rack's Spiral module, never a second editor window.
         // PlayTabView.Cards.cs makes the same call for the same reason.
-        T("loom", "features/loom.png", Tile(0x6F, 0xD3, 0xFF), Always, Never, () => Rack("spiral"));
+        "loom" => D(Always, Never, () => Rack("spiral")),
 
         // ShowTab("fyp") is intercepted into OpenFypFeed, which demands premium itself.
-        T("fyp", "features/fyp.png", Tile(0xB9, 0x80, 0xFF), Always,
-            () => !PremiumOk("emi_desk_target_fyp", "fyp"),
-            () => Mw?.OpenFypFeed(), PremiumFeature.Fyp);
+        "fyp" => D(Always, () => !PremiumOk("emi_desk_target_fyp", "fyp"), () => Mw?.OpenFypFeed()),
 
-        T("sessions", "features/deeper.png", Tile(0x8C, 0x9E, 0xFF), Always, Never, () => Nav("presets"));
-        T("flashes", "features/flash.png", Tile(0xFF, 0x8F, 0xA3), Always, Never, () => Rack("flash"));
+        "sessions" => D(Always, Never, () => Nav("presets")),
+        "flashes" => D(Always, Never, () => Rack("flash")),
 
-        // ---- sixth: the book (Ask EMI, wave 2) ----------------------------------
-        //
-        // SIXTH, by owner decision (2026-08-30). The book shipped SEVENTH - the first slot it
-        // could take without taking anything from anybody - because the first six available
-        // entries ARE the ring for a brand new user, and displacing one of those is an owner
-        // call rather than a build decision (WAVE2-CONTRACT, "Entry points in Wave 2"). The
-        // owner made that call: the manual belongs in a brand new user's ring, and videos is
-        // the card that steps down to seventh for it.
-        //
         // ALWAYS AVAILABLE, NEVER LOCKED, and both halves of that carry weight. The book IS the
         // manual: a tier gate on it would lock a first-run user out of the explanation of the
-        // thing they cannot use yet, which is the exact opposite of what a manual is for. It is
-        // also the one door that opens with NOTHING on disk - EmiCodex fails soft to a native
-        // reader, so a build with no bundle still puts something readable on screen.
-        //
-        // No book PNG was ever drawn, so the manual wears the "New Features" plate: four features
-        // on one sheet, which is what the book is. A flat hue tile beside five illustrated cards
-        // read as a card that failed to load.
-        T("codex", "features/4new.png", Tile(0xE6, 0xD3, 0xA8), Always, Never, () => EmiBook.Open());
+        // thing they cannot use yet. It is also the one door that opens with NOTHING on disk -
+        // EmiCodex fails soft to a native reader.
+        "codex" => D(Always, Never, () => EmiBook.Open()),
 
-        // Seventh since 2026-08-30: stepped out of the default ring to make room for the book.
-        // Still one open away from the ring for anybody who actually runs videos.
-        T("videos", "features/mandatory_videos.png", Tile(0x8B, 0x2C, 0x6A), Always, Never, () => Rack("video"));
-
-        // ---- the rest of the doors ----------------------------------------------
-
-        T("dtrh", "features/dtrh.png", Tile(0x8C, 0xF5, 0xC8), Always,
-            () => !LabOk("emi_desk_target_dtrh", "dtrh"),
-            () => Chaos.DtrhHostService.Launch());
-
-        T("intake", "features/lab_quiz_hero.png", Tile(0xFF, 0xC6, 0x5C), Always,
-            () => !PremiumOk("emi_desk_target_intake", null),
-            () => Quiz.IntakeHostService.Launch(), PremiumFeature.GradedIntake);
-
-        T("subliminals", "features/subliminal.png", Tile(0x7F, 0xE3, 0xFF), Always, Never, () => Rack("subliminal"));
-        T("bubbles", "features/Bubble_pop.png", Tile(0xFF, 0xA8, 0xD8), Always, Never, () => Rack("bubbles"));
+        "videos" => D(Always, Never, () => Rack("video")),
+        "dtrh" => D(Always, () => !LabOk("emi_desk_target_dtrh", "dtrh"), () => Chaos.DtrhHostService.Launch()),
+        "intake" => D(Always, () => !PremiumOk("emi_desk_target_intake", null), () => Quiz.IntakeHostService.Launch()),
+        "subliminals" => D(Always, Never, () => Rack("subliminal")),
+        "bubbles" => D(Always, Never, () => Rack("bubbles")),
 
         // The one card that is not navigation: it fires the overlay where the user already is.
-        T("spiral", "features/spiral_overlay.png", Tile(0xFF, 0x69, 0xB4), Always, Never, FireSpiral);
+        "spiral" => D(Always, Never, FireSpiral),
 
-        T("pinkfilter", "features/Pink_filter.png", Tile(0xFF, 0x9E, 0xC4), Always, Never, () => Rack("pinkfilter"));
-        T("braindrain", "features/brain_drain.png", Tile(0x9B, 0x7C, 0xE8), Always, Never, () => Rack("braindrain"));
-        T("mindwipe", "features/Mind_Wipers.png", Tile(0x6E, 0x7B, 0xC8), Always, Never, () => Rack("mindwipe"));
+        "pinkfilter" => D(Always, Never, () => Rack("pinkfilter")),
+        "braindrain" => D(Always, Never, () => Rack("braindrain")),
+        "mindwipe" => D(Always, Never, () => Rack("mindwipe")),
+        "awareness" => D(Always, () => !PremiumOk("emi_desk_target_awareness", "awareness"), () => Nav("awareness")),
+        "remote" => D(Always, () => !PremiumOk("emi_desk_target_remote", "remote"), () => Nav("remotecontrol")),
+        "takeover" => D(Always, () => !PremiumOk("emi_desk_target_takeover", "takeover"), () => Nav("bambitakeover")),
+        "lockdown" => D(Always, () => !PremiumOk("emi_desk_target_lockdown", null), () => Nav("lockdown")),
+        "vault" => D(Always, Never, () => Nav("exclusives")),
+        "goon" => D(Always, Never, () => GoonGame.GoonHostService.Launch()),
 
-        T("awareness", "features/awareness.png", Tile(0xFF, 0xC6, 0x5C), Always,
-            () => !PremiumOk("emi_desk_target_awareness", "awareness"),
-            () => Nav("awareness"), PremiumFeature.Awareness);
-
-        T("remote", "features/remote_control.png", Tile(0x7F, 0xE3, 0xFF), Always,
-            () => !PremiumOk("emi_desk_target_remote", "remote"),
-            () => Nav("remotecontrol"), PremiumFeature.Remote);
-
-        T("takeover", "features/takeover.png", Tile(0xE8, 0x5C, 0xA8), Always,
-            () => !PremiumOk("emi_desk_target_takeover", "takeover"),
-            () => Nav("bambitakeover"), PremiumFeature.Takeover);
-
-        T("lockdown", "lockdown_icon.png", Tile(0xC8, 0x4B, 0x4B), Always,
-            () => !PremiumOk("emi_desk_target_lockdown", null),
-            () => Nav("lockdown"), PremiumFeature.Lockdown);
-
-        T("vault", "features/vault.png", Tile(0xD8, 0xB4, 0x6A), Always, Never, () => Nav("exclusives"));
-
-        T("goon", "features/goon_game.png", Tile(0x76, 0xC8, 0x93), Always, Never,
-            () => GoonGame.GoonHostService.Launch());
-
-        // The Back Room: free for everyone, so never locked. Like the Arcademy it has no
-        // Resources/features art, and borrows its own room render from the web tree instead.
-        T("backroom", "web/backroom/room/backroom_final.png", Tile(0xB9, 0x5C, 0xD8), Always, Never,
-            () => BackRoom.BackRoomHostService.Launch());
+        // The Back Room: free for everyone, so never locked.
+        "backroom" => D(Always, Never, () => BackRoom.BackRoomHostService.Launch()),
 
         // The shop is withheld on most accounts; ShowTab owns the refusal, IsAvailable keeps the
         // card out of the ring entirely rather than offering a door that answers with a log line.
-        T("justdrop", "features/justdrop.png", Tile(0xFF, 0xB3, 0x6B),
-            () => JustDrop.JustDropService.DoorAvailable, Never, () => Nav("justdrop"));
+        "justdrop" => D(() => JustDrop.JustDropService.DoorAvailable, Never, () => Nav("justdrop")),
 
-        // ---- rooms with no card art: their nav rail medallion on a plate ---------
-        //
-        // These shipped as flat hue tiles (owner report 2026-09-15: Profile, Settings and
-        // Companion pinned beside Flashes, Takeover and Vault read as broken cards). Each room
-        // already has a face - its door medallion in the nav rail - and the favourites rail
-        // (FavoritesRailArt) wears the same one for the same tab, so the ring agrees with it.
-        // "progression" is a permanent alias that lands on Home, hence the home door.
-
-        T("companion", "nav/door_companion.png", Tile(0xB9, 0x80, 0xFF), Always, Never, () => Nav("companion"), icon: true);
-        T("progression", "nav/door_home.png", Tile(0x8C, 0xF5, 0xC8), Always, Never, () => Nav("progression"), icon: true);
-        T("profile", "nav/door_you.png", Tile(0x7F, 0xE3, 0xFF), Always, Never, () => Nav("discord"), icon: true);
-        T("settings", "nav/door_settings.png", Tile(0x9A, 0x9A, 0xB8), Always, Never, () => Nav("appsettings"), icon: true);
-
-        return list;
-    }
+        "companion" => D(Always, Never, () => Nav("companion")),
+        "progression" => D(Always, Never, () => Nav("progression")),
+        "profile" => D(Always, Never, () => Nav("discord")),
+        "settings" => D(Always, Never, () => Nav("appsettings")),
+        _ => null,
+    };
 
     /// <summary>
     /// The spiral card does not navigate anywhere: it drops the spiral overlay on whatever the user

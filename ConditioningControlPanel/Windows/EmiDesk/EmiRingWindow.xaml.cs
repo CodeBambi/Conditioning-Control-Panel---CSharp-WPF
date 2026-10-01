@@ -332,7 +332,7 @@ public partial class EmiRingWindow : Window
         try
         {
             PickedThisOpening = false;
-            _slots = EmiSuggester.Compose();
+            _slots = EmiSuggester.Compose(EmiTargets.All);
             if (_slots.Count == 0)
             {
                 Log.Information("[EmiDesk] ring has nothing to show, staying shut");
@@ -544,7 +544,7 @@ public partial class EmiRingWindow : Window
         if (!_open) return;
         try
         {
-            _slots = EmiSuggester.Compose();
+            _slots = EmiSuggester.Compose(EmiTargets.All);
             BuildCards();
             Layout();
         }
