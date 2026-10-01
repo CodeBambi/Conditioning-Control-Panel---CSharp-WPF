@@ -15,6 +15,10 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Companion.Brain;
+using ConditioningControlPanel.Services.Moderation;
+using ConditioningControlPanel.Views.Controls.Companion;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 {
@@ -106,7 +110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public void PlayDormantShimmer()
         {
             if (_shimmerPlayed || !IsLoaded) return;
-            if (ViewModel is not { State: ChatThresholdViewModel.ZoneState.Dormant }) return;
+            if (ViewModel is not { State: CompanionZoneState.Dormant }) return;
             if (DormantShimmer.RenderTransform is not TransformGroup group) return;
             var shift = group.Children.OfType<TranslateTransform>().FirstOrDefault();
             if (shift is null) return;
@@ -147,19 +151,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// Live artboard as its default data, so the view renders a real her / you / echo thread with
     /// an AI badge. <b>Not a port of the interface</b> - that, the mock and the zone-state enum live
     /// in the WPF head beside the other zones' contracts, and a shared copy here would collide with
-    /// whichever sibling port lands its zone first. The enums are nested for the same reason.
+    /// whichever sibling port lands its zone first. <see cref="CreateLive"/> is the WPF
+    /// <c>ChatThresholdRuntimeVm</c> over <c>App.Brain</c>; the pure half is Core's
+    /// <see cref="CompanionRoomLogic"/>, shared with WPF.
     /// </summary>
     public sealed class ChatThresholdViewModel : INotifyPropertyChanged
     {
-        public enum ZoneState { Live, Dormant, Locked, Empty, Disabled }
-
         private readonly Relay _send;
         private readonly Relay _engineRoom;
+        private readonly bool _live;
         private string _draft = string.Empty;
         private bool _isThinking;
+        private CompanionZoneState _state = CompanionZoneState.Live;
+        private string _lastHeardCopy = Loc.GetF("companion_chat_last_heard_fmt", "2h ago");
+        private string _threadSignature = string.Empty;
+        private ChatSession? _session;
 
-        public ChatThresholdViewModel()
+        public ChatThresholdViewModel() : this(live: false) { }
+
+        /// <summary>The live zone (WPF ChatThresholdRuntimeVm): reads App.Brain, sends through brain.ChatAsync.</summary>
+        internal static ChatThresholdViewModel CreateLive()
         {
+            var vm = new ChatThresholdViewModel(live: true);
+            vm.Sync();
+            return vm;
+        }
+
+        private ChatThresholdViewModel(bool live)
+        {
+            _live = live;
+            Turns = live ? new() : new(LiveThread());
+            TeaserTurns = live ? LiveTeaser() : StagedTeaser();
+            if (live) _lastHeardCopy = string.Empty;
             // WPF's CommandManager.RequerySuggested re-polled CanExecute for free; Avalonia only
             // re-polls on CanExecuteChanged, so Draft and IsThinking raise it by hand.
             SendCommand = _send = new Relay(Send, () => CanSend && !IsThinking && !string.IsNullOrWhiteSpace(Draft));
@@ -167,9 +190,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // surface on this head yet); History needs the transcript viewer; Unlock needs the
             // Patreon tab. None of the three has a target here, and all three are Relays whose
             // CanExecute is constant so the buttons at least do not pretend to be armed.
-            OpenFullChatCommand = new Relay(() => { }, () => false);
+            // Live: Open full chat is the tube's input box (WPF App.AvatarWindow.OpenChatInput) and
+            // Unlock is the Patreon tab; History stays inert (no transcript window on this head).
+            OpenFullChatCommand = live
+                ? new Relay(() => Views.AvatarTube.AvatarTubeWindow.Live?.OpenChatInput())
+                : new Relay(() => { }, () => false);
             HistoryCommand = new Relay(() => { }, () => false);
-            UnlockCommand = new Relay(() => { }, () => false);
+            UnlockCommand = live
+                ? new Relay(() => (global::Avalonia.Application.Current?.ApplicationLifetime
+                    as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                    ?.Windows.OfType<Views.Windows.MainShellWindow>().FirstOrDefault()?.ShowTab("patreon"))
+                : new Relay(() => { }, () => false);
             // The page IS composed now, so this one has a real target - see OpenEngineRoom.
             OpenEngineRoomCommand = _engineRoom = new Relay(() => _openEngineRoom?.Invoke(),
                                                            () => _openEngineRoom != null);
@@ -189,13 +220,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             set { _openEngineRoom = value; _engineRoom.RaiseCanExecuteChanged(); }
         }
 
-        public ZoneState State { get; init; } = ZoneState.Live;
+        public CompanionZoneState State
+        {
+            get => _state;
+            private set
+            {
+                if (_state == value) return;
+                _state = value;
+                Raise(); Raise(nameof(CanSend)); Raise(nameof(StateCopy)); Raise(nameof(FooterCopy));
+                _send.RaiseCanExecuteChanged();
+            }
+        }
 
         /// <summary>The last ~3 real turns, oldest first. Observable so the view follows a growing thread.</summary>
-        public ObservableCollection<ChatBubble> Turns { get; } = new(LiveThread());
+        public ObservableCollection<ChatBubble> Turns { get; }
 
         /// <summary>Static fake bubbles rendered under the veil. Never live content.</summary>
-        public IReadOnlyList<ChatBubble> TeaserTurns { get; init; } = StagedTeaser();
+        public IReadOnlyList<ChatBubble> TeaserTurns { get; }
 
         public string Draft
         {
@@ -206,14 +247,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public bool IsThinking
         {
             get => _isThinking;
-            set { if (_isThinking != value) { _isThinking = value; Raise(); _send.RaiseCanExecuteChanged(); } }
+            set
+            {
+                if (_isThinking == value) return;
+                _isThinking = value;
+                Raise(); Raise(nameof(CanSend)); Raise(nameof(FooterCopy));
+                _send.RaiseCanExecuteChanged();
+            }
         }
 
-        public bool CanSend { get; init; } = true;
+        public bool CanSend => State == CompanionZoneState.Live && !IsThinking;
 
-        public string LastHeardCopy { get; init; } = Loc.GetF("companion_chat_last_heard_fmt", "2h ago");
-        public string FooterCopy { get; init; } = Loc.Get("companion_chat_footer_remembers");
-        public string StateCopy { get; init; } = string.Empty;
+        public string LastHeardCopy
+        {
+            get => _lastHeardCopy;
+            private set { if (_lastHeardCopy != value) { _lastHeardCopy = value; Raise(); } }
+        }
+
+        public string FooterCopy => IsThinking
+            ? Loc.Get("companion_chat_footer_picking")
+            : Turns.Count == 0
+                ? Loc.Get("companion_chat_footer_first")
+                : Loc.Get("companion_chat_footer_remembers");
+
+        public string StateCopy => State switch
+        {
+            CompanionZoneState.Dormant => Loc.Get("companion_chat_dormant_copy"),
+            CompanionZoneState.Disabled => Loc.Get("companion_chat_disabled_copy"),
+            _ => string.Empty
+        };
         public string LockCopy { get; init; } = Loc.Get("companion_chat_lock_copy");
         public string LockCtaLabel { get; init; } = Loc.Get("companion_chat_lock_cta");
         public string InputPlaceholder { get; init; } = Loc.Get("companion_chat_input_placeholder");
@@ -224,14 +286,116 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public ICommand UnlockCommand { get; }
         public ICommand OpenEngineRoomCommand { get; }
 
-        /// <summary>Appends your line and puts her into "thinking". Nothing is sent anywhere.</summary>
-        // ponytail: needs CompanionBrain.SendChatAsync, wired when it moves to Core
+        /// <summary>Live: through brain.ChatAsync (WPF ChatThresholdRuntimeVm.Send). Artboard: appends your line only.</summary>
         public void Send()
         {
             if (!SendCommand.CanExecute(null)) return;
+            if (_live) { SendLive(); return; }
             Turns.Add(new ChatBubble(ChatBubble.BubbleKind.You, Draft.Trim(), timestamp: "just now"));
             Draft = string.Empty;
             IsThinking = true;
+        }
+
+        // ===================== live (WPF ChatThresholdRuntimeVm) =====================
+
+        /// <summary>Re-reads the provider, the entitlement and the thread. The room calls it on resume and after every send.</summary>
+        public void Sync()
+        {
+            if (!_live) return;
+            try
+            {
+                var brain = App.Brain;
+                AttachSession(brain?.Session);
+                var settings = CoreSettings.Current;
+                State = CompanionRoomLogic.ResolveState(
+                    brainRouting: CompanionBrain.ShouldRoute(brain),
+                    aiEnabled: settings.AiChatEnabled,
+                    cloudProvider: (settings.CompanionPrompt?.AiProvider ?? AiProviderType.Cloud) == AiProviderType.Cloud,
+                    // WPF: App.Patreon?.HasAiAccess == true || App.HasCloudIdentity (as CompanionHeroCard.Sync).
+                    entitled: CoreAccount.HasPremiumAccess || !string.IsNullOrEmpty(CoreAccount.UnifiedUserId));
+                RebuildThread(brain);
+                RefreshLastHeard(brain);
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Companion room: chat sync failed"); }
+        }
+
+        private void AttachSession(ChatSession? session)
+        {
+            if (ReferenceEquals(_session, session)) return;
+            if (_session != null) _session.TurnsChanged -= OnTurnsChanged;
+            _session = session;
+            if (_session != null) _session.TurnsChanged += OnTurnsChanged;
+        }
+
+        // A turn landed from the tube box or a bark echo: marshal, Normal priority (Loaded is starved).
+        private void OnTurnsChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
+        {
+            try { var brain = App.Brain; RebuildThread(brain); RefreshLastHeard(brain); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Companion room: chat turn refresh failed"); }
+        }, DispatcherPriority.Normal);
+
+        private void RebuildThread(CompanionBrain? brain)
+        {
+            // ponytail: no link chip (WPF CompanionLinkIndex + CompanionLinkLauncher) - the launcher
+            // routes to the embedded browser and the remote-control guard, neither hosted here yet.
+            var projected = brain != null && CompanionBrain.ShouldRoute(brain)
+                ? CompanionRoomLogic.PickThread(brain.Session.Turns).Select(t => new ChatBubble(
+                    t.Kind switch
+                    {
+                        TurnKind.UserChat => ChatBubble.BubbleKind.You,
+                        TurnKind.BarkEcho => ChatBubble.BubbleKind.Echo,
+                        _ => ChatBubble.BubbleKind.Her
+                    },
+                    CompanionRoomLogic.BubbleText(t), CompanionRoomLogic.IsAiBubble(t),
+                    CompanionRoomLogic.RelativeTime(t.Utc))).ToList()
+                : new List<ChatBubble>();
+
+            var signature = string.Concat(projected.Select(b => $"{b.Kind}\u001F{b.IsAiGenerated}\u001F{b.Text}\u001F{b.Timestamp}\u001F"));
+            if (Turns.Count == projected.Count && signature == _threadSignature) return;
+            _threadSignature = signature;
+            Turns.Clear();
+            foreach (var b in projected) Turns.Add(b);
+            Raise(nameof(FooterCopy));
+        }
+
+        private void RefreshLastHeard(CompanionBrain? brain)
+        {
+            var last = brain?.Session.Turns.LastOrDefault(t => t.Kind == TurnKind.UserChat);
+            LastHeardCopy = last == null
+                ? string.Empty
+                : Loc.GetF("companion_chat_last_heard_fmt", CompanionRoomLogic.RelativeTime(last.Utc));
+        }
+
+        private void SendLive()
+        {
+            var text = Draft.Trim();
+            var brain = App.Brain;
+            if (brain == null || !CompanionBrain.ShouldRoute(brain)) { Sync(); return; }
+            Draft = string.Empty;
+            IsThinking = true;
+            PendingSend = SendAsync(brain, text);
+        }
+
+        /// <summary>The send in flight, for tests.</summary>
+        internal System.Threading.Tasks.Task? PendingSend { get; private set; }
+
+        private async System.Threading.Tasks.Task SendAsync(CompanionBrain brain, string text)
+        {
+            AiReplyResult? result = null;
+            // Same entry point as the tube box: same moderation spine, same single-flight.
+            try { result = await brain.ChatAsync(text); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Companion room: chat send failed"); }
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsThinking = false;
+                Sync();
+                // A refusal or canned fallback never lands in the turn log: it goes to the tube bubble.
+                if (result == null || result.IsAiGenerated || result.IsApplicationReply) return;
+                var tube = Views.AvatarTube.AvatarTubeWindow.Live;
+                if (tube == null) return;
+                if (result.Refusal != null) tube.ShowModerationRefusalBubble(result.Refusal.Source);
+                else if (!string.IsNullOrWhiteSpace(result.Text)) tube.GigglePriority(result.Text, aiGenerated: false);
+            }, DispatcherPriority.Normal);
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -245,6 +409,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             new ChatBubble(ChatBubble.BubbleKind.Her, "level 41 already?? remember when the spiral scared you, princess~", isAi: true, timestamp: "2h ago"),
             new ChatBubble(ChatBubble.BubbleKind.You, "it still does a little", timestamp: "2h ago"),
             new ChatBubble(ChatBubble.BubbleKind.Her, "good. it should~ 💕", isAi: true, timestamp: "2h ago")
+        };
+
+        // WPF ChatThresholdRuntimeVm.BuildTeaser.
+        private static IReadOnlyList<ChatBubble> LiveTeaser() => new[]
+        {
+            new ChatBubble(ChatBubble.BubbleKind.You, Loc.Get("companion_chat_teaser_you")),
+            new ChatBubble(ChatBubble.BubbleKind.Her, Loc.Get("companion_chat_teaser_her"), isAi: true)
         };
 
         private static IReadOnlyList<ChatBubble> StagedTeaser() => new[]

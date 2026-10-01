@@ -30,6 +30,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             SizeChanged += (_, e) => { if (e.WidthChanged) ApplyShelfLayout(e.NewSize.Width); };
             // WPF CompanionRuntimeContext: the hero reaches the shell and this navigator through us.
             if (HeroZone.ViewModel is { } hero) hero.Host = this;
+            // Z2/Z3 over the brain (WPF CompanionRoomVm builds ChatThresholdRuntimeVm / MemoryDiaryRuntimeVm).
+            ChatZone.ViewModel = ChatThresholdViewModel.CreateLive();
+            MemoryZone.ViewModel = MemoryDiaryViewModel.CreateLive();
         }
 
         // =====================================================================================
@@ -79,8 +82,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             }
         }
 
-        // ponytail: ICompanionRoomVm (Chat/Memory/... zone interfaces) lives in the WPF head; the hero
-        // is real, the other zones seed their own viewmodels until their runtime (AI/brain) crosses.
+        // ponytail: ICompanionRoomVm (zone interfaces) lives in the WPF head; hero, chat and memory are
+        // live, the other zones seed their own viewmodels until their runtime crosses.
 
         /// <summary>
         /// True while the shelf is one column. Exposed for the tests and the preview harness — the
@@ -110,6 +113,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 // have changed while the tab was hidden, and a resume that restored the state at
                 // park time would be a lie.
                 AwarenessZone.SyncCursorBlink();
+                ChatZone.ViewModel?.Sync();
+                MemoryZone.ViewModel?.Sync();
                 // ponytail: WPF also calls ChatZone.SyncThinking() here. This head's
                 // ChatThresholdView has no thinking clock to sync - WPF's dots are three
                 // RepeatBehavior=Forever Storyboards (CmpThinkingDotsStoryboard) and the port

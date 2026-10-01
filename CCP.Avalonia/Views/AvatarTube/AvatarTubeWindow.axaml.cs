@@ -1550,7 +1550,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         }
 
         /// <summary>WPF ShowModerationRefusalBubble (Speech.cs:368): the localized refusal with the POLICY badge.</summary>
-        private void ShowModerationRefusalBubble(ConditioningControlPanel.Services.Moderation.ModerationSource source)
+        internal void ShowModerationRefusalBubble(ConditioningControlPanel.Services.Moderation.ModerationSource source)
         {
             var text = Loc.Get(source == ConditioningControlPanel.Services.Moderation.ModerationSource.Input
                 ? "moderation_input_refusal" : "moderation_output_refusal");

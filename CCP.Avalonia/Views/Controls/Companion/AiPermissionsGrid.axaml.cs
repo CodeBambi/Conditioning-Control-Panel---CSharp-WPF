@@ -20,8 +20,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// <c>_isLoading</c> (WPF's <c>SyncLabEffectPermsUI</c>) and compared before writing, because
     /// Avalonia raises <c>IsCheckedChanged</c> on a programmatic set too.</para>
     ///
-    /// <para><b>Two writes are deliberately NOT restored.</b> Chat memory is refused - see
-    /// <see cref="ChkChatMemoryEnabled_Changed"/>. And WPF's <c>UpdateUnlockablesVisibility</c>
+    /// <para><b>One write is deliberately NOT restored.</b> WPF's <c>UpdateUnlockablesVisibility</c>
     /// force-clear (which unticks <c>ChkCapEffects</c> once an account has lapsed) is not ported:
     /// it is a WRITE decided by an entitlement this head cannot see, so here it would silently
     /// destroy a paid-up user's setting on every launch. Seeding shows the stored truth; only a
@@ -143,11 +142,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         private void BtnEffectsLockCta_Click(object? sender, RoutedEventArgs e)
             => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
 
-        private void BtnClearChatMemory_Click(object? sender, RoutedEventArgs e)
+        /// <summary>WPF MainWindow.Patreon.cs BtnClearChatMemory_Click: confirm, then the brain forgets the
+        /// conversation (session.json + live turn log). ponytail: no AiServiceStrategy.ClearLocalHistory
+        /// or AiLiveActions feed on this head yet (local providers are slice 7).</summary>
+        private async void BtnClearChatMemory_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs a forget seam on CoreAi (CCP.Core/CoreAi.cs exposes only
-            // IsAvailable). The confirm half is ready - CCP.Avalonia/Views/Dialogs/MessageDialog -
-            // but the wipe half has nothing to call, so the button must stay inert.
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            if (!await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("btn_forget_everything"),
+                    Loc.Get("dialog_forget_everything_prompt"))) return;
+            try
+            {
+                App.Brain?.ForgetConversation();
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("btn_forget_everything"),
+                    Loc.Get("dialog_forget_everything_done"));
+            }
+            catch (Exception ex) { Log.Warning(ex, "BtnClearChatMemory_Click failed"); }
         }
 
         private void BtnLabEffectsSetupLocal_Click(object? sender, RoutedEventArgs e)
@@ -207,24 +216,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         }
 
         /// <summary>
-        /// REFUSED, not stubbed. The box is SEEDED from settings so it tells the truth, but the
-        /// write is snapped back, because unticking this on WPF is a PROMISE to erase what is
-        /// already on disk (<c>App.Brain.ForgetConversation</c> plus
-        /// <c>AiServiceStrategy.ClearLocalHistory</c> - companion/session.json and the live turn
-        /// log), not merely to stop persisting new turns. <see cref="CoreAi"/> exposes only
-        /// <c>IsAvailable</c>; there is no forget seam, so persisting "memory off" here would
-        /// leave a switch reading "erased" over a transcript that is still there. Restore the
-        /// write the day CoreAi grows a forget action - together with it, never before.
+        /// WPF MainWindow.Patreon.cs ChkChatMemoryEnabled_Changed: persist, and turning memory OFF also
+        /// erases what is already saved (<c>App.Brain.ForgetConversation</c>: session.json and the live
+        /// turn log), not merely stops persisting new turns.
         /// </summary>
         private void ChkChatMemoryEnabled_Changed(object? sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             var p = CoreSettings.Current.CompanionPrompt;
             if (p == null) return;
-            if ((ChkChatMemoryEnabled.IsChecked == true) == p.ChatMemoryEnabled) return;
-            _isLoading = true;
-            try { ChkChatMemoryEnabled.IsChecked = p.ChatMemoryEnabled; }
-            finally { _isLoading = false; }
+            var on = ChkChatMemoryEnabled.IsChecked == true;
+            if (p.ChatMemoryEnabled == on) return;
+            p.ChatMemoryEnabled = on;
+            CoreSettings.Save();
+            if (on) return;
+            try { App.Brain?.ForgetConversation(); }
+            catch (Exception ex) { Log.Warning(ex, "ChkChatMemoryEnabled_Changed: brain wipe failed"); }
         }
 
         private void SliderMaxHapticIntensity_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)

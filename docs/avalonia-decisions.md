@@ -397,3 +397,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Not moved: `AwarenessV2Routing`/`AwarenessSpeech`/`ReactionArbiter` stay in the WPF head. Dry-run into Core needs AwarenessReactionService, AwarenessPromptBuilder (AwarenessAngleCards, AwarenessProjection, CompanionPhraseService), WorthinessScorer -> ActivityLedger and ~25 App.* sites, and they only consume v2 observer frames, so on this head they would be dead code. Bark echo stays a gap (no Core bark hosted).
 - Tests: `Tests/CCP.Avalonia.Tests/AwarenessAiRoutingTests.cs` (denied/incognito never reach the fake AI; v2 on sends nothing; revoked consent sends nothing; fail-proven).
 - Advisor: supervisor.
+## 2026-10-01: Her Room chat and memory diary over the brain (avalonia-port/her-room-chat)
+- Question: how to put Z2 (ChatThresholdRuntimeVm) and Z3 (MemoryDiaryRuntimeVm) on the Avalonia brain without a second copy of their logic.
+- Choice: `CompanionMemoryViewModel` is a pure git mv into `CCP.Core/ViewModels/` (dry-run: 0 errors). The runtime VMs read `App.*`
+  and WPF dispatchers, so only their pure statics (state ladder, thread pick, echo unwrap, relative time, kind key, meta line) plus
+  the `CompanionZoneState` enum moved, into `CCP.Core/Views/Controls/Companion/CompanionRoomLogic.cs` (same namespace); WPF delegates.
+  The Avalonia view-models gain `CreateLive()` (CompanionRoomView uses it) and keep the artboard for standalone renders.
+- Privacy: diary forget/edit/pin/wipe go through Core `CompanionMemoryViewModel` exactly as WPF; the chat-memory switch OFF calls
+  `CompanionBrain.ForgetConversation` (WPF MainWindow.Patreon.cs). The earlier "refused" snap-back is removed now that the brain exists.
+- Not taken: History (transcript window), link chips (CompanionLinkLauncher needs the embedded browser), local-provider history clear (slice 7).
+- Tests: `Tests/CCP.Avalonia.Tests/HerRoomChatMemoryTests.cs` (loopback fake model; fail-proven on send, forget and the switch).
+- Advisor: supervisor.
