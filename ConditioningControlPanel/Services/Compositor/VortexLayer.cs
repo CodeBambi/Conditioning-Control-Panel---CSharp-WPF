@@ -29,6 +29,8 @@ public sealed class VortexLayer : BaseLayer
     private readonly SKPaint _image = new() { FilterQuality = SKFilterQuality.Low };
     private readonly SKShader _flashShader = UnitGlow(new SKColor(255, 200, 240));
     private readonly SKShader _bloomShader = UnitGlow(new SKColor(255, 215, 245));
+    private readonly SKShader _coreShader = UnitGlow(new SKColor(255, 140, 210));   // tinted, never white
+    private readonly SKPaint _trail = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round };
     private readonly SKColorFilter _red = SKColorFilter.CreateBlendMode(new SKColor(255, 0, 80), SKBlendMode.Modulate);
     private readonly SKColorFilter _cyan = SKColorFilter.CreateBlendMode(new SKColor(0, 200, 255), SKBlendMode.Modulate);
 
@@ -49,6 +51,7 @@ public sealed class VortexLayer : BaseLayer
     private double _sincePaint;
     private bool _changed;
     private int _generation;
+    private volatile bool _exiting, _exitRequested, _openRequested;
 
     public VortexLayer(CompositorEngine engine) : base(engine) { }
 
@@ -64,14 +67,20 @@ public sealed class VortexLayer : BaseLayer
     public override bool Dirty => _dirty;
     public override void ClearDirty() { if (_dirty) _sincePaint = 0; _dirty = false; }
 
-    /// <summary>Start (or keep) the vortex. UI thread.</summary>
+    /// <summary>Start (or keep) the vortex; a vortex on its way out opens again. UI thread.</summary>
     public void Start()
     {
-        if (IsActive) return;
-        _sim = new VortexSim();
-        _screenPx = default;
-        _deckTriedAt = double.NegativeInfinity;
-        _tier = PerformanceProfile.CurrentTier;   // read at start, never per frame
+        if (IsActive && !_exiting) return;
+        if (!IsActive)
+        {
+            _sim = new VortexSim();
+            _screenPx = default;
+            _deckTriedAt = double.NegativeInfinity;
+            _tier = PerformanceProfile.CurrentTier;   // read at start, never per frame
+        }
+        _exiting = false;
+        _exitRequested = false;
+        _openRequested = true;                        // the engine thread opens it at the cursor
         Interlocked.Exchange(ref _pendingClicks, 0);
         try
         {
@@ -88,9 +97,26 @@ public sealed class VortexLayer : BaseLayer
         SetActive(true);
     }
 
-    /// <summary>Stop at once (panic, spiral off, Super switched off). UI thread.</summary>
+    /// <summary>
+    /// The Super switch went off under a running spiral: release the mouse hook now and let the
+    /// vortex be sucked in (about a third of a second), then it deactivates itself. Idempotent, so
+    /// the 500 ms reconciler can call it. Panic and every StopSpiral path use <see cref="Stop"/>.
+    /// UI thread.
+    /// </summary>
+    public void BeginExit()
+    {
+        if (!IsActive || _exiting) return;
+        _exiting = true;
+        _openRequested = false;
+        _exitRequested = true;
+        try { _hook?.Dispose(); } catch { }
+        _hook = null;
+    }
+
+    /// <summary>Stop at once (panic, spiral off, disposal). UI thread.</summary>
     public void Stop()
     {
+        _exiting = false; _exitRequested = false; _openRequested = false;
         if (!IsActive && _hook == null) return;   // the 500 ms reconciler calls this while off
         Interlocked.Increment(ref _generation);
         try { _hook?.Dispose(); } catch { }
@@ -123,6 +149,9 @@ public sealed class VortexLayer : BaseLayer
         _level = MotionFx.Level;
         _flicker = _level == MotionLevel.Full && s?.LockdownPhotosafe != true;
 
+        if (_openRequested) { _openRequested = false; _sim.Open(_level, cur.X, cur.Y); }
+        if (_exitRequested) { _exitRequested = false; _sim.Close(); }
+
         int clicks = Interlocked.Exchange(ref _pendingClicks, 0);
         for (int i = 0; i < clicks; i++)
         {
@@ -137,6 +166,7 @@ public sealed class VortexLayer : BaseLayer
 
         double x = _sim.X, y = _sim.Y, size = _sim.Size, rot = _sim.Rot;
         _sim.Step(dt, cur.X, cur.Y, _level);
+        if (_sim.Closed && _exiting) { _exiting = false; SetActive(false); return; }   // sucked in: gone
         bool gifUp = _showing != null && VortexMath.GifFrame(_sim.Time - _sim.GifBorn, _flicker, out _, out _, out _);
         if (_showing != null && !gifUp) Dispose(ref _showing);
         if (_deck == null && !_deckLoading && _sim.Time - _deckTriedAt >= DeckRetrySec) LoadDeck();
@@ -144,7 +174,7 @@ public sealed class VortexLayer : BaseLayer
         // Remember a change even on a frame the repaint gate skips, so the last move of a burst
         // is never left unpainted.
         if (x != _sim.X || y != _sim.Y || size != _sim.Size || rot != _sim.Rot || gifUp || clicks > 0
-            || Array.Exists(_sim.Motes, m => m.Alive))
+            || _sim.IsOpening || _sim.IsClosing || Array.Exists(_sim.Motes, m => m.Alive))
             _changed = true;
         _sincePaint += dt;
         if (_changed && VortexMath.ShouldRepaint(_sincePaint, _tier)) { _dirty = true; _changed = false; }
@@ -153,29 +183,42 @@ public sealed class VortexLayer : BaseLayer
     public override void Render(SKCanvas canvas, SKRectI boundsPx, double dpiScale, TimeSpan elapsed)
     {
         var sim = _sim;
-        float cx = (float)sim.X, cy = (float)sim.Y, r0 = (float)sim.R0, r = (float)sim.Radius;
+        float cx = (float)sim.X, cy = (float)sim.Y, r0 = (float)sim.R0;
+        float ds = (float)sim.DrawScale, r = (float)sim.Radius * ds;
         float reach = Math.Max(r0 * 1.3f, r * 1.3f);
         if (cx + reach < boundsPx.Left || cx - reach > boundsPx.Right
             || cy + reach < boundsPx.Top || cy - reach > boundsPx.Bottom) return;
         double m = _master;
         double t = sim.Time;
+        double da = sim.DrawAlpha * m;   // the open/close fade rides on every arm and glow
+
+        // A soft pink core under the arms: flares as it opens, then breathes.
+        DrawGlow(canvas, _coreShader, cx, cy, r * 0.55f, sim.CoreGlow * m);
 
         foreach (var e in sim.Echoes)
-            if (e.Alive) DrawArms(canvas, cx, cy, (float)(r0 * e.Size), e.Turns, e.Rot, VortexMath.EchoFade(t - e.Born) * m);
-        DrawArms(canvas, cx, cy, r, sim.Turns, sim.Rot, sim.ArmsAlpha * m);
+            if (e.Alive) DrawArms(canvas, cx, cy, (float)(r0 * e.Size) * ds, e.Turns, e.Rot, VortexMath.EchoFade(t - e.Born) * da);
+        DrawArms(canvas, cx, cy, r, sim.Turns, sim.Rot, sim.ArmsAlpha * da);
 
-        if (sim.FlashAlpha > 0) DrawGlow(canvas, _flashShader, cx, cy, r * 0.9f, sim.FlashAlpha * m);
+        if (sim.FlashAlpha > 0) DrawGlow(canvas, _flashShader, cx, cy, r * 0.9f, sim.FlashAlpha * da);
 
-        // Dust motes spiral inward, additive.
+        // Dust motes spiral inward, additive, each fading in and dragging a short tail of where it was.
         _fill.BlendMode = SKBlendMode.Plus;
+        _trail.BlendMode = SKBlendMode.Plus;
         float dot = (float)Math.Clamp(1.6 * r0 / VortexMath.MockupR0, 1.6, 4.0);
+        _trail.StrokeWidth = dot * 1.3f;
         float alphaRef = Math.Max(r, 40);
+        double moteFade = sim.IsClosing ? sim.DrawAlpha : 1;   // gathering motes show before the arms do
         foreach (var d in sim.Motes)
         {
             if (!d.Alive) continue;
-            double a = VortexMath.Clamp01(d.Radius / alphaRef) * 0.9 * m;
+            double a = VortexMath.Clamp01(d.Radius / alphaRef) * 0.9 * m * moteFade * VortexMath.MoteFade(t - d.Born);
+            if (a <= 0.003) continue;
+            float mx = cx + (float)(Math.Cos(d.Angle) * d.Radius), my = cy + (float)(Math.Sin(d.Angle) * d.Radius);
+            double ta = d.Angle - d.Va * VortexMath.TrailSec, tr = d.Radius + d.Vr * VortexMath.TrailSec;
+            _trail.Color = Mote.WithAlpha(ToByte(a * 0.4));
+            canvas.DrawLine(cx + (float)(Math.Cos(ta) * tr), cy + (float)(Math.Sin(ta) * tr), mx, my, _trail);
             _fill.Color = Mote.WithAlpha(ToByte(a));
-            canvas.DrawCircle(cx + (float)(Math.Cos(d.Angle) * d.Radius), cy + (float)(Math.Sin(d.Angle) * d.Radius), dot, _fill);
+            canvas.DrawCircle(mx, my, dot, _fill);
         }
         _fill.BlendMode = SKBlendMode.SrcOver;
 
@@ -188,12 +231,16 @@ public sealed class VortexLayer : BaseLayer
             canvas.DrawCircle(cx, cy, (float)(sim.RingRadius[i] * rs), _stroke);
         }
 
-        if (sim.BloomAlpha > 0) DrawGlow(canvas, _bloomShader, cx, cy, r * 0.5f, sim.BloomAlpha * m);
+        if (sim.BloomAlpha > 0) DrawGlow(canvas, _bloomShader, cx, cy, r * 0.5f, sim.BloomAlpha * da);
 
         var deck = _showing;
         if (deck != null && deck.Length > 0
             && VortexMath.GifFrame(t - sim.GifBorn, _flicker, out var fr, out var ga, out var glitch))
-            DrawGif(canvas, deck[fr % deck.Length], (float)sim.GifX, (float)sim.GifY, r0 * 0.9f, ga, glitch);
+        {
+            // The gif grows out of the vortex with a small overshoot rather than popping in.
+            VortexMath.GifPop(t - sim.GifBorn, _flicker, _level, out var gs, out var gm);
+            DrawGif(canvas, deck[fr % deck.Length], (float)sim.GifX, (float)sim.GifY, r0 * 0.9f * (float)gs, ga * gm, glitch);
+        }
     }
 
     private void DrawArms(SKCanvas canvas, float cx, float cy, float radius, double turns, double rot, double alpha)
