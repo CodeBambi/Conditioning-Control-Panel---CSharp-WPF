@@ -155,7 +155,7 @@ here record where and why the port chose something, and who advised.
 ## 2026-09-30: Awareness legacy observer applies the privacy rules on Avalonia only
 - Question: WPF's legacy title observer (WindowAwarenessService, now in Core) never applied the deny list or the incognito drop; only Awareness v2 (AwarenessObserverPolicy) does, and v2 is not on this head.
 - Choice: Avalonia applies AwarenessPrivacyRules (deny list incl. seeded groups + incognito) in the poll through the service's optional `allowTitle` filter (`WindowAwarenessService.PassesPrivacyRules`), before anything reads the title (logs included). A dropped window reads Unknown, raises no event and keeps nothing. WPF's legacy observer does not, and is left unchanged (constructed with no filter). Privacy-tightening deviation.
-- Also: this head has no AI service, so the reaction is always the preset line WPF says with AI off; no title, app name or reaction leaves the machine.
+- Also: this head has no AI service, so the reaction is always the preset line WPF says with AI off; no title, app name or reaction leaves the machine. (Superseded 2026-10-01 below: the AI exists now.)
 - Tests: `Tests/CCP.Core.Tests/WindowAwarenessServiceTests.cs` (denied/incognito produce no event, fail-proven); `AwarenessConsentTests.WpfBuildsTheLegacyObserverWithoutAPrivacyFilter` (WPF source pin).
 - Advisor: supervisor.
 
@@ -324,3 +324,10 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   (WPF ~2.1k LOC plus mouth/tongue validation and the bubble test) does not fit the line cap and is the next slice, so
   Calibrate stays disabled with a reason.
 - Advisor: worker (supervisor informed).
+
+## 2026-10-01: Awareness reaches the AI only on the legacy consent (avalonia-port/companion-awareness-brain)
+- Question: App.Ai (Core AiService) now exists on this head. WPF's legacy tube handlers send the app name and page title to the AI (AvatarTubeWindow.Reactions.cs:93-150, 214-235) only when v2 is inactive; with v2 on (default) its arbiter speaks and the consent the user accepted (`awareness_consent_leaves_body`) promises page titles stay local. This head has no v2 observer.
+- Choice: the Avalonia tube takes WPF's AI-first legacy path only when UseAwarenessV2 is off (the consent showed `awareness_consent_leaves_body_legacy`, which says titles are sent), awareness is on and consented, AiChatEnabled and the AI is available (`AvatarTubeWindow.MaySendToAi`). Otherwise the preset line and nothing leaves. The deny list and incognito drop still run in the poll before any event (decision 2026-09-30). The consent re-check in the handler is tighter than WPF (WPF relies on the observer being stopped).
+- Not moved: `AwarenessV2Routing`/`AwarenessSpeech`/`ReactionArbiter` stay in the WPF head. Dry-run into Core needs AwarenessReactionService, AwarenessPromptBuilder (AwarenessAngleCards, AwarenessProjection, CompanionPhraseService), WorthinessScorer -> ActivityLedger and ~25 App.* sites, and they only consume v2 observer frames, so on this head they would be dead code. Bark echo stays a gap (no Core bark hosted).
+- Tests: `Tests/CCP.Avalonia.Tests/AwarenessAiRoutingTests.cs` (denied/incognito never reach the fake AI; v2 on sends nothing; revoked consent sends nothing; fail-proven).
+- Advisor: supervisor.
