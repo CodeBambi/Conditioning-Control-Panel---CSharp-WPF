@@ -40,14 +40,23 @@ internal static class ChasterHead
                 Paused: s.ChasterPaused,
                 PriceOverrides: new Dictionary<string, int>(s.ChasterPriceOverrides ?? new Dictionary<string, int>(), StringComparer.Ordinal));
         };
-        // ponytail: no MinutesOn (the feature day log is not on this head) and no LadderApi/raffle
-        // (the ladder slice); both are optional on the service and read as "nobody can tell".
+        // ponytail: no MinutesOn (the feature day log is not on this head); optional on the service,
+        // read as "nobody can tell".
+        var target = Target(userDataDir, overrideUrl);
+        inner ??= new HttpClientHandler();
         return new ChasterService(
-            new ChasterClient(new Route(Target(userDataDir, overrideUrl), inner ?? new HttpClientHandler()),
-                $"ConditioningControlPanel/{CoreReleaseContent.AppVersion}"),
+            new ChasterClient(new Route(target, inner), $"ConditioningControlPanel/{CoreReleaseContent.AppVersion}"),
             new SecretChasterTokenStore(),
             Path.Combine(CorePaths.UserData, "chaster_tab.json"),
-            options);
+            options)
+        {
+            // WPF ChasterServiceApp: the raffle/ladder lives on the same proxy, so the same Route
+            // (loopback-only in a sandbox, fail closed otherwise) carries it.
+            LadderApi = new ChasterLadderApi(new HttpClient(new Route(target, inner), disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan },
+                FriendsHead.Identity, ChasterClient.ProxyBase),
+            RafflePostDays = () => CoreSettings.Current.ChasterRafflePostDays,
+            LadderShowName = () => CoreSettings.Current.ChasterLadderShowName,
+        };
     }
 
     /// <summary>WPF ChasterHooks.Attach, for the events this head raises: quests (and the dailies
