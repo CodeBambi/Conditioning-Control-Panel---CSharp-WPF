@@ -125,8 +125,30 @@ public class SpiralLayer : BaseLayer
 
     public override void OnDeactivated() => DisposeFrames();
 
+    // Super Vortex picked as "Super only": the spiral keeps running (and counts as showing, so the
+    // vortex that rides it stays up) but steps aside behind a veil. OverlayService pushes the
+    // decision (UI thread); the veil eases on the engine tick.
+    private volatile bool _stepAside;
+    private double _veil = 1;
+
+    /// <summary>Hide the spiral for Super only (true) or bring it back. A layer not on screen snaps, so a fresh show never flashes. UI thread.</summary>
+    public void SetStepAside(bool on)
+    {
+        if (!IsActive) _veil = on ? 0 : 1;
+        if (_stepAside == on) return;   // the 500 ms reconciler pushes every tick: no repaint for nothing
+        _stepAside = on;
+        _dirty = true;
+    }
+
     public override void Update(TimeSpan delta)
     {
+        double target = _stepAside ? 0 : 1;
+        if (_veil != target)
+        {
+            _veil = Super.SuperStepAside.Step(_veil, _stepAside, delta.TotalSeconds,
+                Super.SuperStepAside.FadeSecondsFor(MotionFx.Level));
+            _dirty = true;
+        }
         if (_frames.Length < 2) return;
         int start = _frameIndex;
         _accum += delta;
@@ -135,12 +157,14 @@ public class SpiralLayer : BaseLayer
             _accum -= _frameDelay;
             _frameIndex = (_frameIndex + 1) % _frames.Length;
         }
-        if (_frameIndex != start) _dirty = true;   // only repaint the surface when the frame changed
+        // Only repaint the surface when the frame changed, and never for a spiral fully stepped aside.
+        if (_frameIndex != start && _veil > 0) _dirty = true;
     }
 
     public override void Render(SKCanvas canvas, SKRectI boundsPx, double dpiScale, TimeSpan elapsed)
     {
-        if (_frames.Length == 0 || _opacity <= 0) return;
+        double opacity = _opacity * Super.SuperStepAside.Ease(_veil);
+        if (_frames.Length == 0 || opacity <= 0) return;
         var img = _frames[Math.Min(_frameIndex, _frames.Length - 1)];
 
         // UniformToFill: cover the monitor, preserve aspect, center-crop overflow.
@@ -149,7 +173,7 @@ public class SpiralLayer : BaseLayer
         float x = boundsPx.Left + (boundsPx.Width - w) / 2f;
         float y = boundsPx.Top + (boundsPx.Height - h) / 2f;
 
-        _paint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(_opacity * 255, 0, 255));
+        _paint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(opacity * 255, 0, 255));
         canvas.DrawImage(img, SKRect.Create(x, y, w, h), _paint);
     }
 

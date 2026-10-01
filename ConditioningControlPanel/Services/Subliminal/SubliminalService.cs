@@ -269,8 +269,9 @@ namespace ConditioningControlPanel.Services
             if (!_isRunning || !App.Settings.Current.SubliminalEnabled)
                 return;
 
-            // Super Afterglow, "use only Afterglow": the ambient cards rest, the near-cursor words carry on.
-            if (!(App.Settings.Current.AfterglowOnly && Super.SuperAccess.IsOn(Super.SuperEffect.Afterglow)))
+            // Super Afterglow picked as "Super only": the ambient cards rest, the near-cursor words carry on.
+            // Asked per tick, so a pick change applies at the next card with no restart.
+            if (!Super.SuperAccess.ReplacesBase(Super.SuperEffect.Afterglow))
                 FlashSubliminal();
             ScheduleNext();
         }

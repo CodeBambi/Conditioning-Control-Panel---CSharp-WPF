@@ -240,6 +240,7 @@ public class OverlayService : IDisposable
         {
             _pinkLayer = new Compositor.PinkTintLayer(App.Compositor!);
             App.Compositor!.RegisterLayer(_pinkLayer);
+            PushStepAside();   // a first show under Super only starts hidden, no flash of tint
         }
         return _pinkLayer;
     }
@@ -249,6 +250,7 @@ public class OverlayService : IDisposable
         {
             _spiralLayer = new Compositor.SpiralLayer(App.Compositor!);
             App.Compositor!.RegisterLayer(_spiralLayer);
+            PushStepAside();
         }
         return _spiralLayer;
     }
@@ -258,6 +260,32 @@ public class OverlayService : IDisposable
     private void OnSuperChanged(Super.SuperEffect e)
     {
         if (e == Super.SuperEffect.Vortex) DispatcherHelper.RunOnUI(SyncVortex);
+        if (e is Super.SuperEffect.Vortex or Super.SuperEffect.Creep) DispatcherHelper.RunOnUI(PushStepAside);
+    }
+
+    /// <summary>
+    /// "Super only" (owner, 2026-10-01): the pink tint steps aside for Creep and the spiral for
+    /// Vortex while <see cref="Super.SuperAccess.ReplacesBase"/> says so. Only the compositor layers
+    /// can (Creep and Vortex need the compositor to exist at all, so on the legacy window path there
+    /// is no Super to stand in and the base keeps drawing). The base feature keeps running, so its
+    /// toggle stays the master and the add-on riding it stays up. Anything else holding the overlay
+    /// (a timed pop, a voice or remote command, a Deeper band) keeps it visible. Live: Changed, the
+    /// 500 ms reconciler and every direct opacity push call this. UI thread, cheap, idempotent.
+    /// </summary>
+    private void PushStepAside()
+    {
+        try
+        {
+            if (_pinkLayer != null)
+                _pinkLayer.SetStepAside(Super.SuperStepAside.Hides(
+                    Super.SuperAccess.ReplacesBase(Super.SuperEffect.Creep),
+                    _timedPinkHolds > 0 || _sustainedPinkHeld || _rampPinkOpacity.HasValue));
+            if (_spiralLayer != null)
+                _spiralLayer.SetStepAside(Super.SuperStepAside.Hides(
+                    Super.SuperAccess.ReplacesBase(Super.SuperEffect.Vortex),
+                    _timedSpiralHolds > 0 || _sustainedSpiralHeld || _rampSpiralOpacity.HasValue));
+        }
+        catch (Exception ex) { App.Logger?.Debug("OverlayService.PushStepAside: {E}", ex.Message); }
     }
     private void SyncVortex()
     {
@@ -790,6 +818,10 @@ public class OverlayService : IDisposable
             SyncVortex();
         }
 
+        // Super only: re-ask every tick so a hold that ended, a tier lapse or a restored pick
+        // brings the base look back (or sends it away) without waiting on an event.
+        PushStepAside();
+
         // #975: Brain Drain was the ONE overlay this 500ms reconciler never touched. Pink and
         // spiral have always self-healed here - if their windows are gone and the feature is on,
         // the next tick brings them back. Brain Drain's visual half only ever came up from two
@@ -1289,6 +1321,7 @@ public class OverlayService : IDisposable
                 brush.Color = System.Windows.Media.Color.FromArgb(a, fr, fg, fb);
         // Force the next post-ramp settings-sync to re-apply from settings.
         _lastAppliedPinkOpacity = -1;
+        PushStepAside();   // a hold just took or changed the tint: it shows even under Super only
     }
 
     /// <summary>
@@ -1312,6 +1345,7 @@ public class OverlayService : IDisposable
         foreach (var image in _spiralGifImages) image.Opacity = scaled;
         foreach (var media in _spiralMediaElements) media.Opacity = scaled;
         _lastAppliedSpiralOpacity = -1;
+        PushStepAside();
     }
 
     private void ShowPinkFilterAdHoc(int opacityPercent)
