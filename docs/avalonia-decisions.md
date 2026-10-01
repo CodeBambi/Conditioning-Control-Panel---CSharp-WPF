@@ -357,3 +357,19 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   LauncherHost.OnBareRelaunch (panel visible -> raise it; else skip-to-panel ? panel : launcher) instead of always raising the panel.
 - Known limit: .NET named mutexes on Unix are scoped to the login session, so a second launch from another session (setsid,
   another TTY) runs as its own instance. Pre-existing; found while proving the handoff live.
+## web-assets-host: Resources/web served on loopback HTTP, not a custom scheme
+- Question: how does this head serve Assets/web (WPF: WebView2 `SetVirtualHostNameToFolderMapping("ccp.game", Resources\web)`) to its web views?
+- Options: (a) loopback static server; (b) custom URI scheme / `WebResourceRequested`; (c) `file://`.
+- Choice: (a). (b) is not available: Avalonia.Controls.WebView 12.1.0's WebKitGTK adapter imports no
+  `webkit_web_context_register_uri_scheme`/`webkit_uri_scheme_request_finish` (only navigation-policy calls), so it cannot answer a
+  request on Linux. (c) blocks ES modules, workers and `fetch` that the intake/dtrh pages use.
+- `CCP.Avalonia/Platform/WebAssetServer.cs`: HttpListener on `127.0.0.1` only, random port, 128-bit per-run token. The first URL
+  carries `?ccp_t=<token>`; the reply sets an HttpOnly SameSite=Strict cookie so relative and root-relative loads work like they
+  do on `ccp.game`. No token -> 403; foreign Host header -> 404 (HttpListener prefix match); GET/HEAD only; any path resolving
+  outside Resources/web -> 404. No Range support yet (marked `ponytail:`).
+- Packaging: the Avalonia head links `Assets/web/**` to `Resources/web` with the subset WPF ships (same harness/test/notes and
+  content-pack mp3 excludes). Size delta about +158 MB (1,913 files) in the Linux tarball/output; the intake/dtrh mp3s stay in the
+  content pack, as on WPF.
+- Not wired: no page navigates to it yet beyond the test proof (`SharedServer_ServesTheShippedIntakePage`); ccp.assets/ccp.mod/
+  ccp.content/ccp.tunnel user-media hosts are not mapped.
+- Advisor: worker (oracle unavailable; choice clear-cut on the brief's safety constraints).
