@@ -82,7 +82,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal int ActiveDotIndex { get; private set; } = -1;
         internal (string Label, Point Screen)[] Positions { get; private set; } = Array.Empty<(string, Point)>();
         private readonly TaskCompletionSource<bool> _introDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private WebcamCalibrationData? _before;
+        private WebcamCalibrationData? _before, _candidate;
 
         /// <summary>True while a calibration window is on screen (the 6-blink gesture checks it).</summary>
         public static bool IsShowing { get; private set; }
@@ -189,7 +189,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Tracker.OnRawIris -= OnRawIris;
             Tracker.OnHeadPose -= OnHeadPose;
             Tracker.StateChanged -= OnTrackerStateChanged;
-            if (!_saved) Tracker.SetCalibrationLive(_before);   // nothing partial survives a cancel
+            // Nothing partial survives a cancel - but only undo our own candidate: a revoke (or any
+            // other change) made while the window was open stands.
+            if (!_saved && ReferenceEquals(Tracker.Calibration, _candidate)) Tracker.SetCalibrationLive(_before);
         }
 
         private void OnTrackerStateChanged()
@@ -333,11 +335,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             data.MonitorBounds!.DpiScale = RenderScaling;
 
+            _candidate = data;
             Tracker.SetCalibrationLive(data);   // in memory only until the gesture checks finish
             await RunValidationPhaseAsync();
             if (_cancelled) return;
 
-            Tracker.ApplyCalibration(data);
+            if (!Tracker.ApplyCalibration(data))
+            {
+                _validationPanel.IsVisible = false;
+                ShowError("Couldn't save the calibration. See logs/app.log for details.");
+                return;
+            }
             _saved = true;
             CoreSettings.Current.WebcamCalibrated = true;
             CoreSettings.Current.WebcamCalibrationMode = "SixteenPoint";

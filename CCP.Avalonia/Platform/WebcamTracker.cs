@@ -274,12 +274,14 @@ namespace ConditioningControlPanel.Avalonia.Platform
             }
         }
 
-        /// <summary>WPF ApplyCalibration: save to the profile file, then use it.</summary>
-        public void ApplyCalibration(WebcamCalibrationData data)
+        /// <summary>WPF ApplyCalibration: save to the profile file, then use it. False (nothing
+        /// changed) when the save failed.</summary>
+        public bool ApplyCalibration(WebcamCalibrationData data)
         {
-            data.Save();
+            if (!data.Save()) return false;
             SetCalibrationLive(data);
             Log.Information("[Webcam] calibration applied (mode={Mode})", data.Mode);
+            return true;
         }
 
         /// <summary>WPF SetCalibrationLive: in memory only (calibration's verify phase); null clears.</summary>
