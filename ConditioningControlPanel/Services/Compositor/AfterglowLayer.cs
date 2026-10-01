@@ -65,6 +65,7 @@ public sealed class AfterglowLayer : BaseLayer
         if (string.IsNullOrWhiteSpace(text) || placements.Count == 0) return;
         var runs = GlyphFallback.Split(text, BoldArial, SKFontStyle.Bold);
         if (runs.Length == 0) return;
+        var level = MotionFx.Level;
 
         lock (_sync)
         {
@@ -77,18 +78,25 @@ public sealed class AfterglowLayer : BaseLayer
                 d.Height = descent - ascent;
                 d.BaselineOffset = -(ascent + descent) / 2f;
                 var key = (p.BoundsPx.Left * 397) ^ p.BoundsPx.Top;
-                var g = _field.Spawn(text, key, p.BoundsPx.MidX, p.BoundsPx.MidY, FontDip * p.Scale, opacity, delayS);
+                var b = p.BoundsPx;
+                var g = _field.Spawn(text, key, b.MidX, b.MidY, FontDip * p.Scale, opacity, delayS,
+                    b.Left, b.Top, b.Right, b.Bottom, d.Total / 2f + 24f * p.Scale, level, _rnd);
                 g.Payload = d;
             }
+            // Under the lock: an off-thread Update that just found the field empty must not
+            // switch the layer off after this ghost went in.
+            SetActive(true);
         }
-        SetActive(true);
     }
 
     /// <summary>Panic, Stop, switch off. Safe from any thread.</summary>
     public void Clear()
     {
-        lock (_sync) _field.Clear();
-        SetActive(false);
+        lock (_sync)
+        {
+            _field.Clear();
+            SetActive(false);
+        }
     }
 
     // #853: a ghost still waiting behind its card draws nothing, so it must not force the shared
@@ -125,18 +133,16 @@ public sealed class AfterglowLayer : BaseLayer
         bool hasCursor = GetCursorPos(out var cur);
 
         _wokenText.Clear();
-        bool empty;
         lock (_sync)
         {
             _woken.Clear();
             _field.Step(Math.Min(delta.TotalSeconds, 0.1), hasCursor, cur.X, cur.Y, _level, _rnd, _woken);
             foreach (var g in _woken) _wokenText.Add(g.Text);
-            empty = _field.IsEmpty;
+            if (_field.IsEmpty) SetActive(false);
             bool moving = _field.ParticleCount > 0 || _field.Rings.Count > 0;
             foreach (var g in _field.Ghosts) if (g.Born <= _field.Now) { moving = true; break; }
             _moving = moving;
         }
-        if (empty) SetActive(false);
 
         foreach (var t in _wokenText)
         {
@@ -160,8 +166,9 @@ public sealed class AfterglowLayer : BaseLayer
                 _text.TextSize = FontDip * d.Scale;
                 float baseline = (float)g.Y + d.BaselineOffset;
 
-                // Mockup shadowBlur 14 at a 34 px font, i.e. a sigma of about 7 x unit.
-                _text.MaskFilter = Blur((float)(7 * AfterglowField.Unit(g.FontPx)));
+                // Mockup shadowBlur is 14 x alpha at a 34 px font (a sigma of about 7 x unit x a):
+                // the halo swells with the wake flare and shrinks as the ghost fades.
+                _text.MaskFilter = Blur((float)(7 * AfterglowField.Unit(g.FontPx) * Math.Max(a, 0.2)));
                 _text.Color = GhostGlow.WithAlpha(alpha);
                 GlyphFallback.DrawCentered(canvas, d.Runs, (float)g.X, baseline, _text, d.Widths, d.Total);
                 _text.MaskFilter = null;
@@ -191,10 +198,11 @@ public sealed class AfterglowLayer : BaseLayer
 
     private SKMaskFilter Blur(float sigma)
     {
-        int key = (int)Math.Round(sigma * 4);
+        // Half-px steps: the halo now tracks alpha, so keep the cache small (bounded by the max sigma).
+        int key = (int)Math.Round(sigma * 2);
         if (!_blurs.TryGetValue(key, out var f))
         {
-            f = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Math.Max(0.5f, key / 4f));
+            f = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Math.Max(0.5f, key / 2f));
             _blurs[key] = f;
         }
         return f;

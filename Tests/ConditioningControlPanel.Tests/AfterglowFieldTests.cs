@@ -194,4 +194,68 @@ public class AfterglowFieldTests
         Assert.Equal(2, AfterglowField.PickWeighted(words, bonus, 0.76));
         Assert.Equal(-1, AfterglowField.PickWeighted(Array.Empty<string>(), bonus, 0.5));
     }
+
+    // Screen 1920x1080 at the origin; the card sits at its centre.
+    private static AfterglowGhost SpawnScattered(AfterglowField f, MotionLevel level, Func<double> rnd, double delay = 0)
+        => f.Spawn("DROP", 0, 960, 540, Fs, 1, delay, 0, 0, 1920, 1080, 100, level, rnd);
+
+    [Fact]
+    public void Ghost_DriftsFromTheCardToItsOwnSpotInTheBand_EasedOverPointNineSeconds()
+    {
+        var f = new AfterglowField();
+        var g = SpawnScattered(f, MotionLevel.Full, Fixed(0.0), delay: 0.5);
+        // rnd 0 = the band's top-left corner: x .18, y .2 of the screen.
+        Assert.Equal(1920 * 0.18, g.RestX, 6);
+        Assert.Equal(1080 * 0.2, g.RestY, 6);
+        Run(f, 0.4);
+        Assert.Equal(960, g.X, 6);               // waiting behind its card: still on the card
+        Run(f, 0.1 + AfterglowField.DriftS / 2);
+        Assert.InRange(g.X, g.RestX, 960 - 1);    // eased: past halfway at half time
+        Assert.True(960 - g.X > (960 - g.RestX) / 2);
+        Run(f, AfterglowField.DriftS);
+        Assert.Equal(g.RestX, g.X, 6);
+        Assert.Equal(g.RestY, g.Y, 6);
+    }
+
+    [Fact]
+    public void Drift_Off_StaysOnTheCard_Reduced_GoesHalfAsFarAtHalfSpeed()
+    {
+        var f = new AfterglowField();
+        var off = SpawnScattered(f, MotionLevel.Off, Fixed(0.0));
+        Assert.Equal(960, off.RestX, 6);
+        Assert.Equal(0, off.DriftS);
+
+        var red = SpawnScattered(f, MotionLevel.Reduced, Fixed(0.0));
+        Assert.Equal(960 + (1920 * 0.18 - 960) * 0.5, red.RestX, 6);
+        Assert.Equal(AfterglowField.DriftS * 2, red.DriftS, 6);
+    }
+
+    [Fact]
+    public void RestSpot_KeepsTheWordOnScreen_AndPrefersTheSpotFarthestFromOtherGhosts()
+    {
+        var f = new AfterglowField();
+        // Band corner x .18 x 400 = 72 would cut a 100 px half-width word: clamped to 100.
+        var narrow = f.Spawn("SINK", 3, 200, 200, Fs, 1, 0, 0, 0, 400, 400, 100, MotionLevel.Full, Fixed(0.0));
+        Assert.Equal(100, narrow.RestX, 6);
+
+        var first = SpawnScattered(f, MotionLevel.Full, Fixed(0.0));
+        // Tries: (0,0) again, then the far corner (1,1): the far one wins.
+        var seq = new Queue<double>(new[] { 0.0, 0.0, 0.999, 0.999, 0.0, 0.0, 0.0, 0.0 });
+        var second = SpawnScattered(f, MotionLevel.Full, () => seq.Dequeue());
+        Assert.True(second.RestX > 1500 && second.RestY > 800, $"{second.RestX},{second.RestY}");
+        Assert.NotEqual(first.RestX, second.RestX);
+    }
+
+    [Fact]
+    public void Ghost_WakesWhereItRests_NotWhereTheCardWas()
+    {
+        var f = new AfterglowField();
+        var g = SpawnScattered(f, MotionLevel.Full, Fixed(0.0));
+        Run(f, 1.2);
+        var woken = new List<AfterglowGhost>();
+        f.Step(0.02, true, 960, 540, MotionLevel.Full, Fixed(0.5), woken);
+        Assert.Empty(woken);
+        f.Step(0.02, true, g.RestX, g.RestY, MotionLevel.Full, Fixed(0.5), woken);
+        Assert.Single(woken);
+    }
 }

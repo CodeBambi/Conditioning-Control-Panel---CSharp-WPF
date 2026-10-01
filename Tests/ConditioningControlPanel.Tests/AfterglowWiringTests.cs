@@ -23,6 +23,24 @@ public class AfterglowWiringTests
         Assert.Contains("_afterglow.GetActiveTextRectsPx()", Body(src, "public System.Drawing.Rectangle[] GetActiveTextScreenRects()"));
     }
 
+    /// <summary>The compositor can run Update off the UI thread. Turning the layer off for an empty field
+    /// must happen under the same lock Spawn turns it on under, or a ghost spawned between the two is
+    /// stranded on an inactive layer.</summary>
+    [Fact]
+    public void Layer_FlipsItsActivityUnderTheFieldLock()
+    {
+        var src = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Services", "Compositor", "AfterglowLayer.cs"));
+        foreach (var method in new[] { "public void Spawn(", "public void Clear()", "public override void Update(" })
+        {
+            var body = Body(src, method);
+            var lockAt = body.IndexOf("lock (_sync)", StringComparison.Ordinal);
+            Assert.True(lockAt >= 0, method);
+            var lockBody = Body(body.Substring(lockAt), "lock (_sync)");
+            Assert.Contains("SetActive(", lockBody);
+            Assert.DoesNotContain("SetActive(", body.Replace(lockBody, ""));
+        }
+    }
+
     private static string Body(string src, string signature)
     {
         int i = src.IndexOf(signature, StringComparison.Ordinal);

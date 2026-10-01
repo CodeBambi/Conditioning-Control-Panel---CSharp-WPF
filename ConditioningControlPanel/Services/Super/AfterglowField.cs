@@ -10,8 +10,12 @@ namespace ConditioningControlPanel.Services.Super
         public string Text = "";
         /// <summary>Which screen placement it belongs to (the per-screen cap counts by this).</summary>
         public int Screen;
-        /// <summary>Centre of the word, world (virtual-desktop) px.</summary>
+        /// <summary>Centre of the word now, world (virtual-desktop) px.</summary>
         public double X, Y;
+        /// <summary>Where the card showed it, and where the ghost drifts to rest.</summary>
+        public double FromX, FromY, RestX, RestY;
+        /// <summary>Seconds the drift from the card to the rest spot takes (0 = no drift).</summary>
+        public double DriftS;
         /// <summary>The card's font size on this screen, px. Every distance scales off it.</summary>
         public double FontPx;
         /// <summary>The card's own opacity setting, 0..1. The ghost never outshines its card.</summary>
@@ -76,6 +80,12 @@ namespace ConditioningControlPanel.Services.Super
         public const double RingFrom = 0.6, RingGrow = 2.2;          // radius 0.6 -> 2.8 x font
         public const double Drag = 2;             // v *= 1 - dt * 2
         public const int MaxParticles = 400;
+        // Real cards all sit at the screen centre, so ghosts left in place would stack into one
+        // smear. Each ghost drifts to its own spot in the mockup's band (x .18..82, y .2..8 of
+        // the screen), picking the farthest of a few tries from the ghosts already resting there.
+        public const double DriftS = 0.9;          // Reduced: twice as long, half as far
+        public const double BandX0 = 0.18, BandXSpan = 0.64, BandY0 = 0.2, BandYSpan = 0.6;
+        public const int RestTries = 4;
 
         public readonly List<AfterglowGhost> Ghosts = new();
         public readonly AfterglowParticle[] Particles = new AfterglowParticle[MaxParticles];
@@ -143,6 +153,16 @@ namespace ConditioningControlPanel.Services.Super
         /// starts to fade out). Over the per-screen cap, the oldest ghost on that screen goes.
         /// </summary>
         public AfterglowGhost Spawn(string text, int screen, double x, double y, double fontPx, double opacity, double delayS)
+            => Spawn(text, screen, x, y, fontPx, opacity, delayS, 0, 0, 0, 0, 0, MotionLevel.Off, null);
+
+        /// <summary>
+        /// As above, and the ghost drifts from the card to a free spot inside the screen area
+        /// (<paramref name="left"/>..<paramref name="right"/>, keeping <paramref name="halfW"/> clear of
+        /// each side). MotionLevel.Off keeps it where the card was (still); Reduced goes half as far
+        /// at half the speed.
+        /// </summary>
+        public AfterglowGhost Spawn(string text, int screen, double x, double y, double fontPx, double opacity, double delayS,
+            double left, double top, double right, double bottom, double halfW, MotionLevel level, Func<double>? rnd)
         {
             int onScreen = 0, oldest = -1;
             for (int i = 0; i < Ghosts.Count; i++)
@@ -156,10 +176,51 @@ namespace ConditioningControlPanel.Services.Super
             var g = new AfterglowGhost
             {
                 Text = text, Screen = screen, X = x, Y = y, FontPx = fontPx,
-                Opacity = Math.Clamp(opacity, 0, 1), Born = Now + Math.Max(0, delayS)
+                Opacity = Math.Clamp(opacity, 0, 1), Born = Now + Math.Max(0, delayS),
+                FromX = x, FromY = y, RestX = x, RestY = y
             };
+            if (rnd != null && level != MotionLevel.Off && right > left && bottom > top)
+            {
+                PickRest(screen, left, top, right, bottom, halfW, rnd, out var rx, out var ry);
+                double k = MotionScale(level);
+                g.RestX = x + (rx - x) * k;
+                g.RestY = y + (ry - y) * k;
+                g.DriftS = DriftS / k;
+            }
             Ghosts.Add(g);
             return g;
+        }
+
+        /// <summary>The farthest of <see cref="RestTries"/> spots in the band from the other ghosts on this screen.</summary>
+        private void PickRest(int screen, double left, double top, double right, double bottom, double halfW,
+            Func<double> rnd, out double bestX, out double bestY)
+        {
+            double w = right - left, h = bottom - top;
+            double lo = left + Math.Min(halfW, w / 2), hi = right - Math.Min(halfW, w / 2);
+            bestX = (left + right) / 2; bestY = (top + bottom) / 2;
+            double bestD = -1;
+            for (int k = 0; k < RestTries; k++)
+            {
+                double cx = Math.Clamp(left + w * (BandX0 + rnd() * BandXSpan), lo, hi);
+                double cy = top + h * (BandY0 + rnd() * BandYSpan);
+                double d = double.MaxValue;
+                foreach (var o in Ghosts)
+                {
+                    if (o.Screen != screen) continue;
+                    double dx = o.RestX - cx, dy = o.RestY - cy;
+                    d = Math.Min(d, dx * dx + dy * dy);
+                }
+                if (d > bestD) { bestD = d; bestX = cx; bestY = cy; }
+            }
+        }
+
+        /// <summary>Ease-out drift 0..1 at <paramref name="age"/>; 1 when there is no drift.</summary>
+        public static double DriftProgress(double age, double driftS)
+        {
+            if (driftS <= 0 || age >= driftS) return 1;
+            if (age <= 0) return 0;
+            double u = 1 - age / driftS;
+            return 1 - u * u * u;
         }
 
         /// <summary>Panic, stop, switch off: everything goes, at once.</summary>
@@ -191,6 +252,9 @@ namespace ConditioningControlPanel.Services.Super
                 if (age >= DropS) { Ghosts.RemoveAt(i); continue; }
                 if (age < 0) continue;
                 double baseLeft = Base(age), unit = Unit(g.FontPx);
+                double dp = DriftProgress(age, g.DriftS);
+                g.X = g.FromX + (g.RestX - g.FromX) * dp;
+                g.Y = g.FromY + (g.RestY - g.FromY) * dp;
 
                 if (hasCursor)
                 {
