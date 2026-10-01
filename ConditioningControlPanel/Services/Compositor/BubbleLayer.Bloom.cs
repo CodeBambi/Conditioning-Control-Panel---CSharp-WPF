@@ -16,9 +16,12 @@ public sealed partial class BubbleLayer
 {
     private const float Tau = MathF.PI * 2f;
 
+    private enum BloomFxKind { Burst, Clean, KidPop }
+
     private sealed class BloomFx
     {
-        public bool Clean;
+        public BloomFxKind Kind;
+        public int Hue;
         public InnerBloom.Node? Node;
         public float X, Y, R;
         public long StartMs;
@@ -30,6 +33,9 @@ public sealed partial class BubbleLayer
     private readonly List<BloomFx> _bloomFx = new();
     private readonly SKPath _filmPath = new();
     private readonly InnerBloom.Bulge[] _bulgeBuf = new InnerBloom.Bulge[4];
+    private readonly int[] _kidOrder = new int[4];
+    private readonly double[] _kidZ = new double[4];
+    private SKPath? _leafClip;
     private readonly Dictionary<int, SKShader> _hueGlow = new(), _hueFace = new();
     private readonly Dictionary<BitmapSource, SKImage> _bloomPics = new();
     private SKShader? _filmShade;
@@ -39,10 +45,16 @@ public sealed partial class BubbleLayer
         => AddFx(new BloomFx { Node = node, X = (float)xPx, Y = (float)yPx, R = (float)rPx, StartMs = startMs, Motion = motion },
                  InnerBloom.Droplets, 110f, (int)startMs);
 
-    public void AddBloomClean(double xPx, double yPx, double rPx, string word)
-        => AddFx(new BloomFx { Clean = true, X = (float)xPx, Y = (float)yPx, R = (float)rPx, Word = word,
-                               StartMs = System.Environment.TickCount64 },
+    public void AddBloomClean(double xPx, double yPx, double rPx, string word, InnerBloom.Motion motion)
+        => AddFx(new BloomFx { Kind = BloomFxKind.Clean, X = (float)xPx, Y = (float)yPx, R = (float)rPx, Word = word,
+                               StartMs = System.Environment.TickCount64, Motion = motion },
                  InnerBloom.SweepSparks + 20, 260f, (int)xPx * 31 + (int)yPx);
+
+    /// <summary>A released kid popped: a ring and a spray of sparks in its own hue (the mockup's kid pop).</summary>
+    public void AddBloomKidPop(double xPx, double yPx, double rPx, int hue, InnerBloom.Motion motion)
+        => AddFx(new BloomFx { Kind = BloomFxKind.KidPop, Hue = hue, X = (float)xPx, Y = (float)yPx, R = (float)rPx,
+                               StartMs = System.Environment.TickCount64, Motion = motion },
+                 InnerBloom.KidPopSparks, 140f, (int)xPx * 17 + (int)yPx + hue);
 
     private void AddFx(BloomFx fx, int sparks, float speed, int seed)
     {
@@ -52,7 +64,8 @@ public sealed partial class BubbleLayer
         for (int i = 0; i < sparks; i++)
         {
             fx.SparkAngle[i] = (float)(r.NextDouble() * Tau);
-            fx.SparkSpeed[i] = speed * (float)(.45 + .55 * r.NextDouble());
+            // Reduced motion halves how far the sparks fly (Off never gets here: the callers skip it).
+            fx.SparkSpeed[i] = speed * (float)fx.Motion.Amp * (float)(.45 + .55 * r.NextDouble());
         }
         _bloomFx.Add(fx);
         _dirty = true;
@@ -93,41 +106,60 @@ public sealed partial class BubbleLayer
         c.Scale(r, r);
         int nb = InnerBloom.Bulges(node, t, 1, node.Seed, m, _bulgeBuf);
         var bul = new ReadOnlySpan<InnerBloom.Bulge>(_bulgeBuf, 0, nb);
+        double ft = t * m.Speed;   // the film's shimmer obeys MotionFx too: still under Off, half under Reduced
         if (withKids && node.Kids.Count > 0)
         {
+            // Depth order: the far side of the tilted orbit first, so a near kid passes in front.
+            // Only the big bloom's kids travel through depth; a carrier's smalls stay flat.
+            int n = Math.Min(node.Kids.Count, _kidOrder.Length);
+            for (int j = 0; j < n; j++)
+            {
+                _kidOrder[j] = j;
+                _kidZ[j] = node.IsRoot ? InnerBloom.Depth(InnerBloom.Place(node, j, t, 1, m).Angle, m) : 0;
+            }
+            for (int i = 1; i < n; i++)
+                for (int k = i; k > 0 && _kidZ[_kidOrder[k]] < _kidZ[_kidOrder[k - 1]]; k--)
+                    (_kidOrder[k], _kidOrder[k - 1]) = (_kidOrder[k - 1], _kidOrder[k]);
+            // The recursion below reuses these buffers for a carrier's smalls: keep this level's copy.
+            int o0 = _kidOrder[0], o1 = _kidOrder[1], o2 = _kidOrder[2];
+            double z0 = _kidZ[0], z1 = _kidZ[1], z2 = _kidZ[2];
+
             // Each kid glows its own hue inside the big film.
             int gs = c.Save();
             BuildFilmPath(bul);
             c.ClipPath(_filmPath, antialias: true);
             _fill.BlendMode = SKBlendMode.Plus;
-            for (int j = 0; j < node.Kids.Count; j++)
+            for (int j = 0; j < n; j++)
             {
                 var at = InnerBloom.Place(node, j, t, 1, m);
                 _fill.Shader = HueGlow(node.Kids[j].Hue);
-                _fill.Color = SKColors.White.WithAlpha(A(1, alpha));
+                _fill.Color = SKColors.White.WithAlpha(A(InnerBloom.DepthAlpha(_kidZ[j]), alpha));
                 float gr = (float)at.Radius * 2.6f;
                 c.DrawCircle((float)at.X, (float)at.Y, gr, _fill);
             }
             _fill.Shader = null;
             _fill.BlendMode = SKBlendMode.SrcOver;
             c.RestoreToCount(gs);
-            for (int j = 0; j < node.Kids.Count; j++)
+            for (int o = 0; o < n; o++)
             {
+                int j = o == 0 ? o0 : o == 1 ? o1 : o2;
+                double z = j == 0 ? z0 : j == 1 ? z1 : z2;
                 var kid = node.Kids[j];
                 var at = InnerBloom.Place(node, j, t, 1, m);
+                float ka = alpha * (float)InnerBloom.DepthAlpha(z);
                 if (kid.IsCarrier)
-                    DrawNode(c, kid, (float)at.X, (float)at.Y, (float)at.Radius, t, m, 0, alpha, j * 2 + ph, true);
+                    DrawNode(c, kid, (float)at.X, (float)at.Y, (float)at.Radius, t, m, 0, ka, j * 2 + ph, true);
                 else
                 {
                     int ks = c.Save();
                     c.Translate((float)at.X, (float)at.Y);
                     c.Scale((float)at.Radius);
-                    DrawFilm(c, ReadOnlySpan<InnerBloom.Bulge>.Empty, t, j * 2 + ph, kid.Hue, Picture(kid), alpha);
+                    DrawFilm(c, ReadOnlySpan<InnerBloom.Bulge>.Empty, ft, j * 2 + ph, kid.Hue, Picture(kid), ka);
                     c.RestoreToCount(ks);
                 }
             }
         }
-        DrawFilm(c, bul, t, ph, -1, null, alpha);
+        DrawFilm(c, bul, ft, ph, -1, null, alpha);
         c.RestoreToCount(save);
     }
 
@@ -139,7 +171,8 @@ public sealed partial class BubbleLayer
         {
             int ps = c.Save();
             var box = new SKRect(-.8f, -.8f, .8f, .8f);
-            c.ClipRoundRect(new SKRoundRect(box, .8f, .8f), antialias: true);
+            if (_leafClip == null) { _leafClip = new SKPath(); _leafClip.AddCircle(0, 0, .8f); }
+            c.ClipPath(_leafClip, antialias: true);   // a cached path: no native object per leaf per frame
             if (pic != null)
             {
                 _img.Color = SKColors.White.WithAlpha(A(.92, alpha));
@@ -155,7 +188,9 @@ public sealed partial class BubbleLayer
             c.RestoreToCount(ps);
         }
         BuildFilmPath(bul);
-        _fill.Shader = _filmShade ??= SKShader.CreateRadialGradient(new SKPoint(-.3f, -.3f), 1.05f,
+        // Two-point conical, like the mockup's createRadialGradient(x-.3r, y-.3r, .05r, x, y, 1.05r):
+        // the light sits upper left but the rim brightens evenly all round, which is what reads as a sphere.
+        _fill.Shader = _filmShade ??= SKShader.CreateTwoPointConicalGradient(new SKPoint(-.3f, -.3f), .05f, new SKPoint(0, 0), 1.05f,
             new[] { new SKColor(255, 255, 255, 10), new SKColor(180, 200, 255, 20), new SKColor(255, 255, 255, 56) },
             new[] { 0f, .8f, 1f }, SKShaderTileMode.Clamp);
         _fill.Color = SKColors.White.WithAlpha(A(1, alpha));
@@ -212,7 +247,12 @@ public sealed partial class BubbleLayer
         {
             var fx = _bloomFx[i];
             float u = (now - fx.StartMs) / 1000f;
-            bool alive = fx.Clean ? DrawClean(c, fx, u) : DrawBurst(c, fx, u);
+            bool alive = fx.Kind switch
+            {
+                BloomFxKind.Clean => DrawClean(c, fx, u),
+                BloomFxKind.KidPop => DrawKidPop(c, fx, u),
+                _ => DrawBurst(c, fx, u),
+            };
             if (!alive) _bloomFx.RemoveAt(i);
         }
         if (_bloomFx.Count == 0 && _items.Count == 0) SetActive(false);
@@ -293,6 +333,23 @@ public sealed partial class BubbleLayer
             _text.Color = new SKColor(255, 226, 154, (byte)(a * 255));
             c.DrawText(fx.Word, fx.X, y, _text);
         }
+        return true;
+    }
+
+    /// <summary>A kid's pop: a white ring spreading 1.2x over half a second and its hue sparks for 0.7 s.</summary>
+    private bool DrawKidPop(SKCanvas c, BloomFx fx, float u)
+    {
+        const float life = .7f;
+        if (u >= life) return false;
+        if (u < InnerBloom.SweepRingS)
+        {
+            float q = u / (float)InnerBloom.SweepRingS;
+            _stroke.StrokeWidth = 2f;
+            _stroke.Color = new SKColor(255, 255, 255, (byte)(.7f * (1 - q) * 255));
+            c.DrawCircle(fx.X, fx.Y, fx.R * (1 + q * 1.2f * (float)fx.Motion.Amp), _stroke);
+        }
+        _fill.Color = SKColor.FromHsl(fx.Hue, 90, 72, (byte)((1 - u / life) * 255));
+        Sparks(c, fx, u, fx.R * .5f, 0, fx.SparkAngle.Length, 2f);
         return true;
     }
 

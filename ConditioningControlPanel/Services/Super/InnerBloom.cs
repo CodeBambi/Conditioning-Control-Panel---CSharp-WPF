@@ -34,6 +34,12 @@ namespace ConditioningControlPanel.Services.Super
         /// <summary>A small's radius against its carrier's, and its orbit inside the carrier.</summary>
         public const double SmallInCarrier = .32, SmallOrbit = .42, SmallSpin = 1.4;
 
+        // ---- depth ----
+        /// <summary>The orbit is a tilted ring seen from above: a kid on its low side is nearer the
+        /// viewer, so it draws up to 14% bigger, presses the film harder and sits in front; a kid
+        /// on the far side shrinks and dims behind the film. Scaled by motion amplitude.</summary>
+        public const double DepthScale = .14, DepthDim = .35;
+
         // ---- film ----
         public const int FilmPoints = 56, FilmArcs = 14;
         public const double BulgeStart = .8, BulgeGain = .9, BulgeWidth = .4, FilmArcRadius = .88;
@@ -41,6 +47,8 @@ namespace ConditioningControlPanel.Services.Super
         // ---- pop ----
         public const double SqueezeS = .25, TearS = .35, SqueezeAmount = .07;
         public const int Droplets = 22;
+        /// <summary>Sparks in a released kid's own hue when it pops (the mockup throws 3 x 6 for a medium).</summary>
+        public const int KidPopSparks = 18;
         public const double ReleaseX = 100, ReleaseY = 80, ReleaseLift = 30, ReleaseEase = 2.4;
         /// <summary>A small rides out with its release for this long, then escapes if unpopped.</summary>
         public const double EscapeAfterS = 1.0, EscapeFadeS = 1.0, EscapeRise = 16;
@@ -124,7 +132,7 @@ namespace ConditioningControlPanel.Services.Super
             if (parent.IsRoot)
             {
                 var k = KidAt(j, parent.Kids.Count, t, r, parent.Seed, m);
-                return (k.X, k.Y, k.Angle, KidRadius(parent.Kids[j], r));
+                return (k.X, k.Y, k.Angle, KidRadius(parent.Kids[j], r) * DepthSize(Depth(k.Angle, m)));
             }
             var s = SmallAt(j, t, r, m);
             return (s.X, s.Y, Math.Atan2(s.Y, s.X), r * SmallInCarrier);
@@ -146,6 +154,16 @@ namespace ConditioningControlPanel.Services.Super
             return (Math.Cos(ang) * orb, Math.Sin(ang) * orb * OrbitSquash, ang, orb);
         }
 
+        /// <summary>How near the viewer a kid at orbit angle <paramref name="angle"/> sits: -1 far, +1 near
+        /// (0 under Motion Off, where nothing moves through depth).</summary>
+        public static double Depth(double angle, Motion m) => Math.Sin(angle) * m.Amp;
+
+        /// <summary>A kid's size factor at depth z.</summary>
+        public static double DepthSize(double z) => 1 + DepthScale * z;
+
+        /// <summary>A kid's alpha factor at depth z: only the far half dims.</summary>
+        public static double DepthAlpha(double z) => 1 - DepthDim * Math.Max(0, -z);
+
         /// <summary>A small inside its carrier (radius rc): offset from the carrier's centre.</summary>
         public static (double X, double Y) SmallAt(int s, double t, double rc, Motion m)
         {
@@ -164,7 +182,8 @@ namespace ConditioningControlPanel.Services.Super
             for (int j = 0; j < n && w < into.Length; j++)
             {
                 var k = KidAt(j, n, t, r, seed, m);
-                double ex = (k.Orbit + KidRadius(parent.Kids[j], r)) / r - BulgeStart;
+                double kr = KidRadius(parent.Kids[j], r) * DepthSize(Depth(k.Angle, m));
+                double ex = (k.Orbit + kr) / r - BulgeStart;
                 if (ex > 0) into[w++] = new Bulge(k.Angle, ex * BulgeGain, BulgeWidth);
             }
             return w;
