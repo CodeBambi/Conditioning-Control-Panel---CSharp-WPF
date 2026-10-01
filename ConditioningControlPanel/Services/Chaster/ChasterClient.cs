@@ -88,6 +88,9 @@ public sealed class ChasterClient : IDisposable
     /// <summary>One add is never more than the day's cap. A caller with a bigger number has a bug.</summary>
     public const int MaxAddSeconds = TabLimits.MaxDailySeconds;
 
+    /// <summary>A lock id this client will put in a URL: letters and digits only.</summary>
+    public static bool IsLockId(string? lockId) => !string.IsNullOrEmpty(lockId) && lockId.All(char.IsLetterOrDigit);
+
     private readonly HttpClient _http;
 
     public ChasterClient(HttpMessageHandler? handler = null, string? userAgent = null)
@@ -228,7 +231,7 @@ public sealed class ChasterClient : IDisposable
     public async Task<ChasterResult<bool>> AddTimeAsync(string accessToken, string lockId, int seconds, CancellationToken ct = default)
     {
         if (seconds <= 0 || seconds > MaxAddSeconds) throw new ArgumentOutOfRangeException(nameof(seconds));
-        if (string.IsNullOrEmpty(lockId) || !lockId.All(char.IsLetterOrDigit)) throw new ArgumentException("lock id", nameof(lockId));
+        if (!IsLockId(lockId)) throw new ArgumentException("lock id", nameof(lockId));
 
         using var req = new HttpRequestMessage(HttpMethod.Post, $"{ApiBase}/locks/{lockId}/update-time");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);

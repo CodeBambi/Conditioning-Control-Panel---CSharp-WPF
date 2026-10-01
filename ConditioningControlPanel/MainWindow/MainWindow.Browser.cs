@@ -1019,8 +1019,13 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Use TryGetWebMessageAsString to get the raw JSON (not double-encoded)
-                var message = e.TryGetWebMessageAsString();
+                // Use TryGetWebMessageAsString to get the raw JSON (not double-encoded). It THROWS
+                // (ArgumentException) when the page posted an object rather than a string, which
+                // is how fsExit, videoStarted and videoEnded are posted: every one of them was
+                // dropped into the catch below. Objects come through WebMessageAsJson.
+                string? message = null;
+                try { message = e.TryGetWebMessageAsString(); }
+                catch (ArgumentException) { }
                 if (string.IsNullOrEmpty(message))
                 {
                     // Fallback to WebMessageAsJson if string is not available
