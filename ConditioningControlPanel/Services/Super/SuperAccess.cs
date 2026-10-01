@@ -65,9 +65,7 @@ namespace ConditioningControlPanel.Services.Super
             // Unlocks the gate only: the player's own switch still decides.
             if (Environment.GetEnvironmentVariable("CCP_SUPER_ALL") == "1") return IsSwitchedOn(effect);
 #endif
-            var on = App.Settings?.Current?.SuperEffectsOn;
-            bool switchedOn = on != null && on.Contains(effect.ToString());
-            return SuperPreviewRule.IsOn(TierGate.HasPremium, switchedOn, effect, SuperPreview.Trying);
+            return SuperPreviewRule.IsOn(TierGate.HasPremium, IsSwitchedOn(effect), effect, SuperPreview.Trying);
         }
 
         /// <summary>Is the effect's base feature main toggle on right now.</summary>
@@ -134,9 +132,20 @@ namespace ConditioningControlPanel.Services.Super
             if (SuperBase.EffectFor(e.PropertyName) is SuperEffect effect) Changed?.Invoke(effect);
         }
 
-        /// <summary>The player's own switch position, ignoring the gate (the switch UI draws it).</summary>
-        public static bool IsSwitchedOn(SuperEffect effect)
-            => App.Settings?.Current?.SuperEffectsOn?.Contains(effect.ToString()) == true;
+        /// <summary>The player's own pick, ignoring the gate (the box draws it). Both when nothing is stored.</summary>
+        public static SuperMode GetMode(SuperEffect effect)
+            => SuperModeRule.Resolve(effect, App.Settings?.Current?.SuperModes);
+
+        /// <summary>Super runs in the player's pick (Both or Super only), ignoring the gate and the base.</summary>
+        public static bool IsSwitchedOn(SuperEffect effect) => SuperModeRule.RunsSuper(GetMode(effect));
+
+        /// <summary>
+        /// Should the classic effect hide its own look right now: Super is running, the player picked
+        /// Super only, and it is a real unlock (never a weekly try or the DEBUG override alone).
+        /// Base layers ask this where they draw.
+        /// </summary>
+        public static bool ReplacesBase(SuperEffect effect)
+            => SuperModeRule.HidesBase(effect, GetMode(effect), IsOn(effect), SuperPreview.Trying == effect);
 
         /// <summary>For <see cref="SuperPreview"/>: a try started or ended.</summary>
         internal static void RaiseChanged(SuperEffect effect) => Changed?.Invoke(effect);
@@ -168,18 +177,19 @@ namespace ConditioningControlPanel.Services.Super
             foreach (SuperEffect e in Enum.GetValues(typeof(SuperEffect))) Changed?.Invoke(e);
         }
 
-        /// <summary>The player's switch. Does not check the gate; the UI refuses before calling this.</summary>
-        public static void Set(SuperEffect effect, bool on)
+        /// <summary>The player's pick. Does not check the gate; the box refuses before calling this.</summary>
+        public static void SetMode(SuperEffect effect, SuperMode mode)
         {
             var s = App.Settings?.Current;
             if (s == null) return;
-            var list = s.SuperEffectsOn.ToList();
-            var name = effect.ToString();
-            if (on && !list.Contains(name)) list.Add(name);
-            else if (!on) list.Remove(name);
-            else return;
-            s.SuperEffectsOn = list;
+            var next = SuperModeRule.With(s.SuperModes, effect, mode);
+            if (s.SuperModes.TryGetValue(effect.ToString(), out var old) && old == next[effect.ToString()]) return;
+            s.SuperModes = next;
             Changed?.Invoke(effect);
         }
+
+        /// <summary>Compatibility: on = Both (keeps Super only if already picked), off = Classic.</summary>
+        public static void Set(SuperEffect effect, bool on)
+            => SetMode(effect, !on ? SuperMode.Classic : GetMode(effect) == SuperMode.SuperOnly ? SuperMode.SuperOnly : SuperMode.Both);
     }
 }

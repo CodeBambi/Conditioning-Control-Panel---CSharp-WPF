@@ -9422,6 +9422,18 @@ namespace ConditioningControlPanel.Models
             set { _deeperPlayerWindowHeight = value; OnPropertyChanged(); }
         }
 
+        private Dictionary<string, int> _superModes = new();
+        /// <summary>
+        /// The player's pick per Super effect, keyed by <c>SuperEffect</c> name: 0 Classic, 1 Both, 2 Super only
+        /// (<c>SuperMode</c>). Absent = Both. Read only through <c>SuperAccess</c>, which also asks the tier gate.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, int> SuperModes
+        {
+            get => _superModes;
+            set { _superModes = value ?? new(); OnPropertyChanged(); }
+        }
+
         private List<string> _superEffectsOn = new();
         /// <summary>
         /// Super effects the player has switched on, as <c>SuperEffect</c> names. Read only through
