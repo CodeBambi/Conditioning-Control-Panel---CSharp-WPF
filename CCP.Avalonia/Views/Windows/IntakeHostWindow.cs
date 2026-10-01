@@ -32,13 +32,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal WebHost Web { get; } = new();
         internal string SessionsFolder { get; init; } = SessionFileService.CustomSessionsFolder;
 
+        /// <summary>The page this host loaded; messages from any other document are dropped.</summary>
+        internal Uri? PageUrl { get; set; }
+
         public IntakeHostWindow()
         {
             Title = "Graded Intake";   // WPF IntakeHostService.ProductName
             Width = 1280;
             Height = 800;
             Content = Web;
-            Web.WebMessage += HandleMessage;
+            Web.WebMessage += OnPageMessage;
+        }
+
+        /// <summary>WPF ChaosWebViewHost.OnWebMessage's SameDocument guard. The engine's message args
+        /// carry no source, so the source is the page the web view last finished navigating to.</summary>
+        private void OnPageMessage(string json)
+        {
+            if (PageUrl == null || Web.CurrentUrl == null || !IntakeRun.SameDocument(Web.CurrentUrl, PageUrl)) return;
+            HandleMessage(json);
         }
 
         /// <summary>One page message (WPF IntakeHostService.OnPageMessage). Only a parsed

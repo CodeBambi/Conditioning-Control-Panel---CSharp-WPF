@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using ConditioningControlPanel;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Quiz;
 using Newtonsoft.Json.Linq;
@@ -11,6 +12,7 @@ namespace CCP.Core.Tests;
 
 /// <summary>Core <see cref="IntakeRun"/>: the Graded Intake rules both heads' hosts share
 /// (WPF Services/Quiz/IntakeHostService.cs delegates to it).</summary>
+[Collection(SessionStatics.Name)] // CoreProgression providers are process-global
 public class IntakeRunTests
 {
     private static QuizRunResult Run(double total = 90, double max = 100, double depth = 0.5, int mantras = 2, string niche = " Bambi ") =>
@@ -57,8 +59,11 @@ public class IntakeRunTests
         var run = new IntakeRun();
         var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         run.Beat(t0);
+        // WPF's watchdog recovered after >20 s of silence; both heads now read this one rule.
         Assert.False(run.IsHeartbeatSilent(t0.AddSeconds(20)));
-        Assert.True(run.IsHeartbeatSilent(t0.AddSeconds(21)));
+        Assert.True(run.IsHeartbeatSilent(t0.AddSeconds(20).AddTicks(1)));
+        run.Beat(t0.AddSeconds(15));
+        Assert.False(run.IsHeartbeatSilent(t0.AddSeconds(35)));
         run.Exiting = true;
         Assert.False(run.IsHeartbeatSilent(t0.AddSeconds(60)));
     }
@@ -95,6 +100,35 @@ public class IntakeRunTests
         Assert.Equal(1, spent);
         Assert.Null(session);
         Assert.Null(path);
+    }
+
+    [Fact]
+    public void AFailedXpGrantSkipsTheMantraCredit()
+    {
+        var (xp, mantra) = (CoreProgression.AddXPProvider, CoreProgression.TrackMantraCompletedProvider);
+        var credited = 0;
+        try
+        {
+            CoreProgression.TrackMantraCompletedProvider = () => credited++;
+            CoreProgression.AddXPProvider = (_, _) => { };
+            IntakeRun.Complete(Run(mantras: 3), "\0bad", () => { }, null);
+            Assert.Equal(3, credited);
+
+            CoreProgression.AddXPProvider = (_, _) => throw new InvalidOperationException();
+            IntakeRun.Complete(Run(mantras: 3), "\0bad", () => { }, null);
+            Assert.Equal(3, credited);
+        }
+        finally { (CoreProgression.AddXPProvider, CoreProgression.TrackMantraCompletedProvider) = (xp, mantra); }
+    }
+
+    [Fact]
+    public void MessagesCountOnlyFromTheLoadedDocument()
+    {
+        var page = new Uri("https://ccp.game/intake/index.html");
+        Assert.True(IntakeRun.SameDocument(new Uri("https://ccp.game/intake/index.html?t=1#x"), page));
+        Assert.False(IntakeRun.SameDocument(new Uri("https://ccp.game/dtrh/index.html"), page));
+        Assert.False(IntakeRun.SameDocument(new Uri("https://evil.example/intake/index.html"), page));
+        Assert.False(IntakeRun.SameDocument(new Uri("http://ccp.game/intake/index.html"), page));
     }
 
     [Fact]

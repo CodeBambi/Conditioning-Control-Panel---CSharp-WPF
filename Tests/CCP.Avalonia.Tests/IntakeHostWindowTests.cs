@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
@@ -52,8 +53,14 @@ public sealed class IntakeHostWindowTests
                 Assert.True(AvApp.IntakePass.IsPassAvailable);
                 Assert.Empty(Directory.GetFiles(dir));
 
-                // The page's own carrier reaches the same handler.
-                host.Web.OnWebMessage("{\"type\":\"quiz-result\",\"result\":{\"niche\":\"bambi\",\"totalScore\":95,\"maxScore\":100,\"peakDepth\":0.8}}");
+                // The page's own carrier reaches the same handler - but only from the loaded document.
+                const string result = "{\"type\":\"quiz-result\",\"result\":{\"niche\":\"bambi\",\"totalScore\":95,\"maxScore\":100,\"peakDepth\":0.8}}";
+                host.PageUrl = new Uri("http://127.0.0.1:5000/intake/index.html");
+                host.Web.OnNavigationCompleted(new Uri("http://127.0.0.1:5000/other/index.html"));
+                host.Web.OnWebMessage(result);
+                Assert.True(AvApp.IntakePass.IsPassAvailable);
+                host.Web.OnNavigationCompleted(new Uri("http://127.0.0.1:5000/intake/index.html?x=1#y"));
+                host.Web.OnWebMessage(result);
                 Assert.Equal(IntakePassService.CurrentWeekKey(), service.Current.IntakePassSpentWeek);
                 Assert.False(AvApp.IntakePass.IsPassAvailable);
                 Assert.Single(Directory.GetFiles(dir, "*.session.json"));

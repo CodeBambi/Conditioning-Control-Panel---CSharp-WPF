@@ -56,7 +56,6 @@ namespace ConditioningControlPanel.Services.Quiz
         private static ChaosWebViewHost? _host;
         private static DispatcherTimer? _heartbeatWatch;
         private static DispatcherTimer? _exitWatchdog;
-        private static DateTime _lastHeartbeatUtc;
         /// <summary>This run's latches (Core <see cref="IntakeRun"/>): whether a <c>quiz-result</c> has
         /// arrived - after it, the eventual exit is a wind-down, not a walk-out ("held_back") - and
         /// whether a wind-down is under way.</summary>
@@ -306,7 +305,7 @@ namespace ConditioningControlPanel.Services.Quiz
         {
             try
             {
-                _lastHeartbeatUtc = DateTime.UtcNow;
+                _run.Beat();
                 // Claim keyboard focus so the page's inputs work from the first frame.
                 _host?.FocusWeb();
                 // web-shim.fromHostInit expects { type:'init', config:{...}, ai:{...} }.
@@ -383,10 +382,10 @@ namespace ConditioningControlPanel.Services.Quiz
             switch ((string?)o["type"])
             {
                 case "heartbeat":
-                    _lastHeartbeatUtc = DateTime.UtcNow;
+                    _run.Beat();
                     break;
                 case "pong":
-                    _lastHeartbeatUtc = DateTime.UtcNow;
+                    _run.Beat();
                     break;
                 case "quiz-result":
                     OnQuizResult(o);
@@ -1201,7 +1200,7 @@ namespace ConditioningControlPanel.Services.Quiz
         private static void StartHeartbeatWatch()
         {
             StopHeartbeatWatch();
-            _lastHeartbeatUtc = DateTime.UtcNow;
+            _run.Beat();
             _heartbeatWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _heartbeatWatch.Tick += (_, _) =>
             {
@@ -1209,8 +1208,7 @@ namespace ConditioningControlPanel.Services.Quiz
                 // page can't false-trip. A wedged main thread also kills the page's own exit path,
                 // so the watchdog must exist even though this is only a windowed tool.
                 if (_host == null || !_host.IsReady || _exiting) return;
-                var silent = (DateTime.UtcNow - _lastHeartbeatUtc).TotalSeconds;
-                if (silent > 20)
+                if (_run.IsHeartbeatSilent(DateTime.UtcNow))   // Core IntakeRun.HeartbeatTimeout (20 s)
                 {
                     App.Logger?.Warning("IntakeHostService: page heartbeat silent >20s - recovering");
                     Recover("heartbeat-silent");

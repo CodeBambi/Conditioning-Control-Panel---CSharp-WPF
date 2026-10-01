@@ -36,6 +36,13 @@ namespace ConditioningControlPanel.Services.Quiz
 
         public bool IsHeartbeatSilent(DateTime nowUtc) => !Exiting && nowUtc - LastHeartbeatUtc > HeartbeatTimeout;
 
+        /// <summary>Page messages count only from the document the host loaded: same scheme, authority
+        /// and path; query and fragment may differ (WPF ChaosWebViewHost.SameDocument).</summary>
+        public static bool SameDocument(Uri source, Uri target) =>
+            source.IsAbsoluteUri && target.IsAbsoluteUri
+            && source.Scheme == target.Scheme && source.Authority == target.Authority
+            && source.AbsolutePath == target.AbsolutePath;
+
         /// <summary>quiz-result { result } -> the run, latching <see cref="ResultReceived"/>. Null (and no
         /// latch) when the payload does not parse: a garbled message is not a completed intake.</summary>
         public QuizRunResult? AcceptResult(JObject message)
@@ -89,12 +96,10 @@ namespace ConditioningControlPanel.Services.Quiz
             }
             catch (Exception ex) { Log.Debug("IntakeRun: quiz-completed signal failed: {E}", ex.Message); }
 
-            try
-            {
-                CoreProgression.AddXP(Xp(run), "Other");
+            // A failed XP grant skips the mantra credit, as WPF's shared try did.
+            if (CoreProgression.AddXP(Xp(run), "Other"))
                 for (var i = 0; i < MantraCredits(run); i++) CoreProgression.TrackMantraCompleted();
-            }
-            catch (Exception ex) { Log.Debug("IntakeRun: XP grant failed: {E}", ex.Message); }
+            else Log.Debug("IntakeRun: XP grant failed; mantra credit skipped");
 
             try { consumePass(); }
             catch (Exception ex) { Log.Debug("IntakeRun: pass consume failed: {E}", ex.Message); }
