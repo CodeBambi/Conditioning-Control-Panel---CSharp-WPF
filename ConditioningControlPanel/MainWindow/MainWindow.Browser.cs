@@ -421,16 +421,19 @@ namespace ConditioningControlPanel
             // first-ever click on a playlist link auto-plays just like subsequent ones.
             if (autoPlayFullscreen)
             {
-                var isBambiCloudPlaylist = lowerUrl.Contains("bambicloud.com/playlist/");
-                void OnNavCompleted(object? s, string completedUrl)
+                if (lowerUrl.Contains("bambicloud.com/playlist/"))
                 {
-                    _browser.NavigationCompleted -= OnNavCompleted;
-                    if (isBambiCloudPlaylist)
+                    void OnNavCompleted(object? s, string completedUrl)
+                    {
+                        _browser.NavigationCompleted -= OnNavCompleted;
                         _ = AutoPlayBambiCloudPlaylistAsync();
-                    else
-                        _ = AutoPlayAndFullscreenVideoAsync();
+                    }
+                    _browser.NavigationCompleted += OnNavCompleted;
                 }
-                _browser.NavigationCompleted += OnNavCompleted;
+                else
+                {
+                    ArmVideoAutoPlay();
+                }
             }
 
             // Bring the surface hosting the browser forward (embedded tab or pop-out window)
@@ -714,25 +717,24 @@ namespace ConditioningControlPanel
                 // BambiCloud playlists are audio (no <video> element, no fullscreen) — they need a
                 // different injection that clicks the playlist's main play button.
                 EventHandler<Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs>? navCompletedHandler = null;
+                Action? disarmVideoAutoPlay = null;
                 if (autoPlayFullscreen && _browser.WebView?.CoreWebView2 != null)
                 {
-                    var isBambiCloudPlaylist = lowerUrl.Contains("bambicloud.com/playlist/");
-
-                    void OnNavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+                    if (lowerUrl.Contains("bambicloud.com/playlist/"))
                     {
-                        _browser.WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
-
-                        if (e.IsSuccess)
+                        void OnNavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
                         {
-                            if (isBambiCloudPlaylist)
-                                _ = AutoPlayBambiCloudPlaylistAsync();
-                            else
-                                _ = AutoPlayAndFullscreenVideoAsync();
+                            _browser.WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+                            if (e.IsSuccess) _ = AutoPlayBambiCloudPlaylistAsync();
                         }
-                    }
 
-                    navCompletedHandler = OnNavigationCompleted;
-                    _browser.WebView.CoreWebView2.NavigationCompleted += navCompletedHandler;
+                        navCompletedHandler = OnNavigationCompleted;
+                        _browser.WebView.CoreWebView2.NavigationCompleted += navCompletedHandler;
+                    }
+                    else
+                    {
+                        disarmVideoAutoPlay = ArmVideoAutoPlay();
+                    }
                 }
                 else if (autoPlayFullscreen)
                 {
@@ -746,6 +748,7 @@ namespace ConditioningControlPanel
                 {
                     if (navCompletedHandler != null && _browser.WebView?.CoreWebView2 != null)
                         _browser.WebView.CoreWebView2.NavigationCompleted -= navCompletedHandler;
+                    disarmVideoAutoPlay?.Invoke();
 
                     App.Logger?.Warning("Speech link navigation dropped by browser service: {Host}", UrlLog.Host(url));
                     return false;
@@ -761,6 +764,37 @@ namespace ConditioningControlPanel
                 App.Logger?.Error(ex, "Browser navigation failed for host: {Host}", UrlLog.Host(url));
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Runs the video takeover once, as soon as the page's HTML is parsed. It used to wait for
+        /// NavigationCompleted, which waits for every ad and tracker on the page: on the first
+        /// HypnoTube visit after launch (cold cache) that came 41 s after the click. Completion
+        /// stays as the fallback; whichever event comes first wins. Returns a disarm for a
+        /// navigation that never starts.
+        /// </summary>
+        private Action ArmVideoAutoPlay()
+        {
+            var browser = _browser;
+            if (browser == null) return () => { };
+
+            var fired = false;
+            void Disarm()
+            {
+                browser.DomContentLoaded -= Fire;
+                browser.NavigationCompleted -= Fire;
+            }
+            void Fire(object? sender, string url)
+            {
+                Disarm();
+                if (fired) return;
+                fired = true;
+                _ = AutoPlayAndFullscreenVideoAsync();
+            }
+
+            browser.DomContentLoaded += Fire;
+            browser.NavigationCompleted += Fire;
+            return Disarm;
         }
 
         /// <summary>
@@ -785,12 +819,13 @@ namespace ConditioningControlPanel
 
                 // JavaScript to find video, play it, request fullscreen, and add event handlers
                 // Posts message back to C# when video ends or fullscreen exits
-                // Retries up to 10 times (5s total) if video element isn't in the DOM yet
+                // Retries up to 20 times (10s total) if video element isn't in the DOM yet: this runs
+                // as soon as the HTML is parsed, so the site's player script may still be building it
                 var script = @"
                     (async function() {
                         let video = document.querySelector('video');
                         if (!video) {
-                            for (let i = 0; i < 10; i++) {
+                            for (let i = 0; i < 20; i++) {
                                 await new Promise(r => setTimeout(r, 500));
                                 video = document.querySelector('video');
                                 if (video) break;
