@@ -1190,3 +1190,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/webcam-calibration-fixes: +69
 - A revoke during calibration stands; atomic calibration save (both heads); failed save keeps the old calibration. Row back to stub.
+
+## avalonia-port/companion-brain-effects-safety: +319
+- getbacktome follow-ups re-gated at fire time (3 per follow-up), every panic route on both heads cancels pending AI follow-ups and drops a late reply.
