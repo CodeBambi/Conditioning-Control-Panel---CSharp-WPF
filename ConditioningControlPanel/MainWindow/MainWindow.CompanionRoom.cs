@@ -88,6 +88,8 @@ namespace ConditioningControlPanel
             if (enabled) ShowAvatarTube();
             else HideAvatarTube();
             App.Settings.Save();
+            // Every on/off button reads the hero's copy of the switch, wherever it was flipped from.
+            CompanionRoom?.SyncHero();
         }
 
         /// <summary>Mute/unmute her voice. The old <c>ChkMuteAvatar_Changed</c> body.</summary>
