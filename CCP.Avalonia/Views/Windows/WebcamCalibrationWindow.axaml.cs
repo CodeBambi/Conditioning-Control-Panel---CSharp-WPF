@@ -38,9 +38,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private const int SettleMs = 200, RetryReadyMs = 900, MaxAttemptsPerPoint = 2, RingFullSampleTarget = 20;
         private const int MinSamplesPerPoint = WebcamCalibrationFit.MinSamplesPerPoint;
 
-        /// <summary>Tests shrink every wait by this factor; 1 in the app.</summary>
-        internal static int TimeDivisor = 1;
-        private static Task Delay(int ms) => Task.Delay(ms / TimeDivisor);
+        /// <summary>Clock for every wait of the flow; tests step a manual one instead of sleeping.</summary>
+        internal static TimeProvider Time = TimeProvider.System;
+        private static Task Delay(int ms) => Task.Delay(TimeSpan.FromMilliseconds(ms), Time);
         private static WebcamTracker Tracker => WebcamTracker.Instance;
 
         private readonly Canvas _dotCanvas;
@@ -273,8 +273,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     _collecting = true;
                     await Delay(SampleMs);
                     // Slow camera (#909): stretch the window until the count is met, up to the ceiling.
-                    long stretchUntil = Environment.TickCount64 + Math.Max(0, SampleCeilingMs - SampleMs) / TimeDivisor;
-                    while (!_cancelled && _allSamples[i].Count < MinSamplesPerPoint && Environment.TickCount64 < stretchUntil)
+                    long stretchFrom = Time.GetTimestamp();
+                    while (!_cancelled && _allSamples[i].Count < MinSamplesPerPoint
+                           && Time.GetElapsedTime(stretchFrom).TotalMilliseconds < SampleCeilingMs - SampleMs)
                         await Delay(SampleSliceMs);
                     _collecting = false;
                     if (_cancelled) return;
