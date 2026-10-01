@@ -19,7 +19,8 @@ namespace ConditioningControlPanel.Services.Commands
         // emits. Counter is reset by <see cref="BeginBatch"/>.
         public const int MaxCommandsPerResponse = 3;
 
-        private static readonly Dictionary<string, CancellationTokenSource> TokenCancellationSources = new();
+        // Every in-flight command, keyed by its token or a synthetic key; panic / switch-off cancel them all.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> TokenCancellationSources = new();
         private int _batchCount;
 
         public void BeginBatch()
@@ -31,24 +32,9 @@ namespace ConditioningControlPanel.Services.Commands
         {
             if (commandData.Data == null) return;
 
-            var settings = CoreSettings.Current?.CompanionPrompt;
-            if (settings == null)
+            if (Refusal(commandData.Command) is { } refusal)
             {
-                Log.Debug("AiCommandService: no settings — dropping command {Cmd}", commandData.Command);
-                return;
-            }
-
-            // Master gate.
-            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOn(settings, CoreAccount.HasLabAccess))
-            {
-                Log.Information("AiCommandService: master toggle off or no Tier 2 - dropping {Cmd}", commandData.Command);
-                return;
-            }
-
-            // Per-effect gate.
-            if (!IsEffectAllowed(commandData.Command, settings))
-            {
-                Log.Information("AiCommandService: effect {Cmd} disabled by user — dropping", commandData.Command);
+                Log.Information("AiCommandService: {Reason} - dropping {Cmd}", refusal, commandData.Command);
                 return;
             }
 
@@ -66,19 +52,16 @@ namespace ConditioningControlPanel.Services.Commands
             // request; a second line follows after execution if the effect did not fire.
             AppendLiveAction(FormatLiveAction(commandData));
 
+            // Every command is cancellable (panic, switch-off); an untokened one gets a synthetic key.
             var token = commandData.Data.Token;
-            CancellationTokenSource? cts = null;
-
-            if (!string.IsNullOrEmpty(token))
-            {
-                CancelToken(token);
-                cts = new CancellationTokenSource();
-                TokenCancellationSources[token] = cts;
-            }
+            if (string.IsNullOrEmpty(token)) token = "#" + Guid.NewGuid().ToString("N");
+            else CancelToken(token);
+            var cts = new CancellationTokenSource();
+            TokenCancellationSources[token] = cts;
 
             try
             {
-                var command = CommandFactory.CreateCommand(commandData, cts?.Token ?? default, depth: 0);
+                var command = CommandFactory.CreateCommand(commandData, cts.Token, depth: 0);
                 if (command == null)
                 {
                     // Unreachable on WPF (the per-effect gate refuses every type the factory lacks);
@@ -106,21 +89,39 @@ namespace ConditioningControlPanel.Services.Commands
             }
             finally
             {
-                if (!string.IsNullOrEmpty(token))
-                {
-                    RemoveToken(token);
-                }
+                RemoveToken(token, cts);
             }
         }
 
-        public void CancelAllCommands()
+        public void CancelAllCommands() => CancelAll();
+
+        /// <summary>Cancels every pending command: getbacktome delays and their remaining nested
+        /// commands. Panic on every head and switching AI effects off call this.</summary>
+        /// <summary>Bumped by every <see cref="CancelAll"/>, so a head can drop an effect start it had to defer.</summary>
+        public static int CancelGeneration => Volatile.Read(ref _cancelGeneration);
+        private static int _cancelGeneration;
+
+        public static void CancelAll()
         {
-            var tokens = new List<string>(TokenCancellationSources.Keys);
-            foreach (var token in tokens)
-            {
-                CancelToken(token);
-            }
+            Interlocked.Increment(ref _cancelGeneration);
+            foreach (var token in TokenCancellationSources.Keys) CancelToken(token);
         }
+
+        /// <summary>The one gate every AI command passes at the moment it fires, nested getbacktome
+        /// commands included: settings, the AI-effects switch AND live Lab access, then the effect's
+        /// own toggle. Null = allowed; else a log-safe reason.</summary>
+        public static string? Refusal(AICommandType command)
+        {
+            var settings = CoreSettings.Current?.CompanionPrompt;
+            if (settings == null) return "no settings";
+            if (!ConditioningControlPanel.Services.Companion.AiEffectControlGate.IsOn(settings, CoreAccount.HasLabAccess))
+                return "master toggle off or no Tier 2";
+            if (!IsEffectAllowed(command, settings)) return $"effect {command} disabled by user";
+            return null;
+        }
+
+        /// <summary>A Live actions line for a refused follow-up command (no avatar bubble).</summary>
+        internal static void NoteBlockedFollowUp(AICommandType command) => AppendLiveAction($"⛔ Follow-up {command} blocked");
 
         /// <summary>Last-N feed cap so the list doesn't grow forever in long sessions.</summary>
         public const int MaxLiveActions = 30;
@@ -221,24 +222,17 @@ namespace ConditioningControlPanel.Services.Commands
 
         private static void CancelToken(string token)
         {
-            if (TokenCancellationSources.TryGetValue(token, out var cts))
-            {
-                try { cts.Cancel(); }
-                finally
-                {
-                    cts.Dispose();
-                    TokenCancellationSources.Remove(token);
-                }
-            }
+            if (!TokenCancellationSources.TryRemove(token, out var cts)) return;
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
+            finally { cts.Dispose(); }
         }
 
-        private static void RemoveToken(string token)
+        private static void RemoveToken(string token, CancellationTokenSource mine)
         {
-            if (TokenCancellationSources.TryGetValue(token, out var cts))
-            {
-                cts.Dispose();
-                TokenCancellationSources.Remove(token);
-            }
+            // Only our own source: a newer command may have reused the token meanwhile.
+            if (TokenCancellationSources.TryRemove(new KeyValuePair<string, CancellationTokenSource>(token, mine)))
+                mine.Dispose();
         }
     }
 }
