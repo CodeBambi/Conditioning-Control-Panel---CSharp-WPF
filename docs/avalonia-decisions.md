@@ -382,3 +382,12 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   (WPF leaves the unsaved candidate live in memory). Mouth/tongue detectors and the verify cursor/bubble test are not ported:
   the mouth prompts time out to WPF's "moving on" text and Verify runs its countdown only.
 - Advisor: worker (supervisor informed).
+
+## 2026-10-02: EmiDesk ring, slice 2 (avalonia-port/emidesk-ring-2)
+- Catalogue split: the door table (id, art, hue, order) is Core `EmiDoors`; each head's `EmiTargets` answers only "available,
+  locked, open" per id through `EmiDoors.Build`. A null answer hides the door (no surface on this head), never a fake opener.
+  `EmiTarget` moved to Core with `Hue` as 0xRRGGBB bits (heads convert at the brush) and without the unread `Gate` field.
+- `EmiSuggester` is a git mv into Core; `Compose` now takes the head's catalogue. WPF passes `EmiTargets.All`, behaviour unchanged.
+- Options click-away/Escape: polled (XQueryPointer/XQueryKeymap, 30 ms) rather than an X pointer grab, because a grab would
+  swallow the click and WPF's hook let it through. Wayland-native windows stay invisible to it.
+- Not taken: the Codex opener (needs the bookOffer moment bus), the book's demos/tours, scoring tab/rack opens outside the ring.

@@ -1193,7 +1193,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 int dy = now.Y - _dragStartScreen.Y;
                 double s = DipScale;
                 if (s <= 0) s = 1.0;
-                if (!_dragMoved && (Math.Abs(dx) + Math.Abs(dy)) / s > DragThresholdDip) _dragMoved = true;
+                if (!_dragMoved && (Math.Abs(dx) + Math.Abs(dy)) / s > DragThresholdDip)
+                {
+                    _dragMoved = true;
+                    CloseRing();   // WPF Ring.cs OnRingWatchMove: a drag past the threshold folds the fan
+                }
                 if (!_dragMoved) return;
 
                 Position = new PixelPoint(_dragStartPosition.X + dx, _dragStartPosition.Y + dy);
@@ -1459,7 +1463,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// bubble dodge in EmiDeskWindow.Bubble.cs. So the book opens at the first card every time
         /// until EmiState lands.</para>
         /// </summary>
-        private void OpenBook(string? cardId = null)
+        internal void OpenBook(string? cardId = null)
         {
             try
             {
@@ -2542,8 +2546,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: needs EmiState.NotePet() - the pat counter behind her affection state.</summary>
         private void CountPat() { }
 
-        /// <summary>ponytail: EmiDeskWindow.Ring.cs - folds the card fan.</summary>
-        private void CloseRing() { }
 
         /// <summary>
         /// ponytail: EmiDeskWindow.Props.cs, and the note this used to carry was wrong about where
