@@ -1150,3 +1150,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/graded-intake: +397
 - IntakePassService in Core (each head passes its entitlement hooks; Avalonia hooks them in AccountSeed.Seed); the Graded Intake tab paints
   WPF's four pass gates and Begin Intake's checks. GradedIntakeGateTests (4), fail-proven. The intake run itself isn't ported yet.
+
+## avalonia-port/friends-drawer: +1002
+- Core FriendsService (IUiTimer seam; WPF FriendsServiceApp); Avalonia friends rail chip + drawer (presence, requests, block/remove with
+  confirm, report, add by code), loopback-only in a sandbox, disposed on exit. FriendsDrawerTests (11), fail-proven. Rows stub.
