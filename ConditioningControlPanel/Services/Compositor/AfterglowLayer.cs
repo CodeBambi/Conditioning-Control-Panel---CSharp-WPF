@@ -38,6 +38,7 @@ public sealed class AfterglowLayer : BaseLayer
         public Draw Draw;
         public double X, Y, Scale, At;
         public double Tilt;
+        public double FromX, FromY;
     }
 
     private readonly AfterglowField _field = new();
@@ -46,6 +47,10 @@ public sealed class AfterglowLayer : BaseLayer
     private readonly Func<double> _rnd;
     private readonly SKPaint _text = new() { IsAntialias = true, TextAlign = SKTextAlign.Center, Typeface = BoldArial };
     private readonly SKPaint _dot = new() { IsAntialias = true, BlendMode = SKBlendMode.Plus };
+    private readonly SKPaint _streak = new() { IsAntialias = true, BlendMode = SKBlendMode.Plus, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round };
+    // Halo is source-over, never additive: a tinted glow, not a white flash.
+    private readonly SKPaint _halo = new() { IsAntialias = true };
+    private const float HaloSigmaDip = 16f;
     private readonly Dictionary<int, SKMaskFilter> _blurs = new();
     private readonly List<Pending> _pending = new(AfterglowOptions.CountMax);
     private MotionLevel _level = MotionLevel.Full;
@@ -187,11 +192,11 @@ public sealed class AfterglowLayer : BaseLayer
                 double tilt = _level == MotionLevel.Off ? 0 : slot.Tilt * tiltFactor;
                 if (slot.DelayS <= 0)
                 {
-                    var pop = _field.Spawn(words[k], x, y, scale, level, photosafe, _rnd);
+                    var pop = _field.Spawn(words[k], x, y, scale, level, photosafe, _rnd, cx, cy);
                     pop.Payload = d; pop.Tilt = tilt;
                 }
                 else
-                    _pending.Add(new Pending { Text = words[k], Draw = d, X = x, Y = y, Scale = scale, At = _field.Now + slot.DelayS, Tilt = tilt });
+                    _pending.Add(new Pending { Text = words[k], Draw = d, X = x, Y = y, Scale = scale, At = _field.Now + slot.DelayS, Tilt = tilt, FromX = cx, FromY = cy });
             }
             // Under the lock: an off-thread Update that just found the field empty must not switch
             // the layer off after this pop went in.
@@ -253,7 +258,7 @@ public sealed class AfterglowLayer : BaseLayer
             {
                 var w = _pending[i];
                 if (w.At > _field.Now) continue;
-                var np = _field.Spawn(w.Text, w.X, w.Y, w.Scale, _level, _photosafe, _rnd);
+                var np = _field.Spawn(w.Text, w.X, w.Y, w.Scale, _level, _photosafe, _rnd, w.FromX, w.FromY);
                 np.Payload = w.Draw; np.Tilt = w.Tilt;
                 _pending.RemoveAt(i--);
             }
@@ -267,52 +272,100 @@ public sealed class AfterglowLayer : BaseLayer
         {
             double now = _field.Now;
 
-            // Sparks under the words, additive.
+            // Sparks under the words, additive: born hot (near white) and cooling to the glow colour,
+            // with a short streak back along their velocity.
             for (int i = 0; i < _field.ParticleCount; i++)
             {
                 ref readonly var q = ref _field.Particles[i];
                 if (!boundsPx.Contains((int)q.X, (int)q.Y)) continue;
                 var a = AfterglowField.ParticleAlpha(q) * _opacity;
                 if (a <= 0) continue;
-                _dot.Color = _spark[q.Hue & 1].WithAlpha((byte)(a * 255));
-                canvas.DrawCircle((float)q.X, (float)q.Y, (float)((0.8 + 1.8 * a) * q.Size), _dot);
+                var c = Lerp(_glow[q.Hue & 1], _spark[q.Hue & 1], AfterglowField.SparkHeat(q)).WithAlpha((byte)(a * 255));
+                float r = (float)((0.8 + 1.8 * a) * q.Size);
+                double sx = q.Vx * AfterglowField.StreakS, sy = q.Vy * AfterglowField.StreakS;
+                double len = Math.Sqrt(sx * sx + sy * sy), cap = AfterglowField.StreakMaxDip * q.Size;
+                if (len > cap) { sx *= cap / len; sy *= cap / len; len = cap; }
+                if (len > r)
+                {
+                    _streak.Color = c.WithAlpha((byte)(a * 150));
+                    _streak.StrokeWidth = r * 1.2f;
+                    canvas.DrawLine((float)q.X, (float)q.Y, (float)(q.X - sx), (float)(q.Y - sy), _streak);
+                }
+                _dot.Color = c;
+                canvas.DrawCircle((float)q.X, (float)q.Y, r, _dot);
             }
 
             foreach (var p in _field.Pops)
             {
                 if (p.Payload is not Draw d) continue;
                 if (!boundsPx.Contains((int)p.X, (int)p.Y)) continue;
-                var a = AfterglowField.Alpha(now - p.Born, _level, _photosafe, _field.DurationFactor) * _opacity;
+                double age = now - p.Born, df = _field.DurationFactor;
+                var a = AfterglowField.Alpha(age, _level, _photosafe, df) * _opacity;
                 if (a <= 0.004) continue;
                 _text.TextSize = d.FontPx;
                 var glow = _glow[p.Hue & 1];
-                bool tilted = Math.Abs(p.Tilt) > 1e-6;
+                float tilt = (float)(p.Tilt * AfterglowField.TiltSwing(age, _level, _photosafe, df));
+                bool tilted = Math.Abs(tilt) > 1e-6;
+                float s = (float)AfterglowField.PopScale(age, _level, _photosafe, df);
+                double from = AfterglowField.FromCursor(age, _level, _photosafe, df);
+                float wx = (float)(p.X + p.FromDx * from), wy = (float)(p.Y + p.FromDy * from);
 
-                // Trail: echoes oldest first, glow colour only. Echo 0 sits on the word itself.
+                // Trail: echoes oldest first, glow colour only, each a little smaller. Echo 0 sits on the word itself.
                 for (int k = p.TrailCount - 1; k >= 1; k--)
                 {
                     p.TrailAt(k, out var tx, out var ty);
                     var ea = AfterglowField.TrailAlpha(k - 1) * a;
                     if (ea <= 0.004) continue;
                     _text.Color = glow.WithAlpha((byte)Math.Clamp(ea * 255, 0, 255));
-                    if (tilted) canvas.Save();
-                    if (tilted) canvas.RotateRadians((float)p.Tilt, (float)tx, (float)ty);
+                    float es = s * (float)AfterglowField.TrailScale(k - 1);
+                    canvas.Save();
+                    if (tilted) canvas.RotateRadians(tilt, (float)tx, (float)ty);
+                    canvas.Scale(es, es, (float)tx, (float)ty);
                     GlyphFallback.DrawCentered(canvas, d.Runs, (float)tx, (float)ty + d.BaselineOffset, _text, d.Widths, d.Total);
-                    if (tilted) canvas.Restore();
+                    canvas.Restore();
+                }
+
+                // Pop instant: a soft tinted halo opens behind the word.
+                var ha = AfterglowField.HaloAlpha(age, _level, _photosafe) * _opacity;
+                if (ha > 0.004)
+                {
+                    float spread = (float)AfterglowField.HaloSpread(age);
+                    _halo.MaskFilter = Blur((float)(HaloSigmaDip * p.Scale));
+                    _halo.Color = glow.WithAlpha((byte)Math.Clamp(ha * 255, 0, 255));
+                    canvas.DrawOval(wx, wy, (d.Total / 2f + d.FontPx * 0.3f) * spread, d.Height * 0.8f * spread, _halo);
+                    _halo.MaskFilter = null;
                 }
 
                 var alpha = (byte)Math.Clamp(a * 255, 0, 255);
-                float baseline = (float)p.Y + d.BaselineOffset;
-                if (tilted) { canvas.Save(); canvas.RotateRadians((float)p.Tilt, (float)p.X, (float)p.Y); }
+                float baseline = wy + d.BaselineOffset;
+                canvas.Save();
+                if (tilted) canvas.RotateRadians(tilt, wx, wy);
+                canvas.Scale(s, s, wx, wy);
                 _text.MaskFilter = d.Blur;
+                // Pop instant: the two glow colours split apart and close (chromatic shiver).
+                float off = (float)(AfterglowField.ChromaOffset(age, _level, _photosafe) * p.Scale);
+                if (off > 0.2f)
+                {
+                    var ca = (byte)Math.Clamp(AfterglowField.ChromaAlpha(age, _level, _photosafe) * a * 255, 0, 255);
+                    _text.Color = _glow[0].WithAlpha(ca);
+                    GlyphFallback.DrawCentered(canvas, d.Runs, wx - off, baseline, _text, d.Widths, d.Total);
+                    _text.Color = _glow[1].WithAlpha(ca);
+                    GlyphFallback.DrawCentered(canvas, d.Runs, wx + off, baseline, _text, d.Widths, d.Total);
+                }
                 _text.Color = glow.WithAlpha(alpha);
-                GlyphFallback.DrawCentered(canvas, d.Runs, (float)p.X, baseline, _text, d.Widths, d.Total);
+                GlyphFallback.DrawCentered(canvas, d.Runs, wx, baseline, _text, d.Widths, d.Total);
                 _text.MaskFilter = null;
                 _text.Color = WordFill.WithAlpha(alpha);
-                GlyphFallback.DrawCentered(canvas, d.Runs, (float)p.X, baseline, _text, d.Widths, d.Total);
-                if (tilted) canvas.Restore();
+                GlyphFallback.DrawCentered(canvas, d.Runs, wx, baseline, _text, d.Widths, d.Total);
+                canvas.Restore();
             }
         }
+    }
+
+    private static SKColor Lerp(SKColor a, SKColor b, double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return new SKColor((byte)(a.Red + (b.Red - a.Red) * t), (byte)(a.Green + (b.Green - a.Green) * t), (byte)(a.Blue + (b.Blue - a.Blue) * t));
     }
 
     private SKMaskFilter Blur(float sigma)
