@@ -909,12 +909,13 @@ public sealed class FlashLayer : BaseLayer
             for (int k = 2; k + 1 < line.Length; k += 2)
                 _deckPath.LineTo(fit.Left + (float)(line[k] * fit.Width), fit.Top + (float)(line[k + 1] * fit.Height));
         }
-        var w = Math.Max(1.2f, Math.Min(fit.Width, fit.Height) * 0.006f);
-        _ringPaint.StrokeWidth = w * 2.2f;
-        _ringPaint.Color = new SKColor(0, 0, 0, (byte)(0.45 * amount * alpha));
+        // Hairlines: a barely-there under-stroke and a thin pale line, so a crack reads as a flaw, not a drawing.
+        var w = Math.Max(0.8f, Math.Min(fit.Width, fit.Height) * 0.0028f);
+        _ringPaint.StrokeWidth = w * 1.8f;
+        _ringPaint.Color = new SKColor(0, 0, 0, (byte)(0.22 * amount * alpha));
         canvas.DrawPath(_deckPath, _ringPaint);
         _ringPaint.StrokeWidth = w;
-        _ringPaint.Color = new SKColor(255, 255, 255, (byte)(0.85 * amount * alpha));
+        _ringPaint.Color = new SKColor(255, 255, 255, (byte)(0.55 * amount * alpha));
         canvas.DrawPath(_deckPath, _ringPaint);
     }
 
