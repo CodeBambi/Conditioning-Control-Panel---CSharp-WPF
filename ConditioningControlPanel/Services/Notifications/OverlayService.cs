@@ -516,6 +516,8 @@ public class OverlayService : IDisposable
             _updateTimer.Start();
         });
 
+        Super.CreepController.Sync();   // Super Creep rides the engine; it asks its own switch
+
         App.Logger?.Information("OverlayService started");
     }
 
@@ -531,6 +533,7 @@ public class OverlayService : IDisposable
             StopPinkFilter();
             StopSpiral();
             StopBrainDrainBlur();
+            DispatcherHelper.RunOnUISync(Super.CreepController.Stop);
         }
         catch (Exception ex)
         {
@@ -577,6 +580,8 @@ public class OverlayService : IDisposable
             // Handle Brain Drain via its dedicated refresh state method
             RefreshBrainDrainState();
         });
+
+        Super.CreepController.Sync();
 
         App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}, BrainDrain: {BrainDrain}",
             PinkShowing, SpiralShowing, BrainDrainShowing);
