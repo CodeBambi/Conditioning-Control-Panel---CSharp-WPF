@@ -183,11 +183,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
 
-            // ponytail: the launch itself is missing - Services/Quiz/IntakeHostService (the WebHost
-            // window and the page protocol, 1.6k LOC, WPF-only) is what runs a run and calls
-            // IntakePassService.ConsumeForCompletedIntake on its result. Port it next; until then a
-            // run that passes both gates opens nothing, and the pass is never spent.
-            Log.Information("Graded Intake: gates passed, but IntakeHostService is not ported");
+            // ponytail: Windows/IntakeHostWindow (page protocol, spends the pass on quiz-result) exists
+            // but is not opened: nothing serves the intake page on this head yet, so it would be dead
+            // UI. Slice 2 serves it and opens it here (~/ccp-port/briefs/intake-plan.md).
+            Log.Information("Graded Intake: gates passed, but the intake page is not served on this head yet");
         }
 
         /// <summary>WPF MainWindow.Lab.cs:116. The button is IsVisible="False" on both heads ("pending

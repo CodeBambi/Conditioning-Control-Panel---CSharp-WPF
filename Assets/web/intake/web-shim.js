@@ -35,9 +35,13 @@ const webview = win && win.chrome && win.chrome.webview;
 // react-native-webview injects window.ReactNativeWebView.postMessage (string only)
 // onto the page. Host->page frames arrive by the RN side injecting a call to the
 // window.__ccpRnPush global installed below.
+// The Avalonia head (WebKitGTK) injects window.invokeCSharpAction (string) instead;
+// it rides the same string carrier, so __ccpRnPush is its host->page path too.
 const rnwv = (!webview && win && win.ReactNativeWebView &&
               typeof win.ReactNativeWebView.postMessage === 'function')
-             ? win.ReactNativeWebView : null;
+             ? win.ReactNativeWebView
+             : (!webview && win && typeof win.invokeCSharpAction === 'function')
+             ? { postMessage: (s) => win.invokeCSharpAction(s) } : null;
 
 export const isHosted = !!(webview || rnwv);
 
