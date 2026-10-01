@@ -37,7 +37,7 @@ public static class CreepController
                            && App.CompositorEnabled
                            && SuperAccess.IsOn(SuperEffect.Creep);
                 if (want) Show();
-                else Stop();
+                else Retreat();
             }
             catch (Exception ex)
             {
@@ -58,9 +58,28 @@ public static class CreepController
         }
     }
 
+    /// <summary>
+    /// The switch went off (or the seam said no): the fog recedes to the edges over ~0.65 s and the
+    /// layer drops itself. Clicks stop counting at once. Without a compositor to draw the way out,
+    /// it is a plain <see cref="Stop"/>. Panic and the engine stop never come here.
+    /// </summary>
+    private static void Retreat()
+    {
+        try { _hook?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        _hook = null;
+        if (_layer?.IsActive != true || _layer.IsRetreating) return;
+        if (!App.CompositorEnabled || App.Compositor == null) { Stop(); return; }
+        _layer.Retreat();
+        App.Logger?.Debug("Creep: retreating");
+    }
+
     private static void Show()
     {
-        if (_layer?.IsActive == true) return;
+        if (_layer?.IsActive == true)
+        {
+            if (_layer.IsRetreating) { _layer.Show(); StartHook(); }   // back on mid-retreat: no pop
+            return;
+        }
         if (_layer == null)
         {
             _layer = new CreepLayer(App.Compositor!);
