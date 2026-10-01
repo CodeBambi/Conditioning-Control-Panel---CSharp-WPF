@@ -193,7 +193,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (string.IsNullOrWhiteSpace(_fullTutorialUrl)) return;
             try
             {
-                Process.Start(new ProcessStartInfo(_fullTutorialUrl) { UseShellExecute = true });
+                Platform.ExternalOpener.Open(_fullTutorialUrl);
             }
             catch (Exception ex)
             {

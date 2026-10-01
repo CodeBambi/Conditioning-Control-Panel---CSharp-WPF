@@ -234,7 +234,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             // WPF used Process.Start(UseShellExecute); TopLevel.Launcher is Avalonia's own, so no
             // seam is needed. Same precedent as CompanionPromptEditorDialog.
-            try { await Launcher.LaunchUriAsync(new Uri("https://app.cclabs.app/policies/prohibited-content")); }
+            try { await Platform.ExternalOpener.OpenAsync(this, "https://app.cclabs.app/policies/prohibited-content"); }
             catch (Exception ex) { Log.Warning(ex, "AwarenessPresetDetailDialog: failed to open policy URL"); }
         }
 

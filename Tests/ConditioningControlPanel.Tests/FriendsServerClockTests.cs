@@ -117,7 +117,7 @@ public class FriendsServerClockTests
         var card = ReadSource("ConditioningControlPanel", "Windows", "Friends", "KnockCard.cs");
         Assert.DoesNotContain("DateTimeOffset.UtcNow", card);
 
-        var service = ReadSource("ConditioningControlPanel", "Services", "Friends", "FriendsService.cs");
+        var service = SourceRoots.ReadProductFile("Services", "Friends", "FriendsService.cs");
         Assert.Contains("_now = now ?? (() => ServerClock.UtcNow);", service);
     }
 

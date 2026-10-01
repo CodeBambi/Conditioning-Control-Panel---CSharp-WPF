@@ -330,11 +330,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "https://app.cclabs.app/catalogue/mods",
-                    UseShellExecute = true,
-                });
+                Platform.ExternalOpener.Open("https://app.cclabs.app/catalogue/mods");
             }
             catch (Exception ex)
             {

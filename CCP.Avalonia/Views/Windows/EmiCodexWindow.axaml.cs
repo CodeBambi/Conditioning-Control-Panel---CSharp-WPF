@@ -454,7 +454,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         internal static void OpenManualInBrowser()
         {
-            try { Process.Start(new ProcessStartInfo(ManualUrl) { UseShellExecute = true }); }
+            try { Platform.ExternalOpener.Open(ManualUrl); }
             catch (Exception ex) { Log.Warning(ex, "[EmiCodex] could not open the manual in a browser"); }
         }
     }

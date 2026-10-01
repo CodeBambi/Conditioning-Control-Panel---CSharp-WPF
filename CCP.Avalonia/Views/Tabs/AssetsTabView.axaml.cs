@@ -84,8 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var assets = CorePaths.EffectiveAssets;
                 Directory.CreateDirectory(Path.Combine(assets, "images"));
                 Directory.CreateDirectory(Path.Combine(assets, "videos"));
-                var launcher = TopLevel.GetTopLevel(this)?.Launcher;
-                if (launcher != null) await launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(assets));
+                await Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), assets);
             }
             catch (Exception ex)
             {

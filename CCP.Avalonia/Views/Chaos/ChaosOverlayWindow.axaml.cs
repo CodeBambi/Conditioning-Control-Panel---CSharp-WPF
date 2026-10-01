@@ -81,16 +81,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// <c>ChaosBoonColors</c> (an id table, now ChaosBoonColors.cs beside this file),
     /// <c>ChaosRanks</c>/<c>ChaosRank</c>/<c>ChaosGlyphs</c> (Core, Services/Chaos/ChaosRanks.cs)
     /// and <c>ChaosWindowZ.BornTopmost</c> (<c>AppSettings.ChaosPinOnTop</c>). <c>ChaosArt</c>,
-    /// <c>ChaosMeta</c>, <c>ChaosLessons</c>, <c>ChaosNarrator</c>,
-    /// <c>ChaosAnnouncerOverlay</c>, <c>ChaosModeService</c> and <c>RevealService</c>
-    /// still live in the WPF
-    /// head - all under ConditioningControlPanel/Services/Chaos/ except <c>ChaosWindowZ</c> and
-    /// <c>ChaosAnnouncerOverlay</c>, which are ConditioningControlPanel/Chaos/ - and this project
-    /// may not reference it. They are stubbed in the Stubs region below,
-    /// shaped so every call site ports unchanged. <c>ChaosBoon</c>, <c>ChaosRarity</c>
+    /// <c>ChaosNarrator</c>, <c>ChaosAnnouncerOverlay</c> and <c>ChaosModeService</c> still live
+    /// in the WPF head (ConditioningControlPanel/Services/Chaos/, the announcer in
+    /// ConditioningControlPanel/Chaos/) and are stubbed in the Stubs region below, shaped so every
+    /// call site ports unchanged. <c>ChaosMeta</c>, <c>ChaosLessons</c> and <c>RevealService</c>
+    /// are in Core now (CCP.Core/Services/Chaos/), but the overlay keeps local stand-ins for
+    /// them on purpose: its recap is a sample until ChaosModeService drives it, and a sample must
+    /// never read or write the real save. <c>ChaosBoon</c>, <c>ChaosRarity</c>
     /// and the run snapshot are local stand-ins for the same reason;
     /// <c>ChaosConversation</c> and friends are already in Core and are used for real, as is
-    /// <c>ChaosMetaState</c> — the recap reads the real save MODEL; only its store is head-side.</para>
+    /// <c>ChaosMetaState</c> — the recap reads the real save MODEL, over a sample instance.</para>
     ///
     /// <para><b>The parameterless constructor draws a sample recap.</b> WPF's showed an empty
     /// transparent window - every panel starts collapsed and a service drives it - and there is no
@@ -1679,10 +1679,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         /// <summary>The save model is ALREADY in Core (<see cref="ChaosMetaState"/>), so the
         /// recap reads the real one rather than a five-field copy of it — the five members below
-        /// are all this view touches. What is still missing is the STORE: <c>ChaosMetaStore</c>
-        /// loads and writes chaos_meta.json in the WPF head, so this instance is a fresh
-        /// in-memory state seeded to a played save, and <see cref="Save"/> is a no-op.
-        /// ponytail: needs a ChaosMeta seam; the swap is then this one initializer.</summary>
+        /// are all this view touches. The real <c>ChaosMeta</c> (and its store) is in Core now;
+        /// this stand-in stays because the recap is a sample until ChaosModeService drives it:
+        /// a fresh in-memory state seeded to a played save, and <see cref="Save"/> is a no-op so
+        /// the sample never touches the real save. ponytail: swap for Core <c>ChaosMeta</c> when
+        /// the run service lands (its FIRST_FALL_BONUS is 25, not this sample's 100).</summary>
         private static class ChaosMeta
         {
             public const int FIRST_FALL_BONUS = 100;

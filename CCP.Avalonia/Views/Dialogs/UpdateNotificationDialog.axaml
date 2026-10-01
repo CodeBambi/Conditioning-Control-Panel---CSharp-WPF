@@ -24,6 +24,7 @@
                                        HorizontalContentAlignment="Center": WPF's Button filled
                                        its Grid column by default, Avalonia's does not. -->
 <Window xmlns="https://github.com/avaloniaui"
+        xmlns:ctl="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.UpdateNotificationDialog"
@@ -127,12 +128,12 @@
             </Border>
 
             <!-- Manual download escape hatch, for people who would rather install it themselves -->
-            <HyperlinkButton x:Name="LinkManualDownload" Grid.Row="3" Margin="0,0,0,14" Padding="0"
+            <ctl:SafeHyperlinkButton x:Name="LinkManualDownload" Grid.Row="3" Margin="0,0,0,14" Padding="0"
                              HorizontalAlignment="Left"
                              Foreground="#B084DC">
                 <TextBlock Text="{loc:Str link_update_download_manually}" FontSize="12.5"
                            TextWrapping="Wrap" TextDecorations="Underline"/>
-            </HyperlinkButton>
+            </ctl:SafeHyperlinkButton>
 
             <!-- Buttons -->
             <Grid Grid.Row="4">

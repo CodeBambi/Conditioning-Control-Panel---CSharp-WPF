@@ -47,15 +47,6 @@ namespace ConditioningControlPanel.Services.Quiz
 
         private const int Protocol = 1;
 
-        /// <summary>
-        /// "Top marks" bar for the graded-intake achievements (#870), as a percentage of the run's
-        /// compliance score. Deliberately NOT full marks and deliberately the same 90 the classic
-        /// quiz used (<c>QuizWindow.PerfectScorePercent</c>): a banded descent scores partly on
-        /// pacing, so 100% is not a thing a real run reaches and a 100% bar would leave these
-        /// achievements exactly as dead as the collapsed quiz launcher left them.
-        /// </summary>
-        private const double TopMarksPercent = 90.0;
-
         /// <summary>AI server proxy base. MUST match <c>AiService.ProxyBaseUrl</c> — the server's
         /// <c>POST /intake/ai</c> gate (Agent H) expects the same Patreon bearer the app already
         /// uses for <c>/ai/chat</c>. Kept as a local constant to avoid taking a dependency on the
@@ -65,13 +56,11 @@ namespace ConditioningControlPanel.Services.Quiz
         private static ChaosWebViewHost? _host;
         private static DispatcherTimer? _heartbeatWatch;
         private static DispatcherTimer? _exitWatchdog;
-        private static DateTime _lastHeartbeatUtc;
-        private static bool _exiting;
-        /// <summary>Has THIS run reported a <c>quiz-result</c> yet? The page keeps its window open
-        /// after the result (Recovery band, summary, outro spiral recap), so the exit message that
-        /// eventually arrives is a normal wind-down, not a walk-out. Only a page-initiated quit with
-        /// this still false counts as quitting an intake early (achievement "held_back").</summary>
-        private static bool _resultReceived;
+        /// <summary>This run's latches (Core <see cref="IntakeRun"/>): whether a <c>quiz-result</c> has
+        /// arrived - after it, the eventual exit is a wind-down, not a walk-out ("held_back") - and
+        /// whether a wind-down is under way.</summary>
+        private static IntakeRun _run = new();
+        private static bool _exiting { get => _run.Exiting; set => _run.Exiting = value; }
         private static bool _relaunchedOnce;
         private static bool _testMode;
         private static bool _disposing;   // reentrancy guard (Dispose closes the window -> Closed -> DisposeAll)
@@ -108,8 +97,7 @@ namespace ConditioningControlPanel.Services.Quiz
                 // the OUTCOME is observed now - dropping it on the floor is bug #1032.
                 RequestAudioPack();
 
-                _exiting = false;
-                _resultReceived = false;
+                _run = new IntakeRun();
                 _testMode = testMode;
                 _duckPreference = duckMainWindow;
 
@@ -317,7 +305,7 @@ namespace ConditioningControlPanel.Services.Quiz
         {
             try
             {
-                _lastHeartbeatUtc = DateTime.UtcNow;
+                _run.Beat();
                 // Claim keyboard focus so the page's inputs work from the first frame.
                 _host?.FocusWeb();
                 // web-shim.fromHostInit expects { type:'init', config:{...}, ai:{...} }.
@@ -394,10 +382,10 @@ namespace ConditioningControlPanel.Services.Quiz
             switch ((string?)o["type"])
             {
                 case "heartbeat":
-                    _lastHeartbeatUtc = DateTime.UtcNow;
+                    _run.Beat();
                     break;
                 case "pong":
-                    _lastHeartbeatUtc = DateTime.UtcNow;
+                    _run.Beat();
                     break;
                 case "quiz-result":
                     OnQuizResult(o);
@@ -482,11 +470,9 @@ namespace ConditioningControlPanel.Services.Quiz
         /// must not be destroyable by dismissing a dialog.</summary>
         private static void OnQuizResult(JObject o)
         {
-            QuizRunResult? run = null;
-            try { run = o["result"]?.ToObject<QuizRunResult>(); }
-            catch (Exception ex) { App.Logger?.Warning("IntakeHostService: bad quiz-result: {E}", ex.Message); }
+            // Parses and latches: from here on, leaving the window is a wind-down, not a walk-out.
+            var run = _run.AcceptResult(o);
             if (run == null) return;
-            _resultReceived = true;   // from here on, leaving the window is a wind-down, not a walk-out
 
             App.Logger?.Information(
                 "IntakeHostService: quiz-result (niche={N}, peakDepth={D:0.00}, band={B}, mantras={M})",
@@ -512,70 +498,24 @@ namespace ConditioningControlPanel.Services.Quiz
                 //
                 // Inside the dispatcher block on purpose - an unlock can raise the achievement
                 // popup, which is UI.
-                try
-                {
-                    var pct = run.MaxScore > 0 ? run.TotalScore / run.MaxScore * 100.0 : 0.0;
-                    var niche = string.IsNullOrWhiteSpace(run.Niche)
-                        ? IntakeNiche.Fallback
-                        : run.Niche.Trim().ToLowerInvariant();
-
-                    QuizService.RaiseQuizCompleted(
-                        (int)Math.Round(run.TotalScore),
-                        passed: true,
-                        perfect: run.MaxScore > 0 && pct >= TopMarksPercent,
-                        category: niche);
-                }
-                catch (Exception ex) { App.Logger?.Debug("IntakeHostService: RaiseQuizCompleted failed: {E}", ex.Message); }
-
-                // Completing an intake earns XP (mirrors PopQuiz's 25-base): deeper descent and
-                // affirmed mantras pay more, capped so endless laps can't farm it.
-                try
-                {
-                    var xp = 25
-                        + (int)Math.Round(Math.Clamp(run.PeakDepth, 0, 1) * 50)
-                        + Math.Min(run.AffirmedMantras?.Count ?? 0, 5) * 5;
-                    App.Progression?.AddXP(Math.Min(xp, 100), XPSource.Other);
-
-                    // Affirmed mantras also feed the mantra quest/program verifier, same cap
-                    // as the XP above so endless laps can't farm program days. XP was already
-                    // granted in the sum - this is credit only.
-                    var affirmed = Math.Min(run.AffirmedMantras?.Count ?? 0, 5);
-                    for (var i = 0; i < affirmed; i++)
-                        App.Quests?.TrackMantraCompleted();
-                }
-                catch (Exception ex) { App.Logger?.Debug("IntakeHostService: XP grant failed: {E}", ex.Message); }
-
-                // SPEND THE WEEKLY PASS - here, and nowhere else. Deliberately NOT at launch:
-                // the run is only over once a quiz-result has actually arrived, so a crash, a
-                // WebView2 process failure or the "are you sure? -> Yes" abort all cost nothing.
-                // A no-op for patrons, who never took a pass to get in.
                 //
-                // Outside the session-draft try below on purpose: the intake WAS completed even
-                // if drafting the session then fails, and the user should not be charged twice
-                // for our own error.
-                try { App.IntakePass?.ConsumeForCompletedIntake(); }
-                catch (Exception ex) { App.Logger?.Debug("IntakeHostService: pass consume failed: {E}", ex.Message); }
+                // Core IntakeRun.Complete then grants XP (25 base, deeper descent and affirmed
+                // mantras pay more, capped at 100) and mantra credit (same cap of 5), SPENDS THE
+                // WEEKLY PASS - here, and nowhere else: a crash, a WebView2 process failure or the
+                // "are you sure? -> Yes" abort all cost nothing; a no-op for patrons - and only then
+                // drafts the session, so a failed draft never charges twice.
+                //
+                // AUTO-SAVE, NO DIALOG. The drafted session is the run's artifact, written straight
+                // into CustomSessions (where the Sessions tab enumerates it) and announced with a
+                // non-blocking toast; a modal SaveFileDialog once let one Escape destroy the run.
+                var (session, path) = IntakeRun.Complete(run, SessionFileService.CustomSessionsFolder,
+                    () => App.IntakePass?.ConsumeForCompletedIntake(),
+                    (score, passed, perfect, category) =>
+                        QuizService.RaiseQuizCompleted(score, passed, perfect, category));
 
                 try
                 {
-                    // AUTO-SAVE, NO DIALOG. This used to put the drafted session behind a modal
-                    // SaveFileDialog: a run the user had just spent forty minutes descending
-                    // through was destroyed by one Escape key, with no recovery path and no
-                    // second chance (the QuizRunResult is not retained). The session is the
-                    // artifact of the run, so it is written straight into the CustomSessions
-                    // folder - where the Sessions tab already enumerates it - and the user is
-                    // told about it with a non-blocking toast instead of being interrupted
-                    // mid-Recovery-band by a file picker.
-                    var session = QuizSessionGenerator.GenerateSession(run);
-                    var fileService = new SessionFileService();
-                    fileService.EnsureCustomFolderExists();
-
-                    var path = UniqueSessionPath(SessionFileService.GetExportFileName(session));
-                    fileService.ExportSession(session, path);
-                    session.SourceFilePath = path;
-
-                    App.Logger?.Information("IntakeHostService: drafted session '{Name}' -> {Path}",
-                        session.Name, path);
+                    if (session == null || path == null) throw new InvalidOperationException("session draft failed");
 
                     // TELL THE RUNNING APP, NOT JUST THE DISK. BUG #614: writing the file was
                     // the whole fix once, but SessionManager.LoadAllSessions() runs exactly
@@ -658,26 +598,6 @@ namespace ConditioningControlPanel.Services.Quiz
             });
         }
 
-        /// <summary>A free path under CustomSessions for <paramref name="fileName"/> (which always
-        /// ends in <c>.session.json</c>). Two intakes on the same niche at the same tier produce
-        /// the same name, so collisions are the norm, not the exception: suffix <c>-2</c>,
-        /// <c>-3</c>, ... rather than silently overwriting the earlier draft. The counter is
-        /// bounded so a pathological folder can't spin here; the last candidate is taken as-is.</summary>
-        private static string UniqueSessionPath(string fileName)
-        {
-            const string ext = ".session.json";
-            var stem = fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase)
-                ? fileName[..^ext.Length]
-                : Path.GetFileNameWithoutExtension(fileName);
-            if (string.IsNullOrWhiteSpace(stem)) stem = "intake-session";
-
-            var folder = SessionFileService.CustomSessionsFolder;
-            var candidate = Path.Combine(folder, stem + ext);
-            for (var i = 2; i <= 999 && File.Exists(candidate); i++)
-                candidate = Path.Combine(folder, $"{stem}-{i}{ext}");
-            return candidate;
-        }
-
         /// <summary>The in-page "are you sure? -&gt; Yes" jumpscare asks the window to close as an
         /// ABORT: unlike the natural quiz end (a <c>quiz-result</c> that drafts a session), NOTHING
         /// is reported here — we just tear the host down on the dispatcher, reusing the same
@@ -686,13 +606,12 @@ namespace ConditioningControlPanel.Services.Quiz
         /// watchdog can't relaunch the window the user is being kicked out of.</summary>
         /// <summary>Tell the gamification bridge the run was walked out of, if it was. Fired from the
         /// two PAGE-INITIATED quits only (the jumpscare abort and the page's own exit affordance) and
-        /// only while <see cref="_resultReceived"/> is false, so a normal post-result close, a boot
+        /// only before a quiz-result (<see cref="IntakeRun.TakeWalkOut"/>), so a normal post-result close, a boot
         /// failure, a recovery relaunch and an app shutdown all stay out of it. The bridge counts a
         /// streak of these for "held_back" - see GamificationBridge.OnQuizAbandoned.</summary>
         private static void ReportWalkOutIfUnfinished()
         {
-            if (_resultReceived || _exiting) return;
-            _resultReceived = true;   // latch: exit + intake-close can both arrive for one quit
+            if (!_run.TakeWalkOut()) return;   // latches: exit + intake-close can both arrive for one quit
             try
             {
                 App.Logger?.Information("IntakeHostService: intake quit before it reported a result");
@@ -770,7 +689,7 @@ namespace ConditioningControlPanel.Services.Quiz
                     try { bytes = Convert.FromBase64String(b64); }
                     catch { bytes = Array.Empty<byte>(); }
 
-                    if (!LooksLikePng(bytes))
+                    if (!IntakeRun.LooksLikePng(bytes))
                     {
                         error = "bad-image";
                     }
@@ -795,11 +714,6 @@ namespace ConditioningControlPanel.Services.Quiz
             try { _host?.Post(new { type = "intake-save-image-result", ok = error == null, path, error }); }
             catch { }
         }
-
-        /// <summary>8-byte PNG signature — enough to reject arbitrary bytes.</summary>
-        private static bool LooksLikePng(byte[] b) =>
-            b.Length > 8 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47
-            && b[4] == 0x0D && b[5] == 0x0A && b[6] == 0x1A && b[7] == 0x0A;
 
         private static void OnBootError(string? msg)
         {
@@ -1286,7 +1200,7 @@ namespace ConditioningControlPanel.Services.Quiz
         private static void StartHeartbeatWatch()
         {
             StopHeartbeatWatch();
-            _lastHeartbeatUtc = DateTime.UtcNow;
+            _run.Beat();
             _heartbeatWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _heartbeatWatch.Tick += (_, _) =>
             {
@@ -1294,8 +1208,7 @@ namespace ConditioningControlPanel.Services.Quiz
                 // page can't false-trip. A wedged main thread also kills the page's own exit path,
                 // so the watchdog must exist even though this is only a windowed tool.
                 if (_host == null || !_host.IsReady || _exiting) return;
-                var silent = (DateTime.UtcNow - _lastHeartbeatUtc).TotalSeconds;
-                if (silent > 20)
+                if (_run.IsHeartbeatSilent(DateTime.UtcNow))   // Core IntakeRun.HeartbeatTimeout (20 s)
                 {
                     App.Logger?.Warning("IntakeHostService: page heartbeat silent >20s - recovering");
                     Recover("heartbeat-silent");

@@ -440,7 +440,7 @@ public sealed class ChaosModeService
         // Lifetime boons (Skills/Accessories/Utility): apply active ones at their level, then
         // mirror them into the HUD strip as icons. The pre-run glance is over: the loadout
         // locks in and the pinned-open panel folds away.
-        ChaosMeta.ApplyLifetimeBoons(_state);
+        ChaosRunEffects.ApplyLifetimeBoons(_state);
         RefreshSidebarLoadout();
         _hud?.SetPreRunExpanded(false);
         // Pocket Watch gates ALL timekeeping: the sidebar run clock + fill bar only show with the charm.
@@ -3260,7 +3260,7 @@ public sealed class ChaosModeService
 
         // Meta-progression: bank Sparks + update lifetime stats (separate from XP payout).
         int sparksEarned = 0;
-        try { sparksEarned = ChaosMeta.AwardRunRewards(_state); }
+        try { sparksEarned = ChaosRunEffects.AwardRunRewards(_state); }
         catch (Exception ex) { App.Logger?.Debug("Chaos meta award: {E}", ex.Message); }
 
         // RunsCompleted just moved — queue any freshly crossed reveals for the next dollhouse open.

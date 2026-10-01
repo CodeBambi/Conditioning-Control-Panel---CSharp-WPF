@@ -7,6 +7,7 @@ using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Webcam;
 using OpenCvSharp;
 using Serilog;
+using ScreenPoint = Avalonia.Point;
 
 namespace ConditioningControlPanel.Avalonia.Platform
 {
@@ -44,10 +45,11 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
     /// <summary>
     /// The Linux webcam engine: frame source -> Core BlazeFace/FaceMesh/Iris detectors -> Core
-    /// BlinkDetector, the same pipeline WebcamTrackingService.ProcessFrame runs on WPF, blink half
-    /// only. Camera open only between Start and Stop, only with current consent.
-    /// ponytail: blink only - gaze projection, head pose, mouth/tongue stay WPF until a consumer
-    /// (calibration, gaze minigame) is ported.
+    /// BlinkDetector + GazeEngine, the same pipeline WebcamTrackingService.ProcessFrame runs on WPF:
+    /// blinks, face lost/found, head pose, raw iris, gaze side and the projected gaze point. Camera
+    /// open only between Start and Stop, only with current consent.
+    /// ponytail: no mouth/tongue, eyes-closed-long, long stare or gaze lock-on yet - their only
+    /// consumers (calibration validation, bubble test, triggers) are not ported.
     /// </summary>
     internal sealed class WebcamTracker
     {
@@ -60,6 +62,24 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         public event Action? OnBlink;
         public event Action? StateChanged;
+        public event Action? OnFaceLost;
+        public event Action? OnFaceFound;
+        /// <summary>Median-filtered iris vector, what calibration samples (WPF OnRawIris).</summary>
+        public event Action<double, double>? OnRawIris;
+        public event Action<double, double>? OnHeadPose;
+        public event Action<GazeSide>? OnGazeSide;
+        /// <summary>Gaze in DIPs of the calibrated monitor; fires only with a calibration.</summary>
+        public event Action<ScreenPoint>? OnGazeMove;
+
+        /// <summary>The saved calibration (WPF's file in the profile folder), read once on first use
+        /// as WPF reads it in the service constructor; revoke clears it with the file.</summary>
+        public WebcamCalibrationData? Calibration
+        {
+            get { if (!_calibrationLoaded) { _calibration = WebcamCalibrationData.Load(); _calibrationLoaded = true; } return _calibration; }
+            internal set { _calibration = value; _calibrationLoaded = true; }   // internal: tests
+        }
+        private volatile WebcamCalibrationData? _calibration;
+        private volatile bool _calibrationLoaded;
 
         public bool IsRunning => _run != null;
         /// <summary>Why the last start failed, for the user; null after a good start.</summary>
@@ -88,6 +108,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         private Run? _run;
         private Thread? _wedged;
         private readonly BlinkDetector _blink = new();
+        private readonly GazeEngine _gaze = new();
         private int _busy;
         /// <summary>Bumped by every Stop (and so by panic). A start that began before it never publishes
         /// its camera: it releases it instead. Guarded by <see cref="_gate"/> with the publish.</summary>
@@ -157,6 +178,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     return false;
                 }
                 _blink.Reset();
+                _gaze.Reset();
                 run.Thread = new Thread(() => Loop(run)) { IsBackground = true, Name = "WebcamCapture", Priority = ThreadPriority.BelowNormal };
                 bool stale;
                 lock (_gate)
@@ -189,6 +211,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             Views.Overlays.BlinkTrainerSession.Stop();
             Instance.Stop();
             WebcamCalibrationData.DeleteIfExists();   // WPF ClearCalibration (WebcamTrackingService.cs:1112)
+            Instance.Calibration = null;
             var s = CoreSettings.Current;
             s.WebcamConsentGiven = false;
             s.WebcamConsentVersion = "";
@@ -249,20 +272,88 @@ namespace ConditioningControlPanel.Avalonia.Platform
             }
         }
 
-        /// <summary>WPF ProcessFrame steps 1, 2, 4 and 5: face, mesh, iris, EAR blink.</summary>
+        /// <summary>WPF Quick Recal's SetRuntimeOffset: swap the whole calibration (the capture thread
+        /// reads it every frame), optionally saving it. Null clears the offset.</summary>
+        public void SetRuntimeOffset(RuntimeOffsetData? offset, bool persist)
+        {
+            lock (_gate)
+            {
+                if (Calibration is not { } current) return;
+                var updated = current.WithRuntimeOffset(offset);
+                if (persist) updated.Save();
+                Calibration = updated;
+            }
+            Log.Information("[Webcam] runtime offset {State} (persist={Persist})", offset == null ? "cleared" : "set", persist);
+        }
+
+        /// <summary>WPF ProcessFrame without mouth/tongue: face, mesh, face lost/found, head pose,
+        /// iris, EAR blink, then the gaze chain (EmitGazeEvents minus lock-on and long stare).</summary>
         private void ProcessFrame(Run run, Mat bgr)
         {
-            var rect = run.Face!.Detect(bgr);
-            if (rect is not { Width: >= 16, Height: >= 16 } r) { _blink.CancelClosure(); return; }
+            var found = run.Face!.Detect(bgr);
+            if (found is not { } f0) { NoFace(); return; }
+            int x = Math.Clamp(f0.X, 0, bgr.Width - 1), y = Math.Clamp(f0.Y, 0, bgr.Height - 1);
+            var r = new Rect(x, y, Math.Clamp(f0.Width, 0, bgr.Width - x), Math.Clamp(f0.Height, 0, bgr.Height - y));
+            if (r.Width < 16 || r.Height < 16) { NoFace(); return; }
             var lm = run.Mesh!.Detect(bgr, r);
-            if (lm == null) { _blink.CancelClosure(); return; }
+            if (lm == null) { NoFace(); return; }
+            if (_gaze.FaceSeen()) Dispatcher.UIThread.Post(() => OnFaceFound?.Invoke());
+            if (HeadPose(_gaze, lm, bgr.Width, bgr.Height) is { } pose)
+                Dispatcher.UIThread.Post(() => OnHeadPose?.Invoke(pose.Yaw, pose.Pitch));
             var left = run.Iris!.Detect(bgr, lm[FaceMeshDetector.LeftEyeOuterIdx], lm[FaceMeshDetector.LeftEyeInnerIdx], isRightEye: false);
             var right = run.Iris.Detect(bgr, lm[FaceMeshDetector.RightEyeOuterIdx], lm[FaceMeshDetector.RightEyeInnerIdx], isRightEye: true);
-            if (left == null || right == null) return;
-            var ev = _blink.Update(
-                BlinkDetector.ComputeEar(left.Contour, BlinkDetector.IrisContourEarIndices),
-                BlinkDetector.ComputeEar(right.Contour, BlinkDetector.IrisContourEarIndices), DateTime.UtcNow);
-            if (ev == BlinkEvent.Blink) Dispatcher.UIThread.Post(() => OnBlink?.Invoke());
+            if (left == null && right == null) return;
+            if (left != null && right != null)
+            {
+                var ev = _blink.Update(
+                    BlinkDetector.ComputeEar(left.Contour, BlinkDetector.IrisContourEarIndices),
+                    BlinkDetector.ComputeEar(right.Contour, BlinkDetector.IrisContourEarIndices), DateTime.UtcNow);
+                if (ev == BlinkEvent.Blink) Dispatcher.UIThread.Post(() => OnBlink?.Invoke());
+            }
+            (double Dx, double Dy)? vl = left == null ? null
+                : _gaze.NormalizeIris(left.IrisCenter, lm[FaceMeshDetector.LeftEyeOuterIdx], lm[FaceMeshDetector.LeftEyeInnerIdx], rightEye: false);
+            (double Dx, double Dy)? vr = right == null ? null
+                : _gaze.NormalizeIris(right.IrisCenter, lm[FaceMeshDetector.RightEyeOuterIdx], lm[FaceMeshDetector.RightEyeInnerIdx], rightEye: true);
+            if (_gaze.CombineEyes(vl, vr) is not { } v || _blink.EyesClosed) return;   // eyes closed: hold, as WPF
+
+            var (dx, dy) = _gaze.PreFilter(v.Dx, v.Dy);
+            Dispatcher.UIThread.Post(() => OnRawIris?.Invoke(dx, dy));
+            var mapped = _gaze.Step(Calibration, dx, dy, GazeEngine.Now(), out var side);
+            Dispatcher.UIThread.Post(() => OnGazeSide?.Invoke(side));
+            if (mapped is not { } m) return;
+            var p = _gaze.Follow(m.X, m.Y);
+            Dispatcher.UIThread.Post(() => OnGazeMove?.Invoke(new ScreenPoint(p.X, p.Y)));
+        }
+
+        /// <summary>WPF UpdateHeadPose: solvePnP here (OpenCvSharp 4.13 takes SolvePnPMethod, see
+        /// GazeEngine), model, Euler extraction and smoothing in Core.</summary>
+        internal static (double Yaw, double Pitch)? HeadPose(GazeEngine gaze, float[][] lm, int w, int h)
+        {
+            try
+            {
+                var pts = gaze.HeadPoseImagePoints(lm);
+                if (pts == null) return null;
+                using var cam = new Mat(3, 3, MatType.CV_64FC1);
+                var k = GazeEngine.HeadPoseCameraMatrix(w, h);
+                for (int i = 0; i < 9; i++) cam.Set(i / 3, i % 3, k[i]);
+                using var dist = new Mat(4, 1, MatType.CV_64FC1, Scalar.All(0));
+                using var obj = InputArray.Create(GazeEngine.HeadPoseModelPoints);
+                using var img = InputArray.Create(pts);
+                using var rvec = new Mat();
+                using var tvec = new Mat();
+                Cv2.SolvePnP(obj, img, cam, dist, rvec, tvec, useExtrinsicGuess: false, flags: SolvePnPMethod.Iterative);
+                if (rvec.Empty() || rvec.Total() < 3) { gaze.HeadPoseFailed(); return null; }
+                using var rot = new Mat();
+                Cv2.Rodrigues(rvec, rot);
+                return gaze.UpdateHeadPose(rot.At<double>(2, 0), rot.At<double>(2, 1), rot.At<double>(2, 2));
+            }
+            catch (Exception ex) { gaze.HeadPoseFailed(); Log.Debug("[Webcam] head pose failed: {Error}", ex.Message); return null; }
+        }
+
+        private void NoFace()
+        {
+            if (_gaze.FaceMissing()) Dispatcher.UIThread.Post(() => OnFaceLost?.Invoke());
+            _blink.CancelClosure();
         }
     }
 }

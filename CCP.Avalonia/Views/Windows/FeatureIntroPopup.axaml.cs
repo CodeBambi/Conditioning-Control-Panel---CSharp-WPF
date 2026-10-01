@@ -764,7 +764,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         ? desktop.MainWindow as MainShellWindow
                         : null;
 
-                    try { _ = shell?.Launcher.LaunchUriAsync(new Uri("https://app.cclabs.app")); }
+                    try { _ = Platform.ExternalOpener.OpenAsync(shell, "https://app.cclabs.app"); }
                     catch (Exception ex) { Log.Warning(ex, "Feature intro: web app link failed to open"); }
 
                     shell?.RetireWebBannerBeat();
