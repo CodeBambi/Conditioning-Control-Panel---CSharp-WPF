@@ -44,7 +44,18 @@ public class BouncingTextService : IDisposable
         public bool SquashAxisX;      // true = hit a vertical wall (X velocity reversed)
         public double BurstTimer = -1;  // seconds since last corner hit; <0 = idle
         public double OverX, OverY;     // drawn reach past the measured box (last frame's transform)
+        public double Cruise;           // the speed this logo bounces at (Super Scrawl relaxes back to it)
+        public double SlamT = -1;       // Super Scrawl: seconds into a click slam; <0 = idle
+        public double SlamX, SlamY, SlamW; // where the slam lands (centre of the word's monitor) and that monitor's width
+        public bool SlamLanded;
     }
+
+    // Super Scrawl (Services/Super/CONTRACT.md): null while the switch is off, so the base path is untouched.
+    private Super.ScrawlScene? _scrawl;
+    private GlobalMouseHook? _scrawlHook;
+    private readonly double[] _scrawlHitPx = new double[8]; // physical px boxes, x/y/r/b per logo, read on the hook
+    private volatile int _scrawlHitCount;
+    private readonly List<Rect> _scrawlRects = new();
 
     private readonly List<Logo> _logos = new();
     private List<string>? _poolOverride; // AI/session-supplied pool, kept for mid-run re-rolls
@@ -100,7 +111,16 @@ public class BouncingTextService : IDisposable
         try
         {
             var dpiScale = GetDpiScale();
-            var rects = new System.Drawing.Rectangle[_logos.Count];
+            _scrawlRects.Clear();
+            _scrawl?.AppendRects(_scrawlRects);
+            var rects = new System.Drawing.Rectangle[_logos.Count + _scrawlRects.Count];
+            for (int i = 0; i < _scrawlRects.Count; i++)
+            {
+                var s = _scrawlRects[i];
+                rects[_logos.Count + i] = System.Drawing.Rectangle.FromLTRB(
+                    (int)Math.Floor(s.Left * dpiScale), (int)Math.Floor(s.Top * dpiScale),
+                    (int)Math.Ceiling(s.Right * dpiScale), (int)Math.Ceiling(s.Bottom * dpiScale));
+            }
             for (int i = 0; i < _logos.Count; i++)
             {
                 var l = _logos[i];
@@ -173,6 +193,7 @@ public class BouncingTextService : IDisposable
             var baseSpeed = (3.0 + _random.NextDouble() * 2.0) * 60.0; // 180-300 DIP/sec
             logo.VelX = baseSpeed * speed * (_random.Next(2) == 0 ? 1 : -1);
             logo.VelY = baseSpeed * speed * (_random.Next(2) == 0 ? 1 : -1);
+            logo.Cruise = Math.Sqrt(logo.VelX * logo.VelX + logo.VelY * logo.VelY);
 
             logo.Color = NextColor(logo, settings);
             _logos.Add(logo);
@@ -180,6 +201,10 @@ public class BouncingTextService : IDisposable
 
         // Create windows for each screen
         CreateWindows(settings.BouncingTextOpacity, logoCount, settings.BouncingTextOutline);
+
+        Super.SuperAccess.Changed -= OnSuperChanged;
+        Super.SuperAccess.Changed += OnSuperChanged;
+        if (Super.SuperAccess.IsOn(Super.SuperEffect.Scrawl)) EnableScrawl();
 
         // Drive motion off the composition clock (vsync-aligned, one callback per
         // rendered frame) instead of a DispatcherTimer — see _lastRenderTime note.
@@ -213,6 +238,9 @@ public class BouncingTextService : IDisposable
         _isRunning = false;
 
         CompositionTarget.Rendering -= Animate;
+        // Panic, the emergency exit and every other stop come through here: Scrawl goes with the words.
+        Super.SuperAccess.Changed -= OnSuperChanged;
+        DisableScrawl();
         if (App.Video != null)
         {
             App.Video.VideoStarted -= OnVideoStartedPause;
@@ -250,6 +278,7 @@ public class BouncingTextService : IDisposable
         if (disp == null) return;
         if (!disp.CheckAccess()) { try { disp.BeginInvoke(new Action(() => OnVideoStartedPause(sender, e))); } catch { } return; }
         if (App.Settings?.Current?.BouncingTextAlwaysOnTop == true) return;
+        _scrawlHitCount = 0; // hidden words cannot be slammed
         CompositionTarget.Rendering -= Animate;
         foreach (var w in _windows) { try { if (w.IsLoaded) w.Hide(); } catch { } }
     }
@@ -394,6 +423,7 @@ public class BouncingTextService : IDisposable
         if (App.Video?.IsPlaying == true && !overVideos)
         {
             foreach (var w in _windows) { if (w.IsLoaded) w.Hide(); }
+            _scrawlHitCount = 0;
             return;
         }
         else
@@ -429,11 +459,21 @@ public class BouncingTextService : IDisposable
                 window.UpdateTransform(i, sx, sy, angle);
             }
         }
+
+        if (_scrawl != null) TickScrawl(dt);
     }
 
     /// <summary>Advance one logo's motion, handle wall/corner bounces and the bounce payload.</summary>
     private void StepLogo(Logo l, int index, double dt, Models.AppSettings settings)
     {
+        if (_scrawl != null)
+        {
+            if (l.SlamT >= 0) { StepSlam(l, dt); return; }
+            double spd = Math.Sqrt(l.VelX * l.VelX + l.VelY * l.VelY);
+            double f = Super.ScrawlRules.RelaxFactor(spd, l.Cruise, dt);
+            l.VelX *= f; l.VelY *= f;
+        }
+
         // Move (delta-time based; velocities are DIP/second)
         l.PosX += l.VelX * dt;
         l.PosY += l.VelY * dt;
@@ -496,6 +536,15 @@ public class BouncingTextService : IDisposable
         else if (bounced)
         {
             cornerHit = IsNearCorner(l.PosX, l.PosY, textRight, textBottom);
+        }
+
+        if (bounced && _scrawl != null)
+        {
+            var wall = Super.ScrawlRules.WallOf(bouncedX && l.VelX > 0, bouncedX && l.VelX < 0,
+                                                bouncedY && l.VelY > 0, bouncedY && l.VelY < 0);
+            var (mx, my, _) = MonitorCentreAt(l.PosX + l.TextWidth / 2, l.PosY + l.TextHeight / 2);
+            _scrawl.WallHit(l.Text, wall, l.PosX, l.PosY, l.PosX + l.TextWidth, l.PosY + l.TextHeight,
+                new Super.ScrawlBounds(_minX, _minY, _maxX, _maxY), new Point(mx, my));
         }
 
         if (cornerHit)
@@ -625,6 +674,14 @@ public class BouncingTextService : IDisposable
                 sx *= pop;
                 sy *= pop;
             }
+        }
+
+        // Super Scrawl: a slammed word swells at the screen centre
+        if (l.SlamT >= 0)
+        {
+            double slam = Super.ScrawlRules.SlamWordScale(l.SlamT, _scrawlMotion);
+            sx *= slam;
+            sy *= slam;
         }
 
         return (sx, sy, angle);
@@ -775,6 +832,7 @@ public class BouncingTextService : IDisposable
             var scale = targetSpeed / Math.Max(0.1, currentSpeed);
             l.VelX *= scale;
             l.VelY *= scale;
+            l.Cruise = targetSpeed;
         }
 
         // Check if font size changed - if so, update and re-measure
@@ -806,6 +864,13 @@ public class BouncingTextService : IDisposable
                 window.UpdateFontFamily(family);
         }
 
+        // Scrawl stamps are built in the words' font and size: start the walls over when either moves
+        if (_scrawl != null && (_scrawlFont != _currentFont || _scrawlSize != _currentFontSize))
+        {
+            DisableScrawl();
+            EnableScrawl();
+        }
+
         // Live opacity
         foreach (var window in _windows)
             window.UpdateOpacity(settings.BouncingTextOpacity);
@@ -829,6 +894,168 @@ public class BouncingTextService : IDisposable
             else
                 OnVideoStartedPause(null, EventArgs.Empty);
         }
+    }
+
+    // ---- Super Scrawl: wall stamps, corner stamps and the click slam (Services/Super/ScrawlRules.cs) ----
+
+    private Models.MotionLevel _scrawlMotion = Models.MotionLevel.Full;
+    private string _scrawlFont = "";
+    private int _scrawlSize;
+    private double _scrawlDpi = 1.0;
+
+    private void OnSuperChanged(Super.SuperEffect effect)
+    {
+        if (effect != Super.SuperEffect.Scrawl) return;
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) return;
+        if (!disp.CheckAccess()) { try { disp.BeginInvoke(new Action(() => OnSuperChanged(effect))); } catch { } return; }
+        if (!_isRunning) return;
+        bool on = Super.SuperAccess.IsOn(Super.SuperEffect.Scrawl);
+        if (on && _scrawl == null) EnableScrawl();
+        else if (!on && _scrawl != null) DisableScrawl();
+    }
+
+    private void EnableScrawl()
+    {
+        if (_scrawl != null || !_isRunning) return;
+        try
+        {
+            var family = Helpers.FontPickerHelper.Resolve(_currentFont, "Segoe UI");
+            var dpiSource = Application.Current?.MainWindow ?? (Visual?)_windows.FirstOrDefault();
+            double ppd = dpiSource != null ? VisualTreeHelper.GetDpi(dpiSource).PixelsPerDip : 1.0;
+            _scrawlDpi = GetDpiScale();
+            _scrawlMotion = MotionFx.Level;
+            _scrawl = new Super.ScrawlScene(family, _currentFontSize, ppd);
+            _scrawlFont = _currentFont;
+            _scrawlSize = _currentFontSize;
+            foreach (var w in _windows) w.AttachScrawl(_scrawl);
+            _scrawlHook = new GlobalMouseHook { LeftDown = OnScrawlDown };
+            _scrawlHook.Start();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "Super Scrawl failed to start");
+            DisableScrawl();
+        }
+    }
+
+    private void DisableScrawl()
+    {
+        _scrawlHitCount = 0;
+        if (_scrawlHook != null) { try { _scrawlHook.Dispose(); } catch { } _scrawlHook = null; }
+        if (_scrawl == null) return;
+        _scrawl.Clear();
+        _scrawl = null;
+        foreach (var w in _windows) { try { w.DetachScrawl(); } catch { } }
+        foreach (var l in _logos)
+        {
+            l.SlamT = -1;
+            l.SlamLanded = false;
+            double spd = Math.Sqrt(l.VelX * l.VelX + l.VelY * l.VelY);
+            if (spd > l.Cruise && spd > 0) { l.VelX *= l.Cruise / spd; l.VelY *= l.Cruise / spd; }
+        }
+    }
+
+    private void TickScrawl(double dt)
+    {
+        var scene = _scrawl!;
+        _scrawlMotion = MotionFx.Level;
+        scene.Tick(dt, _scrawlMotion);
+        bool live = scene.IsLive;
+        foreach (var w in _windows) w.UpdateScrawl(scene.ShakeX, scene.ShakeY, live);
+
+        // The hit boxes the mouse hook reads, in physical px, written in place (no per-frame allocation)
+        int n = Math.Min(_logos.Count, _scrawlHitPx.Length / 4);
+        const double pad = 8;
+        for (int i = 0; i < n; i++)
+        {
+            var l = _logos[i];
+            _scrawlHitPx[i * 4] = (l.PosX - pad) * _scrawlDpi;
+            _scrawlHitPx[i * 4 + 1] = (l.PosY - pad) * _scrawlDpi;
+            _scrawlHitPx[i * 4 + 2] = (l.PosX + l.TextWidth + pad) * _scrawlDpi;
+            _scrawlHitPx[i * 4 + 3] = (l.PosY + l.TextHeight + pad) * _scrawlDpi;
+        }
+        _scrawlHitCount = n;
+    }
+
+    /// <summary>HOOK THREAD contract: reads the snapshot only. A hit on a word swallows the click and slams it.</summary>
+    private bool OnScrawlDown(Point px)
+    {
+        int n = _scrawlHitCount;
+        var box = _scrawlHitPx;
+        for (int i = n - 1; i >= 0; i--)
+        {
+            if (px.X < box[i * 4] || px.X > box[i * 4 + 2] || px.Y < box[i * 4 + 1] || px.Y > box[i * 4 + 3]) continue;
+            int idx = i;
+            try { Application.Current?.Dispatcher.BeginInvoke(new Action(() => BeginSlam(idx))); } catch { }
+            return true;
+        }
+        return false;
+    }
+
+    private void BeginSlam(int idx)
+    {
+        if (_scrawl == null || !_isRunning || idx >= _logos.Count) return;
+        var l = _logos[idx];
+        if (l.SlamT >= 0) return;
+        (l.SlamX, l.SlamY, l.SlamW) = MonitorCentreAt(l.PosX + l.TextWidth / 2, l.PosY + l.TextHeight / 2);
+        l.SlamT = 0;
+        l.SlamLanded = false;
+    }
+
+    /// <summary>One frame of a slam: pull to the centre over 0.2 s, land (stamp, shake, knock the others), hold, let go.</summary>
+    private void StepSlam(Logo l, double dt)
+    {
+        l.SlamT += dt;
+        double tx = l.SlamX - l.TextWidth / 2, ty = l.SlamY - l.TextHeight / 2;
+        if (l.SlamT <= Super.ScrawlRules.SlamTravel && _scrawlMotion != Models.MotionLevel.Off)
+        {
+            double f = Math.Min(1, dt * Super.ScrawlRules.SlamPull);
+            l.PosX += (tx - l.PosX) * f;
+            l.PosY += (ty - l.PosY) * f;
+            return;
+        }
+        l.PosX = tx;
+        l.PosY = ty;
+        if (!l.SlamLanded)
+        {
+            l.SlamLanded = true;
+            _scrawl?.SlamLanded(l.Text, l.SlamX, l.SlamY, l.SlamW);
+            foreach (var o in _logos)
+            {
+                if (o == l || o.SlamT >= 0) continue;
+                var (dvx, dvy) = Super.ScrawlRules.Knock(o.PosX + o.TextWidth / 2, o.PosY + o.TextHeight / 2,
+                    l.SlamX, l.SlamY, o.Cruise);
+                o.VelX += dvx;
+                o.VelY += dvy;
+            }
+            // Leave on a fresh diagonal at its own cruise speed, DVD style
+            double d = l.Cruise / Math.Sqrt(2);
+            l.VelX = _random.Next(2) == 0 ? d : -d;
+            l.VelY = _random.Next(2) == 0 ? d : -d;
+        }
+        if (l.SlamT >= Super.ScrawlRules.SlamHold)
+        {
+            l.SlamT = -1;
+            l.SlamLanded = false;
+        }
+    }
+
+    /// <summary>Centre and width (DIP) of the monitor under a virtual-desktop DIP point; the whole field if none.</summary>
+    private (double X, double Y, double W) MonitorCentreAt(double x, double y)
+    {
+        double px = x * _scrawlDpi, py = y * _scrawlDpi;
+        try
+        {
+            foreach (var s in App.GetGlobalScreens())
+            {
+                var b = s.Bounds;
+                if (px >= b.Left && px < b.Right && py >= b.Top && py < b.Bottom)
+                    return ((b.Left + b.Width / 2.0) / _scrawlDpi, (b.Top + b.Height / 2.0) / _scrawlDpi, b.Width / _scrawlDpi);
+            }
+        }
+        catch { }
+        return ((_minX + _maxX) / 2, (_minY + _maxY) / 2, _maxX - _minX);
     }
 
     public void Dispose()
@@ -1059,6 +1286,35 @@ internal class BouncingTextWindow : Window
         v.Scale.ScaleX = scaleX;
         v.Scale.ScaleY = scaleY;
         v.Rotate.Angle = angle;
+    }
+
+    // Super Scrawl: the stamp layer sits first in the canvas (under every word); the shake moves the whole canvas.
+    private Super.ScrawlLayer? _scrawlLayer;
+    private TranslateTransform? _shake;
+    private bool _scrawlWasLive;
+
+    public void AttachScrawl(Super.ScrawlScene scene)
+    {
+        DetachScrawl();
+        _scrawlLayer = new Super.ScrawlLayer(scene, _screen.Bounds.X / _dpiScale, _screen.Bounds.Y / _dpiScale);
+        _canvas.Children.Insert(0, _scrawlLayer);
+        _shake = new TranslateTransform();
+        _canvas.RenderTransform = _shake;
+    }
+
+    public void DetachScrawl()
+    {
+        if (_scrawlLayer != null) { _canvas.Children.Remove(_scrawlLayer); _scrawlLayer = null; }
+        if (_shake != null) { _canvas.RenderTransform = Transform.Identity; _shake = null; }
+        _scrawlWasLive = false;
+    }
+
+    /// <summary>Per frame: apply the shake and redraw the stamps while anything is alive (plus one frame to clear).</summary>
+    public void UpdateScrawl(double shakeX, double shakeY, bool live)
+    {
+        if (_shake != null) { _shake.X = shakeX; _shake.Y = shakeY; }
+        if (_scrawlLayer != null && (live || _scrawlWasLive)) _scrawlLayer.InvalidateVisual();
+        _scrawlWasLive = live;
     }
 
     /// <summary>Expanding, fading ring spawned at a corner hit (virtual-desktop DIP center).</summary>
