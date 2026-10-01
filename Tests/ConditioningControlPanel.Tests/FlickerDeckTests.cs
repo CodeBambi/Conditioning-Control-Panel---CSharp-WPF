@@ -162,11 +162,11 @@ public class FlickerDeckTests
 
     [Theory]
     [InlineData(3, 0, 0.0)]
-    [InlineData(3, 1, 0.4)]
-    [InlineData(3, 2, 1.0)]
+    [InlineData(3, 1, 0.25)]
+    [InlineData(3, 2, 0.6)]
     [InlineData(5, 2, 0.0)]
-    [InlineData(5, 3, 0.4)]
-    [InlineData(5, 4, 1.0)]
+    [InlineData(5, 3, 0.25)]
+    [InlineData(5, 4, 0.6)]
     public void Cracks_show_on_the_flip_before_the_last_and_faintly_one_earlier(int breakAt, int flips, double crack)
         => Assert.Equal(crack, FlickerDeck.CrackAmount(flips, breakAt));
 
@@ -206,7 +206,7 @@ public class FlickerDeckTests
     public void Crack_lines_stay_inside_the_picture()
     {
         var lines = FlickerDeck.CrackLines(new Random(3));
-        Assert.InRange(lines.Length, 5, 7);
+        Assert.InRange(lines.Length, 3, 4);
         Assert.All(lines, l => Assert.All(l, v => Assert.InRange(v, 0, 1)));
     }
 

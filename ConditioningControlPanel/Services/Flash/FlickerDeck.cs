@@ -250,9 +250,9 @@ public static class FlickerDeck
         return w;
     }
 
-    /// <summary>Full cracks on the flip before the last, a faint set one earlier.</summary>
+    /// <summary>Subtle cracks on the flip before the last, a hint of them one earlier (0.6 and 0.25 of full).</summary>
     public static double CrackAmount(int flips, int breakAt)
-        => flips == breakAt - 1 ? 1.0 : flips == breakAt - 2 ? 0.4 : 0.0;
+        => flips == breakAt - 1 ? 0.6 : flips == breakAt - 2 ? 0.25 : 0.0;
 
     /// <summary>True when the card needs a redraw this frame even with nothing else moving.</summary>
     public static bool Animating(FlickerDeckState s)
@@ -276,7 +276,7 @@ public static class FlickerDeck
     /// </summary>
     public static double[][] CrackLines(Random rng)
     {
-        var n = 5 + rng.Next(3);
+        var n = 3 + rng.Next(2);
         double ix = 0.4 + rng.NextDouble() * 0.2, iy = 0.4 + rng.NextDouble() * 0.2;
         var lines = new double[n][];
         for (var i = 0; i < n; i++)
@@ -285,7 +285,7 @@ public static class FlickerDeck
             var segs = 3;
             var pts = new double[(segs + 1) * 2];
             pts[0] = ix; pts[1] = iy;
-            double x = ix, y = iy, len = 0.12 + rng.NextDouble() * 0.12;
+            double x = ix, y = iy, len = 0.07 + rng.NextDouble() * 0.07;
             for (var k = 1; k <= segs; k++)
             {
                 a += (rng.NextDouble() - 0.5) * 0.7;
