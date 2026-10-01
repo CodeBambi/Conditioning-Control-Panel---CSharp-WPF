@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
@@ -29,7 +31,7 @@ public sealed class AiCommandGateTests : IDisposable
         CoreAccount.HasLabAccessProvider = () => _labAccess;
         var p = _service.Current.CompanionPrompt;
         p.AllowAiToControlEffects = true;
-        p.AllowAiFlash = p.AllowAiVideo = p.AllowAiOverlay = true;
+        p.AllowAiFlash = p.AllowAiVideo = p.AllowAiOverlay = p.AllowAiGetBackToMe = true;
         _service.Current.MandatoryVideosEnabled = true;
         FlashImageCommand.Surface = (a, ms, s) => { _flashes.Add((a, ms, s)); return true; };
         MediaCommand.VideoSurface = path => { _videos.Add(path); return true; };
@@ -114,5 +116,51 @@ public sealed class AiCommandGateTests : IDisposable
         Run(new AiCommandData { Command = AICommandType.spiral, Data = new SpiralPinkFiler(true, 20) });
         Assert.Equal(2, _feed.Count);
         Assert.Contains("didn't fire", _feed[1]);
+    }
+
+    // ---- getbacktome follow-ups: re-gated when they fire, 3 per follow-up, cancelled by panic / switch-off ----
+
+    private static AiCommandData FollowUp(params AiCommandData[] nested) => new()
+    {
+        Command = AICommandType.getbacktome,
+        Data = new GetBackToMe(1, "t" + Guid.NewGuid().ToString("N"), nested.ToList(), null, JsonOnly: true),
+    };
+
+    private static Task PastTheDelay() => Task.Delay(1800);
+
+    [Fact]
+    public async Task NestedCommandWithItsToggleOffIsRefused()
+    {
+        Run(FollowUp(Flash()));
+        _service.Current.CompanionPrompt.AllowAiFlash = false;   // changed during the delay
+        await PastTheDelay();
+        Assert.Empty(_flashes);
+        Assert.Contains(_feed, l => l.Contains("Follow-up flash_image blocked"));
+    }
+
+    [Fact]
+    public async Task FourthNestedCommandIsRefused()
+    {
+        Run(FollowUp(Flash(), Flash(), Flash(), Flash(), Flash()));
+        await PastTheDelay();
+        Assert.Equal(AiCommandService.MaxCommandsPerResponse, _flashes.Count);
+    }
+
+    [Fact]
+    public async Task PanicDuringTheDelayMeansNothingFires()
+    {
+        Run(FollowUp(Flash()));
+        AiCommandService.CancelAll();
+        await PastTheDelay();
+        Assert.Empty(_flashes);
+    }
+
+    [Fact]
+    public async Task SwitchOffDuringTheDelayCancelsTheFollowUp()
+    {
+        Run(FollowUp(Flash()));
+        _service.Current.CompanionPrompt.AllowAiToControlEffects = false;
+        await PastTheDelay();
+        Assert.Empty(_flashes);
     }
 }

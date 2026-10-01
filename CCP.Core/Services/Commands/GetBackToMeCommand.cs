@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
 using Serilog;
 
@@ -50,19 +51,34 @@ namespace ConditioningControlPanel.Services.Commands
                     delay, _depth, _data.Token);
                 await Task.Delay(delay * 1000, _cancellationToken);
 
+                // Consent can have changed during the delay: re-gate before asking the AI anything.
+                _cancellationToken.ThrowIfCancellationRequested();
+                if (AiCommandService.Refusal(AICommandType.getbacktome) is { } refusal)
+                {
+                    Log.Information("GetBackToMeCommand: {Reason} - follow-up dropped", refusal);
+                    return false;
+                }
+
                 await SendTokenMessage(_data.Token, _data.JsonOnly, _data.Text);
 
-                if (_data.Commands != null)
+                // Each nested command passes the same gate as a top-level one at the moment it fires,
+                // with this follow-up's own budget (never the reply's shared counter).
+                var fired = 0;
+                foreach (var subCommand in _data.Commands ?? new())
                 {
-                    foreach (var subCommand in _data.Commands)
+                    if (_cancellationToken.IsCancellationRequested) break;
+                    var why = AiCommandService.Refusal(AICommandType.getbacktome) ?? AiCommandService.Refusal(subCommand.Command)
+                        ?? (fired >= AiCommandService.MaxCommandsPerResponse ? $"follow-up cap reached ({AiCommandService.MaxCommandsPerResponse})" : null);
+                    if (why != null)
                     {
-                        if (_cancellationToken.IsCancellationRequested) break;
-                        var cmd = CommandFactory.CreateCommand(subCommand, _cancellationToken, _depth + 1);
-                        if (cmd != null)
-                        {
-                            await cmd.ExecuteAsync();
-                        }
+                        Log.Information("GetBackToMeCommand: {Reason} - nested {Cmd} blocked", why, subCommand.Command);
+                        AiCommandService.NoteBlockedFollowUp(subCommand.Command);
+                        continue;
                     }
+                    var cmd = CommandFactory.CreateCommand(subCommand, _cancellationToken, _depth + 1);
+                    if (cmd == null) continue;
+                    fired++;
+                    await cmd.ExecuteAsync();
                 }
                 return true;
             }

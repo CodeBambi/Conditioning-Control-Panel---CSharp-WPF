@@ -35,13 +35,29 @@ namespace ConditioningControlPanel.Avalonia
 
         private static bool OnUi(Func<bool> f) => Dispatcher.UIThread.CheckAccess() ? f() : Dispatcher.UIThread.Invoke(f);
 
+        /// <summary>A desktop-effect start, through MainShellWindow.StartEffect so the portal panic
+        /// shortcut is bound first on native Wayland. A start deferred behind that bind is dropped if a
+        /// panic or switch-off came meanwhile, and reported as requested; inline, it reports what showed.</summary>
+        internal static bool Start(Func<bool> show) => OnUi(() =>
+        {
+            var generation = AiCommandService.CancelGeneration;
+            bool? shown = null;
+            MainShellWindow.StartEffect(() =>
+            {
+                if (generation == AiCommandService.CancelGeneration && AiEffectControlGate.IsOnNow) shown = show();
+                else shown = false;
+            });
+            return shown ?? true;
+        });
+
         /// <summary>An overlay surface: refused without a host or click-through support.</summary>
         private static bool Overlay(Action<Window> show) => OnUi(() =>
-        {
-            if (!X11Overlay.IsAvailable || Host is not { } host) return false;
-            show(host);
-            return true;
-        });
+            X11Overlay.IsAvailable && Host is not null && Start(() =>
+            {
+                if (Host is not { } host) return false;
+                show(host);
+                return true;
+            }));
 
         internal static void Seed()
         {
@@ -70,14 +86,15 @@ namespace ConditioningControlPanel.Avalonia
             BounceCommand.Surface = (on, words) => on
                 ? Overlay(host => BouncingTextOverlay.Start(host, words))
                 : OnUi(() => { BouncingTextOverlay.Stop(); return true; });
-            MantraLockScreenCommand.Surface = (phrase, repeats) => OnUi(() =>
+            MantraLockScreenCommand.Surface = (phrase, repeats) => Start(() =>
             {
+                if (LockCardWindow.IsAnyOpen()) return false;   // never stacks (WPF), so nothing showed
                 LockCardWindow.ShowOnAllMonitors(phrase, repeats, strictMode: true, isTest: false,
                     voiceMode: CoreSettings.Current.LockCardVoiceMode);
-                return true;
+                return LockCardWindow.IsAnyOpen();
             });
             // Without WPF's BypassLevelCheck the tint shows only while the engine does; refused otherwise.
-            PinkCommand.Surface = (on, intensity) => OnUi(() =>
+            PinkCommand.Surface = (on, intensity) => Start(() =>
             {
                 var s = CoreSettings.Current;
                 s.PinkFilterOpacity = intensity;
@@ -86,7 +103,7 @@ namespace ConditioningControlPanel.Avalonia
                 CoreSettings.Save();
                 return !on || PinkFilterOverlay.IsShowing;
             });
-            MediaCommand.VideoSurface = path => OnUi(() =>
+            MediaCommand.VideoSurface = path => Start(() =>
                 CoreEngine.Video?.Trigger(path == null ? null : false, path) == true);
             MediaCommand.AudioSurface = PlayAudio;
             GetBackToMeCommand.AiProvider = () => App.Ai;
