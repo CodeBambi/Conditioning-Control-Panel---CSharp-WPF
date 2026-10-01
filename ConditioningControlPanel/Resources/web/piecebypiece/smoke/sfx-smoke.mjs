@@ -159,7 +159,7 @@ sfx.play('draw');
 expect(names().at(-1) === 'draw', 'draw sting plays by hand');
 expect(sfx.play('cardOpen') && sfx.play('cardClose'), 'card whooshes play by hand');
 
-for (const name of ['crowdApplause','crowdCheer','crowdBoo','hooves','neigh','stomp','headbutt','whip','sweep','spin','breakdance','charge','launch']) {
+for (const name of ['crowdApplause','crowdCheer','crowdBoo','crowdOoh','crowdClap','crowdAww','turnCard','hooves','neigh','stomp','headbutt','whip','sweep','spin','breakdance','charge','launch']) {
   const before = fake.started.length;
   expect(sfx.play(name) && fake.started.length > before, name + ' schedules its sound');
 }
@@ -207,6 +207,23 @@ expect(!sfx.state().pulsing && fake.state === 'closed', 'dispose stops the pulse
   expect(crowdLog.at(-1) === 'crowdCheer', 'checkmate earns a finish cheer');
   events.emit('gameover', { result: 'checkmate' }); audible = false; audience.update(); flush();
   expect(crowdLog.length === 1, 'menu, replay or mute cancels a pending crowd cue');
+  audience.dispose();
+}
+// More reactions, each naming a plain fact of the move (owner, 2026-10-01).
+{
+  const events = createBus(), chess = new Chess();
+  let time = 0, pending = null; const log = [];
+  const audience = createCrowd({ bus: events, game: { rules: { chess } }, now: () => time,
+    play: name => { log.push(name); return true; }, canPlay: () => true, settled: () => true,
+    later: fn => { pending = fn; return 1; }, clear: () => { pending = null; } });
+  const step = (fen, san) => { chess.load(fen); events.emit('local'); log.length = 0; time += 10000; chess.move(san); events.emit('turn'); time += 600; const fn = pending; pending = null; fn?.(); return log.at(-1); };
+  expect(step('4k3/8/8/8/8/8/8/R3K3 w Q - 0 1', 'Ra8+') === 'crowdOoh', 'a check draws an ooh');
+  expect(step('4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1', 'O-O') === 'crowdClap', 'castling draws a polite clap');
+  expect(step('4k3/8/8/3q4/8/8/8/3RK3 w - - 0 1', 'Rxd5') === 'crowdCheer', 'taking the queen draws a cheer');
+  expect(step('4k3/8/8/3n4/8/8/8/3RK3 w - - 0 1', 'Rxd5') === 'crowdApplause', 'a lesser capture still draws applause');
+  expect(step('4k3/8/8/8/8/8/8/4K2R w K - 0 1', 'Kd2') === undefined, 'a quiet move draws nothing');
+  log.length = 0; time += 10000; events.emit('gameover', { result: 'draw' }); time += 400; pending?.();
+  expect(log.at(-1) === 'crowdAww', 'a draw draws an aww');
   audience.dispose();
 }
 
@@ -263,6 +280,7 @@ expect(!sfx.state().pulsing && fake.state === 'closed', 'dispose stops the pulse
   // and nothing more of that replay plays; the next replay sounds as before
   expect(rsfx.state().tail > 0, 'a finished replay leaves its echoes ringing');
   rbus.emit('turn-card', { side: 'b', style: 'slam', short: false });
+  expect(rnames().at(-1) === 'turnCard' && rsfx.log().at(-1).opts.mine === false, 'the card plays its own cue, the theirs version for the other side');
   expect(rsfx.state().yielded && rsfx.state().tail === 0, 'a card after a finished replay fades its echoes out');
   rbus.emit('replay-show', { layout: 'corner', n: 1, hit });
   expect(rsfx.state().tail > 0 && !rsfx.state().yielded && rsfx.state().ducked, 'the next replay opens its echo room again and ducks the beds');

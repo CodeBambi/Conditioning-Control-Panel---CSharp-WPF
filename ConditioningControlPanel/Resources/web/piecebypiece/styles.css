@@ -395,17 +395,17 @@ body.pbp-replay-corner .game-settings:not(:has(.game-options-panel:not([hidden])
 .turn-card { position: fixed; inset: 0; z-index: 20; pointer-events: none; overflow: hidden; --tc: #ff5aa5; }
 .turn-card[hidden], .turn-card > div[hidden], .turn-card .tc-clock[hidden] { display: none; }
 .turn-card > div { position: absolute; inset: 0; }
-.tc-band { position: absolute; left: -6%; right: -6%; top: 38%; height: 24%; background: var(--tc); transform-origin: 50% 50%;
+.tc-band { position: absolute; left: -6%; right: -6%; top: 46%; height: 8%; background: var(--tc); transform-origin: 50% 50%;
   background-image: repeating-linear-gradient(115deg, #ffffff1c 0 14px, transparent 14px 34px); }
 .tc-word { position: absolute; left: 50%; top: 50%; white-space: nowrap; text-transform: uppercase; color: #fff;
-  font: 900 clamp(34px, 8vw, 100px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .02em;
+  font: 900 clamp(22px, 3.8vw, 52px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .02em;
   -webkit-text-stroke: .09em #0c0a1e; paint-order: stroke fill; }
-.tc-clock { position: absolute; left: 50%; top: 65%; padding: 6px 11px 5px; border-radius: 999px; background: #0c0a1e; color: #fff;
+.tc-clock { position: absolute; left: 50%; top: 56%; padding: 6px 11px 5px; border-radius: 999px; background: #0c0a1e; color: #fff;
   font: 700 13px/1 Consolas, 'Courier New', monospace; font-variant-numeric: tabular-nums; }
-.tc-rband { position: absolute; top: 39%; height: 22%; left: -10%; width: 120%; background: var(--tc); box-shadow: 0 7px 0 #0c0a1e; }
+.tc-rband { position: absolute; top: 46%; height: 8%; left: -10%; width: 120%; background: var(--tc); box-shadow: 0 7px 0 #0c0a1e; }
 .tc-rword { position: absolute; left: 50%; top: 50%; white-space: nowrap; text-transform: uppercase; color: #0c0a1e;
-  font: 900 clamp(28px, 6.4vw, 80px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .03em; }
-.tc-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; opacity: 0;
+  font: 900 clamp(18px, 3.2vw, 42px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .03em; }
+.tc-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 18%; opacity: 0;
   background: linear-gradient(to top, color-mix(in srgb, var(--tc) 55%, transparent), transparent); }
 .turn-card.theirs .tc-edge { top: 0; bottom: auto; background: linear-gradient(to bottom, color-mix(in srgb, var(--tc) 55%, transparent), transparent); }
 .tc-pill { position: absolute; top: 16px; left: 50%; display: flex; gap: 10px; align-items: center; padding: 9px 16px 8px 12px;
