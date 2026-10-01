@@ -142,25 +142,53 @@ public sealed class WebcamCalibrationTests
 
     [Theory]
     [InlineData(true)]    // Escape during the gesture checks, with the candidate already live
-    [InlineData(false)]   // panic: tracking stops mid-grid
+    [InlineData(false)]   // panic: tracking stops during the gesture checks
     public void Cancel_SavesNothing_AndPutsTheOldCalibrationBack(bool escape) => WithTracker(start: true, (tracker, sentinel) =>
     {
         var win = OpenAndContinue();
-        if (escape)
-        {
-            var validation = win.FindControl<Grid>("ValidationPanel")!;
-            Assert.True(Gaze(win, () => validation.IsVisible && tracker.Calibration?.Mode == "SixteenPoint"));
-            win.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
-        }
-        else
-        {
-            Assert.True(Gaze(win, () => win.ActiveDotIndex >= 3));
-            tracker.Stop();
-        }
+        var validation = win.FindControl<Grid>("ValidationPanel")!;
+        // Both stop with the unsaved candidate already live, so they prove the restore.
+        Assert.True(Gaze(win, () => validation.IsVisible && tracker.Calibration?.Mode == "SixteenPoint"));
+        if (escape) win.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+        else tracker.Stop();
         Assert.True(Gaze(win, () => !win.IsVisible, 3000));
         Assert.False(File.Exists(WebcamCalibrationData.FilePath));
         Assert.Same(sentinel, tracker.Calibration);
         Assert.False(WebcamCalibrationWindow.IsShowing);
+    });
+
+    [Fact]
+    public void RevokeDuringCalibration_IsNotUndoneByTheClose() => WithTracker(start: true, (tracker, _) =>
+    {
+        var win = OpenAndContinue();
+        var validation = win.FindControl<Grid>("ValidationPanel")!;
+        Assert.True(Gaze(win, () => validation.IsVisible && tracker.Calibration?.Mode == "SixteenPoint"));
+        var s = CoreSettings.Current;
+        var old = (s.WebcamConsentDate, s.WebcamTriggersEnabled, s.FocusGameEnabled);
+        WebcamTracker.RevokeConsent();   // stops tracking, drops the calibration; the window closes
+        (s.WebcamConsentDate, s.WebcamTriggersEnabled, s.FocusGameEnabled) = old;
+        Assert.True(Gaze(win, () => !win.IsVisible, 3000));
+        Assert.Null(tracker.Calibration);
+        Assert.False(File.Exists(WebcamCalibrationData.FilePath));
+    });
+
+    [Fact]
+    public void Save_IsAtomic_AFailedSaveKeepsTheOldFile() => WithTracker(start: false, (_, _) =>
+    {
+        Assert.True(new WebcamCalibrationData { Mode = "Old" }.Save());
+        var tmp = WebcamCalibrationData.FilePath + ".tmp";
+        Directory.CreateDirectory(tmp);   // the temp write cannot happen
+        try
+        {
+            Assert.False(new WebcamCalibrationData { Mode = "New" }.Save());
+            Assert.False(WebcamTracker.Instance.ApplyCalibration(new WebcamCalibrationData { Mode = "New" }));
+            Assert.Equal("Old", WebcamCalibrationData.Load()!.Mode);
+            Assert.NotEqual("New", WebcamTracker.Instance.Calibration?.Mode);
+        }
+        finally { Directory.Delete(tmp); }
+        Assert.True(new WebcamCalibrationData { Mode = "New" }.Save());
+        Assert.Equal("New", WebcamCalibrationData.Load()!.Mode);
+        Assert.False(File.Exists(tmp));
     });
 
     [Fact]
