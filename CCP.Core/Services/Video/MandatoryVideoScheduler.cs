@@ -289,11 +289,12 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>WPF TriggerVideo -> PlayVideo: pick a clip, stop the flash, and show it after the
-        /// pre-roll. False when nothing was started (no clip, or one is already playing).</summary>
-        public bool Trigger(bool? strictOverride = null)
+        /// pre-roll. False when nothing was started (no clip, or one is already playing).
+        /// <paramref name="path"/> plays that clip instead of a pick (WPF PlaySpecificVideo).</summary>
+        public bool Trigger(bool? strictOverride = null, string? path = null)
         {
             if (_playing) return false;
-            var path = PickNext();
+            path ??= PickNext();
             if (path == null)
             {
                 Log.Warning("VideoService: no videos found in the library");

@@ -55,6 +55,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// this is the one declaration of the field for the whole partial class.</summary>
         private AvatarTubeWindow? _avatarTubeWindow;
 
+        /// <summary>WPF MainWindow.BuildingHiddenForBoot: set while a launcher boot shows the panel only so
+        /// its Opened work runs (App.axaml.cs). Nobody sees the panel then, so the tube stays put.</summary>
+        internal bool BuildingHiddenForBoot { get; set; }
+
         // ============================== the XP-drain flash ==============================
 
         /// <summary>
@@ -108,7 +112,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             try
             {
-                bool showNow = IsVisible
+                bool showNow = IsVisible && !BuildingHiddenForBoot
                                && WindowState != WindowState.Minimized
                                && CoreSettings.Current.AvatarEnabled;
 

@@ -34,10 +34,11 @@ public sealed class ShellTrayTests
             shell.TrayHostPresent = () => true;
             var items = shell.Tray!.Menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator).ToList();
             Assert.Equal(
-                new[] { "tray_show", CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", "tray_stop_everything", "tray_exit" }
+                new[] { "tray_show", "launcher_back_to_client", CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", "tray_stop_everything", "tray_exit" }
                     .Select(Loc.Get),
                 items.Select(i => i.Header));
-            Assert.IsType<NativeMenuItemSeparator>(shell.Tray.Menu.Items[2]);
+            Assert.IsType<NativeMenuItemSeparator>(shell.Tray.Menu.Items[3]);
+            Assert.False(items[1].IsVisible);   // Back to CC Labs: a panel boot with no launcher built
 
             // Stop everything is StopEngine: schedules stop, queued flashes are dropped, the saved
             // flags stay On (the card stays ticked), and the shell stays open. A plain Start never
@@ -58,7 +59,7 @@ public sealed class ShellTrayTests
                 Assert.True(cardEnable.IsChecked);
                 Assert.True(cardEnable.IsEnabled);
                 var generation = FlashOverlay.Generation;
-                items[2].Command!.Execute(null);
+                items[3].Command!.Execute(null);
                 Assert.False(CoreEngine.IsRunning);
                 Assert.False(CoreFlash.IsRunning);
                 Assert.False(CoreSubliminal.IsRunning);
@@ -85,7 +86,7 @@ public sealed class ShellTrayTests
             Assert.False(shell.IsVisible);
             items[0].Command!.Execute(null);
             Assert.True(shell.IsVisible);
-            items[3].Command!.Execute(null);
+            items[4].Command!.Execute(null);
             Assert.True(closed);
             shell.Tray.Dispose();
             return Task.CompletedTask;
