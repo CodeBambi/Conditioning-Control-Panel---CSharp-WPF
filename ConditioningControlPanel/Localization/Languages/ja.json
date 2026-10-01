@@ -5258,6 +5258,8 @@
   "super_name_undertow": "Undertow",
   "super_switch_name": "Super {0}",
   "super_switch_locked_tip": "Super {0}。Basic以上。",
+  "super_free_week": "今週は無料",
+  "super_free_week_short": "無料",
   "tiergate_denied_lab": "{0} はティア2の特典です。プレッジをアップグレードすると解除できます。",
   "tiergate_see_tiers": "ティアを見る",
   "tiergate_denied_reconnect": "Patreonを再接続してアクセスを更新してください。",
