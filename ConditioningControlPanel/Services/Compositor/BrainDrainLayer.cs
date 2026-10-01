@@ -105,7 +105,7 @@ public sealed class BrainDrainLayer : BaseLayer
     private readonly System.Collections.Concurrent.ConcurrentQueue<System.Windows.Point> _undertowClicks = new();
     private double _undertowScreenWidth = 1920;
     private SKPaint? _maskPaint;                // DstOut, unit radial gradient scaled by the canvas
-    private SKPaint? _ringPaint;
+    // (click waves: see BeginWaves)
 
     public BrainDrainLayer(CompositorEngine engine) : base(engine)
     {
@@ -490,41 +490,129 @@ public sealed class BrainDrainLayer : BaseLayer
         float x = (float)_undertow.X, y = (float)_undertow.Y;
         var lens = new SKRect(x - r, y - r, x + r, y + r);
 
+        // Click waves bend the image itself (a runtime shader), so they ripple the lens and the blur
+        // alike. No live wave, or no shader support: the plain image, byte-identical to before.
+        var wave = BeginWaves(image, dest, dpiScale);
+
         if (r < 1f || !lens.IntersectsWith(dest))
         {
-            canvas.DrawImage(image, dest, _drawPaint);
+            DrawBase(canvas, image, dest, wave);
         }
         else
         {
             canvas.Save();
             canvas.ClipRect(lens, SKClipOperation.Difference);
-            canvas.DrawImage(image, dest, _drawPaint);
+            DrawBase(canvas, image, dest, wave);
             canvas.Restore();
 
             canvas.SaveLayer(lens, null);
             canvas.ClipRect(lens);
-            canvas.DrawImage(image, dest, _drawPaint);
+            DrawBase(canvas, image, dest, wave);
             canvas.Translate(x, y);
             canvas.Scale(r);
             canvas.DrawCircle(0, 0, 1, MaskPaint());
             canvas.Restore();
         }
+        EndWaves();
+    }
 
-        var motion = UndertowMotionNow();
-        SKPaint? ring = null;
-        foreach (var rp in _undertow.Ripples)
-        {
-            if (!rp.Live) continue;
-            for (int j = 0; j < 2; j++)
-            {
-                if (!Super.UndertowLens.RingAt(rp.Age, j, _undertowScreenWidth, motion,
-                                                out double rr, out double a, out double w, dpiScale)) continue;
-                ring ??= RingPaint();
-                ring.StrokeWidth = (float)w;
-                ring.Color = SKColors.White.WithAlpha((byte)Math.Clamp(Math.Round(a * 255), 0, 255));
-                canvas.DrawCircle((float)rp.X, (float)rp.Y, (float)rr, ring);
+    private void DrawBase(SKCanvas canvas, SKImage image, SKRect dest, SKPaint? wave)
+    {
+        if (wave != null) canvas.DrawRect(dest, wave);
+        else canvas.DrawImage(image, dest, _drawPaint);
+    }
+
+    // SkSL: displace the sample point along the radial direction by a sine train that is sharp at the
+    // front and fades behind it, plus a little crest lighting so the water reads as water.
+    private const string WaveSksl = @"
+uniform shader src;
+uniform float4 w[6];   // x, y, front radius, amplitude (px)
+uniform float3 p;      // wavelength, trailing band, amplitude reference
+half4 main(float2 c) {
+    float2 off = float2(0.0);
+    float hi = 0.0;
+    for (int i = 0; i < 6; i++) {
+        float amp = w[i].w;
+        if (amp > 0.0) {
+            float2 d = c - w[i].xy;
+            float dist = length(d);
+            if (dist > 0.5) {
+                float x = dist - w[i].z;
+                float env = x > 0.0 ? exp(-pow(x / (p.x * 0.5), 2.0)) : exp(x / p.y);
+                float ph = x * 6.2831853 / p.x;
+                off += (d / dist) * sin(ph) * amp * env;
+                hi += cos(ph) * env * (amp / p.z);
             }
         }
+    }
+    half4 col = src.eval(c + off);
+    col.rgb *= half(1.0 + 0.12 * clamp(hi, -1.0, 1.0));
+    return col;
+}";
+
+    private static SKRuntimeEffect? _waveEffect;
+    private static bool _waveEffectTried;
+    private SKPaint? _wavePaint;
+    private SKShader? _waveShader, _waveSrc;
+    private readonly float[] _waveData = new float[6 * 4];
+
+    private SKPaint? BeginWaves(SKImage image, SKRect dest, double dpiScale)
+    {
+        if (!_waveEffectTried)
+        {
+            _waveEffectTried = true;
+            try
+            {
+                _waveEffect = SKRuntimeEffect.Create(WaveSksl, out var err);
+                if (_waveEffect == null) App.Logger?.Debug("Undertow wave shader: {E}", err);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Undertow wave shader: {E}", ex.Message); }
+        }
+        if (_waveEffect == null) return null;
+
+        var motion = UndertowMotionNow();
+        Array.Clear(_waveData);
+        double maxAmp = 0, wl = 0, band = 0;
+        bool any = false;
+        int n = 0;
+        foreach (var rp in _undertow.Ripples)
+        {
+            if (!rp.Live || n >= 6) continue;
+            if (!Super.UndertowLens.WaveAt(rp.Age, _undertowScreenWidth, motion, dpiScale,
+                                           out double front, out double amp, out wl, out band)) continue;
+            _waveData[n * 4] = (float)rp.X; _waveData[n * 4 + 1] = (float)rp.Y;
+            _waveData[n * 4 + 2] = (float)front; _waveData[n * 4 + 3] = (float)amp;
+            if (amp > maxAmp) maxAmp = amp;
+            n++; any = true;
+        }
+        if (!any) return null;
+
+        try
+        {
+            var m = SKMatrix.CreateScale(dest.Width / image.Width, dest.Height / image.Height);
+            m = m.PostConcat(SKMatrix.CreateTranslation(dest.Left, dest.Top));
+            _waveSrc = image.ToShader(SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, m);
+            var uniforms = new SKRuntimeEffectUniforms(_waveEffect) { ["w"] = _waveData, ["p"] = new float[] { (float)wl, (float)band, (float)Math.Max(1, maxAmp) } };
+            var children = new SKRuntimeEffectChildren(_waveEffect) { ["src"] = _waveSrc };
+            _waveShader = _waveEffect.ToShader(false, uniforms, children);
+            _wavePaint ??= new SKPaint { IsAntialias = false };
+            _wavePaint.Shader = _waveShader;
+            _wavePaint.Color = SKColors.White.WithAlpha(_drawPaint.Color.Alpha);
+            return _wavePaint;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Undertow wave draw: {E}", ex.Message);
+            EndWaves();
+            return null;
+        }
+    }
+
+    private void EndWaves()
+    {
+        if (_wavePaint != null) _wavePaint.Shader = null;
+        _waveShader?.Dispose(); _waveShader = null;
+        _waveSrc?.Dispose(); _waveSrc = null;
     }
 
     private SKPaint MaskPaint()
@@ -542,12 +630,6 @@ public sealed class BrainDrainLayer : BaseLayer
         };
         return _maskPaint;
     }
-
-    private SKPaint RingPaint() => _ringPaint ??= new SKPaint
-    {
-        IsAntialias = true,
-        Style = SKPaintStyle.Stroke,
-    };
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }

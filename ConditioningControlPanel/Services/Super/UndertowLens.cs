@@ -60,23 +60,25 @@ namespace ConditioningControlPanel.Services.Super
     {
         // ---- constants, copied from the mockup and the owner's spec ----
         public const double FollowRate = 6.0;             // smoothing 1 - exp(-6 dt)
-        public const double ShrinkLinear = 0.045;         // x screen width per second
-        public const double ShrinkProportional = 0.3;     // x radius per second
-        public const double KickPerClick = 0.15;          // x screen width
+        public const double ShrinkLinear = 0.016;         // x screen width per second (owner: slower to retract)
+        public const double ShrinkProportional = 0.1;     // x radius per second
+        public const double KickPerClick = 0.2;           // x screen width
         public const double KickApplyRate = 0.75;         // x screen width per second
-        public const double MaxRadius = 0.36;             // x screen width
-        public const double StillRadius = 0.18;           // x screen width, MotionFx Off
+        public const double MaxRadius = 0.5;              // x screen width (owner: wider in general)
+        public const double StillRadius = 0.25;           // x screen width, MotionFx Off
+        public const double MinRadius = 0.09;             // x screen width; the lens never closes below this, so a few cm around the cursor stay sharp
         public const double StartRadius = MaxRadius;      // neutral default: the lens opens wide, then sinks
         public const double MaxKick = MaxRadius;          // x screen width; owed widening never queues past one full lens
         public const double ChangeEpsilon = 0.25;         // px; movement below this is not worth a repaint
 
-        public const double RippleLife = 0.8;             // seconds
-        public const double RippleRingGap = 0.1;          // second ring starts this much later
-        public const double RippleGrow = 0.7;             // seconds for one ring to reach full size
-        public const double RippleReach = 0.18;           // x screen width
-        public const double RippleBase = 6.0;             // px, ring radius at birth
-        public const double RippleAlpha = 0.65;
-        public const double OffFadeSeconds = 0.12;        // MotionFx Off: the click is one 120 ms fade
+        // Click waves (owner: no drawn circle, real waves through the screen image). One front runs
+        // out from the click with a trailing train of crests that fades behind it.
+        public const double WaveLife = 1.8;               // seconds
+        public const double WaveSpeed = 0.42;             // x screen width per second
+        public const double WaveLength = 0.026;           // x screen width, crest to crest
+        public const double WaveBandCrests = 4.0;         // how many crests trail the front
+        public const double WaveAmp = 10.0;               // px of displacement at the front at birth (x dpi)
+        public const int MaxWaves = UndertowState.MaxRipples;
 
         /// <summary>Radial mask stops: 1 at the centre, 0.95 at half radius, 0 at the rim (no hard circle).</summary>
         public static readonly float[] MaskPositions = { 0f, 0.5f, 1f };
@@ -91,13 +93,13 @@ namespace ConditioningControlPanel.Services.Super
             if (motion == UndertowMotion.Off) return StillRadius * screenWidth;
             double speed = motion == UndertowMotion.Reduced ? 0.5 : 1.0;
             double r = radius - Math.Max(0, dt) * speed * (ShrinkLinear * screenWidth + ShrinkProportional * radius);
-            return Math.Max(0, r);
+            return Math.Max(MinRadius * screenWidth, r);
         }
 
         /// <summary>Opening radius for a fresh run. Off sits at the still lens at once; otherwise
         /// the lens starts closed and <see cref="InitialKick"/> opens it, so it never pops in.</summary>
         public static double InitialRadius(double screenWidth, UndertowMotion motion) =>
-            motion == UndertowMotion.Off ? StillRadius * screenWidth : 0;
+            motion == UndertowMotion.Off ? StillRadius * screenWidth : MinRadius * screenWidth;
 
         /// <summary>Widening owed at the start of a run: the lens opens at the click rate (about half
         /// a second), then sinks. Off: none, the still lens is already there.</summary>
@@ -167,7 +169,7 @@ namespace ConditioningControlPanel.Services.Super
         {
             if (motion != UndertowMotion.Off)
                 s.Kick = Math.Min(MaxKick * screenWidth, s.Kick + KickPerClick * screenWidth);
-            if (motion == UndertowMotion.Reduced) return;
+            if (motion == UndertowMotion.Off) return;   // still: no wave
 
             int slot = 0;
             double oldest = -1;
@@ -179,36 +181,29 @@ namespace ConditioningControlPanel.Services.Super
             s.Ripples[slot] = new UndertowRipple { Live = true, X = x, Y = y, Age = 0 };
         }
 
-        public static double RippleLifeFor(UndertowMotion motion) =>
-            motion == UndertowMotion.Off ? OffFadeSeconds : RippleLife;
+        public static double RippleLifeFor(UndertowMotion motion) => WaveLife;
 
         /// <summary>
-        /// Ring <paramref name="ring"/> (0 or 1) of a ripple at <paramref name="age"/>. Returns false
-        /// when that ring is not drawn this frame. Off: ring 0 only, fixed at the still lens radius,
-        /// fading over 120 ms; it never grows. Pixel sizes (birth radius, stroke) are the mockup's CSS
-        /// px, so they scale by <paramref name="dpiScale"/>: the layer draws in physical pixels.
+        /// One click wave at <paramref name="age"/>. Returns false when nothing is drawn (Off, or the
+        /// wave is spent). <paramref name="front"/> is the radius the wave front has reached,
+        /// <paramref name="amp"/> the peak displacement in px, <paramref name="wavelength"/> and
+        /// <paramref name="band"/> the crest spacing and the trailing length. Reduced: half speed and
+        /// half amplitude. Pixel amplitude scales with <paramref name="dpiScale"/> (the layer draws in
+        /// physical pixels); the rest is a screen share.
         /// </summary>
-        public static bool RingAt(double age, int ring, double screenWidth, UndertowMotion motion,
-                                  out double radius, out double alpha, out double strokeWidth,
-                                  double dpiScale = 1.0)
+        public static bool WaveAt(double age, double screenWidth, UndertowMotion motion, double dpiScale,
+                                  out double front, out double amp, out double wavelength, out double band)
         {
+            front = amp = wavelength = band = 0;
+            if (motion == UndertowMotion.Off || age < 0 || age >= WaveLife) return false;
+            double speed = motion == UndertowMotion.Reduced ? 0.5 : 1.0;
             double px = dpiScale > 0 ? dpiScale : 1.0;
-            radius = alpha = strokeWidth = 0;
-            if (motion == UndertowMotion.Reduced) return false;
-            if (motion == UndertowMotion.Off)
-            {
-                if (ring != 0 || age < 0 || age >= OffFadeSeconds) return false;
-                radius = StillRadius * screenWidth;
-                alpha = RippleAlpha * (1.0 - age / OffFadeSeconds);
-                strokeWidth = 3 * px;
-                return alpha > 0;
-            }
-            double u = Math.Clamp((age - ring * RippleRingGap) / RippleGrow, 0, 1);
-            if (u <= 0 || age >= RippleLife) return false;
-            radius = u * RippleReach * screenWidth + RippleBase * px;
-            alpha = RippleAlpha * (1.0 - u);
-            strokeWidth = (3 - ring * 1.5) * px;
-            return alpha > 0;
+            double u = age / WaveLife;
+            front = age * WaveSpeed * speed * screenWidth;
+            amp = WaveAmp * px * speed * (1 - u) * (1 - u);
+            wavelength = WaveLength * screenWidth;
+            band = WaveBandCrests * wavelength;
+            return amp > 0.01;
         }
     }
 }
