@@ -3927,3 +3927,8 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
 - Camera tiles move out of their wall root into the painted feed layer. Motion classes must follow the tiles. Reduced motion uses a static cast and a one-second clock, with no frame loop. Normal camera updates cap at 30 Hz.
 - Stop/destroy cancels camera timers and frames. Leaving monitors or opening the laptop stops the wall. Mask decoding is cached per lab visit; late completion must check that its feed layer still belongs to the current monitor slide.
 - Regression checks: `node --experimental-vm-modules --test Tests/arcademy/annex.test.mjs` from the repo root.
+
+## Phone landscape campus HUD (2026-10-01)
+- `isMobile()` rule 2 (no fine pointer anywhere) refused S Pen class Android phones: they list a FINE `any-pointer` because the digitizer could take a pen, so a plain phone got the DESKTOP campus (row under the TIMETABLE plaque, full-size EMI over the right wing, "hover" hint). `core/device.js stylusPhone()` now lets a phone-sized screen (short side <= 500) with a coarse pointer somewhere and a finger as primary input (coarse or no hover) count as mobile. Touchscreen laptops still fail (fine primary pointer, hovers).
+- The phone host mounts four top-right chips (bell, prize wallet, gear, account), not two. Landscape drops the bell caption and its step-left margin when another chip follows it, tightens the gap, and hangs the collapsed plaque at `left:37%`. Measured clear at 850x390 and 667x375; desktop rects unchanged.
+- Rig: a headless page with no RN host needs a fake `window.ReactNativeWebView` that answers `ready` with an `init` (via `window.__ccpRnPush`); simulate the stylus phone by forcing `matchMedia('(any-pointer: fine)')` true.
