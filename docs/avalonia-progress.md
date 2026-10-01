@@ -1142,3 +1142,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/launcher-core: +999
 - Launcher slice 1: Core LauncherCards + rules (WPF builds tiles from them); Avalonia LauncherWindow with the openable cards, the CC Labs
   door and WPF's close rule. Fail-proven tests; Keincheck live. Rows missing -> stub.
+
+## avalonia-port/takeover-actions: +480
+- Takeover performs Pink Filter pulse (handed back on every stop path incl. app exit), Bubble Count, Comment (AI or WPF-style Giggle preset)
+  and seeded Mind Wipe; unavailable actions are never picked. Wallpaper picker and voice hint. TakeoverTests (7), fail-proven.
