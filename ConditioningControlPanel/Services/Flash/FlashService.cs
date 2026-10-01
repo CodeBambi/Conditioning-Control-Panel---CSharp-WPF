@@ -189,6 +189,10 @@ namespace ConditioningControlPanel.Services
         // when the number CHANGES (#1099). Guarded by _lockObj, like _soundQueue.
         private int _lastLoggedVoicePoolCount = -1;
         private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
+        // Super Flicker Deck: a pack picture decrypts to a fresh temp path on every draw, so the
+        // path alone cannot say "this picture is already up". Temp path -> pack entry key, under
+        // _lockObj, cleared with the temp files.
+        private readonly Dictionary<string, string> _tempPackIdentity = new(StringComparer.OrdinalIgnoreCase);
         private readonly object _lockObj = new();
         private FlashWindow[] _windowsSnapshot = Array.Empty<FlashWindow>(); // Reusable snapshot for heartbeat
 
@@ -1747,7 +1751,7 @@ namespace ConditioningControlPanel.Services
                 window.Left = finalX;
                 window.Top = finalY;
                 window.Frames = imageData.Frames;
-                window.SourcePath = imageData.FilePath;
+                lock (_lockObj) window.SourcePath = SourceIdentityLocked(imageData.FilePath ?? "");
                 window.ClipPath = imageData.ClipPath;
                 // #1194: the user's GIF speed slider, applied once here rather than per tick.
                 window.FrameDelay = ScaleFrameDelay(imageData.FrameDelay, settings.FlashGifSpeedMultiplier);
@@ -2690,6 +2694,8 @@ namespace ConditioningControlPanel.Services
                     OnFlashClicked(window, App.Settings.Current);
                     break;
                 case FlickerPress.Flip:
+                    // Keep the card alive through its lift and the longest edge-on wait.
+                    window.BoostLifetime((int)((FlickerDeck.LiftSpanSec + FlickerDeck.MaxHoldSec) * 1000) + 250);
                     _ = LoadDeckPictureAsync(window, item);
                     break;
             }
@@ -2706,21 +2712,36 @@ namespace ConditioningControlPanel.Services
             SkiaSharp.SKImage[]? frames = null;
             try
             {
-                HashSet<string> up;
+                // Prefer a picture that is not up anywhere; a small library may have nothing
+                // else, then anything but the card's own face beats a long edge-on wait.
+                // Off the UI thread: a pack draw decrypts to disk.
+                var candidates = await Task.Run(() => GetNextImages(DeckCandidates));
+                List<string> order;
+                string own;
                 lock (_lockObj)
                 {
-                    up = new HashSet<string>(_activeWindows.Select(w => w.SourcePath)
+                    own = window.SourcePath;
+                    var up = new HashSet<string>(_activeWindows.Select(w => w.SourcePath)
                         .Where(p => !string.IsNullOrEmpty(p)), StringComparer.OrdinalIgnoreCase);
+                    var keyed = candidates.Select(p => (Path: p, Key: SourceIdentityLocked(p))).ToList();
+                    order = keyed.Where(c => !up.Contains(c.Key)).Select(c => c.Path)
+                        .Concat(keyed.Where(c => up.Contains(c.Key)
+                            && !string.Equals(c.Key, own, StringComparison.OrdinalIgnoreCase)).Select(c => c.Path))
+                        .ToList();
                 }
                 LoadedImageData? data = null;
-                foreach (var path in GetNextImages(DeckCandidates))
+                foreach (var path in order)
                 {
-                    if (up.Contains(path)) continue;
                     data = await LoadImageAsync(path);
                     if (data is { Frames.Count: > 0 }) break;
                     data = null;
                 }
-                if (data == null) return;
+                if (data == null)
+                {
+                    // Nothing to flip to: open on the old face at the edge, no long hold.
+                    if (ReferenceEquals(window.LayerItem, item) && item.Deck is { } d) d.NoPicture = true;
+                    return;
+                }
 
                 var source = data.Frames.ToArray();
                 frames = await Task.Run(() =>
@@ -2764,7 +2785,10 @@ namespace ConditioningControlPanel.Services
             window.FrameDelay = ScaleFrameDelay(data.FrameDelay, App.Settings?.Current?.FlashGifSpeedMultiplier ?? 1);
             window.StartTime = DateTime.Now;
             window.CurrentFrameIndex = 0;
-            window.SourcePath = data.FilePath;
+            lock (_lockObj) window.SourcePath = SourceIdentityLocked(data.FilePath ?? "");
+            // A new face deserves a full look: a flip late in the flash's life would otherwise
+            // fade the fresh picture a moment after it lands. BoostLifetime only ever lengthens.
+            window.BoostLifetime(window.OriginalLifetimeMs);
         }
 
         /// <summary>The card is in the air: it is now the topmost one, for the click test too.</summary>
@@ -3926,6 +3950,7 @@ namespace ConditioningControlPanel.Services
                         if (!string.IsNullOrEmpty(tempPath))
                         {
                             _tempPackFiles.Add(tempPath);  // Track for cleanup
+                            _tempPackIdentity[tempPath] = PackEntryKey(packImage);
                             result.Add(tempPath);
                             App.Logger?.Debug("Using pack image: {Name} from pack {PackId}", packImage.File.OriginalName, packImage.PackId);
                             continue;
@@ -4050,6 +4075,7 @@ namespace ConditioningControlPanel.Services
                         if (!string.IsNullOrEmpty(tempPath))
                         {
                             _tempPackFiles.Add(tempPath);   // track for cleanup
+                            _tempPackIdentity[tempPath] = PackEntryKey(packImage);
                             result.Add(tempPath);
                         }
                         // decrypt failed → index stays marked chosen so we don't retry a broken entry
@@ -4692,7 +4718,15 @@ namespace ConditioningControlPanel.Services
                 }
             }
             _tempPackFiles.Clear();
+            _tempPackIdentity.Clear();
         }
+
+        /// <summary>
+        /// The picture behind a draw: the pack entry for a decrypted temp file, else the path or URL
+        /// itself. Caller holds _lockObj.
+        /// </summary>
+        private string SourceIdentityLocked(string path)
+            => !string.IsNullOrEmpty(path) && _tempPackIdentity.TryGetValue(path, out var key) ? key : path;
 
         private string? GetNextSound()
         {

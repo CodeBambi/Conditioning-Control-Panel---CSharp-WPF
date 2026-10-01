@@ -209,4 +209,33 @@ public class FlickerDeckTests
         Assert.InRange(lines.Length, 5, 7);
         Assert.All(lines, l => Assert.All(l, v => Assert.InRange(v, 0, 1)));
     }
+
+    [Fact]
+    public void No_picture_opens_on_the_old_face_at_the_edge_without_the_long_hold()
+    {
+        var s = Card();
+        Assert.Equal(FlickerPress.Flip, FlickerDeck.Press(s, MotionLevel.Full));
+        s.NoPicture = true;
+        double t = 0;
+        var gaveUp = -1.0;
+        int n = 0;
+        while (s.Busy && n++ < 10000)
+        {
+            var ev = FlickerDeck.Step(s, Dt, false, MotionLevel.Full);
+            t += Dt;
+            if ((ev & FlickerEvents.GaveUp) != 0) gaveUp = t;
+        }
+        Assert.InRange(gaveUp, 0, FlickerDeck.LiftLeadSec + FlickerDeck.FlipSec / 2 + 0.05);
+        Assert.False(s.Busy);
+        Assert.Equal(1, s.Flips);
+    }
+
+    [Fact]
+    public void A_new_press_clears_no_picture()
+    {
+        var s = Card();
+        s.NoPicture = true;
+        FlickerDeck.Press(s, MotionLevel.Full);
+        Assert.False(s.NoPicture);
+    }
 }

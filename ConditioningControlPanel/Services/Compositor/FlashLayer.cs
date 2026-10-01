@@ -83,6 +83,8 @@ public sealed class FlashLayer : BaseLayer
         /// <summary>Unit direction a buried card peeks along, set while hovered.</summary>
         internal float DeckPeekDx, DeckPeekDy;
         internal SKMaskFilter? DeckShadowCache;
+        /// <summary>The white puff at a flip's edge as the new picture lands. Null once it has died.</summary>
+        internal FlickerSpark[]? DeckSparks;
         internal float DeckShadowSigma = -1f;
 
         // Glow (lucky / sparkle-boost tiers). Sigma is the WPF DropShadow blur radius / 3
@@ -613,6 +615,7 @@ public sealed class FlashLayer : BaseLayer
             if (item.DodgeUntilMs > 0 && item.Exit == null) DrawDodgeRing(canvas, fit, alpha, item.DodgeUntilMs);
             canvas.RestoreToCount(saves);
             if (item.Exit != null) DrawSparks(canvas, item);
+            if (item.DeckSparks != null && item.Deck != null) DrawDeckPuff(canvas, item.DeckSparks, rect.MidX, rect.MidY, item.Opacity);
         }
     }
 
@@ -863,7 +866,13 @@ public sealed class FlashLayer : BaseLayer
             item.LastFrameIndex = -1;
             if (old != null)
                 foreach (var f in old) { try { f.Dispose(); } catch { } }
+            item.DeckSparks = FlickerShatter.SwapSparks(MotionFx.Level, _deckRng);
             item.OnDeckSwap?.Invoke(item);
+        }
+        if (item.DeckSparks is { } puff)
+        {
+            if (FlickerShatter.StepSparks(puff, dt)) _dirty = true;
+            else { item.DeckSparks = null; _dirty = true; }
         }
         if ((ev & FlickerEvents.GaveUp) != 0) item.OnDeckGaveUp?.Invoke(item);
         if (ev != FlickerEvents.None || (MotionFx.Level != MotionLevel.Off && FlickerDeck.Animating(deck)))
@@ -883,8 +892,9 @@ public sealed class FlashLayer : BaseLayer
         _fillPaint.MaskFilter = item.DeckShadowCache;
         _fillPaint.Color = new SKColor(0, 0, 0, (byte)(0.65 * alpha));
         var off = (float)(3 + 12 * lift);
-        canvas.DrawRoundRect(new SKRoundRect(new SKRect(fit.Left, fit.Top + off, fit.Right, fit.Bottom + off),
-            item.CornerRadiusPx), _fillPaint);
+        // The rect overload: no native SKRoundRect allocated every frame per card.
+        canvas.DrawRoundRect(new SKRect(fit.Left, fit.Top + off, fit.Right, fit.Bottom + off),
+            item.CornerRadiusPx, item.CornerRadiusPx, _fillPaint);
         _fillPaint.MaskFilter = null;
     }
 
@@ -910,6 +920,21 @@ public sealed class FlashLayer : BaseLayer
 
     private static readonly SKColor SparkWhite = new(0xFF, 0xFF, 0xFF);
     private static readonly SKColor SparkDeckPink = new(0xFF, 0x8F, 0xD0);
+
+    /// <summary>The flip's puff: additive white dots about the card's centre, unaffected by its pose.</summary>
+    private void DrawDeckPuff(SKCanvas canvas, FlickerSpark[] sparks, float cx, float cy, double opacity)
+    {
+        _fillPaint.MaskFilter = null;
+        _fillPaint.BlendMode = SKBlendMode.Plus;
+        foreach (var sp in sparks)
+        {
+            var sa = sp.Alpha * opacity;
+            if (sa <= 0) continue;
+            _fillPaint.Color = SparkWhite.WithAlpha((byte)Math.Clamp(sa * 255, 0, 255));
+            canvas.DrawCircle((float)(cx + sp.X), (float)(cy + sp.Y), (float)(1 + 2.2 * sp.Alpha), _fillPaint);
+        }
+        _fillPaint.BlendMode = SKBlendMode.SrcOver;
+    }
 
     /// <summary>The final break: each triangle clips the picture as it was, thrown and tumbling, plus sparks.</summary>
     private void DrawDeckShards(SKCanvas canvas, FlashItem item, FlickerShatterState s, SKImage image)

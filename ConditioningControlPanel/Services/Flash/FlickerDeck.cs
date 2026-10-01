@@ -63,6 +63,12 @@ public sealed class FlickerDeckState
     public bool Hover;
     /// <summary>Crack polylines, normalised 0..1 over the picture box, rolled at spawn.</summary>
     public double[][] Cracks = Array.Empty<double[]>();
+    /// <summary>
+    /// The pool had nothing new to flip to: the flip opens on the old picture as soon as it
+    /// reaches its edge instead of holding edge-on for <see cref="FlickerDeck.MaxHoldSec"/>.
+    /// Reset on every press.
+    /// </summary>
+    public bool NoPicture;
 
     public bool Busy => LiftT >= 0;
 }
@@ -136,6 +142,7 @@ public static class FlickerDeck
         s.LiftT = 0;
         s.FlipT = -1;
         s.HoldSec = 0;
+        s.NoPicture = false;
         s.Raised = false;
         s.Swapped = false;
         if (level == MotionLevel.Off)
@@ -187,7 +194,7 @@ public static class FlickerDeck
             else
             {
                 s.HoldSec += dt;
-                if (s.HoldSec < MaxHoldSec) return ev;
+                if (s.HoldSec < MaxHoldSec && !s.NoPicture) return ev;
                 s.Swapped = true;
                 ev |= FlickerEvents.GaveUp;
             }

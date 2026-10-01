@@ -84,4 +84,27 @@ public class FlickerShatterTests
         Assert.Empty(off.Shards);
         Assert.False(FlickerShatter.Step(off, 0.1));
     }
+
+    [Fact]
+    public void Swap_puff_is_ten_sparks_that_die_inside_point_six_seconds()
+    {
+        var sparks = FlickerShatter.SwapSparks(MotionLevel.Full, new Random(3));
+        Assert.Equal(FlickerShatter.SwapSparkCount, sparks.Length);
+        Assert.All(sparks, sp => Assert.InRange(Math.Sqrt(sp.Vx * sp.Vx + sp.Vy * sp.Vy), 0, FlickerShatter.SwapSparkSpeed + 1e-9));
+        var alive = true;
+        double t = 0;
+        while (alive && t < 2) { alive = FlickerShatter.StepSparks(sparks, 1.0 / 60); t += 1.0 / 60; }
+        Assert.False(alive);
+        Assert.InRange(t, 0.2, FlickerShatter.SwapSparkLife * 1.2 + 0.05);
+    }
+
+    [Fact]
+    public void Swap_puff_is_nothing_under_off_and_half_speed_under_reduced()
+    {
+        Assert.Empty(FlickerShatter.SwapSparks(MotionLevel.Off, new Random(3)));
+        var full = FlickerShatter.SwapSparks(MotionLevel.Full, new Random(5));
+        var reduced = FlickerShatter.SwapSparks(MotionLevel.Reduced, new Random(5));
+        for (int i = 0; i < full.Length; i++)
+            Assert.Equal(full[i].Vx * 0.5, reduced[i].Vx, 9);
+    }
 }
