@@ -50,16 +50,23 @@ function eq(what, got, want) {
   t.note({ ply: 7, side: 'w', san: 'Qh3', best: 'Qxf7#', cp: 924 });
   eq('a tie keeps the earlier move', t.worst().san, 'Qg4');
   const rec = t.toRecord();
-  eq('the record keeps start, end, low', [rec.start, rec.end, rec.low], [140, t.value, t.value]);
+  eq('the record has the shelf\'s shape: start, end, low', [rec.start, rec.end, rec.low], [140, t.value, t.value]);
   eq('the record keeps every move', rec.moves.map(m => m.ply), [1, 3, 5, 7]);
   t.note({ ply: 5, side: 'w', san: 'Qg4', best: 'Nc3', cp: 0 });
   eq('a regrade replaces the old grade', t.toRecord().moves.length, 4);
+  const before = t.value;
   t.dropAfter(3);
   eq('a take-back drops the later grades', t.toRecord().moves.map(m => m.ply), [1, 3]);
+  eq('but keeps what they cost', t.value, before);
+  eq('and the record says what was spent', t.toRecord().spent, [{ ply: 7, loss: iqLoss(924) }]);
+  t.spend({ ply: 5, cp: 924 });
+  eq('a grade that lands after its take-back still costs', t.value, before - iqLoss(924));
   for (let i = 0; i < 20; i++) t.note({ ply: 9 + 2 * i, side: 'w', san: 'x', best: 'y', cp: 2000 });
   eq('the score never goes under the floor', t.value, IQ.floor);
   t.reset();
-  eq('a reset is a fresh game', t.value, 140);
+  eq('a reset is a fresh game', [t.value, t.toRecord().spent], [140, []]);
+  t.restore([{ ply: 1, side: 'w', san: 'e4', best: 'e4', cp: 0 }], [{ ply: 3, loss: 16 }]);
+  eq('a restore brings back what was spent', t.value, 124);
 }
 
 // The grader on known positions.
@@ -73,6 +80,7 @@ function eq(what, got, want) {
   eq('a missed mate in one names the mate', missed && missed.best, 'Qxf7#');
   eq('a missed mate in one costs the cap', missed && iqLoss(missed.cp), IQ.cap);
   eq('the mate itself is free', gradeMove({ fen: mate, move: { from: 'h5', to: 'f7' } })?.cp, 0);
+  eq('a slower forced mate is free too', gradeMove({ fen: '7k/8/6K1/8/8/8/8/R7 w - - 0 1', move: { from: 'a1', to: 'b1' } })?.cp, 0);
   eq('an only move is free', gradeMove({ fen: '7k/8/8/8/8/8/6q1/7K w - - 0 1', move: { from: 'h1', to: 'g2' } }), { best: 'Kxg2', cp: 0, depth: 0 });
   eq('an illegal move is not graded', gradeMove({ move: { from: 'e2', to: 'e5' } }), null);
 }
@@ -104,19 +112,42 @@ function eq(what, got, want) {
   const rec = iq.record();
   eq('the record has our seat only', Object.keys(rec), ['w']);
   eq('the record carries the moves', rec.w.moves.map(m => m.san), ['e4', 'Qg4']);
+  const fallen = iq.value('w');
   rules.undo(); rules.undo(); bus.emit('takeback', { ply: rules.ply() }); bus.emit('turn', { ply: rules.ply() });
   await iq.settled(5000);
   eq('a take-back drops the grade with its move', iq.track('w').moves.map(m => m.san), ['e4']);
-  eq('the score comes back with it', iq.value('w'), iq.track('w').moves[0].value);
+  eq('but not what the blunder cost', iq.value('w'), fallen);
   play('g1', 'f3');
   await iq.settled(5000);
   eq('the replayed ply is graded fresh', iq.track('w').moves.map(m => m.san), ['e4', 'Nf3']);
-  // a resumed game keeps what still matches the board
+  // Ne5 walks out of the pin and hangs the queen, and is taken back before its grade comes in
+  play('c8', 'g4');
+  const pinned = iq.value('w');
+  play('f3', 'e5'); rules.undo(); bus.emit('takeback', { ply: rules.ply() }); bus.emit('turn', { ply: rules.ply() });
+  await iq.settled(5000);
+  ok(`a blunder taken back before its grade still costs (IQ ${pinned} -> ${iq.value('w')})`, iq.value('w') < pinned && heard[heard.length - 1]?.gone === true);
+  eq('and stays off the record', iq.track('w').moves.map(m => m.san), ['e4', 'Nf3']);
+  // a resumed game keeps what still matches the board, and what the rest cost
   iq.restore({ w: { moves: [{ ply: 1, side: 'w', san: 'e4', best: 'e4', cp: 0 }, { ply: 3, side: 'w', san: 'Qg4', best: 'Nc3', cp: 924 }] } });
   eq('a restore keeps only moves still on the board', iq.track('w').moves.map(m => m.san), ['e4']);
+  eq('and keeps the cost of the one that is not', iq.value('w'), 140 - iqLoss(924));
+  const epoch = iq.epoch();
   bus.emit('newgame', { ply: 0 });
   eq('a new game starts clean', iq.value('w'), 140);
+  ok('a new game moves the epoch on, so a late settle can tell', iq.epoch() !== epoch);
   eq('one worker served the whole game', made, 1);
+  iq.dispose();
+}
+
+// The server corrects a guessed online seat: the score moves to the real side.
+{
+  const bus = createBus();
+  let seats = ['w'];
+  const iq = createIqLive({ bus, game: { rules: createRules(), get seats() { return seats; } }, workerFactory: () => ({ postMessage() {}, terminate() {} }) });
+  bus.emit('local', { sides: ['w'], mode: 'online' });
+  seats = ['b'];
+  bus.emit('seat', { color: 'b' });
+  eq('a corrected seat is the one with a score', [iq.sides(), iq.value('w'), iq.value('b')], [['b'], null, 140]);
   iq.dispose();
 }
 
@@ -129,9 +160,20 @@ function eq(what, got, want) {
   bus.emit('local', { sides: ['w', 'b'] });
   rules.move('e2', 'e4'); bus.emit('turn', {});
   await iq.settled(200);
-  console.warn = quiet;
   eq('no worker: the score stays at the start', [iq.value('w'), iq.value('b')], [140, 140]);
   iq.dispose();
+  // a module worker that fails to load says so later, through onerror
+  const late = createBus(), lateRules = createRules();
+  const iq2 = createIqLive({ bus: late, game: { rules: lateRules }, workerFactory: () => {
+    const w = { onmessage: null, onerror: null, terminate() {}, postMessage() { setTimeout(() => w.onerror?.({ message: 'failed to load' }), 0); } };
+    return w;
+  } });
+  late.emit('local', { sides: ['w'] });
+  lateRules.move('e2', 'e4'); late.emit('turn', {});
+  await iq2.settled(500);
+  console.warn = quiet;
+  eq('a worker that fails late: the score stays at the start', iq2.value('w'), 140);
+  iq2.dispose();
 }
 
 console.log(`${passed} checks passed`);
