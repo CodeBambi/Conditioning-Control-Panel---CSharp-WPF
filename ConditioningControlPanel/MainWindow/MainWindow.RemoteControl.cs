@@ -1494,8 +1494,17 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>Every panic route calls this: pending AI follow-ups (getbacktome delays and their
+        /// nested effects) never outlive a panic. Never throws.</summary>
+        internal static void CancelPendingAi()
+        {
+            try { Services.Commands.AiCommandService.CancelAll(); }
+            catch (Exception ex) { App.Logger?.Debug("AI command cancel on panic failed: {Error}", ex.Message); }
+        }
+
         internal void TriggerPanicFromRemote()
         {
+            CancelPendingAi();
             try
             {
                 // EMI Desk (MOMENTS 4.B): the second panic entry point. Nothing else hooks it - the

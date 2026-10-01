@@ -181,8 +181,9 @@ public static class EmiSuggester
     /// <summary>
     /// Build the ring. Never throws, never returns the same target twice, never returns more than
     /// <see cref="Slots"/> slots, and returns fewer only when the app genuinely has fewer doors.
+    /// <paramref name="all"/> is the head's catalogue, in <see cref="EmiDoors"/> order.
     /// </summary>
-    public static IReadOnlyList<EmiRingSlot> Compose()
+    public static IReadOnlyList<EmiRingSlot> Compose(IReadOnlyList<EmiTarget> all)
     {
         var slots = new List<EmiRingSlot>(Slots);
         try
@@ -195,7 +196,7 @@ public static class EmiSuggester
             {
                 if (slots.Count >= Slots) break;
                 if (!taken.Add(id)) continue;
-                var t = EmiTargets.Find(id);
+                var t = all.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.Ordinal));
                 if (t == null || !t.Available) continue;
                 slots.Add(new EmiRingSlot(t, true, t.Locked));
             }
@@ -203,14 +204,14 @@ public static class EmiSuggester
             int free = Slots - slots.Count;
             if (free > 0)
             {
-                var pool = EmiTargets.All
+                var pool = all
                     .Where(t => !taken.Contains(t.Id) && t.Available)
                     .Select(t => (Target: t, Score: ScoreOf(t.Id), Locked: t.Locked))
                     .ToList();
 
                 var unlocked = pool.Where(p => !p.Locked)
                     .OrderByDescending(p => p.Score)
-                    .ThenBy(p => EmiTargets.OrderOf(p.Target.Id))
+                    .ThenBy(p => IndexOf(all, p.Target))
                     .ToList();
 
                 var fill = unlocked.Select(p => new EmiRingSlot(p.Target, false, false)).ToList();
@@ -222,7 +223,7 @@ public static class EmiSuggester
                 {
                     var top = pool.Where(p => p.Locked)
                         .OrderByDescending(p => p.Score)
-                        .ThenBy(p => EmiTargets.OrderOf(p.Target.Id))
+                        .ThenBy(p => IndexOf(all, p.Target))
                         .Select(p => p.Target)
                         .FirstOrDefault();
 
@@ -258,7 +259,7 @@ public static class EmiSuggester
             Log.Warning(ex, "[EmiDesk] ring compose failed, falling back to the catalogue head");
             try
             {
-                slots = EmiTargets.All.Where(t => t.Available).Take(Slots)
+                slots = all.Where(t => t.Available).Take(Slots)
                     .Select(t => new EmiRingSlot(t, false, false)).ToList();
             }
             catch { slots = new List<EmiRingSlot>(); }
@@ -266,5 +267,11 @@ public static class EmiSuggester
 
         _last = slots;
         return slots;
+    }
+
+    private static int IndexOf(IReadOnlyList<EmiTarget> all, EmiTarget t)
+    {
+        for (int i = 0; i < all.Count; i++) if (ReferenceEquals(all[i], t)) return i;
+        return int.MaxValue;
     }
 }

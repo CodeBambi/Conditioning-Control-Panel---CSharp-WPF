@@ -67,6 +67,7 @@ here record where and why the port chose something, and who advised.
 | 2026-09-29 | Second-instance signal on Avalonia | WPF named events (Windows only); named pipe on both OSes | Same mutex name as WPF; show/ack over a named pipe, since named EventWaitHandles are unsupported on Unix | worker |
 | 2026-09-29 | Linux package shape | AppImage; Flatpak bundles WPE; tarball + Flatpak + AUR | Tarball `ConditioningControlPanel/` with the Vosk model, `.desktop` and icon; app id `io.github.CodeBambi.ConditioningControlPanel`; Flatpak on GNOME 50 (has webkit2gtk-4.1, libsecret) bundles libVLC only - WebHost needs the GTK3 NativeControlHost engine, not WPE. CONFLICT: docs/avalonia-linux-install.md asks to bundle wpewebkit/wpebackend-fdo/libwpe; the Flatpak row stays blocked until the first flatpak-builder run shows whether any web surface needs WPE, then bundle it or amend the brief with the user; WM_CLASS = app id (X11PlatformOptions.WmClass) matching StartupWMClass; AUR `-bin` depends on system vlc/webkit/WPE | worker |
 | 2026-09-30 | MemorySignalWriter head sources | Core writer reads App.* via one seam per service; new Core events per feature; one SourcesHook the head seeds | `SourcesHook`/`DeferredSourcesHook` (WPF seeds its original bodies verbatim); settings mirror in Core over CoreSettings; Avalonia raises `App.FeatureUsed` from its flash/subliminal/bubble surfaces and Core `MandatoryVideoScheduler.VideoStarted` (mirrors WPF VideoService.VideoStarted) | worker |
+| 2026-10-01 | getbacktome follow-ups and the AI effect gate | keep WPF behaviour as frozen reference; fix on Avalonia only; fix in Core for both heads | Option A, fix in Core for both heads: getbacktome follow-ups ran nested effects without the AI-effects switch, Lab access, per-effect toggles or the 3-command cap, and panic couldn't cancel them, contradicting the shipped help text and the user's explicit consent choices. Frozen-reference status doesn't protect a consent/panic bypass, so the fix lives in Core for both heads: re-gated at fire time, refusals logged, 3-per-follow-up cap, panic or switch-off cancels everything pending. | oracle-deep |
 
 ## 2026-09-29: flashing line after moving the window on KDE
 - Question: the user saw a thin purple line flash where the window's top edge had been after moving it. Can the app fix it?
@@ -155,7 +156,7 @@ here record where and why the port chose something, and who advised.
 ## 2026-09-30: Awareness legacy observer applies the privacy rules on Avalonia only
 - Question: WPF's legacy title observer (WindowAwarenessService, now in Core) never applied the deny list or the incognito drop; only Awareness v2 (AwarenessObserverPolicy) does, and v2 is not on this head.
 - Choice: Avalonia applies AwarenessPrivacyRules (deny list incl. seeded groups + incognito) in the poll through the service's optional `allowTitle` filter (`WindowAwarenessService.PassesPrivacyRules`), before anything reads the title (logs included). A dropped window reads Unknown, raises no event and keeps nothing. WPF's legacy observer does not, and is left unchanged (constructed with no filter). Privacy-tightening deviation.
-- Also: this head has no AI service, so the reaction is always the preset line WPF says with AI off; no title, app name or reaction leaves the machine.
+- Also: this head has no AI service, so the reaction is always the preset line WPF says with AI off; no title, app name or reaction leaves the machine. (Superseded 2026-10-01 below: the AI exists now.)
 - Tests: `Tests/CCP.Core.Tests/WindowAwarenessServiceTests.cs` (denied/incognito produce no event, fail-proven); `AwarenessConsentTests.WpfBuildsTheLegacyObserverWithoutAPrivacyFilter` (WPF source pin).
 - Advisor: supervisor.
 
@@ -382,6 +383,20 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   the mouth prompts time out to WPF's "moving on" text and Verify runs its countdown only.
 - Advisor: worker (supervisor informed).
 
+## 2026-10-02: EmiDesk ring, slice 2 (avalonia-port/emidesk-ring-2)
+- Catalogue split: the door table (id, art, hue, order) is Core `EmiDoors`; each head's `EmiTargets` answers only "available,
+  locked, open" per id through `EmiDoors.Build`. A null answer hides the door (no surface on this head), never a fake opener.
+  `EmiTarget` moved to Core with `Hue` as 0xRRGGBB bits (heads convert at the brush) and without the unread `Gate` field.
+- `EmiSuggester` is a git mv into Core; `Compose` now takes the head's catalogue. WPF passes `EmiTargets.All`, behaviour unchanged.
+- Options click-away/Escape: polled (XQueryPointer/XQueryKeymap, 30 ms) rather than an X pointer grab, because a grab would
+  swallow the click and WPF's hook let it through. Wayland-native windows stay invisible to it.
+- Not taken: the Codex opener (needs the bookOffer moment bus), the book's demos/tours, scoring tab/rack opens outside the ring.
+## 2026-10-01: Awareness reaches the AI only on the legacy consent (avalonia-port/companion-awareness-brain)
+- Question: App.Ai (Core AiService) now exists on this head. WPF's legacy tube handlers send the app name and page title to the AI (AvatarTubeWindow.Reactions.cs:93-150, 214-235) only when v2 is inactive; with v2 on (default) its arbiter speaks and the consent the user accepted (`awareness_consent_leaves_body`) promises page titles stay local. This head has no v2 observer.
+- Choice: the Avalonia tube takes WPF's AI-first legacy path only when UseAwarenessV2 is off (the consent showed `awareness_consent_leaves_body_legacy`, which says titles are sent), awareness is on and consented, AiChatEnabled and the AI is available (`AvatarTubeWindow.MaySendToAi`). Otherwise the preset line and nothing leaves. The deny list and incognito drop still run in the poll before any event (decision 2026-09-30). The consent re-check in the handler is tighter than WPF (WPF relies on the observer being stopped).
+- Not moved: `AwarenessV2Routing`/`AwarenessSpeech`/`ReactionArbiter` stay in the WPF head. Dry-run into Core needs AwarenessReactionService, AwarenessPromptBuilder (AwarenessAngleCards, AwarenessProjection, CompanionPhraseService), WorthinessScorer -> ActivityLedger and ~25 App.* sites, and they only consume v2 observer frames, so on this head they would be dead code. Bark echo stays a gap (no Core bark hosted).
+- Tests: `Tests/CCP.Avalonia.Tests/AwarenessAiRoutingTests.cs` (denied/incognito never reach the fake AI; v2 on sends nothing; revoked consent sends nothing; fail-proven).
+- Advisor: supervisor.
 ## 2026-10-01: Graded Intake page served and wired (avalonia-port/intake-page)
 - Begin Intake opens `IntakeHostWindow` after WPF's pass + AI gates; it loads `WebAssetServer.Shared.Url("intake/index.html")`
   (the token URL) and never navigates off that origin (`WebHost.AllowNavigation` = same scheme + authority). Page messages count

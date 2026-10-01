@@ -402,4 +402,18 @@ public sealed class MandatoryVideoSchedulerTests
         }
         finally { CoreHaptics.Service = old; haptics.Dispose(); }
     });
+
+    /// <summary>The AI's named clip (WPF PlaySpecificVideo(path, strict: false)) plays that clip, not a pick,
+    /// and not strict even when Strict Lock is on.</summary>
+    [Fact]
+    public void TriggerWithAPathPlaysThatClipUnstrict() => With(6, strict: true, () =>
+    {
+        var host = new Host();
+        var clock = new FakeClock();
+        var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+        Assert.True(v.Trigger(strictOverride: false, path: "/ai/named.mp4"));
+        clock.Advance(TimeSpan.FromSeconds(1.3));
+        Assert.Equal(new[] { ("/ai/named.mp4", false) }, host.Shown);
+        Assert.False(v.Trigger(path: "/ai/other.mp4"));      // one already playing
+    });
 }

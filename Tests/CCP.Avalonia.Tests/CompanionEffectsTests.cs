@@ -1,4 +1,7 @@
 using System.Linq;
+using Avalonia;
+using Avalonia.Headless;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia;
@@ -51,5 +54,52 @@ public sealed class CompanionEffectsTests
         {
             (CoreSettings.ServiceProvider, CoreAccount.IsLoggedInProvider, CoreEntitlement.HasLabProvider) = (provider, signedIn, lab);
         }
+    }
+
+    /// <summary>The AI's lock card is strict and reports "fired" only when a card really came up: a
+    /// second request while one is open never stacks, so it is reported as not fired.</summary>
+    [Fact]
+    public void LockCardSurfaceReportsOnlyACardThatShowed()
+    {
+        var (provider, lab) = (CoreSettings.ServiceProvider, CoreAccount.HasLabAccessProvider);
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            if (global::Avalonia.Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var service = new SettingsService();
+            CoreSettings.ServiceProvider = () => service;
+            service.Current.CompanionPrompt.AllowAiToControlEffects = true;
+            CoreAccount.HasLabAccessProvider = () => true;
+            try
+            {
+                CompanionEffects.Seed();
+                Assert.True(MantraLockScreenCommand.Surface!("good girls obey", 1));
+                Assert.True(LockCardWindow.IsAnyOpen());
+                Assert.False(MantraLockScreenCommand.Surface!("again", 1));
+                LockCardWindow.ForceCloseAll();
+
+                // Held behind the portal panic bind, then a panic: the start must be dropped when released.
+                System.Action? held = null;
+                CompanionEffects.StartEffect = start => held = start;
+                Assert.True(MantraLockScreenCommand.Surface!("held", 1));   // requested, not yet shown
+                Assert.False(LockCardWindow.IsAnyOpen());
+                MainShellWindow.CancelPendingAi();
+                held!();
+                Assert.False(LockCardWindow.IsAnyOpen());
+                CompanionEffects.StartEffect = MainShellWindow.StartEffect;
+
+                service.Current.CompanionPrompt.AllowAiToControlEffects = false;
+                Assert.False(MantraLockScreenCommand.Surface!("no consent", 1));
+                Assert.False(LockCardWindow.IsAnyOpen());
+            }
+            finally
+            {
+                CompanionEffects.StartEffect = MainShellWindow.StartEffect;
+                LockCardWindow.ForceCloseAll();
+                (CoreSettings.ServiceProvider, CoreAccount.HasLabAccessProvider) = (provider, lab);
+            }
+        });
     }
 }
