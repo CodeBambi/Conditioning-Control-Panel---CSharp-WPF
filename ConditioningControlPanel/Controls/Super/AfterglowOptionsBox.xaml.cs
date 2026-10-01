@@ -65,12 +65,39 @@ namespace ConditioningControlPanel.Controls
                 SliderCount.Value = s?.AfterglowCount ?? AfterglowOptions.CountDefault;
                 SliderSize.Value = s?.AfterglowSize ?? AfterglowOptions.SizeDefault;
                 ChkOnly.IsChecked = s?.AfterglowOnly == true;
+                SliderDuration.Value = s?.AfterglowDuration ?? AfterglowOptions.DurationDefault;
+                SliderOpacity.Value = s?.AfterglowOpacity ?? AfterglowOptions.OpacityDefault;
+                SliderTilt.Value = s?.AfterglowTilt ?? AfterglowOptions.TiltSliderDefault;
+                TxtTilt.Text = ((int)SliderTilt.Value).ToString();
+                TxtDuration.Text = ((int)SliderDuration.Value).ToString();
+                TxtOpacity.Text = ((int)SliderOpacity.Value) + "%";
                 TxtFrequency.Text = ((int)SliderFrequency.Value).ToString();
                 TxtCount.Text = ((int)SliderCount.Value).ToString();
                 TxtSize.Text = ((int)SliderSize.Value).ToString();
             }
             finally { _loading = false; }
             UpdateSwatches();
+        }
+
+        private void SliderDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDuration == null) return;
+            TxtDuration.Text = ((int)SliderDuration.Value).ToString();
+            Write(s => s.AfterglowDuration = (int)SliderDuration.Value);
+        }
+
+        private void SliderOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtOpacity == null) return;
+            TxtOpacity.Text = ((int)SliderOpacity.Value) + "%";
+            Write(s => s.AfterglowOpacity = (int)SliderOpacity.Value);
+        }
+
+        private void SliderTilt_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtTilt == null) return;
+            TxtTilt.Text = ((int)SliderTilt.Value).ToString();
+            Write(s => s.AfterglowTilt = (int)SliderTilt.Value);
         }
 
         private void ChkOnly_Changed(object sender, RoutedEventArgs e)

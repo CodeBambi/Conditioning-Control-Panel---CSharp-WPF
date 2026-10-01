@@ -9481,6 +9481,33 @@ namespace ConditioningControlPanel.Models
             set { _afterglowColorB = Services.Super.AfterglowOptions.Normalise(value, Services.Super.AfterglowOptions.ColorBDefault); OnPropertyChanged(); }
         }
 
+        private int _afterglowDuration = Services.Super.AfterglowOptions.DurationDefault;
+        /// <summary>How long Afterglow words stay, 1-10 (5 = the shipped 0.42 s, 10 = about 1.7 s).</summary>
+        [JsonProperty]
+        public int AfterglowDuration
+        {
+            get => _afterglowDuration;
+            set { _afterglowDuration = Services.Super.AfterglowOptions.ClampDuration(value); OnPropertyChanged(); }
+        }
+
+        private int _afterglowOpacity = Services.Super.AfterglowOptions.OpacityDefault;
+        /// <summary>Afterglow words, echoes and sparks opacity in percent, 10-100.</summary>
+        [JsonProperty]
+        public int AfterglowOpacity
+        {
+            get => _afterglowOpacity;
+            set { _afterglowOpacity = Services.Super.AfterglowOptions.ClampOpacity(value); OnPropertyChanged(); }
+        }
+
+        private int _afterglowTilt = Services.Super.AfterglowOptions.TiltSliderDefault;
+        /// <summary>How much Afterglow words tilt, 0-10 (0 = straight, 5 = about 8 degrees, 10 = double).</summary>
+        [JsonProperty]
+        public int AfterglowTilt
+        {
+            get => _afterglowTilt;
+            set { _afterglowTilt = Services.Super.AfterglowOptions.ClampTilt(value); OnPropertyChanged(); }
+        }
+
         private bool _afterglowOnly;
         /// <summary>
         /// "Use only Afterglow": while Afterglow runs, the normal subliminal cards are not shown, only

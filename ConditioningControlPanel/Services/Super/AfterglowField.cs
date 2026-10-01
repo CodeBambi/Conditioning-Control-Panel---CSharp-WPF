@@ -58,6 +58,9 @@ namespace ConditioningControlPanel.Services.Super
     /// </summary>
     public sealed class AfterglowField
     {
+        /// <summary>How long words stay, as a multiple of the shipped life (the Duration slider). 1 = as shipped.</summary>
+        public double DurationFactor = 1.0;
+
         // Lifecycle (owner: "for just a split second").
         public const double FadeInS = 0.06, HoldS = 0.14, FadeOutS = 0.22;      // 0.42 s total
         public const double OffFadeS = 0.12;                                     // MotionFx Off
@@ -113,21 +116,23 @@ namespace ConditioningControlPanel.Services.Super
         public static double NextInterval(double r01) => IntervalMinS + Math.Clamp(r01, 0, 1) * (IntervalMaxS - IntervalMinS);
 
         /// <summary>Total life of a pop under these settings.</summary>
-        public static double Life(MotionLevel level, bool photosafe)
+        public static double Life(MotionLevel level, bool photosafe, double durationFactor = 1.0)
         {
-            if (photosafe) return SafeInS + SafeHoldS + SafeOutS;
-            if (level == MotionLevel.Off) return OffFadeS;
-            return FadeInS + HoldS + FadeOutS;
+            if (level == MotionLevel.Off) return OffFadeS;                 // Off stays one 120 ms fade
+            double f = durationFactor > 0 ? durationFactor : 1.0;
+            if (photosafe) return (SafeInS + SafeHoldS + SafeOutS) * f;
+            return (FadeInS + HoldS + FadeOutS) * f;
         }
 
         /// <summary>Alpha envelope 0..1. Off = a single 120 ms fade; photosafe = slow in, 0.5 s out.</summary>
-        public static double Alpha(double age, MotionLevel level, bool photosafe)
+        public static double Alpha(double age, MotionLevel level, bool photosafe, double durationFactor = 1.0)
         {
             if (age < 0) return 0;
             double inS, holdS, outS;
-            if (photosafe) { inS = SafeInS; holdS = SafeHoldS; outS = SafeOutS; }
-            else if (level == MotionLevel.Off) return Math.Clamp(1 - age / OffFadeS, 0, 1);
-            else { inS = FadeInS; holdS = HoldS; outS = FadeOutS; }
+            double f = durationFactor > 0 ? durationFactor : 1.0;
+            if (level == MotionLevel.Off) return Math.Clamp(1 - age / OffFadeS, 0, 1);
+            if (photosafe) { inS = SafeInS * f; holdS = SafeHoldS * f; outS = SafeOutS * f; }
+            else { inS = FadeInS * f; holdS = HoldS * f; outS = FadeOutS * f; }
             if (age < inS) return age / inS;
             if (age < inS + holdS) return 1;
             return Math.Clamp(1 - (age - inS - holdS) / outS, 0, 1);
@@ -224,7 +229,7 @@ namespace ConditioningControlPanel.Services.Super
             if (dt < 0) dt = 0;
             Now += dt;
             double k = MotionScale(level);
-            double life = Life(level, photosafe);
+            double life = Life(level, photosafe, DurationFactor);
             double drag = Math.Exp(-Drag * dt);
 
             for (int i = Pops.Count - 1; i >= 0; i--)

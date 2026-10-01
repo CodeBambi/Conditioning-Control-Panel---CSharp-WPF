@@ -33,6 +33,9 @@ namespace ConditioningControlPanel.Services.Super
         public const int FrequencyMin = 1, FrequencyMax = 10, FrequencyDefault = 5;
         public const int CountMin = 1, CountMax = 4, CountDefault = 1;
         public const int SizeMin = 1, SizeMax = 10, SizeDefault = 5;
+        public const int DurationMin = 1, DurationMax = 10, DurationDefault = 5;
+        public const int OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
+        public const int TiltSliderMin = 0, TiltSliderMax = 10, TiltSliderDefault = 5;
         public const string ColorADefault = "#FF5FB0";   // pink (mockup palette)
         public const string ColorBDefault = "#5FFFD0";   // mint
 
@@ -83,6 +86,22 @@ namespace ConditioningControlPanel.Services.Super
 
         /// <summary>Multiplier on everything that scales with the word (trail, sparks, offsets). 1 at 5.</summary>
         public static double SizeFactor(int size) => SizeDip(size) / AfterglowField.FontDip;
+
+        public static int ClampDuration(int v) => Math.Clamp(v, DurationMin, DurationMax);
+        public static int ClampOpacity(int v) => Math.Clamp(v, OpacityMin, OpacityMax);
+        public static int ClampTilt(int v) => Math.Clamp(v, TiltSliderMin, TiltSliderMax);
+
+        /// <summary>Tilt slider 0..10 as a multiplier on the burst words' tilt: 0 = straight, 5 = as shipped (about 8 degrees), 10 = double.</summary>
+        public static double TiltFactor(int tilt) => ClampTilt(tilt) / (double)TiltSliderDefault;
+
+        /// <summary>
+        /// How long a word stays, as a multiple of the shipped 0.42 s: 1 = a third of it, 5 = as shipped,
+        /// 10 = four times it (about 1.7 s). Every phase (in, hold, out) scales together.
+        /// </summary>
+        public static double DurationFactor(int duration) => Math.Pow(2, (ClampDuration(duration) - DurationDefault) * 0.4);
+
+        /// <summary>Opacity slider 10..100 as a 0.1..1 multiplier on the words, echoes and sparks.</summary>
+        public static double OpacityFactor(int opacity) => ClampOpacity(opacity) / 100.0;
 
         /// <summary>How many pops may be alive at once for this burst size.</summary>
         public static int MaxAlive(int count) => AfterglowField.MaxAlive * ClampCount(count);

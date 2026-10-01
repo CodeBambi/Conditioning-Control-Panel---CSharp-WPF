@@ -144,6 +144,7 @@ public sealed class AfterglowLayer : BaseLayer
 
             _field.Capacity = AfterglowOptions.MaxAlive(count);
             var plan = AfterglowOptions.BurstPlan(count, _rnd);
+            double tiltFactor = AfterglowOptions.TiltFactor(settings?.AfterglowTilt ?? AfterglowOptions.TiltSliderDefault);
 
             // Row widths: words on one row sit side by side with a wide gap, centred on the burst point.
             float gap = (float)(AfterglowOptions.GapFonts * fontPx);
@@ -183,7 +184,7 @@ public sealed class AfterglowLayer : BaseLayer
                 double x = xByWord[k] + slot.Nudge * fontPx;
                 x = lo > hi ? (lo + hi) / 2 : Math.Clamp(x, lo, hi);
                 double y = by + slot.Line * fontPx;
-                double tilt = _level == MotionLevel.Off ? 0 : slot.Tilt;
+                double tilt = _level == MotionLevel.Off ? 0 : slot.Tilt * tiltFactor;
                 if (slot.DelayS <= 0)
                 {
                     var pop = _field.Spawn(words[k], x, y, scale, level, photosafe, _rnd);
@@ -235,11 +236,16 @@ public sealed class AfterglowLayer : BaseLayer
             (int)Math.Ceiling(halfW * 2), (int)Math.Ceiling(halfH * 2));
     }
 
+    private double _opacity = 1.0;
+
     public override void Update(TimeSpan delta)
     {
         _level = MotionFx.Level;
         _photosafe = App.Settings?.Current?.LockdownPhotosafe == true;
         RefreshColours();
+        var st = App.Settings?.Current;
+        _opacity = AfterglowOptions.OpacityFactor(st?.AfterglowOpacity ?? AfterglowOptions.OpacityDefault);
+        _field.DurationFactor = AfterglowOptions.DurationFactor(st?.AfterglowDuration ?? AfterglowOptions.DurationDefault);
         lock (_sync)
         {
             _field.Step(Math.Min(delta.TotalSeconds, 0.1), _level, _photosafe, _rnd);
@@ -266,7 +272,7 @@ public sealed class AfterglowLayer : BaseLayer
             {
                 ref readonly var q = ref _field.Particles[i];
                 if (!boundsPx.Contains((int)q.X, (int)q.Y)) continue;
-                var a = AfterglowField.ParticleAlpha(q);
+                var a = AfterglowField.ParticleAlpha(q) * _opacity;
                 if (a <= 0) continue;
                 _dot.Color = _spark[q.Hue & 1].WithAlpha((byte)(a * 255));
                 canvas.DrawCircle((float)q.X, (float)q.Y, (float)((0.8 + 1.8 * a) * q.Size), _dot);
@@ -276,7 +282,7 @@ public sealed class AfterglowLayer : BaseLayer
             {
                 if (p.Payload is not Draw d) continue;
                 if (!boundsPx.Contains((int)p.X, (int)p.Y)) continue;
-                var a = AfterglowField.Alpha(now - p.Born, _level, _photosafe);
+                var a = AfterglowField.Alpha(now - p.Born, _level, _photosafe, _field.DurationFactor) * _opacity;
                 if (a <= 0.004) continue;
                 _text.TextSize = d.FontPx;
                 var glow = _glow[p.Hue & 1];
