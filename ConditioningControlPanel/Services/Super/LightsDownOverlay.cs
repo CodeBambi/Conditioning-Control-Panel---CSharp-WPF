@@ -103,7 +103,7 @@ namespace ConditioningControlPanel.Services.Super
 
             // The swell only works where the video is WPF content (the blurred-background vmem path):
             // a WebView2 or VideoView surface is an HwndHost and ignores render transforms.
-            if (videoWindow?.Content is FrameworkElement fe && !HasHwndHost(fe))
+            if (SwellTarget(videoWindow) is { } fe)
             {
                 _videoContent = fe;
                 _savedTransform = fe.RenderTransform;
@@ -159,6 +159,11 @@ namespace ConditioningControlPanel.Services.Super
             hex.Freeze();
             var apBrush = new SolidColorBrush(Color.FromRgb(2, 0, 8));
             apBrush.Freeze();
+            // Clipped to the room like the rays: shut, the innermost hex reaches inside the
+            // picture's corners (its apothem is under the picture's half-diagonal), and the
+            // mockup draws the video OVER the aperture, so the picture stays clean.
+            var apHost = new Canvas { Clip = _outside };
+            _shade.Children.Add(apHost);
             for (int i = 0; i < _aperture.Length; i++)
             {
                 _apScale[i] = new ScaleTransform();
@@ -168,7 +173,7 @@ namespace ConditioningControlPanel.Services.Super
                     Fill = apBrush,
                     RenderTransform = new TransformGroup { Children = { _apScale[i], _apRotate, _apMove } },
                 };
-                _shade.Children.Add(_aperture[i]);
+                apHost.Children.Add(_aperture[i]);
             }
 
             // Dust motes catching the light.
@@ -404,6 +409,18 @@ namespace ConditioningControlPanel.Services.Super
                 _videoContent.RenderTransformOrigin = _savedOrigin;
             }
             catch { }
+        }
+
+        /// <summary>
+        /// The element the swell may scale: the picture surface ONLY, the first child of the video
+        /// window's grid. Its siblings are the click overlay and, on the vmem path, the in-window
+        /// attention plane; scaling the whole grid would carry the checks up to 7% away from the
+        /// bounds gaze dwell and the cut-outs read. Null when the surface is an HwndHost.
+        /// </summary>
+        internal static FrameworkElement? SwellTarget(Window? videoWindow)
+        {
+            if (videoWindow?.Content is not Panel p || p.Children.Count == 0) return null;
+            return p.Children[0] is FrameworkElement fe && !HasHwndHost(fe) ? fe : null;
         }
 
         private static bool HasHwndHost(DependencyObject root)

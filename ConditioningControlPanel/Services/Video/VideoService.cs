@@ -765,6 +765,23 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Super Lights Down: the live attention targets' bounds (gaze DIP space) so the dark
+        /// never covers a check. Fills <paramref name="into"/> in place.
+        /// </summary>
+        internal void CopyAttentionBounds(List<System.Windows.Rect> into)
+        {
+            into.Clear();
+            lock (_targets)
+            {
+                foreach (var t in _targets)
+                {
+                    var r = t.GetGazeBounds();
+                    if (!r.IsEmpty) into.Add(r);
+                }
+            }
+        }
+
+        /// <summary>
         /// Snapshot of currently-active attention targets that should respond
         /// to Focus Gaze dwells. Returns empty when VideoGazeClickEnabled is
         /// off. Caller iterates in reverse for topmost-first selection.
@@ -7498,6 +7515,10 @@ namespace ConditioningControlPanel.Services
                 // Invalidate any in-flight watchdog continuation (see _teardownGeneration).
                 System.Threading.Interlocked.Increment(ref _teardownGeneration);
             }
+
+            // Super Lights Down rides this video: its dark goes the moment teardown begins, before
+            // the waits below. A no-op unless it is up.
+            Super.LightsDownService.OnVideoTeardown();
 
             // Credit the minutes actually watched, on EVERY teardown (natural end, manual stop, panic,
             // safety timeout, attention-fail retry) — not just OnEnded. Position-based + watermarked so it
