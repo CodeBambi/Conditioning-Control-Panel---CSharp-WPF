@@ -63,9 +63,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             BlinkTrainerStatusAction.Click += (_, _) => _statusAction?.Invoke();
 
-            // Calibration needs the gaze feed WebcamTracker does not emit yet: visibly off, with the
-            // reason on hover. Session and tracker toggle are live (Overlays/BlinkTrainerSession, Platform/WebcamTracker).
-            foreach (var b in new[] { BtnBlinkTrainerCalibrate, BtnBlinkTrainerQuickRecal })
+            // The 16-point calibration window is not ported yet: visibly off, with the reason on hover.
+            // Session, tracker toggle and Quick Recal are live (Overlays/BlinkTrainerSession, Platform/WebcamTracker).
+            foreach (var b in new[] { BtnBlinkTrainerCalibrate })
             {
                 b.IsEnabled = false;
                 ToolTip.SetShowOnDisabled(b, true);
@@ -545,10 +545,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Refresh();
         }
 
-        // Disabled in the constructor: WebcamCalibrationWindow needs the gaze feed (see
-        // MainShellWindow.BlinkTrainer.cs).
+        // Disabled in the constructor: WebcamCalibrationWindow is not ported yet.
         private void BtnBlinkTrainerCalibrate_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnBlinkTrainerQuickRecal_Click(object? sender, RoutedEventArgs e) { }
+
+        /// <summary>WPF BtnBlinkTrainerQuickRecal_Click (MainWindow.BlinkTrainer.cs:1334): consent when
+        /// stale, refuse without a calibration, start tracking if off (say so if that fails), run the
+        /// one-dot recal, stop again only if started here.</summary>
+        private async void BtnBlinkTrainerQuickRecal_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                var tracker = Platform.WebcamTracker.Instance;
+                if (!WebcamConsent.IsCurrent(CoreSettings.Current))
+                {
+                    await new Dialogs.WebcamConsentDialog().ShowDialog(owner);
+                    if (!WebcamConsent.IsCurrent(CoreSettings.Current)) { Refresh(); return; }
+                }
+                if (tracker.Calibration == null)
+                {
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("blink_trainer_quick_recal_needs_full_title"),
+                        Loc.Get("blink_trainer_quick_recal_needs_full_body"));
+                    return;
+                }
+                bool startedHere = false;
+                if (!tracker.IsRunning)
+                {
+                    if (!await tracker.StartAsync())
+                    {
+                        await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("blink_trainer_quick_recal_start_failed_title"),
+                            Loc.GetF("blink_trainer_quick_recal_start_failed_body", tracker.LastError?.TrimEnd('.') ?? "Error"));
+                        Refresh();
+                        return;
+                    }
+                    startedHere = true;
+                }
+                await new Windows.WebcamQuickRecalWindow().ShowDialog<bool?>(owner);
+                if (startedHere) await tracker.StopAsync();
+                Refresh();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Blink Trainer quick recal failed"); }
+        }
 
         /// <summary>WPF BtnBlinkTrainerStartSession_Click: stop if running; else bring the tracker up
         /// off the UI thread (only with current consent), then start. A refusal lands in the status
