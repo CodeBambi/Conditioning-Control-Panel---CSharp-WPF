@@ -1158,3 +1158,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/chaos-shelves: +660
 - Chaos slice 2: ChaosMeta/Upgrades/Boons/Lessons/Reveal in Core, ChaosBench; WPF run effects keyed by id; the Avalonia hub's shelves spend
   and save the active slot (one atomic save per buy); rendering never writes. Fail-proven tests. Rows stay stub.
+
+## avalonia-port/webcam-gaze: +988
+- Webcam slice 4 part 1: Core GazeEngine (WPF delegates); tracker gaze/face/head-pose feed with the WPF-profile calibration; Tracker Test
+  and Quick Recal ported. Synthetic-frame tests, fail-proven. Merge with part 2.
