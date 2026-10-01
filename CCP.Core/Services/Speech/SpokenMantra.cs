@@ -128,7 +128,12 @@ namespace ConditioningControlPanel.Services.Speech
             async Task WaitSpokenAsync()
             {
                 if (host.WaitSpoken is { } wait)
-                    await Task.WhenAny(wait(ct), host.Delay(TimeSpan.FromSeconds(30), ct)).ConfigureAwait(false);
+                {
+                    var spoken = wait(ct);
+                    if (await Task.WhenAny(spoken, host.Delay(TimeSpan.FromSeconds(30), ct)).ConfigureAwait(false) != spoken
+                        && !ct.IsCancellationRequested)
+                        Log.Warning("SpokenMantra: her clip's finished signal never came; listening after the 30 s cap");
+                }
                 ct.ThrowIfCancellationRequested();
             }
 
