@@ -1,5 +1,6 @@
 // PORTED (slice 1) from WPF LauncherWindow.xaml.cs/.Tiles.cs and LauncherHost.cs; rules are Core's
-// LauncherCards/LauncherRules. ponytail: games, boot surface, account row, FX = later slices (launcher-plan.md).
+// LauncherCards/LauncherRules; slice 2 adds the boot surface and the second-instance handoff (WPF App.xaml.cs
+// RouteBootSurface/RouteSurfaceHandoff, LauncherHost.OnBareRelaunch). ponytail: games, account row, FX = later slices.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -56,6 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var w = _window ??= new LauncherWindow();
             w.BuildTiles();
+            w.SkipToPanel.IsChecked = CoreSettings.Current.LauncherSkipToPanel;
             if (!w.IsVisible) w.Show();
             if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
             w.Activate();
@@ -72,10 +74,100 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             panel.Hide();
             panel.HideAvatarTube();
-            var w = Open();
-            // The launcher goes with its panel: hidden, it would keep a trayless process alive UI-less.
-            if (!ReferenceEquals(w._panel, panel)) { w._panel = panel; panel.Closed += (_, _) => w.Close(); }
+            OpenFor(panel);
             return true;
+        }
+
+        /// <summary>WPF LauncherHost.Show, tied to <paramref name="panel"/>.</summary>
+        internal static LauncherWindow OpenFor(MainShellWindow panel) => Open().Link(panel);
+
+        /// <summary>The launcher goes with its panel: hidden, it would keep a trayless process alive UI-less.</summary>
+        private LauncherWindow Link(MainShellWindow panel)
+        {
+            if (!ReferenceEquals(_panel, panel)) { _panel = panel; panel.Closed += (_, _) => Close(); }
+            return this;
+        }
+
+        /// <summary>WPF App.Boot: the surface this run opened with (decided in App, Core LauncherBoot.Decide).</summary>
+        internal static BootDecision Boot { get; set; } = BootDecision.PanelFirst;
+
+        /// <summary>WPF LauncherHost.SurfaceInPlay: the launcher is part of this run.</summary>
+        internal static bool SurfaceInPlay => _window != null || Boot.Surface != BootSurface.Panel;
+
+        /// <summary>WPF App.RouteBootSurface: tuck the panel away (it was shown only so its Opened work
+        /// runs, as WPF's ShowHiddenForBoot) and bring the decided surface up. Any failure shows the panel.</summary>
+        internal static void RouteBoot(MainShellWindow panel)
+        {
+            try
+            {
+                panel.Hide();
+                panel.HideAvatarTube();
+                if (!(Boot.Surface == BootSurface.Game && Boot.GameId is { } id && LaunchGame(panel, id)))
+                    OpenFor(panel);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[Launcher] boot routing failed; leaving the panel up");
+                try { panel.ShowFromTray(); } catch (Exception ex2) { Log.Debug(ex2, "[Launcher] ShowFromTray after failed boot routing"); }
+            }
+        }
+
+        /// <summary>WPF LauncherHost.LaunchGame for the cards this head can open; false = no such card here.</summary>
+        internal static bool LaunchGame(MainShellWindow panel, string id)
+        {
+            var card = VisibleCards.FirstOrDefault(c => string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (card == null) return false;
+            // The sign-in ask is owned by the launcher, so only then does it come on screen.
+            var w = card.RequiresAccount && !CoreAccount.IsLoggedIn ? OpenFor(panel) : (_window ??= new LauncherWindow()).Link(panel);
+            w.Play(card);
+            return true;
+        }
+
+        /// <summary>WPF LauncherHost.OpenPanel without a launcher instance in hand.</summary>
+        internal static void OpenPanel(MainShellWindow panel)
+        {
+            if (_window != null) _window.OpenPanel();
+            else panel.ShowFromTray();
+        }
+
+        /// <summary>A second launch (Platform/SingleInstance): WPF RouteSurfaceHandoff for a
+        /// <see cref="LauncherHandoff"/> payload, LauncherHost.OnBareRelaunch for none.</summary>
+        internal static void RouteHandoff(MainShellWindow panel, string? payload)
+        {
+            try
+            {
+                if (payload == null)
+                {
+                    if (panel.IsVisible) panel.ShowFromTray();
+                    else if (CoreSettings.Current.LauncherSkipToPanel) OpenPanel(panel);
+                    else OpenFor(panel);
+                    return;
+                }
+                var (kind, id) = LauncherHandoff.Decode(payload);
+                Log.Information("[Launcher] second instance asked for {Kind} {Id}", kind, id);
+                switch (kind)
+                {
+                    case LauncherHandoff.PanelKind:
+                        OpenPanel(panel);
+                        break;
+                    case LauncherHandoff.GameKind:
+                        if (id == null || !LaunchGame(panel, id)) OpenFor(panel);
+                        break;
+                    default:
+                        if (panel.IsVisible) BackToLauncher(panel);   // Lockdown vetoes on its own
+                        else OpenFor(panel);
+                        break;
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] surface handoff failed"); }
+        }
+
+        /// <summary>WPF SkipToPanel_Click: the box binds LauncherSkipToPanel; the click saves it.</summary>
+        private void SkipToPanel_Click(object? sender, RoutedEventArgs e)
+        {
+            CoreSettings.Current.LauncherSkipToPanel = SkipToPanel.IsChecked == true;
+            try { CoreSettings.Save(); }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] saving LauncherSkipToPanel failed"); }
         }
 
         /// <summary>WPF LauncherHost.OpenPanel: the launcher hides, the panel comes up, then <paramref name="then"/>.</summary>

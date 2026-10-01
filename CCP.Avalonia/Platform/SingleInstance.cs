@@ -10,7 +10,9 @@ namespace ConditioningControlPanel.Avalonia.Platform
     /// <summary>
     /// WPF's single-instance gate (App.xaml.cs:1819-1922) on both OSes. The mutex name is WPF's, because the
     /// installer's AppMutex and InitializeSetup look for it. WPF's named EventWaitHandles do not exist on Unix,
-    /// so the show request and its ack travel over a named pipe (a Unix socket on Linux) instead.
+    /// so the show request and its ack travel over a named pipe (a Unix socket on Linux) instead. The request
+    /// carries WPF's surface handoff (LauncherHandoff payload, App.xaml.cs:1951) in place of its handoff file:
+    /// one length byte, then the UTF-8 payload; length 0 is a bare relaunch.
     /// </summary>
     internal sealed class SingleInstance : IDisposable
     {
@@ -23,7 +25,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         readonly bool _owned;
         readonly CancellationTokenSource _cts = new();
 
-        SingleInstance(Mutex mutex, bool owned, string pipe, Func<Task> show)
+        SingleInstance(Mutex mutex, bool owned, string pipe, Func<string?, Task> show)
         {
             _mutex = mutex;
             _owned = owned;
@@ -40,13 +42,13 @@ namespace ConditioningControlPanel.Avalonia.Platform
         }
 
         /// <summary>Null means a live primary acknowledged the show request and this launch must exit.</summary>
-        public static SingleInstance? Claim(string suffix, Func<Task> show)
+        public static SingleInstance? Claim(string suffix, Func<string?, Task> show, string? payload = null)
         {
             var pipe = "ConditioningControlPanel_ShowWindow_Signal_" + Environment.UserName + suffix;
             var mutex = new Mutex(true, MutexName + suffix, out bool owned);
             if (!owned)
             {
-                bool? acked = RequestShow(pipe);
+                bool? acked = RequestShow(pipe, payload);
                 if (acked == true) { mutex.Dispose(); return null; }
                 // No listener: a primary still exiting mid-update (#466) - wait for it, else exit (WPF 1861-1870).
                 // Listener but no ack: wedged primary. ponytail: WPF also kills it (KillStaleInstances);
@@ -59,14 +61,17 @@ namespace ConditioningControlPanel.Avalonia.Platform
         }
 
         /// <summary>true = acked, false = connected but no ack in time, null = nobody listening.</summary>
-        static bool? RequestShow(string pipe)
+        static bool? RequestShow(string pipe, string? payload)
         {
+            var bytes = Encoding.UTF8.GetBytes(payload ?? "");
+            if (bytes.Length > byte.MaxValue) bytes = Array.Empty<byte>();   // unreadable reads as a bare relaunch
             try
             {
                 using var c = new NamedPipeClientStream(".", pipe, PipeDirection.InOut,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 c.Connect(1000);
-                c.WriteByte(1);
+                c.WriteByte((byte)bytes.Length);
+                c.Write(bytes);
                 c.Flush();
                 using var cts = new CancellationTokenSource(ShowAckTimeoutMs);
                 var buf = new byte[1];
@@ -77,7 +82,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             catch (Exception ex) { Serilog.Log.Warning(ex, "Single-instance show request failed"); return null; }
         }
 
-        static async Task ListenAsync(string pipe, Func<Task> show, CancellationToken ct)
+        static async Task ListenAsync(string pipe, Func<string?, Task> show, CancellationToken ct)
         {
             while (!ct.IsCancellationRequested)
             {
@@ -86,10 +91,14 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     await using var s = new NamedPipeServerStream(pipe, PipeDirection.InOut, 1,
                         PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                     await s.WaitForConnectionAsync(ct);
-                    await s.ReadExactlyAsync(new byte[1], ct);
+                    var len = new byte[1];
+                    await s.ReadExactlyAsync(len, ct);
+                    var body = new byte[len[0]];
+                    await s.ReadExactlyAsync(body, ct);
+                    string? payload = body.Length == 0 ? null : Encoding.UTF8.GetString(body);
                     // Ack even when showing fails: WPF acks after the attempt (App.xaml.cs:1985), and a
                     // missing ack reads as "wedged" to the second launch.
-                    try { await show(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Single-instance show failed"); }
+                    try { await show(payload); } catch (Exception ex) { Serilog.Log.Warning(ex, "Single-instance show failed"); }
                     await s.WriteAsync(new byte[] { 1 }, ct);
                     await s.FlushAsync(ct);
                 }

@@ -11,6 +11,7 @@ using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Launcher;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -43,6 +44,7 @@ public sealed class LauncherWindowTests
             finally
             {
                 LauncherWindow.Instance?.Close();
+                LauncherWindow.Boot = BootDecision.PanelFirst;
                 LockdownService.Current = null;
                 (CoreAccount.IsLoggedInProvider, CoreEntitlement.HasLabProvider) = (oldIn, oldLab);
                 shell.Close();
@@ -168,6 +170,134 @@ public sealed class LauncherWindowTests
         {
             CoreSession.IsSessionRunningProvider = oldSession;
             CoreEngine.Stop();
+        }
+    });
+
+    // ---- slice 2: boot surface, second-instance handoff, tray row, skip box
+
+    [Fact]
+    public void BootIntoTheLauncher_TucksThePanel() => Run(shell =>
+    {
+        LauncherWindow.Boot = BootDecision.LauncherFirst;
+        LauncherWindow.RouteBoot(shell);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(shell.IsVisible);
+        Assert.True(LauncherWindow.Instance!.IsVisible);
+    });
+
+    [Fact]
+    public void BootIntoAGame_OpensItsDestination_UnknownHereShowsTheTiles() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreEntitlement.HasLabProvider = () => true;
+        LauncherWindow.Boot = BootDecision.GameFirst("intake");
+        LauncherWindow.RouteBoot(shell);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(shell.IsVisible);
+        Assert.Equal("gradedintake", shell.CurrentTab);
+        Assert.False(LauncherWindow.Instance!.IsVisible);
+
+        LauncherWindow.Boot = BootDecision.GameFirst("race");   // a WPF game with no host on this head
+        LauncherWindow.RouteBoot(shell);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(shell.IsVisible);
+        Assert.True(LauncherWindow.Instance!.IsVisible);
+    });
+
+    [Fact]
+    public void SecondInstance_RoutesTheSurfaceItNames() => Run(shell =>
+    {
+        LauncherWindow.RouteHandoff(shell, LauncherHandoff.Encode(new[] { "--launcher" }));
+        Dispatcher.UIThread.RunJobs();
+        var launcher = LauncherWindow.Instance!;
+        Assert.True(launcher.IsVisible);
+        Assert.False(shell.IsVisible);
+
+        LauncherWindow.RouteHandoff(shell, LauncherHandoff.Encode(new[] { "--panel" }));
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(shell.IsVisible);
+        Assert.False(launcher.IsVisible);
+
+        LauncherWindow.RouteHandoff(shell, "game:nope");
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(launcher.IsVisible);
+
+        // Bare relaunch with the panel tucked: the launcher, unless "open the panel directly".
+        shell.Hide();
+        LauncherWindow.RouteHandoff(shell, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(shell.IsVisible);
+        Assert.True(launcher.IsVisible);
+        CoreSettings.Current.LauncherSkipToPanel = true;
+        LauncherWindow.RouteHandoff(shell, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(shell.IsVisible);
+        Assert.False(launcher.IsVisible);
+    });
+
+    [Fact]
+    public void SecondInstance_UnderLockdown_NeverTucksThePanel() => Run(shell =>
+    {
+        var ld = LockdownService.Current = new LockdownService();
+        ld.Activate(TimeSpan.FromMinutes(30));
+        LauncherWindow.RouteHandoff(shell, "launcher");
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(shell.IsVisible);
+        ld.Deactivate();
+    });
+
+    private static NativeMenuItem BackRow(MainShellWindow shell) => shell.BuildTrayMenu().Items.OfType<NativeMenuItem>()
+        .Single(i => i.Header == Loc.Get("launcher_back_to_client"));
+
+    [Fact]
+    public void TrayBackRow_OnlyWhileTheLauncherIsInPlay_GreyedUnderLockdown() => Run(shell =>
+    {
+        Assert.False(BackRow(shell).IsVisible);             // a panel boot, launcher never built
+        LauncherWindow.Boot = BootDecision.LauncherFirst;
+        var row = BackRow(shell);
+        Assert.True(row.IsVisible);
+        Assert.True(row.IsEnabled);
+
+        var ld = LockdownService.Current = new LockdownService();
+        ld.Activate(TimeSpan.FromMinutes(30));
+        Assert.False(BackRow(shell).IsEnabled);
+        ld.Deactivate();
+
+        row.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(shell.IsVisible);
+        Assert.True(LauncherWindow.Instance!.IsVisible);
+    });
+
+    [Fact]
+    public void SkipToPanelBox_ShowsAndSavesTheSetting() => Run(shell =>
+    {
+        CoreSettings.Current.LauncherSkipToPanel = false;
+        var box = LauncherWindow.Open().FindControl<CheckBox>("SkipToPanel")!;
+        Assert.False(box.IsChecked);
+        Assert.Contains(Loc.Get("launcher_skip_to_panel"), Texts(box));
+        box.IsChecked = true;
+        box.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.True(CoreSettings.Current.LauncherSkipToPanel);
+    });
+
+    [Fact]
+    public void BootHiddenPanel_KeepsTheCompanionTubeDown() => Run(_ =>
+    {
+        var old = CoreSettings.Current.AvatarEnabled;
+        CoreSettings.Current.AvatarEnabled = true;
+        var panel = new MainShellWindow { BuildingHiddenForBoot = true };   // as App's launcher boot
+        try
+        {
+            panel.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotNull(panel.Tube);                 // built, as WPF does on load
+            Assert.False(panel.Tube!.IsVisible);        // but never on screen before the launcher
+        }
+        finally
+        {
+            panel.Close();
+            CoreSettings.Current.AvatarEnabled = old;
         }
     });
 }

@@ -1176,3 +1176,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/companion-brain-effects: +701
 - CompanionBrain slice 4 part 1: AI command gate + 11 effect commands in Core (head Surface hooks); Avalonia executor and activities.
+
+## avalonia-port/launcher-boot: +355
+- Launcher slice 2: WPF's boot decision (Lockdown/18+/fresh install → panel), skip box, tray Back to CC Labs, second-instance handoff;
+  the tube stays down during a hidden boot. Fail-proven tests; Keincheck live boot + handoffs.
