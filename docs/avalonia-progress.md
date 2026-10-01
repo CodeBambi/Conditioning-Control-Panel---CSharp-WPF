@@ -1173,3 +1173,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/intake-host: +574
 - Graded Intake host slice 1: Core IntakeRun (latches, heartbeat, grading, caps, drafting, pass only on a parsed result; WPF delegates);
   Avalonia IntakeHostWindow + WebHost message bridge, not opened yet (page serving is slice 2). Fail-proven tests.
+
+## avalonia-port/companion-brain-effects: +701
+- CompanionBrain slice 4 part 1: AI command gate + 11 effect commands in Core (head Surface hooks); Avalonia executor and activities.
