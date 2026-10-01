@@ -160,3 +160,16 @@ export function iqFromApi(api) {
     return plainIq(raw);
   } catch { return null; }
 }
+
+/**
+ * The fall to keep once the grader has settled (door.js settleIq): the live
+ * grader's while it still holds this game, else what the record carried at the
+ * end. `epoch` is the grader's epoch() as the game ended; the menu, a rematch or
+ * a new deal moves it on and empties the trackers, and an empty fall must never
+ * be saved over a real one.
+ */
+export function keptIq(api, epoch, fromRecord, ours = true) {
+  let same = !!ours;
+  try { if (same && epoch != null) same = api.epoch() === epoch; } catch { same = false; }
+  return (same && iqFromApi(api)) || plainIq(fromRecord);
+}

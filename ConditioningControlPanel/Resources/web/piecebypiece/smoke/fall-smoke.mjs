@@ -1,9 +1,10 @@
 // node smoke/fall-smoke.mjs - the end card's IQ recap: whose seat it shows, the move
 // numbers, the "Gone at move" line, the curve, and what the shelf and the profile keep.
 import assert from 'node:assert/strict';
-import { FALL, seatsShown, moveNumber, worstOf, goneLine, endOf, curvePoints, recapRows, recapHtml, plainIq, iqFromApi } from '../door/fall.js';
+import { FALL, seatsShown, moveNumber, worstOf, goneLine, endOf, curvePoints, recapRows, recapHtml, plainIq, iqFromApi, keptIq } from '../door/fall.js';
 import { profileStats, finalIq, seatIq } from '../door/store.js';
-import { createIqTracker, IQ } from '../game/iq.js';
+import { createIqTracker, createIqLive, IQ } from '../game/iq.js';
+import { Chess } from '../vendor/chess.js';
 
 const grade = (ply, san, best, loss, value, side = ply % 2 ? 'w' : 'b') => ({ ply, side, san, best, cp: loss * 12, loss, value, fen: 'not kept' });
 const white = { start: 140, end: 61, low: 61, moves: [grade(1, 'e4', 'e4', 0, 140), grade(3, 'Qh5', 'Nf3', 4, 136), grade(37, 'Qxd5', 'Nf3', 30, 106), grade(39, 'Kh1', 'Rd1', 30, 76), grade(41, 'Rxe8', 'Rxe8', 15, 61)] };
@@ -110,4 +111,29 @@ assert.equal(seatIq(games[2]), null);
 assert.equal(profileStats(games).lowIq, 61);
 assert.equal(profileStats([games[3]]).lowIq, null, 'no graded game, no stat');
 
-console.log('fall: seats, move numbers, the gone line, the curve, the markup and the shelf passed');
+// The settle (door.js settleIq): the menu or a rematch before the last grade came in starts the
+// grader over, and the card and the shelf keep the record's fall, never the next game's empty one.
+{
+  const handlers = {};
+  const bus = { on(n, f) { (handlers[n] ||= []).push(f); return () => {}; }, emit(n, p) { for (const f of handlers[n] || []) f(p); } };
+  const chess = new Chess();
+  const worker = { inbox: [], postMessage(m) { this.inbox.push(m); }, terminate() {}, onmessage: null, onerror: null };
+  const live = createIqLive({ bus, game: { rules: { chess }, seats: ['w'] }, workerFactory: () => worker });
+  const answer = (cp) => { const m = worker.inbox.shift(); worker.onmessage({ data: { id: m.id, best: 'Nf3', cp } }); };
+  bus.emit('local', { sides: ['w'], mode: 'solo' });
+  chess.move('e4'); bus.emit('turn', {}); answer(0);
+  chess.move('e5'); bus.emit('turn', {});
+  chess.move('Qh5'); bus.emit('turn', {}); answer(400);
+  chess.move('Nc6'); bus.emit('turn', {});
+  chess.move('Qxf7+'); bus.emit('gameover', {});   // its grade is still out
+  const atEnd = live.record(), epoch = live.epoch();
+  assert.equal(keptIq(live, epoch, atEnd).w.moves.length, 2, 'nothing moved on: the live grader is the fall');
+  bus.emit('newgame', { ply: 0 });                  // the menu
+  answer(900);                                      // lands for a game that is gone
+  assert.equal(keptIq(live, epoch, atEnd).w.end, atEnd.w.end, "after the menu the record's fall is kept, not an empty one");
+  assert.equal(keptIq(live, epoch, atEnd).w.moves.length, 2);
+  assert.equal(keptIq(live, null, atEnd, false).w.end, atEnd.w.end, 'a game dealt meanwhile: the record');
+  live.dispose();
+}
+
+console.log('fall: seats, move numbers, the gone line, the curve, the markup, the shelf and the settle passed');
