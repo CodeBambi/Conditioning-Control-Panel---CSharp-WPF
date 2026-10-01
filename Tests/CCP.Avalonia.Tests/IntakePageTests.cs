@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Skia;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
@@ -128,5 +129,69 @@ public sealed class IntakePageTests
             });
         }
         finally { Directory.Delete(root, true); }
+    }
+
+    /// <summary>ccp.assets/ is media from the user's library and nothing else: no other file types,
+    /// no app dot-folders, no unchecked assets, no escape by .. or symlink, never the profile folder.</summary>
+    [Fact]
+    public void TheAssetsPrefixServesOnlyActiveLibraryMedia()
+    {
+        var web = Directory.CreateTempSubdirectory("intake-web-").FullName;
+        var assets = Directory.CreateTempSubdirectory("intake-assets-").FullName;
+        var outside = Directory.CreateTempSubdirectory("intake-outside-").FullName;
+        var profileImage = Path.Combine(CorePaths.UserData, "images", "p.png");
+        try
+        {
+            File.WriteAllText(Path.Combine(web, "settings.json"), "{}");
+            File.WriteAllText(Path.Combine(web, "w.png"), "x");
+            Directory.CreateDirectory(Path.Combine(assets, "images"));
+            Directory.CreateDirectory(Path.Combine(assets, ".temp"));
+            foreach (var f in new[] { "images/a.gif", "images/off.png", "images/page.html", ".temp/t.png" })
+                File.WriteAllText(Path.Combine(assets, f), "x");
+            File.WriteAllText(Path.Combine(outside, "secret.png"), "x");
+            File.CreateSymbolicLink(Path.Combine(assets, "images", "link.png"), Path.Combine(outside, "secret.png"));
+            Directory.CreateSymbolicLink(Path.Combine(assets, "images", "out"), outside);
+
+            using var server = new WebAssetServer(web) { AssetsRoot = () => assets, DisabledAssets = () => new[] { "images/off.png" } };
+            string P(string rel) => "/" + WebAssetServer.AssetsPrefix + rel;
+            Assert.Equal(Path.Combine(assets, "images", "a.gif"), server.ResolveFile(P("images/a.gif")));
+            Assert.Null(server.ResolveFile(P("images/page.html")));     // not media
+            Assert.Null(server.ResolveFile(P(".temp/t.png")));          // the app's own folder
+            Assert.Null(server.ResolveFile(P("images/off.png")));       // unchecked in the Assets tree
+            Assert.Null(server.ResolveFile(P("../settings.json")));
+            Assert.Null(server.ResolveFile(P("../" + Path.GetFileName(web) + "/w.png")));
+            Assert.Null(server.ResolveFile(P("images/link.png")));      // symlink escape
+            Assert.Null(server.ResolveFile(P("images/out/secret.png")));
+
+            Directory.CreateDirectory(Path.GetDirectoryName(profileImage)!);
+            File.WriteAllText(profileImage, "x");
+            using var profile = new WebAssetServer(web) { AssetsRoot = () => CorePaths.UserData, DisabledAssets = () => null };
+            Assert.Null(profile.ResolveFile(P("images/p.png")));
+            using var parent = new WebAssetServer(web) { AssetsRoot = () => Path.GetDirectoryName(CorePaths.UserData), DisabledAssets = () => null };
+            Assert.Null(parent.ResolveFile(P(Path.GetFileName(CorePaths.UserData) + "/images/p.png")));
+        }
+        finally
+        {
+            File.Delete(profileImage);
+            Directory.Delete(web, true);
+            Directory.Delete(assets, true);
+            Directory.Delete(outside, true);
+        }
+    }
+
+    [Fact]
+    public async Task TheFallbackPanelNeverShowsTheToken()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            var host = new ConditioningControlPanel.Avalonia.Views.Controls.WebHost
+            {
+                Source = new Uri("http://127.0.0.1:5000/intake/index.html?ccp_t=ABC&x=1"),
+            };
+            var text = host.FindControl<global::Avalonia.Controls.TextBlock>("TxtSource")!.Text;
+            Assert.Equal("http://127.0.0.1:5000/intake/index.html?x=1", text);
+            return Task.CompletedTask;
+        });
     }
 }

@@ -1,13 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Services.Quiz;
 using Serilog;
+
+using ConditioningControlPanel;
 
 namespace ConditioningControlPanel.Avalonia.Platform;
 
@@ -32,7 +37,7 @@ public sealed class WebAssetServer : IDisposable
         {
             lock (_sharedLock)
                 return _shared ??= new WebAssetServer(Path.Combine(AppContext.BaseDirectory, "Resources", "web"))
-                    { AssetsRoot = () => ConditioningControlPanel.CorePaths.EffectiveAssets };
+                    { AssetsRoot = () => CorePaths.EffectiveAssets };
         }
     }
 
@@ -140,16 +145,38 @@ public sealed class WebAssetServer : IDisposable
     {
         var rel = Uri.UnescapeDataString(urlPath).TrimStart('/');
         var root = _root;
-        if (rel.StartsWith(AssetsPrefix, StringComparison.Ordinal))
+        bool asset = rel.StartsWith(AssetsPrefix, StringComparison.Ordinal);
+        if (asset)
         {
             if (AssetsRoot?.Invoke() is not { Length: > 0 } assets) return null;
             root = Path.GetFullPath(assets).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             rel = rel[AssetsPrefix.Length..];
+            // Media only, never the app's own dot-folders (.temp, .packs), never the profile itself.
+            if (!MediaTypeSniffer.MediaExtensions.Contains(Path.GetExtension(rel))
+                || rel.Split('/', '\\').Any(seg => seg.StartsWith('.'))
+                || HoldsUserData(root)) return null;
         }
         if (rel.Length == 0 || rel.EndsWith('/')) rel += "index.html";
         if (rel.Contains('\0')) return null;
         var full = Path.GetFullPath(Path.Combine(root, rel));
-        return Inside(full, root) && File.Exists(full) && LinksStayInside(full, root) ? full : null;
+        if (!Inside(full, root) || !File.Exists(full) || !LinksStayInside(full, root)) return null;
+        if (asset && !IntakeRun.IsAssetActive(IntakeRun.DisabledAssetSet(DisabledAssets()), root, full)) return null;
+        return full;
+    }
+
+    /// <summary>The user's unchecked assets (Settings DisabledAssetPaths), never served.</summary>
+    public Func<IEnumerable<string>?> DisabledAssets { get; init; } = () => CoreSettings.Current.DisabledAssetPaths;
+
+    int _userDataWarned;
+
+    /// <summary>An assets root that is, or contains, the profile folder would expose settings and secrets.</summary>
+    bool HoldsUserData(string root)
+    {
+        var data = Path.GetFullPath(CorePaths.UserData).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!data.StartsWith(root, StringComparison.Ordinal)) return false;
+        if (Interlocked.Exchange(ref _userDataWarned, 1) == 0)
+            Log.Warning("WebAssetServer: refusing to serve assets from {Root}: it holds the profile folder", root);
+        return true;
     }
 
     static bool Inside(string full, string root) => full.StartsWith(root, StringComparison.Ordinal);

@@ -390,7 +390,9 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   `webkit_user_script_new(..., ALL_FRAMES=0, INJECT_AT_DOCUMENT_START=0, ...)` (read from the IL,
   ~/ccp-port/evidence/avalonia-port/intake-page/bridge-injection-time.txt), so it exists before web-shim.js evaluates.
 - ccp.assets -> `WebAssetServer.AssetsPrefix` ("ccp.assets/") over `CorePaths.EffectiveAssets`, same token/cookie rule and
-  confinement. ccp.content is a hard-coded origin in intake/core/audioSrc.js and no audio ships on this head, so it is not mapped
+  confinement, narrowed to library media: only MediaTypeSniffer.MediaExtensions, no dot-folders (.temp/.packs), no
+  DisabledAssetPaths entry, and a root that is or contains CorePaths.UserData is refused (logged once). The no-engine fallback
+  panel prints the URL without ccp_t. ccp.content is a hard-coded origin in intake/core/audioSrc.js and no audio ships on this head, so it is not mapped
   (the page's silent-missing-audio path, as on a WPF install without packs).
 - init: WPF's payload minus bubble sprite, subliminal pool, speech bridge and remote media (remoteMedia=false). In a
   CCP_USERDATA_DIR sandbox `ai` is null (the page's local stub) so a live run never reaches the AI server.
