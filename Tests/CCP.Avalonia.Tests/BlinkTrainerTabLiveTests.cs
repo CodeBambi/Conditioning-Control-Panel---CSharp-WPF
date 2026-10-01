@@ -80,10 +80,9 @@ public sealed class BlinkTrainerTabLiveTests
                 Assert.Single(tab.FindControl<StackPanel>("BlinkTrainerFolderCardsHost")!.Children);
                 Assert.Contains(dir, s.BlinkTrainerFolders);
 
-                // Ready: Start is live (WPF SetStartButtonState); calibration (gaze) is off with a reason.
+                // Ready: Start is live (WPF SetStartButtonState), and so is Calibrate (webcam slice 5).
                 Assert.True(tab.FindControl<Button>("BtnBlinkTrainerStartSession")!.IsEnabled);
-                Assert.False(tab.FindControl<Button>("BtnBlinkTrainerCalibrate")!.IsEnabled);
-                Assert.NotNull(ToolTip.GetTip(tab.FindControl<Button>("BtnBlinkTrainerCalibrate")!));
+                Assert.True(tab.FindControl<Button>("BtnBlinkTrainerCalibrate")!.IsEnabled);
                 // The tracker toggle is live now (Platform/WebcamTracker), labelled as WPF does.
                 var tracker = tab.FindControl<Button>("BtnBlinkTrainerStartStopTracker")!;
                 Assert.True(tracker.IsEnabled);

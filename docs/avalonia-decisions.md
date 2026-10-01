@@ -324,3 +324,11 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   (WPF ~2.1k LOC plus mouth/tongue validation and the bubble test) does not fit the line cap and is the next slice, so
   Calibrate stays disabled with a reason.
 - Advisor: worker (supervisor informed).
+## 2026-10-01: 16-point calibration on Avalonia (webcam slice 5)
+- Question: where does the calibration fit live, and what does a cancelled run leave behind?
+- Choice: the window's pure maths (grid, pose gate, robust means, homography, ridge Cerrolaza fit, axis correction) moved to
+  Core `WebcamCalibrationFit` (extracted, not git mv: it sat inside a WPF window); both windows call it, so the saved file is
+  identical. Escape, a tracker stop (panic) or the X before the save puts back the calibration that was live before
+  (WPF leaves the unsaved candidate live in memory). Mouth/tongue detectors and the verify cursor/bubble test are not ported:
+  the mouth prompts time out to WPF's "moving on" text and Verify runs its countdown only.
+- Advisor: worker (supervisor informed).

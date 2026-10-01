@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -10,67 +11,37 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     /// <summary>
-    /// Fullscreen 16-point gaze calibration (4×4 grid). The WPF original samples raw iris vectors
-    /// at each point, fits a 3×3 homography and an over-determined 2nd-order polynomial
-    /// (Cerrolaza asymmetric form, ridge-regularized with λ chosen by leave-one-out CV, iris →
-    /// screen DIPs), and persists via WebcamCalibrationData.
+    /// Fullscreen 16-point gaze calibration (4×4 grid), PORTED from
+    /// ConditioningControlPanel/Windows/WebcamCalibrationWindow.xaml.cs over Platform/WebcamTracker
+    /// (OnRawIris / OnHeadPose / OnBlink / StateChanged / SetCalibrationLive / ApplyCalibration). The
+    /// fit is Core WebcamCalibrationFit, which the WPF window calls too; the result is saved to the
+    /// same profile file in the same format (WebcamCalibrationData.Save).
     ///
-    /// PORTED from ConditioningControlPanel/Windows/WebcamCalibrationWindow.xaml.cs (2,116 lines).
-    ///
-    /// <para><b>No Win32 and no WebView2 here.</b> This view was scheduled in the Win32/WebView2
-    /// wave, but reading it end to end there is exactly one interop site and no web view at all:
-    /// <c>WindowInteropHelper(this).Handle</c> fed to <c>System.Windows.Forms.Screen.FromHandle</c>
-    /// inside <c>FinalizeCalibrationAsync</c>, to record which monitor calibration ran on. That
-    /// maps to <c>Screens.ScreenFromWindow(this)</c> plus <c>screen.Bounds</c> and
-    /// <c>RenderScaling</c> (which also replaces <c>VisualTreeHelper.GetDpi</c>) — but the whole
-    /// method is service-bound and stubbed below, so the mapping is recorded rather than written.
-    /// Nothing here needs <c>X11Overlay</c>: the window is opaque black, focusable and clickable,
-    /// so <c>Topmost</c> + <c>ShowInTaskbar="False"</c> cover it.</para>
-    ///
-    /// <para><b>What is real in this port</b> — everything that only touches the view: the panel
-    /// choreography, the 4×4 grid layout, dot and bubble placement, the Ramanujan stroke-dash
-    /// progress rings, the ring pulse, the error panel and the verify-panel countdown.</para>
-    ///
-    /// <para><b>What is stubbed</b> — everything reaching a service or the camera:
-    /// <c>App.Webcam</c> (OnRawIris / OnHeadPose / OnTrackingStateChanged / SetCalibrationLive /
-    /// ApplyCalibration / ClearGazeAttractor), the entire fit pipeline (TrimmedMean,
-    /// FitCerrolazaPolynomial, FitRidge, EvalPolynomial, BuildAxisCorrection, FitAxisTrim,
-    /// ~1,300 lines of OpenCvSharp-free maths that still needs <c>WebcamCalibrationData</c> from
-    /// the WPF head), the gesture warm-up waiters, <c>RunBubbleTestAsync</c>,
-    /// <c>CalibrationSoundService</c> (ConditioningControlPanel/Services/CalibrationSoundService.cs)
-    /// and <c>App.GazeCursor</c> (Services/Tracking/GazeDebugCursorService.cs, a WPF window).
-    /// <c>App.Webcam</c> is ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs.
-    /// <b>Three names that used to be on this list are not blockers any more</b> and were removed
-    /// rather than left to mislead: <c>App.Settings</c> is <see cref="CoreSettings"/>,
-    /// <c>App.Logger</c> is Serilog's static <c>Log</c>, and the HelpContentService/HelpVideoWindow
-    /// popup is RESTORED and live (see BtnHelp below - the service is in Core and the window sits
-    /// in this same folder). <c>App.Notifications</c> exists here too now
-    /// (CCP.Avalonia/Helpers/NotificationService.cs), but WPF only calls its sticky
-    /// <c>Dismiss("recalibrate-multimonitor")</c>, which that port does not carry.</para>
-    ///
-    /// Other deviations:
-    ///  - WPF's <c>DialogResult</c> becomes <c>Close(bool)</c>, as in TextEditorDialog.
-    ///  - <c>ShowDialogWithRecalibrate</c> becomes async: Avalonia's <c>ShowDialog</c> is awaitable
-    ///    and has no synchronous form.
-    ///  - The ring-pulse <c>Storyboard</c> becomes a <c>DispatcherTimer</c> driving the same
-    ///    sinusoid. Avalonia's <c>Animation</c> CANNOT target a <c>Transform</c> — its
-    ///    TransformAnimator casts the target to <c>Visual</c> and throws at run time, which the
-    ///    compiler says nothing about. See the comment on StartRingPulse.
-    ///  - <c>ActualWidth/Height</c> become <c>Bounds.Width/Height</c>.
-    ///  - The named <c>ScaleTransform</c>s are reached through <c>RenderTransform</c> rather than
-    ///    <c>FindControl</c>, which is constrained to <c>Control</c>.
-    ///  - The pipeline's timing constants (SampleMs, SettleMs, MinSamplesPerPoint, …) are not
-    ///    copied: they belong with the sampling loop, and it is a stub. Only the two the layout
-    ///    actually uses are here.
+    /// Same timing, retries, messages and gesture checks as WPF. Deviations: Escape, a tracker stop
+    /// (panic, revoke) or the X before the save restores the previously live calibration (WPF leaves the
+    /// unsaved candidate live); the mouth prompts always time out (no MAR detector yet); the redo prompt
+    /// is ConfirmAsync (Yes / Cancel); Close(bool) for DialogResult; Screens.ScreenFromWindow for the monitor.
+    /// ponytail: the verify cursor and the bubble test need GazeDebugCursorService (a WPF overlay
+    /// window), not ported: Verify runs its countdown only and the bubble test only places a bubble.
+    /// The ring pulse is a DispatcherTimer: Avalonia's Animation cannot target a Transform.
     /// </summary>
     public partial class WebcamCalibrationWindow : Window
     {
-        private const int GridSize = 4;       // 4×4 = 16 calibration points (corners + interior)
-        private const double EdgeMargin = 40; // distance from screen edge for corner dots (DIPs)
+        private const int ReadyMs = 600, SampleMs = 1100, SampleCeilingMs = 4000, SampleSliceMs = 100;
+        private const int SettleMs = 200, RetryReadyMs = 900, MaxAttemptsPerPoint = 2, RingFullSampleTarget = 20;
+        private const int MinSamplesPerPoint = WebcamCalibrationFit.MinSamplesPerPoint;
+
+        /// <summary>Tests shrink every wait by this factor; 1 in the app.</summary>
+        internal static int TimeDivisor = 1;
+        private static Task Delay(int ms) => Task.Delay(ms / TimeDivisor);
+        private static WebcamTracker Tracker => WebcamTracker.Instance;
 
         private readonly Canvas _dotCanvas;
         private readonly Ellipse _dot;
@@ -103,18 +74,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private int _verifyCountdownSecondsLeft;
         private bool _completedOk;
 
-        /// <summary>
-        /// True while a calibration window is on screen. The global 6-blink recalibrate gesture
-        /// (MainWindow) checks this so blinking during the verify step — or while calibration is
-        /// already open — can't re-trigger another calibration.
-        /// </summary>
+        // Per-dot iris samples tagged with the head pose at that frame, and the session's poses.
+        private readonly List<List<(double X, double Y, double Yaw, double Pitch, bool HasPose)>> _allSamples = new();
+        private readonly List<(double Yaw, double Pitch)> _allPoseSamples = new();
+        private (double Yaw, double Pitch)? _lastPose;
+        private bool _collecting, _cancelled, _ringIsFull, _subscribed, _saved;
+        internal int ActiveDotIndex { get; private set; } = -1;
+        internal (string Label, Point Screen)[] Positions { get; private set; } = Array.Empty<(string, Point)>();
+        private readonly TaskCompletionSource<bool> _introDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private WebcamCalibrationData? _before;
+
+        /// <summary>True while a calibration window is on screen (the 6-blink gesture checks it).</summary>
         public static bool IsShowing { get; private set; }
 
-        /// <summary>
-        /// Set to true when the user clicked Recalibrate on the verify panel. Callers that want to
-        /// loop should re-open the dialog while this is true. Use
-        /// <see cref="ShowDialogWithRecalibrate"/> for the canonical loop pattern.
-        /// </summary>
+        /// <summary>The user asked to redo (verify panel, or Yes on the inaccurate-fit prompt);
+        /// <see cref="ShowDialogWithRecalibrate"/> re-opens while this is true.</summary>
         public bool WantsRecalibrate { get; private set; }
 
         public WebcamCalibrationWindow()
@@ -146,19 +120,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtVerifyStatus = this.FindControl<TextBlock>("TxtVerifyStatus")!;
             _btnVerifyAccuracy = this.FindControl<Button>("BtnVerifyAccuracy")!;
 
-            // FindControl is constrained to Control, so the two named ScaleTransforms are reached
-            // through their owner's RenderTransform instead. Deterministic: the shapes and their
-            // transforms are both authored in this file.
-            // Throwing rather than falling back to a detached ScaleTransform: a silent fallback
-            // would pulse an object nobody renders, and a still ring is exactly what a broken
-            // pulse looks like anyway.
+            // FindControl is constrained to Control, so the named ScaleTransform is reached through
+            // its owner's RenderTransform (authored in this file, so Single() is deterministic).
             _dotRingScale = ((TransformGroup)_dotRingFg.RenderTransform!).Children
                 .OfType<ScaleTransform>().Single();
 
-            // Handlers live here rather than in markup, per the porting convention.
             this.FindControl<Button>("BtnCalibrationHelp")!.Click += (_, _) => BtnCalibrationHelp_Click();
-            this.FindControl<Button>("BtnIntroContinue")!.Click += (_, _) => BtnIntroContinue_Click();
-            this.FindControl<Button>("BtnErrorClose")!.Click += (_, _) => BtnErrorClose_Click();
+            this.FindControl<Button>("BtnIntroContinue")!.Click += (_, _) => _introDone.TrySetResult(true);
+            this.FindControl<Button>("BtnErrorClose")!.Click += (_, _) => Close(_completedOk);
             _btnVerifyAccuracy.Click += (_, _) => BtnVerifyAccuracy_Click();
             this.FindControl<Button>("BtnVerifyBubbleTest")!.Click += (_, _) => BtnVerifyBubbleTest_Click();
             this.FindControl<Button>("BtnVerifyRecalibrate")!.Click += (_, _) => BtnVerifyRecalibrate_Click();
@@ -174,146 +143,309 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         //  Window lifecycle
         // ─────────────────────────────────────────────────────────────────────
 
-        private void Window_Loaded(object? sender, RoutedEventArgs e)
+        private async void Window_Loaded(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs App.Webcam - ConditioningControlPanel/Services/Webcam/
-            // WebcamTrackingService.cs - for the IsRunning gate and the OnRawIris / OnHeadPose /
-            // OnTrackingStateChanged subscriptions. It is head-only by construction (its capture
-            // stack is Windows-side). CoreWebcam carries capability + consent-revoke only and
-            // deliberately no per-frame feed, which is all this window consumes - see its class doc
-            // for why state without frames would be the worse half.
-            // The WPF original bails to ShowError when tracking is not running; with no service to
-            // ask, the intro is shown unconditionally so the view still has a first frame.
+            if (!Tracker.IsRunning)
+            {
+                ShowError("Webcam tracking is not running. Start tracking before calibrating.");
+                return;
+            }
+            _before = Tracker.Calibration;
+            Tracker.OnRawIris += OnRawIris;
+            Tracker.OnHeadPose += OnHeadPose;
+            // Auto-close if tracking ends mid-flow (panic, consent revoked, camera gone).
+            Tracker.StateChanged += OnTrackerStateChanged;
+            _subscribed = true;
 
-            // Show the intro overlay first so users know what's coming — the dot grid + validation
-            // checks are otherwise a surprise. DotCanvas / StatusPanel stay hidden until the user
-            // clicks Continue (or presses ESC, which cancels).
+            // Intro first; the dot grid and the blink hint banner wait for Continue (ESC cancels).
             _dotCanvas.IsVisible = false;
             _statusPanel.IsVisible = false;
             _introPanel.IsVisible = true;
-            // Surface the blink-shortcut hint while the user is reading the intro (and again on
-            // the verify panel) — but not during the dot grid, where it would sit over the top-row
-            // dots.
             _shortcutHintBanner.IsVisible = true;
+
+            if (!await _introDone.Task || _cancelled) return;
+
+            _introPanel.IsVisible = false;
+            _shortcutHintBanner.IsVisible = false;
+            _dotCanvas.IsVisible = true;
+            _statusPanel.IsVisible = true;
+            try { await RunSequenceAsync(); }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "WebcamCalibrationWindow: calibration sequence threw");
+                ShowError("Calibration failed unexpectedly. See logs/app.log for details.");
+            }
         }
 
         private void Window_Closed(object? sender, EventArgs e)
         {
             IsShowing = false;
+            _cancelled = true;
+            _collecting = false;
+            _introDone.TrySetResult(false);
             StopRingPulse();
             _verifyCountdownTimer?.Stop();
-            // ponytail: needs WebcamTrackingService / GazeDebugCursorService (paths in the header)
-            // to unsubscribe the iris + pose streams and release the "calibration-verify" and
-            // "calibration-bubbletest" cursor keys and the gaze attractor.
+            if (!_subscribed) return;
+            Tracker.OnRawIris -= OnRawIris;
+            Tracker.OnHeadPose -= OnHeadPose;
+            Tracker.StateChanged -= OnTrackerStateChanged;
+            if (!_saved) Tracker.SetCalibrationLive(_before);   // nothing partial survives a cancel
+        }
+
+        private void OnTrackerStateChanged()
+        {
+            if (Tracker.IsRunning) return;
+            _cancelled = true;
+            Close(false);
         }
 
         private void Window_KeyDown(object? sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape)
-            {
-                StopRingPulse();
-                Close(false);
-            }
+            if (e.Key != Key.Escape) return;
+            _cancelled = true;
+            _collecting = false;
+            Close(false);
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        //  Intro / error panels
-        // ─────────────────────────────────────────────────────────────────────
-
-        private void BtnIntroContinue_Click()
+        internal void OnRawIris(double dx, double dy)
         {
-            _introPanel.IsVisible = false;
-            _shortcutHintBanner.IsVisible = false;
-            _dotCanvas.IsVisible = true;
-            _statusPanel.IsVisible = true;
-
-            // ponytail: needs App.Webcam's iris/pose streams + CalibrationSoundService for the
-            // real per-dot sampling loop (RunSequenceAsync), wired when they move to Core. The
-            // grid layout, the dot placement and the progress ring below are the WPF original's,
-            // parked on the first point so the view still shows what the sequence looks like.
-            var positions = BuildGrid(Bounds.Width, Bounds.Height);
-            MoveDotTo(positions[0].Screen);
-            _txtProgress.Text = $"Point 1 / {positions.Length}  ({positions[0].Label})";
-            _txtStatus.Text = "Look at the pink dot…";
-            ResetProgressRing();
+            if (!_collecting || ActiveDotIndex < 0 || ActiveDotIndex >= _allSamples.Count) return;
+            var pose = _lastPose;
+            var list = _allSamples[ActiveDotIndex];
+            list.Add((dx, dy, pose?.Yaw ?? 0, pose?.Pitch ?? 0, pose.HasValue));
+            UpdateProgressRing(Math.Min(1.0, list.Count / (double)RingFullSampleTarget));
+            if (!_ringIsFull && list.Count >= RingFullSampleTarget) RingFull();
         }
 
-        /// <summary>
-        /// The 4×4 dot layout from RunSequenceAsync, verbatim. Row-major, 16 dots evenly spaced
-        /// across cols/rows 0..3 of the usable span:
-        /// <code>
-        ///    0  1  2  3      (top row)
-        ///    4  5  6  7
-        ///    8  9 10 11
-        ///   12 13 14 15      (bottom row)
-        /// </code>
-        /// Left column = {0,4,8,12}; right column = {3,7,11,15}.
-        /// </summary>
-        private static (string Label, Point Screen)[] BuildGrid(double w, double h)
+        internal void OnHeadPose(double yaw, double pitch)
         {
-            double xL = EdgeMargin, xR = w - EdgeMargin;
-            double yT = EdgeMargin, yB = h - EdgeMargin;
-            string[] rowLabels = { "Top", "Upper", "Lower", "Bottom" };
-            string[] colLabels = { "left", "mid-left", "mid-right", "right" };
-            var positions = new (string Label, Point Screen)[GridSize * GridSize];
-            for (int r = 0; r < GridSize; r++)
-            {
-                double y = yT + (yB - yT) * (r / (double)(GridSize - 1));
-                for (int c = 0; c < GridSize; c++)
-                {
-                    double x = xL + (xR - xL) * (c / (double)(GridSize - 1));
-                    positions[r * GridSize + c] = ($"{rowLabels[r]}-{colLabels[c]}", new Point(x, y));
-                }
-            }
-            return positions;
+            _lastPose = (yaw, pitch);
+            if (_collecting) _allPoseSamples.Add((yaw, pitch));
         }
 
-        private void BtnErrorClose_Click() => Close(_completedOk);
+        private void RingFull()
+        {
+            _ringIsFull = true;
+            StartRingPulse();
+            WebcamQuickRecalWindow.Play("bubbles/Pop.mp3", 0.35f);   // CalibrationSoundService.RingFull
+        }
 
         private void BtnCalibrationHelp_Click()
         {
-            // topmost: true so the popup layers above this full-screen calibration window.
-            // HelpContentService is Core's; HelpVideoWindow is this head's. The topic ships a clip
-            // that this head cannot play, so the popup takes its fail-soft branch - title, glyph
-            // and the topic's "what it does" blurb, video surface hidden. That is honest and it is
-            // strictly more than the nothing this button did before; WPF had no other fallback
-            // here either.
+            // topmost: true so the popup layers above this full-screen calibration window. The clip
+            // cannot play on this head, so the popup takes its fail-soft text branch.
             HelpVideoWindow.Show(Services.HelpContentService.GetContent("WebcamCalibration"), this, topmost: true);
+        }
+
+        private async Task RunSequenceAsync()
+        {
+            var positions = WebcamCalibrationFit.BuildGrid(Bounds.Width, Bounds.Height)
+                .Select(p => (p.Label, Screen: new Point(p.Screen.X, p.Screen.Y))).ToArray();
+            Positions = positions;
+            foreach (var _ in positions) _allSamples.Add(new());
+
+            for (int i = 0; i < positions.Length; i++)
+            {
+                if (_cancelled) return;
+                MoveDotTo(positions[i].Screen);
+                _txtProgress.Text = $"Point {i + 1} / {positions.Length}  ({positions[i].Label})";
+
+                bool succeeded = false;
+                for (int attempt = 1; attempt <= MaxAttemptsPerPoint && !succeeded; attempt++)
+                {
+                    if (_cancelled) return;
+                    StopRingPulse();
+                    ResetProgressRing();
+                    _allSamples[i].Clear();
+                    _ringIsFull = false;
+                    ActiveDotIndex = i;
+
+                    _txtStatus.Text = attempt == 1
+                        ? "Look at the pink dot…"
+                        : "Missed that one — let's try again. Look at the pink dot…";
+                    await Delay(attempt == 1 ? ReadyMs : RetryReadyMs);
+                    if (_cancelled) return;
+
+                    _txtStatus.Text = "Hold steady — sampling…";
+                    WebcamQuickRecalWindow.Play("lvup.mp3", 0.25f);   // CalibrationSoundService.DotSampleStart
+                    _collecting = true;
+                    await Delay(SampleMs);
+                    // Slow camera (#909): stretch the window until the count is met, up to the ceiling.
+                    long stretchUntil = Environment.TickCount64 + Math.Max(0, SampleCeilingMs - SampleMs) / TimeDivisor;
+                    while (!_cancelled && _allSamples[i].Count < MinSamplesPerPoint && Environment.TickCount64 < stretchUntil)
+                        await Delay(SampleSliceMs);
+                    _collecting = false;
+                    if (_cancelled) return;
+
+                    if (_allSamples[i].Count >= MinSamplesPerPoint)
+                    {
+                        succeeded = true;
+                        UpdateProgressRing(1.0);   // an accepted dot always shows a full ring
+                        if (!_ringIsFull) RingFull();
+                    }
+                }
+                ActiveDotIndex = -1;
+
+                if (!succeeded)
+                {
+                    ShowError(
+                        $"Couldn't sample point {i + 1} ({positions[i].Label}) after " +
+                        $"{MaxAttemptsPerPoint} tries. " +
+                        $"Got {_allSamples[i].Count} samples (need at least {MinSamplesPerPoint}). " +
+                        "Make sure you're well-lit, facing the camera, and your face fits in frame.");
+                    return;
+                }
+                StopRingPulse();
+                await Delay(SettleMs);
+            }
+            if (_cancelled) return;
+            WebcamQuickRecalWindow.Play("chime2.mp3", 0.5f);   // CalibrationSoundService.AllDotsCollected
+            await FinalizeCalibrationAsync(positions);
+        }
+
+        private async Task FinalizeCalibrationAsync((string Label, Point Screen)[] positions)
+        {
+            var fit = WebcamCalibrationFit.Fit(_allSamples, _allPoseSamples,
+                positions.Select(p => new OpenCvSharp.Point2d(p.Screen.X, p.Screen.Y)).ToArray(), Bounds.Width, Bounds.Height);
+            if (fit.Data is not { } data)
+            {
+                ShowError("Couldn't fit calibration from your samples. The points may have been too similar — try again and make sure to look directly at each dot.");
+                return;
+            }
+            if (fit.TooInaccurate)
+            {
+                Log.Warning("WebcamCalibration: fit residual too high — rms_x={Rx:F0}, rms_y={Ry:F0} DIPs; prompting redo", fit.RmsX, fit.RmsY);
+                bool redo = await Dialogs.MessageDialog.ConfirmAsync(this, "Calibration inaccurate",
+                    "This calibration came out very inaccurate — the dots didn't line up, so eye tracking would be unreliable.\n\n" +
+                    "For a better result: good, even lighting; avoid glare on glasses (or try without them); keep your head still and look right at each dot.\n\n" +
+                    "Try the calibration again?", okText: "Yes");
+                if (_cancelled) return;
+                if (redo) { WantsRecalibrate = true; Close(false); return; }
+                Log.Information("WebcamCalibration: user kept low-quality calibration despite high residual");
+            }
+
+            // The monitor calibration ran on (WPF Screen.FromHandle), for calibrated-screen placement.
+            if (Screens.ScreenFromWindow(this) is { } sc)
+            {
+                data.MonitorBounds!.DeviceName = sc.DisplayName;
+                data.MonitorBounds.X = sc.Bounds.X;
+                data.MonitorBounds.Y = sc.Bounds.Y;
+            }
+            data.MonitorBounds!.DpiScale = RenderScaling;
+
+            Tracker.SetCalibrationLive(data);   // in memory only until the gesture checks finish
+            await RunValidationPhaseAsync();
+            if (_cancelled) return;
+
+            Tracker.ApplyCalibration(data);
+            _saved = true;
+            CoreSettings.Current.WebcamCalibrated = true;
+            CoreSettings.Current.WebcamCalibrationMode = "SixteenPoint";
+            CoreSettings.Save();
+            WebcamQuickRecalWindow.Play("result.mp3", 0.6f);   // CalibrationSoundService.CalibrationVerified
+            ShowVerifyPanel();
+        }
+
+        private async Task RunValidationPhaseAsync()
+        {
+            _dotCanvas.IsVisible = false;
+            _validationPanel.IsVisible = true;
+            _txtTitle.Text = "Verifying calibration";
+            _txtStatus.Text = "Follow the prompts to confirm the system can read your blinks and mouth.";
+            _txtProgress.Text = "";
+            _txtValidationCue.Text = "";
+            _txtValidationPrompt.Text = "Get ready…";
+            _txtValidationDetail.Text = "A couple of quick gesture checks and you're done.";
+            _txtValidationAttempt.Text = "";
+            await Delay(1400);
+            if (_cancelled) return;
+
+            await RunGestureCheckAsync("👁", "Blink a couple of times", 2, h => Tracker.OnBlink += h, h => Tracker.OnBlink -= h);
+            if (_cancelled) return;
+            await RunGestureCheckAsync("😮", "Open your mouth wide", 1, null, null);
+            if (_cancelled) return;
+            _txtValidationDetail.Text = "Good — close, and once more in a moment…";
+            await Delay(1000);
+            if (_cancelled) return;
+            await RunGestureCheckAsync("😮", "Open your mouth wide again", 1, null, null);
+        }
+
+        /// <summary>WPF RunGestureCheckAsync + WaitFor*Async: up to 5 s for <paramref name="needed"/>
+        /// events, then advance either way. A null subscribe (no detector) just times out.</summary>
+        private async Task RunGestureCheckAsync(string cue, string prompt, int needed, Action<Action>? add, Action<Action>? remove)
+        {
+            const int TimeoutMs = 5000;
+            _txtValidationCue.Text = cue;
+            _txtValidationPrompt.Text = prompt;
+            _txtValidationDetail.Text = $"Detected: 0 / {needed}";
+            _txtValidationAttempt.Text = "";
+
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            int count = 0;
+            void Handler()
+            {
+                count++;
+                _txtValidationDetail.Text = $"Detected: {count} / {needed}";
+                if (count >= needed) tcs.TrySetResult(true);
+            }
+            add?.Invoke(Handler);
+            bool got;
+            try { got = await Task.WhenAny(tcs.Task, Delay(TimeoutMs)) == tcs.Task; }
+            finally { remove?.Invoke(Handler); }
+            if (_cancelled) return;
+
+            if (got)
+            {
+                WebcamQuickRecalWindow.Play("chime1.mp3", 0.45f);   // CalibrationSoundService.ValidationStepPass
+                var prevCue = _txtValidationCue.Text;
+                var prevColor = _txtValidationCue.Foreground;
+                _txtValidationCue.Text = "✓";
+                _txtValidationCue.Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0xE0, 0x80));
+                _txtValidationDetail.Text = "Detected.";
+                await Delay(700);
+                _txtValidationCue.Text = prevCue;
+                _txtValidationCue.Foreground = prevColor;
+            }
+            else
+            {
+                _txtValidationDetail.Text = "No worries — moving on.";
+                await Delay(700);
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
         //  Verify panel
         // ─────────────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Helper for callers: shows the dialog, re-opens automatically when the user clicks
-        /// Recalibrate on the verify panel. Returns the terminal result — true when calibration was
-        /// accepted, false when cancelled. Async because Avalonia's ShowDialog has no synchronous
-        /// form; the WPF original returned <c>bool?</c> directly.
-        /// </summary>
+        /// <summary>Shows the dialog, re-opening while the user asks to recalibrate; true when a
+        /// calibration was accepted. Opens on the calibrated monitor (WPF ApplyCalibrationScreenPlacement).</summary>
         public static async Task<bool?> ShowDialogWithRecalibrate(Window owner)
         {
             bool? final;
             while (true)
             {
                 var dlg = new WebcamCalibrationWindow();
-                // ponytail: needs App.ApplyCalibrationScreenPlacement to pick the monitor to open
-                // on (Screens.ScreenFromWindow(owner) / screen.Bounds on this head), wired when
-                // that helper moves to Core.
+                PlaceOnCalibratedScreen(dlg);
                 final = await dlg.ShowDialog<bool?>(owner);
                 if (!dlg.WantsRecalibrate) break;
             }
             return final;
         }
 
+        /// <summary>WPF App.ApplyCalibrationScreenPlacement: start on the monitor the last calibration
+        /// ran on (matched by pixel origin) so Maximized lands there; unknown monitor: leave it.</summary>
+        private static void PlaceOnCalibratedScreen(Window window)
+        {
+            if (Tracker.Calibration?.MonitorBounds is not { } mb || window.Screens is not { } screens) return;
+            if (screens.All.FirstOrDefault(s => s.Bounds.X == mb.X && s.Bounds.Y == mb.Y) is not { } sc) return;
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            window.Position = sc.Bounds.Position;
+        }
+
         private void BtnVerifyAccuracy_Click()
         {
-            // ponytail: needs App.GazeCursor.Show/Hide("calibration-verify") to actually draw the
-            // live gaze cursor, wired when the cursor service moves to Core. The 15s countdown is
-            // view-only and runs for real.
             _verifyCountdownSecondsLeft = 15;
             UpdateVerifyCountdownUi();
-
             if (_verifyCountdownTimer == null)
             {
                 _verifyCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -326,7 +458,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             _verifyCountdownTimer.Stop();
             _verifyCountdownTimer.Start();
-
             _btnVerifyAccuracy.IsEnabled = false;
         }
 
@@ -346,12 +477,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _verifyPanel.IsVisible = false;
             _shortcutHintBanner.IsVisible = false;
             _bubbleTestPanel.IsVisible = true;
-            // ponytail: needs App.Webcam's gaze stream + SetGazeAttractor and App.GazeCursor for
-            // RunBubbleTestAsync (dwell detection, residual capture, the FitAxisTrim fine-tune),
-            // wired when they move to Core. Placing the first bubble and its rings uses the real
-            // view code so the panel is not empty.
-            var centre = new Point(Bounds.Width / 2, Bounds.Height / 2);
-            MoveBubbleTo(centre);
+            MoveBubbleTo(new Point(Bounds.Width / 2, Bounds.Height / 2));
             UpdateRing(_testBubbleRingFg, 0.0);
         }
 
@@ -368,10 +494,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Close(true);
         }
 
-        /// <summary>
-        /// The tail of FinalizeCalibrationAsync: swap the dot UI for the verify panel. Reached
-        /// from the stubbed pipeline today; kept because it is pure view choreography.
-        /// </summary>
         private void ShowVerifyPanel()
         {
             _validationPanel.IsVisible = false;
@@ -380,23 +502,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _verifyPanel.IsVisible = true;
             _shortcutHintBanner.IsVisible = true;
             _completedOk = true;
-        }
-
-        /// <summary>
-        /// The prompt half of RunValidationPhaseAsync / RunGestureCheckAsync. The detection half
-        /// (WaitForBlinksAsync / WaitForMouthOpensAsync / WaitForTongueOutsAsync) is a stub.
-        /// </summary>
-        private void ShowValidationPrompt(string cue, string prompt, string detail, string attempt = "")
-        {
-            _dotCanvas.IsVisible = false;
-            _validationPanel.IsVisible = true;
-            _txtTitle.Text = "Verifying calibration";
-            _txtStatus.Text = "Follow the prompts to confirm the system can read your blinks and mouth.";
-            _txtProgress.Text = "";
-            _txtValidationCue.Text = cue;
-            _txtValidationPrompt.Text = prompt;
-            _txtValidationDetail.Text = detail;
-            _txtValidationAttempt.Text = attempt;
         }
 
         // ─────────────────────────────────────────────────────────────────────
