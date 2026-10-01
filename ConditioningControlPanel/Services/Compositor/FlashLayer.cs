@@ -391,6 +391,12 @@ public sealed class FlashLayer : BaseLayer
             }
 
             if (item.Deck is { } deck && item.Exit == null) StepDeck(item, deck, delta.TotalSeconds);
+            else if (item.DeckSparks is { } leftover)
+            {
+                // An exiting card's puff and dust still drift out instead of freezing in place.
+                if (!FlickerShatter.StepSparks(leftover, delta.TotalSeconds)) item.DeckSparks = null;
+                _dirty = true;
+            }
 
             if (item.Exit is { } exit)
             {
@@ -491,15 +497,17 @@ public sealed class FlashLayer : BaseLayer
             }
             // Super Flicker Deck: peek, lift, wobble and flip about the card's own centre.
             FlickerPose? pose = null;
-            if (item.Deck is { } deck && item.Exit == null)
+            if (item.Deck is { } deck)
             {
                 var p = FlickerDeck.Sample(deck, MotionFx.Level);
+                // Juice: an exiting card eases out of its pose rather than snapping to rest.
+                if (item.Exit is { } leaving) p = FlickerDeck.Settle(p, leaving.ElapsedSec);
                 pose = p;
                 var dx = (float)(item.DeckPeekDx * p.PeekFrac * rect.Width);
                 var dy = (float)(item.DeckPeekDy * p.PeekFrac * rect.Width + p.RiseFrac * rect.Height);
                 canvas.Translate(rect.MidX + dx, rect.MidY + dy);
                 if (p.WobbleRad != 0) canvas.RotateRadians((float)p.WobbleRad);
-                canvas.Scale((float)(p.ScaleX * p.Scale), (float)p.Scale);
+                canvas.Scale((float)(p.ScaleX * p.Scale), (float)(p.Scale * p.SquashY));
                 canvas.Translate(-rect.MidX, -rect.MidY);
             }
 
@@ -610,8 +618,9 @@ public sealed class FlashLayer : BaseLayer
                     canvas.DrawRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), _fillPaint);
                 }
             }
+            if (pose is { Sheen: > 0.004 } lit2) DrawDeckSheen(canvas, fit, lit2.Sheen, lit2.SheenPos, alpha);
             if (pose is { Crack: > 0 } cracked && item.Deck is { } crackDeck)
-                DrawCracks(canvas, crackDeck, fit, cracked.Crack, alpha);
+                DrawCracks(canvas, crackDeck, fit, cracked.Crack, cracked.CrackReach, alpha);
             if (item.DodgeUntilMs > 0 && item.Exit == null) DrawDodgeRing(canvas, fit, alpha, item.DodgeUntilMs);
             canvas.RestoreToCount(saves);
             if (item.Exit != null) DrawSparks(canvas, item);
@@ -866,7 +875,7 @@ public sealed class FlashLayer : BaseLayer
             item.LastFrameIndex = -1;
             if (old != null)
                 foreach (var f in old) { try { f.Dispose(); } catch { } }
-            item.DeckSparks = FlickerShatter.SwapSparks(MotionFx.Level, _deckRng);
+            item.DeckSparks = SwapPuff(item, deck);
             item.OnDeckSwap?.Invoke(item);
         }
         if (item.DeckSparks is { } puff)
@@ -898,16 +907,73 @@ public sealed class FlashLayer : BaseLayer
         _fillPaint.MaskFilter = null;
     }
 
-    /// <summary>Cracks over the picture: a dark under-stroke and a white line, faint one flip early.</summary>
-    private void DrawCracks(SKCanvas canvas, FlickerDeckState deck, SKRect fit, double amount, byte alpha)
+    /// <summary>
+    /// Juice: the flip's puff, plus dust shaken out of the crack when this flip deepens it. The
+    /// dust leaves from the cracks' impact point, measured on the card's padded picture box.
+    /// </summary>
+    private FlickerSpark[] SwapPuff(FlashItem item, FlickerDeckState deck)
+    {
+        var motes = FlickerDeck.CrackMotes(deck.Flips, deck.BreakAt, MotionFx.Level);
+        if (motes <= 0 || deck.Cracks.Length == 0 || deck.Cracks[0].Length < 2)
+            return FlickerShatter.SwapSparks(MotionFx.Level, _deckRng);
+        double w = Math.Max(1, item.W - 2 * item.PaddingPx), h = Math.Max(1, item.H - 2 * item.PaddingPx);
+        return FlickerShatter.SwapSparks(MotionFx.Level, _deckRng, motes,
+            (deck.Cracks[0][0] - 0.5) * w, (deck.Cracks[0][1] - 0.5) * h);
+    }
+
+    // Juice: the flip's lit band, one unit-space gradient built once and mapped onto the face each frame.
+    private readonly SKPaint _sheenPaint = new()
+    {
+        IsAntialias = true,
+        Shader = SKShader.CreateLinearGradient(new SKPoint(0, 0), new SKPoint(1, 0),
+            new[] { new SKColor(255, 236, 246, 0), new SKColor(255, 236, 246, 255), new SKColor(255, 236, 246, 0) },
+            new[] { 0f, 0.5f, 1f }, SKShaderTileMode.Clamp),
+    };
+
+    /// <summary>
+    /// A thin lit band sweeping the face through the flip, slanted, tinted pale pink and low (never a
+    /// white flash). Drawn in the card's own space, so it narrows with the flip like the face does.
+    /// </summary>
+    private void DrawDeckSheen(SKCanvas canvas, SKRect fit, double sheen, double pos, byte alpha)
+    {
+        var a = (byte)Math.Clamp(sheen * alpha, 0, 255);
+        if (a == 0) return;
+        int saves = canvas.Save();
+        canvas.ClipRect(fit, antialias: true);
+        const float Slant = 0.12f;   // the band leans back by this share of the height
+        var bw = fit.Width * 0.22f;
+        var lean = Slant * fit.Height;
+        // Starts fully off the left edge and leaves fully off the right one, slant included.
+        var x = fit.Left - bw + (float)pos * (fit.Width + bw + lean);
+        canvas.Translate(x, fit.Top);
+        canvas.Skew(-Slant, 0);
+        canvas.Scale(bw, fit.Height);
+        _sheenPaint.Color = new SKColor(255, 255, 255, a);
+        canvas.DrawRect(0, 0, 1, 1, _sheenPaint);
+        canvas.RestoreToCount(saves);
+    }
+
+    /// <summary>
+    /// Cracks over the picture: a dark under-stroke and a white line, faint one flip early. Juice:
+    /// <paramref name="reach"/> below 1 draws each hairline only part of its way out from the impact.
+    /// </summary>
+    private void DrawCracks(SKCanvas canvas, FlickerDeckState deck, SKRect fit, double amount, double reach, byte alpha)
     {
         _deckPath.Rewind();
         foreach (var line in deck.Cracks)
         {
             if (line.Length < 4) continue;
+            var segs = line.Length / 2 - 1;
+            var run = Math.Clamp(reach, 0, 1) * segs;
+            if (run <= 0) continue;
             _deckPath.MoveTo(fit.Left + (float)(line[0] * fit.Width), fit.Top + (float)(line[1] * fit.Height));
-            for (int k = 2; k + 1 < line.Length; k += 2)
-                _deckPath.LineTo(fit.Left + (float)(line[k] * fit.Width), fit.Top + (float)(line[k + 1] * fit.Height));
+            for (int k = 1; k <= segs && k - 1 < run; k++)
+            {
+                var f = Math.Min(1, run - (k - 1));
+                var px = line[k * 2 - 2] + (line[k * 2] - line[k * 2 - 2]) * f;
+                var py = line[k * 2 - 1] + (line[k * 2 + 1] - line[k * 2 - 1]) * f;
+                _deckPath.LineTo(fit.Left + (float)(px * fit.Width), fit.Top + (float)(py * fit.Height));
+            }
         }
         // Hairlines: a barely-there under-stroke and a thin pale line, so a crack reads as a flaw, not a drawing.
         var w = Math.Max(0.8f, Math.Min(fit.Width, fit.Height) * 0.0028f);
@@ -921,6 +987,7 @@ public sealed class FlashLayer : BaseLayer
 
     private static readonly SKColor SparkWhite = new(0xFF, 0xFF, 0xFF);
     private static readonly SKColor SparkDeckPink = new(0xFF, 0x8F, 0xD0);
+    private static readonly SKColor SparkDust = new(0xE8, 0xDC, 0xE4);
 
     /// <summary>The flip's puff: additive white dots about the card's centre, unaffected by its pose.</summary>
     private void DrawDeckPuff(SKCanvas canvas, FlickerSpark[] sparks, float cx, float cy, double opacity)
@@ -931,6 +998,15 @@ public sealed class FlashLayer : BaseLayer
         {
             var sa = sp.Alpha * opacity;
             if (sa <= 0) continue;
+            if (sp.Mote)
+            {
+                // Crack dust: small, dim, painted over (never added), so it reads as grit, not light.
+                _fillPaint.BlendMode = SKBlendMode.SrcOver;
+                _fillPaint.Color = SparkDust.WithAlpha((byte)Math.Clamp(sa * 0.55 * 255, 0, 255));
+                canvas.DrawCircle((float)(cx + sp.X), (float)(cy + sp.Y), (float)(0.8 + 0.7 * sp.Alpha), _fillPaint);
+                _fillPaint.BlendMode = SKBlendMode.Plus;
+                continue;
+            }
             _fillPaint.Color = SparkWhite.WithAlpha((byte)Math.Clamp(sa * 255, 0, 255));
             canvas.DrawCircle((float)(cx + sp.X), (float)(cy + sp.Y), (float)(1 + 2.2 * sp.Alpha), _fillPaint);
         }
