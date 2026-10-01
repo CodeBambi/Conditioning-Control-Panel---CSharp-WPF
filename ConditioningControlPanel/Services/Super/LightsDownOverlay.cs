@@ -63,6 +63,11 @@ namespace ConditioningControlPanel.Services.Super
         private readonly SolidColorBrush[] _moteBrush = new SolidColorBrush[MaxMotes];
         private readonly double[] _mx = new double[MaxMotes], _my = new double[MaxMotes], _mvx = new double[MaxMotes], _mvy = new double[MaxMotes], _mAge = new double[MaxMotes], _mLife = new double[MaxMotes];
         private readonly bool[] _mBurst = new bool[MaxMotes];
+        private readonly double[] _mPhase = new double[MaxMotes];
+        // The iris leans toward the pointer on a spring (local DIPs, offset from the picture centre).
+        private double _leanX, _leanVX, _leanY, _leanVY;
+        private double _ptrX = double.NaN, _ptrY = double.NaN;
+        private double _picCx, _picCy;
         private readonly Random _rng = new();
         private readonly List<Rect> _cutRects = new();
         private bool _cutDirty;
@@ -246,7 +251,8 @@ namespace ConditioningControlPanel.Services.Super
             _frameSwell.CenterX = cx; _frameSwell.CenterY = cy;
             ((TranslateTransform)((TransformGroup)_rays.RenderTransform).Children[1]).X = cx;
             ((TranslateTransform)((TransformGroup)_rays.RenderTransform).Children[1]).Y = cy;
-            _apMove.X = cx; _apMove.Y = cy;
+            _apMove.X = cx + _leanX; _apMove.Y = cy + _leanY;
+            _picCx = cx; _picCy = cy;
             foreach (var r in new[] { _glow, _run, _splitA, _splitB })
             {
                 r.Width = w; r.Height = h;
@@ -263,6 +269,18 @@ namespace ConditioningControlPanel.Services.Super
         /// <summary>Is this physical-pixel point on the picture (unswollen)?</summary>
         public bool PictureContainsPx(double px, double py)
             => LightsDownMath.Inside((px - _bounds.X) / _dpi, (py - _bounds.Y) / _dpi, _pic.X, _pic.Y, _pic.Width, _pic.Height);
+
+        /// <summary>The point the iris leans toward (cursor, or gaze when it decides), physical pixels.
+        /// <paramref name="known"/> false lets the iris settle back on the picture centre.</summary>
+        public void SetPointerPx(double px, double py, bool known)
+        {
+            if (!known) { _ptrX = _ptrY = double.NaN; return; }
+            _ptrX = (px - _bounds.X) / _dpi;
+            _ptrY = (py - _bounds.Y) / _dpi;
+        }
+
+        /// <summary>Current iris lean from the picture centre, DIPs (tests).</summary>
+        internal (double X, double Y) LeanForTest => (_leanX, _leanY);
 
         /// <summary>Cut the live attention targets (desktop DIP rects) out of the dark. Rebuilt only on change.</summary>
         public void SetCutouts(List<Rect> desktopDips)
@@ -292,13 +310,27 @@ namespace ConditioningControlPanel.Services.Super
             double d = f.Depth;
             _dim.Opacity = Math.Clamp(f.DimAlpha, 0, 1);
 
+            // A frame built by hand (tests, the first paint) carries 0 for the juice multipliers.
+            double breath = f.ApertureBreath > 0 ? f.ApertureBreath : 1;
+            double pulse = f.GlowPulse > 0 ? f.GlowPulse : 1;
             for (int i = 0; i < _aperture.Length; i++)
             {
                 double r = LightsDownMath.ApertureRadius(_w, _h, Math.Max(_pic.Width, _pic.Height), f.ApertureClose, i);
-                _apScale[i].ScaleX = _apScale[i].ScaleY = r;
+                _apScale[i].ScaleX = _apScale[i].ScaleY = r * breath;
                 _aperture[i].Opacity = f.ApertureAlpha;
             }
             _apRotate.Angle = f.ApertureRotation * 180 / Math.PI;
+
+            // The iris eases toward the pointer: a second of lag and one small overshoot.
+            var (tx, ty) = double.IsNaN(_ptrX) ? (0.0, 0.0) : LightsDownMath.LeanTarget(_ptrX, _ptrY, _picCx, _picCy, f.LeanGain);
+            if (f.LeanGain <= 0) { _leanX = _leanY = _leanVX = _leanVY = 0; }
+            else
+            {
+                LightsDownMath.LeanStep(ref _leanX, ref _leanVX, tx, dt);
+                LightsDownMath.LeanStep(ref _leanY, ref _leanVY, ty, dt);
+            }
+            _apMove.X = _picCx + _leanX;
+            _apMove.Y = _picCy + _leanY;
 
             var (lr, lg, lb) = LightsDownMath.Hsl(f.Hue, 0.9, 0.7);
             _raysRotate.Angle = f.RayAngle * 180 / Math.PI;
@@ -324,11 +356,12 @@ namespace ConditioningControlPanel.Services.Super
 
             var (gr, gg, gb) = LightsDownMath.Hsl(f.Hue, 0.95, 0.62);
             _glowBrush.Color = Color.FromRgb(gr, gg, gb);
-            _glow.Opacity = Math.Clamp(f.GlowAlpha, 0, 1);
+            double flare = Math.Clamp(f.LockFlare, 0, 1);
+            _glow.Opacity = Math.Clamp(f.GlowAlpha * pulse * (1 + LightsDownMath.FlareGlow * flare), 0, 1);
             if (_glowFx != null)
             {
                 _glowFx.Color = _glowBrush.Color;
-                _glowFx.BlurRadius = Math.Min(f.GlowBlur, _glowCap);
+                _glowFx.BlurRadius = Math.Min(f.GlowBlur * (1 + LightsDownMath.FlareBlur * flare), _glowCap);
             }
             else _glow.StrokeThickness = 3 + 8 * d;
 
@@ -375,7 +408,8 @@ namespace ConditioningControlPanel.Services.Super
                 double a = _mBurst[i] ? 1 - _mAge[i] / _mLife[i] : LightsDownMath.MoteAlpha(_mAge[i], f.Depth);
                 var c = _moteBrush[i].Color;
                 _moteBrush[i].Color = Color.FromArgb((byte)Math.Clamp(a * 255, 0, 255), c.R, c.G, c.B);
-                _moteAt[i].X = _mx[i];
+                // Dust drifts side to side as it rises, each mote on its own phase; bursts fly straight.
+                _moteAt[i].X = _mx[i] + (_mBurst[i] ? 0 : LightsDownMath.MoteSway(_mAge[i], _mPhase[i], speed));
                 _moteAt[i].Y = _my[i];
             }
         }
@@ -392,6 +426,9 @@ namespace ConditioningControlPanel.Services.Super
             {
                 if (_mLife[i] > 0) continue;
                 _mx[i] = x; _my[i] = y; _mvx[i] = vx; _mvy[i] = vy; _mAge[i] = 0; _mLife[i] = life; _mBurst[i] = burst;
+                _mPhase[i] = _rng.NextDouble() * Math.PI * 2;
+                double size = burst ? 2.8 : LightsDownMath.MoteSize(_rng.NextDouble());
+                _motes[i].Width = _motes[i].Height = size;
                 _moteBrush[i].Color = burst ? (y <= _pic.Y + 1 ? Color.FromArgb(255, 255, 208, 240) : Color.FromArgb(255, 208, 240, 255)) : Color.FromArgb(0, 255, 215, 240);
                 _motes[i].Visibility = Visibility.Visible;
                 return;
