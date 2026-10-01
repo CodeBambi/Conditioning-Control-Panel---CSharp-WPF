@@ -72,6 +72,21 @@ public sealed class FlashLayer : BaseLayer
         /// </summary>
         public FlashExitState? Exit;
 
+        /// <summary>Super Flicker Deck: non-null while this flash is a flippable card.</summary>
+        public FlickerDeckState? Deck;
+        /// <summary>Super Flicker Deck: the final click's break. Owns the item until done, like Shatter.</summary>
+        public FlickerShatterState? DeckShatter;
+        /// <summary>The next picture, converted and waiting for the flip's edge. Owned by the layer.</summary>
+        internal SKImage[]? DeckPendingFrames;
+        /// <summary>Raised in the air (bring the window forward too), swapped, or gave up waiting.</summary>
+        internal Action<FlashItem>? OnDeckRaise, OnDeckSwap, OnDeckGaveUp;
+        /// <summary>Unit direction a buried card peeks along, set while hovered.</summary>
+        internal float DeckPeekDx, DeckPeekDy;
+        internal SKMaskFilter? DeckShadowCache;
+        /// <summary>The white puff at a flip's edge as the new picture lands. Null once it has died.</summary>
+        internal FlickerSpark[]? DeckSparks;
+        internal float DeckShadowSigma = -1f;
+
         // Glow (lucky / sparkle-boost tiers). Sigma is the WPF DropShadow blur radius / 3
         // (same conversion as the brain-drain layer). LuckyPulse replicates the 400ms
         // auto-reverse radius x1.6 / opacity 0.7->1.0 forever-animation.
@@ -98,7 +113,7 @@ public sealed class FlashLayer : BaseLayer
 
         internal void SetClipFrame(System.Windows.Media.Imaging.BitmapSource source)
         {
-            if (Shatter != null || Frames == null) return;
+            if (Shatter != null || DeckShatter != null || Frames == null) return;
             var next = SkiaWpfInterop.ToSKImage(source);
             foreach (var old in Frames) old.Dispose();
             Frames = new[] { next };
@@ -117,6 +132,20 @@ public sealed class FlashLayer : BaseLayer
             }
             BlurCache?.Dispose();
             BlurCache = null;
+            DropDeckPending();
+            DeckShadowCache?.Dispose();
+            DeckShadowCache = null;
+        }
+
+        internal void DropDeckPending()
+        {
+            var pending = DeckPendingFrames;
+            DeckPendingFrames = null;
+            if (pending == null) return;
+            foreach (var f in pending)
+            {
+                try { f.Dispose(); } catch { }
+            }
         }
     }
 
@@ -125,6 +154,9 @@ public sealed class FlashLayer : BaseLayer
     private readonly SKPaint _imagePaint = new() { FilterQuality = SKFilterQuality.Low };
     private readonly SKPaint _fillPaint = new();
     private readonly SKPaint _ringPaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round };
+    // Super Flicker Deck: one reused path for cracks and shard clips, one rng for the breaks.
+    private readonly SKPath _deckPath = new();
+    private readonly Random _deckRng = new();
 
     public FlashLayer(CompositorEngine engine) : base(engine) { }
 
@@ -212,6 +244,73 @@ public sealed class FlashLayer : BaseLayer
         SetActive(true);
     }
 
+    /// <summary>
+    /// Super Flicker Deck: draw this item above every other flash. Called while the card is
+    /// already in the air, never on the click frame.
+    /// </summary>
+    public void BringToFront(FlashItem item)
+    {
+        var at = _items.IndexOf(item);
+        if (at < 0 || at == _items.Count - 1) return;
+        _items.RemoveAt(at);
+        _items.Add(item);
+        _dirty = true;
+    }
+
+    /// <summary>
+    /// Super Flicker Deck: the final click. Breaks the picture box as it is drawn right now into
+    /// triangles (FlickerShatter) and keeps the frames until the last shard is gone. Off motion
+    /// makes no shards and removes the item: the plain cut.
+    /// </summary>
+    public void BeginDeckShatter(FlashItem item, MotionLevel level)
+    {
+        var frames = item.Frames;
+        if (frames is not { Length: > 0 }) { Remove(item); return; }
+        var image = frames[Math.Clamp(item.FrameIndex, 0, frames.Length - 1)];
+        var rect = new SKRect(item.X, item.Y, item.X + item.W, item.Y + item.H);
+        var inner = new SKRect(rect.Left + item.PaddingPx, rect.Top + item.PaddingPx,
+            rect.Right - item.PaddingPx, rect.Bottom - item.PaddingPx);
+        var fit = UniformFit(image.Width, image.Height, inner);
+        var rot = item.Deck != null ? FlickerDeck.Sample(item.Deck, level).WobbleRad : 0;
+        var state = FlickerShatter.Create(fit.MidX, fit.MidY, fit.Width, fit.Height, rot, level, _deckRng);
+        if (state.Done) { Remove(item); return; }
+        item.Deck = null;
+        item.DropDeckPending();
+        item.DeckShatter = state;
+        _dirty = true;
+        SetActive(true);
+    }
+
+    /// <summary>
+    /// Super Flicker Deck: drop every break still falling. Panic and Stop call this after they
+    /// have closed the windows, because a break has no window left to close.
+    /// </summary>
+    public void ClearDeckBreaks()
+    {
+        for (int i = _items.Count - 1; i >= 0; i--)
+        {
+            var item = _items[i];
+            if (item.DeckShatter == null) continue;
+            item.DeckShatter = null;
+            item.ReleaseFrames();
+            _items.RemoveAt(i);
+            _dirty = true;
+        }
+        if (_items.Count == 0) SetActive(false);
+    }
+
+    /// <summary>Super Flicker Deck switched off: every card goes back to a plain flash where it is.</summary>
+    public void ClearDecks()
+    {
+        foreach (var item in _items)
+        {
+            if (item.Deck == null) continue;
+            item.Deck = null;
+            item.DropDeckPending();
+            _dirty = true;
+        }
+    }
+
     /// <summary>Remove an item and dispose its frames. Idempotent.</summary>
     public void Remove(FlashItem item)
     {
@@ -240,6 +339,7 @@ public sealed class FlashLayer : BaseLayer
 
     public override void Update(TimeSpan delta)
     {
+        UpdateDeckHover();
         // Backwards: a finished shatter drops its item right here, on the existing flash tick, so
         // the break needs no timer of its own.
         for (int i = _items.Count - 1; i >= 0; i--)
@@ -275,6 +375,22 @@ public sealed class FlashLayer : BaseLayer
                 // ramp, no GIF advance (its FlashWindow is already gone and writes nothing).
                 continue;
             }
+
+            if (item.DeckShatter is { } deckBreak)
+            {
+                if (FlickerShatter.Step(deckBreak, delta.TotalSeconds)) _dirty = true;
+                if (deckBreak.Done)
+                {
+                    item.DeckShatter = null;
+                    item.ReleaseFrames();
+                    _items.RemoveAt(i);
+                    _dirty = true;
+                    if (_items.Count == 0) SetActive(false);
+                }
+                continue;
+            }
+
+            if (item.Deck is { } deck && item.Exit == null) StepDeck(item, deck, delta.TotalSeconds);
 
             if (item.Exit is { } exit)
             {
@@ -337,6 +453,12 @@ public sealed class FlashLayer : BaseLayer
                 continue;
             }
 
+            if (item.DeckShatter is { } deckBreak)
+            {
+                DrawDeckShards(canvas, item, deckBreak, frames[Math.Clamp(item.FrameIndex, 0, frames.Length - 1)]);
+                continue;
+            }
+
             // An exit can grow past its box (a swell, a melt), so it skips the AABB cull.
             if (item.Exit == null && !rect.IntersectsWith(boundsPx)) continue;   // cull to this monitor (the AABB)
 
@@ -367,6 +489,20 @@ public sealed class FlashLayer : BaseLayer
                 canvas.Scale(s, s);
                 canvas.Translate(-rect.MidX, -rect.MidY);
             }
+            // Super Flicker Deck: peek, lift, wobble and flip about the card's own centre.
+            FlickerPose? pose = null;
+            if (item.Deck is { } deck && item.Exit == null)
+            {
+                var p = FlickerDeck.Sample(deck, MotionFx.Level);
+                pose = p;
+                var dx = (float)(item.DeckPeekDx * p.PeekFrac * rect.Width);
+                var dy = (float)(item.DeckPeekDy * p.PeekFrac * rect.Width + p.RiseFrac * rect.Height);
+                canvas.Translate(rect.MidX + dx, rect.MidY + dy);
+                if (p.WobbleRad != 0) canvas.RotateRadians((float)p.WobbleRad);
+                canvas.Scale((float)(p.ScaleX * p.Scale), (float)p.Scale);
+                canvas.Translate(-rect.MidX, -rect.MidY);
+            }
+
             // Leave animation: scale / spin / slide about the pivot the style asks for.
             if (exit is { } ex)
             {
@@ -400,6 +536,8 @@ public sealed class FlashLayer : BaseLayer
                 canvas.RestoreToCount(saves);
                 continue;
             }
+
+            if (pose is { } shadowPose) DrawDeckShadow(canvas, item, fit, shadowPose.Lift, alpha);
 
             if (item.HasGlow)
             {
@@ -472,9 +610,12 @@ public sealed class FlashLayer : BaseLayer
                     canvas.DrawRoundRect(new SKRoundRect(fit, item.CornerRadiusPx), _fillPaint);
                 }
             }
+            if (pose is { Crack: > 0 } cracked && item.Deck is { } crackDeck)
+                DrawCracks(canvas, crackDeck, fit, cracked.Crack, alpha);
             if (item.DodgeUntilMs > 0 && item.Exit == null) DrawDodgeRing(canvas, fit, alpha, item.DodgeUntilMs);
             canvas.RestoreToCount(saves);
             if (item.Exit != null) DrawSparks(canvas, item);
+            if (item.DeckSparks != null && item.Deck != null) DrawDeckPuff(canvas, item.DeckSparks, rect.MidX, rect.MidY, item.Opacity);
         }
     }
 
@@ -636,6 +777,211 @@ public sealed class FlashLayer : BaseLayer
         }
         canvas.RestoreToCount(saves);
     }
+
+    #region Super Flicker Deck
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct CursorPoint { public int X, Y; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out CursorPoint pt);
+
+    /// <summary>
+    /// Which card the cursor is over, and whether it sits under another one. Only a buried card
+    /// peeks: it slides out from the middle of the cluster it is in. One cursor read per tick, and
+    /// none at all while no flash is a card.
+    /// </summary>
+    private void UpdateDeckHover()
+    {
+        var anyDeck = false;
+        foreach (var it in _items) if (it.Deck != null) { anyDeck = true; break; }
+        if (!anyDeck) return;
+
+        FlashItem? top = null;
+        if (GetCursorPos(out var cur))
+        {
+            for (int i = _items.Count - 1; i >= 0; i--)
+            {
+                var it = _items[i];
+                if (!Live(it) || it.Opacity <= 0) continue;
+                if (cur.X >= it.X && cur.X <= it.X + it.W && cur.Y >= it.Y && cur.Y <= it.Y + it.H) { top = it; break; }
+            }
+        }
+
+        foreach (var it in _items)
+        {
+            if (it.Deck == null) continue;
+            var hover = false;
+            if (ReferenceEquals(it, top))
+            {
+                // Buried = something drawn above it overlaps it. The cluster is every live flash
+                // overlapping it, itself included.
+                var at = _items.IndexOf(it);
+                double sx = 0, sy = 0;
+                int n = 0;
+                var buried = false;
+                for (int j = 0; j < _items.Count; j++)
+                {
+                    var o = _items[j];
+                    if (!Live(o)) continue;
+                    var self = ReferenceEquals(o, it);
+                    if (!self && !Overlaps(o, it)) continue;
+                    if (j > at && !self) buried = true;
+                    sx += o.X + o.W / 2;
+                    sy += o.Y + o.H / 2;
+                    n++;
+                }
+                if (buried && n > 1)
+                {
+                    hover = true;
+                    var (dx, dy) = FlickerDeck.PeekDirection(it.X + it.W / 2, it.Y + it.H / 2, sx / n, sy / n);
+                    it.DeckPeekDx = (float)dx;
+                    it.DeckPeekDy = (float)dy;
+                }
+            }
+            if (it.Deck.Hover != hover) { it.Deck.Hover = hover; _dirty = true; }
+        }
+    }
+
+    private static bool Live(FlashItem it) => it.Shatter == null && it.Exit == null && it.DeckShatter == null;
+
+    private static bool Overlaps(FlashItem a, FlashItem b)
+        => a.X < b.X + b.W && b.X < a.X + a.W && a.Y < b.Y + b.H && b.Y < a.Y + a.H;
+
+    /// <summary>Step one card and act on what the step says: raise it, swap its picture, or give up.</summary>
+    private void StepDeck(FlashItem item, FlickerDeckState deck, double dt)
+    {
+        var ev = FlickerDeck.Step(deck, dt, item.DeckPendingFrames != null, MotionFx.Level);
+        if ((ev & FlickerEvents.Raise) != 0)
+        {
+            BringToFront(item);
+            item.OnDeckRaise?.Invoke(item);
+        }
+        if ((ev & FlickerEvents.Swap) != 0 && item.DeckPendingFrames is { Length: > 0 } next)
+        {
+            var old = item.Frames;
+            item.Frames = next;
+            item.DeckPendingFrames = null;
+            item.FrameIndex = 0;
+            item.LastFrameIndex = -1;
+            if (old != null)
+                foreach (var f in old) { try { f.Dispose(); } catch { } }
+            item.DeckSparks = FlickerShatter.SwapSparks(MotionFx.Level, _deckRng);
+            item.OnDeckSwap?.Invoke(item);
+        }
+        if (item.DeckSparks is { } puff)
+        {
+            if (FlickerShatter.StepSparks(puff, dt)) _dirty = true;
+            else { item.DeckSparks = null; _dirty = true; }
+        }
+        if ((ev & FlickerEvents.GaveUp) != 0) item.OnDeckGaveUp?.Invoke(item);
+        if (ev != FlickerEvents.None || (MotionFx.Level != MotionLevel.Off && FlickerDeck.Animating(deck)))
+            _dirty = true;
+    }
+
+    /// <summary>The card's shadow grows and drops as it lifts (mockup: blur 8 + 24 lift, offset 3 + 12 lift).</summary>
+    private void DrawDeckShadow(SKCanvas canvas, FlashItem item, SKRect fit, double lift, byte alpha)
+    {
+        var sigma = MathF.Round((float)(4 + 12 * lift) * 2f) / 2f;
+        if (item.DeckShadowCache == null || Math.Abs(sigma - item.DeckShadowSigma) > 0.01f)
+        {
+            item.DeckShadowCache?.Dispose();
+            item.DeckShadowCache = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Math.Max(0.5f, sigma));
+            item.DeckShadowSigma = sigma;
+        }
+        _fillPaint.MaskFilter = item.DeckShadowCache;
+        _fillPaint.Color = new SKColor(0, 0, 0, (byte)(0.65 * alpha));
+        var off = (float)(3 + 12 * lift);
+        // The rect overload: no native SKRoundRect allocated every frame per card.
+        canvas.DrawRoundRect(new SKRect(fit.Left, fit.Top + off, fit.Right, fit.Bottom + off),
+            item.CornerRadiusPx, item.CornerRadiusPx, _fillPaint);
+        _fillPaint.MaskFilter = null;
+    }
+
+    /// <summary>Cracks over the picture: a dark under-stroke and a white line, faint one flip early.</summary>
+    private void DrawCracks(SKCanvas canvas, FlickerDeckState deck, SKRect fit, double amount, byte alpha)
+    {
+        _deckPath.Rewind();
+        foreach (var line in deck.Cracks)
+        {
+            if (line.Length < 4) continue;
+            _deckPath.MoveTo(fit.Left + (float)(line[0] * fit.Width), fit.Top + (float)(line[1] * fit.Height));
+            for (int k = 2; k + 1 < line.Length; k += 2)
+                _deckPath.LineTo(fit.Left + (float)(line[k] * fit.Width), fit.Top + (float)(line[k + 1] * fit.Height));
+        }
+        // Hairlines: a barely-there under-stroke and a thin pale line, so a crack reads as a flaw, not a drawing.
+        var w = Math.Max(0.8f, Math.Min(fit.Width, fit.Height) * 0.0028f);
+        _ringPaint.StrokeWidth = w * 1.8f;
+        _ringPaint.Color = new SKColor(0, 0, 0, (byte)(0.22 * amount * alpha));
+        canvas.DrawPath(_deckPath, _ringPaint);
+        _ringPaint.StrokeWidth = w;
+        _ringPaint.Color = new SKColor(255, 255, 255, (byte)(0.55 * amount * alpha));
+        canvas.DrawPath(_deckPath, _ringPaint);
+    }
+
+    private static readonly SKColor SparkWhite = new(0xFF, 0xFF, 0xFF);
+    private static readonly SKColor SparkDeckPink = new(0xFF, 0x8F, 0xD0);
+
+    /// <summary>The flip's puff: additive white dots about the card's centre, unaffected by its pose.</summary>
+    private void DrawDeckPuff(SKCanvas canvas, FlickerSpark[] sparks, float cx, float cy, double opacity)
+    {
+        _fillPaint.MaskFilter = null;
+        _fillPaint.BlendMode = SKBlendMode.Plus;
+        foreach (var sp in sparks)
+        {
+            var sa = sp.Alpha * opacity;
+            if (sa <= 0) continue;
+            _fillPaint.Color = SparkWhite.WithAlpha((byte)Math.Clamp(sa * 255, 0, 255));
+            canvas.DrawCircle((float)(cx + sp.X), (float)(cy + sp.Y), (float)(1 + 2.2 * sp.Alpha), _fillPaint);
+        }
+        _fillPaint.BlendMode = SKBlendMode.SrcOver;
+    }
+
+    /// <summary>The final break: each triangle clips the picture as it was, thrown and tumbling, plus sparks.</summary>
+    private void DrawDeckShards(SKCanvas canvas, FlashItem item, FlickerShatterState s, SKImage image)
+    {
+        var shardAlpha = FlickerShatter.ShardAlpha(s.ElapsedSec) * item.Opacity;
+        float hw = (float)(s.W / 2), hh = (float)(s.H / 2);
+        if (shardAlpha > 0)
+        {
+            var a = (byte)Math.Clamp(shardAlpha * 255, 0, 255);
+            foreach (var sh in s.Shards)
+            {
+                float cx = (float)sh.Cx, cy = (float)sh.Cy;
+                int saves = canvas.Save();
+                canvas.Translate((float)(s.CenterX + sh.Cx + sh.X), (float)(s.CenterY + sh.Cy + sh.Y));
+                canvas.RotateRadians((float)(sh.AngleRad + s.Rot0));
+                _deckPath.Rewind();
+                _deckPath.MoveTo((float)(sh.U0 * s.W) - hw - cx, (float)(sh.V0 * s.H) - hh - cy);
+                _deckPath.LineTo((float)(sh.U1 * s.W) - hw - cx, (float)(sh.V1 * s.H) - hh - cy);
+                _deckPath.LineTo((float)(sh.U2 * s.W) - hw - cx, (float)(sh.V2 * s.H) - hh - cy);
+                _deckPath.Close();
+                canvas.ClipPath(_deckPath, antialias: true);
+                var dest = new SKRect(-hw - cx, -hh - cy, hw - cx, hh - cy);
+                if (!item.HasGlow)
+                {
+                    _fillPaint.Color = new SKColor(0, 0, 0, a);
+                    canvas.DrawRect(dest, _fillPaint);
+                }
+                _imagePaint.Color = new SKColor(255, 255, 255, a);
+                canvas.DrawImage(image, dest, _imagePaint);
+                canvas.RestoreToCount(saves);
+            }
+        }
+
+        _fillPaint.MaskFilter = null;
+        _fillPaint.BlendMode = SKBlendMode.Plus;
+        foreach (var sp in s.Sparks)
+        {
+            var sa = sp.Alpha * item.Opacity;
+            if (sa <= 0) continue;
+            _fillPaint.Color = (sp.Pink ? SparkDeckPink : SparkWhite).WithAlpha((byte)Math.Clamp(sa * 255, 0, 255));
+            canvas.DrawCircle((float)(s.CenterX + sp.X), (float)(s.CenterY + sp.Y), (float)(1 + 2.2 * sp.Alpha), _fillPaint);
+        }
+        _fillPaint.BlendMode = SKBlendMode.SrcOver;
+    }
+
+    #endregion
 
     /// <summary>Copy the motion's current axis-aligned bounds onto the item's bookkeeping rect.</summary>
     private static void SyncRect(FlashItem item, FlashMotionState m)

@@ -144,7 +144,7 @@ public class FlickerDeckTests
         var full = FlickerDeck.Sample(s, MotionLevel.Full).WobbleRad;
         Assert.Equal(full / 2, FlickerDeck.Sample(s, MotionLevel.Reduced).WobbleRad, 9);
         var off = FlickerDeck.Sample(s, MotionLevel.Off);
-        Assert.Equal(new FlickerPose(1, 1, 0, 0, 0, 0, 1.0), off);
+        Assert.Equal(new FlickerPose(1, 1, 0, 0, 0, 0, 0.6), off);
     }
 
     [Fact]
@@ -162,11 +162,11 @@ public class FlickerDeckTests
 
     [Theory]
     [InlineData(3, 0, 0.0)]
-    [InlineData(3, 1, 0.4)]
-    [InlineData(3, 2, 1.0)]
+    [InlineData(3, 1, 0.25)]
+    [InlineData(3, 2, 0.6)]
     [InlineData(5, 2, 0.0)]
-    [InlineData(5, 3, 0.4)]
-    [InlineData(5, 4, 1.0)]
+    [InlineData(5, 3, 0.25)]
+    [InlineData(5, 4, 0.6)]
     public void Cracks_show_on_the_flip_before_the_last_and_faintly_one_earlier(int breakAt, int flips, double crack)
         => Assert.Equal(crack, FlickerDeck.CrackAmount(flips, breakAt));
 
@@ -206,7 +206,36 @@ public class FlickerDeckTests
     public void Crack_lines_stay_inside_the_picture()
     {
         var lines = FlickerDeck.CrackLines(new Random(3));
-        Assert.InRange(lines.Length, 5, 7);
+        Assert.InRange(lines.Length, 3, 4);
         Assert.All(lines, l => Assert.All(l, v => Assert.InRange(v, 0, 1)));
+    }
+
+    [Fact]
+    public void No_picture_opens_on_the_old_face_at_the_edge_without_the_long_hold()
+    {
+        var s = Card();
+        Assert.Equal(FlickerPress.Flip, FlickerDeck.Press(s, MotionLevel.Full));
+        s.NoPicture = true;
+        double t = 0;
+        var gaveUp = -1.0;
+        int n = 0;
+        while (s.Busy && n++ < 10000)
+        {
+            var ev = FlickerDeck.Step(s, Dt, false, MotionLevel.Full);
+            t += Dt;
+            if ((ev & FlickerEvents.GaveUp) != 0) gaveUp = t;
+        }
+        Assert.InRange(gaveUp, 0, FlickerDeck.LiftLeadSec + FlickerDeck.FlipSec / 2 + 0.05);
+        Assert.False(s.Busy);
+        Assert.Equal(1, s.Flips);
+    }
+
+    [Fact]
+    public void A_new_press_clears_no_picture()
+    {
+        var s = Card();
+        s.NoPicture = true;
+        FlickerDeck.Press(s, MotionLevel.Full);
+        Assert.False(s.NoPicture);
     }
 }

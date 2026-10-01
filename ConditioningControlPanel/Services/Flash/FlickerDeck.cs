@@ -63,6 +63,12 @@ public sealed class FlickerDeckState
     public bool Hover;
     /// <summary>Crack polylines, normalised 0..1 over the picture box, rolled at spawn.</summary>
     public double[][] Cracks = Array.Empty<double[]>();
+    /// <summary>
+    /// The pool had nothing new to flip to: the flip opens on the old picture as soon as it
+    /// reaches its edge instead of holding edge-on for <see cref="FlickerDeck.MaxHoldSec"/>.
+    /// Reset on every press.
+    /// </summary>
+    public bool NoPicture;
 
     public bool Busy => LiftT >= 0;
 }
@@ -136,6 +142,7 @@ public static class FlickerDeck
         s.LiftT = 0;
         s.FlipT = -1;
         s.HoldSec = 0;
+        s.NoPicture = false;
         s.Raised = false;
         s.Swapped = false;
         if (level == MotionLevel.Off)
@@ -187,7 +194,7 @@ public static class FlickerDeck
             else
             {
                 s.HoldSec += dt;
-                if (s.HoldSec < MaxHoldSec) return ev;
+                if (s.HoldSec < MaxHoldSec && !s.NoPicture) return ev;
                 s.Swapped = true;
                 ev |= FlickerEvents.GaveUp;
             }
@@ -243,9 +250,9 @@ public static class FlickerDeck
         return w;
     }
 
-    /// <summary>Full cracks on the flip before the last, a faint set one earlier.</summary>
+    /// <summary>Subtle cracks on the flip before the last, a hint of them one earlier (0.6 and 0.25 of full).</summary>
     public static double CrackAmount(int flips, int breakAt)
-        => flips == breakAt - 1 ? 1.0 : flips == breakAt - 2 ? 0.4 : 0.0;
+        => flips == breakAt - 1 ? 0.6 : flips == breakAt - 2 ? 0.25 : 0.0;
 
     /// <summary>True when the card needs a redraw this frame even with nothing else moving.</summary>
     public static bool Animating(FlickerDeckState s)
@@ -269,7 +276,7 @@ public static class FlickerDeck
     /// </summary>
     public static double[][] CrackLines(Random rng)
     {
-        var n = 5 + rng.Next(3);
+        var n = 3 + rng.Next(2);
         double ix = 0.4 + rng.NextDouble() * 0.2, iy = 0.4 + rng.NextDouble() * 0.2;
         var lines = new double[n][];
         for (var i = 0; i < n; i++)
@@ -278,7 +285,7 @@ public static class FlickerDeck
             var segs = 3;
             var pts = new double[(segs + 1) * 2];
             pts[0] = ix; pts[1] = iy;
-            double x = ix, y = iy, len = 0.12 + rng.NextDouble() * 0.12;
+            double x = ix, y = iy, len = 0.07 + rng.NextDouble() * 0.07;
             for (var k = 1; k <= segs; k++)
             {
                 a += (rng.NextDouble() - 0.5) * 0.7;

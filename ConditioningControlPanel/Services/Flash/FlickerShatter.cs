@@ -121,17 +121,54 @@ public static class FlickerShatter
             sh.Y += sh.Vy * dt;
             sh.AngleRad += sh.SpinRadPerSec * dt;
         }
+        StepSparks(s.Sparks, dt);
+        if (s.ElapsedSec >= LifeSec) s.Done = true;
+        return true;
+    }
+
+    /// <summary>The small white puff at a flip's edge as the new picture lands (mockup: 10 sparks, 120 px/s, 0.5 s).</summary>
+    public const int SwapSparkCount = 10;
+    public const double SwapSparkSpeed = 120.0, SwapSparkLife = 0.5;
+
+    /// <summary>
+    /// The puff for one flip. Empty under Off motion; Reduced halves the speed. One small array
+    /// per flip, never per frame; the layer steps it with <see cref="StepSparks"/>.
+    /// </summary>
+    public static FlickerSpark[] SwapSparks(MotionLevel level, Random rng)
+    {
+        if (level == MotionLevel.Off) return Array.Empty<FlickerSpark>();
+        var speed = level == MotionLevel.Reduced ? 0.5 : 1.0;
+        var sparks = new FlickerSpark[SwapSparkCount];
+        for (var i = 0; i < sparks.Length; i++)
+        {
+            var a = rng.NextDouble() * Math.PI * 2;
+            var sp = SwapSparkSpeed * (0.3 + rng.NextDouble() * 0.7) * speed;
+            sparks[i] = new FlickerSpark
+            {
+                Vx = Math.Cos(a) * sp,
+                Vy = Math.Sin(a) * sp,
+                LifeSec = SwapSparkLife * (0.6 + rng.NextDouble() * 0.6),
+            };
+        }
+        return sparks;
+    }
+
+    /// <summary>Advance a spark set (damped like the mockup's particles). True while any is still visible.</summary>
+    public static bool StepSparks(FlickerSpark[] sparks, double dt)
+    {
+        if (dt <= 0) return false;
         var damp = Math.Max(0, 1 - dt * 2);
-        foreach (var sp in s.Sparks)
+        var alive = false;
+        foreach (var sp in sparks)
         {
             sp.T += dt;
             sp.X += sp.Vx * dt;
             sp.Y += sp.Vy * dt;
             sp.Vx *= damp;
             sp.Vy *= damp;
+            if (sp.T < sp.LifeSec) alive = true;
         }
-        if (s.ElapsedSec >= LifeSec) s.Done = true;
-        return true;
+        return alive;
     }
 
     /// <summary>Shards hold for half a second, then fade over the next 0.9 s.</summary>
