@@ -4,323 +4,281 @@ using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Super
 {
-    /// <summary>One word's ghost: where the card put it, and when it settled.</summary>
-    public sealed class AfterglowGhost
+    /// <summary>One word popped near the cursor. Lives a split second.</summary>
+    public sealed class AfterglowPop
     {
         public string Text = "";
-        /// <summary>Which screen placement it belongs to (the per-screen cap counts by this).</summary>
-        public int Screen;
         /// <summary>Centre of the word now, world (virtual-desktop) px.</summary>
-        public double X, Y;
-        /// <summary>Where the card showed it, and where the ghost drifts to rest.</summary>
-        public double FromX, FromY, RestX, RestY;
-        /// <summary>Seconds the drift from the card to the rest spot takes (0 = no drift).</summary>
-        public double DriftS;
-        /// <summary>The card's font size on this screen, px. Every distance scales off it.</summary>
-        public double FontPx;
-        /// <summary>The card's own opacity setting, 0..1. The ghost never outshines its card.</summary>
-        public double Opacity = 1;
-        /// <summary>Field clock (s) when the ghost takes over from the card. Before it, inert and unseen.</summary>
+        public double X, Y, Vx, Vy;
+        /// <summary>Field clock (s) at birth.</summary>
         public double Born;
-        /// <summary>Field clock (s) of the last wake.</summary>
-        public double Wake = -9;
+        /// <summary>Physical px per DIP on the screen it was born on. Every distance scales off it.</summary>
+        public double Scale = 1;
+        /// <summary>Glow colour: 0 pink, 1 mint, 2 lilac.</summary>
+        public int Hue;
+        /// <summary>Trail ring buffer: recent centres, newest at <see cref="TrailHead"/>.</summary>
+        public readonly double[] TrailX = new double[AfterglowField.TrailLen];
+        public readonly double[] TrailY = new double[AfterglowField.TrailLen];
+        public int TrailCount, TrailHead;
+        internal double TrailClock, PathAcc;
         /// <summary>The layer's draw cache (measured runs). Never read by the maths.</summary>
         public object? Payload;
+
+        /// <summary>The k-th echo back along the path (0 = the most recent one).</summary>
+        public void TrailAt(int k, out double x, out double y)
+        {
+            int i = ((TrailHead - k) % AfterglowField.TrailLen + AfterglowField.TrailLen) % AfterglowField.TrailLen;
+            x = TrailX[i]; y = TrailY[i];
+        }
+
+        internal void Record(double x, double y)
+        {
+            TrailHead = (TrailHead + 1) % AfterglowField.TrailLen;
+            TrailX[TrailHead] = x; TrailY[TrailHead] = y;
+            if (TrailCount < AfterglowField.TrailLen) TrailCount++;
+        }
     }
 
-    /// <summary>A spark or an ember. Struct, pooled: no allocation per frame.</summary>
+    /// <summary>A spark. Struct, pooled: no allocation per frame.</summary>
     public struct AfterglowParticle
     {
-        public double X, Y, Vx, Vy, T, Life, Unit;
-    }
-
-    /// <summary>A wake's shock ring.</summary>
-    public struct AfterglowRing
-    {
-        public double X, Y, T0, FontPx;
+        public double X, Y, Vx, Vy, T, Life, Size;
+        public int Hue;
     }
 
     /// <summary>
-    /// Super Afterglow, the maths (mockup <c>mkSubs</c>, owner rated 10/10, ported as-is). After a
-    /// subliminal card, its word stays where it appeared as a faint pink ghost that fades over 4 s
-    /// and sheds embers. Bring the cursor near a ghost and it flares back with sparks and a shock
-    /// ring; a woken word weighs a little more in the next pick.
+    /// Super Afterglow, the maths. While subliminals run, a random word from the active pool pops up
+    /// near the mouse for a split second, keeps a little of the mouse's momentum, leaves a short trail
+    /// of echoes and sheds sparks. Distances are DIP and multiplied by the screen's scale.
     ///
-    /// Mockup distances are canvas px around a 34 px font. Real cards are 120 DIP, so every
-    /// speed and size here is multiplied by <c>unit = FontPx / 34</c>: the proportions the owner
-    /// saw survive the bigger word.
-    ///
-    /// WPF-free, Skia-free, App-free. The layer draws what this leaves in <see cref="Ghosts"/>,
-    /// <see cref="Particles"/> and <see cref="Rings"/>.
+    /// WPF-free, Skia-free, App-free. The layer draws what this leaves in <see cref="Pops"/> and
+    /// <see cref="Particles"/>; the driver feeds it the cursor and decides when to spawn.
     /// </summary>
     public sealed class AfterglowField
     {
-        public const double MockFontPx = 34;
-        public const double LifeS = 4;            // base = 1 - age / 4
-        public const double DropS = 4.2;          // ghosts leave the list here
-        public const double IntroS = 0.16;        // 1 -> 0.35 as the card hands over
-        public const double GhostAlpha = 0.35;
-        public const int MaxPerScreen = 6;
-        public const double WakeRadius = 1.6;     // x font size
-        public const double WakeMinAge = 0.5;
-        public const double WakeCooldownS = 1.5;
-        public const double WakeMinBase = 0.15;
-        public const double FlareS = 0.4;
-        public const double FlareOffS = 0.12;     // MotionLevel.Off: the 120 ms fade
-        public const double PhotosafeFlarePeak = 0.6;
-        public const int SparkCount = 14;
-        public const double SparkSpeed = 110;     // x (0.3..1)
-        public const double SparkLife = 0.6;      // x (0.6..1.2)
-        public const double EmberMinAge = 0.3;
-        public const double EmberRate = 3;        // per second, x base
-        public const double EmberLife = 1.2;
-        public const double EmberRiseMin = 18, EmberRiseSpan = 14;   // 18..32 px/s up
-        public const double EmberDrift = 10;      // +-5 px/s sideways
-        public const double RingS = 0.6;
-        public const double RingFrom = 0.6, RingGrow = 2.2;          // radius 0.6 -> 2.8 x font
-        public const double Drag = 2;             // v *= 1 - dt * 2
-        public const int MaxParticles = 400;
-        // Real cards all sit at the screen centre, so ghosts left in place would stack into one
-        // smear. Each ghost drifts to its own spot in the mockup's band (x .18..82, y .2..8 of
-        // the screen), picking the farthest of a few tries from the ghosts already resting there.
-        public const double DriftS = 0.9;          // Reduced: twice as long, half as far
-        public const double BandX0 = 0.18, BandXSpan = 0.64, BandY0 = 0.2, BandYSpan = 0.6;
-        public const int RestTries = 4;
+        // Lifecycle (owner: "for just a split second").
+        public const double FadeInS = 0.06, HoldS = 0.14, FadeOutS = 0.22;      // 0.42 s total
+        public const double OffFadeS = 0.12;                                     // MotionFx Off
+        public const double SafeInS = 0.12, SafeHoldS = 0.1, SafeOutS = 0.5;     // photosafe: soft, no snap
+        public const double IntervalMinS = 1.5, IntervalMaxS = 4.5;
+        public const int MaxAlive = 2;
+        public const double FontDip = 40;
+        // Placement: a random spot this far from the cursor, clamped on screen.
+        public const double OffsetMinDip = 50, OffsetMaxDip = 160;
+        // Momentum: smoothed cursor velocity, a share of it handed to the word, then drag.
+        public const double VelocityTauS = 0.08;
+        public const double MaxCursorSpeedPx = 6000;
+        public const double TeleportGapS = 0.25;
+        public const double Inherit = 0.6;
+        public const double Drag = 5;                   // v *= exp(-5 dt): about 0.15 s half-life
+        public const double JitterDip = 30;             // +-15 DIP/s nudge so a still mouse is not dead still
+        // Trail.
+        public const int TrailLen = 6;
+        public const double TrailStepS = 0.025;
+        // Sparks.
+        public const int BirthBurst = 10;
+        public const double BurstSpeedMinDip = 40, BurstSpeedSpanDip = 90;
+        public const double SparkEveryDip = 14;         // one spark per 14 DIP travelled
+        public const int MaxPathSparksPerStep = 4;
+        public const double SparkInherit = 0.35, SparkSpreadDip = 60;
+        public const double SparkLifeMin = 0.3, SparkLifeSpan = 0.3;
+        public const double SparkDrag = 3;
+        public const int MaxParticles = 160;
 
-        public readonly List<AfterglowGhost> Ghosts = new();
+        public readonly List<AfterglowPop> Pops = new();
         public readonly AfterglowParticle[] Particles = new AfterglowParticle[MaxParticles];
         public int ParticleCount;
-        public readonly List<AfterglowRing> Rings = new();
+
+        private double _cvx, _cvy, _lastX, _lastY;
+        private bool _hasLast;
 
         /// <summary>Seconds since the field started; advanced only by <see cref="Step"/>.</summary>
         public double Now { get; private set; }
 
-        public bool IsEmpty => Ghosts.Count == 0 && ParticleCount == 0 && Rings.Count == 0;
+        public bool IsEmpty => Pops.Count == 0 && ParticleCount == 0;
 
-        /// <summary>Unit scale for a font size (see class remarks).</summary>
-        public static double Unit(double fontPx) => Math.Max(0.1, fontPx / MockFontPx);
+        public double CursorVx => _cvx;
+        public double CursorVy => _cvy;
 
-        /// <summary>Half speed and amplitude at Reduced (CONTRACT rule 3).</summary>
-        public static double MotionScale(MotionLevel level) => level == MotionLevel.Reduced ? 0.5 : 1.0;
+        /// <summary>Half speed and distance at Reduced, none at Off (CONTRACT rule 3).</summary>
+        public static double MotionScale(MotionLevel level) =>
+            level == MotionLevel.Off ? 0 : level == MotionLevel.Reduced ? 0.5 : 1.0;
 
-        /// <summary>1 at settle, 0 at <see cref="LifeS"/>.</summary>
-        public static double Base(double age) => Math.Max(0, 1 - age / LifeS);
+        /// <summary>Seconds until the next pop, 1.5..4.5. <paramref name="r01"/> in [0,1).</summary>
+        public static double NextInterval(double r01) => IntervalMinS + Math.Clamp(r01, 0, 1) * (IntervalMaxS - IntervalMinS);
 
-        /// <summary>
-        /// The ghost's alpha (before the card's own opacity): the 160 ms hand-over from the card,
-        /// then 0.35 x base, raised to the wake flare while one runs. Negative age = not yet born.
-        /// </summary>
-        public static double Alpha(double age, double sinceWake, MotionLevel level, bool photosafe)
+        /// <summary>Total life of a pop under these settings.</summary>
+        public static double Life(MotionLevel level, bool photosafe)
+        {
+            if (photosafe) return SafeInS + SafeHoldS + SafeOutS;
+            if (level == MotionLevel.Off) return OffFadeS;
+            return FadeInS + HoldS + FadeOutS;
+        }
+
+        /// <summary>Alpha envelope 0..1. Off = a single 120 ms fade; photosafe = slow in, 0.5 s out.</summary>
+        public static double Alpha(double age, MotionLevel level, bool photosafe)
         {
             if (age < 0) return 0;
-            double a = age < IntroS ? 1 - age / IntroS * (1 - GhostAlpha) : Base(age) * GhostAlpha;
-            double flareS = level == MotionLevel.Off ? FlareOffS : FlareS;
-            if (sinceWake >= 0 && sinceWake < flareS)
-            {
-                double peak = photosafe ? PhotosafeFlarePeak : 1;
-                a = Math.Max(a, peak * (1 - sinceWake / flareS));
-            }
-            return Math.Clamp(a, 0, 1);
+            double inS, holdS, outS;
+            if (photosafe) { inS = SafeInS; holdS = SafeHoldS; outS = SafeOutS; }
+            else if (level == MotionLevel.Off) return Math.Clamp(1 - age / OffFadeS, 0, 1);
+            else { inS = FadeInS; holdS = HoldS; outS = FadeOutS; }
+            if (age < inS) return age / inS;
+            if (age < inS + holdS) return 1;
+            return Math.Clamp(1 - (age - inS - holdS) / outS, 0, 1);
         }
 
-        /// <summary>The wake rule: close enough, settled, rested, and not already mostly gone.</summary>
-        public static bool ShouldWake(double distPx, double fontPx, double age, double sinceWake, double baseLeft)
-            => distPx < fontPx * WakeRadius && age > WakeMinAge && sinceWake > WakeCooldownS && baseLeft > WakeMinBase;
+        /// <summary>Echo k (0 = newest) alpha, before the pop's own alpha.</summary>
+        public static double TrailAlpha(int k) => k < 0 || k >= TrailLen ? 0 : 0.5 * (1 - (k + 1.0) / (TrailLen + 1));
 
         /// <summary>
-        /// Weighted pick: each word weighs 1, plus its wake bonus. <paramref name="r01"/> in [0,1).
-        /// With no bonus this is exactly a uniform pick (index = floor(r * n)).
+        /// Where a pop goes: <paramref name="r1"/> picks the angle, <paramref name="r2"/> the distance
+        /// (50..160 DIP, half at Reduced), clamped so the word (half size <paramref name="halfW"/> x
+        /// <paramref name="halfH"/>) stays inside the screen. A screen too small to fit it centres it.
         /// </summary>
-        public static int PickWeighted(IReadOnlyList<string> texts, IReadOnlyDictionary<string, int>? bonus, double r01)
+        public static void SpawnPoint(double cx, double cy, double scale, double left, double top, double right, double bottom,
+            double halfW, double halfH, MotionLevel level, double r1, double r2, out double x, out double y)
         {
-            if (texts.Count == 0) return -1;
-            double total = 0;
-            for (int i = 0; i < texts.Count; i++) total += 1 + Bonus(bonus, texts[i]);
-            double x = Math.Clamp(r01, 0, 0.999999999) * total;
-            for (int i = 0; i < texts.Count; i++)
-            {
-                x -= 1 + Bonus(bonus, texts[i]);
-                if (x < 0) return i;
-            }
-            return texts.Count - 1;
+            double k = level == MotionLevel.Reduced ? 0.5 : 1;
+            double ang = r1 * Math.PI * 2;
+            double dist = (OffsetMinDip + Math.Clamp(r2, 0, 1) * (OffsetMaxDip - OffsetMinDip)) * scale * k;
+            x = ClampSpan(cx + Math.Cos(ang) * dist, left + halfW, right - halfW);
+            y = ClampSpan(cy + Math.Sin(ang) * dist, top + halfH, bottom - halfH);
         }
 
-        private static int Bonus(IReadOnlyDictionary<string, int>? bonus, string t)
-            => bonus != null && bonus.TryGetValue(t, out var b) && b > 0 ? b : 0;
+        private static double ClampSpan(double v, double lo, double hi) => lo > hi ? (lo + hi) / 2 : Math.Clamp(v, lo, hi);
 
         /// <summary>
-        /// A card went up. Its ghost takes over in <paramref name="delayS"/> (the moment the card
-        /// starts to fade out). Over the per-screen cap, the oldest ghost on that screen goes.
+        /// Feed one cursor sample. Velocity is smoothed (tau 80 ms) so a jerk does not fling the word;
+        /// a gap over 0.25 s (or the first sample) restarts from rest.
         /// </summary>
-        public AfterglowGhost Spawn(string text, int screen, double x, double y, double fontPx, double opacity, double delayS)
-            => Spawn(text, screen, x, y, fontPx, opacity, delayS, 0, 0, 0, 0, 0, MotionLevel.Off, null);
-
-        /// <summary>
-        /// As above, and the ghost drifts from the card to a free spot inside the screen area
-        /// (<paramref name="left"/>..<paramref name="right"/>, keeping <paramref name="halfW"/> clear of
-        /// each side). MotionLevel.Off keeps it where the card was (still); Reduced goes half as far
-        /// at half the speed.
-        /// </summary>
-        public AfterglowGhost Spawn(string text, int screen, double x, double y, double fontPx, double opacity, double delayS,
-            double left, double top, double right, double bottom, double halfW, MotionLevel level, Func<double>? rnd)
+        public void SampleCursor(double dt, double x, double y)
         {
-            int onScreen = 0, oldest = -1;
-            for (int i = 0; i < Ghosts.Count; i++)
+            if (!_hasLast || dt <= 0 || dt > TeleportGapS)
             {
-                if (Ghosts[i].Screen != screen) continue;
-                onScreen++;
-                if (oldest < 0 || Ghosts[i].Born < Ghosts[oldest].Born) oldest = i;
+                if (!_hasLast || dt > TeleportGapS) { _cvx = 0; _cvy = 0; }
+                _lastX = x; _lastY = y; _hasLast = true;
+                return;
             }
-            if (onScreen >= MaxPerScreen && oldest >= 0) Ghosts.RemoveAt(oldest);
+            double ix = (x - _lastX) / dt, iy = (y - _lastY) / dt;
+            double sp = Math.Sqrt(ix * ix + iy * iy);
+            if (sp > MaxCursorSpeedPx) { ix *= MaxCursorSpeedPx / sp; iy *= MaxCursorSpeedPx / sp; }
+            double a = 1 - Math.Exp(-dt / VelocityTauS);
+            _cvx += (ix - _cvx) * a;
+            _cvy += (iy - _cvy) * a;
+            _lastX = x; _lastY = y;
+        }
 
-            var g = new AfterglowGhost
+        public void ResetCursor() { _hasLast = false; _cvx = 0; _cvy = 0; }
+
+        /// <summary>
+        /// Pop a word at (<paramref name="x"/>, <paramref name="y"/>). Over <see cref="MaxAlive"/>, the
+        /// oldest goes. It takes 60% of the smoothed cursor velocity (30% at Reduced, none at Off or
+        /// photosafe for the jitter) and, at Full and Reduced without photosafe, a small birth burst.
+        /// </summary>
+        public AfterglowPop Spawn(string text, double x, double y, double scale, MotionLevel level, bool photosafe, Func<double> rnd)
+        {
+            while (Pops.Count >= MaxAlive) Pops.RemoveAt(0);
+            double k = MotionScale(level);
+            scale = scale <= 0 ? 1 : scale;
+            var p = new AfterglowPop
             {
-                Text = text, Screen = screen, X = x, Y = y, FontPx = fontPx,
-                Opacity = Math.Clamp(opacity, 0, 1), Born = Now + Math.Max(0, delayS),
-                FromX = x, FromY = y, RestX = x, RestY = y
+                Text = text, X = x, Y = y, Born = Now, Scale = scale,
+                Vx = _cvx * Inherit * k, Vy = _cvy * Inherit * k,
+                Hue = Math.Min(2, (int)(rnd() * 3))
             };
-            if (rnd != null && level != MotionLevel.Off && right > left && bottom > top)
+            if (k > 0 && !photosafe)
             {
-                PickRest(screen, left, top, right, bottom, halfW, rnd, out var rx, out var ry);
-                double k = MotionScale(level);
-                g.RestX = x + (rx - x) * k;
-                g.RestY = y + (ry - y) * k;
-                g.DriftS = DriftS / k;
+                p.Vx += (rnd() - 0.5) * JitterDip * scale * k;
+                p.Vy += (rnd() - 0.5) * JitterDip * scale * k;
             }
-            Ghosts.Add(g);
-            return g;
-        }
+            p.Record(x, y);
+            Pops.Add(p);
 
-        /// <summary>The farthest of <see cref="RestTries"/> spots in the band from the other ghosts on this screen.</summary>
-        private void PickRest(int screen, double left, double top, double right, double bottom, double halfW,
-            Func<double> rnd, out double bestX, out double bestY)
-        {
-            double w = right - left, h = bottom - top;
-            double lo = left + Math.Min(halfW, w / 2), hi = right - Math.Min(halfW, w / 2);
-            bestX = (left + right) / 2; bestY = (top + bottom) / 2;
-            double bestD = -1;
-            for (int k = 0; k < RestTries; k++)
+            int burst = photosafe || k == 0 ? 0 : (int)(BirthBurst * k);
+            for (int i = 0; i < burst; i++)
             {
-                double cx = Math.Clamp(left + w * (BandX0 + rnd() * BandXSpan), lo, hi);
-                double cy = top + h * (BandY0 + rnd() * BandYSpan);
-                double d = double.MaxValue;
-                foreach (var o in Ghosts)
-                {
-                    if (o.Screen != screen) continue;
-                    double dx = o.RestX - cx, dy = o.RestY - cy;
-                    d = Math.Min(d, dx * dx + dy * dy);
-                }
-                if (d > bestD) { bestD = d; bestX = cx; bestY = cy; }
+                double ang = rnd() * Math.PI * 2;
+                double sp = (BurstSpeedMinDip + rnd() * BurstSpeedSpanDip) * scale * k;
+                Emit(x, y, Math.Cos(ang) * sp + p.Vx * SparkInherit, Math.Sin(ang) * sp + p.Vy * SparkInherit,
+                    SparkLifeMin + rnd() * SparkLifeSpan, scale, (p.Hue + i) % 3);
             }
-        }
-
-        /// <summary>Ease-out drift 0..1 at <paramref name="age"/>; 1 when there is no drift.</summary>
-        public static double DriftProgress(double age, double driftS)
-        {
-            if (driftS <= 0 || age >= driftS) return 1;
-            if (age <= 0) return 0;
-            double u = 1 - age / driftS;
-            return 1 - u * u * u;
+            return p;
         }
 
         /// <summary>Panic, stop, switch off: everything goes, at once.</summary>
         public void Clear()
         {
-            Ghosts.Clear();
-            Rings.Clear();
+            Pops.Clear();
             ParticleCount = 0;
         }
 
-        /// <summary>
-        /// Advance by <paramref name="dt"/> seconds. <paramref name="hasCursor"/> false = no wakes.
-        /// Every woken ghost is appended to <paramref name="woken"/> (may be null).
-        /// <paramref name="rnd"/> returns [0,1); injected so tests are deterministic.
-        /// </summary>
-        public void Step(double dt, bool hasCursor, double cursorX, double cursorY,
-            MotionLevel level, Func<double> rnd, List<AfterglowGhost>? woken = null)
+        /// <summary>Advance by <paramref name="dt"/> seconds. <paramref name="rnd"/> returns [0,1).</summary>
+        public void Step(double dt, MotionLevel level, bool photosafe, Func<double> rnd)
         {
             if (dt < 0) dt = 0;
             Now += dt;
-            double t = Now;
-            double ms = MotionScale(level);
-            bool moving = level != MotionLevel.Off;
+            double k = MotionScale(level);
+            double life = Life(level, photosafe);
+            double drag = Math.Exp(-Drag * dt);
 
-            for (int i = Ghosts.Count - 1; i >= 0; i--)
+            for (int i = Pops.Count - 1; i >= 0; i--)
             {
-                var g = Ghosts[i];
-                double age = t - g.Born;
-                if (age >= DropS) { Ghosts.RemoveAt(i); continue; }
-                if (age < 0) continue;
-                double baseLeft = Base(age), unit = Unit(g.FontPx);
-                double dp = DriftProgress(age, g.DriftS);
-                g.X = g.FromX + (g.RestX - g.FromX) * dp;
-                g.Y = g.FromY + (g.RestY - g.FromY) * dp;
+                var p = Pops[i];
+                if (Now - p.Born >= life) { Pops.RemoveAt(i); continue; }
+                if (k == 0) continue;   // Off: no movement, no trail, no sparks
 
-                if (hasCursor)
+                double dx = p.Vx * dt, dy = p.Vy * dt;
+                p.X += dx; p.Y += dy;
+                p.Vx *= drag; p.Vy *= drag;
+
+                p.TrailClock += dt;
+                while (p.TrailClock >= TrailStepS)
                 {
-                    double dx = cursorX - g.X, dy = cursorY - g.Y;
-                    if (ShouldWake(Math.Sqrt(dx * dx + dy * dy), g.FontPx, age, t - g.Wake, baseLeft))
-                    {
-                        g.Wake = t;
-                        woken?.Add(g);
-                        if (moving)
-                        {
-                            for (int k = 0; k < SparkCount; k++)
-                            {
-                                double ang = rnd() * Math.PI * 2, sp = SparkSpeed * (0.3 + rnd() * 0.7) * unit * ms;
-                                Emit(g.X, g.Y, Math.Cos(ang) * sp, Math.Sin(ang) * sp, SparkLife * (0.6 + rnd() * 0.6), unit);
-                            }
-                            Rings.Add(new AfterglowRing { X = g.X, Y = g.Y, T0 = t, FontPx = g.FontPx });
-                        }
-                    }
+                    p.TrailClock -= TrailStepS;
+                    p.Record(p.X, p.Y);
                 }
 
-                if (moving && age > EmberMinAge && rnd() < dt * EmberRate * baseLeft)
+                p.PathAcc += Math.Sqrt(dx * dx + dy * dy);
+                double every = SparkEveryDip * p.Scale / k;   // Reduced: half as many
+                int n = 0;
+                while (p.PathAcc >= every && n < MaxPathSparksPerStep)
                 {
-                    Emit(g.X + (rnd() - 0.5) * g.FontPx * 2, g.Y,
-                        (rnd() - 0.5) * EmberDrift * unit * ms,
-                        -(EmberRiseMin + rnd() * EmberRiseSpan) * unit * ms,
-                        EmberLife, unit);
+                    p.PathAcc -= every; n++;
+                    double sx = (rnd() - 0.5) * SparkSpreadDip * p.Scale * k;
+                    double sy = (rnd() - 0.5) * SparkSpreadDip * p.Scale * k;
+                    Emit(p.X, p.Y, p.Vx * SparkInherit + sx, p.Vy * SparkInherit + sy,
+                        SparkLifeMin + rnd() * SparkLifeSpan, p.Scale, p.Hue);
                 }
+                if (p.PathAcc >= every) p.PathAcc = 0;   // a capped burst does not bank sparks
             }
 
             // Particles: drift, drag, age; compact in place (no allocation).
             int w = 0;
-            double drag = Math.Max(0, 1 - dt * Drag);
+            double pd = Math.Exp(-SparkDrag * dt);
             for (int i = 0; i < ParticleCount; i++)
             {
-                var p = Particles[i];
-                p.T += dt;
-                if (p.T >= p.Life) continue;
-                p.X += p.Vx * dt; p.Y += p.Vy * dt;
-                p.Vx *= drag; p.Vy *= drag;
-                Particles[w++] = p;
+                var q = Particles[i];
+                q.T += dt;
+                if (q.T >= q.Life) continue;
+                q.X += q.Vx * dt; q.Y += q.Vy * dt;
+                q.Vx *= pd; q.Vy *= pd;
+                Particles[w++] = q;
             }
             ParticleCount = w;
-
-            for (int i = Rings.Count - 1; i >= 0; i--)
-                if (t - Rings[i].T0 >= RingS) Rings.RemoveAt(i);
         }
 
-        private void Emit(double x, double y, double vx, double vy, double life, double unit)
+        private void Emit(double x, double y, double vx, double vy, double life, double scale, int hue)
         {
             if (ParticleCount >= MaxParticles)
             {
-                // Mockup parity: the oldest go first.
-                Array.Copy(Particles, 1, Particles, 0, MaxParticles - 1);
+                Array.Copy(Particles, 1, Particles, 0, MaxParticles - 1);   // the oldest go first
                 ParticleCount = MaxParticles - 1;
             }
-            Particles[ParticleCount++] = new AfterglowParticle { X = x, Y = y, Vx = vx, Vy = vy, Life = life, Unit = unit };
+            Particles[ParticleCount++] = new AfterglowParticle { X = x, Y = y, Vx = vx, Vy = vy, Life = life, Size = scale, Hue = hue };
         }
 
         /// <summary>Particle alpha, 1 at birth to 0 at end of life.</summary>
         public static double ParticleAlpha(in AfterglowParticle p) => Math.Max(0, 1 - p.T / p.Life);
-
-        /// <summary>Ring progress 0..1 and radius at time <paramref name="t"/>.</summary>
-        public static double RingRadius(in AfterglowRing r, double t, MotionLevel level)
-        {
-            double u = Math.Clamp((t - r.T0) / RingS, 0, 1);
-            return r.FontPx * (RingFrom + u * RingGrow * MotionScale(level));
-        }
     }
 }
