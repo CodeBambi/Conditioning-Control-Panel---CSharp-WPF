@@ -774,6 +774,15 @@ namespace ConditioningControlPanel.Avalonia
             return media;
         }
 
+        /// <summary>The exit save, after Takeover hands back what a pulse borrowed - else a boosted
+        /// pink tint is saved as the user's own (WPF StopEngine cancels pulses before the save).</summary>
+        internal static void SaveSettingsOnExit(Views.Windows.MainShellWindow? shell, Action save)
+        {
+            try { shell?.CancelAutonomyPulses(); } catch (Exception ex) { Serilog.Log.Debug("Exit pulse cancel failed: {E}", ex.Message); }
+            try { save(); }
+            catch { /* SettingsService logs save failures; exit must continue */ }
+        }
+
         /// <summary>Exit path (tray Exit and every other shutdown): close any MantraWindow, whose OnClosed
         /// stops the drone and ends the session, end the service as WPF App.OnExit's Mantra?.Dispose(),
         /// and delete the synthesised WAVs.</summary>
@@ -812,8 +821,8 @@ namespace ConditioningControlPanel.Avalonia
 
             // Flush while the dispatcher is still usable. In particular, a serialize retry from a
             // background save must not see the shutdown-safe drop provider below.
-            try { Settings?.SaveImmediate(); }
-            catch { /* SettingsService logs save failures; exit must continue */ }
+            var shell = (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as Views.Windows.MainShellWindow;
+            SaveSettingsOnExit(shell, () => Settings?.SaveImmediate());
 
             // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
