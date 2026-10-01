@@ -28,7 +28,7 @@ public class UndertowLensTests
         var s = Placed();
         Assert.Equal(500, s.X);
         Assert.Equal(400, s.Y);
-        Assert.Equal(0, s.Radius);                                 // never a full lens on frame one
+        Assert.Equal(UndertowLens.MinRadius * W, s.Radius, 6);     // starts at the minimum, never a full lens on frame one
         Assert.Equal(UndertowLens.MaxRadius * W, s.Kick, 6);
 
         double peak = 0;
@@ -45,7 +45,7 @@ public class UndertowLensTests
     public void Off_opens_at_the_still_lens_at_once()
     {
         var s = Placed(UndertowMotion.Off);
-        Assert.Equal(0.18 * W, s.Radius, 6);
+        Assert.Equal(UndertowLens.StillRadius * W, s.Radius, 6);
         Assert.Equal(0, s.Kick);
     }
 
@@ -66,25 +66,26 @@ public class UndertowLensTests
     {
         double r = 300;
         double next = UndertowLens.Shrink(r, 0.1, W, UndertowMotion.Full);
-        Assert.Equal(300 - 0.1 * (0.045 * W + 0.3 * 300), next, 6);
-        Assert.Equal(0, UndertowLens.Shrink(5, 1, W, UndertowMotion.Full));
+        Assert.Equal(300 - 0.1 * (UndertowLens.ShrinkLinear * W + UndertowLens.ShrinkProportional * 300), next, 6);
+        Assert.Equal(UndertowLens.MinRadius * W, UndertowLens.Shrink(5, 1, W, UndertowMotion.Full));
     }
 
     [Fact]
-    public void Left_alone_the_lens_shrinks_to_zero_and_stops_animating()
+    public void Left_alone_the_lens_shrinks_to_the_minimum_and_stops_repainting()
     {
         var s = Placed();
         s.Kick = 0;
         s.Radius = UndertowLens.MaxRadius * W;
         double last = s.Radius;
-        for (int i = 0; i < 60 * 10; i++)
+        for (int i = 0; i < 60 * 40; i++)
         {
             UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
             Assert.True(s.Radius <= last);
+            Assert.True(s.Radius >= UndertowLens.MinRadius * W - 1e-9);
             last = s.Radius;
         }
-        Assert.Equal(0, s.Radius);
-        Assert.False(s.Animating);
+        Assert.Equal(UndertowLens.MinRadius * W, s.Radius, 6);
+        Assert.False(UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full));
     }
 
     [Fact]
@@ -99,14 +100,14 @@ public class UndertowLensTests
     public void A_click_widens_the_lens_at_the_apply_rate()
     {
         var s = Placed();
-        s.Radius = 0;
+        s.Radius = UndertowLens.MinRadius * W;
         s.Kick = 0;
         UndertowLens.Click(s, 500, 400, W, UndertowMotion.Full);
-        Assert.Equal(0.15 * W, s.Kick, 6);
+        Assert.Equal(UndertowLens.KickPerClick * W, s.Kick, 6);
         UndertowLens.Step(s, 0.1, 500, 400, W, UndertowMotion.Full);
         // shrink from 0 stays 0, then at most 0.75 W per second of kick lands
-        Assert.Equal(0.075 * W, s.Radius, 6);
-        Assert.Equal(0.075 * W, s.Kick, 6);
+        Assert.Equal((UndertowLens.MinRadius + 0.075) * W, s.Radius, 6);
+        Assert.Equal((UndertowLens.KickPerClick - 0.075) * W, s.Kick, 6);
     }
 
     [Fact]
@@ -117,7 +118,7 @@ public class UndertowLensTests
         for (int i = 0; i < 300; i++)
         {
             UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
-            Assert.True(s.Radius <= 0.36 * W + 1e-9);
+            Assert.True(s.Radius <= UndertowLens.MaxRadius * W + 1e-9);
         }
     }
 
@@ -140,15 +141,13 @@ public class UndertowLensTests
     }
 
     [Fact]
-    public void Ripple_sizes_scale_with_dpi_because_the_layer_draws_in_physical_pixels()
+    public void Wave_amplitude_scales_with_dpi_because_the_layer_draws_in_physical_pixels()
     {
-        Assert.True(UndertowLens.RingAt(0.05, 0, W, UndertowMotion.Full, out double r1, out _, out double w1));
-        Assert.True(UndertowLens.RingAt(0.05, 0, W, UndertowMotion.Full, out double r2, out _, out double w2, 2.0));
-        Assert.Equal(w1 * 2, w2, 6);
-        Assert.Equal(r1 + UndertowLens.RippleBase, r2, 6);   // only the birth radius is in px; the reach is a screen share
-
-        Assert.True(UndertowLens.RingAt(0.06, 0, W, UndertowMotion.Off, out _, out _, out double wo, 1.5));
-        Assert.Equal(4.5, wo, 6);
+        Assert.True(UndertowLens.WaveAt(0.1, W, UndertowMotion.Full, 1.0, out double f1, out double a1, out double wl1, out _));
+        Assert.True(UndertowLens.WaveAt(0.1, W, UndertowMotion.Full, 2.0, out double f2, out double a2, out double wl2, out _));
+        Assert.Equal(a1 * 2, a2, 6);
+        Assert.Equal(f1, f2, 6);     // the front and the crest spacing are screen shares
+        Assert.Equal(wl1, wl2, 6);
     }
 
     [Fact]
@@ -160,12 +159,12 @@ public class UndertowLensTests
         Assert.True(UndertowLens.Step(s, Dt, 520, 400, W, UndertowMotion.Off));  // cursor moved
 
         UndertowLens.Click(s, 520, 400, W, UndertowMotion.Off);
-        Assert.True(UndertowLens.Step(s, Dt, 520, 400, W, UndertowMotion.Off));  // fade ring alive
+        Assert.False(UndertowLens.Step(s, Dt, 520, 400, W, UndertowMotion.Off));  // Off: no wave, still screen
 
-        // closed lens: a moving cursor alone changes nothing on screen
+        // a lens resting at its minimum, cursor still: nothing on screen changes
         var c = Placed();
-        c.Kick = 0; c.Radius = 0;
-        Assert.False(UndertowLens.Step(c, Dt, 900, 700, W, UndertowMotion.Full));
+        c.Kick = 0; c.Radius = UndertowLens.MinRadius * W;
+        Assert.False(UndertowLens.Step(c, Dt, c.X, c.Y, W, UndertowMotion.Full));
 
         // a shrinking open lens repaints every tick
         var o = Placed();
@@ -174,24 +173,22 @@ public class UndertowLensTests
     }
 
     [Fact]
-    public void A_click_drops_a_double_ripple_that_dies_after_point_eight_seconds()
+    public void A_click_sends_a_wave_front_that_runs_out_and_dies_after_the_wave_life()
     {
         var s = Placed();
         UndertowLens.Click(s, 700, 300, W, UndertowMotion.Full);
         Assert.True(s.Ripples[0].Live);
         Assert.Equal(700, s.Ripples[0].X);
 
-        // ring 1 starts 0.1 s after ring 0
-        Assert.True(UndertowLens.RingAt(0.05, 0, W, UndertowMotion.Full, out _, out _, out _));
-        Assert.False(UndertowLens.RingAt(0.05, 1, W, UndertowMotion.Full, out _, out _, out _));
-        Assert.True(UndertowLens.RingAt(0.2, 1, W, UndertowMotion.Full, out _, out _, out double w1));
-        Assert.Equal(1.5, w1, 6);
+        Assert.True(UndertowLens.WaveAt(0.2, W, UndertowMotion.Full, 1.0, out double early, out double aEarly, out _, out _));
+        Assert.True(UndertowLens.WaveAt(0.9, W, UndertowMotion.Full, 1.0, out double late, out double aLate, out _, out double band));
+        Assert.True(late > early);                       // the front keeps travelling
+        Assert.True(aLate < aEarly);                     // and fades
+        Assert.True(band > 0);
+        Assert.False(UndertowLens.WaveAt(UndertowLens.WaveLife, W, UndertowMotion.Full, 1.0, out _, out _, out _, out _));
 
-        UndertowLens.RingAt(0.35, 0, W, UndertowMotion.Full, out double r, out double a, out _);
-        Assert.Equal(0.5 * 0.18 * W + 6, r, 6);
-        Assert.Equal(0.65 * 0.5, a, 6);
-
-        for (int i = 0; i < 49; i++) UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
+        int ticks = (int)(UndertowLens.WaveLife / Dt) + 2;
+        for (int i = 0; i < ticks; i++) UndertowLens.Step(s, Dt, 500, 400, W, UndertowMotion.Full);
         Assert.False(s.Ripples[0].Live);
     }
 
@@ -209,33 +206,30 @@ public class UndertowLensTests
     }
 
     [Fact]
-    public void Reduced_widens_but_draws_no_ripple()
+    public void Reduced_widens_and_waves_at_half_speed_and_half_amplitude()
     {
         var s = Placed(UndertowMotion.Reduced);
         UndertowLens.Click(s, 500, 400, W, UndertowMotion.Reduced);
         Assert.True(s.Kick > 0);
-        foreach (var r in s.Ripples) Assert.False(r.Live);
-        Assert.False(UndertowLens.RingAt(0.2, 0, W, UndertowMotion.Reduced, out _, out _, out _));
+        Assert.True(s.Ripples[0].Live);
+        UndertowLens.WaveAt(0.4, W, UndertowMotion.Full, 1.0, out double ff, out double fa, out _, out _);
+        UndertowLens.WaveAt(0.4, W, UndertowMotion.Reduced, 1.0, out double rf, out double ra, out _, out _);
+        Assert.Equal(ff / 2, rf, 6);
+        Assert.Equal(fa / 2, ra, 6);
     }
 
     [Fact]
-    public void Off_keeps_a_still_lens_and_answers_a_click_with_a_120ms_fade()
+    public void Off_keeps_a_still_lens_and_a_click_makes_no_wave()
     {
         var s = Placed(UndertowMotion.Off);
         for (int i = 0; i < 600; i++) UndertowLens.Step(s, Dt, 800, 600, W, UndertowMotion.Off);
-        Assert.Equal(0.18 * W, s.Radius, 6);
+        Assert.Equal(UndertowLens.StillRadius * W, s.Radius, 6);
         Assert.Equal(800, s.X);
 
         UndertowLens.Click(s, 800, 600, W, UndertowMotion.Off);
         Assert.Equal(0, s.Kick);
-        Assert.True(UndertowLens.RingAt(0.06, 0, W, UndertowMotion.Off, out double r, out double a, out _));
-        Assert.Equal(0.18 * W, r, 6);   // it never grows
-        Assert.Equal(0.65 * 0.5, a, 6);
-        Assert.False(UndertowLens.RingAt(0.06, 1, W, UndertowMotion.Off, out _, out _, out _));
-        Assert.False(UndertowLens.RingAt(0.12, 0, W, UndertowMotion.Off, out _, out _, out _));
-
-        for (int i = 0; i < 10; i++) UndertowLens.Step(s, Dt, 800, 600, W, UndertowMotion.Off);
         Assert.False(s.Ripples[0].Live);
+        Assert.False(UndertowLens.WaveAt(0.06, W, UndertowMotion.Off, 1.0, out _, out _, out _, out _));
     }
 
     [Fact]
