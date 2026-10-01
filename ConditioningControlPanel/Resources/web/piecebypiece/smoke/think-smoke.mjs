@@ -18,10 +18,21 @@ globalThis.performance = { now: () => clock };
 globalThis.requestAnimationFrame = (fn) => { frames.push(fn); return frames.length; };
 globalThis.cancelAnimationFrame = () => {};
 
-// the referee the ramp asks whose move it is
+// the referee the ramp asks whose move it is, the menu over it, and the director
 const game = { side: 'w', over: false, turn() { return this.side; }, isOver() { return this.over; } };
 let paused = false;
-globalThis.window = { PBP: { game, isPaused: () => paused } };
+let doorUp = true;
+let held = false;
+globalThis.window = { PBP: { game, isPaused: () => paused, door: { isUp: () => doorUp }, board: { director: { holding: () => held } } } };
+
+// a stage that keeps its classes, so the snap's fast fades can be seen
+const classes = new Set();
+const stage = { style: {}, classList: {
+  add: (...c) => c.forEach((x) => classes.add(x)),
+  remove: (...c) => c.forEach((x) => classes.delete(x)),
+  contains: (c) => classes.has(c),
+  toggle(c, on) { const v = on === undefined ? !classes.has(c) : !!on; if (v) classes.add(c); else classes.delete(c); return v; },
+} };
 
 const { attachRamp } = await import('../ramp/index.js');
 const { RAMP_TUNING } = await import('../ramp/meter.js');
@@ -44,10 +55,20 @@ function wait(ms) {
 const warn = console.warn;
 console.warn = () => {};   // the ramp says it has no #fx, no #stage and no pictures: all expected here
 const bus = createBus();
-const ramp = attachRamp({ bus, seed: 'think-smoke' });
+const ramp = attachRamp({ bus, seed: 'think-smoke', stage });
 const dbg = () => ramp.debug();
 
+/* ---- the menu: the referee idles at the start with white to move ------------ */
+doorUp = false;   // even a page with no menu at all: nothing counts until a game is dealt
+wait(3000);
+check('no game dealt, nothing counts', dbg().think.ms === 0, String(dbg().think.ms));
+doorUp = true;
+wait(21000);
+check('the menu never counts as thinking', dbg().think.ms === 0 && !dbg().think.counting, JSON.stringify(dbg().think));
+check('so the menu stays calm', dbg().meter < 0.05, String(dbg().meter));
+
 /* ---- solo, playing white -------------------------------------------------- */
+doorUp = false;
 bus.emit('local', { sides: ['w'] });
 bus.emit('turn', { side: 'w', ply: 0, clocks: { w: 300000, b: 300000 }, total: 300000 });
 check('the ramp runs in Distraction', dbg().enabled);
@@ -64,6 +85,18 @@ wait(5000);
 check('the pause card never counts', near(dbg().think.ms, pausedAt), `${dbg().think.ms} vs ${pausedAt}`);
 paused = false;
 
+held = true;
+const heldAt = dbg().think.ms;
+wait(4000);
+check('a capture replay holding the screen never counts', near(dbg().think.ms, heldAt), `${dbg().think.ms} vs ${heldAt}`);
+held = false;
+
+doorUp = true;   // a card over a live board (the menu, the shelf): nothing counts behind it
+const behindAt = dbg().think.ms;
+wait(3000);
+check('a menu over the board never counts', near(dbg().think.ms, behindAt), `${dbg().think.ms} vs ${behindAt}`);
+doorUp = false;
+
 wait(11000);
 check('20 s of your own thinking is the top of the ramp', near(dbg().meter, 1), String(dbg().meter));
 
@@ -73,6 +106,9 @@ bus.emit('turn', { side: 'b', ply: 1, clocks: { w: 280000, b: 300000 }, total: 3
 const floor = dbg();
 check('the move snaps the screen straight back to the floor', floor.meter < 0.15, String(floor.meter));
 check('and the think clock is back at zero', floor.think.ms === 0);
+check('the snap arms the fast fades', classes.has('is-snap'));
+await new Promise((r) => setTimeout(r, RAMP_TUNING.think.snapMs + 100));
+check('and lets them go again', !classes.has('is-snap'));
 
 wait(15000);
 check('the opponent\'s move never counts', dbg().think.ms === 0 && !dbg().think.counting);
@@ -98,6 +134,24 @@ bus.emit('turn', { side: 'w', ply: 0, clocks: { w: 300000, b: 300000 }, total: 3
 wait(2000);
 bus.emit('gameover', { result: '1-0', winner: 'w' });
 check('a win does not surge', !dbg().surge && !dbg().enabled);
+
+/* ---- back at the menu after a game: the referee is reset, nobody deals -------- */
+doorUp = true;
+game.over = false; game.side = 'w';
+bus.emit('newgame', { ply: 0 });
+wait(21000);
+check('back at the menu, nothing climbs', dbg().think.ms === 0 && dbg().meter < 0.05, JSON.stringify(dbg().think));
+doorUp = false;
+
+/* ---- online: a resync is not a move, and the server's seat wins ---------------- */
+bus.emit('local', { sides: ['w'], mode: 'online' });
+bus.emit('turn', { side: 'w', ply: 0, clocks: { w: 300000, b: 300000 }, total: 300000 });
+wait(15000);
+const beforeResync = dbg().think.ms;
+bus.emit('turn', { side: 'w', ply: 0, clocks: { w: 285000, b: 300000 }, total: 300000 });   // a reconnect
+check('an online resync is not a move: the think goes on', near(dbg().think.ms, beforeResync) && dbg().meter > 0.5, String(dbg().meter));
+bus.emit('seat', { color: 'b' });   // the lobby guessed white; the server says black
+check('a corrected seat moves the climb to the real side', dbg().side === 'b' && dbg().think.ms === 0 && !dbg().think.counting);
 
 /* ---- hotseat: every hand-over snaps ---------------------------------------------- */
 bus.emit('local', { sides: ['w', 'b'] });

@@ -127,6 +127,7 @@ export function attachRamp(opts = {}) {
   let ticks = 0;   // scheduling beats served, so a harness can prove the loop runs
   let overrideMeter = null;   // dev harness: pin the meter regardless of the game
   let seenTurn = false;       // the board's seeding `turn` is not a played move
+  let lastTurn = '';          // side:ply of the last turn, so a resync is not a move
   let solo = null;            // dev harness: show ONE sustained layer, for a screenshot
   let lastBeat = 0;           // the previous scheduling beat, for the think clock's step
   let nextCardAt = 0;         // the earliest the next think wash may rise
@@ -159,15 +160,19 @@ export function attachRamp(opts = {}) {
 
   /**
    * Is the acting side sitting on its own move with a live board in front of it?
-   * Only then does the think clock run: not on the opponent's move, not under
-   * the pause card, not while a full-screen replay owns the view. The referee's
-   * turn() leads the clocks online (an optimistic move), so it is asked first.
+   * Only then does the think clock run: not before a game is dealt, not behind
+   * the menu or the end card (the referee idles at the start with white to
+   * move), not on the opponent's move, not under the pause card, not while a
+   * full-screen replay owns the view. The referee's turn() leads the clocks
+   * online (an optimistic move), so it is asked first.
    */
   function thinking() {
+    if (!seenTurn) return false;
     const side = actingSide();
     if (!localSides.includes(side)) return false;
     try {
       const pbp = globalThis.window?.PBP;
+      if (pbp?.door?.isUp?.()) return false;
       const game = pbp?.game;
       if (game && typeof game.turn === 'function') {
         if (game.turn() !== side || (typeof game.isOver === 'function' && game.isOver())) return false;
@@ -298,11 +303,24 @@ export function attachRamp(opts = {}) {
       localSides = Array.isArray(p?.sides) ? p.sides.filter(s => s === 'w' || s === 'b') : ['w', 'b'];
       resetMatch();
     },
+    // An online seat the lobby could only guess, corrected by the server's first
+    // word (net/match.js): the climb belongs to the player's real side.
+    seat(p) {
+      const side = p && (p.color === 'w' || p.color === 'b') ? p.color : null;
+      if (!side || localSides.length !== 1 || localSides[0] === side) return;
+      localSides = [side];
+      think.reset();
+    },
     clock(p) { meter.setClock(p); },
     turn(p) {
       const seeding = !seenTurn;
       seenTurn = true;
       meter.setTurn(p);
+      // An online resync repeats the turn it already had (net/match.js
+      // applyState): nobody moved, so the think goes on and nothing snaps.
+      const key = p ? p.side + ':' + p.ply : '';
+      if (!seeding && key === lastTurn) return;
+      lastTurn = key;
       // A move was made: the think clock starts over for whoever is on the move
       // now, and a screen the think had lifted SNAPS back to the floor the match
       // has built (owner, 2026-10-01). Solo and online that is the player's own
@@ -367,6 +385,7 @@ export function attachRamp(opts = {}) {
     for (const move of history) if (move.captured) meter.noteCapture({ by: move.color, victimSide: otherSide(move.color) }, now() - 60000);
 
     seenTurn = false;
+    lastTurn = '';
     overrideMeter = null;
     lastTick = lastBoardPush = 0;
     setEnabled(true);
