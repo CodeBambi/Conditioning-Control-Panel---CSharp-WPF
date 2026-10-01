@@ -8,7 +8,9 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.LogicalTree;
 using CCP.Avalonia.Testing;
+using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
 using Xunit;
 
@@ -37,14 +39,20 @@ public sealed class FriendsDrawerTests
         }
     }
 
+    /// <summary>Ticks only when the test says so; <see cref="Restarted"/> completes on the first Start after a tick.</summary>
     private sealed class FakeTimer : IUiTimer
     {
         public TimeSpan Interval { get; set; }
         public event EventHandler? Tick;
         public bool Running;
-        public void Start() => Running = true; public void Stop() => Running = false;
-        public void OnUiThread(Action action) => action(); public void Fire() => Tick?.Invoke(this, EventArgs.Empty);
+        public readonly TaskCompletionSource Restarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _ticked;
+        public void Start() { Running = true; if (_ticked) Restarted.TrySetResult(); }
+        public void Stop() => Running = false;
+        public void OnUiThread(Action action) => action();
+        public void Fire() { _ticked = true; Tick?.Invoke(this, EventArgs.Empty); }
     }
+
     private static (FriendsService Svc, Wire Wire) Service(string? account = "u_me")
     {
         var wire = new Wire();
@@ -62,9 +70,24 @@ public sealed class FriendsDrawerTests
         var timer = new FakeTimer();
         svc.Start(timer);
         Assert.True(timer.Running);
+        Assert.Empty(wire.Ops);
         timer.Fire();
-        await Task.Delay(200);
-        Assert.Contains("poll", wire.Ops);
+        await timer.Restarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(new[] { "poll", "state" }, wire.Ops);
+        // The state has Mia online and the app is in front: the fast cadence (FriendsPollRule).
+        Assert.Equal(TimeSpan.FromSeconds(FriendsPollRule.FastSeconds), timer.Interval);
+    }
+
+    [Theory]
+    [InlineData("/tmp/sandbox", null, null)]
+    [InlineData("/tmp/sandbox", "https://codebambi-proxy.vercel.app", null)]
+    [InlineData("/tmp/sandbox", "http://example.com:3001", null)]
+    [InlineData("/tmp/sandbox", "http://127.0.0.1:3001/", "http://127.0.0.1:3001")]
+    [InlineData(null, null, "https://codebambi-proxy.vercel.app")]
+    public void ASandboxReachesOnlyALoopbackFriendsServer(string? userData, string? url, string? expected)
+    {
+        Assert.Equal(expected, FriendsHead.BaseUrl(userData, url));
+        Assert.Equal(expected != null, FriendsHead.Create(userData, url) != null);
     }
 
     [Fact]
@@ -99,6 +122,41 @@ public sealed class FriendsDrawerTests
         Assert.Contains("accept", wire.Ops);
         Assert.Equal(ActResult.Done, await d.UnblockAsync(new BlockedFriend("u_bad", "Bob")));
         Assert.Contains("unblock", wire.Ops);
+    });
+
+    [Fact]
+    public Task RemoveAsksFirstAndReportGoesToTheWire() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var (svc, wire) = Service();
+        var d = new FriendsDrawer(svc);
+        await svc.RefreshAsync();
+        var zed = svc.Snapshot.Friends.First(f => f.Id == "u_off");
+        await d.RunMenuAsync(zed, "remove");
+        Assert.DoesNotContain("remove", wire.Ops);
+        Assert.NotNull(Tagged<Border>(d, "friends-confirm:remove"));
+        Assert.Equal(ActResult.Done, await d.ConfirmAsync(zed.Id, zed.Name, "remove"));
+        Assert.Contains("remove", wire.Ops);
+        Assert.Equal(ActResult.Done, await d.ReportAsync("u_on", "spam"));
+        Assert.Contains("report", wire.Ops);
+        Assert.Equal(Loc.Get("friends_report_done"), Tagged<TextBlock>(d, "friends-result")!.Text);
+    });
+
+    [Fact]
+    public Task ThePresenceSwitchFlipsSharingAndAnswersTheAsk() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var (svc, _) = Service();
+        var marked = 0;
+        var before = PresenceAsk.MarkAsked;
+        PresenceAsk.MarkAsked = () => marked++;
+        try
+        {
+            var d = new FriendsDrawer(svc);
+            await svc.RefreshAsync();
+            d.TogglePresence();
+            Assert.True(svc.PresenceShared);
+            Assert.Equal(1, marked);
+        }
+        finally { PresenceAsk.MarkAsked = before; }
     });
 
     [Fact]
