@@ -1169,3 +1169,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/friends-drawer-fixes: +78
 - Friends review fixes: dispose on exit, sandbox URL tests, presence marks the ask, remove/report tests, manual-tick timer test, ledger stubs.
+
+## avalonia-port/intake-host: +574
+- Graded Intake host slice 1: Core IntakeRun (latches, heartbeat, grading, caps, drafting, pass only on a parsed result; WPF delegates);
+  Avalonia IntakeHostWindow + WebHost message bridge, not opened yet (page serving is slice 2). Fail-proven tests.
