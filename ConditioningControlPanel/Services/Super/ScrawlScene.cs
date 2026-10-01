@@ -24,6 +24,8 @@ namespace ConditioningControlPanel.Services.Super
             public int Ink;                 // 0 pink, 1 mint, 2 lilac, 3 gold
             public bool Slam, Gold;
             public double X, Y, Age, Reach, Pulse = -1;
+            public double HalfW, HalfH;
+            public double[] Drips = Array.Empty<double>();   // per drip: x offset (-1..1 of half width), start delay 0..1, speed 0.7..1.3
         }
 
         private struct Glow { public double X, Y, Age; public int Ink; }
@@ -178,13 +180,40 @@ namespace ConditioningControlPanel.Services.Super
                 if (al <= 0.003) continue;
                 double sc = ScrawlRules.PressScale(s.Age, s.Slam, _motion);
                 bool scaled = sc > 1.0001;
+                bool leftover = !s.Slam;
+                double melt = leftover ? ScrawlRules.MeltAmount(s.Age, life, _motion) : 0;
+                if (leftover)
+                {
+                    // Afterglow: a halo that settles into a slow breath, plus a one-off ghost echo.
+                    double glow = ScrawlRules.AfterglowStrength(s.Age, life, _motion);
+                    dc.PushOpacity(al * glow);
+                    dc.DrawGeometry(null, _haloPens[s.Ink], s.Text);
+                    dc.Pop();
+                    if (ScrawlRules.EchoAt(s.Age, _motion, out double es, out double ea))
+                    {
+                        dc.PushTransform(new ScaleTransform(es, es, s.X, s.Y));
+                        dc.PushOpacity(al * ea);
+                        dc.DrawGeometry(null, _strokePens[s.Ink], s.Text);
+                        dc.Pop();
+                        dc.Pop();
+                    }
+                }
                 if (scaled) dc.PushTransform(new ScaleTransform(sc, sc, s.X, s.Y));
+                bool melting = melt > 0.001;
+                if (melting)
+                {
+                    // Melt: sink and stretch downward from the top of the word.
+                    dc.PushTransform(new TranslateTransform(0, melt * ScrawlRules.MeltSag * _fs));
+                    dc.PushTransform(new ScaleTransform(1, 1 + ScrawlRules.MeltStretch * melt, s.X, s.Y - s.HalfH));
+                }
                 dc.PushOpacity(al);
                 if (s.Slam || s.Gold) dc.DrawGeometry(null, _haloPens[s.Ink], s.Text);
                 dc.DrawGeometry(FillBrushes[s.Ink], s.Slam ? _slamPens[s.Ink] : _strokePens[s.Ink], s.Text);
                 if (s.Dots != null) dc.DrawGeometry(DotBrushes[s.Ink], null, s.Dots);
                 dc.Pop();
+                if (melting) { dc.Pop(); dc.Pop(); }
                 if (scaled) dc.Pop();
+                if (leftover && melting) DrawDrips(dc, s, life, al);
             }
             double gr = ScrawlRules.GlowRadius * _fs;
             foreach (var g in _glows)
@@ -228,6 +257,22 @@ namespace ConditioningControlPanel.Services.Super
             }
         }
 
+        private void DrawDrips(DrawingContext dc, Stamp s, double life, double al)
+        {
+            for (int i = 0; i + 2 < s.Drips.Length; i += 3)
+            {
+                double t = ScrawlRules.DripProgress(s.Age, life, s.Drips[i + 1], _motion);
+                if (t <= 0) continue;
+                double fall = t * t * ScrawlRules.DripReach * _fs * s.Drips[i + 2];
+                double x = s.X + s.Drips[i] * s.HalfW;
+                double y = s.Y + s.HalfH * 0.55 + fall;
+                double rx = 0.07 * _fs * (1 - 0.5 * t), ry = rx * (1 + 1.8 * t);
+                dc.PushOpacity(al * (1 - t * 0.6));
+                dc.DrawEllipse(DotBrushes[s.Ink], null, new Point(x, y), rx, ry);
+                dc.Pop();
+            }
+        }
+
         /// <summary>Every stamp's box, for the OCR self-exclusion list (the stamps are the player's text too).</summary>
         public void AppendRects(List<Rect> into)
         {
@@ -267,12 +312,27 @@ namespace ConditioningControlPanel.Services.Super
             {
                 Text = text, Dots = dotGeo, Ink = ink, Gold = gold, Slam = slam, X = pose.X, Y = pose.Y,
                 Reach = Math.Max(ft.Width, ft.Height) / 2 + (dots > 0 ? far * _fs : 0),
+                HalfW = ft.Width / 2, HalfH = ft.Height / 2,
+                Drips = slam ? Array.Empty<double>() : MakeDrips(),
             });
             if (!slam && _stamps.Count > ScrawlRules.StampCap)
             {
                 int oldest = _stamps.FindIndex(s => !s.Slam);
                 if (oldest >= 0) _stamps.RemoveAt(oldest);
             }
+        }
+
+        private double[] MakeDrips()
+        {
+            int n = 3 + _rng.Next(ScrawlRules.MaxDrips - 2);
+            var d = new double[n * 3];
+            for (int i = 0; i < n; i++)
+            {
+                d[i * 3] = _rng.NextDouble() * 1.7 - 0.85;
+                d[i * 3 + 1] = _rng.NextDouble();
+                d[i * 3 + 2] = 0.7 + _rng.NextDouble() * 0.6;
+            }
+            return d;
         }
 
         private void Emit(double x, double y, int n, int ink, double speed, double life)
