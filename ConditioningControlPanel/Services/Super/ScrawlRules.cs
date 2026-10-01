@@ -69,7 +69,7 @@ namespace ConditioningControlPanel.Services.Super
         public const double RelaxSpeed = 115.0;         // px/s in the mockup
         public const double RelaxRate = 1.6;            // per second
         public const double ShakeSlam = 1.0, ShakeCorner = 0.5;
-        public const double ShakeDecay = 1.0 / 0.35;    // a full shake dies in 0.35 s
+        public const double ShakeDecay = 3.5;           // per second, the mockup's: a full shake dies in about 0.29 s
         public const double ShakePixels = 9.0;          // at MockupFont
 
         /// <summary>The wall a hit reports: the side wall when x bounced, else the top/bottom wall.</summary>
@@ -186,11 +186,12 @@ namespace ConditioningControlPanel.Services.Super
         /// The push a slam gives another word: straight away from the slam point, at the mockup's
         /// 170 px/s scaled to that word's own cruise speed (the mockup cruised at 115).
         /// </summary>
-        public static (double Dvx, double Dvy) Knock(double ox, double oy, double sx, double sy, double cruise)
+        public static (double Dvx, double Dvy) Knock(double ox, double oy, double sx, double sy, double cruise,
+            MotionLevel motion = MotionLevel.Full)
         {
             double dx = ox - sx, dy = oy - sy, d = Math.Sqrt(dx * dx + dy * dy);
             if (d < 1e-6) { dx = 1; dy = 0; d = 1; }
-            double impulse = KnockImpulse / RelaxSpeed * cruise;
+            double impulse = KnockImpulse / RelaxSpeed * cruise * ShakeGain(motion);
             return (dx / d * impulse, dy / d * impulse);
         }
 
@@ -201,13 +202,23 @@ namespace ConditioningControlPanel.Services.Super
             return 1 - (speed - cruise) / speed * Math.Min(1, dt * RelaxRate);
         }
 
-        /// <summary>How much shake a motion level allows: Full 1, Reduced 0.5, Off none.</summary>
-        public static double ShakeGain(MotionLevel motion) => motion switch
+        /// <summary>How much shake (and knock) a motion level allows: Full 1, Reduced 0.5, Off none. Photosafe never shakes.</summary>
+        public static double ShakeGain(MotionLevel motion, bool photosafe = false) => photosafe ? 0 : motion switch
         {
             MotionLevel.Off => 0,
             MotionLevel.Reduced => 0.5,
             _ => 1,
         };
+
+        /// <summary>
+        /// May a left press on a word be swallowed and turned into a slam? Only when it lands on a
+        /// word AND the window that would get the click is not CCP's own input surface. A click on
+        /// any CCP window (the panel, Lockdown, a lock card, a leash window, an attention check, the
+        /// panic button) always goes through, so a slam can never block an exit. Click-through
+        /// overlays (the words themselves, the compositor layers) are not input surfaces.
+        /// </summary>
+        public static bool MaySwallow(bool onWord, bool targetIsOurs, bool targetClickThrough)
+            => onWord && !(targetIsOurs && !targetClickThrough);
 
         /// <summary>The shake level after dt: decays linearly so a full shake lasts 0.35 s.</summary>
         public static double DecayShake(double shake, double dt) => Math.Max(0, shake - dt * ShakeDecay);
