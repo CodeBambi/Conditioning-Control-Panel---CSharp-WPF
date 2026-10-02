@@ -94,7 +94,9 @@ public sealed class VaultGateDialog : Window
         Content = _card;
 
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
-        MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed) try { DragMove(); } catch (InvalidOperationException) { } }; // swallow: DragMove refuses once the button is up
+        // DragMove captures the mouse and eats the button-up, so a press on a clickable piece (every
+        // link and pill wears the hand cursor) must not start a drag or its MouseLeftButtonUp never fires.
+        MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed && !OnClickable(e.OriginalSource as DependencyObject)) try { DragMove(); } catch (InvalidOperationException) { } }; // swallow: DragMove refuses once the button is up
     }
 
     // ============================== entry points ==============================
@@ -467,6 +469,18 @@ public sealed class VaultGateDialog : Window
         var b = new Button { Content = text, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
         b.SetResourceReference(StyleProperty, "SmallPinkButton");
         return b;
+    }
+
+    /// <summary>True when the press landed on (or inside) something that wears the hand cursor.</summary>
+    private static bool OnClickable(DependencyObject? d)
+    {
+        for (; d != null; d = d is Visual || d is System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+        {
+            if (d is FrameworkElement fe && fe.Cursor == Cursors.Hand) return true;
+            if (d is System.Windows.Controls.Primitives.ButtonBase) return true;
+            if (d is Window) return false;
+        }
+        return false;
     }
 
     private static TextBlock Link(string text) => new()
