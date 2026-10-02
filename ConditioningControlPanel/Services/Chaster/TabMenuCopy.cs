@@ -68,7 +68,6 @@ public static class TabMenuCopy
         ["program_skipped"] = "program",
         ["remote_video"] = "remote_media",
         ["natasha"] = "bubbles",
-        [NatashasFavourite.HeldEventId] = "bubbles",
         ["leash"] = "detention",
         ["leash_credit"] = "pardon",
         [Stakes.StakeRules.LossRowId] = "goon",

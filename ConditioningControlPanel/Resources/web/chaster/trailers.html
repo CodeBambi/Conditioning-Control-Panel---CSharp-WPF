@@ -857,6 +857,36 @@ V.bubbles=async function(s){
   await s.wait(1800);
 };
 
+/* Resisted the red: press and HOLD the red bubble, the mint ring fills, it shrinks away and
+   time comes OFF. The bubbles scene above is the pop; this row used to borrow it and showed
+   the pop's +figure under a -1:00 stamp (tester report 2026-09-30). */
+V.natasha_held=async function(s){
+  s.add('<div class="abs" style="left:110px;top:50px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,#05020a 20%,transparent 70%)"></div>');
+  for(var i=0;i<6;i++){var r=s.add('<i class="vb-tun"></i>');r.style.animationDelay=(-i*.4)+'s'}
+  [[40,230,14,0],[286,260,10,-2],[150,250,8,-3.4]].forEach(function(b){var n=s.add('<i class="vb-bub vb-amb" style="width:'+b[2]+'px;height:'+b[2]+'px;opacity:.6"></i>',b[0],b[1]);n.style.animationDelay=b[3]+'s'});
+  var rb=s.add('<div class="vb-bub red" style="width:46px;height:46px">'+lockSvg(22,'#fff','#ff3d71')+'</div>',137,70);
+  s.set(rb,{y:150,o:0});
+  var C=2*Math.PI*30;
+  var ring=s.add('<svg width="70" height="70" viewBox="0 0 70 70" style="overflow:visible;transform:rotate(-90deg)"><circle cx="35" cy="35" r="30" fill="none" stroke="#4dffc3" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+C+'" style="filter:drop-shadow(0 0 6px #4dffc3)"/></svg>',125,58);
+  var arc=ring.querySelector('circle');
+  var cur=s.cursor(262,168);
+  await s.to(rb,{y:0,o:1},1100,'cubic-bezier(.2,.8,.3,1)');
+  rb.classList.add('vb-bob');
+  await s.to(cur,{x:-102,y:-70},560);
+  // press and keep holding: the cursor stays down while the ring fills over 1.2 s
+  s.ripple(162,95,'sub');
+  s.anim(cur,[{scale:'1'},{scale:'.78'}],120);
+  s.anim(rb,[{scale:'1'},{scale:'.82'}],{duration:1200,easing:'linear'});
+  await s.anim(arc,[{strokeDashoffset:C},{strokeDashoffset:0}],{duration:1200,easing:'linear'});
+  s.anim(cur,[{scale:'.78'},{scale:'1'}],120);
+  s.anim(ring,[{opacity:1},{opacity:0}],260);
+  await s.anim(rb,[{scale:'.82',opacity:1},{scale:'0',opacity:0}],{duration:380,easing:'cubic-bezier(.5,0,.8,.4)'});
+  s.spark(160,93,'sub',10);
+  await s.wait(120);s.cost('-1:00',160,50,'sub',28);
+  s.to(cur,{x:-80,y:-40},500);
+  await s.wait(1800);
+};
+
 /* ---------- CURSES ---------- */
 V.curses=async function(s){
   var lk=s.add(lockSvg(32,'#a892cc'),144,16),sec=9;
