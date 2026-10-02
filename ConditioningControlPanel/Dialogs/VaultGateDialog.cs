@@ -159,9 +159,7 @@ public sealed class VaultGateDialog : Window
             : Loc.GetF(lab ? "vaultgate_title_lab" : "vaultgate_title_vault", name)));
         _body.Children.Add(Para(_feature == null ? Loc.Get("vaultgate_generic_body") : Loc.Get(_feature.TaglineLocKey)));
 
-        _body.Children.Add(Checks(lab
-            ? new[] { "vaultgate_lab_perk_1", "vaultgate_lab_perk_2", "vaultgate_lab_perk_3" }
-            : new[] { "vaultgate_perk_1", "vaultgate_perk_2", "vaultgate_perk_3" }, lab ? Gold : null));
+        _body.Children.Add(Perks(lab, 12.5));
 
         _proofSlot = new StackPanel();
         _body.Children.Add(_proofSlot);
@@ -307,9 +305,7 @@ public sealed class VaultGateDialog : Window
             Margin = new Thickness(0, 8, 0, 0), TextWrapping = TextWrapping.Wrap,
         });
         col.Children.Add(Price(tier, compact: true, yearly: _yearly));
-        col.Children.Add(Checks(lab
-            ? new[] { "vaultgate_lab_perk_1", "vaultgate_lab_perk_2", "vaultgate_lab_perk_3" }
-            : new[] { "vaultgate_perk_1", "vaultgate_perk_2", "vaultgate_perk_3" }, lab ? Gold : null, 12));
+        col.Children.Add(Perks(lab, 12));
         var choose = SmallButton(Loc.GetF("vaultgate_choose", Loc.Get(lab ? "vaultgate_tier_lab_name" : "vaultgate_tier_vault_name")));
         choose.Margin = new Thickness(0, 12, 0, 0);
         choose.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -420,17 +416,44 @@ public sealed class VaultGateDialog : Window
         Margin = margin ?? new Thickness(0, 4, 0, 0),
     };
 
-    private static FrameworkElement Checks(string[] keys, Brush? tick, double size = 13)
+    /// <summary>What a tier adds, as the gate audit found it (2026-10-02): Basic over free, Prime
+    /// over Basic. Keep these lines true when a gate moves; the card is the only place a free
+    /// account reads the full list.</summary>
+    private static readonly string[] BasicPerks =
+    {
+        "vaultgate_basic_1", "vaultgate_basic_2", "vaultgate_basic_3", "vaultgate_basic_4",
+        "vaultgate_basic_5", "vaultgate_basic_6", "vaultgate_basic_7", "vaultgate_basic_8",
+    };
+
+    private static readonly string[] PrimePerks =
+    {
+        "vaultgate_prime_1", "vaultgate_prime_2", "vaultgate_prime_3", "vaultgate_prime_4",
+        "vaultgate_prime_5", "vaultgate_prime_6", "vaultgate_prime_7",
+    };
+
+    /// <summary>The tier's header line and its bullets: a small dot per row, tight spacing, so
+    /// eight lines cost the card little height.</summary>
+    private static FrameworkElement Perks(bool lab, double size)
     {
         var list = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
-        foreach (var key in keys)
+        list.Children.Add(new TextBlock
         {
-            var row = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) });
+            Text = Loc.Get(lab ? "vaultgate_prime_head" : "vaultgate_basic_head"),
+            Foreground = Muted, FontSize = size - 0.5, FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4),
+        });
+        foreach (var key in lab ? PrimePerks : BasicPerks)
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 2) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(13) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var mark = new TextBlock { Text = "✓", FontWeight = FontWeights.Bold, FontSize = size };
-            if (tick != null) mark.Foreground = tick; else mark.SetResourceReference(TextBlock.ForegroundProperty, "PinkBrush");
-            row.Children.Add(mark);
+            var dot = new System.Windows.Shapes.Ellipse
+            {
+                Width = 5, Height = 5, HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(1, size * 0.47, 0, 0),
+            };
+            if (lab) dot.Fill = Gold; else dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "PinkBrush");
+            row.Children.Add(dot);
             var line = new TextBlock { Text = Loc.Get(key), Foreground = Text, FontSize = size, TextWrapping = TextWrapping.Wrap };
             Grid.SetColumn(line, 1);
             row.Children.Add(line);

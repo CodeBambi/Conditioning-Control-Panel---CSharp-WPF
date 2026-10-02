@@ -1075,9 +1075,9 @@ namespace ConditioningControlPanel
             var p2 = ExclusivesTab.TierPlate2;
             if (p1 == null || p2 == null) return;
 
-            var tier = App.Patreon?.CurrentTier ?? PatreonTier.None;
-            // Whitelist is permanent top tier by policy.
-            bool topTier = tier >= PatreonTier.Level2 || App.Patreon?.IsWhitelisted == true;
+            // The access properties, not the raw Patreon tier: SubscribeStar Prime, the whitelist
+            // and the offline grace light the right plate the same way they unlock the features.
+            bool topTier = App.Patreon?.HasLabAccess == true;
             bool premium = App.Patreon?.HasPremiumAccess == true;
 
             MotionFx.Stop(p1);

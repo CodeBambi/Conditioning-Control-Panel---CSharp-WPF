@@ -187,11 +187,11 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Whether the user has Lab access: Tier 2+ OR whitelisted.
         ///
-        /// THIS IS THE GOON GAME **HOST** BAR, and it mirrors the server exactly:
-        /// <c>/v2/goon/invite</c> answers 403 <c>no_host_access</c> below
-        /// <c>computeEffectiveTier(user) &gt;= 2</c>. Joining a duel is free for everyone;
-        /// minting the room is the tier-2 perk. <see cref="HasPremiumAccess"/> is deliberately
-        /// NOT the right gate here — in this codebase "premium" means tier 1.
+        /// This is the Prime (tier 2) bar: Down the Rabbit Hole, the Arcademy, full Breakout,
+        /// unlimited Graded Intake and the gaze games. It is NOT the Goon Game host bar any more:
+        /// hosting a room is a Basic perk since 2026-09-24 (<c>GoonHostService.HostingAllowed</c>
+        /// reads <see cref="HasPremiumAccess"/>, and the server's <c>/v2/goon/invite</c> asks for
+        /// <c>computeEffectiveTier &gt;= 1</c>). In this codebase "premium" means tier 1.
         ///
         /// Whitelist folds to permanent tier 2 on both sides (<see cref="SetWhitelistStatus"/>
         /// raises CurrentTier to Level2, computeEffectiveTier does the same server-side), so the
