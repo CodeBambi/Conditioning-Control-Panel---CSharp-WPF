@@ -7643,5 +7643,10 @@
   "vaultgate_ending_until": "你的邀请周将于 {0} 结束",
   "vaultgate_ending_keep": "保留宝库",
   "vaultgate_ending_let_close": "让它关闭",
-  "vaultgate_ending_inbox": "你的邀请周即将结束"
+  "vaultgate_ending_inbox": "你的邀请周即将结束",
+  "vaultgate_price_year": "/ 年 · 每月 {0}",
+  "vaultgate_yearly_hint": "或在 Patreon 按年付 {0}：免 2 个月。",
+  "vaultgate_billing_monthly": "按月",
+  "vaultgate_billing_yearly": "按年 · 免 2 个月",
+  "vaultgate_yearly_note": "按年付费目前仅支持 Patreon。其他支付方式为按月。"
 }

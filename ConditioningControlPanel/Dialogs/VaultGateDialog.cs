@@ -54,6 +54,10 @@ public sealed class VaultGateDialog : Window
     private readonly ExclusiveFeature? _feature;
     private readonly int _tier;
     private readonly Action _signIn;
+    private readonly PriceCurrency _currency = VaultOffer.LocalCurrency();
+
+    /// <summary>The compare face's billing switch. Yearly is Patreon-only, and says so.</summary>
+    private bool _yearly;
 
     private VaultGateDialog(ExclusiveFeature? feature, int tier, Action signIn)
     {
@@ -133,6 +137,7 @@ public sealed class VaultGateDialog : Window
         PaintProof();
 
         _body.Children.Add(Price(_tier));
+        _body.Children.Add(YearlyHint(_tier));
 
         var open = PrimaryButton(Loc.Get(lab ? "vaultgate_open_lab" : "vaultgate_open_vault"));
         open.Click += (_, _) => { OpenPatreon("gate"); Close(); };
@@ -262,6 +267,7 @@ public sealed class VaultGateDialog : Window
     {
         _body.Children.Clear();
         _body.Children.Add(Heading(Loc.Get("vaultgate_compare_title")));
+        _body.Children.Add(BillingSwitch());
 
         var grid = new Grid { Margin = new Thickness(0, 12, 0, 0) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -272,6 +278,7 @@ public sealed class VaultGateDialog : Window
         Grid.SetColumn(lab, 2);
         grid.Children.Add(lab);
         _body.Children.Add(grid);
+        if (_yearly) _body.Children.Add(Para(Loc.Get("vaultgate_yearly_note"), Gold, 12, new Thickness(0, 10, 0, 0)));
 
         var back = Link(Loc.Get("vaultgate_back"));
         back.Margin = new Thickness(0, 12, 0, 0);
@@ -292,7 +299,7 @@ public sealed class VaultGateDialog : Window
             FontWeight = FontWeights.SemiBold, FontSize = 16, Foreground = Brushes.White,
             Margin = new Thickness(0, 8, 0, 0), TextWrapping = TextWrapping.Wrap,
         });
-        col.Children.Add(Price(tier, compact: true));
+        col.Children.Add(Price(tier, compact: true, yearly: _yearly));
         col.Children.Add(Checks(lab
             ? new[] { "vaultgate_lab_perk_1", "vaultgate_lab_perk_2", "vaultgate_lab_perk_3" }
             : new[] { "vaultgate_perk_1", "vaultgate_perk_2", "vaultgate_perk_3" }, lab ? Gold : null, 12));
@@ -330,6 +337,7 @@ public sealed class VaultGateDialog : Window
         _body.Children.Add(Para(Loc.GetF("vaultgate_ending_until", grantUntilUtc.ToLocalTime().ToString("ddd d MMM, HH:mm")),
             Warn, 12.5, new Thickness(0, 10, 0, 0)));
         _body.Children.Add(Price(1));
+        _body.Children.Add(YearlyHint(1));
 
         var keep = PrimaryButton(Loc.Get("vaultgate_ending_keep"));
         keep.Click += (_, _) => { OpenPatreon("ending"); Close(); };
@@ -423,23 +431,56 @@ public sealed class VaultGateDialog : Window
         return list;
     }
 
-    private static FrameworkElement Price(int tier, bool compact = false)
+    private FrameworkElement Price(int tier, bool compact = false, bool yearly = false)
     {
-        var line = new WrapPanel { Margin = new Thickness(0, compact ? 8 : 12, 0, compact ? 0 : 10) };
+        var price = VaultOffer.PriceFor(tier, _currency);
+        var line = new WrapPanel { Margin = new Thickness(0, compact ? 8 : 12, 0, compact ? 0 : 4) };
         line.Children.Add(new TextBlock
         {
-            Text = VaultOffer.MonthlyLabel(tier),
+            Text = VaultOffer.Money(yearly ? price.YearlyCents : price.MonthlyCents, _currency),
             FontFamily = ConditioningControlPanel.Helpers.FontPickerHelper.FredokaFamily,
             FontWeight = FontWeights.SemiBold, FontSize = compact ? 22 : 28, Foreground = Brushes.White,
             Margin = new Thickness(0, 0, 8, 0),
         });
         line.Children.Add(new TextBlock
         {
-            Text = Loc.GetF("vaultgate_price", VaultOffer.PerDayLabel(tier)),
+            Text = yearly
+                ? Loc.GetF("vaultgate_price_year", VaultOffer.YearlyPerMonth(price))
+                : Loc.GetF("vaultgate_price", VaultOffer.PerDay(price)),
             Foreground = Dim, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 5),
             TextWrapping = TextWrapping.Wrap,
         });
         return line;
+    }
+
+    /// <summary>"Or €60 a year on Patreon: 2 months free." under a monthly price.</summary>
+    private FrameworkElement YearlyHint(int tier)
+        => Para(Loc.GetF("vaultgate_yearly_hint", VaultOffer.Money(VaultOffer.PriceFor(tier, _currency).YearlyCents, _currency)),
+            Gold, 12, new Thickness(0, 0, 0, 10));
+
+    /// <summary>Monthly / Yearly pills on the compare face. Rebuilds the face on a switch.</summary>
+    private FrameworkElement BillingSwitch()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        foreach (var yearly in new[] { false, true })
+        {
+            var on = yearly == _yearly;
+            var pill = new Border
+            {
+                CornerRadius = new CornerRadius(99), Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(0, 0, 6, 0),
+                Background = on ? RowBg : Brushes.Transparent, BorderBrush = on ? Gold : Edge, BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                Child = new TextBlock
+                {
+                    Text = Loc.Get(yearly ? "vaultgate_billing_yearly" : "vaultgate_billing_monthly"),
+                    Foreground = on ? Gold : Muted, FontSize = 12, FontWeight = FontWeights.SemiBold,
+                },
+            };
+            var choice = yearly;
+            pill.MouseLeftButtonUp += (_, _) => { if (_yearly != choice) { _yearly = choice; BuildCompare(); } };
+            row.Children.Add(pill);
+        }
+        return row;
     }
 
     private static Button PrimaryButton(string text)

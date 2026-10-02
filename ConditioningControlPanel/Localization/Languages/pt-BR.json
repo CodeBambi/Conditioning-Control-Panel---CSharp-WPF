@@ -7131,5 +7131,10 @@
   "vaultgate_ending_until": "Sua semana de convite termina em {0}",
   "vaultgate_ending_keep": "Manter o cofre",
   "vaultgate_ending_let_close": "Deixar fechar",
-  "vaultgate_ending_inbox": "Sua semana de convite termina em breve"
+  "vaultgate_ending_inbox": "Sua semana de convite termina em breve",
+  "vaultgate_price_year": "/ ano · {0} por mês",
+  "vaultgate_yearly_hint": "Ou {0} por ano no Patreon: 2 meses grátis.",
+  "vaultgate_billing_monthly": "Mensal",
+  "vaultgate_billing_yearly": "Anual · 2 meses grátis",
+  "vaultgate_yearly_note": "Por enquanto a cobrança anual é só pelo Patreon. Os outros meios de pagamento são mensais."
 }

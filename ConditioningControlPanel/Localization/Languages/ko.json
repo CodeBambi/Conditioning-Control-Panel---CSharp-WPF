@@ -7131,5 +7131,10 @@
   "vaultgate_ending_until": "초대 주간은 {0}에 끝나요",
   "vaultgate_ending_keep": "금고 유지하기",
   "vaultgate_ending_let_close": "닫히게 두기",
-  "vaultgate_ending_inbox": "초대 주간이 곧 끝나요"
+  "vaultgate_ending_inbox": "초대 주간이 곧 끝나요",
+  "vaultgate_price_year": "/ 년 · 월 {0}",
+  "vaultgate_yearly_hint": "또는 Patreon에서 연 {0}: 2개월 무료.",
+  "vaultgate_billing_monthly": "월간",
+  "vaultgate_billing_yearly": "연간 · 2개월 무료",
+  "vaultgate_yearly_note": "연간 결제는 현재 Patreon에서만 가능해요. 다른 결제 수단은 월간이에요."
 }

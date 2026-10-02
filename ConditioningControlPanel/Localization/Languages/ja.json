@@ -7131,5 +7131,10 @@
   "vaultgate_ending_until": "招待ウィークは{0}に終わります",
   "vaultgate_ending_keep": "金庫を続ける",
   "vaultgate_ending_let_close": "閉じさせる",
-  "vaultgate_ending_inbox": "招待ウィークがもうすぐ終わります"
+  "vaultgate_ending_inbox": "招待ウィークがもうすぐ終わります",
+  "vaultgate_price_year": "/ 年 · 月あたり{0}",
+  "vaultgate_yearly_hint": "またはPatreonで年{0}：2か月分無料。",
+  "vaultgate_billing_monthly": "月額",
+  "vaultgate_billing_yearly": "年額 · 2か月分無料",
+  "vaultgate_yearly_note": "年額払いは今のところPatreonのみです。他の支払い方法は月額です。"
 }

@@ -9,25 +9,58 @@ namespace ConditioningControlPanel.Services.Vault;
 /// <summary>
 /// The pure half of the vault gate card (Dialogs/VaultGateDialog): which feature a padlock
 /// belongs to, what the tiers cost, the supporter-count line, and when the last-day card for an
-/// invite week is owed. Prices live here and nowhere else in the client; they must match Patreon.
+/// invite week is owed. Prices live here (<see cref="PriceFor"/>) and nowhere else in the client.
 /// </summary>
+public enum PriceCurrency { Usd, Eur }
+
+/// <summary>One tier's price in one currency, in cents.</summary>
+public sealed record TierPrice(PriceCurrency Currency, int MonthlyCents, int YearlyCents);
+
 public static class VaultOffer
 {
-    /// <summary>Monthly price in US cents, by tier (1 = vault, 2 = lab). Mirrors the Patreon tiers.</summary>
-    public static int MonthlyCents(int tier) => tier >= 2 ? 1000 : 500;
-
-    /// <summary>"$5", "$10", "$7.50".</summary>
-    public static string MonthlyLabel(int tier)
+    /// <summary>
+    /// The Patreon price list. Two currencies, because Patreon bills supporters in euros or in
+    /// dollars; the card picks one from the machine's region (<see cref="CurrencyFor"/>). Yearly is
+    /// ten months' price ("2 months free") and exists on Patreon only: the other payment systems
+    /// have no yearly plan, so the card always says so next to it.
+    /// <para>These numbers must match the live Patreon tiers. This table is the one copy in the
+    /// client; change it here and nowhere else.</para>
+    /// </summary>
+    public static TierPrice PriceFor(int tier, PriceCurrency currency) => (tier >= 2, currency) switch
     {
-        var cents = MonthlyCents(tier);
-        return cents % 100 == 0
-            ? "$" + (cents / 100).ToString(CultureInfo.InvariantCulture)
-            : "$" + (cents / 100.0).ToString("0.00", CultureInfo.InvariantCulture);
+        (false, PriceCurrency.Eur) => new TierPrice(currency, 600, 6000),
+        (true, PriceCurrency.Eur) => new TierPrice(currency, 1000, 10000),
+        (false, _) => new TierPrice(currency, 750, 7500),
+        (true, _) => new TierPrice(currency, 1250, 12500),
+    };
+
+    /// <summary>Euros for a region that pays in euros, dollars for everyone else.</summary>
+    public static PriceCurrency CurrencyFor(string? isoCurrencySymbol)
+        => string.Equals(isoCurrencySymbol, "EUR", StringComparison.OrdinalIgnoreCase) ? PriceCurrency.Eur : PriceCurrency.Usd;
+
+    /// <summary>The machine's currency, from its Windows region. Dollars if the region cannot be read.</summary>
+    public static PriceCurrency LocalCurrency()
+    {
+        try { return CurrencyFor(RegionInfo.CurrentRegion.ISOCurrencySymbol); }
+        catch (Exception ex) { Diag.Swallowed(ex, "no region"); return PriceCurrency.Usd; }
     }
 
-    /// <summary>"17¢": the monthly price over 30 days, rounded to the nearest cent.</summary>
-    public static string PerDayLabel(int tier)
-        => ((int)Math.Round(MonthlyCents(tier) / 30.0, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture) + "¢";
+    /// <summary>"€6", "$7.50", "€0.20": whole amounts without decimals, anything else with two.</summary>
+    public static string Money(int cents, PriceCurrency currency)
+    {
+        var symbol = currency == PriceCurrency.Eur ? "€" : "$";
+        return cents % 100 == 0
+            ? symbol + (cents / 100).ToString(CultureInfo.InvariantCulture)
+            : symbol + (cents / 100m).ToString("0.00", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Monthly price over 30 days, rounded to the cent: "€0.20", "$0.42".</summary>
+    public static string PerDay(TierPrice price)
+        => Money((int)Math.Round(price.MonthlyCents / 30m, MidpointRounding.AwayFromZero), price.Currency);
+
+    /// <summary>Yearly price over 12 months, rounded to the cent: "€5", "$10.42".</summary>
+    public static string YearlyPerMonth(TierPrice price)
+        => Money((int)Math.Round(price.YearlyCents / 12m, MidpointRounding.AwayFromZero), price.Currency);
 
     /// <summary>
     /// The feature behind a tab's padlock, from the tab view's type name. Every gated tab forwards

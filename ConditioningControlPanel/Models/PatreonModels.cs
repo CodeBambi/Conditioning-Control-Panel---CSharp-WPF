@@ -12,9 +12,9 @@ namespace ConditioningControlPanel.Models
     {
         /// <summary>Not subscribed or not authenticated</summary>
         None = 0,
-        /// <summary>Level 1 ($5/mo) - AI Chatbot access</summary>
+        /// <summary>Level 1, the vault (€6 / $7.50 a month; see VaultOffer.PriceFor) - AI Chatbot access</summary>
         Level1 = 1,
-        /// <summary>Level 2 ($10/mo) - AI Chatbot + Window Awareness</summary>
+        /// <summary>Level 2, the lab (€10 / $12.50 a month; see VaultOffer.PriceFor) - AI Chatbot + Window Awareness</summary>
         Level2 = 2
     }
 

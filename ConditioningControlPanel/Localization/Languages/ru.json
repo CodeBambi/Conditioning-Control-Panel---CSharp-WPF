@@ -7131,5 +7131,10 @@
   "vaultgate_ending_until": "Твоя неделя по приглашению заканчивается {0}",
   "vaultgate_ending_keep": "Оставить хранилище",
   "vaultgate_ending_let_close": "Пусть закроется",
-  "vaultgate_ending_inbox": "Твоя неделя по приглашению скоро закончится"
+  "vaultgate_ending_inbox": "Твоя неделя по приглашению скоро закончится",
+  "vaultgate_price_year": "/ год · {0} в месяц",
+  "vaultgate_yearly_hint": "Или {0} в год на Patreon: 2 месяца бесплатно.",
+  "vaultgate_billing_monthly": "Помесячно",
+  "vaultgate_billing_yearly": "Годовая · 2 месяца бесплатно",
+  "vaultgate_yearly_note": "Годовая оплата пока доступна только через Patreon. Остальные способы оплаты помесячные."
 }

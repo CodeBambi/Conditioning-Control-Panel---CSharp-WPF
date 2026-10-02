@@ -7131,5 +7131,10 @@
   "vaultgate_ending_until": "Tu semana de invitación termina el {0}",
   "vaultgate_ending_keep": "Conservar la bóveda",
   "vaultgate_ending_let_close": "Dejar que se cierre",
-  "vaultgate_ending_inbox": "Tu semana de invitación termina pronto"
+  "vaultgate_ending_inbox": "Tu semana de invitación termina pronto",
+  "vaultgate_price_year": "/ año · {0} al mes",
+  "vaultgate_yearly_hint": "O {0} al año en Patreon: 2 meses gratis.",
+  "vaultgate_billing_monthly": "Mensual",
+  "vaultgate_billing_yearly": "Anual · 2 meses gratis",
+  "vaultgate_yearly_note": "Por ahora el pago anual solo está en Patreon. Los demás métodos de pago son mensuales."
 }

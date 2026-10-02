@@ -19,14 +19,39 @@ public class VaultOfferTests
     private static readonly string[] Languages = { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" };
 
     [Theory]
-    [InlineData(1, "$5", "17¢")]
-    [InlineData(2, "$10", "33¢")]
-    [InlineData(0, "$5", "17¢")]
-    public void Prices(int tier, string monthly, string perDay)
+    [InlineData(1, PriceCurrency.Eur, "€6", "€0.20", "€60", "€5")]
+    [InlineData(2, PriceCurrency.Eur, "€10", "€0.33", "€100", "€8.33")]
+    [InlineData(1, PriceCurrency.Usd, "$7.50", "$0.25", "$75", "$6.25")]
+    [InlineData(2, PriceCurrency.Usd, "$12.50", "$0.42", "$125", "$10.42")]
+    [InlineData(0, PriceCurrency.Usd, "$7.50", "$0.25", "$75", "$6.25")]
+    public void ThePatreonPriceList(int tier, PriceCurrency currency, string monthly, string perDay, string yearly, string yearlyPerMonth)
     {
-        Assert.Equal(monthly, VaultOffer.MonthlyLabel(tier));
-        Assert.Equal(perDay, VaultOffer.PerDayLabel(tier));
+        var price = VaultOffer.PriceFor(tier, currency);
+        Assert.Equal(monthly, VaultOffer.Money(price.MonthlyCents, currency));
+        Assert.Equal(perDay, VaultOffer.PerDay(price));
+        Assert.Equal(yearly, VaultOffer.Money(price.YearlyCents, currency));
+        Assert.Equal(yearlyPerMonth, VaultOffer.YearlyPerMonth(price));
     }
+
+    [Theory]
+    [InlineData(1, PriceCurrency.Eur)]
+    [InlineData(2, PriceCurrency.Eur)]
+    [InlineData(1, PriceCurrency.Usd)]
+    [InlineData(2, PriceCurrency.Usd)]
+    public void YearlyIsTwoMonthsFree(int tier, PriceCurrency currency)
+    {
+        var price = VaultOffer.PriceFor(tier, currency);
+        Assert.Equal(price.MonthlyCents * 10, price.YearlyCents);
+    }
+
+    [Theory]
+    [InlineData("EUR", PriceCurrency.Eur)]
+    [InlineData("eur", PriceCurrency.Eur)]
+    [InlineData("USD", PriceCurrency.Usd)]
+    [InlineData("GBP", PriceCurrency.Usd)]
+    [InlineData(null, PriceCurrency.Usd)]
+    public void EurosOnlyWhereTheRegionPaysInEuros(string? iso, PriceCurrency expected)
+        => Assert.Equal(expected, VaultOffer.CurrencyFor(iso));
 
     [Theory]
     [InlineData("LockdownTabView", "lockdown")]

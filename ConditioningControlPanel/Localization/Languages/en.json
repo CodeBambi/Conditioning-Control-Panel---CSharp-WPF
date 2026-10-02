@@ -7886,5 +7886,10 @@
   "vaultgate_ending_until": "Your invite week ends {0}",
   "vaultgate_ending_keep": "Keep the vault",
   "vaultgate_ending_let_close": "Let it close",
-  "vaultgate_ending_inbox": "Your invite week ends soon"
+  "vaultgate_ending_inbox": "Your invite week ends soon",
+  "vaultgate_price_year": "/ year · {0} a month",
+  "vaultgate_yearly_hint": "Or {0} a year on Patreon: 2 months free.",
+  "vaultgate_billing_monthly": "Monthly",
+  "vaultgate_billing_yearly": "Yearly · 2 months free",
+  "vaultgate_yearly_note": "Yearly billing is on Patreon only for now. Other payment options are monthly."
 }

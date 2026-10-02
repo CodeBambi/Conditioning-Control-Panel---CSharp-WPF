@@ -159,7 +159,7 @@ Every padlocked tab's unlock button opens `VaultGateDialog`, the vault gate card
 old jump to Settings · Account (`MainWindow.BtnGateUnlock_Click`; TierGate's "see tiers" toast
 opens it too, at the tier the door needs). A patron whose Patreon grant died on this PC still gets
 Reconnect instead. The card names the clicked feature (art, title and tagline from
-`ExclusiveFeature.All`), lists what the tier holds, shows the price from `VaultOffer` (keep it in
+`ExclusiveFeature.All`), lists what the tier holds, shows the price from `VaultOffer.PriceFor` (keep it in
 step with Patreon), and offers: open the tier on Patreon, compare tiers, sign in as an existing
 supporter, and redeem an invite code once `/v2/invites/mine` answers.
 
@@ -173,3 +173,16 @@ Unauthenticated, cacheable for an hour: `{ "count": 1234 }`, the number of activ
 supporters across providers. The card shows it rounded down to the hundred ("Join 1,200+
 subjects"), hides it below 100, and hides it entirely while this endpoint does not exist, so it
 never shows an invented number.
+
+### Prices
+
+`VaultOffer.PriceFor` is the one copy of the Patreon price list in the client. The card shows euros
+when the Windows region's currency is EUR and dollars otherwise.
+
+| Tier | Monthly | Yearly (Patreon only, 2 months free) |
+|------|---------|--------------------------------------|
+| Vault (tier 1) | €6 / $7.50 | €60 / $75 |
+| Lab (tier 2) | €10 / $12.50 | €100 / $125 |
+
+The other payment systems have no yearly plan, so every yearly price the card shows says
+"on Patreon". Change a price on Patreon and you must change it here.

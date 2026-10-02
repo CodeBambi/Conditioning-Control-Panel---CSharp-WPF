@@ -7131,5 +7131,10 @@
   "vaultgate_ending_until": "Deine Einladungswoche endet {0}",
   "vaultgate_ending_keep": "Tresor behalten",
   "vaultgate_ending_let_close": "Schließen lassen",
-  "vaultgate_ending_inbox": "Deine Einladungswoche endet bald"
+  "vaultgate_ending_inbox": "Deine Einladungswoche endet bald",
+  "vaultgate_price_year": "/ Jahr · {0} pro Monat",
+  "vaultgate_yearly_hint": "Oder {0} im Jahr über Patreon: 2 Monate gratis.",
+  "vaultgate_billing_monthly": "Monatlich",
+  "vaultgate_billing_yearly": "Jährlich · 2 Monate gratis",
+  "vaultgate_yearly_note": "Jährliche Abrechnung gibt es vorerst nur über Patreon. Andere Zahlungswege sind monatlich."
 }
