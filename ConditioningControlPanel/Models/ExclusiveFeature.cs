@@ -81,6 +81,19 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public string? DailyFreeKey { get; init; }
 
+        /// <summary>
+        /// Null means the card always shows. A probe that returns false HIDES the card (not a
+        /// veil): for a door that does not exist in this build or until the server opens it
+        /// (Just Drop, the Arcademy). A veil means "buy this", so it is only for things for sale.
+        /// </summary>
+        public Func<bool>? IsShown { get; init; }
+
+        public bool Shown()
+        {
+            try { return IsShown?.Invoke() ?? true; }
+            catch { return false; }
+        }
+
         /// <summary>Normalized (0-1) focal point of the art, where the hover bloom sits.</summary>
         public double FocalX { get; init; } = 0.5;
         public double FocalY { get; init; } = 0.45;
@@ -106,6 +119,10 @@ namespace ConditioningControlPanel.Models
                 return ExclusiveGateState.Locked;
             }
         }
+
+        /// <summary>Tier 2 ("Lab"), whitelist folded in, same bar as TierGate.RequiresLab.</summary>
+        private static ExclusiveGateState LabGate() =>
+            App.Patreon?.HasLabAccess == true ? ExclusiveGateState.Unlocked : ExclusiveGateState.Locked;
 
         /// <summary>
         /// The roster, in shelf order. The first entry is additionally the spotlight
@@ -142,6 +159,7 @@ namespace ConditioningControlPanel.Models
                 // Just Drop is for everyone (owner, 2026-09-25): no livery, no Prime badge,
                 // no veil and no rail star. The door itself is still the server's DoorAvailable.
                 Gate = () => ExclusiveGateState.Unlocked,
+                IsShown = () => Services.JustDrop.JustDropService.DoorAvailable,
             },
             new()
             {
@@ -212,6 +230,67 @@ namespace ConditioningControlPanel.Models
                 Key = "lockdown", Emoji = "🔒", Tier = 1,
                 TitleLocKey = "tab_lockdown_mode", TaglineLocKey = "exclusives_tag_lockdown",
                 ArtResource = "Resources/lockdown_icon.png",
+            },
+            // ---- Prime (tier 2) games and Lab features. Owner, 2026-10-02: "add the other
+            // premium features, or this is not an exclusive page". The collection grid puts
+            // Prime first (MainWindow.Exclusives.cs ShelfRank); the order here is the order
+            // inside each shelf. Each card opens the same door the launcher / Play wall uses,
+            // and that door keeps its own refusal (MainWindow.OpenExclusiveFeature).
+            new()
+            {
+                Key = "dtrh", Emoji = "🕳", Tier = 2,
+                TitleLocKey = "launcher_game_dtrh_title", TaglineLocKey = "exclusives_tag_dtrh",
+                ArtResource = "Resources/features/dtrh.png",
+                // Never on the daily wheel, but a server drop day names it (DailyFreeService
+                // OverridableKeys), and the card then wears FREE TODAY like the pool doors.
+                DailyFreeKey = "dtrh",
+                Gate = LabGate,
+            },
+            new()
+            {
+                Key = "arcademy", Emoji = "🏫", Tier = 2,
+                TitleLocKey = "launcher_game_arcademy_title", TaglineLocKey = "exclusives_tag_arcademy",
+                ArtResource = "Resources/features/arcademy.png",
+                Gate = LabGate,
+                // Same build flag that hides the launcher tile.
+                IsShown = () => Services.Arcademy.ArcademyHostService.DoorAvailable,
+            },
+            new()
+            {
+                // The full game: eight Story walls and Endless. The three-wall demo is free and
+                // lives on the launcher and the Play wall, not here.
+                Key = "breakout", Emoji = "🧱", Tier = 2,
+                TitleLocKey = "launcher_game_breakout_title", TaglineLocKey = "exclusives_tag_breakout",
+                // A render of the launcher's own vector cover (Services/Launcher/BreakoutCardArt).
+                ArtResource = "Resources/features/breakout.png",
+                FocalY = 0.5,
+                Gate = () => Services.BackRoom.BreakoutAccess.FullAllowed
+                    ? ExclusiveGateState.Unlocked
+                    : ExclusiveGateState.Locked,
+            },
+            new()
+            {
+                Key = "gazeminigame", Emoji = "🎯", Tier = 2,
+                TitleLocKey = "label_gaze_minigame", TaglineLocKey = "exclusives_tag_gazeminigame",
+                ArtResource = "Resources/features/lab_gaze_hero.png",
+                Gate = LabGate,
+            },
+            new()
+            {
+                // A switch, not a window: the card opens the Play wall, where the switch lives.
+                Key = "focusgaze", Emoji = "👀", Tier = 2,
+                TitleLocKey = "label_focus_gaze", TaglineLocKey = "exclusives_tag_focusgaze",
+                ArtResource = "Resources/features/lab_focusgaze_hero.png",
+                Gate = LabGate,
+            },
+            new()
+            {
+                // Tier 1 is HOSTING and sending your own pictures. Joining is free for any
+                // signed-in account, so the card always opens the game; the veil only says
+                // that hosting is sold.
+                Key = "goon", Emoji = "🟢", Tier = 1,
+                TitleLocKey = "launcher_game_goon_title", TaglineLocKey = "exclusives_tag_goon",
+                ArtResource = "Resources/features/goon_game_tile.png",
             },
             new()
             {
