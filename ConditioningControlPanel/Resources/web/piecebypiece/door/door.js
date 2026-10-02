@@ -897,6 +897,8 @@ export function createDoor(opts = {}) {
    *                                     the host (`pbp:friend-challenge`) so the drawer can send
    *                                     it as the invite, and the lobby waits for the yes
    *   { mode: 'accept', challengeId }   the friend's side: take it up, straight to the board
+   *   { mode: 'join', target }          the desktop Lobby: sit at that open table (a p_ id)
+   *   { mode: 'host' }                  the desktop Lobby: list a table and wait
    * A live online game is never interrupted; the host hears null and says so.
    */
   function friend(intent) {
@@ -915,6 +917,9 @@ export function createDoor(opts = {}) {
       }, () => tell(null));
       return;
     }
+    // The desktop Lobby: sit at one open table, or list ours. The same buttons the lobby screen has.
+    if (m.mode === 'join' && m.target) { if (screen !== 'lobby') show('lobby'); act('join', String(m.target)); return; }
+    if (m.mode === 'host') { if (screen !== 'lobby') show('lobby'); act('host'); return; }
     if (m.mode === 'accept' && m.challengeId && typeof lobby.acceptChallenge === 'function') {
       gate(() => {
         if (screen !== 'lobby') show('lobby');

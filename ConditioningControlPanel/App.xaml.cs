@@ -675,6 +675,8 @@ namespace ConditioningControlPanel
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
         public static RemoteControlService RemoteControl { get; private set; } = null!;
         public static AvailableSubjectsService AvailableSubjects { get; private set; } = null!;
+        /// <summary>The Lobby: chess, Goon and Remote open tables in one list. Polls only while watched.</summary>
+        public static Services.Lobby.LobbyService Lobby { get; private set; } = null!;
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
         public static CatalogueService Catalogue { get; private set; } = null!;
         public static CatalogueLookupService CatalogueLookup { get; private set; } = null!;
@@ -2469,6 +2471,7 @@ namespace ConditioningControlPanel
             // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
             // so an always-constructed idle singleton owned nothing and was never read.)
             AvailableSubjects = new AvailableSubjectsService();
+            Lobby = new Services.Lobby.LobbyService();
             CompanionPhrases = new CompanionPhraseService();
             Catalogue = new CatalogueService();
             CatalogueLookup = new CatalogueLookupService();
