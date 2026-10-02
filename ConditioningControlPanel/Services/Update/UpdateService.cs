@@ -20,64 +20,52 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.0.1";
+        public const string AppVersion = "7.0.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.0.1 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.0.2 - Stay Tuned
 
-[a quick fix on top of 7.0.0]
+[a lobby, the fall, invite codes, and the fixes you sent in]
 
-NEW IN 7.0.1
+NEW IN 7.0.2
 
-LAG AND FLICKER
-the Awareness and Listening pages no longer flip between a wide and a compact layout over and over. that flip was what made the whole app lag when you opened them. the Awareness privacy card also no longer rebuilds itself every second and a half.
+THE LOBBY
+Available Subjects is now the Lobby. three lists side by side: open tables, playing now, and your friends' tables. every table says who, what game and how it is set up, with a Join button. host a chess, Goon or Remote table from the top of the page. the launcher has a Lobby chip too: it shows how many tables are open and drops down the list, so you can join without opening the panel.
 
-GOON GAME
-the game no longer closes itself when a busy moment makes the picture pause for a few seconds. it waits longer and only steps in when it is really stuck.
+INVITE CODES
+subscribers get invite codes every month: two with Basic, three with Prime. anyone new who redeems one gets 7 days of Basic, free. no card, nothing renews. when a friend you invited subscribes, you climb a ladder of four badges, each with something new for the wardrobe. find your codes on the Exclusives tab.
 
-AI AND VIDEOS
-when the AI names a video that is not in your library, nothing random plays any more.
-
-EVERYTHING ELSE
-the rest is 7.0.0: Breakout, Piece by Piece, Circe's Tab, the Locktober raffle, Stakes, Friends and the Leash. if you are coming from 6.11.5, read the 7.0.0 notes on the release page.
-
-v7.0.0 - Stay Tuned
-
-[Task impossible. We should continue]
-
-BREAKOUT
-a brick breaker that starts grey and earns its colour, brick by brick, until the whole screen breaks out with your pictures and music, and every bounce lands on the beat. eight Story levels with an ending, Endless boards with portals, and the first three levels are free for everyone.
+LOCKED FEATURES
+clicking a padlock opens a card instead of throwing you into Settings: what the feature is, what Basic and Prime cost in your currency, monthly or yearly, and a compare page. already a supporter? sign in from the same card. have a code? redeem it there.
 
 PIECE BY PIECE
-chess where the pieces have real personality and every capture plays back like a comic strip. play the computer at five levels, from beginner to properly hard, or invite a friend online, and switch on Distraction if you want the board to fight for your attention, all of it free for everyone.
+- the fall. in Distraction, thinking makes it worse: the longer you stare at the board, the more the room closes in, and your move snaps it back. every move you make is graded and your IQ starts at 140. it only goes down. your opponent never sees yours.
+- the end card shows where it went wrong and the better move. Watch the fall plays your game back, and you can save or copy the picture.
+- open tables: see who is waiting for a game and who is playing right now, then host or join.
+- the first Distraction game asks which pictures you want. change it later under Options, Pictures.
+- the turn card is smaller and quicker, with a sound. the crowd reacts more.
 
 CIRCE'S TAB
-link your Chaster lock and CCP keeps a tab on you, so the slip-ups you choose to count add time and good behaviour takes it off, never past your daily limit. Circe has moods, red bubbles make you choose between popping and resisting, and panic never adds a second.
+- time taken off no longer shrinks your daily max. the day counts your adds minus your credits, so it can still reach the full limit, and a credit earned after you hit it cancels your next slip-up.
+- a quick pop on a red bubble could sometimes count as a hold. fixed.
+- the ""Resisted the red"" preview shows the hold and -1:00, not the pop.
 
-THE LOCKTOBER RAFFLE
-every October day CCP adds time to your lock counts, and 25 days with 31 hours in total put you in the draw, with the winner picked live on stream.
+LOCKTOBER
+already live, no update needed: a lock's first day counts, so Oct 1 is back for locks made at the end of September. new Chaster accounts count too. the daily post in #locktober lists everyone with time and counts the rest.
 
-STAKES
-play online chess and Goon Game for lock time or Sparkle Points, always against the house and never against the other player.
+FIXES
+- the AI's videos play again. when it names a video, you get your closest matching file, or its HypnoTube link opens. nothing plays only when you do not have it.
+- drop a preset file anywhere, including on the launcher. renamed downloads like ""name.preset (1).json"" work, and a file CCP does not know tells you so.
+- the companion can be switched back on after you dismiss it: Companion, Settings, Show companion.
+- the ""On Autopilot"" quest counts while CCP is minimised.
+- Breakout: the paddle no longer jumps when the mouse sends one wild movement.
+- videos in the in-app browser start right away instead of waiting for the page's ads.
 
-FRIENDS AND THE LEASH
-a friend list on the launcher, where you can poke friends, invite them into a game or send them something to watch. hand one friend your leash and they can send you tasks, rewards and punishments from a set list, while you can cut it any time and panic always works.
-
-GOON GAME
-see who is hosting and join in one click, with nothing to set up, since it plays from online pictures.
-
-ALSO
-- CCP opens on a launcher, with every game one click away.
-- the companion is rebuilt, with its own page, a memory and shorter replies.
-- flashes can stay until you pop them, and Brain Drain can keep your pictures sharp.
-- a tier bought on the website, PayPal included, unlocks straight away.
-- nine languages throughout, and a long list of fixes.
-- a phone update follows, so your level and Sparkle Points match everywhere.
-
-Welcome to v7";
+EVERYTHING ELSE
+the rest is 7.0.0. if you are coming from 6.11.5, read the 7.0.0 notes on the release page.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
