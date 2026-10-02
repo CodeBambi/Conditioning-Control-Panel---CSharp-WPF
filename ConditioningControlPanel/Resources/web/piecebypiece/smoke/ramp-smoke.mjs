@@ -11,7 +11,7 @@
  * (smoke/shoot.mjs) is what looks at those.
  * ==========================================================================*/
 
-import { createMeter, RAMP_TUNING, plainShare, clamp01 } from '../ramp/meter.js';
+import { createMeter, RAMP_TUNING, plainShare, clamp01, thinkLift, liftMeter, surgeLevel, createThinkClock } from '../ramp/meter.js';
 import { createSchedule, makeRng, cadenceMs, sustainedFor, videoHoldMs } from '../ramp/schedule.js';
 import { createFixtureMedia, createHostMedia, HOST_MSG, noiseTileUrl } from '../ramp/media.js';
 
@@ -382,6 +382,58 @@ function fakeBridge() {
   eq('a host hold of 6s is the floor', videoHoldMs(0, RAMP_TUNING, 6), 6000);
   check('and a full meter still stretches it', videoHoldMs(1, RAMP_TUNING, 6) > 6000);
   eq('a nonsense hold falls back to the tuning', videoHoldMs(0, RAMP_TUNING, -3), RAMP_TUNING.videoCard.minHoldSec * 1000);
+}
+
+/* ---- the think ramp (owner, 2026-10-01) ---------------------------------- */
+
+{
+  const T = RAMP_TUNING.think;
+  eq('a move made at once lifts nothing', thinkLift(0), 0);
+  eq('20 s of thinking is the top of the ramp', thinkLift(20000), 1);
+  eq('and it never goes past the top', thinkLift(60000), 1);
+  check('it eases in: half the time is well under half the lift', thinkLift(10000) < 0.4, String(thinkLift(10000)));
+  let rising = true;
+  for (let ms = 0; ms < 20000; ms += 500) if (thinkLift(ms + 500) < thinkLift(ms)) rising = false;
+  check('the lift only ever climbs with the think', rising);
+
+  eq('no lift leaves the floor where the match put it', liftMeter(0.3, 0), 0.3);
+  eq('a full lift is a full meter whatever the floor', liftMeter(0.3, 1), 1);
+  eq('half a lift is half the way from the floor to full', liftMeter(0.3, 0.5), 0.65);
+  eq('a floor already full stays full', liftMeter(1, 0.2), 1);
+
+  const full = sustainedFor(liftMeter(0, thinkLift(T.fullMs)));
+  check('a full think from a clean board reaches every sustained layer',
+    full.melt.on && full.blur.on && full.spiral.on && full.overlay.on);
+  check('the wash only rises over a screen that is already going soft',
+    liftMeter(0, thinkLift(T.cardAtMs)) >= RAMP_TUNING.unlock.blur);
+  check('and it does not wait until the very top', T.cardAtMs < T.fullMs);
+}
+
+{
+  const T = RAMP_TUNING.think;
+  const c = createThinkClock();
+  c.advance(5000, false);
+  eq('the opponent\'s move never counts', c.ms, 0);
+  c.advance(90, true);
+  eq('a beat on your own move counts', c.ms, 90);
+  c.advance(60000, true);
+  eq('one beat can never bank more than maxStepMs (a hidden tab)', c.ms, 90 + T.maxStepMs);
+  check('a quick move does not snap', c.reset() === false);
+  eq('the move puts the clock back to zero', c.ms, 0);
+  for (let i = 0; i < 80; i++) c.advance(T.maxStepMs, true);   // 20 s
+  eq('a full think lifts the screen all the way', c.lift(), 1);
+  check('a long think snaps when the move is made', c.reset() === true);
+  eq('and the screen is back on the floor', liftMeter(0.2, c.lift()), 0.2);
+}
+
+{
+  const S = RAMP_TUNING.surge;
+  eq('the fall starts at full', surgeLevel(0), 1);
+  eq('and holds there', surgeLevel(S.holdMs), 1);
+  eq('then drains', surgeLevel(S.holdMs + S.drainMs / 2), 0.5);
+  eq('to nothing', surgeLevel(S.holdMs + S.drainMs), 0);
+  eq('and stays at nothing', surgeLevel(S.holdMs + S.drainMs * 3), 0);
+  eq('a time before game over is nothing', surgeLevel(-5), 0);
 }
 
 /* ---- report -------------------------------------------------------------- */
