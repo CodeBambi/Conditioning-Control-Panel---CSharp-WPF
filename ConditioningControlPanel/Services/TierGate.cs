@@ -159,8 +159,10 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
+                    // The vault gate card at the tier this door needs (Dialogs/VaultGateDialog).
+                    var tier = verdict.Required >= PatreonTier.Level2 ? 2 : 1;
                     App.Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
-                        Loc.Get("tiergate_see_tiers"), () => App.MainWindowRef?.ShowAppInfoPopup());
+                        Loc.Get("tiergate_see_tiers"), () => App.MainWindowRef?.ShowVaultGate(null, tier));
                 }
             }
             catch (Exception ex)

@@ -152,3 +152,24 @@ the friend later cancels.
 - Client core (this primer, the wire, the grant): built.
 - Server endpoints: not built yet. Until they ship, `mine` answers 404, the client reads that as
   "no invites", and the invites UI stays hidden.
+
+## Vault gate card
+
+Every padlocked tab's unlock button opens `VaultGateDialog`, the vault gate card, in place of the
+old jump to Settings · Account (`MainWindow.BtnGateUnlock_Click`; TierGate's "see tiers" toast
+opens it too, at the tier the door needs). A patron whose Patreon grant died on this PC still gets
+Reconnect instead. The card names the clicked feature (art, title and tagline from
+`ExclusiveFeature.All`), lists what the tier holds, shows the price from `VaultOffer` (keep it in
+step with Patreon), and offers: open the tier on Patreon, compare tiers, sign in as an existing
+supporter, and redeem an invite code once `/v2/invites/mine` answers.
+
+The last-day card (`VaultGateDialog.ShowEnding`) is owed once per invite week inside its last 36
+hours, to premium that comes only from the week. It goes through the presenter, so it becomes an
+Inbox row when something is quiet.
+
+### `GET /v2/public/supporters` (CCP-Server, new)
+
+Unauthenticated, cacheable for an hour: `{ "count": 1234 }`, the number of active paying
+supporters across providers. The card shows it rounded down to the hundred ("Join 1,200+
+subjects"), hides it below 100, and hides it entirely while this endpoint does not exist, so it
+never shows an invented number.

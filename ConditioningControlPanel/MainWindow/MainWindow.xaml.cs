@@ -3605,6 +3605,7 @@ namespace ConditioningControlPanel
             // TierChanged handlers cover the loud grant paths; this covers the quiet ones
             // on the next launch.
             MaybeShowPremiumCelebration();
+            MaybeShowInviteEnding();
 
             // Catalogue submission feedback: poll for any pending Deeper
             // submissions that have been accepted/published since last launch and
