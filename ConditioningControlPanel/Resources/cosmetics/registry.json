@@ -632,6 +632,38 @@
       "name": "Key Cushion",
       "file": "circe/lock_velvet_cushion.png",
       "unlock": "free"
+    },
+    {
+      "id": "invite_pink_envelope",
+      "mod": "invites",
+      "type": "charm",
+      "name": "Pink Envelope",
+      "file": "invites/invite_pink_envelope.png",
+      "unlock": "achievement:invite_first"
+    },
+    {
+      "id": "invite_hostess_headset",
+      "mod": "invites",
+      "type": "deco",
+      "name": "Hostess Headset",
+      "file": "invites/invite_hostess_headset.png",
+      "unlock": "achievement:invite_hostess"
+    },
+    {
+      "id": "invite_recruiter_rose",
+      "mod": "invites",
+      "type": "charm",
+      "name": "Recruiter Rose",
+      "file": "invites/invite_recruiter_rose.png",
+      "unlock": "achievement:invite_pied_piper"
+    },
+    {
+      "id": "invite_velvet_crown",
+      "mod": "invites",
+      "type": "deco",
+      "name": "Velvet Crown",
+      "file": "invites/invite_velvet_crown.png",
+      "unlock": "achievement:invite_recruiter_chief"
     }
   ]
 }

@@ -59,7 +59,23 @@ export function createGifRain(ctx) {
     live = 0;
   }
 
-  return { fire, clear, dispose() { disposed = true; clear(); }, set() {}, show() {}, grab() {}, move() {}, drop() {} };
+  /** The breath after a move: what is still up lets go quickly instead of finishing its show. */
+  function fade(ms = 280) {
+    for (const n of [...nodes.keys()]) {
+      try {
+        const from = getComputedStyle(n).opacity;
+        n.style.animationPlayState = 'paused';
+        n.style.opacity = from;
+        n.style.transition = 'opacity ' + ms + 'ms ease';
+        void n.offsetWidth;
+        n.style.animation = 'none';
+        n.style.opacity = '0';
+      } catch { /* gone */ }
+    }
+    setTimeout(clear, ms + 40);
+  }
+
+  return { fire, clear, fade, dispose() { disposed = true; clear(); }, set() {}, show() {}, grab() {}, move() {}, drop() {} };
 }
 
 export default createGifRain;

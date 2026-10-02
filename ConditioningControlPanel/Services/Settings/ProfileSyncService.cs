@@ -832,6 +832,8 @@ namespace ConditioningControlPanel.Services
                             // Same body, second reading: a tier bought on the site (PayPal / Stripe)
                             // unlocks here without a sign-in. Rises only; see EntitlementTierRule.
                             EntitlementTierSync.Offer(EntitlementTierRule.ParseHeartbeatTier(body), "heartbeat");
+                            // Third reading: an invite week redeemed on another device opens here too.
+                            Invites.InviteGrantSync.Offer(Invites.InviteRules.ParseHeartbeatGrant(body), "heartbeat");
                         }
                         catch (Exception ex)
                         {
@@ -4696,6 +4698,7 @@ namespace ConditioningControlPanel.Services
             nameof(AppSettings.UserDisplayName),
             nameof(AppSettings.PatreonTier),
             nameof(AppSettings.PatreonPremiumValidUntil),
+            nameof(AppSettings.InviteGrantUntil),
             nameof(AppSettings.LastPatreonVerification),
             nameof(AppSettings.AuthToken),
             nameof(AppSettings.CustomAssetsPath),

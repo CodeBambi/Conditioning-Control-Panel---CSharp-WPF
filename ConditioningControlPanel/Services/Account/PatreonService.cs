@@ -154,14 +154,22 @@ namespace ConditioningControlPanel.Services
         /// provider unlocks features without touching the ~50 call sites that read it.
         /// </summary>
         public bool HasAiAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
-            || (App.SubscribeStar?.HasAiAccess == true);
+            || (App.SubscribeStar?.HasAiAccess == true) || (App.Settings?.Current?.HasInviteGrant == true);
 
         /// <summary>
         /// Whether the user has any premium feature access (Tier 1+ OR whitelisted OR within 2-week grace period).
         /// Canonical premium gate; SubscribeStar is OR'd in (see <see cref="HasAiAccess"/>).
         /// </summary>
         public bool HasPremiumAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
-            || (App.SubscribeStar?.HasPremiumAccess == true);
+            || (App.SubscribeStar?.HasPremiumAccess == true) || (App.Settings?.Current?.HasInviteGrant == true);
+
+        /// <summary>
+        /// Premium that comes ONLY from an invite week (Services/Invites): a free trial, not a
+        /// purchase. The celebration card and anything else that means "they paid" checks this.
+        /// </summary>
+        public bool IsInviteWeekOnly => App.Settings?.Current?.HasInviteGrant == true
+            && !(CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
+                 || (App.SubscribeStar?.HasPremiumAccess == true));
 
         /// <summary>
         /// The tier-2 half of the offline grace: its own 14-day stamp
@@ -179,11 +187,11 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Whether the user has Lab access: Tier 2+ OR whitelisted.
         ///
-        /// THIS IS THE GOON GAME **HOST** BAR, and it mirrors the server exactly:
-        /// <c>/v2/goon/invite</c> answers 403 <c>no_host_access</c> below
-        /// <c>computeEffectiveTier(user) &gt;= 2</c>. Joining a duel is free for everyone;
-        /// minting the room is the tier-2 perk. <see cref="HasPremiumAccess"/> is deliberately
-        /// NOT the right gate here — in this codebase "premium" means tier 1.
+        /// This is the Prime (tier 2) bar: Down the Rabbit Hole, the Arcademy, full Breakout,
+        /// unlimited Graded Intake and the gaze games. It is NOT the Goon Game host bar any more:
+        /// hosting a room is a Basic perk since 2026-09-24 (<c>GoonHostService.HostingAllowed</c>
+        /// reads <see cref="HasPremiumAccess"/>, and the server's <c>/v2/goon/invite</c> asks for
+        /// <c>computeEffectiveTier &gt;= 1</c>). In this codebase "premium" means tier 1.
         ///
         /// Whitelist folds to permanent tier 2 on both sides (<see cref="SetWhitelistStatus"/>
         /// raises CurrentTier to Level2, computeEffectiveTier does the same server-side), so the
@@ -1116,6 +1124,7 @@ namespace ConditioningControlPanel.Services
             {
                 App.Settings.Current.PatreonPremiumValidUntil = null;
                 App.Settings.Current.PatreonLabValidUntil = null;
+                App.Settings.Current.InviteGrantUntil = null; // the week belongs to the account, not the machine
                 App.Settings.Current.PatreonTier = 0; // Clear cached tier
                 App.Settings.Save(); // Force save immediately
             }

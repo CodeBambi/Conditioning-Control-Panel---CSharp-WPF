@@ -3159,6 +3159,25 @@ namespace ConditioningControlPanel.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasCachedLabAccess => _patreonLabValidUntil.HasValue && DateTime.UtcNow < _patreonLabValidUntil.Value;
 
+        private DateTime? _inviteGrantUntil = null;
+        /// <summary>
+        /// End of an invite week (Services/Invites), the server's exact date. Its own field on
+        /// purpose: the Patreon stamps above mean "a validation came back premium", and the quest
+        /// history, the celebration card and the boot heals all read them that way. Vault only;
+        /// never stretched into the 14-day grace. Machine-local like the stamps above.
+        /// </summary>
+        [JsonProperty("invite_grant_until")]
+        public DateTime? InviteGrantUntil
+        {
+            get => _inviteGrantUntil;
+            set { _inviteGrantUntil = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>True while an invite week is running.</summary>
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasInviteGrant => _inviteGrantUntil.HasValue && DateTime.UtcNow < _inviteGrantUntil.Value;
+
         #endregion
 
         #region Scheduler
