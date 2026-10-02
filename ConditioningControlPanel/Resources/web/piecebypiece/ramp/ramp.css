@@ -142,7 +142,7 @@
   will-change: opacity, transform;
   pointer-events: none;
 }
-.pbp-card.is-in { opacity: 0.42; transform: scale(1); }
+.pbp-card.is-in { opacity: 0.2; transform: scale(1); }  /* .42 -> .2 (owner, 2026-10-02) */
 .pbp-card.is-out { opacity: 0; transition: opacity 900ms ease, transform 900ms ease; }
 .pbp-card.is-out.is-snap { transition: opacity 220ms ease, transform 220ms ease; }
 

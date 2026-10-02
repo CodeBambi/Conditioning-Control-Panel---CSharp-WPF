@@ -282,6 +282,7 @@ export function attachRamp(opts = {}) {
       // and drops everything that pops, falls or rushes at the player
       if (!reducedMotion) for (const kind of out.fire) stack.oneshot(kind, { heat: out.heat });
       applySustained(out.sustained);
+      stack.boardMask();
       thinkCard(t, m, counting);
       if (t - lastBoardPush >= BOARD_PUSH_MS) { lastBoardPush = t; pushToBoard(m); }
     }
@@ -438,6 +439,7 @@ export function attachRamp(opts = {}) {
       setMeter(v) {
         overrideMeter = v == null ? null : clamp01(v);
         applySustained(sustainedFor(liveMeter(), tuning, { cardLive: stack.cardLive }));
+        stack.boardMask();
         return overrideMeter;
       },
       /** Dev harness only: fire one layer by name right now. */

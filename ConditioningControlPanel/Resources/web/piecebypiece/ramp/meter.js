@@ -45,17 +45,23 @@ export const RAMP_TUNING = Object.freeze({
   // --- sustained layer envelopes -------------------------------------------
   // Mort (2026-09-28): the early stages were right, full tilt was unreadable.
   // The top of every full-screen layer came down; the bottom barely moved.
-  melt: Object.freeze({ minAlpha: 0.10, maxAlpha: 0.30 }),
-  blurMaxPx: 3,
+  // Owner (2026-10-02): "keep the pieces and the grid always visible or we
+  // can't play". The pink wash and the full-screen pictures came down by about
+  // half again (melt .30 -> .14, spiral .32 -> .16, overlay .22 -> .11, veil
+  // budget .40 -> .22), and the blur on the board is capped under a pixel
+  // (3 -> 0.8): the board softens, a piece never smears. The board mask
+  // (layers/boardmask.js) thins what is left over the board's footprint.
+  melt: Object.freeze({ minAlpha: 0.06, maxAlpha: 0.14 }),
+  blurMaxPx: 0.8,
   // THE VEIL BUDGET. The two full-screen gif veils (spiral, overlay) may cover
   // this much between them and no more, and they step back to `cardVeilDamp` of
   // that while a video card is over the board. Without it the top of the ramp
   // is three walls at once and the board stops existing, which is a different
   // game to the one being played.
-  veilBudget: 0.40,
+  veilBudget: 0.22,
   cardVeilDamp: 0.45,          // HARD CAP: a move must always stay physically possible
-  spiral: Object.freeze({ minAlpha: 0.14, maxAlpha: 0.32, minHoldMs: 1400, maxHoldMs: 5200, gapMs: 9000 }),
-  overlay: Object.freeze({ minAlpha: 0.08, maxAlpha: 0.22 }),
+  spiral: Object.freeze({ minAlpha: 0.08, maxAlpha: 0.16, minHoldMs: 1400, maxHoldMs: 5200, gapMs: 9000 }),
+  overlay: Object.freeze({ minAlpha: 0.05, maxAlpha: 0.11 }),
 
   // --- the video card + the drag glitch ------------------------------------
   videoCard: Object.freeze({ minHoldSec: 4, maxHoldSec: 13, riseMs: 620, startJitter: 0.7 }),
