@@ -73,7 +73,7 @@ public sealed class VaultGateDialog : Window
         _tier = Math.Clamp(tier, 1, 2);
         _signIn = signIn;
 
-        Title = "Vault";
+        Title = "CC Labs";
         Width = 460;
         SizeToContent = SizeToContent.Height;
         WindowStyle = WindowStyle.None;

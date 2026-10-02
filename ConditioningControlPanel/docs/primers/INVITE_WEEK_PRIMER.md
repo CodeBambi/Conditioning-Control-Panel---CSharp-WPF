@@ -46,7 +46,7 @@ through the registry's `achievement:` gate.
 | Converted | Badge (title) | Wardrobe item |
 |-----------|---------------|---------------|
 | 1 | `invite_first` Brought One Down | charm `invite_pink_envelope` |
-| 3 | `invite_hostess` The Hostess | deco `invite_hostess_headset` |
+| 3 | `invite_hostess` The Welcome Committee | deco `invite_hostess_headset` |
 | 5 | `invite_pied_piper` Pied Piper | charm `invite_recruiter_rose` |
 | 10 | `invite_recruiter_chief` Recruiter in Chief | deco `invite_velvet_crown` |
 
@@ -181,8 +181,8 @@ when the Windows region's currency is EUR and dollars otherwise.
 
 | Tier | Monthly | Yearly (Patreon only, 2 months free) |
 |------|---------|--------------------------------------|
-| Vault (tier 1) | €6 / $7.50 | €60 / $75 |
-| Lab (tier 2) | €10 / $12.50 | €100 / $125 |
+| Basic (tier 1) | €6 / $7.50 | €60 / $75 |
+| Prime (tier 2) | €10 / $12.50 | €100 / $125 |
 
 The other payment systems have no yearly plan, so every yearly price the card shows says
 "on Patreon". Change a price on Patreon and you must change it here.
