@@ -7109,7 +7109,7 @@
   "invites_ticket_tooltip": "Tienes una invitación para regalar",
   "invites_resets": "Se renueva el {0}",
   "invites_inviter_body": "Quien sea nuevo y canjee uno de tus códigos recibe 7 días de Basic gratis. Sin tarjeta, nada se renueva. Ganas recompensas cuando se quedan.",
-  "invites_left": "Te quedan {0} de {1} códigos este mes",
+  "invites_left": "Códigos que te quedan este mes: {0} de {1}",
   "invites_slot_open": "Sin usar",
   "invites_slot_trying": "{0} · lo está probando, día {1}",
   "invites_slot_converted": "{0} · suscripción activa ✓",

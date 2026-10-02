@@ -7109,7 +7109,7 @@
   "invites_ticket_tooltip": "Tu as une invitation à offrir",
   "invites_resets": "Renouvelé le {0}",
   "invites_inviter_body": "Toute personne nouvelle qui utilise un de tes codes a 7 jours de Basic offerts. Pas de carte, rien ne se renouvelle. Tu gagnes des récompenses quand elle reste.",
-  "invites_left": "Il te reste {0} codes sur {1} ce mois-ci",
+  "invites_left": "Codes restants ce mois-ci : {0} sur {1}",
   "invites_slot_open": "Pas encore utilisé",
   "invites_slot_trying": "{0} · en essai, jour {1}",
   "invites_slot_converted": "{0} · abonnement actif ✓",

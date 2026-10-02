@@ -7109,7 +7109,7 @@
   "invites_ticket_tooltip": "Você tem um convite para dar",
   "invites_resets": "Renova em {0}",
   "invites_inviter_body": "Quem for novo e resgatar um dos seus códigos ganha 7 dias de Basic grátis. Sem cartão, nada renova. Você ganha recompensas quando a pessoa fica.",
-  "invites_left": "{0} de {1} códigos restantes este mês",
+  "invites_left": "Códigos restantes este mês: {0} de {1}",
   "invites_slot_open": "Ainda não usado",
   "invites_slot_trying": "{0} · testando, dia {1}",
   "invites_slot_converted": "{0} · assinatura ativa ✓",

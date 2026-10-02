@@ -7864,7 +7864,7 @@
   "invites_ticket_tooltip": "You have an invite to give",
   "invites_resets": "Resets {0}",
   "invites_inviter_body": "Anyone new who redeems one of your codes gets 7 days of Basic, free. No card, nothing renews. You earn rewards when they stay.",
-  "invites_left": "{0} of {1} codes left this month",
+  "invites_left": "Codes left this month: {0} of {1}",
   "invites_slot_open": "Not used yet",
   "invites_slot_trying": "{0} · trying it, day {1}",
   "invites_slot_converted": "{0} · subscribed ✓",

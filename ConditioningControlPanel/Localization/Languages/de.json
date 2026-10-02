@@ -7109,7 +7109,7 @@
   "invites_ticket_tooltip": "Du hast eine Einladung zu vergeben",
   "invites_resets": "Neu am {0}",
   "invites_inviter_body": "Wer neu ist und einen deiner Codes einlöst, bekommt 7 Tage Basic gratis. Keine Karte, nichts verlängert sich. Du bekommst Belohnungen, wenn sie bleiben.",
-  "invites_left": "{0} von {1} Codes übrig diesen Monat",
+  "invites_left": "Codes übrig diesen Monat: {0} von {1}",
   "invites_slot_open": "Noch nicht benutzt",
   "invites_slot_trying": "{0} · probiert es, Tag {1}",
   "invites_slot_converted": "{0} · abonniert ✓",
