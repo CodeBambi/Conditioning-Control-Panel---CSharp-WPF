@@ -302,6 +302,10 @@ namespace ConditioningControlPanel
                 // Parks/resumes with tab switches like every other ambient canvas.
                 RegisterTabFx("exclusives", ExclusivesTab.ExclusivesAmbientFx);
 
+                // Columns follow the width: a wide window gets more cards a row, never an empty strip.
+                ExclusivesTab.ExclusivesShelf.SizeChanged += (_, e) => { if (e.WidthChanged) FitExclusiveShelf(); };
+                FitExclusiveShelf();
+
                 _invitePanel = new Controls.Invites.InvitePanel();
                 ExclusivesTab.InvitesHost.Child = _invitePanel;
                 // Every read the card makes also repaints the header ticket (MainWindow.InviteTicket.cs).
@@ -1319,6 +1323,20 @@ namespace ConditioningControlPanel
         /// Card decode cap. A card paints 336 DIP, so this is already ~2x for a 200% display;
         /// nine sources at 1376x768 native would cost ~32 MB of bitmaps.
         /// </summary>
+        /// <summary>Sizes every shelf card to <see cref="Services.UI.ExclusiveShelfFit"/> for the shelf's width.</summary>
+        private void FitExclusiveShelf()
+        {
+            try
+            {
+                var shelf = ExclusivesTab?.ExclusivesShelf;
+                if (shelf == null || shelf.ActualWidth <= 0) return;
+                var (_, w, h) = Services.UI.ExclusiveShelfFit.For(shelf.ActualWidth);
+                foreach (var child in shelf.Children)
+                    if (child is FrameworkElement card) { card.Width = w; card.Height = h; }
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Exclusives] shelf fit failed: {E}", ex.Message); }
+        }
+
         private const int ExclusiveCardDecodeWidth = 700;
 
         /// <summary>The header's 240-wide vault plate, matching the XAML's authored DecodePixelWidth.</summary>
