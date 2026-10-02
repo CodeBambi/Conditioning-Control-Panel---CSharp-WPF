@@ -261,7 +261,9 @@ public sealed class ChasterClient : IDisposable
             var status = api ? MapApi(res.StatusCode, write) : Map(res.StatusCode);
             if (status != ChasterStatus.Ok)
             {
-                App.Logger?.Debug("[Chaster] {Path} answered {Code}", req.RequestUri?.AbsolutePath.Split('/').ElementAtOrDefault(1), (int)res.StatusCode);
+                // Information, not Debug: every one of these reads as "offline" on the page, and
+                // a support log must say which answer it was (ccp-bugs #1332).
+                App.Logger?.Information("[Chaster] {Path} answered {Code}", req.RequestUri?.AbsolutePath.Split('/').ElementAtOrDefault(1), (int)res.StatusCode);
                 return new(status, default);
             }
             var body = res.Content == null ? "" : await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
