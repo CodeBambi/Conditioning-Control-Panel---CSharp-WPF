@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Services.Friends;
 using Newtonsoft.Json.Linq;
@@ -52,6 +53,23 @@ internal static partial class PieceByPieceHostService
         if (!InviteDestination.IsChallengeId(challengeId)) return;
         Intend(new JObject { ["type"] = "pbp:friend", ["mode"] = "accept", ["challengeId"] = challengeId });
     }
+
+    /// <summary>The Lobby's Join on a chess open table: open the board and sit at the table of
+    /// that <c>p_</c> id (the page runs its own lobby.join, refusals included).</summary>
+    public static void JoinOpenTable(string target)
+    {
+        if (!IsTableId(target)) return;
+        Intend(new JObject { ["type"] = "pbp:friend", ["mode"] = "join", ["target"] = target });
+    }
+
+    /// <summary>The Lobby's "Host a chess table": open the board and list a table at the page's
+    /// default clock, waiting for someone to sit down.</summary>
+    public static void HostOpenTable() => Intend(new JObject { ["type"] = "pbp:friend", ["mode"] = "host" });
+
+    /// <summary>A chess lobby row id: the server's opaque <c>p_</c> id, letters, digits, _ and -.</summary>
+    internal static bool IsTableId(string? id) =>
+        !string.IsNullOrEmpty(id) && id.Length <= 64 && id.StartsWith("p_", System.StringComparison.Ordinal)
+        && id.Skip(2).All(c => char.IsAsciiLetterOrDigit(c) || c == '_' || c == '-') && id.Length > 2;
 
     private static void Intend(JObject intent)
     {
