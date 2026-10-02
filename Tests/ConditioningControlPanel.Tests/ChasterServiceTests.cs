@@ -128,12 +128,16 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
-    public void Today_reads_the_gross_adds_of_the_local_day_and_zero_on_a_new_one()
+    public void Today_reads_adds_minus_credits_of_the_local_day_and_zero_on_a_new_one()
     {
         using var service = Make();
         service.Note("typo");
-        service.Note("session");
+        Assert.Equal(30, service.TodayAddedSeconds);
 
+        // The credit hands its room back (it can only take back the 30 on the tab: nothing pushed yet).
+        service.Note("session");
+        Assert.Equal(0, service.TodayAddedSeconds);
+        service.Note("typo");
         Assert.Equal(30, service.TodayAddedSeconds);
         _utc = _utc.AddDays(1);
         Assert.Equal(0, service.TodayAddedSeconds);
