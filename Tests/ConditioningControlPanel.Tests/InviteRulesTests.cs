@@ -37,29 +37,50 @@ public class InviteRulesTests
         => Assert.Null(InviteRules.NormalizeCode(raw));
 
     [Fact]
-    public void ApplyGrant_OpensTheWindowToTheExactEnd()
+    public void ApplyGrant_RecordsTheExactEndInItsOwnField()
     {
         var s = new AppSettings();
         var end = Now.AddDays(7);
         Assert.True(InviteRules.ApplyGrant(s, end, Now));
-        Assert.Equal(end, s.PatreonPremiumValidUntil);
+        Assert.Equal(end, s.InviteGrantUntil);
+        // The Patreon stamps mean "they paid"; an invite week never writes them.
+        Assert.Null(s.PatreonPremiumValidUntil);
         Assert.Null(s.PatreonLabValidUntil);
     }
 
     [Fact]
-    public void ApplyGrant_NeverShortensASubscribersWindow()
+    public void ApplyGrant_NeverShortensAWeekAlreadyRecorded()
+    {
+        var s = new AppSettings { InviteGrantUntil = Now.AddDays(7) };
+        Assert.False(InviteRules.ApplyGrant(s, Now.AddDays(5), Now));
+        Assert.Equal(Now.AddDays(7), s.InviteGrantUntil);
+    }
+
+    [Fact]
+    public void ApplyGrant_LeavesASubscribersWindowAlone()
     {
         var s = new AppSettings { PatreonPremiumValidUntil = Now.AddDays(14) };
-        Assert.False(InviteRules.ApplyGrant(s, Now.AddDays(7), Now));
+        Assert.True(InviteRules.ApplyGrant(s, Now.AddDays(7), Now));
         Assert.Equal(Now.AddDays(14), s.PatreonPremiumValidUntil);
     }
 
     [Fact]
-    public void ApplyGrant_ClampsAGrantThatClaimsMoreThanAWeek()
+    public void ApplyGrant_IgnoresAGrantThatClaimsMoreThanAWeek()
     {
         var s = new AppSettings();
-        Assert.True(InviteRules.ApplyGrant(s, Now.AddYears(5), Now));
-        Assert.Equal(Now + InviteRules.MaxGrantAhead, s.PatreonPremiumValidUntil);
+        Assert.False(InviteRules.ApplyGrant(s, Now.AddYears(5), Now));
+        Assert.False(InviteRules.ApplyGrant(s, Now + InviteRules.MaxGrantAhead + TimeSpan.FromMinutes(1), Now));
+        Assert.Null(s.InviteGrantUntil);
+    }
+
+    [Fact]
+    public void ApplyGrant_ABadFarFutureValueNeverSlidesForwardOnHeartbeats()
+    {
+        var s = new AppSettings();
+        var bogus = Now.AddYears(5);
+        for (var minute = 0; minute < 60 * 24 * 30; minute += 60)
+            InviteRules.ApplyGrant(s, bogus, Now.AddMinutes(minute));
+        Assert.Null(s.InviteGrantUntil);
     }
 
     [Fact]
@@ -69,7 +90,7 @@ public class InviteRulesTests
         Assert.False(InviteRules.ApplyGrant(s, Now.AddMinutes(-1), Now));
         Assert.False(InviteRules.ApplyGrant(s, null, Now));
         Assert.False(InviteRules.ApplyGrant(null, Now.AddDays(3), Now));
-        Assert.Null(s.PatreonPremiumValidUntil);
+        Assert.Null(s.InviteGrantUntil);
     }
 
     [Fact]
@@ -79,8 +100,16 @@ public class InviteRulesTests
         var end = Now.AddDays(7);
         InviteRules.ApplyGrant(s, end, Now);
         Assert.False(InviteRules.ApplyGrant(s, end, Now.AddDays(3)));
-        Assert.Equal(end, s.PatreonPremiumValidUntil);
+        Assert.Equal(end, s.InviteGrantUntil);
     }
+
+    [Theory]
+    [InlineData("{\"ok\":false,\"reason\":\"not_subscribed\",\"converted_total\":3}", 3)]
+    [InlineData("{\"ok\":false,\"reason\":\"not_subscribed\"}", 0)]
+    [InlineData("{\"converted_total\":\"3\"}", 0)]
+    [InlineData("{\"converted_total\":-2}", 0)]
+    public void ParseConverted_ReadsAnyWordedReply(string json, int expected)
+        => Assert.Equal(expected, InviteRules.ParseConverted(JObject.Parse(json)));
 
     [Theory]
     [InlineData("{\"invite_grant_until\":\"2026-10-09T12:00:00Z\"}", true)]

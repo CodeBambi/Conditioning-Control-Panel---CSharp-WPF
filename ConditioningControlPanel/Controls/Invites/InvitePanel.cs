@@ -33,12 +33,14 @@ public sealed class InvitePanel : Border
     private static readonly Brush Warn = Frozen("#FFB347");
     private static readonly Brush Text = Frozen("#E0E0E0");
     private static readonly Brush Muted = Frozen("#B8B1CC");
-    private static readonly FontFamily Display = new("/Fonts/#Fredoka, Segoe UI");
+    private enum Face { None, Inviter, Redeem, Redeemed }
 
     private readonly Func<IInviteApi> _api;
     private readonly StackPanel _body = new();
     private DateTime _lastReadUtc = DateTime.MinValue;
-    private bool _busy;
+    private Face _face = Face.None;
+    private bool _reading;
+    private bool _redeeming;
 
     public InvitePanel(Func<IInviteApi>? api = null)
     {
@@ -55,35 +57,41 @@ public sealed class InvitePanel : Border
     /// <summary>Re-read the server and repaint. Throttled unless forced; never throws.</summary>
     public async Task RefreshAsync(bool force = false)
     {
-        if (_busy) return;
+        // A redeem in flight or just confirmed owns the card: the grant it applies repaints the
+        // tab, and a re-read then would collapse the confirmation (the account is now premium).
+        if (_reading || _redeeming || _face == Face.Redeemed) return;
         if (!force && DateTime.UtcNow - _lastReadUtc < RefreshGap) return;
-        if (BackRoomApi.AppIdentity() == null) { Visibility = Visibility.Collapsed; return; }
+        if (BackRoomApi.AppIdentity() == null) { Hide(); return; }
 
-        _busy = true;
+        _reading = true;
         try
         {
             var mine = await _api().MineAsync();
             _lastReadUtc = DateTime.UtcNow;
+            if (_redeeming || _face == Face.Redeemed) return;
+            InviteRewards.Apply(mine.ConvertedTotal);
             if (mine.Snapshot != null)
-            {
-                InviteRewards.Apply(mine.Snapshot);
                 ShowInviter(mine.Snapshot);
-            }
             else if (mine.Reachable && App.Patreon?.HasPremiumAccess != true)
             {
-                ShowRedeem();
+                // Rebuilding would wipe a half-typed code or the last refusal.
+                if (_face != Face.Redeem) ShowRedeem();
             }
             else
-            {
-                Visibility = Visibility.Collapsed;
-            }
+                Hide();
         }
         catch (Exception ex)
         {
             App.Logger?.Debug("[Invites] panel refresh failed: {E}", ex.GetType().Name);
-            Visibility = Visibility.Collapsed;
+            Hide();
         }
-        finally { _busy = false; }
+        finally { _reading = false; }
+    }
+
+    private void Hide()
+    {
+        _face = Face.None;
+        Visibility = Visibility.Collapsed;
     }
 
     // ============================== inviter ==============================
@@ -105,6 +113,7 @@ public sealed class InvitePanel : Border
             _body.Children.Add(SlotRow(slot));
 
         _body.Children.Add(Ladder(snap.ConvertedTotal));
+        _face = Face.Inviter;
         Visibility = Visibility.Visible;
     }
 
@@ -255,19 +264,20 @@ public sealed class InvitePanel : Border
 
         async void Redeem()
         {
-            if (_busy) return;
+            if (_redeeming) return;
             if (InviteRules.NormalizeCode(box.Text) == null)
             {
                 Say(result, Loc.Get("invites_err_bad_code"), Warn);
                 return;
             }
-            _busy = true;
+            _redeeming = true;
             go.IsEnabled = false;
             try
             {
                 var outcome = await _api().RedeemAsync(box.Text);
                 if (outcome.Ok)
                 {
+                    _face = Face.Redeemed;
                     InviteGrantSync.Offer(outcome.GrantUntilUtc, "redeem");
                     row.Visibility = Visibility.Collapsed;
                     var until = outcome.GrantUntilUtc?.ToLocalTime().ToString("d MMM, HH:mm") ?? "";
@@ -285,13 +295,14 @@ public sealed class InvitePanel : Border
             }
             finally
             {
-                _busy = false;
+                _redeeming = false;
                 go.IsEnabled = true;
             }
         }
 
         go.Click += (_, _) => Redeem();
         box.KeyDown += (_, e) => { if (e.Key == Key.Enter) Redeem(); };
+        _face = Face.Redeem;
         Visibility = Visibility.Visible;
     }
 
@@ -320,7 +331,7 @@ public sealed class InvitePanel : Border
         grid.Children.Add(new TextBlock
         {
             Text = title,
-            FontFamily = Display,
+            FontFamily = ConditioningControlPanel.Helpers.FontPickerHelper.FredokaFamily,
             FontWeight = FontWeights.SemiBold,
             FontSize = 18,
             Foreground = Brushes.White,
@@ -347,19 +358,17 @@ public sealed class InvitePanel : Border
             Margin = margin ?? new Thickness(0),
         };
 
+    /// <summary>The theme's pink pill (Resources/Theme/MainWindow.xaml), so hover, pressed and
+    /// disabled stay on-theme instead of falling back to the default light-blue chrome.</summary>
     private static Button SmallButton(string text)
     {
         var b = new Button
         {
             Content = text,
-            Padding = new Thickness(14, 6, 14, 6),
             Cursor = Cursors.Hand,
-            Background = Pink,
-            Foreground = Frozen("#1A1A2E"),
-            BorderThickness = new Thickness(0),
-            FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        b.SetResourceReference(StyleProperty, "SmallPinkButton");
         return b;
     }
 

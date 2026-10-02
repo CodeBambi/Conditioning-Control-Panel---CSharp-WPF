@@ -88,10 +88,12 @@ public class InviteApiTests
     [Fact]
     public async Task Mine_ANonSubscriberIsReachableWithNoSnapshot()
     {
-        var (api, _) = Make(HttpStatusCode.OK, "{\"ok\":false,\"reason\":\"not_subscribed\"}");
+        var (api, _) = Make(HttpStatusCode.OK, "{\"ok\":false,\"reason\":\"not_subscribed\",\"converted_total\":2}");
         var mine = await api.MineAsync(TestContext.Current.CancellationToken);
         Assert.True(mine.Reachable);
         Assert.Null(mine.Snapshot);
+        // A lapsed inviter still carries the lifetime count, so ladder rewards keep arriving.
+        Assert.Equal(2, mine.ConvertedTotal);
     }
 
     [Fact]

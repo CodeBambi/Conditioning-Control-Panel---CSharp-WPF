@@ -38,7 +38,9 @@ public sealed record InviteSnapshot(
 /// (a refusal such as <c>not_subscribed</c> included), which is how the app knows invites exist
 /// server-side before it shows anyone a redeem box. <see cref="Snapshot"/> is set for subscribers.
 /// </summary>
-public sealed record InviteMine(bool Reachable, InviteSnapshot? Snapshot)
+/// <see cref="ConvertedTotal"/> is the lifetime count from ANY worded reply, so an inviter whose
+/// own subscription lapsed still collects ladder rewards for friends who convert later.
+public sealed record InviteMine(bool Reachable, InviteSnapshot? Snapshot, int ConvertedTotal = 0)
 {
     public static readonly InviteMine Unreachable = new(false, null);
 }
@@ -54,17 +56,20 @@ public sealed record RedeemOutcome(bool Ok, string? Reason, DateTime? GrantUntil
 /// that redeems one gets the vault (tier 1) for <see cref="GrantDays"/> days. The server owns the
 /// codes, the one-week-per-account rule and conversion; the app only reads the results.
 ///
-/// <para>The week is written into <see cref="AppSettings.PatreonPremiumValidUntil"/>, the same
-/// window every premium gate already reads, at the server's exact end date. It never goes through
-/// <see cref="EntitlementTierRule.ExtendGrace"/>: that would stretch a 7-day gift into the 14-day
-/// subscriber grace. See docs/primers/INVITE_WEEK_PRIMER.md for the server contract.</para>
+/// <para>The week is written into its own <see cref="AppSettings.InviteGrantUntil"/> at the
+/// server's exact end date, which <c>HasPremiumAccess</c> and <c>HasAiAccess</c> OR in. It never
+/// touches the Patreon stamps (the quest history, the celebration card and the boot heals read
+/// those as "they paid") and never goes through <see cref="EntitlementTierRule.ExtendGrace"/>,
+/// which would stretch a 7-day gift into the 14-day subscriber grace. See
+/// docs/primers/INVITE_WEEK_PRIMER.md for the server contract.</para>
 /// </summary>
 public static class InviteRules
 {
     public const int GrantDays = 7;
 
-    /// <summary>A grant end further out than this is not believed: it is clamped, so a bad server
-    /// value can never hand out more than one week plus a day of clock slack.</summary>
+    /// <summary>A grant end further out than this is not believed and is ignored outright. Not
+    /// clamped: a clamp measured from "now" would slide forward on every heartbeat and turn one
+    /// bad server value into premium for as long as it persists.</summary>
     public static readonly TimeSpan MaxGrantAhead = TimeSpan.FromDays(GrantDays + 1);
 
     public const int MinCodeLength = 6;
@@ -123,23 +128,28 @@ public static class InviteRules
     {
         if (string.IsNullOrWhiteSpace(body)) return null;
         try { return JObject.Parse(body) is JObject root ? ParseUtc(root["invite_grant_until"]) : null; }
-        catch { return null; }
+        catch (Exception ex) { Diag.Swallowed(ex, "heartbeat body not JSON"); return null; }
     }
 
     /// <summary>
-    /// Open the premium window up to the grant's end. True when the window grew (the caller saves
-    /// and repaints). Never shortens a longer window a real subscription already stamped, ignores
-    /// a grant that has ended, and clamps one that claims more than a week.
+    /// Record the grant's end. True when the invite week grew (the caller saves and repaints).
+    /// Ignores a grant that has ended or one that claims more than <see cref="MaxGrantAhead"/>,
+    /// and never shortens a week already recorded. Touches nothing but
+    /// <see cref="AppSettings.InviteGrantUntil"/>.
     /// </summary>
     public static bool ApplyGrant(AppSettings? settings, DateTime? grantUntilUtc, DateTime nowUtc)
     {
-        if (settings == null || grantUntilUtc == null || grantUntilUtc.Value <= nowUtc) return false;
-        var cap = nowUtc + MaxGrantAhead;
-        var until = grantUntilUtc.Value < cap ? grantUntilUtc.Value : cap;
-        if (settings.PatreonPremiumValidUntil is DateTime held && held >= until) return false;
-        settings.PatreonPremiumValidUntil = until;
+        if (settings == null || grantUntilUtc == null) return false;
+        var until = grantUntilUtc.Value;
+        if (until <= nowUtc || until > nowUtc + MaxGrantAhead) return false;
+        if (settings.InviteGrantUntil is DateTime held && held >= until) return false;
+        settings.InviteGrantUntil = until;
         return true;
     }
+
+    /// <summary>The lifetime <c>converted_total</c> off any worded reply, refusals included; 0 when absent.</summary>
+    public static int ParseConverted(JObject? reply)
+        => reply?["converted_total"]?.Type == JTokenType.Integer ? Math.Max(0, reply.Value<int>("converted_total")) : 0;
 
     /// <summary>The <c>mine</c> reply, or null when it is not one. Unknown slot states read as open.</summary>
     public static InviteSnapshot? ParseSnapshot(JObject? reply)
@@ -161,8 +171,7 @@ public static class InviteRules
             int? day = c["day"]?.Type == JTokenType.Integer ? c.Value<int>("day") : null;
             slots.Add(new InviteSlot(code, state, string.IsNullOrWhiteSpace(name) ? null : name, day));
         }
-        var converted = reply["converted_total"]?.Type == JTokenType.Integer ? Math.Max(0, reply.Value<int>("converted_total")) : 0;
-        return new InviteSnapshot(slots, ParseUtc(reply["resets_at"]), converted);
+        return new InviteSnapshot(slots, ParseUtc(reply["resets_at"]), ParseConverted(reply));
     }
 
     /// <summary>The <c>redeem</c> reply. A null reply (network, timeout, signed out) is offline.</summary>

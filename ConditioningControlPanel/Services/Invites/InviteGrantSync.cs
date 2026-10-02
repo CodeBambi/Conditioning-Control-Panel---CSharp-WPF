@@ -37,7 +37,7 @@ public static class InviteGrantSync
         {
             var settings = App.Settings?.Current;
             if (settings == null || !InviteRules.ApplyGrant(settings, grantUntilUtc, DateTime.UtcNow)) return;
-            var until = settings.PatreonPremiumValidUntil ?? grantUntilUtc;
+            var until = settings.InviteGrantUntil ?? grantUntilUtc;
             App.Logger?.Information("[Invites] {Source}: invite week opens premium until {Until:u}", source, until);
             App.Settings?.Save();
             try { GrantApplied?.Invoke(until); }

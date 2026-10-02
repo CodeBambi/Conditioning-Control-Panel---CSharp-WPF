@@ -4698,6 +4698,7 @@ namespace ConditioningControlPanel.Services
             nameof(AppSettings.UserDisplayName),
             nameof(AppSettings.PatreonTier),
             nameof(AppSettings.PatreonPremiumValidUntil),
+            nameof(AppSettings.InviteGrantUntil),
             nameof(AppSettings.LastPatreonVerification),
             nameof(AppSettings.AuthToken),
             nameof(AppSettings.CustomAssetsPath),

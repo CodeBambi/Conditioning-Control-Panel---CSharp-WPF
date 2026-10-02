@@ -47,7 +47,9 @@ public sealed class InviteApi : IInviteApi
     public async Task<InviteMine> MineAsync(CancellationToken ct = default)
     {
         var reply = await CallAsync("mine", new JObject(), ct).ConfigureAwait(false);
-        return reply == null ? InviteMine.Unreachable : new InviteMine(true, InviteRules.ParseSnapshot(reply));
+        return reply == null
+            ? InviteMine.Unreachable
+            : new InviteMine(true, InviteRules.ParseSnapshot(reply), InviteRules.ParseConverted(reply));
     }
 
     public async Task<RedeemOutcome> RedeemAsync(string code, CancellationToken ct = default)
@@ -60,7 +62,8 @@ public sealed class InviteApi : IInviteApi
     private async Task<JObject?> CallAsync(string op, JObject body, CancellationToken ct)
     {
         (string UnifiedId, string Token)? id;
-        try { id = _identity(); } catch { id = null; }
+        try { id = _identity(); }
+        catch (Exception ex) { Diag.Swallowed(ex, "no identity to send"); id = null; }
         if (id == null) return null;
         body["unified_id"] = id.Value.UnifiedId;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -78,7 +81,7 @@ public sealed class InviteApi : IInviteApi
                 App.Logger?.Debug("[Invites] {Op} answered {Status}", op, (int)res.StatusCode);
             return FriendsApi.Read((int)res.StatusCode, text);
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) { return null; } // swallow: the 8s budget ran out or the caller cancelled; null is "offline"
         catch (Exception ex)
         {
             App.Logger?.Debug("[Invites] {Op} failed: {E}", op, ex.GetType().Name);

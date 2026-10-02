@@ -154,14 +154,22 @@ namespace ConditioningControlPanel.Services
         /// provider unlocks features without touching the ~50 call sites that read it.
         /// </summary>
         public bool HasAiAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
-            || (App.SubscribeStar?.HasAiAccess == true);
+            || (App.SubscribeStar?.HasAiAccess == true) || (App.Settings?.Current?.HasInviteGrant == true);
 
         /// <summary>
         /// Whether the user has any premium feature access (Tier 1+ OR whitelisted OR within 2-week grace period).
         /// Canonical premium gate; SubscribeStar is OR'd in (see <see cref="HasAiAccess"/>).
         /// </summary>
         public bool HasPremiumAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
-            || (App.SubscribeStar?.HasPremiumAccess == true);
+            || (App.SubscribeStar?.HasPremiumAccess == true) || (App.Settings?.Current?.HasInviteGrant == true);
+
+        /// <summary>
+        /// Premium that comes ONLY from an invite week (Services/Invites): a free trial, not a
+        /// purchase. The celebration card and anything else that means "they paid" checks this.
+        /// </summary>
+        public bool IsInviteWeekOnly => App.Settings?.Current?.HasInviteGrant == true
+            && !(CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true)
+                 || (App.SubscribeStar?.HasPremiumAccess == true));
 
         /// <summary>
         /// The tier-2 half of the offline grace: its own 14-day stamp
@@ -1116,6 +1124,7 @@ namespace ConditioningControlPanel.Services
             {
                 App.Settings.Current.PatreonPremiumValidUntil = null;
                 App.Settings.Current.PatreonLabValidUntil = null;
+                App.Settings.Current.InviteGrantUntil = null; // the week belongs to the account, not the machine
                 App.Settings.Current.PatreonTier = 0; // Clear cached tier
                 App.Settings.Save(); // Force save immediately
             }

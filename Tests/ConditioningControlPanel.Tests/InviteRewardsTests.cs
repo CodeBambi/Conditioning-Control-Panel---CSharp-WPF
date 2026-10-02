@@ -108,5 +108,5 @@ public class InviteRewardsTests
     }
 
     [Fact]
-    public void ApplyWithoutASnapshotIsANoOp() => Assert.Equal(0, InviteRewards.Apply(null));
+    public void ApplyWithNothingConvertedIsANoOp() => Assert.Equal(0, InviteRewards.Apply(0));
 }

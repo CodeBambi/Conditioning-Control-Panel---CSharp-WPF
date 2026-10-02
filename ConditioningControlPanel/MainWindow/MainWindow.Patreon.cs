@@ -1125,6 +1125,9 @@ namespace ConditioningControlPanel
             {
                 var patreon = App.Patreon;
                 if (patreon?.HasPremiumAccess != true) return;
+                // An invite week is a free trial, not a purchase: celebrating it would spend the
+                // tier-1 seen-flag and the friend's real subscription later would get no card.
+                if (patreon.IsInviteWeekOnly) return;
                 var tier = patreon.HasLabAccess ? 2 : 1;
                 var onRise = riseTier > 0;
                 if (!TierCelebration.IsOwed(App.Settings?.Current?.SeenFeatureIntros, tier, onRise)) return;

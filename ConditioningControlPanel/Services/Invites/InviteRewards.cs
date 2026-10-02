@@ -35,22 +35,23 @@ public static class InviteRewards
         => Ladder.FirstOrDefault(r => convertedTotal < r.Converted);
 
     /// <summary>
-    /// Unlock whatever a fresh <c>mine</c> snapshot has earned. Idempotent (TryUnlock is), so it is
-    /// safe on every read. Returns how many badges were newly unlocked.
+    /// Unlock whatever a fresh <c>mine</c> read has earned (<see cref="InviteMine.ConvertedTotal"/>,
+    /// which a lapsed inviter's refusal carries too). Idempotent (TryUnlock is), so it is safe on
+    /// every read. Returns how many badges were newly unlocked.
     /// </summary>
-    public static int Apply(InviteSnapshot? snapshot)
+    public static int Apply(int convertedTotal)
     {
-        if (snapshot == null) return 0;
+        if (convertedTotal <= 0) return 0;
         try
         {
             var achievements = App.Achievements;
             if (achievements == null) return 0;
             var unlocked = achievements.Progress?.UnlockedAchievements;
             var count = 0;
-            foreach (var id in Due(snapshot.ConvertedTotal, unlocked))
+            foreach (var id in Due(convertedTotal, unlocked))
                 if (achievements.TryUnlock(id)) count++;
             if (count > 0)
-                App.Logger?.Information("[Invites] {Count} invite reward(s) unlocked at {Converted} converted", count, snapshot.ConvertedTotal);
+                App.Logger?.Information("[Invites] {Count} invite reward(s) unlocked at {Converted} converted", count, convertedTotal);
             return count;
         }
         catch (Exception ex)

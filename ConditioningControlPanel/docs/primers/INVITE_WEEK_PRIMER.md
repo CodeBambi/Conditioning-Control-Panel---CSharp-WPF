@@ -20,14 +20,21 @@ tracking and the counts. The app reads the results and never decides who is enti
 
 ## How the week unlocks the app
 
-The grant is written into `AppSettings.PatreonPremiumValidUntil`, the window every premium gate
-already reads through `HasPremiumAccess`, at the server's exact end date.
+The grant is written into its own setting, `AppSettings.InviteGrantUntil`, at the server's exact
+end date. `PatreonService.HasPremiumAccess` and `HasAiAccess` OR it in.
 
+- It never writes the Patreon stamps (`PatreonPremiumValidUntil`, `PatreonLabValidUntil`). Other
+  code reads those as "a validation came back premium": the quest history, the boot heals and the
+  "Premium is yours" card.
 - It never goes through `EntitlementTierRule.ExtendGrace`, which would stretch 7 days into the
   14-day subscriber grace.
-- It never shortens a longer window a real subscription already stamped.
-- An end date more than 8 days out is clamped to 8 days, so a bad server value cannot hand out more.
-- The Lab (tier 2) window is never touched. An invite week is vault only.
+- `PatreonService.IsInviteWeekOnly` marks premium that comes only from the week. The celebration
+  card skips it, so the one-time card is still owed when the friend actually pays.
+- An end date more than 8 days out is ignored, not clamped. A clamp measured from "now" would slide
+  forward on every heartbeat and turn one bad server value into open-ended premium.
+- Logout and account switch clear it. It is excluded from settings backup and kept local on restore,
+  like the Patreon stamps.
+- The Lab (tier 2) is never granted. An invite week is vault only.
 
 ## Reward ladder
 
@@ -69,9 +76,9 @@ For a subscriber (effective tier 1 or more, whitelist included):
   "resets_at": "2026-11-01T00:00:00Z",
   "converted_total": 4,
   "codes": [
-    { "code": "PINK-MIA-7Q4X", "state": "converted", "invitee_name": "kaycee", "day": 9 },
-    { "code": "PINK-MIA-2B8R", "state": "trying",    "invitee_name": "j.doll", "day": 3 },
-    { "code": "PINK-MIA-K3ZZ", "state": "open" }
+    { "code": "K7QM-X2PR-9H", "state": "converted", "invitee_name": "kaycee", "day": 9 },
+    { "code": "W4DN-8TZC-3F", "state": "trying",    "invitee_name": "j.doll", "day": 3 },
+    { "code": "Q9VB-6MKE-2R", "state": "open" }
   ]
 }
 ```
@@ -83,9 +90,15 @@ For a subscriber (effective tier 1 or more, whitelist included):
 - `converted_total` is lifetime, not monthly. The reward ladder reads it.
 - `invitee_name` is the friend's display name. Send it only for `trying` and `converted`; the client
   drops it on `open` regardless.
-- Not a subscriber: `{ "ok": false, "reason": "not_subscribed" }`.
+- Not a subscriber: `{ "ok": false, "reason": "not_subscribed", "converted_total": 3 }`. Include
+  `converted_total` whenever it is above 0, so an inviter whose own subscription lapsed still
+  collects ladder rewards for friends who convert later.
 - Codes are 6 to 24 characters from `A-Z`, `0-9` and `-`. The client upper-cases and strips spaces
   before sending, and accepts the share link `cclabs.app/i/<CODE>`.
+- **Mint codes from a CSPRNG with at least 40 bits of randomness:** 8 or more characters from a
+  32-symbol alphabet (Crockford base32, no `I L O U`). Never embed the inviter's name or id. A
+  readable prefix plus a short suffix can be enumerated, and the code would tell strangers who
+  issued it.
 
 ### `POST /v2/invites/redeem`
 
@@ -102,12 +115,22 @@ Refusal reasons the client words for the user:
 | `unknown_code` | No such code, or it expired at its month's reset |
 | `used` | Someone already redeemed it |
 | `own_code` | The redeemer minted it |
-| `already_had_week` | This account (or this hardware hash) already had an invite week |
+| `already_had_week` | This account already had an invite week |
 | `already_subscribed` | The redeemer already has tier 1 or more |
 | `too_fast` | Rate limited (the client maps HTTP 429 to this too) |
 
-Abuse limits: one invite week per account, ever; also one per hardware hash if the server keeps one.
-Rate limit redeem attempts per account and per IP so codes cannot be brute-forced.
+Abuse limits the server enforces:
+
+- One invite week per account, ever, and only for accounts that have never had tier 1 or more.
+- Only accounts created after the code was minted may redeem it. This stops a subscriber from
+  feeding their own codes to old alts. `own_code` alone only blocks the minting account.
+- Rate limit failed redeems per account, per IP, and globally (for example 10 failures per account
+  per hour, and a global ceiling that alerts). Per-account and per-IP limits alone reset with every
+  new throwaway account and proxy.
+
+**Known gap (owner decision):** the client sends no device identifier, and the app has none today.
+A determined user can still make a fresh account per code they collect. Closing that needs a
+device or install id, which is a privacy trade-off; it is not built.
 
 ### `invite_grant_until`
 
