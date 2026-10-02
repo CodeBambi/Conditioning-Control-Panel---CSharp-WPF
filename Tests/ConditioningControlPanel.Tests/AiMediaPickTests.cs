@@ -7,7 +7,8 @@ using Pick = ConditioningControlPanel.Services.Commands.MediaCommand.MediaPick;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>ccp-bugs #1325: the AI recommended one video and a random local file played instead.
-/// A named video that does not resolve plays nothing; asking for "any video" stays random.</summary>
+/// A named video that does not resolve plays nothing; asking for "any video" stays random.
+/// ccp-bugs #1330: a named video plays its closest local match, or opens its HypnoTube link.</summary>
 public class AiMediaPickTests
 {
     [Fact]
@@ -28,6 +29,35 @@ public class AiMediaPickTests
     [Fact]
     public void A_named_video_that_resolves_plays_it()
         => Assert.Equal(Pick.Named, MediaCommand.Decide(new Media("t", "videos/a.mp4"), AICommandType.video, true));
+
+    [Fact]
+    public void A_named_video_with_no_local_match_opens_its_hypnotube_link()
+        => Assert.Equal(Pick.HypnoTube, MediaCommand.Decide(
+            new Media("Bambi Bae", "https://hypnotube.com/video/bambi-bae-113979.html"), AICommandType.video, false, hypnoTubeLink: true));
+
+    [Fact]
+    public void A_local_match_wins_over_the_hypnotube_link()
+        => Assert.Equal(Pick.Named, MediaCommand.Decide(
+            new Media("Bambi Bae", "https://hypnotube.com/video/bambi-bae-113979.html"), AICommandType.video, true, hypnoTubeLink: true));
+
+    [Fact]
+    public void A_random_request_never_opens_a_link()
+        => Assert.Equal(Pick.Random, MediaCommand.Decide(
+            new Media("", "https://hypnotube.com/video/bambi-bae-113979.html", Random: true), AICommandType.video, false, hypnoTubeLink: true));
+
+    [Fact]
+    public void A_named_audio_never_opens_a_link()
+        => Assert.Equal(Pick.Random, MediaCommand.Decide(
+            new Media("t", "https://hypnotube.com/video/bambi-bae-113979.html"), AICommandType.audio, false, hypnoTubeLink: true));
+
+    [Theory]
+    [InlineData("https://hypnotube.com/video/bambi-bae-113979.html", "", "https://hypnotube.com/video/bambi-bae-113979.html")]
+    [InlineData("videos/a.mp4", " https://www.hypnotube.com/video/123/ ", "https://www.hypnotube.com/video/123/")]
+    [InlineData("https://example.com/video/bambi-bae-113979.html", "Bambi Bae", null)]
+    [InlineData("https://hypnotube.com/videos/", "", null)]
+    [InlineData("", "Bambi Bae", null)]
+    public void Only_a_hypnotube_video_page_counts_as_a_link(string path, string title, string? expected)
+        => Assert.Equal(expected, MediaCommand.HypnoTubeLinkOf(new Media(title, path)));
 
     [Fact]
     public void A_named_audio_that_does_not_resolve_keeps_its_random_fallback()

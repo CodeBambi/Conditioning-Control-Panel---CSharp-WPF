@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Services.Logging;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
+using ConditioningControlPanel.Services.Browser;
 
 namespace ConditioningControlPanel.Services.Commands
 {
@@ -12,8 +16,9 @@ namespace ConditioningControlPanel.Services.Commands
     /// Plays a video or audio file from inside the user's assets root. Path is normalized
     /// and rejected if it escapes the assets directory after resolution. The AI doesn't
     /// know which files actually exist on disk. A request that names nothing is a random pick
-    /// of the right kind; a named video that does not resolve plays nothing (see
-    /// <see cref="Decide"/>), a named audio still falls back to a random one.
+    /// of the right kind. A named video plays the closest local match by name
+    /// (<see cref="VideoTitleMatcher"/>), or opens a HypnoTube link in the browser takeover, or
+    /// plays nothing (see <see cref="Decide"/>); a named audio still falls back to a random one.
     /// </summary>
     public class MediaCommand : ICommand
     {
@@ -27,21 +32,34 @@ namespace ConditioningControlPanel.Services.Commands
         }
 
         /// <summary>What an AI media request plays.</summary>
-        internal enum MediaPick { Random, Named, Nothing }
+        internal enum MediaPick { Random, Named, HypnoTube, Nothing }
 
-        /// <summary>Pure decision (ccp-bugs #1325). An explicit Random, or a request that names
-        /// nothing at all ("play any video"), is a random pick. A request that NAMES something
-        /// (a Title or a Path) plays that file when it resolves to a playable file inside the
-        /// assets root. When it does not, a video request plays NOTHING: the chat text was about
-        /// that one video (often a Hypnotube recommendation), and a random local file in its place
-        /// is the unrelated video the report describes. Audio keeps its random fallback.</summary>
-        internal static MediaPick Decide(Media data, AICommandType kind, bool namedFilePlayable)
+        /// <summary>Pure decision (ccp-bugs #1325, #1330). An explicit Random, or a request that
+        /// names nothing at all ("play any video"), is a random pick. A request that NAMES
+        /// something (a Title or a Path) plays the local file it resolves to: the path itself, or
+        /// for a video the closest library match by name (<paramref name="namedFilePlayable"/>).
+        /// A named video with no local match opens its HypnoTube link in the browser takeover when
+        /// Path or Title is one (<paramref name="hypnoTubeLink"/>). Otherwise a video request plays
+        /// NOTHING: the chat text was about that one video, and a random local file in its place is
+        /// the unrelated video #1325 describes. Audio keeps its random fallback.</summary>
+        internal static MediaPick Decide(Media data, AICommandType kind, bool namedFilePlayable, bool hypnoTubeLink = false)
         {
             if (data.Random) return MediaPick.Random;
             var named = !string.IsNullOrWhiteSpace(data.Path) || !string.IsNullOrWhiteSpace(data.Title);
             if (!named) return MediaPick.Random;
             if (namedFilePlayable) return MediaPick.Named;
-            return kind == AICommandType.audio ? MediaPick.Random : MediaPick.Nothing;
+            if (kind == AICommandType.audio) return MediaPick.Random;
+            return hypnoTubeLink ? MediaPick.HypnoTube : MediaPick.Nothing;
+        }
+
+        /// <summary>The first of Path, Title that is a HypnoTube video page, or null.</summary>
+        internal static string? HypnoTubeLinkOf(Media data)
+        {
+            var path = data.Path?.Trim();
+            if (HtUrlHelper.IsEligibleHtUrl(path)) return path;
+            var title = data.Title?.Trim();
+            if (HtUrlHelper.IsEligibleHtUrl(title)) return title;
+            return null;
         }
 
         public Task<bool> ExecuteAsync()
@@ -50,15 +68,31 @@ namespace ConditioningControlPanel.Services.Commands
             var ext = fullPath == null ? "" : Path.GetExtension(fullPath).ToLowerInvariant();
             var playable = fullPath != null && (IsVideo(ext) || IsAudio(ext));
 
-            switch (Decide(_data, _kind, playable))
+            // A named video that is not a literal file: the closest match by name in the library.
+            if (!playable && !_data.Random && _kind == AICommandType.video)
+            {
+                var match = VideoTitleMatcher.FindBest(new[] { _data.Path, _data.Title }, LocalVideoLibrary());
+                if (match != null)
+                {
+                    fullPath = match;
+                    ext = Path.GetExtension(match).ToLowerInvariant();
+                    playable = true;
+                    App.Logger?.Information("MediaCommand: AI named video matched a library file by name");
+                }
+            }
+
+            var htLink = HypnoTubeLinkOf(_data);
+            switch (Decide(_data, _kind, playable, htLink != null))
             {
                 case MediaPick.Random:
                     if (_kind == AICommandType.audio)
                         return Task.FromResult(PlayRandomAudio());
                     return Task.FromResult(PlayRandomVideo());
+                case MediaPick.HypnoTube:
+                    return Task.FromResult(OpenHypnoTube(htLink!));
                 case MediaPick.Nothing:
                     // No title or path in the log: a named video can be a private file name.
-                    App.Logger?.Information("MediaCommand: AI named a video that is not a playable local file, playing nothing");
+                    App.Logger?.Information("MediaCommand: AI named a video with no close local match and no HypnoTube link, playing nothing");
                     return Task.FromResult(false);
             }
 
@@ -91,6 +125,87 @@ namespace ConditioningControlPanel.Services.Commands
             }
 
             return Task.FromResult(PlayFile(fullPath!));   // Named means video or audio
+        }
+
+        /// <summary>
+        /// Opens a HypnoTube video page in the embedded browser's fullscreen takeover, the way the
+        /// companion's own web videos open (AutonomyService web video): the Videos toggle governs
+        /// it like any AI video, it never navigates over a video that is playing, and it claims the
+        /// fullscreen slot before navigating. True when the navigation was issued.
+        /// </summary>
+        private static bool OpenHypnoTube(string url)
+        {
+            if (App.Settings?.Current?.MandatoryVideosEnabled != true)
+            {
+                App.Logger?.Information("MediaCommand: AI HypnoTube video ignored, Videos feature is disabled");
+                return false;
+            }
+
+            return Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (App.RemoteControl?.ControllerConnected == true)
+                {
+                    App.Logger?.Information("MediaCommand: AI HypnoTube video skipped, a remote controller is connected");
+                    return false;
+                }
+                if (App.Video?.IsPlaying == true || App.BrowserMedia?.ShouldDeferNewVideo == true)
+                {
+                    App.Logger?.Information("MediaCommand: AI HypnoTube video skipped, a video is already playing");
+                    return false;
+                }
+
+                var mainWindow = App.MainWindowRef
+                    ?? Application.Current.Windows.OfType<MainWindow>().FirstOrDefault();
+                if (mainWindow == null) return false;
+
+                if (App.BrowserMedia?.BeginTakeover(BrowserMediaService.MediaOwner.Autonomy) == false)
+                    return false;
+
+                // userInitiated: false - the AI decided this, so an offline block stays silent.
+                if (mainWindow.NavigateToUrlInBrowser(url, autoPlayFullscreen: true, userInitiated: false))
+                {
+                    App.Logger?.Information("MediaCommand: AI HypnoTube video opened on {Host}", UrlLog.Host(url));
+                    return true;
+                }
+
+                App.BrowserMedia?.OnMediaStopped("navigation-failed");
+                App.Logger?.Warning("MediaCommand: AI HypnoTube video not opened, browser not available");
+                return false;
+            });
+        }
+
+        /// <summary>Every local video the random picker could draw: under the assets videos
+        /// folder, minus the files and folders the user switched off.</summary>
+        private static IReadOnlyList<string> LocalVideoLibrary()
+        {
+            try
+            {
+                var assetsRoot = App.EffectiveAssetsPath;
+                var videosRoot = Path.Combine(assetsRoot, "videos");
+                if (!Directory.Exists(videosRoot)) return Array.Empty<string>();
+
+                var settings = App.Settings?.Current;
+                static string Norm(string p) => p.Replace('\\', '/');
+                var disabled = new HashSet<string>(
+                    (settings?.DisabledAssetPaths ?? Enumerable.Empty<string>()).Select(Norm),
+                    StringComparer.OrdinalIgnoreCase);
+                var folders = settings?.DisabledAssetFolders?.ToArray() ?? Array.Empty<string>();
+
+                return Directory.EnumerateFiles(videosRoot, "*.*", SearchOption.AllDirectories)
+                    .Where(f => IsVideo(Path.GetExtension(f).ToLowerInvariant()))
+                    .Where(f =>
+                    {
+                        var rel = Norm(Path.GetRelativePath(assetsRoot, f));
+                        return !disabled.Contains(rel) && !AssetFolderExclusion.IsUnderAny(rel, folders);
+                    })
+                    .Take(5000)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "MediaCommand: video library scan threw");
+                return Array.Empty<string>();
+            }
         }
 
         private static bool PlayRandomVideo()
