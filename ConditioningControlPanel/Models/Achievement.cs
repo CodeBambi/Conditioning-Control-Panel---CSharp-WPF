@@ -738,6 +738,44 @@ public class Achievement
             ImageName = "she_remembers.png",
             Category = AchievementCategory.Minigames,
             IsExclusive = true
+        },
+
+        // ========== COMMUNITY: invite week (Services/Invites/InviteRewards.cs owns the ladder) ==========
+        ["invite_first"] = new Achievement
+        {
+            Id = "invite_first",
+            Name = "Brought One Down",
+            Requirement = "1 friend you invited subscribes",
+            FlavorText = "You brought one down with you. She noticed.",
+            ImageName = "invite_first.png",
+            Category = AchievementCategory.Community
+        },
+        ["invite_hostess"] = new Achievement
+        {
+            Id = "invite_hostess",
+            Name = "The Hostess",
+            Requirement = "3 friends you invited subscribe",
+            FlavorText = "Three new girls checked in at your door.",
+            ImageName = "invite_hostess.png",
+            Category = AchievementCategory.Community
+        },
+        ["invite_pied_piper"] = new Achievement
+        {
+            Id = "invite_pied_piper",
+            Name = "Pied Piper",
+            Requirement = "5 friends you invited subscribe",
+            FlavorText = "Five followed the tune. They always do.",
+            ImageName = "invite_pied_piper.png",
+            Category = AchievementCategory.Community
+        },
+        ["invite_recruiter_chief"] = new Achievement
+        {
+            Id = "invite_recruiter_chief",
+            Name = "Recruiter in Chief",
+            Requirement = "10 friends you invited subscribe",
+            FlavorText = "Ten of them, because of you. She keeps count.",
+            ImageName = "invite_recruiter_chief.png",
+            Category = AchievementCategory.Community
         }
     };
 }
@@ -749,5 +787,6 @@ public enum AchievementCategory
     Minigames,
     Hardcore,
     Deeper,
-    Creator
+    Creator,
+    Community
 }

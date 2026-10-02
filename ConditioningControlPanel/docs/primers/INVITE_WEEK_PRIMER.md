@@ -14,6 +14,7 @@ tracking and the counts. The app reads the results and never decides who is enti
 | `Services/Invites/InviteRules.cs` | Pure: code normalisation, reply parsing, `ApplyGrant` |
 | `Services/Invites/InviteApi.cs` | The wire: `POST /v2/invites/mine` and `/v2/invites/redeem` |
 | `Services/Invites/InviteGrantSync.cs` | Live half: applies a grant on the UI thread, saves, repaints gates |
+| `Services/Invites/InviteRewards.cs` | The inviter's reward ladder; unlocks badges off a `mine` snapshot |
 | `Services/Account/V2AuthService.cs` | Reads `invite_grant_until` off `/v2/user/profile` |
 | `Services/Settings/ProfileSyncService.cs` | Reads `invite_grant_until` off the heartbeat |
 
@@ -27,6 +28,31 @@ already reads through `HasPremiumAccess`, at the server's exact end date.
 - It never shortens a longer window a real subscription already stamped.
 - An end date more than 8 days out is clamped to 8 days, so a bad server value cannot hand out more.
 - The Lab (tier 2) window is never touched. An invite week is vault only.
+
+## Reward ladder
+
+Rewards count converted friends (a first paid month), never redemptions, so handing out codes
+alone earns nothing. Each rung is a visible achievement in the `Community` category, so it can be
+worn as a title, and it unlocks one wardrobe item (mod bucket `invites`, its own picker tab)
+through the registry's `achievement:` gate.
+
+| Converted | Badge (title) | Wardrobe item |
+|-----------|---------------|---------------|
+| 1 | `invite_first` Brought One Down | charm `invite_pink_envelope` |
+| 3 | `invite_hostess` The Hostess | deco `invite_hostess_headset` |
+| 5 | `invite_pied_piper` Pied Piper | charm `invite_recruiter_rose` |
+| 10 | `invite_recruiter_chief` Recruiter in Chief | deco `invite_velvet_crown` |
+
+`InviteRewards.Apply` runs on every `mine` read and is idempotent.
+
+The badge and wardrobe PNGs in this first cut are generated placeholders (flat vector, neon text).
+Replace them with real art at the same paths and sizes: badges 1024x1024 in
+`Resources/achievements/`, wardrobe items 512x512 transparent in `Resources/cosmetics/invites/`.
+
+Outside this repo, per CLAUDE.md "Add a New Achievement": add the four ids to CCP-Server
+`proxy/data/achievements.json` (or the Discord announce 400s), upload the badges plus 256px webp
+siblings to `cclabs-site/achievements/`, and add the four wardrobe ids to `proxy/cosmetics.js` if
+it validates deco and charm ids.
 
 ## Server contract (CCP-Server)
 
