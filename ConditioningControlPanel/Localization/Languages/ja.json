@@ -5249,6 +5249,8 @@
   "nav_door_webapp": "ウェブアプリ",
   "tooltip_nav_door_webapp": "ブラウザでCC Labsウェブアプリを開きます",
   "nav_search_label": "検索",
+  "nav_back_label": "戻る",
+  "tooltip_nav_back": "前のページに戻る",
   "nav_search_keys": "Ctrl+K",
   "nav_tag_premium_tip": "プレミアム機能。どのパトロン階層でも解放されます。",
   "nav_tag_lab_tip": "Lab機能。Tier 2で解放されます。",

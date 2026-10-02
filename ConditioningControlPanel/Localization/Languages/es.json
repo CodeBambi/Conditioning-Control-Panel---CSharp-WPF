@@ -5249,6 +5249,8 @@
   "nav_door_webapp": "App web",
   "tooltip_nav_door_webapp": "Abre la app web de CC Labs en tu navegador",
   "nav_search_label": "Buscar",
+  "nav_back_label": "Atrás",
+  "tooltip_nav_back": "Volver a la página anterior",
   "nav_search_keys": "Ctrl+K",
   "nav_tag_premium_tip": "Función premium. Cualquier nivel de mecenas la desbloquea.",
   "nav_tag_lab_tip": "Función Lab. El nivel 2 la desbloquea.",

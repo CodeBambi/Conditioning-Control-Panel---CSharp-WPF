@@ -5761,6 +5761,8 @@
   "nav_door_webapp": "网页应用",
   "tooltip_nav_door_webapp": "在浏览器中打开 CC Labs 网页应用",
   "nav_search_label": "搜索",
+  "nav_back_label": "返回",
+  "tooltip_nav_back": "返回上一页",
   "nav_search_keys": "Ctrl+K",
   "nav_tag_premium_tip": "高级功能。任意赞助等级即可解锁。",
   "nav_tag_lab_tip": "Lab 功能。Tier 2 解锁。",

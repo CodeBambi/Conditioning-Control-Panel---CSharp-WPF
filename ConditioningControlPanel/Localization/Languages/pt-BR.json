@@ -5249,6 +5249,8 @@
   "nav_door_webapp": "App web",
   "tooltip_nav_door_webapp": "Abre o app web do CC Labs no seu navegador",
   "nav_search_label": "Buscar",
+  "nav_back_label": "Voltar",
+  "tooltip_nav_back": "Voltar à página anterior",
   "nav_search_keys": "Ctrl+K",
   "nav_tag_premium_tip": "Recurso premium. Qualquer nível de apoiador o desbloqueia.",
   "nav_tag_lab_tip": "Recurso Lab. O nível 2 desbloqueia.",

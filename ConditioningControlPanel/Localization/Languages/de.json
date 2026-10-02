@@ -5249,6 +5249,8 @@
   "nav_door_webapp": "Web-App",
   "tooltip_nav_door_webapp": "Öffnet die CC Labs Web-App in deinem Browser",
   "nav_search_label": "Suche",
+  "nav_back_label": "Zurück",
+  "tooltip_nav_back": "Zurück zur letzten Seite",
   "nav_search_keys": "Strg+K",
   "nav_tag_premium_tip": "Premium-Funktion. Jede Patron-Stufe schaltet sie frei.",
   "nav_tag_lab_tip": "Lab-Feature. Tier 2 schaltet es frei.",
