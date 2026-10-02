@@ -780,7 +780,7 @@ export async function mount(ctx) {
     const fieldPerCss = () => renderer.toField(dpr, 0).x - renderer.toField(0, 0).x;
 
     const steer = (e) => {
-      if (mouseLock?.locked && e.pointerType !== 'touch') { touchDrag = null; const p = game.snapshot().paddle; return lockedSteer(input.x ?? p.x, e.movementX, fieldPerCss(), p.w / 2, W); }
+      if (mouseLock?.locked && e.pointerType !== 'touch') { touchDrag = null; const p = game.snapshot().paddle; return lockedSteer(input.x ?? p.x, mouseLock.movement(e), fieldPerCss(), p.w / 2, W); }   // movement(): spikes clamped, the lock's first move dropped (#1337)
       if (e.pointerType !== 'touch') { touchDrag = null; return pointerX(e); }
       const p = game.snapshot().paddle;
       touchDrag = touchDrag && touchDrag.id === e.pointerId ? touchDrag : { id: e.pointerId, sx: pointerX(e), px: p.x };
