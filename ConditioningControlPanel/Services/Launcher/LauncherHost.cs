@@ -230,6 +230,17 @@ public static partial class LauncherHost
         });
     }
 
+    /// <summary>The friends drawer's "Invite them" link: the panel comes up on the Premium tab's
+    /// invites card, wherever the drawer was opened from.</summary>
+    public static void OpenPanelInvites()
+    {
+        OpenPanel(null, () =>
+        {
+            try { App.MainWindowRef?.OpenInvitesCard(); }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] invites card failed"); }
+        });
+    }
+
     /// <summary>
     /// A tile that lives in the panel (the Graded Intake). Hides the launcher through
     /// <see cref="OpenPanel"/>, so an armed exit beat still plays, and puts the panel on

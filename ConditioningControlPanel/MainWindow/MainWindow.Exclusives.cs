@@ -262,6 +262,8 @@ namespace ConditioningControlPanel
 
                 _invitePanel = new Controls.Invites.InvitePanel();
                 ExclusivesTab.InvitesHost.Child = _invitePanel;
+                // Every read the card makes also repaints the header ticket (MainWindow.InviteTicket.cs).
+                _invitePanel.Read += ApplyInviteTicket;
             }
             catch (Exception ex)
             {

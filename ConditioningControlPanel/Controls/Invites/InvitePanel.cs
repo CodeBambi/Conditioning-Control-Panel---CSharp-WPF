@@ -45,6 +45,9 @@ public sealed class InvitePanel : Border
     /// <summary>A confirmed redeem holds the card this long before a re-read may replace it.</summary>
     public static readonly TimeSpan RedeemedHold = TimeSpan.FromMinutes(2);
 
+    /// <summary>Raised on the UI thread after each server read, so the header ticket follows the card.</summary>
+    public event Action<InviteMine>? Read;
+
     public InvitePanel(Func<IInviteApi>? api = null)
     {
         _api = api ?? (() => new InviteApi());
@@ -72,6 +75,8 @@ public sealed class InvitePanel : Border
         {
             var mine = await _api().MineAsync();
             _lastReadUtc = DateTime.UtcNow;
+            try { Read?.Invoke(mine); }
+            catch (Exception ex) { App.Logger?.Debug("[Invites] read observer failed: {E}", ex.GetType().Name); }
             if (_face == Face.Redeemed && DateTime.UtcNow - _redeemedAtUtc < RedeemedHold) return;
             InviteRewards.Apply(mine.ConvertedTotal);
             if (mine.Snapshot != null)

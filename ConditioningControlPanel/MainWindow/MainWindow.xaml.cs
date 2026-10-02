@@ -432,6 +432,10 @@ namespace ConditioningControlPanel
             // without a cached ceremony timestamp, so this is inert on every install today.
             InitializeDescentFuse();
 
+            // Header invite ticket: shown while this account has an unused invite code this month.
+            // MainWindow.InviteTicket.cs. One delayed read, then every 30 min and on account change.
+            InitializeInviteTicket();
+
             // Circe's tab: the flashing "+0:30" over the rail padlock when a price lands.
             // MainWindow.Chaster.cs. One event subscription on an install that never linked a
             // Chaster account, because the service raises nothing until it is linked and on.
