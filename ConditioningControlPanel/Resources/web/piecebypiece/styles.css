@@ -308,8 +308,12 @@ html, body {
 
 /* A small options drawer; presentation preferences never change chess rules. */
 .game-settings { position: absolute; bottom: 70px; right: 18px; pointer-events: auto; }
-.game-options-panel { position: absolute; right: 0; bottom: 45px; width: 280px; display: grid; gap: 12px;
+.game-options-panel { position: absolute; right: 0; bottom: 45px; width: min(620px, calc(100vw - 36px));
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; align-items: start;
+  max-height: calc(100vh - 140px); overflow: hidden auto; scrollbar-width: thin; scrollbar-color: #665474 transparent;
   padding: 18px; border: 1px solid #665474; border-radius: 14px; background: #211d38; box-shadow: 0 12px 36px #08071280; }
+.game-options-panel .opt-col { display: grid; gap: 12px; min-width: 0; }
+@media (max-width: 680px) { .game-options-panel { grid-template-columns: 1fr; gap: 12px; } }
 .game-options-panel strong { font-size: 16px; }
 .game-options-panel p { margin: 0; color: #d0c2de; font-size: 13px; line-height: 1.5; }
 .game-options-panel label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
@@ -418,5 +422,16 @@ body.pbp-replay-corner .game-settings:not(:has(.game-options-panel:not([hidden])
 .tc-pip { width: 11px; height: 11px; border-radius: 50%; background: var(--tc); box-shadow: 0 0 12px var(--tc); }
 .tc-tclock { color: #bfb0d0; font: 700 12px/1 Consolas, 'Courier New', monospace; letter-spacing: .04em; }
 .tc-tclock:empty { display: none; }
-.turncard-pick { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; }
+.turncard-pick { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; }
 .turncard-pick [aria-pressed="true"] { border-color: #ff91c9; background: #58334e; color: #ffe1f0; }
+/* Distraction's dials: Amount and Ramp borrow the turn card row, Strength is a slider. */
+.dials { display: grid; gap: 8px; }
+.surrender { display: grid; gap: 8px; }
+.surrender[hidden], .surrender-ask[hidden] { display: none; }
+.surrender-ask { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: center; }
+.surrender-ask span { grid-column: 1 / -1; font-size: 13px; color: #ffe1f0; }
+.dials[hidden] { display: none; }
+.dials .turncard-pick { grid-template-columns: 64px repeat(3, minmax(0, 1fr)); }
+.game-options-panel .dial-slider { display: grid; grid-template-columns: 64px minmax(0, 1fr) 40px; gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; cursor: default; }
+.game-options-panel .dial-slider input { width: 100%; min-width: 0; height: 17px; margin: 0; }
+.dial-slider output { text-align: right; font-variant-numeric: tabular-nums; color: #ffe1f0; }

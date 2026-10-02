@@ -3,8 +3,11 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.BackRoom;
 using ConditioningControlPanel.Services.Invites;
 
@@ -45,6 +48,9 @@ public sealed class InvitePanel : Border
     /// <summary>A confirmed redeem holds the card this long before a re-read may replace it.</summary>
     public static readonly TimeSpan RedeemedHold = TimeSpan.FromMinutes(2);
 
+    /// <summary>Raised on the UI thread after each server read, so the header ticket follows the card.</summary>
+    public event Action<InviteMine>? Read;
+
     public InvitePanel(Func<IInviteApi>? api = null)
     {
         _api = api ?? (() => new InviteApi());
@@ -72,6 +78,8 @@ public sealed class InvitePanel : Border
         {
             var mine = await _api().MineAsync();
             _lastReadUtc = DateTime.UtcNow;
+            try { Read?.Invoke(mine); }
+            catch (Exception ex) { App.Logger?.Debug("[Invites] read observer failed: {E}", ex.GetType().Name); }
             if (_face == Face.Redeemed && DateTime.UtcNow - _redeemedAtUtc < RedeemedHold) return;
             InviteRewards.Apply(mine.ConvertedTotal);
             if (mine.Snapshot != null)
@@ -196,36 +204,220 @@ public sealed class InvitePanel : Border
         var host = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
         host.Children.Add(Para(Loc.Get("invites_ladder_title"), Gold, 12, new Thickness(0, 0, 0, 8), bold: true));
 
-        var rungs = new WrapPanel();
+        var next = InviteRewards.Next(converted);
+        var rungs = new UniformGrid { Columns = InviteRewards.Ladder.Count, MaxWidth = 640, HorizontalAlignment = HorizontalAlignment.Left };
         foreach (var rung in InviteRewards.Ladder)
-        {
-            var reached = converted >= rung.Converted;
-            var name = Loc.Get($"achievement_{rung.AchievementId}_name");
-            rungs.Children.Add(new Border
-            {
-                CornerRadius = new CornerRadius(99),
-                Padding = new Thickness(10, 4, 10, 4),
-                Margin = new Thickness(0, 0, 6, 6),
-                Background = reached ? Frozen("#33E5C76B") : RowBg,
-                BorderBrush = reached ? Gold : Edge,
-                BorderThickness = new Thickness(1),
-                Child = new TextBlock
-                {
-                    Text = (reached ? "✓ " : "") + $"{rung.Converted} · {name}",
-                    Foreground = reached ? Gold : Muted,
-                    FontSize = 11.5,
-                    FontWeight = FontWeights.SemiBold,
-                },
-            });
-        }
+            rungs.Children.Add(RungTile(rung, converted, ReferenceEquals(rung, next)));
         host.Children.Add(rungs);
 
-        var next = InviteRewards.Next(converted);
         host.Children.Add(Para(next == null
             ? Loc.Get("invites_ladder_done")
             : Loc.GetF("invites_ladder_next", next.Converted - converted, Loc.Get($"achievement_{next.AchievementId}_name")),
             Muted, 12, new Thickness(0, 2, 0, 0)));
         return host;
+    }
+
+    /// <summary>
+    /// One rung as a picture tile: the badge, its name, how many friends it takes and the wardrobe
+    /// piece it unlocks. Earned rungs are in full colour on a gold edge; the rest are grey under a
+    /// lock, and the next one to reach carries a thin progress bar.
+    /// </summary>
+    internal static FrameworkElement RungTile(InviteRung rung, int converted, bool isNext)
+    {
+        var reached = converted >= rung.Converted;
+        var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Stretch };
+
+        // Badge, rounded like the achievement cards, grey and locked until earned.
+        var badge = new Grid { Width = 60, Height = 60, HorizontalAlignment = HorizontalAlignment.Center };
+        var art = BadgeImage(rung.AchievementId, grey: !reached);
+        if (art != null)
+        {
+            var img = new Image
+            {
+                Source = art,
+                Width = 60,
+                Height = 60,
+                Stretch = Stretch.UniformToFill,
+                Opacity = reached ? 1 : 0.45,
+                Clip = new RectangleGeometry(new Rect(0, 0, 60, 60), 10, 10),
+            };
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+            badge.Children.Add(img);
+        }
+        if (!reached)
+        {
+            badge.Children.Add(new Border
+            {
+                Width = 22,
+                Height = 22,
+                CornerRadius = new CornerRadius(11),
+                Background = Frozen("#CC12121F"),
+                BorderBrush = Edge,
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, -4, -4),
+                Child = new TextBlock
+                {
+                    Text = "", // Segoe MDL2 lock
+                    FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                    FontSize = 10,
+                    Foreground = Muted,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            });
+        }
+        stack.Children.Add(badge);
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = Loc.Get($"achievement_{rung.AchievementId}_name"),
+            Foreground = reached ? Brushes.White : Text,
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 15,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            MaxHeight = 30,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(0, 7, 0, 0),
+        });
+        stack.Children.Add(new TextBlock
+        {
+            Text = rung.Converted == 1 ? Loc.Get("invites_ladder_friends_one") : Loc.GetF("invites_ladder_friends", rung.Converted),
+            Foreground = reached ? Gold : Muted,
+            FontSize = 11,
+            TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(0, 1, 0, 0),
+        });
+
+        // The wardrobe piece it pays out: a small picture and its registry name (a proper noun).
+        var item = WardrobeCatalog.Find(rung.WardrobeItemId);
+        if (item != null)
+        {
+            var unlock = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 6, 0, 0),
+                ToolTip = Loc.GetF("invites_ladder_unlocks", item.Name),
+                Opacity = reached ? 1 : 0.6,
+            };
+            var piece = TrimToContent(WardrobeCatalog.GetImage(item.Id));
+            if (piece != null)
+            {
+                var pimg = new Image { Source = piece, Width = 22, Height = 22, Margin = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+                RenderOptions.SetBitmapScalingMode(pimg, BitmapScalingMode.HighQuality);
+                unlock.Children.Add(pimg);
+            }
+            unlock.Children.Add(new TextBlock
+            {
+                Text = item.Name,
+                Foreground = Muted,
+                FontSize = 10.5,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 100,
+            });
+            stack.Children.Add(unlock);
+        }
+
+        if (isNext && !reached)
+        {
+            var have = Math.Max(0, Math.Min(converted, rung.Converted));
+            var track = new Grid { Height = 4, Margin = new Thickness(6, 8, 6, 0) };
+            track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(have, 0.0001), GridUnitType.Star) });
+            track.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(rung.Converted - have, 0.0001), GridUnitType.Star) });
+            var trackBg = new Border { CornerRadius = new CornerRadius(2), Background = Edge };
+            Grid.SetColumnSpan(trackBg, 2);
+            track.Children.Add(trackBg);
+            if (have > 0) track.Children.Add(new Border { CornerRadius = new CornerRadius(2), Background = Pink });
+            stack.Children.Add(track);
+            stack.Children.Add(new TextBlock
+            {
+                Text = Loc.GetF("invites_ladder_progress", have, rung.Converted),
+                Foreground = Pink,
+                FontSize = 10.5,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(0, 3, 0, 0),
+            });
+        }
+
+        var tile = new Border
+        {
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(8, 10, 8, 10),
+            Margin = new Thickness(0, 0, 8, 6),
+            Background = reached ? Frozen("#26E5C76B") : RowBg,
+            BorderBrush = reached ? Gold : isNext ? Frozen("#80FF69B4") : Edge,
+            BorderThickness = new Thickness(reached ? 1.5 : 1),
+            Child = stack,
+            Cursor = Cursors.Hand,
+            ToolTip = Loc.Get($"achievement_{rung.AchievementId}_req"),
+        };
+        tile.MouseLeftButtonUp += (_, _) =>
+        {
+            try { App.MainWindowRef?.ShowTab("achievements"); }
+            catch (Exception ex) { Diag.Swallowed(ex, "open achievements from invite ladder"); }
+        };
+        return tile;
+    }
+
+    /// <summary>
+    /// Decorations are authored on the full avatar canvas (a crown sits in the top third), so at
+    /// icon size the piece itself would be a speck. Crop to the opaque pixels for the preview.
+    /// </summary>
+    private static ImageSource? TrimToContent(ImageSource? source)
+    {
+        if (source is not BitmapSource bmp) return source;
+        try
+        {
+            var src = bmp.Format == PixelFormats.Bgra32 || bmp.Format == PixelFormats.Pbgra32
+                ? bmp
+                : new FormatConvertedBitmap(bmp, PixelFormats.Bgra32, null, 0);
+            int w = src.PixelWidth, h = src.PixelHeight, stride = w * 4;
+            var px = new byte[stride * h];
+            src.CopyPixels(px, stride, 0);
+            int x0 = w, y0 = h, x1 = -1, y1 = -1;
+            for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++)
+                    if (px[y * stride + x * 4 + 3] > 24)
+                    {
+                        if (x < x0) x0 = x;
+                        if (x > x1) x1 = x;
+                        if (y < y0) y0 = y;
+                        if (y > y1) y1 = y;
+                    }
+            if (x1 < x0 || y1 < y0) return source;
+            var crop = new CroppedBitmap(src, new Int32Rect(x0, y0, x1 - x0 + 1, y1 - y0 + 1));
+            crop.Freeze();
+            return crop;
+        }
+        catch (Exception ex)
+        {
+            Diag.Swallowed(ex, "invite wardrobe preview crop");
+            return source;
+        }
+    }
+
+    private static ImageSource? BadgeImage(string achievementId, bool grey)
+    {
+        try
+        {
+            var file = Models.Achievement.All.TryGetValue(achievementId, out var a) && !string.IsNullOrEmpty(a.ImageName) ? a.ImageName : achievementId + ".png";
+            var src = Services.ModResourceResolver.ResolveImageDecoded($"achievements/{file}", 128) as BitmapSource;
+            if (src == null || !grey) return src;
+            var g = new FormatConvertedBitmap(src, PixelFormats.Gray8, null, 0);
+            g.Freeze();
+            return g;
+        }
+        catch (Exception ex)
+        {
+            Diag.Swallowed(ex, "invite badge art");
+            return null;
+        }
     }
 
     // ============================== redeem ==============================

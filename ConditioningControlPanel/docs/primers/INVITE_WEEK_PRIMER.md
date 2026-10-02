@@ -1,6 +1,6 @@
 # Invite Week Primer
 
-Paying subscribers hand out a few invite codes a month. A new account that redeems one gets the vault
+Paying subscribers hand out one invite code a month. A new account that redeems one gets the vault
 (tier 1) free for 7 days, with no card and nothing that renews. When an invited friend pays for a
 month, the inviter climbs a reward ladder of cosmetics.
 
@@ -46,7 +46,7 @@ through the registry's `achievement:` gate.
 | Converted | Badge (title) | Wardrobe item |
 |-----------|---------------|---------------|
 | 1 | `invite_first` Brought One Down | charm `invite_pink_envelope` |
-| 3 | `invite_hostess` The Hostess | deco `invite_hostess_headset` |
+| 3 | `invite_hostess` The Welcome Committee | deco `invite_hostess_headset` |
 | 5 | `invite_pied_piper` Pied Piper | charm `invite_recruiter_rose` |
 | 10 | `invite_recruiter_chief` Recruiter in Chief | deco `invite_velvet_crown` |
 
@@ -83,7 +83,7 @@ For a subscriber (effective tier 1 or more, whitelist included):
 }
 ```
 
-- Allowance: tier 1 gets 2 codes per calendar month (UTC), tier 2 gets 3. Codes are minted lazily on
+- Allowance: every subscriber (Basic or Prime) gets 1 code per calendar month (UTC) since 2026-10-02 (was 2 and 3). Codes are minted lazily on
   the first `mine` of the month. Unused codes expire at `resets_at`; they do not roll over.
 - `state` is `open` (not redeemed), `trying` (redeemed; `day` is the day of the week, 1 to 7, or more
   once the week has ended unpaid) or `converted` (the friend's first paid month landed).
@@ -181,8 +181,8 @@ when the Windows region's currency is EUR and dollars otherwise.
 
 | Tier | Monthly | Yearly (Patreon only, 2 months free) |
 |------|---------|--------------------------------------|
-| Vault (tier 1) | €6 / $7.50 | €60 / $75 |
-| Lab (tier 2) | €10 / $12.50 | €100 / $125 |
+| Basic (tier 1) | €6 / $7.50 | €60 / $75 |
+| Prime (tier 2) | €10 / $12.50 | €100 / $125 |
 
 The other payment systems have no yearly plan, so every yearly price the card shows says
 "on Patreon". Change a price on Patreon and you must change it here.

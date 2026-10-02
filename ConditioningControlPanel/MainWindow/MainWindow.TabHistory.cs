@@ -23,7 +23,21 @@ namespace ConditioningControlPanel
             if (_tabHistoryReplaying) return;
             // "lab" and "play" are one view: record the view, or Back lands on the same page.
             _tabHistory.Navigate(CanonicalTabKey(tab));
+            RefreshNavBack();
         }
+
+        /// <summary>The rail's Back arrow (above search) shows only when there is a tab to go back to.</summary>
+        private void RefreshNavBack()
+        {
+            try
+            {
+                if (BtnNavBack != null)
+                    BtnNavBack.Visibility = _tabHistory.CanGoBack ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception ex) { App.Logger?.Debug("Nav back refresh failed: {E}", ex.Message); }
+        }
+
+        private void BtnNavBack_Click(object sender, RoutedEventArgs e) => TabHistoryStep(back: true);
 
         private void InitializeTabHistoryInput()
         {
@@ -78,7 +92,7 @@ namespace ConditioningControlPanel
             _tabHistoryReplaying = true;
             try { ShowTab(target); }
             catch (Exception ex) { App.Logger?.Debug("Tab history step failed: {E}", ex.Message); }
-            finally { _tabHistoryReplaying = false; }
+            finally { _tabHistoryReplaying = false; RefreshNavBack(); }
             return true;
         }
     }

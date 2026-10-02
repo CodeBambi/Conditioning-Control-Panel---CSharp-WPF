@@ -6,11 +6,19 @@
  * softer and harder to read. Taking a piece ramps you MORE than losing one, so
  * the player who is ahead on material is also the one squinting.
  *
- * On top of that floor sits the THINK (owner, 2026-10-01): while the player
- * sits on their own move the screen climbs toward full (20 s), the wash rises
- * over the board on a long think, and the moment the move is made everything
- * SNAPS back down to the floor. A local loss is THE FALL: everything comes up
- * at once, holds, and drains away under the end card.
+ * What the player sees is the THINK (owner, 2026-10-01): while the player sits
+ * on their own move the screen climbs toward full, and the wash rises over the
+ * board on a long think. The match pressure (clock + pieces) makes that climb
+ * faster. THE BREATH (owner, 2026-10-02, there is no floor any more): the
+ * moment a move is made everything for the player stops (pictures fade out,
+ * the wash and the haze drop, the heartbeat and whispers go quiet) and stays
+ * stopped until their own turn card; then the climb starts from nothing. A
+ * local loss is THE FALL: everything comes up at once, holds, and drains away
+ * under the end card.
+ *
+ * The player's dials (Options, game/preferences.js): Amount (how many pictures
+ * pop), Strength (how see-through every wash and picture is) and Ramp (how long
+ * the climb takes).
  *
  * attachRamp({ bus, root, stage, media, board }) -> { dispose, setEnabled, debug }
  *
@@ -26,7 +34,7 @@
  * degrade to a console.warn and a quieter ramp.
  * ==========================================================================*/
 
-import { createMeter, createThinkClock, liftMeter, surgeLevel, RAMP_TUNING, clamp01 } from './meter.js';
+import { createMeter, createThinkClock, surgeLevel, RAMP_TUNING, clamp01, thinkRate, thinkFullMs, amountRate } from './meter.js';
 import { createSchedule, videoHoldMs, sustainedFor } from './schedule.js';
 import { createLayerStack } from './layers/index.js';
 import { createFixtureMedia } from './media.js';
@@ -84,7 +92,9 @@ export function attachRamp(opts = {}) {
   const tuning = opts.tuning || RAMP_TUNING;
   const media = opts.media || createFixtureMedia([]);
   const meter = createMeter({ tuning });
-  const think = createThinkClock({ tuning });
+  // the player's dials; refreshed by onPresentation below
+  let dials = { amount: 'normal', strength: 1, rampSpeed: 'normal' };
+  const think = createThinkClock({ tuning, fullMs: () => thinkFullMs(dials.rampSpeed, tuning) });
   const schedule = createSchedule({ tuning, seed: opts.seed || 'pbp-ramp' });
 
   // The front plane carries the video card: in front of the POV, still
@@ -134,6 +144,8 @@ export function attachRamp(opts = {}) {
   let cardWasLive = false;
   let snapTimer = 0;          // clears the fast-transition class after a snap
   let surge = null;           // { at } while the loss surge runs
+  let resting = false;        // THE BREATH: a move was made, nothing for us until our turn card
+  let restWake = 0;           // ms of our own live turn spent resting, for when no card comes
   // OFF is the "this layer is currently off" key; UNSET is "we have never
   // written it". They must differ, or a forced re-apply of an off layer reads
   // as no change and is skipped, which is how a solo call once left the layers
@@ -146,17 +158,21 @@ export function attachRamp(opts = {}) {
 
   /** The side the ramp is acting on: whoever is on the move. */
   const actingSide = () => localSides.length === 1 ? localSides[0] : meter.active;
-  /** What the layers ride: the surge at a loss, else the floor lifted by the think. */
+  /** What the layers ride: the surge at a loss, nothing during the breath, else the think. */
   function liveMeter(t = now()) {
     if (overrideMeter != null) return clamp01(overrideMeter);
     if (surge) return surgeLevel(t - surge.at, tuning);
-    return liftMeter(meter.meterFor(actingSide()), think.lift());
+    if (resting) return 0;
+    return think.lift();
   }
   /** The meter plus what is left of the last capture kick (one-shots ride this). */
   function liveHeat(t) {
     if (overrideMeter != null || surge) return liveMeter(t);
+    if (resting) return 0;
     return clamp01(liveMeter(t) + meter.kickFor(actingSide(), t));
   }
+  /** The sustained stack at this meter, with the player's Strength on it. */
+  const susFor = (m) => sustainedFor(m, tuning, { cardLive: stack.cardLive, strength: dials.strength });
 
   /**
    * Is the acting side sitting on its own move with a live board in front of it?
@@ -191,7 +207,7 @@ export function attachRamp(opts = {}) {
     }
   }
 
-  /** The move is made: the wash leaves in a blink and the haze drops to the floor now. */
+  /** The move is made: the wash leaves in a blink, the haze and the sound drop now. */
   function snap() {
     stack.clearCard({ fast: true });
     if (!enabled) return;
@@ -200,9 +216,27 @@ export function attachRamp(opts = {}) {
     snapTimer = setTimeout(() => { snapTimer = 0; setSnapClass(false); }, tuning.think.snapMs);
     const t = now();
     const m = liveMeter(t);
-    applySustained(sustainedFor(m, tuning, { cardLive: stack.cardLive }));
+    applySustained(susFor(m));
     lastBoardPush = t;
     pushToBoard(m);
+  }
+
+  /** THE BREATH: a move was made. Everything for us lets go until our turn card. */
+  function rest() {
+    think.reset();
+    resting = true;
+    restWake = 0;
+    stack.rest(tuning.think.snapMs / 2);
+    snap();
+  }
+
+  /** Our turn card is up (or never came): the climb starts again from nothing. */
+  function wake() {
+    if (!resting) return;
+    resting = false;
+    restWake = 0;
+    think.reset();
+    lastBeat = now();
   }
 
   /** On a long think the wash rises, and the next one follows the last. */
@@ -210,7 +244,7 @@ export function attachRamp(opts = {}) {
     const live = stack.cardLive;
     if (cardWasLive && !live) nextCardAt = t + tuning.think.cardGapMs;   // a breath between washes
     cardWasLive = live;
-    if (live || !counting || reducedMotion || t < nextCardAt || think.ms < tuning.think.cardAtMs) return;
+    if (live || !counting || reducedMotion || t < nextCardAt || think.ms < think.fullMs * tuning.think.cardAt) return;
     stack.videoCard({ holdMs: videoHoldMs(m, tuning, hostHoldSec), side: actingSide() });
     // a pool with every picture already up declines: try again after a breath, not every beat
     nextCardAt = t + tuning.think.cardGapMs;
@@ -221,10 +255,11 @@ export function attachRamp(opts = {}) {
   function startSurge() {
     const t = now();
     surge = { at: t };
+    resting = false;
     think.reset();
     stack.clearCard({ fast: true });
     stack.burst(schedule.burstFor('taker', 1));
-    applySustained(sustainedFor(1, tuning, { cardLive: false }));
+    applySustained(sustainedFor(1, tuning, { cardLive: false, strength: dials.strength }));
     lastBoardPush = t;
     pushToBoard(1);
     schedulePump();
@@ -273,15 +308,24 @@ export function attachRamp(opts = {}) {
       ticks += 1;
       // the fall has drained: the game is over, go quiet
       if (surge && t - surge.at >= tuning.surge.holdMs + tuning.surge.drainMs) { surge = null; setEnabled(false); return; }
-      const counting = !surge && thinking();
-      think.advance(lastBeat ? t - lastBeat : 0, counting);
+      const dt = lastBeat ? t - lastBeat : 0;
       lastBeat = t;
+      const live = !surge && thinking();
+      // no turn card is coming (clock under 10 s, a resumed game): the breath ends on its own
+      if (resting && live) { restWake += Math.min(dt, tuning.think.maxStepMs); if (restWake >= tuning.think.wakeAfterMs) wake(); }
+      const counting = live && !resting;
+      think.advance(dt, counting, thinkRate(meter.meterFor(actingSide()), tuning));
       const m = liveMeter(t);
-      const out = schedule.tick(t, liveHeat(t), m, { cardLive: stack.cardLive });
+      // pictures only pop while we are on our own live move (or in the fall)
+      const out = schedule.tick(t, liveHeat(t), m, {
+        cardLive: stack.cardLive, quiet: !surge && !counting,
+        amount: amountRate(dials.amount), strength: dials.strength,
+      });
       // reduced motion keeps the still layers (the melt, the blur, the veils)
       // and drops everything that pops, falls or rushes at the player
       if (!reducedMotion) for (const kind of out.fire) stack.oneshot(kind, { heat: out.heat });
       applySustained(out.sustained);
+      stack.boardMask();
       thinkCard(t, m, counting);
       if (t - lastBoardPush >= BOARD_PUSH_MS) { lastBoardPush = t; pushToBoard(m); }
     }
@@ -311,6 +355,11 @@ export function attachRamp(opts = {}) {
       localSides = [side];
       think.reset();
     },
+    // The turn card (ui/turn-handoff.js): ours ends the breath.
+    'turn-card'(p) {
+      const side = p && (p.side === 'w' || p.side === 'b') ? p.side : null;
+      if (side && localSides.includes(side)) wake();
+    },
     clock(p) { meter.setClock(p); },
     turn(p) {
       const seeding = !seenTurn;
@@ -321,25 +370,18 @@ export function attachRamp(opts = {}) {
       const key = p ? p.side + ':' + p.ply : '';
       if (!seeding && key === lastTurn) return;
       lastTurn = key;
-      // A move was made: the think clock starts over for whoever is on the move
-      // now, and a screen the think had lifted SNAPS back to the floor the match
-      // has built (owner, 2026-10-01). Solo and online that is the player's own
-      // move landing; in hotseat it is every hand-over. The board's seeding
-      // `turn` at start() is not a move, so it never snaps.
-      const lifted = think.reset();
-      lastBeat = now();   // the next mover's think starts at the move, not at the last beat
-      if (!seeding && (lifted || stack.cardLive)) snap();
+      // A move was made, by anyone: THE BREATH (owner, 2026-10-02). Everything
+      // for the player lets go now and stays quiet until their own turn card.
+      // The board's seeding `turn` at start() is not a move, so it never rests.
+      lastBeat = now();
+      if (seeding) { think.reset(); return; }
+      if (surge || meter.over) return;   // the fall owns the screen now
+      rest();
     },
-    capture(p) {
-      const t = now();
-      meter.noteCapture(p, t);
-      const taker = p && p.by === 'b' ? 'b' : 'w';
-      if (!enabled || reducedMotion) return;   // the meter still moved; only the burst is off
-      // both sides feel it; the one who took the piece feels it harder
-      if (localSides.includes(taker)) stack.burst(schedule.burstFor('taker', meter.heatFor(taker, t)));
-      if (localSides.includes(otherSide(taker))) stack.burst(schedule.burstFor('victim', meter.heatFor(otherSide(taker), t)));
-    },
-    check() { if (enabled && !reducedMotion) stack.oneshot('flash', { heat: liveHeat(now()) }); },
+    // A capture still counts (it makes the next climb faster) but no longer
+    // bursts: it lands on a move, and a move is the breath. The capture replay
+    // owns that moment. A check no longer flashes for the same reason.
+    capture(p) { meter.noteCapture(p, now()); },
     grab(p) { if (enabled) stack.grab(p); },
     dragmove(p) { if (enabled) stack.dragmove(p); },
     drop(p) { if (enabled) stack.drop(p); },
@@ -386,12 +428,28 @@ export function attachRamp(opts = {}) {
 
     seenTurn = false;
     lastTurn = '';
+    resting = false;
+    restWake = 0;
     overrideMeter = null;
     lastTick = lastBoardPush = 0;
     setEnabled(true);
   }
 
+  /** The player's Strength reaches the pictures as a CSS multiplier (ramp.css). */
+  function paintStrength() {
+    for (const el of [root, front]) {
+      try { if (el) el.style.setProperty('--pbp-strength', String(dials.strength)); } catch { /* gone */ }
+    }
+  }
+
   const unsubPresentation = onPresentation(p => {
+    const before = dials;
+    dials = { amount: p.amount || 'normal', strength: Number.isFinite(p.strength) ? p.strength : 1, rampSpeed: p.rampSpeed || 'normal' };
+    paintStrength();
+    if (before.strength !== dials.strength) {
+      for (const k of Object.keys(applied)) applied[k] = UNSET;
+      if (enabled) applySustained(susFor(liveMeter()));
+    }
     const wasReduced = reducedMotion;
     reducedMotion = p.reducedMotion;
     if (reducedMotion && !wasReduced) {
@@ -423,7 +481,9 @@ export function attachRamp(opts = {}) {
       side: actingSide(),
       meter: liveMeter(t),
       heat: liveHeat(t),
-      think: { ms: think.ms, lift: think.lift(), counting: thinking() },
+      think: { ms: think.ms, lift: think.lift(), fullMs: think.fullMs, counting: thinking() && !resting },
+      resting,
+      dials: { ...dials },
       surge: surge ? { ms: t - surge.at } : null,
       override: overrideMeter,
       hostHoldSec,
@@ -437,7 +497,8 @@ export function attachRamp(opts = {}) {
        *  wait for the next rAF beat (headless barely gets any). */
       setMeter(v) {
         overrideMeter = v == null ? null : clamp01(v);
-        applySustained(sustainedFor(liveMeter(), tuning, { cardLive: stack.cardLive }));
+        applySustained(susFor(liveMeter()));
+        stack.boardMask();
         return overrideMeter;
       },
       /** Dev harness only: fire one layer by name right now. */
@@ -449,7 +510,7 @@ export function attachRamp(opts = {}) {
       only(name) {
         solo = name || null;
         for (const k of Object.keys(applied)) applied[k] = UNSET;
-        applySustained(sustainedFor(liveMeter(), tuning, { cardLive: stack.cardLive }));
+        applySustained(susFor(liveMeter()));
         return solo;
       },
       /** Dev harness only: fill the screen for a screenshot without waiting. */

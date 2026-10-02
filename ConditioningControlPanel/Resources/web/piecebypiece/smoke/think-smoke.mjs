@@ -5,8 +5,9 @@
  *
  * ramp-smoke pins the numbers; this pins the wiring the owner asked for on
  * 2026-10-01: the screen climbs while YOU sit on your move, never on the
- * opponent's, drops straight back to the floor when the move lands, and a loss
- * surges and then goes quiet. No DOM: the layers degrade to no-ops, and time
+ * opponent's, and a loss surges and then goes quiet. And 2026-10-02: no floor,
+ * a slower climb, and THE BREATH: a move takes everything to zero and keeps it
+ * there until your own turn card (or a few seconds of your turn with no card). No DOM: the layers degrade to no-ops, and time
  * and frames are driven by hand.
  * ==========================================================================*/
 
@@ -76,8 +77,8 @@ check('the ramp runs in Distraction', dbg().enabled);
 wait(10000);
 const tenSeconds = dbg();
 check('your own move counts as thinking', tenSeconds.think.counting);
-check('10 s in, the screen is lifted', tenSeconds.meter > 0.3, String(tenSeconds.meter));
-check('but not to the top', tenSeconds.meter < 0.6, String(tenSeconds.meter));
+check('10 s in, the screen is lifted a little', tenSeconds.meter > 0.08, String(tenSeconds.meter));
+check('but the climb is slow now (owner: 20 s was too fast)', tenSeconds.meter < 0.3, String(tenSeconds.meter));
 
 paused = true;
 const pausedAt = dbg().think.ms;
@@ -97,27 +98,36 @@ wait(3000);
 check('a menu over the board never counts', near(dbg().think.ms, behindAt), `${dbg().think.ms} vs ${behindAt}`);
 doorUp = false;
 
-wait(11000);
-check('20 s of your own thinking is the top of the ramp', near(dbg().meter, 1), String(dbg().meter));
+wait(31000);
+check('40 s of your own thinking is the top of the Normal ramp', near(dbg().meter, 1), String(dbg().meter));
+const flashesBefore = dbg().layers.counts.flash || 0;
+check('a long think pops pictures', flashesBefore > 0, String(flashesBefore));
 
 // the move lands: white moved, black is on the move
 game.side = 'b';
 bus.emit('turn', { side: 'b', ply: 1, clocks: { w: 280000, b: 300000 }, total: 300000 });
 const floor = dbg();
-check('the move snaps the screen straight back to the floor', floor.meter < 0.15, String(floor.meter));
-check('and the think clock is back at zero', floor.think.ms === 0);
+check('the move takes the screen all the way down: no floor', floor.meter === 0, String(floor.meter));
+check('and starts the breath', floor.resting && floor.think.ms === 0);
 check('the snap arms the fast fades', classes.has('is-snap'));
 await new Promise((r) => setTimeout(r, RAMP_TUNING.think.snapMs + 100));
 check('and lets them go again', !classes.has('is-snap'));
 
 wait(15000);
 check('the opponent\'s move never counts', dbg().think.ms === 0 && !dbg().think.counting);
-check('so the screen stays on the floor while they think', dbg().meter < 0.15, String(dbg().meter));
+check('so the screen stays clear while they think', dbg().meter === 0, String(dbg().meter));
+check('and no picture pops for us during the breath', (dbg().layers.counts.flash || 0) === flashesBefore && (dbg().layers.counts.gifRain || 0) >= 0);
 
 game.side = 'w';
 bus.emit('turn', { side: 'w', ply: 2, clocks: { w: 280000, b: 285000 }, total: 300000 });
+wait(1000);
+check('our turn, but the card is not up yet: still breathing', dbg().resting && dbg().think.ms === 0, JSON.stringify(dbg().think));
+bus.emit('turn-card', { side: 'b', style: 'slam', short: false, mine: false });
+check('their turn card never ends our breath', dbg().resting);
+bus.emit('turn-card', { side: 'w', style: 'slam', short: false, mine: true });
+check('our turn card ends the breath', !dbg().resting);
 wait(3000);
-check('your next move starts the climb again from zero', dbg().think.ms > 2000 && dbg().think.ms < 3500, String(dbg().think.ms));
+check('and the climb starts again from zero', dbg().think.ms > 2000 && dbg().think.ms < 3500, String(dbg().think.ms));
 
 /* ---- the fall --------------------------------------------------------------- */
 bus.emit('gameover', { result: '0-1', winner: 'b' });
@@ -146,7 +156,7 @@ doorUp = false;
 /* ---- online: a resync is not a move, and the server's seat wins ---------------- */
 bus.emit('local', { sides: ['w'], mode: 'online' });
 bus.emit('turn', { side: 'w', ply: 0, clocks: { w: 300000, b: 300000 }, total: 300000 });
-wait(15000);
+wait(30000);
 const beforeResync = dbg().think.ms;
 bus.emit('turn', { side: 'w', ply: 0, clocks: { w: 285000, b: 300000 }, total: 300000 });   // a reconnect
 check('an online resync is not a move: the think goes on', near(dbg().think.ms, beforeResync) && dbg().meter > 0.5, String(dbg().meter));
@@ -157,11 +167,13 @@ check('a corrected seat moves the climb to the real side', dbg().side === 'b' &&
 bus.emit('local', { sides: ['w', 'b'] });
 game.side = 'w';
 bus.emit('turn', { side: 'w', ply: 0, clocks: { w: 300000, b: 300000 }, total: 300000 });
-wait(20500);
+wait(40500);
 check('hotseat: the side on the move climbs', near(dbg().meter, 1), String(dbg().meter));
 game.side = 'b';
 bus.emit('turn', { side: 'b', ply: 1, clocks: { w: 280000, b: 300000 }, total: 300000 });
-check('hotseat: the next player starts on their own floor', dbg().side === 'b' && dbg().meter < 0.15, String(dbg().meter));
+check('hotseat: the hand-over is a breath too', dbg().side === 'b' && dbg().meter === 0 && dbg().resting, String(dbg().meter));
+wait(RAMP_TUNING.think.wakeAfterMs + 300);
+check('no card comes (a short clock): the breath ends on its own', !dbg().resting && dbg().think.ms > 0, JSON.stringify(dbg().think));
 
 ramp.dispose();
 console.warn = warn;

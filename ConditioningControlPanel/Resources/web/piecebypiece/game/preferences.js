@@ -10,6 +10,9 @@ let hostVolume = Number.isFinite(settings().sfxVolume) ? settings().sfxVolume : 
 const listeners = new Set();
 const osMotion = globalThis.window?.matchMedia?.('(prefers-reduced-motion: reduce)');
 const clamp = value => Math.max(0, Math.min(1, value));
+const AMOUNTS = ['less', 'normal', 'more'];
+const SPEEDS = ['slow', 'normal', 'fast'];
+const strength = value => Math.round(Math.max(0.1, Math.min(2, value)) * 20) / 20;
 export function presentation() {
   const volume = Number.isFinite(saved.volume) ? clamp(saved.volume) : hostVolume;
   return {
@@ -24,6 +27,10 @@ export function presentation() {
     followCam: saved.followCam !== false,
     replays: saved.replays !== false,
     turnCard: ['slam', 'ribbon', 'tag'].includes(saved.turnCard) ? saved.turnCard : 'slam',
+    // Distraction dials (owner, 2026-10-02): how many pictures, how strong, how fast it climbs.
+    amount: AMOUNTS.includes(saved.amount) ? saved.amount : 'normal',
+    strength: Number.isFinite(saved.strength) ? strength(saved.strength) : 1,
+    rampSpeed: SPEEDS.includes(saved.rampSpeed) ? saved.rampSpeed : 'normal',
     soundLocked: hostVolume === 0,
   };
 }
@@ -41,6 +48,9 @@ export function setPresentation(patch) {
   if (typeof patch.followCam === 'boolean') saved.followCam = patch.followCam;
   if (typeof patch.replays === 'boolean') saved.replays = patch.replays;
   if (['slam', 'ribbon', 'tag'].includes(patch.turnCard)) saved.turnCard = patch.turnCard;
+  if (AMOUNTS.includes(patch.amount)) saved.amount = patch.amount;
+  if (Number.isFinite(patch.strength)) saved.strength = strength(patch.strength);
+  if (SPEEDS.includes(patch.rampSpeed)) saved.rampSpeed = patch.rampSpeed;
   try { globalThis.localStorage?.setItem(KEY, JSON.stringify(saved)); } catch { /* session only */ }
   return apply();
 }

@@ -8,7 +8,7 @@
  * and fades out: the board stays readable through it, it just moves.
  *
  * It rides the THINK (owner, 2026-10-01): it rises once the mover has sat on a
- * move for a while (RAMP_TUNING.think.cardAtMs) and drops away fast the moment
+ * move for a while (RAMP_TUNING.think.cardAt of the climb) and drops away fast the moment
  * the move is made (clear({ fast: true }), the snap). On a long think the next
  * wash follows the last one. Hold time is scaled by the meter
  * (RAMP_TUNING.videoCard, 4s to 13s). Click-through like every other layer. The
