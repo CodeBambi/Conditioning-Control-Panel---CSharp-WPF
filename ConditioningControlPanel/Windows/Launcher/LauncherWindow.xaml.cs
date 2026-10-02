@@ -141,6 +141,23 @@ public partial class LauncherWindow : Window
         Dispatcher.BeginInvoke(DispatcherPriority.Normal, LauncherHost.RequestClose);
     }
 
+    // Since 6.11.5 the app boots on the launcher with the panel hidden, so "download the
+    // preset and drag it in" landed on a window that took no drops (ccp-bugs #1331). Any
+    // file drop is accepted here and handed to the panel's drop path, which sorts it.
+    private void Launcher_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Launcher_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        e.Handled = true;
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            LauncherHost.OpenPanelWithDrop(files);
+    }
+
     private void OnClosedCleanup(object? sender, EventArgs e)
     {
         LauncherHost.FadeOut = null;
