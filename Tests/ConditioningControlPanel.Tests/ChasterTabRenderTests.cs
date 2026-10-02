@@ -50,6 +50,8 @@ public class ChasterTabRenderTests
         Assert.Equal("typo", TabMenuCopy.VignetteFor("lockcard"));
         Assert.Equal("program", TabMenuCopy.VignetteFor("program_skipped"));
         Assert.Equal("bubbles", TabMenuCopy.VignetteFor("natasha"));
+        // The held row has its own scene: the pop's scene shows a +figure (tester report 2026-09-30).
+        Assert.Equal(NatashasFavourite.HeldEventId, TabMenuCopy.VignetteFor(NatashasFavourite.HeldEventId));
         Assert.Equal("escape", TabMenuCopy.VignetteFor("escape"));
         // the mount script never lets a quote through to the page
         Assert.Equal("window.__mount && window.__mount('typo',null,null)", ChasterTrailerView.MountScript("typo"));
