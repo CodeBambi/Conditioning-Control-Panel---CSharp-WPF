@@ -16,6 +16,9 @@
         ResizeMode="CanResize"
         ShowInTaskbar="True"
         UseLayoutRounding="True"
+        AllowDrop="True"
+        DragOver="Launcher_DragOver"
+        Drop="Launcher_Drop"
         FontFamily="Segoe UI">
 
     <!-- The CC Labs launcher: one screen, dark ground, one accent. The panel on the left, the
