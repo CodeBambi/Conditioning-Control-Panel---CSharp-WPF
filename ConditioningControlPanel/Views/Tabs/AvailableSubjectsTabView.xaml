@@ -6,228 +6,179 @@
              xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="800">
-        <Grid Margin="36,28,36,28">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <!-- ============================================================ -->
-            <!-- AMBIENT LAYER - the one looping FX on this tab: a very sparse -->
-            <!-- fog drift behind the roster. Declared FIRST so it is the      -->
-            <!-- bottom of the grid's z-order; the cards paint their own opaque-->
-            <!-- surfaces on top, so the mist only reads through the gutters.  -->
-            <!--                                                              -->
-            <!-- Two puffs at low intensity, not the default three: this tab is-->
-            <!-- a roster you scan, and the air behind it must never compete   -->
-            <!-- with a name. The tint comes from FxTheme (the mod's mist      -->
-            <!-- colour), so it follows the active mod instead of being nailed -->
-            <!-- to one hex - see MainWindow.SubjectsFx for why that is not    -->
-            <!-- literally NeonPurple.                                        -->
-            <!--                                                              -->
-            <!-- AmbientFxCanvas is hit-test invisible by construction, runs a -->
-            <!-- self-stopping clock, and MainWindow.SubjectsFx registers it   -->
-            <!-- with RegisterTabFx so it parks on every tab switch.           -->
-            <!-- ============================================================ -->
-            <fx:AmbientFxCanvas x:Name="SubjectsAmbientFx" x:FieldModifier="internal"
-                                Grid.Row="0" Grid.RowSpan="3"/>
-
-            <!-- Header -->
-            <Grid Grid.Row="0" Margin="0,0,0,18">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Image Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0"
-                       Source="{Binding Source='🛰️', Converter={StaticResource EmojiToImageSource}}"/>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Str tab_available_subjects}"
-                               Foreground="{DynamicResource NeonPurpleBrush}"
-                               FontSize="26" FontWeight="Bold"/>
-                    <TextBlock Text="{loc:Str desc_available_subjects}"
-                               Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                </StackPanel>
-    
-                <!-- "Become a subject!" CTA. Free users get the button +
-                     italic subtitle pointing to Patreon; premium users get
-                     the button alone, opening the Remote Control tab. -->
-                <StackPanel Grid.Column="2" VerticalAlignment="Center"
-                            HorizontalAlignment="Right" MaxWidth="260" Margin="16,0,0,0">
-                    <Button x:Name="BtnBecomeASubject"
-                            Click="BtnBecomeASubject_Click"
-                            Content="{loc:Str btn_become_a_subject}"
-                            ToolTip="{loc:Str tooltip_become_a_subject}"
-                            FontSize="13" FontWeight="Bold"
-                            Padding="16,9" BorderThickness="0" Cursor="Hand"
-                            HorizontalAlignment="Right">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
-                                <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="border" CornerRadius="8"
-                                                    Padding="{TemplateBinding Padding}"
-                                                    Background="{TemplateBinding Background}">
-                                                <ContentPresenter HorizontalAlignment="Center"
-                                                                  VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="border" Property="Opacity" Value="0.9"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                    <TextBlock x:Name="TxtBecomeASubjectSubtitle" x:FieldModifier="internal"
-                               Text="{loc:Str desc_become_a_subject_locked}"
-                               Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="11" FontStyle="Italic"
-                               Margin="0,6,0,0" TextWrapping="Wrap"
-                               TextAlignment="Right"
-                               Visibility="Collapsed"/>
-                </StackPanel>
-            </Grid>
-    
-            <!-- Empty state (visible iff service.IsEmpty + !HasError) -->
-            <Border Grid.Row="1" x:Name="AvailableSubjectsEmptyPanel" x:FieldModifier="internal"
-                    Background="{DynamicResource SurfaceBgBrush}"
-                    BorderBrush="{DynamicResource NeonPurpleBrush}" BorderThickness="1"
-                    CornerRadius="10" Padding="24,18" Margin="0,0,0,12"
-                    Visibility="Collapsed">
-                <TextBlock Text="{loc:Str empty_available_subjects}"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
+             d:DesignHeight="640" d:DesignWidth="900">
+    <!-- THE LOBBY (2026-10-02). Was the Available Subjects directory; the tab key, rail entry
+         and palette row stay "availablesubjects". Three lists by state: open tables (Join),
+         playing now (no button until a game can be watched), friends' tables. Rows come from
+         App.Lobby (LobbyService); the host bar respects each game's own gate. -->
+    <UserControl.Resources>
+        <Style x:Key="LobbyPill" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderHoverBrush}"/>
+            <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" CornerRadius="18" BorderThickness="1"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="LobbyJoin" TargetType="Button">
+            <Setter Property="Foreground" Value="#2A0618"/>
+            <Setter Property="Background" Value="{DynamicResource PinkVibrantBrush}"/>
+            <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="18,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" CornerRadius="14" Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.88"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="LobbyEyebrow" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
+            <Setter Property="Margin" Value="4,18,0,8"/>
+        </Style>
+        <DataTemplate x:Key="LobbyRowTemplate">
+            <Border Margin="0,0,0,8" Padding="14,10" CornerRadius="14"
+                    Background="#14FFFFFF" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Image Width="26" Height="26" Margin="0,0,12,0" VerticalAlignment="Center"
+                           Source="{Binding GameIcon, Converter={StaticResource EmojiToImageSource}}"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextLightBrush}"
+                                       FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="15" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <Ellipse Width="7" Height="7" Margin="8,2,0,0" VerticalAlignment="Center"
+                                     Fill="#5FFFD0" ToolTip="{loc:Str lobby_friend_tip}"
+                                     Visibility="{Binding Friend, Converter={StaticResource BoolToVisibility}}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource TextSecondaryBrush}"
+                                   FontSize="12" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                                   Visibility="{Binding HasSummary, Converter={StaticResource BoolToVisibility}}"/>
+                    </StackPanel>
+                    <Border Grid.Column="2" Margin="12,0" VerticalAlignment="Center" CornerRadius="10" Padding="9,3"
+                            Background="{DynamicResource TransparentPink20Brush}">
+                        <TextBlock Text="{Binding GameLabel}" Foreground="{DynamicResource PinkSoftBrush}"
+                                   FontSize="11" FontWeight="SemiBold"/>
+                    </Border>
+                    <Button Grid.Column="3" Style="{StaticResource LobbyJoin}" MinWidth="78"
+                            Content="{Binding ButtonText}" Opacity="{Binding ButtonOpacity}"
+                            Visibility="{Binding HasButton, Converter={StaticResource BoolToVisibility}}"
+                            Click="BtnLobbyRow_Click"/>
+                </Grid>
             </Border>
-    
-            <!-- Error state (visible iff service.HasError) -->
-            <Border Grid.Row="1" x:Name="AvailableSubjectsErrorPanel" x:FieldModifier="internal"
-                    Background="{DynamicResource SurfaceBgBrush}"
-                    BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
-                    CornerRadius="10" Padding="24,18" Margin="0,0,0,12"
-                    Visibility="Collapsed">
-                <TextBlock Text="{loc:Str error_available_subjects}"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
-            </Border>
-    
-            <!-- Side-scrollable horizontal card list. ItemsSource is bound
-                 in code-behind to App.AvailableSubjects.Entries. Each card
-                 gets a fixed 260px width to keep horizontal scrolling
-                 intentional rather than incidental. -->
-            <ScrollViewer Grid.Row="2" x:Name="AvailableSubjectsScroller"
-                          HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Disabled"
-                          PreviewMouseWheel="AvailableSubjectsScroller_PreviewMouseWheel">
-                <ItemsControl x:Name="AvailableSubjectsList" x:FieldModifier="internal">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Width="260" Margin="0,0,12,4" Opacity="{Binding CardOpacity}"
-                                    Background="{DynamicResource SurfaceBgBrush}"
-                                    BorderBrush="{DynamicResource NeonPurpleBrush}"
-                                    BorderThickness="1" CornerRadius="10" Padding="18,14">
-                                <StackPanel>
-                                    <!-- Top row: name + level + tier badge -->
-                                    <Grid Margin="0,0,0,8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0">
-                                            <TextBlock Text="{Binding DisplayName}" Foreground="White"
-                                                       FontSize="15" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Foreground="{DynamicResource TextMutedBrush}"
-                                                       FontSize="11" Margin="0,2,0,0">
-                                                <Run Text="Lv "/><Run Text="{Binding Level, Mode=OneWay}"/>
-                                            </TextBlock>
-                                        </StackPanel>
-                                        <Border Grid.Column="1" Background="{DynamicResource NeonPurpleTransparent20Brush}"
-                                                CornerRadius="9999" Padding="8,3" VerticalAlignment="Top">
-                                            <TextBlock Text="{Binding TierLabel}"
-                                                       Foreground="{DynamicResource NeonPurpleBrush}"
-                                                       FontSize="10" FontWeight="Bold"/>
-                                        </Border>
-                                    </Grid>
-    
-                                    <!-- Status text (only when present) -->
-                                    <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource TextMutedBrush}"
-                                               FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
-                                               Visibility="{Binding HasStatusText, Converter={StaticResource BoolToVisibility}}"/>
-    
-                                    <!-- Tags as pill badges (mirrors cclabs-web /dashboard/subjects) -->
-                                    <ItemsControl ItemsSource="{Binding Tags}" Margin="0,0,0,12"
-                                                  Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibility}}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel Orientation="Horizontal"/>
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Background="{DynamicResource NeonPurpleTransparent20Brush}"
-                                                        CornerRadius="9999" Padding="7,2" Margin="0,0,5,5">
-                                                    <TextBlock Text="{Binding}"
-                                                               Foreground="{DynamicResource NeonPurpleBrush}"
-                                                               FontSize="10" FontWeight="SemiBold"/>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-    
-                                    <!-- Connect button (or Taken disabled) -->
-                                    <Button Content="{Binding ConnectButtonText}"
-                                            Tag="{Binding UnifiedId}"
-                                            IsEnabled="{Binding IsConnectEnabled}"
-                                            Click="BtnConnectSubject_Click"
-                                            PreviewMouseLeftButtonDown="BtnConnectSubject_PressDown"
-                                            PreviewMouseLeftButtonUp="BtnConnectSubject_PressUp"
-                                            MouseLeave="BtnConnectSubject_PressUp"
-                                            FontSize="13" FontWeight="Bold"
-                                            Padding="0,8" BorderThickness="0" Cursor="Hand">
-                                        <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
-                                                <Setter Property="Foreground" Value="White"/>
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="Button">
-                                                            <Border x:Name="border" CornerRadius="8"
-                                                                    Padding="{TemplateBinding Padding}"
-                                                                    Background="{TemplateBinding Background}">
-                                                                <ContentPresenter HorizontalAlignment="Center"
-                                                                                  VerticalAlignment="Center"/>
-                                                            </Border>
-                                                            <ControlTemplate.Triggers>
-                                                                <Trigger Property="IsEnabled" Value="False">
-                                                                    <Setter TargetName="border" Property="Background" Value="#3A2E5A"/>
-                                                                    <Setter Property="Foreground" Value="White"/>
-                                                                </Trigger>
-                                                            </ControlTemplate.Triggers>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Margin="36,28,36,28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- The tab's one looping FX, under everything (MainWindow.SubjectsFx registers it). -->
+        <fx:AmbientFxCanvas x:Name="SubjectsAmbientFx" x:FieldModifier="internal" Grid.Row="0" Grid.RowSpan="3"/>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="{loc:Str tab_available_subjects}" Foreground="{DynamicResource TextLightBrush}"
+                       FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="30" FontWeight="SemiBold"/>
+            <TextBlock x:Name="TxtLobbyCount" x:FieldModifier="internal" Text="{loc:Str desc_available_subjects}"
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,2,0,0"/>
+        </StackPanel>
+
+        <!-- Host bar: one pill per game. Locked pills stay visible with a lock; a click goes to the gate. -->
+        <StackPanel Grid.Row="1" Orientation="Vertical">
+            <WrapPanel Orientation="Horizontal">
+                <Button x:Name="BtnHostChess" x:FieldModifier="internal" Style="{StaticResource LobbyPill}"
+                        Content="{loc:Str lobby_host_chess}" Click="BtnHostChess_Click"/>
+                <Button x:Name="BtnHostGoon" x:FieldModifier="internal" Style="{StaticResource LobbyPill}"
+                        Content="{loc:Str lobby_host_goon}" Click="BtnHostGoon_Click"/>
+                <Button x:Name="BtnBecomeASubject" x:FieldModifier="internal" Style="{StaticResource LobbyPill}"
+                        Content="{loc:Str lobby_host_remote}" ToolTip="{loc:Str desc_optin_directory_consent}"
+                        Click="BtnBecomeASubject_Click"/>
+            </WrapPanel>
+            <TextBlock x:Name="TxtBecomeASubjectSubtitle" x:FieldModifier="internal"
+                       Text="{loc:Str desc_become_a_subject_locked}" Foreground="{DynamicResource TextDimBrush}"
+                       FontSize="11" Margin="4,6,0,0" Visibility="Collapsed"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="2" x:Name="LobbyScroller" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled" Margin="0,6,0,0">
+            <StackPanel MaxWidth="860" HorizontalAlignment="Stretch">
+                <!-- Error: one line, the poll keeps trying behind it -->
+                <Border x:Name="AvailableSubjectsErrorPanel" x:FieldModifier="internal" Visibility="Collapsed"
+                        Margin="0,14,0,0" Padding="16,10" CornerRadius="12"
+                        Background="#14FFFFFF" BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1">
+                    <TextBlock Text="{loc:Str lobby_error}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13"/>
+                </Border>
+
+                <!-- (1) Open tables -->
+                <TextBlock Text="{loc:Str lobby_list_open}" Style="{StaticResource LobbyEyebrow}"/>
+                <Border x:Name="AvailableSubjectsEmptyPanel" x:FieldModifier="internal" Visibility="Collapsed"
+                        Padding="16,12" CornerRadius="12" Background="#0DFFFFFF"
+                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                    <TextBlock x:Name="TxtLobbyEmpty" x:FieldModifier="internal" Text="{loc:Str lobby_empty_open}"
+                               Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13"/>
+                </Border>
+                <ItemsControl x:Name="AvailableSubjectsList" x:FieldModifier="internal"
+                              ItemTemplate="{StaticResource LobbyRowTemplate}"/>
+
+                <!-- (2) Playing now: hidden while empty -->
+                <StackPanel x:Name="LobbyPlayingSection" x:FieldModifier="internal" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Str lobby_list_playing}" Style="{StaticResource LobbyEyebrow}"/>
+                    <ItemsControl x:Name="LobbyPlayingList" x:FieldModifier="internal"
+                                  ItemTemplate="{StaticResource LobbyRowTemplate}"/>
+                </StackPanel>
+
+                <!-- (3) Friends' tables: hidden while empty -->
+                <StackPanel x:Name="LobbyFriendsSection" x:FieldModifier="internal" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Str lobby_list_friends}" Style="{StaticResource LobbyEyebrow}"/>
+                    <ItemsControl x:Name="LobbyFriendsList" x:FieldModifier="internal"
+                                  ItemTemplate="{StaticResource LobbyRowTemplate}"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>
