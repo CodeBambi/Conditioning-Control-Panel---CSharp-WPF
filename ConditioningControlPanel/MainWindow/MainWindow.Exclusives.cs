@@ -70,6 +70,9 @@ namespace ConditioningControlPanel
         private readonly List<DropShadowEffect> _exclusiveAccentShadows = new();
 
         private bool _exclusivesBuilt;
+
+        /// <summary>The invites section under the shelf (Controls/Invites). Dark until the server has invites.</summary>
+        private Controls.Invites.InvitePanel? _invitePanel;
         private bool _exclusivesSheenRetryQueued;
 
         /// <summary>The spotlight's FREE TODAY pulse - same contract as ExclusiveCardUi.FreeFx.</summary>
@@ -256,6 +259,9 @@ namespace ConditioningControlPanel
 
                 // Parks/resumes with tab switches like every other ambient canvas.
                 RegisterTabFx("exclusives", ExclusivesTab.ExclusivesAmbientFx);
+
+                _invitePanel = new Controls.Invites.InvitePanel();
+                ExclusivesTab.InvitesHost.Child = _invitePanel;
             }
             catch (Exception ex)
             {
@@ -778,6 +784,9 @@ namespace ConditioningControlPanel
                 // the 6h/10min gates inside make this free on every repaint, so a user parked on
                 // the vault catches a same-day override without this tab owning a clock.
                 _ = App.DailyFree?.RefreshAsync();
+
+                // Throttled inside (30s), so a repaint storm costs one read.
+                _ = _invitePanel?.RefreshAsync();
             }
             catch (Exception ex)
             {

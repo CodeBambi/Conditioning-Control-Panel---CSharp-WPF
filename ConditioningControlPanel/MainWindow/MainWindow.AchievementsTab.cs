@@ -720,6 +720,7 @@ namespace ConditioningControlPanel
             AchievementCategory.Hardcore => "■",
             AchievementCategory.Deeper => "▼",
             AchievementCategory.Creator => "★",
+            AchievementCategory.Community => "♥",
             _ => "◆",
         };
 
