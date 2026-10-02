@@ -36,7 +36,7 @@ THE LOBBY
 Available Subjects is now the Lobby. three lists side by side: open tables, playing now, and your friends' tables. every table says who, what game and how it is set up, with a Join button. host a chess, Goon or Remote table from the top of the page. the launcher has a Lobby chip too: it shows how many tables are open and drops down the list, so you can join without opening the panel.
 
 INVITE CODES
-subscribers get invite codes every month: two with Basic, three with Prime. anyone new who redeems one gets 7 days of Basic, free. no card, nothing renews. when a friend you invited subscribes, you climb a ladder of four badges, each with something new for the wardrobe. find your codes on the Exclusives tab.
+Basic and Prime get one invite code a month. anyone new who redeems it gets 7 days of Basic, free. no card, nothing renews. when a friend you invited subscribes, you climb a ladder of four badges, each with something new for the wardrobe. a ticket wiggles next to your profile while you have a code to give: click it, or find your code at the bottom of the Premium tab. the friends list has an invite link too.
 
 LOCKED FEATURES
 clicking a padlock opens a card instead of throwing you into Settings: what the feature is, what Basic and Prime cost in your currency, monthly or yearly, and a compare page. already a supporter? sign in from the same card. have a code? redeem it there.
