@@ -168,6 +168,11 @@ export function createLayerStack(ctx = {}) {
       counts.videoCard += 1;
       try { card.show(opts || {}); } catch { /* no card is fine */ }
     },
+    /** Take the wash down now; `{ fast: true }` is the snap when a move is made. */
+    clearCard(opts) {
+      if (disposed) return;
+      try { card.clear(opts || {}); } catch { /* no card is fine */ }
+    },
     grab(p) { if (!disposed) { counts.grab += 1; try { drag.grab(p); } catch { /* ignore */ } } },
     dragmove(p) { if (!disposed) { try { drag.move(p); } catch { /* per-frame, stay quiet */ } } },
     drop(p) { if (!disposed) { counts.drop += 1; try { drag.drop(p); } catch { /* ignore */ } } },

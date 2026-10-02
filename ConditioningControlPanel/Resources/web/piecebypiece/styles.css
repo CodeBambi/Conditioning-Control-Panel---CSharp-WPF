@@ -249,6 +249,10 @@ html, body {
 .chip.check { background: #48253b; border-color: #ff8295; }
 .chip .tally { font-size: 12px; letter-spacing: 0; opacity: 1; color: #c5bad4; margin-left: auto; white-space: nowrap; }
 .player-material { min-height: 18px; }
+/* The IQ readout (game/iq.js): local seats only, beside the name; what a move cost rises off it. */
+.chip .iq { position: relative; flex: none; font-size: 12px; font-weight: 600; color: #ffc4e1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chip .iq-pop { position: absolute; left: calc(100% + 5px); top: 0; font-weight: 700; color: #ff8295; pointer-events: none; animation: pbp-iq-pop 1100ms ease-out forwards; }
+@keyframes pbp-iq-pop { 0% { opacity: 0; transform: translateY(5px); } 18% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-9px); } }
 .captured { font: 17px/1 'Segoe UI Symbol', sans-serif; letter-spacing: -3px; color: #e2cfff; max-width: 135px; overflow: hidden; }
 .turn-line { display: none; }
 .statuscol { top: 276px; width: 214px; transform: none; transition: none; }

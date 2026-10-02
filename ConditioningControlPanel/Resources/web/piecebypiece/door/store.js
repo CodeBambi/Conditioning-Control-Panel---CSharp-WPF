@@ -8,7 +8,7 @@
  *
  *   Game = { id, at, mode: 'hotseat' | 'online', me: 'w' | 'b' | null,
  *            opponent, moves: [san], plies, result: { result, winner, reason } | null,
- *            durationMs, captures: { w, b } }
+ *            durationMs, captures: { w, b }, iq?: { w?, b? } (door/fall.js) }
  * ==========================================================================*/
 
 export const STORE = Object.freeze({ key: 'pbp-games', cap: 50, nameKey: 'pbp-name' });
@@ -58,10 +58,28 @@ export function outcome(g) {
 
 const PIECE_WORD = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
 
+/**
+ * The player's own IQ track in a saved game (door/fall.js), or null: an old
+ * save, a game the grader never saw, or a two-players-here game, where the
+ * board had two heads and neither is "yours".
+ */
+export function seatIq(g) {
+  const t = g && (g.me === 'w' || g.me === 'b') && g.iq ? g.iq[g.me] : null;
+  return t && Number.isFinite(t.start) ? t : null;
+}
+
+/** Where your IQ ended a saved game, rounded; null when the game has no track of yours. */
+export function finalIq(g) {
+  const t = seatIq(g);
+  if (!t) return null;
+  return Math.round(Number.isFinite(t.end) ? t.end : t.start);
+}
+
 /** The counts the profile shows. ELO is deliberately absent: the server rates, or nobody does. */
 export function profileStats(list = read()) {
   let wins = 0, losses = 0, draws = 0, captures = 0, plies = 0, ms = 0;
   let streak = 0, streakOpen = true;
+  let lowIq = null;
   const moved = { p: 0, n: 0, b: 0, r: 0, q: 0, k: 0 };
   for (const g of list) {
     const o = outcome(g);
@@ -69,6 +87,9 @@ export function profileStats(list = read()) {
     if (streakOpen) { if (o === 'win') streak++; else if (o === 'loss' || o === 'draw') streakOpen = false; }
     plies += g.plies || 0;
     ms += g.durationMs || 0;
+    const t = seatIq(g);
+    const low = t ? (Number.isFinite(t.low) ? t.low : finalIq(g)) : null;
+    if (low !== null && (lowIq === null || low < lowIq)) lowIq = Math.round(low);
     const caps = g.captures || {};
     captures += g.me ? (caps[g.me] || 0) : ((caps.w || 0) + (caps.b || 0));
     const moves = Array.isArray(g.moves) ? g.moves : [];
@@ -84,6 +105,7 @@ export function profileStats(list = read()) {
   return {
     games: list.length, wins, losses, draws, streak, captures, plies, ms,
     favourite: fav && fav[1] > 0 ? PIECE_WORD[fav[0]] : null,
+    lowIq,          // the lowest your IQ went in any game kept here; null before the first graded one
     rating: null,   // "unrated" until the server says otherwise
   };
 }

@@ -6,6 +6,12 @@
  * softer and harder to read. Taking a piece ramps you MORE than losing one, so
  * the player who is ahead on material is also the one squinting.
  *
+ * On top of that floor sits the THINK (owner, 2026-10-01): while the player
+ * sits on their own move the screen climbs toward full (20 s), the wash rises
+ * over the board on a long think, and the moment the move is made everything
+ * SNAPS back down to the floor. A local loss is THE FALL: everything comes up
+ * at once, holds, and drains away under the end card.
+ *
  * attachRamp({ bus, root, stage, media, board }) -> { dispose, setEnabled, debug }
  *
  * CONTRACT (the board owns these, this module only listens):
@@ -20,7 +26,7 @@
  * degrade to a console.warn and a quieter ramp.
  * ==========================================================================*/
 
-import { createMeter, RAMP_TUNING, clamp01 } from './meter.js';
+import { createMeter, createThinkClock, liftMeter, surgeLevel, RAMP_TUNING, clamp01 } from './meter.js';
 import { createSchedule, videoHoldMs, sustainedFor } from './schedule.js';
 import { createLayerStack } from './layers/index.js';
 import { createFixtureMedia } from './media.js';
@@ -78,6 +84,7 @@ export function attachRamp(opts = {}) {
   const tuning = opts.tuning || RAMP_TUNING;
   const media = opts.media || createFixtureMedia([]);
   const meter = createMeter({ tuning });
+  const think = createThinkClock({ tuning });
   const schedule = createSchedule({ tuning, seed: opts.seed || 'pbp-ramp' });
 
   // The front plane carries the video card: in front of the POV, still
@@ -120,7 +127,13 @@ export function attachRamp(opts = {}) {
   let ticks = 0;   // scheduling beats served, so a harness can prove the loop runs
   let overrideMeter = null;   // dev harness: pin the meter regardless of the game
   let seenTurn = false;       // the board's seeding `turn` is not a played move
+  let lastTurn = '';          // side:ply of the last turn, so a resync is not a move
   let solo = null;            // dev harness: show ONE sustained layer, for a screenshot
+  let lastBeat = 0;           // the previous scheduling beat, for the think clock's step
+  let nextCardAt = 0;         // the earliest the next think wash may rise
+  let cardWasLive = false;
+  let snapTimer = 0;          // clears the fast-transition class after a snap
+  let surge = null;           // { at } while the loss surge runs
   // OFF is the "this layer is currently off" key; UNSET is "we have never
   // written it". They must differ, or a forced re-apply of an off layer reads
   // as no change and is skipped, which is how a solo call once left the layers
@@ -133,8 +146,89 @@ export function attachRamp(opts = {}) {
 
   /** The side the ramp is acting on: whoever is on the move. */
   const actingSide = () => localSides.length === 1 ? localSides[0] : meter.active;
-  const liveMeter = () => (overrideMeter == null ? meter.meterFor(actingSide()) : clamp01(overrideMeter));
-  const liveHeat = (t) => (overrideMeter == null ? meter.heatFor(actingSide(), t) : clamp01(overrideMeter));
+  /** What the layers ride: the surge at a loss, else the floor lifted by the think. */
+  function liveMeter(t = now()) {
+    if (overrideMeter != null) return clamp01(overrideMeter);
+    if (surge) return surgeLevel(t - surge.at, tuning);
+    return liftMeter(meter.meterFor(actingSide()), think.lift());
+  }
+  /** The meter plus what is left of the last capture kick (one-shots ride this). */
+  function liveHeat(t) {
+    if (overrideMeter != null || surge) return liveMeter(t);
+    return clamp01(liveMeter(t) + meter.kickFor(actingSide(), t));
+  }
+
+  /**
+   * Is the acting side sitting on its own move with a live board in front of it?
+   * Only then does the think clock run: not before a game is dealt, not behind
+   * the menu or the end card (the referee idles at the start with white to
+   * move), not on the opponent's move, not under the pause card, not while a
+   * full-screen replay owns the view. The referee's turn() leads the clocks
+   * online (an optimistic move), so it is asked first.
+   */
+  function thinking() {
+    if (!seenTurn) return false;
+    const side = actingSide();
+    if (!localSides.includes(side)) return false;
+    try {
+      const pbp = globalThis.window?.PBP;
+      if (pbp?.door?.isUp?.()) return false;
+      const game = pbp?.game;
+      if (game && typeof game.turn === 'function') {
+        if (game.turn() !== side || (typeof game.isOver === 'function' && game.isOver())) return false;
+      } else if (meter.active !== side) return false;
+      if (pbp?.isPaused?.()) return false;
+      const board = opts.board || pbp?.board;
+      if (board?.director?.holding?.()) return false;
+    } catch { return false; }
+    return true;
+  }
+
+  /** The fast-transition class on both planes and the stage, for one snap. */
+  function setSnapClass(on) {
+    for (const el of [root, front, stage]) {
+      try { if (el) el.classList.toggle('is-snap', on); } catch { /* gone */ }
+    }
+  }
+
+  /** The move is made: the wash leaves in a blink and the haze drops to the floor now. */
+  function snap() {
+    stack.clearCard({ fast: true });
+    if (!enabled) return;
+    setSnapClass(true);
+    if (snapTimer) clearTimeout(snapTimer);
+    snapTimer = setTimeout(() => { snapTimer = 0; setSnapClass(false); }, tuning.think.snapMs);
+    const t = now();
+    const m = liveMeter(t);
+    applySustained(sustainedFor(m, tuning, { cardLive: stack.cardLive }));
+    lastBoardPush = t;
+    pushToBoard(m);
+  }
+
+  /** On a long think the wash rises, and the next one follows the last. */
+  function thinkCard(t, m, counting) {
+    const live = stack.cardLive;
+    if (cardWasLive && !live) nextCardAt = t + tuning.think.cardGapMs;   // a breath between washes
+    cardWasLive = live;
+    if (live || !counting || reducedMotion || t < nextCardAt || think.ms < tuning.think.cardAtMs) return;
+    stack.videoCard({ holdMs: videoHoldMs(m, tuning, hostHoldSec), side: actingSide() });
+    // a pool with every picture already up declines: try again after a breath, not every beat
+    nextCardAt = t + tuning.think.cardGapMs;
+    cardWasLive = stack.cardLive;
+  }
+
+  /** THE FALL: a local loss brings everything up at once; the tick drains it and switches off. */
+  function startSurge() {
+    const t = now();
+    surge = { at: t };
+    think.reset();
+    stack.clearCard({ fast: true });
+    stack.burst(schedule.burstFor('taker', 1));
+    applySustained(sustainedFor(1, tuning, { cardLive: false }));
+    lastBoardPush = t;
+    pushToBoard(1);
+    schedulePump();
+  }
 
   /** Hand the meter to A's board if it grew those knobs. Always guarded. */
   function pushToBoard(m) {
@@ -177,12 +271,18 @@ export function attachRamp(opts = {}) {
     if (t - lastTick >= TICK_MS) {
       lastTick = t;
       ticks += 1;
-      const m = liveMeter();
+      // the fall has drained: the game is over, go quiet
+      if (surge && t - surge.at >= tuning.surge.holdMs + tuning.surge.drainMs) { surge = null; setEnabled(false); return; }
+      const counting = !surge && thinking();
+      think.advance(lastBeat ? t - lastBeat : 0, counting);
+      lastBeat = t;
+      const m = liveMeter(t);
       const out = schedule.tick(t, liveHeat(t), m, { cardLive: stack.cardLive });
       // reduced motion keeps the still layers (the melt, the blur, the veils)
       // and drops everything that pops, falls or rushes at the player
       if (!reducedMotion) for (const kind of out.fire) stack.oneshot(kind, { heat: out.heat });
       applySustained(out.sustained);
+      thinkCard(t, m, counting);
       if (t - lastBoardPush >= BOARD_PUSH_MS) { lastBoardPush = t; pushToBoard(m); }
     }
   }
@@ -203,23 +303,32 @@ export function attachRamp(opts = {}) {
       localSides = Array.isArray(p?.sides) ? p.sides.filter(s => s === 'w' || s === 'b') : ['w', 'b'];
       resetMatch();
     },
+    // An online seat the lobby could only guess, corrected by the server's first
+    // word (net/match.js): the climb belongs to the player's real side.
+    seat(p) {
+      const side = p && (p.color === 'w' || p.color === 'b') ? p.color : null;
+      if (!side || localSides.length !== 1 || localSides[0] === side) return;
+      localSides = [side];
+      think.reset();
+    },
     clock(p) { meter.setClock(p); },
     turn(p) {
       const seeding = !seenTurn;
       seenTurn = true;
       meter.setTurn(p);
-      // The card belongs to the side that just MOVED and is now waiting: it
-      // rides over the board while the opponent thinks. In hotseat both sides
-      // are local, so this is simply every turn.
-      //
-      // Except the first one. The board deals a `turn` at start() to seed the
-      // clocks and the effects layer, and nobody has moved yet: a card there
-      // covers the opening position before the player has touched a piece.
-      if (seeding || !enabled || reducedMotion) return;
-      const waiting = otherSide(p && p.side === 'b' ? 'b' : 'w');
-      if (!localSides.includes(waiting)) return;
-      const m = overrideMeter == null ? meter.meterFor(waiting) : clamp01(overrideMeter);
-      stack.videoCard({ holdMs: videoHoldMs(m, tuning, hostHoldSec), side: waiting });
+      // An online resync repeats the turn it already had (net/match.js
+      // applyState): nobody moved, so the think goes on and nothing snaps.
+      const key = p ? p.side + ':' + p.ply : '';
+      if (!seeding && key === lastTurn) return;
+      lastTurn = key;
+      // A move was made: the think clock starts over for whoever is on the move
+      // now, and a screen the think had lifted SNAPS back to the floor the match
+      // has built (owner, 2026-10-01). Solo and online that is the player's own
+      // move landing; in hotseat it is every hand-over. The board's seeding
+      // `turn` at start() is not a move, so it never snaps.
+      const lifted = think.reset();
+      lastBeat = now();   // the next mover's think starts at the move, not at the last beat
+      if (!seeding && (lifted || stack.cardLive)) snap();
     },
     capture(p) {
       const t = now();
@@ -234,8 +343,13 @@ export function attachRamp(opts = {}) {
     grab(p) { if (enabled) stack.grab(p); },
     dragmove(p) { if (enabled) stack.dragmove(p); },
     drop(p) { if (enabled) stack.drop(p); },
-    gameover() {
+    gameover(p) {
       meter.over = true;
+      // THE FALL (owner, 2026-10-01): a local loss is the climax, not a
+      // failure. Hotseat counts too, since the side that lost sits at this
+      // screen. A win or a draw goes quiet as before.
+      const winner = p && (p.winner === 'w' || p.winner === 'b') ? p.winner : null;
+      if (enabled && !reducedMotion && winner && localSides.includes(otherSide(winner))) { startSurge(); return; }
       setEnabled(false);
     },
   };
@@ -250,16 +364,20 @@ export function attachRamp(opts = {}) {
   function setEnabled(on) {
     enabled = !!on && !meter.over && presentation().experience === 'distraction';
     if (!enabled) {
+      surge = null;
       stack.clear();
       for (const k of Object.keys(applied)) applied[k] = UNSET;
       pushToBoard(0);
-    } else { schedulePump(); }
+    } else { lastBeat = 0; schedulePump(); }   // a pause never banks think time
     return enabled;
   }
 
   function resetMatch() {
     setEnabled(false);
     meter.reset();
+    think.reset();
+    nextCardAt = 0;
+    cardWasLive = false;
     schedule.reset(now());
     // Continuing a saved game restores its accumulated pressure without replaying bursts.
     const game = globalThis.window?.PBP?.game;
@@ -267,6 +385,7 @@ export function attachRamp(opts = {}) {
     for (const move of history) if (move.captured) meter.noteCapture({ by: move.color, victimSide: otherSide(move.color) }, now() - 60000);
 
     seenTurn = false;
+    lastTurn = '';
     overrideMeter = null;
     lastTick = lastBoardPush = 0;
     setEnabled(true);
@@ -286,6 +405,7 @@ export function attachRamp(opts = {}) {
     if (disposed) return;
     disposed = true;
     unsubPresentation();
+    if (snapTimer) { clearTimeout(snapTimer); snapTimer = 0; setSnapClass(false); }
     if (rafId) { try { cancelAnimationFrame(rafId); } catch { clearTimeout(rafId); } rafId = 0; }
     if (unsubSettings) { try { unsubSettings(); } catch { /* gone */ } unsubSettings = null; }
     if (bus) for (const [type, fn] of bound) { try { bus.off(type, fn); } catch { /* gone already */ } }
@@ -301,8 +421,10 @@ export function attachRamp(opts = {}) {
       enabled,
       ticks,
       side: actingSide(),
-      meter: liveMeter(),
+      meter: liveMeter(t),
       heat: liveHeat(t),
+      think: { ms: think.ms, lift: think.lift(), counting: thinking() },
+      surge: surge ? { ms: t - surge.at } : null,
       override: overrideMeter,
       hostHoldSec,
       reducedMotion,

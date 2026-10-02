@@ -144,6 +144,18 @@
 }
 .pbp-card.is-in { opacity: 0.42; transform: scale(1); }
 .pbp-card.is-out { opacity: 0; transition: opacity 900ms ease, transform 900ms ease; }
+.pbp-card.is-out.is-snap { transition: opacity 220ms ease, transform 220ms ease; }
+
+/* ===========================================================================
+ * THE SNAP (owner, 2026-10-01): the move is made and the haze lets go at once.
+ * The ramp arms .is-snap on both planes and the stage for a moment, so the
+ * veils, the melt and the blur drop to the floor in a blink instead of their
+ * usual slow fades. The climb back up keeps the slow fades.
+ * ==========================================================================*/
+.pbp-fx.is-snap .pbp-melt,
+.pbp-fx.is-snap .pbp-spiral,
+.pbp-fx.is-snap .pbp-overlay { transition-duration: 160ms; }
+.pbp-stage-fx.is-snap { transition-duration: 160ms; }
 .pbp-card video {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover;
