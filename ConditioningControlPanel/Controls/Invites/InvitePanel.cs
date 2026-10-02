@@ -40,7 +40,10 @@ public sealed class InvitePanel : Border
     private DateTime _lastReadUtc = DateTime.MinValue;
     private Face _face = Face.None;
     private bool _reading;
-    private bool _redeeming;
+    private DateTime _redeemedAtUtc = DateTime.MinValue;
+
+    /// <summary>A confirmed redeem holds the card this long before a re-read may replace it.</summary>
+    public static readonly TimeSpan RedeemedHold = TimeSpan.FromMinutes(2);
 
     public InvitePanel(Func<IInviteApi>? api = null)
     {
@@ -57,18 +60,19 @@ public sealed class InvitePanel : Border
     /// <summary>Re-read the server and repaint. Throttled unless forced; never throws.</summary>
     public async Task RefreshAsync(bool force = false)
     {
-        // A redeem in flight or just confirmed owns the card: the grant it applies repaints the
-        // tab, and a re-read then would collapse the confirmation (the account is now premium).
-        if (_reading || _redeeming || _face == Face.Redeemed) return;
-        if (!force && DateTime.UtcNow - _lastReadUtc < RefreshGap) return;
+        // Signed out (or switched away) always wins, even over a confirmation on screen.
         if (BackRoomApi.AppIdentity() == null) { Hide(); return; }
+        // A just-confirmed redeem owns the card for a moment: the grant it applies repaints the
+        // tab, and a re-read then would collapse the confirmation (the account is now premium).
+        if (_reading || (_face == Face.Redeemed && DateTime.UtcNow - _redeemedAtUtc < RedeemedHold)) return;
+        if (!force && DateTime.UtcNow - _lastReadUtc < RefreshGap) return;
 
         _reading = true;
         try
         {
             var mine = await _api().MineAsync();
             _lastReadUtc = DateTime.UtcNow;
-            if (_redeeming || _face == Face.Redeemed) return;
+            if (_face == Face.Redeemed && DateTime.UtcNow - _redeemedAtUtc < RedeemedHold) return;
             InviteRewards.Apply(mine.ConvertedTotal);
             if (mine.Snapshot != null)
                 ShowInviter(mine.Snapshot);
@@ -231,77 +235,9 @@ public sealed class InvitePanel : Border
         _body.Children.Clear();
         _body.Children.Add(Header(Loc.Get("invites_redeem_title"), null));
         _body.Children.Add(Para(Loc.Get("invites_redeem_body")));
-
-        var row = new Grid { Margin = new Thickness(0, 10, 0, 0) };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MaxWidth = 320 });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var box = new TextBox
-        {
-            Name = "InviteCodeBox",
-            Background = RowBg,
-            Foreground = Text,
-            CaretBrush = Pink,
-            BorderBrush = Edge,
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 7, 10, 7),
-            FontSize = 14,
-            MaxLength = 80,
-            CharacterCasing = CharacterCasing.Upper,
-        };
-        box.SetResourceReference(Control.FontFamilyProperty, "Font.Mono");
-        row.Children.Add(box);
-
-        var go = SmallButton(Loc.Get("invites_redeem_go"));
-        go.Margin = new Thickness(8, 0, 0, 0);
-        Grid.SetColumn(go, 1);
-        row.Children.Add(go);
-        _body.Children.Add(row);
-
-        var result = Para("", Muted, 12, new Thickness(0, 8, 0, 0));
-        result.Visibility = Visibility.Collapsed;
-        _body.Children.Add(result);
-
-        async void Redeem()
-        {
-            if (_redeeming) return;
-            if (InviteRules.NormalizeCode(box.Text) == null)
-            {
-                Say(result, Loc.Get("invites_err_bad_code"), Warn);
-                return;
-            }
-            _redeeming = true;
-            go.IsEnabled = false;
-            try
-            {
-                var outcome = await _api().RedeemAsync(box.Text);
-                if (outcome.Ok)
-                {
-                    _face = Face.Redeemed;
-                    InviteGrantSync.Offer(outcome.GrantUntilUtc, "redeem");
-                    row.Visibility = Visibility.Collapsed;
-                    var until = outcome.GrantUntilUtc?.ToLocalTime().ToString("d MMM, HH:mm") ?? "";
-                    Say(result, Loc.GetF("invites_redeem_ok", until), Good);
-                }
-                else
-                {
-                    Say(result, Loc.Get(ReasonKey(outcome.Reason)), Warn);
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("[Invites] redeem failed: {E}", ex.GetType().Name);
-                Say(result, Loc.Get("invites_err_offline"), Warn);
-            }
-            finally
-            {
-                _redeeming = false;
-                go.IsEnabled = true;
-            }
-        }
-
-        go.Click += (_, _) => Redeem();
-        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) Redeem(); };
+        var box = new InviteRedeemBox("redeem", _api) { Margin = new Thickness(0, 10, 0, 0) };
+        box.Redeemed += () => { _face = Face.Redeemed; _redeemedAtUtc = DateTime.UtcNow; };
+        _body.Children.Add(box);
         _face = Face.Redeem;
         Visibility = Visibility.Visible;
     }
@@ -313,13 +249,6 @@ public sealed class InvitePanel : Border
             or "too_fast" or "offline" or "bad_code" => "invites_err_" + reason,
         _ => "invites_err_generic",
     };
-
-    private static void Say(TextBlock target, string text, Brush brush)
-    {
-        target.Text = text;
-        target.Foreground = brush;
-        target.Visibility = Visibility.Visible;
-    }
 
     // ============================== bits ==============================
 

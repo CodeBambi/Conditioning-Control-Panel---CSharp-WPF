@@ -30,7 +30,8 @@ public class InviteCopyTests
 
     private static string[] KeysThePanelReads()
     {
-        var src = File.ReadAllText(Path.Combine(AppDir(), "Controls", "Invites", "InvitePanel.cs"));
+        var src = File.ReadAllText(Path.Combine(AppDir(), "Controls", "Invites", "InvitePanel.cs"))
+                  + File.ReadAllText(Path.Combine(AppDir(), "Controls", "Invites", "InviteRedeemBox.cs"));
         var keys = Regex.Matches(src, "\"(invites_[a-z_]+)\"").Select(m => m.Groups[1].Value)
             .Where(k => !k.EndsWith("_", StringComparison.Ordinal))
             .Distinct().ToList();
@@ -49,6 +50,7 @@ public class InviteCopyTests
         var keys = KeysThePanelReads();
         Assert.Contains("invites_redeem_go", keys);
         Assert.Contains("invites_err_generic", keys);
+        Assert.Contains("invites_redeem_ok_pending", keys);
 
         var en = Lang("en");
         foreach (var lang in Languages)

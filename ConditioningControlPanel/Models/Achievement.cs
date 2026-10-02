@@ -741,6 +741,8 @@ public class Achievement
         },
 
         // ========== COMMUNITY: invite week (Services/Invites/InviteRewards.cs owns the ladder) ==========
+        // IsPremiumFeature: only subscribers get codes to hand out, so a free account must not
+        // carry these in its denominator (it could never reach 100%). Earned ones always count.
         ["invite_first"] = new Achievement
         {
             Id = "invite_first",
@@ -748,7 +750,8 @@ public class Achievement
             Requirement = "1 friend you invited subscribes",
             FlavorText = "You brought one down with you. She noticed.",
             ImageName = "invite_first.png",
-            Category = AchievementCategory.Community
+            Category = AchievementCategory.Community,
+            IsPremiumFeature = true
         },
         ["invite_hostess"] = new Achievement
         {
@@ -757,7 +760,8 @@ public class Achievement
             Requirement = "3 friends you invited subscribe",
             FlavorText = "Three new girls checked in at your door.",
             ImageName = "invite_hostess.png",
-            Category = AchievementCategory.Community
+            Category = AchievementCategory.Community,
+            IsPremiumFeature = true
         },
         ["invite_pied_piper"] = new Achievement
         {
@@ -766,7 +770,8 @@ public class Achievement
             Requirement = "5 friends you invited subscribe",
             FlavorText = "Five followed the tune. They always do.",
             ImageName = "invite_pied_piper.png",
-            Category = AchievementCategory.Community
+            Category = AchievementCategory.Community,
+            IsPremiumFeature = true
         },
         ["invite_recruiter_chief"] = new Achievement
         {
@@ -775,7 +780,8 @@ public class Achievement
             Requirement = "10 friends you invited subscribe",
             FlavorText = "Ten of them, because of you. She keeps count.",
             ImageName = "invite_recruiter_chief.png",
-            Category = AchievementCategory.Community
+            Category = AchievementCategory.Community,
+            IsPremiumFeature = true
         }
     };
 }

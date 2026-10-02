@@ -79,6 +79,13 @@ public static class VaultOffer
         _ => null,
     };
 
+    /// <summary>
+    /// Padlocks whose button must keep going to Settings · Account: Graded Intake's CTA also
+    /// serves its "sign in" state and a tier-1 patron's spent weekly pass, neither of which a
+    /// price card answers.
+    /// </summary>
+    public static bool KeepsAccountRoute(string? viewTypeName) => viewTypeName == "GradedIntakeTabView";
+
     /// <summary>The registry entry for a feature key, or null.</summary>
     public static ExclusiveFeature? Feature(string? key)
     {

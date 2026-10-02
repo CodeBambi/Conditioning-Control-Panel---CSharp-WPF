@@ -7088,6 +7088,7 @@
   "invites_redeem_body": "Le code d'une amie ouvre la Chambre de Velours pendant 7 jours. Pas de carte, rien ne se renouvelle, et ta progression reste quand la semaine se termine.",
   "invites_redeem_go": "Commencer ma semaine",
   "invites_redeem_ok": "Ta semaine dans la Chambre de Velours est ouverte jusqu'au {0}.",
+  "invites_redeem_ok_pending": "Ton code a fonctionné. Ta semaine dans la Chambre de Velours s'ouvre d'ici une minute.",
   "invites_err_bad_code": "Ça ne ressemble pas à un code d'invitation. Vérifie-le et réessaie.",
   "invites_err_unknown_code": "Ce code n'existe pas ou a expiré. Demande-en un nouveau à ton amie.",
   "invites_err_used": "Quelqu'un a déjà utilisé ce code. Demande-en un autre à ton amie.",

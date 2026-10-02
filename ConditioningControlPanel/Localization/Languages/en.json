@@ -7843,6 +7843,7 @@
   "invites_redeem_body": "A friend's code opens the vault for 7 days. No card, nothing renews, and your progress stays when the week ends.",
   "invites_redeem_go": "Start my week",
   "invites_redeem_ok": "Your week in the vault is open until {0}.",
+  "invites_redeem_ok_pending": "Your code worked. Your week in the vault opens within a minute.",
   "invites_err_bad_code": "That doesn't look like an invite code. Check it and try again.",
   "invites_err_unknown_code": "That code doesn't exist or has expired. Ask your friend for a fresh one.",
   "invites_err_used": "Someone already used that code. Ask your friend for another.",

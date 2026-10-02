@@ -67,10 +67,11 @@ public static class InviteRules
 {
     public const int GrantDays = 7;
 
-    /// <summary>A grant end further out than this is not believed and is ignored outright. Not
+    /// <summary>A grant end further out than this is not believed and is ignored outright (a week
+    /// plus three days of slack for a PC clock that runs slow). Not
     /// clamped: a clamp measured from "now" would slide forward on every heartbeat and turn one
     /// bad server value into premium for as long as it persists.</summary>
-    public static readonly TimeSpan MaxGrantAhead = TimeSpan.FromDays(GrantDays + 1);
+    public static readonly TimeSpan MaxGrantAhead = TimeSpan.FromDays(GrantDays + 3);
 
     public const int MinCodeLength = 6;
     public const int MaxCodeLength = 24;
@@ -139,13 +140,16 @@ public static class InviteRules
     /// </summary>
     public static bool ApplyGrant(AppSettings? settings, DateTime? grantUntilUtc, DateTime nowUtc)
     {
-        if (settings == null || grantUntilUtc == null) return false;
-        var until = grantUntilUtc.Value;
-        if (until <= nowUtc || until > nowUtc + MaxGrantAhead) return false;
+        if (settings == null || !IsBelievable(grantUntilUtc, nowUtc)) return false;
+        var until = grantUntilUtc!.Value;
         if (settings.InviteGrantUntil is DateTime held && held >= until) return false;
         settings.InviteGrantUntil = until;
         return true;
     }
+
+    /// <summary>True when <see cref="ApplyGrant"/> would accept this end date at all.</summary>
+    public static bool IsBelievable(DateTime? grantUntilUtc, DateTime nowUtc)
+        => grantUntilUtc is DateTime end && end > nowUtc && end <= nowUtc + MaxGrantAhead;
 
     /// <summary>The lifetime <c>converted_total</c> off any worded reply, refusals included; 0 when absent.</summary>
     public static int ParseConverted(JObject? reply)

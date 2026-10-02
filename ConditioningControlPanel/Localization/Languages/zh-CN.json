@@ -7600,6 +7600,7 @@
   "invites_redeem_body": "朋友的邀请码可开启宝库 7 天。无需绑卡，不会自动续费，一周结束后进度仍会保留。",
   "invites_redeem_go": "开始我的一周",
   "invites_redeem_ok": "你的宝库一周开放至 {0}。",
+  "invites_redeem_ok_pending": "邀请码有效。你的宝库一周将在一分钟内开启。",
   "invites_err_bad_code": "这看起来不像邀请码。请检查后重试。",
   "invites_err_unknown_code": "该邀请码不存在或已过期。请向朋友要一个新的。",
   "invites_err_used": "该邀请码已被他人使用。请向朋友要另一个。",

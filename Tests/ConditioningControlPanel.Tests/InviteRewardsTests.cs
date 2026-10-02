@@ -73,6 +73,8 @@ public class InviteRewardsTests
         Assert.Equal(AchievementCategory.Community, a!.Category);
         Assert.False(a.IsHidden);
         Assert.False(a.IsExclusive);
+        // Only subscribers hand out codes: out of a free account's denominator until earned.
+        Assert.True(a.IsPremiumFeature);
         Assert.Equal($"{id}.png", a.ImageName);
         Assert.Contains(rung.Converted.ToString(), a.Requirement);
         Assert.True(File.Exists(Path.Combine(AppDir(), "Resources", "achievements", a.ImageName)), $"no badge art for {id}");

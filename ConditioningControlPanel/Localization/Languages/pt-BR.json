@@ -7088,6 +7088,7 @@
   "invites_redeem_body": "O código de uma amiga abre o cofre por 7 dias. Sem cartão, nada renova, e seu progresso fica quando a semana acabar.",
   "invites_redeem_go": "Começar minha semana",
   "invites_redeem_ok": "Sua semana no cofre está aberta até {0}.",
+  "invites_redeem_ok_pending": "Seu código funcionou. Sua semana no cofre abre em até um minuto.",
   "invites_err_bad_code": "Isso não parece um código de convite. Confira e tente de novo.",
   "invites_err_unknown_code": "Esse código não existe ou expirou. Peça um novo para sua amiga.",
   "invites_err_used": "Alguém já usou esse código. Peça outro para sua amiga.",

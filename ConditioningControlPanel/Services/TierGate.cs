@@ -134,6 +134,27 @@ namespace ConditioningControlPanel.Services
         ///
         /// Never throws: a gate that crashes the handler is worse than one that only logs.
         /// </summary>
+        /// <summary>
+        /// True when a refused click belongs to a patron whose Patreon grant died on this PC: the
+        /// fix is Reconnect, not a sales pitch. The ONE live read of PatreonReconnectRule for gates
+        /// (this toast and the padlock card). Tokens on disk are not a working grant: the proxy
+        /// refusing to refresh leaves the .dat in place (#585), hence GrantLooksDead, exactly as
+        /// the Account section's row reads it.
+        /// </summary>
+        public static bool ReconnectIsTheAnswer()
+        {
+            try
+            {
+                return PatreonReconnectRule.Decide(
+                    hasUnifiedId: !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId),
+                    linkedServerSide: App.Settings?.Current?.HasLinkedPatreon == true,
+                    desktopAuthenticated: App.Patreon?.IsAuthenticated == true && App.Patreon?.GrantLooksDead != true,
+                    hasPremiumNow: App.Patreon?.HasPremiumAccess == true,
+                    whitelisted: App.Patreon?.IsWhitelisted == true).Prominent;
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "reconnect probe"); return false; }
+        }
+
         public static void ShowDenied(in TierVerdict verdict)
         {
             App.Logger?.Information("TierGate: blocked {Feature} (needs {Required})", verdict.Feature, verdict.Required);
@@ -144,14 +165,7 @@ namespace ConditioningControlPanel.Services
                 // PatreonReconnectRule says the row is in its prominent Reconnect state - linked
                 // server-side, no token here, premium off - the refusal says what actually
                 // happened and its button repairs it instead of selling them a tier they hold.
-                var row = PatreonReconnectRule.Decide(
-                    hasUnifiedId: !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId),
-                    linkedServerSide: App.Settings?.Current?.HasLinkedPatreon == true,
-                    desktopAuthenticated: App.Patreon?.IsAuthenticated == true,
-                    hasPremiumNow: App.Patreon?.HasPremiumAccess == true,
-                    whitelisted: App.Patreon?.IsWhitelisted == true);
-
-                if (row.Prominent)
+                if (ReconnectIsTheAnswer())
                 {
                     App.Notifications?.Show(Loc.Get("tiergate_denied_reconnect"), NotificationType.Warning,
                         TimeSpan.FromSeconds(10), Loc.Get("tiergate_reconnect_action"),

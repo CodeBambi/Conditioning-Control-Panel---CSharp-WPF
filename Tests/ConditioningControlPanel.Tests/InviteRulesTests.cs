@@ -84,6 +84,14 @@ public class InviteRulesTests
     }
 
     [Fact]
+    public void ApplyGrant_ToleratesAPcClockThatRunsADayOrTwoSlow()
+    {
+        // Server time is two days ahead of this PC: a real 7-day week ends 9 days from local now.
+        var s = new AppSettings();
+        Assert.True(InviteRules.ApplyGrant(s, Now.AddDays(9), Now));
+    }
+
+    [Fact]
     public void ApplyGrant_IgnoresAnEndedGrant()
     {
         var s = new AppSettings();

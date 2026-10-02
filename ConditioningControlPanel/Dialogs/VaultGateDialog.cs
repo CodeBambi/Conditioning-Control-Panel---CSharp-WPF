@@ -49,6 +49,14 @@ public sealed class VaultGateDialog : Window
     private static DateTime _supportersReadUtc = DateTime.MinValue;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(5) };
 
+    /// <summary>Whether /v2/invites/mine answered, remembered for ten minutes so a padlock click
+    /// costs no round trip of its own.</summary>
+    private static bool? _invitesReachable;
+    private static DateTime _invitesReadUtc = DateTime.MinValue;
+
+    /// <summary>The card on screen, if any. One at a time: a second padlock or toast replaces it.</summary>
+    private static VaultGateDialog? _open;
+
     private readonly Border _card = new();
     private readonly StackPanel _body = new();
     private readonly ExclusiveFeature? _feature;
@@ -97,8 +105,17 @@ public sealed class VaultGateDialog : Window
         var feature = VaultOffer.Feature(featureKey);
         var dialog = new VaultGateDialog(feature, Math.Max(tier, feature?.Tier ?? 1), signIn) { Owner = owner };
         dialog.BuildOffer();
-        dialog.Show();
+        Present(dialog);
         _ = dialog.FillAsyncBits();
+    }
+
+    private static void Present(VaultGateDialog dialog)
+    {
+        try { _open?.Close(); }
+        catch (InvalidOperationException) { } // swallow: the previous card was already closing
+        _open = dialog;
+        dialog.Closed += (_, _) => { if (ReferenceEquals(_open, dialog)) _open = null; };
+        dialog.Show();
     }
 
     /// <summary>The last-day card of an invite week.</summary>
@@ -106,7 +123,7 @@ public sealed class VaultGateDialog : Window
     {
         var dialog = new VaultGateDialog(null, 1, signIn) { Owner = owner };
         dialog.BuildEnding(grantUntilUtc);
-        dialog.Show();
+        Present(dialog);
     }
 
     // ============================== offer ==============================
@@ -182,12 +199,22 @@ public sealed class VaultGateDialog : Window
         try
         {
             if (BackRoomApi.AppIdentity() == null) return;
-            var mine = await new InviteApi().MineAsync();
-            if (mine.Reachable && _codeSlot != null && IsLoaded)
+            if (_invitesReachable == null || DateTime.UtcNow - _invitesReadUtc > TimeSpan.FromMinutes(10))
+            {
+                _invitesReadUtc = DateTime.UtcNow;
+                _invitesReachable = (await new InviteApi().MineAsync()).Reachable;
+            }
+            if (_invitesReachable == true && _codeSlot != null && IsLoaded)
             {
                 var link = Link(Loc.Get("vaultgate_have_code"));
                 link.Margin = new Thickness(0, 8, 0, 0);
-                link.MouseLeftButtonUp += (_, _) => { _codeSlot.Children.Clear(); _codeSlot.Children.Add(RedeemRow()); };
+                link.MouseLeftButtonUp += (_, _) =>
+                {
+                    var box = new InviteRedeemBox("gate") { Margin = new Thickness(0, 10, 0, 0) };
+                    _codeSlot.Children.Clear();
+                    _codeSlot.Children.Add(box);
+                    box.FocusCode();
+                };
                 _codeSlot.Children.Clear();
                 _codeSlot.Children.Add(link);
             }
@@ -202,63 +229,6 @@ public sealed class VaultGateDialog : Window
         var floor = VaultOffer.SupporterFloor(_supporters);
         if (floor == null) return;
         _proofSlot.Children.Add(Para(Loc.GetF("vaultgate_proof", floor), Text, 12.5, new Thickness(0, 10, 0, 0)));
-    }
-
-    private FrameworkElement RedeemRow()
-    {
-        var host = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
-        var row = new Grid();
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var box = new TextBox
-        {
-            Background = RowBg, Foreground = Text, BorderBrush = Edge, BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 7, 10, 7), FontSize = 14, MaxLength = 80, CharacterCasing = CharacterCasing.Upper,
-        };
-        box.SetResourceReference(Control.FontFamilyProperty, "Font.Mono");
-        row.Children.Add(box);
-        var go = SmallButton(Loc.Get("invites_redeem_go"));
-        go.Margin = new Thickness(8, 0, 0, 0);
-        Grid.SetColumn(go, 1);
-        row.Children.Add(go);
-        host.Children.Add(row);
-        var result = Para("", Muted, 12, new Thickness(0, 6, 0, 0));
-        host.Children.Add(result);
-
-        var busy = false;
-        async void Redeem()
-        {
-            if (busy) return;
-            busy = true;
-            go.IsEnabled = false;
-            try
-            {
-                var outcome = await new InviteApi().RedeemAsync(box.Text);
-                if (outcome.Ok)
-                {
-                    InviteGrantSync.Offer(outcome.GrantUntilUtc, "gate");
-                    row.Visibility = Visibility.Collapsed;
-                    result.Foreground = Good;
-                    result.Text = Loc.GetF("invites_redeem_ok", outcome.GrantUntilUtc?.ToLocalTime().ToString("d MMM, HH:mm") ?? "");
-                }
-                else
-                {
-                    result.Foreground = Warn;
-                    result.Text = Loc.Get(InvitePanel.ReasonKey(outcome.Reason));
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("[VaultGate] redeem failed: {E}", ex.GetType().Name);
-                result.Foreground = Warn;
-                result.Text = Loc.Get("invites_err_offline");
-            }
-            finally { busy = false; go.IsEnabled = true; }
-        }
-        go.Click += (_, _) => Redeem();
-        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) Redeem(); };
-        Dispatcher.BeginInvoke(new Action(() => box.Focus()));
-        return host;
     }
 
     // ============================== compare ==============================

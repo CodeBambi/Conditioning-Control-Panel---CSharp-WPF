@@ -68,6 +68,13 @@ public class VaultOfferTests
     }
 
     [Theory]
+    [InlineData("GradedIntakeTabView", true)]
+    [InlineData("LockdownTabView", false)]
+    [InlineData(null, false)]
+    public void GradedIntakeKeepsTheAccountRoute(string? view, bool expected)
+        => Assert.Equal(expected, VaultOffer.KeepsAccountRoute(view));
+
+    [Theory]
     [InlineData(null)]
     [InlineData("SettingsTabView")]
     public void AnUnknownViewGetsTheGenericCard(string? view) => Assert.Null(VaultOffer.FeatureKeyForView(view));
@@ -162,8 +169,9 @@ public class VaultOfferTests
         var patreon = File.ReadAllText(Path.Combine(AppDir(), "MainWindow", "MainWindow.Patreon.cs"));
         var at = patreon.IndexOf("internal void BtnGateUnlock_Click", StringComparison.Ordinal);
         Assert.True(at > 0);
-        var body = patreon.Substring(at, 400);
+        var body = patreon.Substring(at, 900);
         Assert.Contains("ShowVaultGate(", body);
+        Assert.Contains("TierGate.ReconnectIsTheAnswer()", body);
         Assert.Contains("StartPatreonReconnectFromGate()", body);
     }
 }

@@ -7088,6 +7088,7 @@
   "invites_redeem_body": "El código de una amiga abre la bóveda durante 7 días. Sin tarjeta, nada se renueva y tu progreso se queda cuando termina la semana.",
   "invites_redeem_go": "Empezar mi semana",
   "invites_redeem_ok": "Tu semana en la bóveda está abierta hasta el {0}.",
+  "invites_redeem_ok_pending": "Tu código funcionó. Tu semana en la bóveda se abre en menos de un minuto.",
   "invites_err_bad_code": "Eso no parece un código de invitación. Revísalo e inténtalo de nuevo.",
   "invites_err_unknown_code": "Ese código no existe o ha caducado. Pídele uno nuevo a tu amiga.",
   "invites_err_used": "Alguien ya usó ese código. Pídele otro a tu amiga.",

@@ -7088,6 +7088,7 @@
   "invites_redeem_body": "Der Code einer Freundin öffnet den Tresor für 7 Tage. Keine Karte, nichts verlängert sich, und dein Fortschritt bleibt, wenn die Woche endet.",
   "invites_redeem_go": "Meine Woche starten",
   "invites_redeem_ok": "Deine Woche im Tresor läuft bis {0}.",
+  "invites_redeem_ok_pending": "Dein Code hat funktioniert. Deine Woche im Tresor öffnet sich innerhalb einer Minute.",
   "invites_err_bad_code": "Das sieht nicht wie ein Einladungscode aus. Prüf ihn und versuch es nochmal.",
   "invites_err_unknown_code": "Diesen Code gibt es nicht oder er ist abgelaufen. Frag deine Freundin nach einem neuen.",
   "invites_err_used": "Diesen Code hat schon jemand benutzt. Frag deine Freundin nach einem anderen.",

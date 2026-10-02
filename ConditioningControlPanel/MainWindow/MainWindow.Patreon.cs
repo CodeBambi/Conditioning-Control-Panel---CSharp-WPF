@@ -47,8 +47,12 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void BtnGateUnlock_Click(object sender, RoutedEventArgs e)
         {
-            if (NeedsPatreonReconnect()) { StartPatreonReconnectFromGate(); return; }
-            ShowVaultGate(Services.Vault.VaultOffer.FeatureKeyForView(GateViewName(sender as DependencyObject)), 1);
+            if (TierGate.ReconnectIsTheAnswer()) { StartPatreonReconnectFromGate(); return; }
+            var view = GateViewName(sender as DependencyObject);
+            // Graded Intake's CTA also serves its NeedsLogin state and a tier-1 patron's spent
+            // pass; Account (sign-in and tiers in one place) stays the right door for both.
+            if (Services.Vault.VaultOffer.KeepsAccountRoute(view)) { ShowAppInfoPopup(); return; }
+            ShowVaultGate(Services.Vault.VaultOffer.FeatureKeyForView(view), 1);
         }
 
         /// <summary>The vault gate card. Null feature = the tier as a whole (e.g. a TierGate toast).</summary>
@@ -63,20 +67,6 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "[VaultGate] card failed; falling back to Account");
                 ShowAppInfoPopup();
             }
-        }
-
-        private static bool NeedsPatreonReconnect()
-        {
-            try
-            {
-                return PatreonReconnectRule.Decide(
-                    hasUnifiedId: !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId),
-                    linkedServerSide: App.Settings?.Current?.HasLinkedPatreon == true,
-                    desktopAuthenticated: App.Patreon?.IsAuthenticated == true,
-                    hasPremiumNow: App.Patreon?.HasPremiumAccess == true,
-                    whitelisted: App.Patreon?.IsWhitelisted == true).Prominent;
-            }
-            catch (Exception ex) { Diag.Swallowed(ex, "reconnect probe"); return false; }
         }
 
         /// <summary>Type name of the tab view a gate button sits in, or null.</summary>
@@ -1298,6 +1288,7 @@ namespace ConditioningControlPanel
             // in, and the rise's own fanfare on the profile bubble (EntitlementTierSync).
             Activated += (_, __) => EntitlementTierSync.OnAppFocused();
             Activated += (_, __) => MaybeShowInviteEnding();
+            Services.Invites.InviteGrantSync.ArmExpiry();
             EntitlementTierSync.TierRaised += OnEntitlementTierRaised;
 
             // SubscribeStar is the third login provider and it OR's into the canonical premium gate

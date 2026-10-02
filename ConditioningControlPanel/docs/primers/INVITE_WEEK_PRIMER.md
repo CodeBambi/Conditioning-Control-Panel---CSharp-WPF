@@ -30,7 +30,7 @@ end date. `PatreonService.HasPremiumAccess` and `HasAiAccess` OR it in.
   14-day subscriber grace.
 - `PatreonService.IsInviteWeekOnly` marks premium that comes only from the week. The celebration
   card skips it, so the one-time card is still owed when the friend actually pays.
-- An end date more than 8 days out is ignored, not clamped. A clamp measured from "now" would slide
+- An end date more than 10 days out (a week plus clock slack) is ignored, not clamped. A clamp measured from "now" would slide
   forward on every heartbeat and turn one bad server value into open-ended premium.
 - Logout and account switch clear it. It is excluded from settings backup and kept local on restore,
   like the Patreon stamps.

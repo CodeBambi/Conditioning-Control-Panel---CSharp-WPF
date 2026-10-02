@@ -7088,6 +7088,7 @@
   "invites_redeem_body": "친구의 코드로 금고가 7일 동안 열려요. 카드 필요 없음, 자동 갱신 없음, 일주일이 끝나도 진행 상황은 그대로예요.",
   "invites_redeem_go": "내 일주일 시작하기",
   "invites_redeem_ok": "금고 일주일은 {0}까지 열려 있어요.",
+  "invites_redeem_ok_pending": "코드가 적용됐어요. 금고 일주일이 1분 안에 열려요.",
   "invites_err_bad_code": "초대 코드처럼 보이지 않아요. 확인하고 다시 시도해 줘.",
   "invites_err_unknown_code": "존재하지 않거나 만료된 코드예요. 친구에게 새 코드를 받아 줘.",
   "invites_err_used": "이미 누군가 사용한 코드예요. 친구에게 다른 코드를 받아 줘.",
