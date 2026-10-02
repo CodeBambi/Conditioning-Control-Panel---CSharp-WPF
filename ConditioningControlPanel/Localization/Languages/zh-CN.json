@@ -7680,5 +7680,8 @@
   "vaultgate_yearly_hint": "或在 Patreon 按年付 {0}：免 2 个月。",
   "vaultgate_billing_monthly": "按月",
   "vaultgate_billing_yearly": "按年 · 免 2 个月",
-  "vaultgate_yearly_note": "按年付费目前仅支持 Patreon。其他支付方式为按月。"
+  "vaultgate_yearly_note": "按年付费目前仅支持 Patreon。其他支付方式为按月。",
+  "vaultgate_sale_first": "/ 首月",
+  "vaultgate_sale_line": "首月减免 {0}%，之后每月 {1}。",
+  "vaultgate_sale_ends": "优惠截止 {0}。"
 }

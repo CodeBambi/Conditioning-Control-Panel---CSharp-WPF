@@ -7168,5 +7168,8 @@
   "vaultgate_yearly_hint": "またはPatreonで年{0}：2か月分無料。",
   "vaultgate_billing_monthly": "月額",
   "vaultgate_billing_yearly": "年額 · 2か月分無料",
-  "vaultgate_yearly_note": "年額払いは今のところPatreonのみです。他の支払い方法は月額です。"
+  "vaultgate_yearly_note": "年額払いは今のところPatreonのみです。他の支払い方法は月額です。",
+  "vaultgate_sale_first": "/ 初月",
+  "vaultgate_sale_line": "初月{0}%オフ、その後は月{1}。",
+  "vaultgate_sale_ends": "セールは{0}まで。"
 }
