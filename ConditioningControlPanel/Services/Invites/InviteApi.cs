@@ -13,9 +13,10 @@ namespace ConditioningControlPanel.Services.Invites;
 /// <summary>The invites wire as the rest of the app sees it. Tests hand in a fake.</summary>
 public interface IInviteApi
 {
-    /// <summary>This month's codes and the lifetime conversion count, or null (offline, signed
-    /// out, no subscription, or a server that does not have invites yet).</summary>
-    Task<InviteSnapshot?> MineAsync(CancellationToken ct = default);
+    /// <summary>This month's codes and the lifetime conversion count. Unreachable when offline,
+    /// signed out, or on a server that does not have invites yet; reachable with no snapshot when
+    /// the account is not a subscriber.</summary>
+    Task<InviteMine> MineAsync(CancellationToken ct = default);
 
     /// <summary>Redeem a friend's code for this account. Never throws.</summary>
     Task<RedeemOutcome> RedeemAsync(string code, CancellationToken ct = default);
@@ -43,8 +44,11 @@ public sealed class InviteApi : IInviteApi
         _baseUrl = baseUrl ?? BackRoomApi.BaseUrl;
     }
 
-    public async Task<InviteSnapshot?> MineAsync(CancellationToken ct = default)
-        => InviteRules.ParseSnapshot(await CallAsync("mine", new JObject(), ct).ConfigureAwait(false));
+    public async Task<InviteMine> MineAsync(CancellationToken ct = default)
+    {
+        var reply = await CallAsync("mine", new JObject(), ct).ConfigureAwait(false);
+        return reply == null ? InviteMine.Unreachable : new InviteMine(true, InviteRules.ParseSnapshot(reply));
+    }
 
     public async Task<RedeemOutcome> RedeemAsync(string code, CancellationToken ct = default)
     {

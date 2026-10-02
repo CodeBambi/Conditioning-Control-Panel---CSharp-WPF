@@ -79,17 +79,26 @@ public class InviteApiTests
     [Theory]
     [InlineData(HttpStatusCode.NotFound, "<html>not here</html>")]
     [InlineData(HttpStatusCode.InternalServerError, "{\"ok\":false,\"reason\":\"boom\"}")]
-    public async Task Mine_AServerWithoutInvitesIsNull(HttpStatusCode status, string body)
+    public async Task Mine_AServerWithoutInvitesIsUnreachable(HttpStatusCode status, string body)
     {
         var (api, _) = Make(status, body);
-        Assert.Null(await api.MineAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(InviteMine.Unreachable, await api.MineAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Mine_ANonSubscriberIsReachableWithNoSnapshot()
+    {
+        var (api, _) = Make(HttpStatusCode.OK, "{\"ok\":false,\"reason\":\"not_subscribed\"}");
+        var mine = await api.MineAsync(TestContext.Current.CancellationToken);
+        Assert.True(mine.Reachable);
+        Assert.Null(mine.Snapshot);
     }
 
     [Fact]
     public async Task Mine_ReadsTheSnapshot()
     {
         var (api, stub) = Make(HttpStatusCode.OK, "{\"ok\":true,\"converted_total\":2,\"codes\":[{\"code\":\"PINK-MIA-7Q4X\",\"state\":\"open\"}]}");
-        var snap = await api.MineAsync(TestContext.Current.CancellationToken);
+        var snap = (await api.MineAsync(TestContext.Current.CancellationToken)).Snapshot;
         Assert.Equal("https://example.test/v2/invites/mine", stub.Last!.RequestUri!.ToString());
         Assert.Equal(2, snap!.ConvertedTotal);
         Assert.Single(snap.Slots);

@@ -33,6 +33,16 @@ public sealed record InviteSnapshot(
     DateTime? ResetsAtUtc,
     int ConvertedTotal);
 
+/// <summary>
+/// A <c>mine</c> read. <see cref="Reachable"/> is true when the server answered in words at all
+/// (a refusal such as <c>not_subscribed</c> included), which is how the app knows invites exist
+/// server-side before it shows anyone a redeem box. <see cref="Snapshot"/> is set for subscribers.
+/// </summary>
+public sealed record InviteMine(bool Reachable, InviteSnapshot? Snapshot)
+{
+    public static readonly InviteMine Unreachable = new(false, null);
+}
+
 /// <summary>A redeem reply. <see cref="Reason"/> is a server refusal word, or <c>offline</c>.</summary>
 public sealed record RedeemOutcome(bool Ok, string? Reason, DateTime? GrantUntilUtc)
 {
