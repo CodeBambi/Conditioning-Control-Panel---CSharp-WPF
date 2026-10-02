@@ -184,11 +184,11 @@ public sealed partial class ChasterService : IDisposable
     /// <summary>Seconds on the tab and not on the lock yet. Negative is credit.</summary>
     public int BalanceSeconds { get { lock (_gate) return _tab.BalanceSeconds; } }
 
-    /// <summary>Gross adds booked today, for "Today 12:30 of 60:00". A day nothing was booked
-    /// on yet reads 0, whatever yesterday left behind.</summary>
+    /// <summary>What counts against today's limit (adds minus credits, never below 0), for
+    /// "Today 12:30 of 60:00". A day nothing was booked on yet reads 0, whatever yesterday left behind.</summary>
     public int TodayAddedSeconds
     {
-        get { lock (_gate) return _tab.Day == CircesTab.DayKey(_localNow()) ? _tab.DayAddedSeconds : 0; }
+        get { lock (_gate) return _tab.Day == CircesTab.DayKey(_localNow()) ? Math.Max(0, CircesTab.DayUsed(_tab)) : 0; }
     }
 
     /// <summary>Would a Note for this row book right now: tab on, account linked, row switched
@@ -268,13 +268,13 @@ public sealed partial class ChasterService : IDisposable
                 for (var i = 0; i < charges.Count; i++)
                 {
                     var on = lastDay.AddDays(i + 1).AddHours(12);
-                    var keep = (_tab.Day, _tab.DayAddedSeconds);
+                    var keep = (_tab.Day, _tab.DayAddedSeconds, _tab.DayCreditSeconds);
                     // Inside the safety hold nothing adds, the days away included.
                     booked += CircesTab.Book(_tab, CircesMisses.EventId, charges[i], _utcNow(),
                         on, _runStartUtc, safetyExit: _utcNow() < _safetyUntilUtc, options.Caps).AppliedSeconds;
                     // A charge dated on a past day must not roll the day counter back to that day:
                     // it would zero what today already booked and hand today's cap out again.
-                    if (CircesTab.DayKey(on) != keep.Day) (_tab.Day, _tab.DayAddedSeconds) = keep;
+                    if (CircesTab.DayKey(on) != keep.Day) (_tab.Day, _tab.DayAddedSeconds, _tab.DayCreditSeconds) = keep;
                 }
                 if (booked > 0) _tab.ForgivableSeconds = CircesMisses.Forgivable(booked);
             }
