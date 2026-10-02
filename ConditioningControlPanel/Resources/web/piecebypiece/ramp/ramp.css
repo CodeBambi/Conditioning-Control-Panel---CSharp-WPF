@@ -52,8 +52,8 @@
 }
 @keyframes pbp-flash-pop {
   0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(0.8); }
-  13%  { opacity: var(--pbp-peak, 0.85); transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1); }
-  70%  { opacity: var(--pbp-peak, 0.85); transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1.02); }
+  13%  { opacity: calc(var(--pbp-peak, 0.85) * var(--pbp-strength, 1)); transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1); }
+  70%  { opacity: calc(var(--pbp-peak, 0.85) * var(--pbp-strength, 1)); transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1.02); }
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1.07); }
 }
 
@@ -68,8 +68,8 @@
 }
 @keyframes pbp-rain-fall {
   0%   { opacity: 0; transform: translate(0, 0) scale(0.5) rotate(0deg); }
-  12%  { opacity: var(--pbp-peak, 0.85); }
-  88%  { opacity: var(--pbp-peak, 0.85); }
+  12%  { opacity: calc(var(--pbp-peak, 0.85) * var(--pbp-strength, 1)); }
+  88%  { opacity: calc(var(--pbp-peak, 0.85) * var(--pbp-strength, 1)); }
   100% { opacity: 0; transform: translate(var(--pbp-drift, 0), 145vh) scale(1) rotate(var(--pbp-spin, 0deg)); }
 }
 
@@ -142,7 +142,7 @@
   will-change: opacity, transform;
   pointer-events: none;
 }
-.pbp-card.is-in { opacity: 0.2; transform: scale(1); }  /* .42 -> .2 (owner, 2026-10-02) */
+.pbp-card.is-in { opacity: calc(0.2 * var(--pbp-strength, 1)); transform: scale(1); }  /* .42 -> .2 (owner, 2026-10-02); Strength scales it */
 .pbp-card.is-out { opacity: 0; transition: opacity 900ms ease, transform 900ms ease; }
 .pbp-card.is-out.is-snap { transition: opacity 220ms ease, transform 220ms ease; }
 

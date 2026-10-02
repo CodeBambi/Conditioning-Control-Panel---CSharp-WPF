@@ -63,10 +63,28 @@
           <button type="button" class="hud-btn" data-experience="classic" aria-pressed="false">Classic</button>
           <button type="button" class="hud-btn" data-experience="distraction" aria-pressed="true">Distraction</button>
         </div>
-        <p id="experience-description">Media and effects build as the match progresses.</p>
+        <p id="experience-description">Effects build while you think and let go when you move.</p>
         <!-- Distraction's pictures (ui/pictures.js). Hidden until the host says
              what it holds, so a plain browser shows nothing half-built. -->
         <div class="pictures" id="game-pictures" hidden></div>
+        <!-- Distraction's dials (owner, 2026-10-02): how many pictures, how strong, how fast it climbs. -->
+        <div class="dials" id="game-dials">
+          <div class="turncard-pick" role="group" aria-label="Amount">
+            <span>Amount</span>
+            <button type="button" class="hud-btn" data-amount="less" aria-pressed="false">Less</button>
+            <button type="button" class="hud-btn" data-amount="normal" aria-pressed="true">Normal</button>
+            <button type="button" class="hud-btn" data-amount="more" aria-pressed="false">More</button>
+          </div>
+          <label class="dial-slider" for="game-strength"><span>Strength</span>
+            <input type="range" id="game-strength" min="10" max="200" step="5" value="100" aria-describedby="game-strength-out">
+            <output id="game-strength-out">100%</output></label>
+          <div class="turncard-pick" role="group" aria-label="Ramp">
+            <span>Ramp</span>
+            <button type="button" class="hud-btn" data-ramp="slow" aria-pressed="false">Slow</button>
+            <button type="button" class="hud-btn" data-ramp="normal" aria-pressed="true">Normal</button>
+            <button type="button" class="hud-btn" data-ramp="fast" aria-pressed="false">Fast</button>
+          </div>
+        </div>
         <strong>Camera</strong>
         <label><input type="checkbox" id="game-follow" checked> Follow the move</label>
         <label><input type="checkbox" id="game-replays" checked> Replay captures</label>

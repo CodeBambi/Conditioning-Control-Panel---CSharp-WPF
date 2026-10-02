@@ -42,7 +42,8 @@ LOCKED FEATURES
 clicking a padlock opens a card instead of throwing you into Settings: what the feature is, what Basic and Prime cost in your currency, monthly or yearly, and a compare page. already a supporter? sign in from the same card. have a code? redeem it there.
 
 PIECE BY PIECE
-- the fall. in Distraction, thinking makes it worse: the longer you stare at the board, the more the room closes in, and your move snaps it back. every move you make is graded and your IQ starts at 140. it only goes down. your opponent never sees yours.
+- the fall. in Distraction, thinking makes it worse: the longer you stare at the board, the more the room closes in. your move clears it, and it stays clear until your next turn comes round. every move you make is graded and your IQ starts at 140. it only goes down. your opponent never sees yours.
+- Distraction has its own dials under Options: how many pictures (less, normal, more), how strong they are, and how fast it climbs. it climbs slower than before by default.
 - the end card shows where it went wrong and the better move. Watch the fall plays your game back, and you can save or copy the picture.
 - open tables: see who is waiting for a game and who is playing right now, then host or join.
 - the first Distraction game asks which pictures you want. change it later under Options, Pictures.

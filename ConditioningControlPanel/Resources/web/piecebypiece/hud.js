@@ -459,6 +459,16 @@ export function createHud(opts = {}) {
   replays?.addEventListener('change', replaysChange);
   undom.push(() => { follow?.removeEventListener('change', followChange); replays?.removeEventListener('change', replaysChange); });
   for (const button of root.querySelectorAll('[data-turncard]')) click(button, () => setPresentation({ turnCard: button.dataset.turncard }));
+  for (const button of root.querySelectorAll('[data-amount]')) click(button, () => setPresentation({ amount: button.dataset.amount }));
+  for (const button of root.querySelectorAll('[data-ramp]')) click(button, () => setPresentation({ rampSpeed: button.dataset.ramp }));
+  const strength = pick('game-strength');
+  const strengthOut = pick('game-strength-out');
+  const strengthInput = () => {
+    if (strengthOut) strengthOut.textContent = strength.value + '%';
+    setPresentation({ strength: Number(strength.value) / 100 });
+  };
+  strength?.addEventListener('input', strengthInput);
+  undom.push(() => strength?.removeEventListener('input', strengthInput));
   sound?.addEventListener('change', soundChange);
   motion?.addEventListener('change', motionChange);
   undom.push(() => { sound?.removeEventListener('change', soundChange); motion?.removeEventListener('change', motionChange); });
@@ -480,13 +490,19 @@ export function createHud(opts = {}) {
     pictures?.setVisible?.(p.experience === 'distraction');
     for (const button of root.querySelectorAll('[data-experience]')) button.setAttribute('aria-pressed', String(button.dataset.experience === p.experience));
     const copy = pick('experience-description');
-    if (copy) copy.textContent = p.experience === 'classic' ? 'The board, animated captures and sound.' : 'Media and effects build as the match progresses.';
+    if (copy) copy.textContent = p.experience === 'classic' ? 'The board, animated captures and sound.' : 'Effects build while you think and let go when you move.';
     if (sound) { sound.checked = p.volume > 0; sound.disabled = p.soundLocked; }
     if (motion) { motion.checked = p.reducedMotion; motion.disabled = p.motionLocked; }
     // Reduced motion keeps the camera at the seat and drops the replay; the boxes say so.
     if (follow) { follow.checked = p.followCam && !p.reducedMotion; follow.disabled = p.reducedMotion; }
     if (replays) { replays.checked = p.replays && !p.reducedMotion; replays.disabled = p.reducedMotion; }
     for (const button of root.querySelectorAll('[data-turncard]')) button.setAttribute('aria-pressed', String(button.dataset.turncard === p.turnCard));
+    const dials = pick('game-dials');
+    if (dials) dials.hidden = p.experience !== 'distraction';
+    for (const button of root.querySelectorAll('[data-amount]')) button.setAttribute('aria-pressed', String(button.dataset.amount === p.amount));
+    for (const button of root.querySelectorAll('[data-ramp]')) button.setAttribute('aria-pressed', String(button.dataset.ramp === p.rampSpeed));
+    if (strength && document.activeElement !== strength) strength.value = String(Math.round(p.strength * 100));
+    if (strengthOut) strengthOut.textContent = Math.round(p.strength * 100) + '%';
     const note = pick('game-preference-note');
     if (note) { note.hidden = !p.motionLocked && !p.soundLocked; note.textContent = 'App and system preferences stay in effect.'; }
     setMeter(p.experience === 'classic' ? 0 : meter);

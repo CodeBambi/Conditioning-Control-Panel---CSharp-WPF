@@ -4,13 +4,18 @@
  * One number per side, 0..1, built from three inputs: how little clock is left,
  * how many pieces that side has TAKEN, and how many it has LOST. Taking ramps
  * you harder than losing (captureWeight 1.5 vs lossWeight 1.0) - the player who
- * is winning on the board gets the worse screen. Both sides end up melted.
- * That number is the FLOOR.
+ * is winning on the board gets the worse screen. That number is the PRESSURE.
  *
  * THINKING MAKES IT WORSE (owner, 2026-10-01): on your own move the screen
- * climbs from that floor toward full the longer you sit on it (full at 20 s),
- * and the moment the move is made it drops straight back to the floor. To play
- * well you have to think, and thinking pulls you under.
+ * climbs toward full the longer you sit on it. To play well you have to think,
+ * and thinking pulls you under.
+ *
+ * NO FLOOR, AND A BREATH (owner, 2026-10-02, supersedes the floor): the moment
+ * you move, everything for you stops (pictures, wash, heartbeat, whispers) and
+ * stays stopped through the other side's turn, until your own turn card. Then
+ * the climb starts again from nothing. The pressure no longer holds the screen
+ * up between moves; it makes the climb FASTER (thinkRate). The climb is slower
+ * than before and the player picks its pace (thinkFullMs).
  *
  * Pure and deterministic: every function takes the clock/counters it needs and
  * `now` is passed in, so smoke tests replay the same numbers without a timer.
@@ -78,26 +83,38 @@ export const RAMP_TUNING = Object.freeze({
   // --- the effect-free share, ported from the Arcademy plainShare ramp ------
   plain: Object.freeze({ early: 0.80, floor: 0.30 }),
 
-  // --- the think ramp (owner, 2026-10-01: "20 sec to the max") ---------------
+  // --- the think ramp -------------------------------------------------------
   // curve > 1 eases in: a quick move stays clean, a long think piles on at the
-  // end (5 s 0.13, 10 s 0.35, 15 s 0.65, 20 s 1). The wash rises once a think
-  // passes cardAtMs and rides until the move. snapFrom: a move only snaps the
-  // screen down when the think had lifted it at least this much. maxStepMs: one
-  // beat never adds more than this, so a hidden tab cannot bank a full ramp.
-  think: Object.freeze({ fullMs: 20000, curve: 1.5, cardAtMs: 12000, cardGapMs: 900, snapFrom: 0.08, snapMs: 600, maxStepMs: 250 }),
+  // end. fullMs is the Normal pace; the player's Ramp pick swaps it (SPEEDS).
+  // Owner 2026-10-02: 20 s was too fast, Normal is 40 s now and Fast is about
+  // the old pace. The wash rises once a think passes cardAt of the full climb.
+  // pressureRate: a full pressure meter (clock + captures) climbs this much
+  // faster. wakeAfterMs: no turn card came (the clock is under 10 s, or the
+  // card never shows) so the breath ends after this much of the player's own
+  // live turn. maxStepMs: one beat never adds more than this, so a hidden tab
+  // cannot bank a full ramp.
+  think: Object.freeze({ fullMs: 40000, curve: 1.5, cardAt: 0.6, cardGapMs: 900, snapMs: 600, maxStepMs: 250,
+    pressureRate: 0.6, wakeAfterMs: 3000 }),
 
   // --- the fall: a local loss brings everything up at once, then drains -------
   surge: Object.freeze({ holdMs: 1200, drainMs: 1400 }),
 });
 
-/** How far a think of `ms` lifts the screen from its floor toward full, 0..1. */
-export function thinkLift(ms, tuning = RAMP_TUNING) {
-  const { fullMs, curve } = tuning.think;
-  return Math.pow(clamp01(ms / fullMs), curve);
+/** The player's Ramp pick -> how long the climb takes to full, in ms. */
+export const SPEEDS = Object.freeze({ slow: 70000, normal: 40000, fast: 22000 });
+export const thinkFullMs = (speed, tuning = RAMP_TUNING) => SPEEDS[speed] || tuning.think.fullMs;
+
+/** The player's Amount pick -> how many pictures pop, as a rate on the one-shots. */
+export const AMOUNTS = Object.freeze({ less: 0.5, normal: 1, more: 1.6 });
+export const amountRate = (amount) => AMOUNTS[amount] || 1;
+
+/** How far a think of `ms` lifts the screen toward full, 0..1. */
+export function thinkLift(ms, tuning = RAMP_TUNING, fullMs = tuning.think.fullMs) {
+  return Math.pow(clamp01(ms / fullMs), tuning.think.curve);
 }
 
-/** The floor, lifted `lift` of the way to a full meter. */
-export const liftMeter = (floor, lift) => clamp01(clamp01(floor) + (1 - clamp01(floor)) * clamp01(lift));
+/** How much faster the climb runs under this much match pressure. */
+export const thinkRate = (pressure, tuning = RAMP_TUNING) => 1 + tuning.think.pressureRate * clamp01(pressure);
 
 /** The loss surge at `ms` after game over: full for holdMs, then a straight drain to nothing. */
 export function surgeLevel(ms, tuning = RAMP_TUNING) {
@@ -108,26 +125,24 @@ export function surgeLevel(ms, tuning = RAMP_TUNING) {
 }
 
 /**
- * createThinkClock({ tuning }) - how long the mover has been sitting on this move.
+ * createThinkClock({ tuning, fullMs }) - how far into this move's climb we are.
  *
  * The ramp advances it once a beat, and only counts a beat when the mover is
- * looking at a live board (their move, no pause card, no full-screen replay).
- * reset() is the move: back to zero, and true when that drop should snap.
+ * looking at a live board (their move, no pause card, no full-screen replay)
+ * and is not taking the breath after their last move. reset() is the move.
  */
-export function createThinkClock({ tuning = RAMP_TUNING } = {}) {
+export function createThinkClock({ tuning = RAMP_TUNING, fullMs = () => tuning.think.fullMs } = {}) {
   let ms = 0;
   return {
     get ms() { return ms; },
-    lift: () => thinkLift(ms, tuning),
-    advance(dtMs, counting) {
-      if (counting && dtMs > 0) ms += Math.min(dtMs, tuning.think.maxStepMs);
+    get fullMs() { return fullMs(); },
+    lift: () => thinkLift(ms, tuning, fullMs()),
+    /** `rate` > 1 is match pressure: the same seconds climb further. */
+    advance(dtMs, counting, rate = 1) {
+      if (counting && dtMs > 0) ms += Math.min(dtMs, tuning.think.maxStepMs) * Math.max(1, rate);
       return ms;
     },
-    reset() {
-      const snap = thinkLift(ms, tuning) >= tuning.think.snapFrom;
-      ms = 0;
-      return snap;
-    },
+    reset() { ms = 0; },
   };
 }
 

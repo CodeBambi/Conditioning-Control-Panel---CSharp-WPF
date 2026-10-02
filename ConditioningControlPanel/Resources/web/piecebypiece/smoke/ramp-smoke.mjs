@@ -11,7 +11,7 @@
  * (smoke/shoot.mjs) is what looks at those.
  * ==========================================================================*/
 
-import { createMeter, RAMP_TUNING, plainShare, clamp01, thinkLift, liftMeter, surgeLevel, createThinkClock } from '../ramp/meter.js';
+import { createMeter, RAMP_TUNING, plainShare, clamp01, thinkLift, thinkRate, thinkFullMs, amountRate, SPEEDS, surgeLevel, createThinkClock } from '../ramp/meter.js';
 import { createSchedule, makeRng, cadenceMs, sustainedFor, videoHoldMs } from '../ramp/schedule.js';
 import { createFixtureMedia, createHostMedia, HOST_MSG, noiseTileUrl } from '../ramp/media.js';
 
@@ -384,29 +384,36 @@ function fakeBridge() {
   eq('a nonsense hold falls back to the tuning', videoHoldMs(0, RAMP_TUNING, -3), RAMP_TUNING.videoCard.minHoldSec * 1000);
 }
 
-/* ---- the think ramp (owner, 2026-10-01) ---------------------------------- */
+/* ---- the think ramp (owner, 2026-10-01; no floor and slower, 2026-10-02) - */
 
 {
   const T = RAMP_TUNING.think;
   eq('a move made at once lifts nothing', thinkLift(0), 0);
-  eq('20 s of thinking is the top of the ramp', thinkLift(20000), 1);
-  eq('and it never goes past the top', thinkLift(60000), 1);
-  check('it eases in: half the time is well under half the lift', thinkLift(10000) < 0.4, String(thinkLift(10000)));
+  eq('Normal reaches the top at 40 s', thinkLift(40000), 1);
+  check('20 s is no longer the top (owner: too fast)', thinkLift(20000) < 0.5, String(thinkLift(20000)));
+  eq('and it never goes past the top', thinkLift(120000), 1);
+  check('it eases in: half the time is well under half the lift', thinkLift(T.fullMs / 2) < 0.4, String(thinkLift(T.fullMs / 2)));
   let rising = true;
-  for (let ms = 0; ms < 20000; ms += 500) if (thinkLift(ms + 500) < thinkLift(ms)) rising = false;
+  for (let ms = 0; ms < T.fullMs; ms += 500) if (thinkLift(ms + 500) < thinkLift(ms)) rising = false;
   check('the lift only ever climbs with the think', rising);
+  check('Slow is slower than Normal, Fast is faster', thinkFullMs('slow') > thinkFullMs('normal') && thinkFullMs('fast') < thinkFullMs('normal'));
+  eq('an unknown pace is Normal', thinkFullMs('zoom'), T.fullMs);
+  eq('Fast at its own full time is the top', thinkLift(SPEEDS.fast, RAMP_TUNING, SPEEDS.fast), 1);
+  eq('no pressure climbs at the plain pace', thinkRate(0), 1);
+  check('a full pressure meter climbs faster', thinkRate(1) > 1.4, String(thinkRate(1)));
+  check('More pops more, Less pops less', amountRate('more') > 1 && amountRate('less') < 1 && amountRate('x') === 1);
 
-  eq('no lift leaves the floor where the match put it', liftMeter(0.3, 0), 0.3);
-  eq('a full lift is a full meter whatever the floor', liftMeter(0.3, 1), 1);
-  eq('half a lift is half the way from the floor to full', liftMeter(0.3, 0.5), 0.65);
-  eq('a floor already full stays full', liftMeter(1, 0.2), 1);
-
-  const full = sustainedFor(liftMeter(0, thinkLift(T.fullMs)));
-  check('a full think from a clean board reaches every sustained layer',
-    full.melt.on && full.blur.on && full.spiral.on && full.overlay.on);
+  const full = sustainedFor(thinkLift(T.fullMs));
+  check('a full think reaches every sustained layer', full.melt.on && full.blur.on && full.spiral.on && full.overlay.on);
   check('the wash only rises over a screen that is already going soft',
-    liftMeter(0, thinkLift(T.cardAtMs)) >= RAMP_TUNING.unlock.blur);
-  check('and it does not wait until the very top', T.cardAtMs < T.fullMs);
+    thinkLift(T.fullMs * T.cardAt) >= RAMP_TUNING.unlock.blur);
+  check('and it does not wait until the very top', T.cardAt < 1);
+
+  const half = sustainedFor(1, RAMP_TUNING, { strength: 0.5 });
+  check('Strength halves the washes', Math.abs(half.melt.alpha - full.melt.alpha / 2) < 1e-9);
+  const twice = sustainedFor(1, RAMP_TUNING, { strength: 2 });
+  check('a stronger setting never blurs past the cap', twice.blur.px <= RAMP_TUNING.blurMaxPx);
+  check('and the veils stay inside the doubled budget', twice.spiral.alpha + twice.overlay.alpha <= RAMP_TUNING.veilBudget * 2 + 1e-9);
 }
 
 {
@@ -418,12 +425,18 @@ function fakeBridge() {
   eq('a beat on your own move counts', c.ms, 90);
   c.advance(60000, true);
   eq('one beat can never bank more than maxStepMs (a hidden tab)', c.ms, 90 + T.maxStepMs);
-  check('a quick move does not snap', c.reset() === false);
+  c.reset();
   eq('the move puts the clock back to zero', c.ms, 0);
-  for (let i = 0; i < 80; i++) c.advance(T.maxStepMs, true);   // 20 s
+  c.advance(100, true, 1.5);
+  eq('pressure makes the same beat climb further', c.ms, 150);
+  c.reset();
+  for (let i = 0; i < T.fullMs / T.maxStepMs; i++) c.advance(T.maxStepMs, true);
   eq('a full think lifts the screen all the way', c.lift(), 1);
-  check('a long think snaps when the move is made', c.reset() === true);
-  eq('and the screen is back on the floor', liftMeter(0.2, c.lift()), 0.2);
+  c.reset();
+  eq('and the move takes it all the way back down, no floor', c.lift(), 0);
+  const fast = createThinkClock({ fullMs: () => SPEEDS.fast });
+  for (let i = 0; i < SPEEDS.fast / T.maxStepMs; i++) fast.advance(T.maxStepMs, true);
+  eq('Fast tops out on its own clock', fast.lift(), 1);
 }
 
 {

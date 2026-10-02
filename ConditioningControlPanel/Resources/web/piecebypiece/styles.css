@@ -309,6 +309,7 @@ html, body {
 /* A small options drawer; presentation preferences never change chess rules. */
 .game-settings { position: absolute; bottom: 70px; right: 18px; pointer-events: auto; }
 .game-options-panel { position: absolute; right: 0; bottom: 45px; width: 280px; display: grid; gap: 12px;
+  max-height: calc(100vh - 140px); overflow-y: auto;
   padding: 18px; border: 1px solid #665474; border-radius: 14px; background: #211d38; box-shadow: 0 12px 36px #08071280; }
 .game-options-panel strong { font-size: 16px; }
 .game-options-panel p { margin: 0; color: #d0c2de; font-size: 13px; line-height: 1.5; }
@@ -420,3 +421,10 @@ body.pbp-replay-corner .game-settings:not(:has(.game-options-panel:not([hidden])
 .tc-tclock:empty { display: none; }
 .turncard-pick { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; }
 .turncard-pick [aria-pressed="true"] { border-color: #ff91c9; background: #58334e; color: #ffe1f0; }
+/* Distraction's dials: Amount and Ramp borrow the turn card row, Strength is a slider. */
+.dials { display: grid; gap: 8px; }
+.dials[hidden] { display: none; }
+.dials .turncard-pick { grid-template-columns: 64px 1fr 1fr 1fr; }
+.game-options-panel .dial-slider { display: grid; grid-template-columns: 64px minmax(0, 1fr) 40px; gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; cursor: default; }
+.game-options-panel .dial-slider input { width: 100%; min-width: 0; height: 17px; margin: 0; }
+.dial-slider output { text-align: right; font-variant-numeric: tabular-nums; color: #ffe1f0; }

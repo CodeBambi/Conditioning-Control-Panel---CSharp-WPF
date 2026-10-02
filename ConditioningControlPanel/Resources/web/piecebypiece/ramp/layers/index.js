@@ -176,6 +176,13 @@ export function createLayerStack(ctx = {}) {
       if (disposed) return;
       try { card.clear(opts || {}); } catch { /* no card is fine */ }
     },
+    /** The breath after a move: every picture still popping or falling fades out now. */
+    rest(ms) {
+      if (disposed) return;
+      for (const l of Object.values(oneshot)) {
+        try { if (typeof l.fade === 'function') l.fade(ms); else l.clear(); } catch { /* best effort */ }
+      }
+    },
     /** Re-measure the board on screen; cheap when it has not moved. */
     boardMask() { if (!disposed && mask) { try { return mask.update(); } catch { return false; } } return false; },
     grab(p) { if (!disposed) { counts.grab += 1; try { drag.grab(p); } catch { /* ignore */ } } },
