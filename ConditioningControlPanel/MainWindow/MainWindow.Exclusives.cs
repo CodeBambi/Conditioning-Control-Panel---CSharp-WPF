@@ -223,9 +223,51 @@ namespace ConditioningControlPanel
 
         private void OpenExclusiveFeature(ExclusiveFeature feature)
         {
-            if (feature.Key == "backroom") BtnStartBackRoom_Click(this, new RoutedEventArgs());
-            else ShowTab(feature.Key);
+            // Every branch is the door the launcher or the Play wall already uses, so the card
+            // never decides access itself: a locked account meets that door's own refusal.
+            switch (feature.Key)
+            {
+                case "backroom": BtnStartBackRoom_Click(this, new RoutedEventArgs()); break;
+                case "breakout": LaunchPlayBreakout(); break;
+                case "goon": LaunchPlayGoon(); break;
+                case "gazeminigame": BtnGazeMinigame_Click(this, new RoutedEventArgs()); break;
+                case "dtrh":
+                case "arcademy": LaunchExclusiveGame(feature.Key); break;
+                case "focusgaze": OpenFocusGazeSwitch(); break;
+                default: ShowTab(feature.Key); break;
+            }
         }
+
+        /// <summary>Starts a launcher game by id. Signed out, the sign-in dialog opens instead of
+        /// the launcher's silent refusal (same rule as the Play wall's Goon card).</summary>
+        private void LaunchExclusiveGame(string id)
+        {
+            var entry = Services.Launcher.LauncherCatalogue.Find(id);
+            if (entry == null) return;
+            if (entry.NeedsAccount) { OpenUnifiedLoginDialog(); return; }
+            Services.Launcher.LauncherCatalogue.TryLaunch(entry);
+        }
+
+        /// <summary>Focus Gaze is a switch on the Play wall, not a window: go there and show it.
+        /// The switch's own handler asks the tier gate.</summary>
+        private void OpenFocusGazeSwitch()
+        {
+            ShowTab("play");
+            var slot = PlayTab?.SlotFocusGaze;
+            if (slot == null) return;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { slot.BringIntoView(); }
+                catch (Exception ex) { App.Logger?.Debug("Focus Gaze bring-into-view: {E}", ex.Message); }
+            }), System.Windows.Threading.DispatcherPriority.Normal);
+        }
+
+        /// <summary>
+        /// Collection order: Prime (tier 2) first, then Basic (tier 1), then the untiered doors.
+        /// Stable, so roster order holds inside each shelf. The spotlight still reads All[0].
+        /// </summary>
+        internal static IEnumerable<ExclusiveFeature> ShelfOrder(IEnumerable<ExclusiveFeature> roster) =>
+            roster.OrderBy(f => f.Tier switch { 2 => 0, 1 => 1, _ => 2 });
 
         // ============================== build ==============================
 
@@ -248,7 +290,7 @@ namespace ConditioningControlPanel
                 // EVERY feature gets a card - the spotlight is a highlight on top of
                 // the collection, not a hole in it. (The hero and its card share the
                 // same registry entry, so chips/veils/titles refresh identically.)
-                foreach (var feature in ExclusiveFeature.All)
+                foreach (var feature in ShelfOrder(ExclusiveFeature.All))
                     ExclusivesTab.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
 
                 // The casino fills the first former teaser. Two seats remain reserved.
@@ -724,10 +766,8 @@ namespace ConditioningControlPanel
                     // server opens the door, and advertising it would be selling a thing that
                     // cannot be bought. Everything below still runs for it, so the card is fully
                     // painted the moment it is revealed mid-session.
-                    if (string.Equals(ui.Feature.Key, "justdrop", StringComparison.Ordinal))
-                        ui.Card.Visibility = Services.JustDrop.JustDropService.DoorAvailable
-                            ? Visibility.Visible
-                            : Visibility.Collapsed;
+                    // The Arcademy behind its build flag is the same case (ExclusiveFeature.IsShown).
+                    ui.Card.Visibility = ui.Feature.Shown() ? Visibility.Visible : Visibility.Collapsed;
 
                     // Mod-aware titles (Drone mod -> "Drone Takeover", etc.).
                     ui.Title.Text = $"{ui.Feature.Emoji} {ExclusiveTitle(ui.Feature)}";
