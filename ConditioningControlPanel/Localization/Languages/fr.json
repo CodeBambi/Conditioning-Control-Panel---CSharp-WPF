@@ -7168,5 +7168,8 @@
   "vaultgate_yearly_hint": "Ou {0} par an sur Patreon : 2 mois offerts.",
   "vaultgate_billing_monthly": "Mensuel",
   "vaultgate_billing_yearly": "Annuel · 2 mois offerts",
-  "vaultgate_yearly_note": "La facturation annuelle n'existe pour l'instant que sur Patreon. Les autres moyens de paiement sont mensuels."
+  "vaultgate_yearly_note": "La facturation annuelle n'existe pour l'instant que sur Patreon. Les autres moyens de paiement sont mensuels.",
+  "vaultgate_sale_first": "/ premier mois",
+  "vaultgate_sale_line": "-{0} % sur le premier mois, puis {1} par mois.",
+  "vaultgate_sale_ends": "Offre jusqu'au {0}."
 }

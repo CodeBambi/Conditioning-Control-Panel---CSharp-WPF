@@ -7168,5 +7168,8 @@
   "vaultgate_yearly_hint": "또는 Patreon에서 연 {0}: 2개월 무료.",
   "vaultgate_billing_monthly": "월간",
   "vaultgate_billing_yearly": "연간 · 2개월 무료",
-  "vaultgate_yearly_note": "연간 결제는 현재 Patreon에서만 가능해요. 다른 결제 수단은 월간이에요."
+  "vaultgate_yearly_note": "연간 결제는 현재 Patreon에서만 가능해요. 다른 결제 수단은 월간이에요.",
+  "vaultgate_sale_first": "/ 첫 달",
+  "vaultgate_sale_line": "첫 달 {0}% 할인, 이후 매월 {1}.",
+  "vaultgate_sale_ends": "세일은 {0}까지."
 }

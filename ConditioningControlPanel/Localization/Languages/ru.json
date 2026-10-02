@@ -7168,5 +7168,8 @@
   "vaultgate_yearly_hint": "Или {0} в год на Patreon: 2 месяца бесплатно.",
   "vaultgate_billing_monthly": "Помесячно",
   "vaultgate_billing_yearly": "Годовая · 2 месяца бесплатно",
-  "vaultgate_yearly_note": "Годовая оплата пока доступна только через Patreon. Остальные способы оплаты помесячные."
+  "vaultgate_yearly_note": "Годовая оплата пока доступна только через Patreon. Остальные способы оплаты помесячные.",
+  "vaultgate_sale_first": "/ первый месяц",
+  "vaultgate_sale_line": "Скидка {0}% на первый месяц, затем {1} в месяц.",
+  "vaultgate_sale_ends": "Акция до {0}."
 }
