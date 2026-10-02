@@ -84,7 +84,7 @@ public sealed record LobbySnapshot(
 
 /// <summary>
 /// THE MERGE. Pure: the three game answers plus the friends list in, one <see cref="LobbySnapshot"/>
-/// out. Friend rows go to list 3 only (no row is drawn twice); open tables wait longest first;
+/// out. Friend rows go to list 3 only (no row is drawn twice); newest tables first;
 /// a friend who is in a game with no listed table still shows as "playing" with no button.
 /// </summary>
 public static class LobbyMerge
@@ -170,17 +170,17 @@ public static class LobbyMerge
 
         var friendRows = rows.Where(r => r.Friend)
             .OrderBy(r => r.State == LobbyRowState.Open ? 0 : 1)
-            .ThenByDescending(r => r.AgeSec)
+            .ThenBy(r => r.AgeSec)
             .ThenBy(r => r.HostName, StringComparer.OrdinalIgnoreCase)
             .Take(MaxPerList).ToList();
         var open = rows.Where(r => !r.Friend && r.State == LobbyRowState.Open)
-            .OrderByDescending(r => r.AgeSec)
+            .OrderBy(r => r.AgeSec)
             .ThenBy(r => r.Game)
             .ThenBy(r => r.HostName, StringComparer.OrdinalIgnoreCase)
             .Take(MaxPerList).ToList();
         var playing = rows.Where(r => !r.Friend && r.State == LobbyRowState.Playing)
             .OrderBy(r => r.Game)
-            .ThenByDescending(r => r.AgeSec)
+            .ThenBy(r => r.AgeSec)
             .ThenBy(r => r.HostName, StringComparer.OrdinalIgnoreCase)
             .Take(MaxPerList).ToList();
         return new LobbySnapshot(open, playing, friendRows, true);

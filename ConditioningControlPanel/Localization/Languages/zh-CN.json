@@ -1314,6 +1314,8 @@
   "lobby_list_playing": "正在对局",
   "lobby_list_friends": "好友的桌子",
   "lobby_empty_open": "没有空桌。开一张吧。",
+  "lobby_empty_playing": "还没人在玩。",
+  "lobby_empty_friends": "没有好友在桌上。",
   "lobby_signed_out": "登录后才能看到桌子。",
   "lobby_error": "大厅没动静了。正在重试。",
   "lobby_host_chess": "开一张棋桌",

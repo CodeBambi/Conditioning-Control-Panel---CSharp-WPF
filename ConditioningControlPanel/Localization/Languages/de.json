@@ -4163,6 +4163,8 @@
   "lobby_list_playing": "Läuft gerade",
   "lobby_list_friends": "Tische von Freunden",
   "lobby_empty_open": "Keine offenen Tische. Mach einen auf.",
+  "lobby_empty_playing": "Noch spielt niemand.",
+  "lobby_empty_friends": "Keine Freunde an einem Tisch.",
   "lobby_signed_out": "Melde dich an, um die Tische zu sehen.",
   "lobby_error": "Die Lobby ist still geworden. Neuer Versuch.",
   "lobby_host_chess": "Schachtisch hosten",

@@ -4163,6 +4163,8 @@
   "lobby_list_playing": "Jugando ahora",
   "lobby_list_friends": "Mesas de amigos",
   "lobby_empty_open": "No hay mesas abiertas. Abre una.",
+  "lobby_empty_playing": "Nadie está jugando aún.",
+  "lobby_empty_friends": "Ningún amigo en una mesa.",
   "lobby_signed_out": "Inicia sesión para ver las mesas.",
   "lobby_error": "La sala se quedó en silencio. Reintentando.",
   "lobby_host_chess": "Abrir mesa de ajedrez",

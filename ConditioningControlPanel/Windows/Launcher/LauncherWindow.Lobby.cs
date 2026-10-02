@@ -156,49 +156,70 @@ public partial class LauncherWindow
 
     private static FrameworkElement DropRow(LobbyRowView v, Action<LobbyRow> joinRow)
     {
-        var grid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+        var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var icon = new Image { Source = ConditioningControlPanel.Helpers.EmojiImage.Get(v.GameIcon), Width = 20, Height = 20, Margin = new Thickness(2, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
+        // The same card as the Lobby page: feature art, rim-lit glass, a Join key that travels.
+        var icon = new Border
+        {
+            Width = 36, Height = 36, CornerRadius = new CornerRadius(10), Margin = new Thickness(0, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)), BorderThickness = new Thickness(1),
+            Background = v.Art is { } art ? new ImageBrush(art) { Stretch = Stretch.UniformToFill } : null,
+        };
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var title = Line(v.Title, 14, 1, new Thickness(0));
         title.FontFamily = Fredoka;
         title.FontWeight = FontWeights.SemiBold;
         text.Children.Add(title);
-        var sub = string.IsNullOrEmpty(v.Summary) ? v.GameLabel : v.GameLabel + " · " + v.Summary;
-        text.Children.Add(Line(sub, 11.5, 0.7, new Thickness(0, 1, 0, 0)));
+        text.Children.Add(Line(v.Line, 11.5, 0.72, new Thickness(0, 1, 0, 0)));
         Grid.SetColumn(text, 1);
 
+        var travel = new TranslateTransform();
+        var face = new Border
+        {
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(14, 4, 14, 5),
+            Margin = new Thickness(0, 0, 0, 3),
+            RenderTransform = travel,
+            Background = new LinearGradientBrush(Color.FromRgb(0xFF, 0x8C, 0xC0), Color.FromRgb(0xFF, 0x5F, 0xA2), 90),
+            Child = new TextBlock { Text = v.ButtonText, FontFamily = Fredoka, FontSize = 13, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(0x2A, 0x06, 0x18)) },
+        };
+        var key = new Grid();
+        key.Children.Add(new Border { CornerRadius = new CornerRadius(12), Margin = new Thickness(0, 3, 0, 0), Background = new SolidColorBrush(Color.FromRgb(0xB2, 0x3A, 0x6B)) });
+        key.Children.Add(face);
         var join = new Button
         {
-            Content = new Border
-            {
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(14, 4, 14, 5),
-                Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x5F, 0xA2)),
-                Child = new TextBlock { Text = v.ButtonText, FontFamily = Fredoka, FontSize = 13, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(0x2A, 0x06, 0x18)) },
-            },
+            Content = key,
             Template = BareTemplate(),
             Cursor = Cursors.Hand,
             Opacity = v.ButtonOpacity,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        join.PreviewMouseLeftButtonDown += (_, _) => travel.Y = 3;
+        join.PreviewMouseLeftButtonUp += (_, _) => travel.Y = 0;
+        join.MouseLeave += (_, _) => travel.Y = 0;
         join.Click += (_, _) => joinRow(v.Row);
         Grid.SetColumn(join, 2);
 
         grid.Children.Add(icon);
         grid.Children.Add(text);
         grid.Children.Add(join);
-        return new Border
+        var card = new Border
         {
-            CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(8, 6, 8, 6),
-            Background = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)),
+            CornerRadius = new CornerRadius(13),
+            Padding = new Thickness(8, 7, 8, 7),
+            Background = new LinearGradientBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x0C, 0xFF, 0xFF, 0xFF), 90),
+            BorderBrush = new LinearGradientBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x0A, 0xFF, 0xFF, 0xFF), 90),
+            BorderThickness = new Thickness(1),
             Child = grid,
             Margin = new Thickness(0, 0, 0, 6),
         };
+        card.MouseEnter += (_, _) => MotionFx.HoverLift(card, true);
+        card.MouseLeave += (_, _) => MotionFx.HoverLift(card, false);
+        return card;
     }
 
     /// <summary>Join straight from the dropdown: the game opens on the table, and the launcher
