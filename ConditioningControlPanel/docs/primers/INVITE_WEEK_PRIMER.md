@@ -1,6 +1,6 @@
 # Invite Week Primer
 
-Paying subscribers hand out a few invite codes a month. A new account that redeems one gets the vault
+Paying subscribers hand out one invite code a month. A new account that redeems one gets the vault
 (tier 1) free for 7 days, with no card and nothing that renews. When an invited friend pays for a
 month, the inviter climbs a reward ladder of cosmetics.
 
@@ -83,7 +83,7 @@ For a subscriber (effective tier 1 or more, whitelist included):
 }
 ```
 
-- Allowance: tier 1 gets 2 codes per calendar month (UTC), tier 2 gets 3. Codes are minted lazily on
+- Allowance: every subscriber (Basic or Prime) gets 1 code per calendar month (UTC) since 2026-10-02 (was 2 and 3). Codes are minted lazily on
   the first `mine` of the month. Unused codes expire at `resets_at`; they do not roll over.
 - `state` is `open` (not redeemed), `trying` (redeemed; `day` is the day of the week, 1 to 7, or more
   once the week has ended unpaid) or `converted` (the friend's first paid month landed).
