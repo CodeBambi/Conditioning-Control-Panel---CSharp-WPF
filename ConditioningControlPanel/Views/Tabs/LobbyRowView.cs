@@ -62,7 +62,9 @@ public sealed class LobbyRowView
     {
         LobbyGame.Chess => "features/piecebypiece.png",
         LobbyGame.Goon => "features/goon_game_tile.png",
-        _ => "features/remote_control.png",
+        // A text-free crop of the Remote Hands quest art: the feature card says REMOTE CONTROL,
+        // which a 40 px thumbnail cuts to "MOTE NTROL".
+        _ => "features/lobby_remote.png",
     };
 
     public static ImageSource? ArtFor(LobbyGame g)
