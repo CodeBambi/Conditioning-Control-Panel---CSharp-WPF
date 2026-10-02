@@ -4163,6 +4163,8 @@
   "lobby_list_playing": "En cours",
   "lobby_list_friends": "Tables des amis",
   "lobby_empty_open": "Aucune table ouverte. Ouvres-en une.",
+  "lobby_empty_playing": "Personne ne joue encore.",
+  "lobby_empty_friends": "Aucun ami à une table.",
   "lobby_signed_out": "Connecte-toi pour voir les tables.",
   "lobby_error": "Le salon ne répond plus. Nouvel essai.",
   "lobby_host_chess": "Ouvrir une table d'échecs",

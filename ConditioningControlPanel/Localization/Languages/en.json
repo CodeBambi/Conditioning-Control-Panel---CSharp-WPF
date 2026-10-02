@@ -1495,6 +1495,8 @@
   "lobby_list_playing": "Playing now",
   "lobby_list_friends": "Friends' tables",
   "lobby_empty_open": "No open tables. Host one.",
+  "lobby_empty_playing": "Nobody's playing yet.",
+  "lobby_empty_friends": "No friends at a table.",
   "lobby_signed_out": "Sign in to see the tables.",
   "lobby_error": "The lobby went quiet. Trying again.",
   "lobby_host_chess": "Host a chess table",

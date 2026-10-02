@@ -34,18 +34,18 @@ public class LobbyMergeTests
     }
 
     [Fact]
-    public void Open_tables_wait_longest_first_across_games()
+    public void Open_tables_newest_first_across_games()
     {
         var snap = LobbyMerge.Build(
             Chess(new[] { new PbpOpenSeat("p_new", "new", 600000, 0, Now - 2_000), new PbpOpenSeat("p_old", "old", 300000, 3000, Now - 90_000) }),
             GoonReply(Goon("GOON1", "mid", waiting: 30)),
             new[] { new RemoteSeat("u_r", "rem", 4, "light", new[] { "trance" }, Claimed: false) },
             null, true, Now);
-        Assert.Equal(new[] { "old", "mid", "new", "rem" }, snap.Open.Select(r => r.HostName).ToArray());
+        Assert.Equal(new[] { "rem", "new", "mid", "old" }, snap.Open.Select(r => r.HostName).ToArray());
         Assert.All(snap.Open, r => Assert.True(r.CanJoin));
-        Assert.Equal("p_old", snap.Open[0].Key);
-        Assert.Equal("GOON1", snap.Open[1].Key);
-        Assert.Equal("u_r", snap.Open[3].Key);
+        Assert.Equal("u_r", snap.Open[0].Key);
+        Assert.Equal("GOON1", snap.Open[2].Key);
+        Assert.Equal("p_old", snap.Open[3].Key);
     }
 
     [Fact]

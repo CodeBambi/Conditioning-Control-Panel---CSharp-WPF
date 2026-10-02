@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Lobby;
 
@@ -19,6 +21,12 @@ public sealed class LobbyRowView
     public string Title { get; }
     public string Summary { get; }
     public bool HasSummary => Summary.Length > 0;
+    /// <summary>The second line on a card: game, then the settings.</summary>
+    public string Line => HasSummary ? GameLabel + " · " + Summary : GameLabel;
+    /// <summary>The game's feature art, small: light and coloured, readable on a dark card.</summary>
+    public ImageSource? Art => ArtFor(Row.Game);
+    /// <summary>Stable identity across polls, for the "new table" pop.</summary>
+    public string Id => Row.Game + "|" + (Row.Key ?? Row.HostName + "|" + Row.OpponentName) + "|" + Row.State;
     public bool Friend => Row.Friend;
     public string ButtonText { get; }
     public bool HasButton { get; }
@@ -47,6 +55,38 @@ public sealed class LobbyRowView
         LobbyGame.Goon => "\U0001F497",
         _ => "\U0001F6F0️",
     };
+
+    private static readonly Dictionary<LobbyGame, ImageSource?> ArtCache = new();
+
+    public static string ArtPath(LobbyGame g) => g switch
+    {
+        LobbyGame.Chess => "features/piecebypiece.png",
+        LobbyGame.Goon => "features/goon_game_tile.png",
+        _ => "features/remote_control.png",
+    };
+
+    public static ImageSource? ArtFor(LobbyGame g)
+    {
+        lock (ArtCache)
+        {
+            if (ArtCache.TryGetValue(g, out var hit)) return hit;
+            ImageSource? img = null;
+            try
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.UriSource = new Uri("pack://application:,,,/Resources/" + ArtPath(g), UriKind.Absolute);
+                bmp.DecodePixelWidth = 96;
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.EndInit();
+                bmp.Freeze();
+                img = bmp;
+            }
+            catch { img = null; }
+            ArtCache[g] = img;
+            return img;
+        }
+    }
 
     public static string LabelKey(LobbyGame g) => g switch
     {

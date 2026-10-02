@@ -4163,6 +4163,8 @@
   "lobby_list_playing": "진행 중",
   "lobby_list_friends": "친구 테이블",
   "lobby_empty_open": "빈 테이블이 없어. 하나 열어 봐.",
+  "lobby_empty_playing": "아직 아무도 안 하고 있어.",
+  "lobby_empty_friends": "테이블에 앉은 친구가 없어.",
   "lobby_signed_out": "로그인하면 테이블이 보여.",
   "lobby_error": "로비가 조용해졌어. 다시 시도 중.",
   "lobby_host_chess": "체스 테이블 열기",

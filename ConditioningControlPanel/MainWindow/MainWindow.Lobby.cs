@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
@@ -64,9 +68,7 @@ namespace ConditioningControlPanel
         {
             var tab = AvailableSubjectsTab;
             if (tab == null) return;
-            bool firstFill = tab.AvailableSubjectsList.Items.Count == 0 && snap.Open.Count > 0;
             PaintLobbyInto(tab, snap, CurrentLobbyGates(), error: snap.SignedIn && App.Lobby?.LastRoundOk == false);
-            if (firstFill && tab.IsVisible) StaggerSubjectCards(allowRetry: true);
         }
 
         private void PaintLobbyHostBar(LobbyGates gates)
@@ -79,11 +81,33 @@ namespace ConditioningControlPanel
         internal static void PaintLobbyInto(AvailableSubjectsTabView tab, LobbySnapshot snap, LobbyGates gates, bool error)
         {
             PaintLobbyHostBar(tab, gates);
-            tab.AvailableSubjectsList.ItemsSource = LobbyRowView.From(snap.Open, gates);
-            tab.LobbyPlayingList.ItemsSource = LobbyRowView.From(snap.Playing, gates);
-            tab.LobbyFriendsList.ItemsSource = LobbyRowView.From(snap.Friends, gates);
-            tab.LobbyPlayingSection.Visibility = snap.Playing.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-            tab.LobbyFriendsSection.Visibility = snap.Friends.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            var open = LobbyRowView.From(snap.Open, gates);
+            var playing = LobbyRowView.From(snap.Playing, gates);
+            var friends = LobbyRowView.From(snap.Friends, gates);
+            tab.AvailableSubjectsList.ItemsSource = open;
+            tab.LobbyPlayingList.ItemsSource = playing;
+            tab.LobbyFriendsList.ItemsSource = friends;
+
+            tab.LobbyOpenCount.Text = snap.Open.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            tab.LobbyPlayingCount.Text = snap.Playing.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            tab.LobbyFriendsCount.Text = snap.Friends.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            tab.LobbyPlayingEmpty.Visibility = snap.Playing.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            tab.LobbyFriendsEmpty.Visibility = snap.Friends.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            tab.TabOpen.Content = Loc.Get("lobby_list_open") + "  " + snap.Open.Count;
+            tab.TabPlaying.Content = Loc.Get("lobby_list_playing") + "  " + snap.Playing.Count;
+            tab.TabFriends.Content = Loc.Get("lobby_list_friends") + "  " + snap.Friends.Count;
+
+            // Entrance: the first fill staggers in; after that only a NEW table pops.
+            var ids = open.Concat(playing).Concat(friends).Select(v => v.Id).ToList();
+            var fresh = ids.Where(id => !tab.SeenRows.Contains(id)).ToHashSet();
+            bool firstFill = tab.SeenRows.Count == 0;
+            foreach (var id in ids) tab.SeenRows.Add(id);
+            if (ids.Count > 0)
+                tab.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+                {
+                    try { LobbyEntrance(tab, firstFill ? null : fresh); }
+                    catch (Exception ex) { App.Logger?.Debug("Lobby entrance: {E}", ex.Message); }
+                }));
 
             tab.TxtLobbyEmpty.Text = Loc.Get(snap.SignedIn ? "lobby_empty_open" : "lobby_signed_out");
             tab.AvailableSubjectsEmptyPanel.Visibility = snap.Open.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -91,6 +115,64 @@ namespace ConditioningControlPanel
             tab.TxtLobbyCount.Text = snap.OpenCount > 0
                 ? Loc.GetF("lobby_open_count", snap.OpenCount)
                 : Loc.Get("desc_available_subjects");
+        }
+
+        /// <summary>First fill (<paramref name="fresh"/> null): every card staggers in. Later: a card
+        /// whose table was not there before pops (a small back-eased scale) and sends out one
+        /// ring. Off honours MotionFx; Reduced keeps the stagger and drops the ring.</summary>
+        internal static void LobbyEntrance(AvailableSubjectsTabView tab, ISet<string>? fresh)
+        {
+            if (!MotionFx.AllowTransitions) return;
+            var lists = new[] { tab.AvailableSubjectsList, tab.LobbyPlayingList, tab.LobbyFriendsList };
+            foreach (var list in lists)
+            {
+                try { list.UpdateLayout(); } catch { }
+                var cards = new List<FrameworkElement>();
+                foreach (var item in list.Items)
+                {
+                    if (item is not LobbyRowView v) continue;
+                    if (list.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement c) continue;
+                    if (fresh == null) { cards.Add(c); continue; }
+                    if (fresh.Contains(v.Id)) Pop(c);
+                }
+                if (cards.Count > 0) MotionFx.StaggerIn(cards);
+            }
+        }
+
+        private static void Pop(FrameworkElement container)
+        {
+            var card = FindTagged(container, "lobby-card");
+            var ring = FindTagged(container, "lobby-ring");
+            if (card != null)
+            {
+                var sc = new ScaleTransform(0.9, 0.9);
+                card.RenderTransform = sc;
+                var grow = new DoubleAnimation(0.9, 1.0, TimeSpan.FromMilliseconds(320)) { EasingFunction = new BackEase { Amplitude = 0.5, EasingMode = EasingMode.EaseOut } };
+                sc.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+                sc.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+            }
+            if (ring != null && MotionFx.AllowParticles)
+            {
+                var rs = new ScaleTransform(1, 1);
+                ring.RenderTransform = rs;
+                var spread = new DoubleAnimation(1.0, 1.08, TimeSpan.FromMilliseconds(520)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+                rs.BeginAnimation(ScaleTransform.ScaleXProperty, spread);
+                rs.BeginAnimation(ScaleTransform.ScaleYProperty, spread);
+                ring.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.9, 0.0, TimeSpan.FromMilliseconds(520)));
+            }
+        }
+
+        private static FrameworkElement? FindTagged(DependencyObject root, string tag)
+        {
+            int n = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is FrameworkElement fe && Equals(fe.Tag, tag)) return fe;
+                var deeper = FindTagged(child, tag);
+                if (deeper != null) return deeper;
+            }
+            return null;
         }
 
         internal static void PaintLobbyHostBar(AvailableSubjectsTabView tab, LobbyGates gates)

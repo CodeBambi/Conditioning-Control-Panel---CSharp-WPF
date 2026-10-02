@@ -4163,6 +4163,8 @@
   "lobby_list_playing": "対戦中",
   "lobby_list_friends": "フレンドの卓",
   "lobby_empty_open": "空いている卓はありません。開いてみよう。",
+  "lobby_empty_playing": "まだ誰も遊んでいません。",
+  "lobby_empty_friends": "卓にいるフレンドはいません。",
   "lobby_signed_out": "サインインすると卓が見えます。",
   "lobby_error": "ロビーが静かになりました。再試行中。",
   "lobby_host_chess": "チェスの卓を開く",

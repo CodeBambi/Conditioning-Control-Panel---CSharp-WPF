@@ -83,7 +83,40 @@ public class LobbyRenderTests
             Layout(tab, 900, 500);
             Assert.Equal(Visibility.Visible, tab.AvailableSubjectsEmptyPanel.Visibility);
             Assert.Empty(tab.AvailableSubjectsList.Items);
-            Assert.Equal(Visibility.Collapsed, tab.LobbyPlayingSection.Visibility);
+            Assert.Equal(Visibility.Visible, tab.LobbyPlayingEmpty.Visibility);
+            Assert.Equal("0", tab.LobbyOpenCount.Text);
+        });
+
+    [Fact]
+    public void Columns_sit_side_by_side_and_become_tabs_when_narrow()
+        => WpfRenderHarness.OnStaThread(() =>
+        {
+            var snap = Sample();
+            var tab = Page(snap, LobbyGates.From(true, true, true));
+            tab.SetNarrow(false);
+            Layout(tab, 1200, 700);
+            Assert.Equal(Visibility.Collapsed, tab.LobbyTabStrip.Visibility);
+            Assert.Equal(0, Grid.GetColumn(tab.LobbyOpenColumn));
+            Assert.Equal(1, Grid.GetColumn(tab.LobbyPlayingSection));
+            Assert.Equal(2, Grid.GetColumn(tab.LobbyFriendsSection));
+            Assert.Equal(snap.Open.Count.ToString(), tab.LobbyOpenCount.Text);
+
+            tab.SetNarrow(true);
+            tab.SelectColumn(2);
+            Assert.Equal(Visibility.Visible, tab.LobbyTabStrip.Visibility);
+            Assert.Equal(Visibility.Collapsed, tab.LobbyOpenColumn.Visibility);
+            Assert.Equal(Visibility.Visible, tab.LobbyFriendsSection.Visibility);
+            Assert.Equal(3, Grid.GetColumnSpan(tab.LobbyFriendsSection));
+            Assert.True(AvailableSubjectsTabView.IsNarrowWidth(700));
+            Assert.False(AvailableSubjectsTabView.IsNarrowWidth(1200));
+        });
+
+    [Fact]
+    public void Every_game_has_light_feature_art()
+        => WpfRenderHarness.OnStaThread(() =>
+        {
+            foreach (var g in new[] { LobbyGame.Chess, LobbyGame.Goon, LobbyGame.Remote })
+                Assert.NotNull(LobbyRowView.ArtFor(g));
         });
 
     [Fact]
@@ -108,9 +141,12 @@ public class LobbyRenderTests
             Directory.CreateDirectory(dir);
             var bg = new SolidColorBrush(Color.FromRgb(0x1A, 0x10, 0x24));
             var snap = Sample();
-            Save(new Border { Background = bg, Child = Page(snap, LobbyGates.From(true, false, false)) }, 900, 820, Path.Combine(dir, "lobby-page-free.png"));
-            Save(new Border { Background = bg, Child = Page(snap, LobbyGates.From(true, true, true)) }, 900, 820, Path.Combine(dir, "lobby-page-patron.png"));
-            Save(new Border { Background = bg, Child = Page(LobbySnapshot.Empty with { SignedIn = true }, LobbyGates.From(true, true, true)) }, 900, 420, Path.Combine(dir, "lobby-page-empty.png"));
+            Save(Wrap(Page(snap, LobbyGates.From(true, true, true)), bg), 1240, 720, Path.Combine(dir, "lobby-page-patron-v2.png"));
+            Save(Wrap(Page(snap, LobbyGates.From(true, false, false)), bg), 1240, 720, Path.Combine(dir, "lobby-page-free-v2.png"));
+            Save(Wrap(Page(LobbySnapshot.Empty with { SignedIn = true }, LobbyGates.From(true, true, true)), bg), 1240, 480, Path.Combine(dir, "lobby-page-empty-v2.png"));
+            var narrow = Page(snap, LobbyGates.From(true, true, true));
+            narrow.SetNarrow(true);
+            Save(Wrap(narrow, bg), 760, 720, Path.Combine(dir, "lobby-page-narrow-v2.png"));
 
             var rows = new StackPanel();
             LauncherWindow.FillLobbyDrop(rows, snap, LobbyGates.From(true, true, true), _ => { }, () => { });
@@ -125,8 +161,14 @@ public class LobbyRenderTests
             var stack = new StackPanel { Margin = new Thickness(20) };
             stack.Children.Add(LauncherWindow.LobbyDropShell(rows));
             stack.Children.Add(chip);
-            Save(new Border { Background = new SolidColorBrush(Color.FromRgb(0x24, 0x14, 0x30)), Child = stack }, 440, 0, Path.Combine(dir, "launcher-lobby-dropdown.png"));
+            Save(new Border { Background = new SolidColorBrush(Color.FromRgb(0x24, 0x14, 0x30)), Child = stack }, 440, 0, Path.Combine(dir, "launcher-lobby-dropdown-v2.png"));
         });
+    }
+
+    private static Border Wrap(AvailableSubjectsTabView tab, Brush bg)
+    {
+        // Pin the mode to the shot's width (the harness has no window to raise SizeChanged in order).
+        return new Border { Background = bg, Child = tab };
     }
 
     private static void Layout(FrameworkElement e, double w, double h)
