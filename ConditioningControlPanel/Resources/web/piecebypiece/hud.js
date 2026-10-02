@@ -440,10 +440,45 @@ export function createHud(opts = {}) {
     if (!panel) return;
     panel.hidden = !panel.hidden;
     options.setAttribute('aria-expanded', String(!panel.hidden));
+    stopSurrender();
   });
   for (const button of root.querySelectorAll('[data-experience]')) click(button, () => setPresentation({ experience: button.dataset.experience }));
+  // SURRENDER (owner, 2026-10-02): in Options for every mode, asked once.
+  // Solo gives the game to the computer, hotseat gives it to the side not on
+  // the move, online is the server's resign. A local loss is THE FALL.
+  const surrenderBox = pick('game-surrender-box');
+  const surrenderBtn = pick('game-surrender');
+  const surrenderAsk = pick('game-surrender-ask');
+  let surrendering = null;   // the "give up this game?" question, while it stands
+  function stopSurrender(repaint = true) {
+    if (surrendering) { clearTimeout(surrendering); timers.delete(surrendering); surrendering = null; }
+    if (repaint) paintSurrender();
+  }
+  function paintSurrender() {
+    let live = !!deal && !over;
+    try { if (window.PBP?.door?.isUp?.() || game?.isOver?.()) live = false; } catch { /* no referee yet */ }
+    if (!live) stopSurrender(false);
+    if (surrenderBox) surrenderBox.hidden = !live;
+    if (surrenderBtn) surrenderBtn.hidden = !!surrendering;
+    if (surrenderAsk) surrenderAsk.hidden = !surrendering;
+  }
+  click(surrenderBtn, () => {
+    stopSurrender(false);
+    surrendering = later(() => { surrendering = null; paintSurrender(); }, T.askMs);
+    paintSurrender();
+  });
+  click(pick('game-surrender-no'), () => stopSurrender());
+  click(pick('game-surrender-yes'), () => {
+    stopSurrender(false);
+    closeOptions();
+    if (online) verb('resign');
+    else if (game?.isSolo) verb('resign');
+    else if (game && typeof game.resign === 'function') { try { game.resign(game.turn()); } catch { /* already over */ } }
+    paintSurrender();
+  });
   const menuButton = pick('game-menu');
   function paintMenu() {
+    paintSurrender();
     if (menuButton) { menuButton.textContent = deal?.mode === 'solo' ? 'Save and menu' : 'Menu'; menuButton.disabled = online && !over; }
     const note = pick('game-menu-note');
     if (note) note.hidden = !online || !!over;
