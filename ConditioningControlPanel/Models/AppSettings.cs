@@ -2543,6 +2543,16 @@ namespace ConditioningControlPanel.Models
             set { _pinkFilterTargetMonitor = value; OnPropertyChanged(); }
         }
 
+        private int _videoTargetMonitor = -1;
+        /// <summary>Monitor target for mandatory videos (and their attention targets and messages).
+        /// -1 = follow DualMonitorEnabled / "Show content on", -2 = all monitors, 0..N = specific
+        /// monitor index (ccp-bugs #1154). See <see cref="DualMonitorEnabled"/>.</summary>
+        public int VideoTargetMonitor
+        {
+            get => _videoTargetMonitor;
+            set { _videoTargetMonitor = value; OnPropertyChanged(); }
+        }
+
         private bool _fillAllMonitorsWithVideo;
         /// <summary>
         /// On 3+ monitors, give every secondary screen its own video decoder. Each LibVLC

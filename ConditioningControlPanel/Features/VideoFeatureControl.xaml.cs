@@ -2,12 +2,14 @@ using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Features
 {
     public partial class VideoFeatureControl : UserControl, ISettingsRebindable
     {
         private bool _isLoading = true;
+        private bool _monitorPopulating; // guards the monitor combo while it is rebuilt
 
         public VideoFeatureControl()
         {
@@ -68,8 +70,68 @@ namespace ConditioningControlPanel.Features
                 SliderTargetSize.Value = s.AttentionSize;
                 TxtTargetSize.Text = s.AttentionSize.ToString();
                 ChkVideoGazeClick.IsChecked = s.VideoGazeClickEnabled;
+                PopulateMonitors();
             }
             finally { _isLoading = false; }
+        }
+
+        // -- Display monitor picker (ccp-bugs #1154, same recipe as the Pink filter's #639) --
+
+        /// <summary>Rebuild the monitor dropdown and select the saved
+        /// <see cref="Models.AppSettings.VideoTargetMonitor"/>. A saved index that no longer exists
+        /// shows "Default" WITHOUT writing back, so the pick survives a reconnect.</summary>
+        private void PopulateMonitors()
+        {
+            if (CmbMonitor == null) return;
+            int saved = App.Settings?.Current?.VideoTargetMonitor ?? App.MonitorTargetFollowGlobal;
+            _monitorPopulating = true;
+            try
+            {
+                CmbMonitor.Items.Clear();
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_default"), Tag = App.MonitorTargetFollowGlobal });
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_all"), Tag = App.MonitorTargetAll });
+
+                var screens = App.GetAllScreensCached();
+                string monitorLabel = Loc.Get("monitor_label");
+                string primaryMarker = Loc.Get("monitor_primary_marker");
+                for (int i = 0; i < screens.Length; i++)
+                {
+                    var b = screens[i].Bounds;
+                    string prefix = screens[i].Primary ? primaryMarker + ", " : "";
+                    CmbMonitor.Items.Add(new ComboBoxItem
+                    {
+                        Content = $"{monitorLabel} {i + 1} ({prefix}{b.Width}x{b.Height})",
+                        Tag = i
+                    });
+                }
+
+                ComboBoxItem? match = null;
+                foreach (ComboBoxItem it in CmbMonitor.Items)
+                    if (it.Tag is int t && t == saved) { match = it; break; }
+                CmbMonitor.SelectedItem = match ?? (CmbMonitor.Items.Count > 0 ? CmbMonitor.Items[0] : null);
+            }
+            finally { _monitorPopulating = false; }
+        }
+
+        // Re-enumerate on open so a monitor plugged in since load appears without reopening the card.
+        private void CmbMonitor_DropDownOpened(object sender, EventArgs e)
+        {
+            App.InvalidateScreenCache();
+            PopulateMonitors();
+        }
+
+        private void CmbMonitor_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_monitorPopulating || _isLoading) return;
+            if (CmbMonitor.SelectedItem is not ComboBoxItem item || item.Tag is not int target) return;
+
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (s.VideoTargetMonitor == target) return;
+
+            // Read at the next video's start; a video already playing stays where it is.
+            s.VideoTargetMonitor = target;
+            App.Settings?.Save();
         }
 
         private static string FormatDuration(int seconds)
@@ -93,7 +155,8 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.RandomizeAttentionTargets) ||
                 e.PropertyName == nameof(Models.AppSettings.AttentionLifespan) ||
                 e.PropertyName == nameof(Models.AppSettings.AttentionSize) ||
-                e.PropertyName == nameof(Models.AppSettings.VideoGazeClickEnabled))
+                e.PropertyName == nameof(Models.AppSettings.VideoGazeClickEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.VideoTargetMonitor))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
