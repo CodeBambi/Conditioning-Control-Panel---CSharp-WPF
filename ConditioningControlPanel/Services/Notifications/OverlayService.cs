@@ -206,7 +206,7 @@ public class OverlayService : IDisposable
     // Deeper opacity-ramp override. When set, a Deeper enhancement owns this
     // overlay's opacity for a ramped band; the 500ms settings-sync
     // (UpdatePinkFilterOpacity / UpdateSpiralOpacity) must not stomp it.
-    // Normalized 0..1 (spiral applies its own ×0.1 reduction on top).
+    // Normalized 0..1 (spiral maps it through SpiralPaint on top).
     private double? _rampPinkOpacity;
     private double? _rampSpiralOpacity;
     private double? _rampBrainDrainOpacity;
@@ -621,7 +621,7 @@ public class OverlayService : IDisposable
 
             if (hasSpiral)
             {
-                var boostedOpacity = Math.Min((settings.SpiralOpacity / 100.0) * 0.1 * 2, 1.0);
+                var boostedOpacity = Math.Min(SpiralPaint(settings.SpiralOpacity / 100.0) * 2, 1.0);
                 _spiralLayer?.SetOpacity(boostedOpacity);
                 foreach (var image in _spiralGifImages)
                     image.Opacity = boostedOpacity;
@@ -1165,7 +1165,7 @@ public class OverlayService : IDisposable
     /// Live-updates the opacity of an overlay shown via <see cref="ShowOverlaySustained"/>.
     /// Used by Deeper enhancement opacity ramps to interpolate a sustained overlay's
     /// opacity across a region. <paramref name="opacity"/> is normalized 0..1 (spiral
-    /// applies its own ×0.1 reduction, matching the global spiral path). While a ramp
+    /// maps it through SpiralPaint, matching the global spiral path). While a ramp
     /// is active the 500ms settings-sync leaves this overlay alone so it isn't stomped.
     /// Only pink_filter and spiral support ramping; other kinds are ignored.
     /// </summary>
@@ -1269,9 +1269,21 @@ public class OverlayService : IDisposable
         ApplyPinkOpacityDirect(opacity);
     }
 
+    /// <summary>
+    /// ccp-bugs #722: the spiral slider (0..1) to the alpha it paints. The spiral used to paint
+    /// at a flat tenth of the slider, so 100% was 0.1 and barely visible. The bottom half keeps
+    /// that exact curve (nobody's 10-50% setting changes); above it the line climbs steeply so
+    /// 100% paints at 0.6. Every spiral opacity path goes through here.
+    /// </summary>
+    internal static double SpiralPaint(double f)
+    {
+        f = double.IsNaN(f) ? 0 : Math.Clamp(f, 0, 1);
+        return f <= 0.5 ? f * 0.1 : 0.05 + (f - 0.5) * 1.1;
+    }
+
     private void ApplySpiralOpacityDirect(double opacity)
     {
-        var scaled = opacity * 0.1; // 90% reduction, matching CreateSpiralGifWindow / UpdateSpiralOpacity
+        var scaled = SpiralPaint(opacity); // matching CreateSpiralGifWindow / UpdateSpiralOpacity
         _spiralLayer?.SetOpacity(scaled);
         foreach (var image in _spiralGifImages) image.Opacity = scaled;
         foreach (var media in _spiralMediaElements) media.Opacity = scaled;
@@ -1490,7 +1502,7 @@ public class OverlayService : IDisposable
         // user paths) is identical to the legacy windows by construction.
         if (UseCompositor && _isGifSpiral && _spiralPath != _spiralLayerFailedPath)
         {
-            var finalOpacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
+            var finalOpacity = SpiralPaint(App.Settings.Current.SpiralOpacity / 100.0);
 
             // Cache hit: show immediately (frames are frozen, shared with the legacy cache).
             if (_spiralFramesCacheKey == _spiralPath && _spiralFramesCache.Count > 0)
@@ -1535,8 +1547,8 @@ public class OverlayService : IDisposable
                         // opacity. The decode finishes after the show call returned, so read the hold
                         // here rather than the user's saved setting.
                         double baseOpacity = _rampSpiralOpacity ?? (s.SpiralOpacity / 100.0);
-                        GetSpiralLayer().ShowFrames(frames, delay, baseOpacity * 0.1);
-                        _lastAppliedSpiralOpacity = baseOpacity * 0.1;
+                        GetSpiralLayer().ShowFrames(frames, delay, SpiralPaint(baseOpacity));
+                        _lastAppliedSpiralOpacity = SpiralPaint(baseOpacity);
                         App.Logger?.Debug("Spiral started on compositor layer ({Path}, decoded off-thread)", path);
                     }
                 });
@@ -1891,8 +1903,7 @@ public class OverlayService : IDisposable
 
             var wpfBounds = GetWpfScreenBounds(screen);
 
-            // Very subtle opacity - 90% reduction
-            var actualOpacity = (opacity / 100.0) * 0.1;
+            var actualOpacity = SpiralPaint(opacity / 100.0);
 
             var image = new System.Windows.Controls.Image
             {
@@ -1961,7 +1972,7 @@ public class OverlayService : IDisposable
         try
         {
             var wpfBounds = GetWpfScreenBounds(screen);
-            var actualOpacity = (opacity / 100.0) * 0.1;
+            var actualOpacity = SpiralPaint(opacity / 100.0);
 
             var mediaElement = new MediaElement
             {
@@ -2090,8 +2101,7 @@ public class OverlayService : IDisposable
     private void UpdateSpiralOpacity()
     {
         if (_rampSpiralOpacity.HasValue) return; // a Deeper ramp owns this overlay's opacity
-        // Very subtle opacity - 90% reduction
-        var opacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
+        var opacity = SpiralPaint(App.Settings.Current.SpiralOpacity / 100.0);
         if (opacity == _lastAppliedSpiralOpacity) return;
         _lastAppliedSpiralOpacity = opacity;
 
