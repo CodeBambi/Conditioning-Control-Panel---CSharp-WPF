@@ -62,6 +62,25 @@ namespace ConditioningControlPanel.Services.Commands
             return null;
         }
 
+        /// <summary>The AI names a pool video by its TITLE ("Sissy Dreams 3"), never by URL, so a
+        /// request resolves through the mod's link pool: an exact name first, then the closest name.
+        /// Without this every effect-control video came back "didn't play" (ccp-bugs #1344).</summary>
+        internal static string? PoolLinkOf(Media data, IReadOnlyDictionary<string, string>? pool)
+        {
+            if (pool == null || pool.Count == 0) return null;
+            foreach (var q in new[] { data.Title, data.Path })
+            {
+                var name = q?.Trim();
+                if (string.IsNullOrEmpty(name)) continue;
+                foreach (var kv in pool)
+                    if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase) && HtUrlHelper.IsEligibleHtUrl(kv.Value))
+                        return kv.Value;
+            }
+            var names = pool.Where(kv => HtUrlHelper.IsEligibleHtUrl(kv.Value)).Select(kv => kv.Key).ToList();
+            var hit = VideoTitleMatcher.FindBest(new[] { data.Title, data.Path }, names);
+            return hit != null && pool.TryGetValue(hit, out var url) ? url : null;
+        }
+
         public Task<bool> ExecuteAsync()
         {
             var fullPath = string.IsNullOrWhiteSpace(_data.Path) ? null : GetValidatedPath(_data.Path);
@@ -81,7 +100,8 @@ namespace ConditioningControlPanel.Services.Commands
                 }
             }
 
-            var htLink = HypnoTubeLinkOf(_data);
+            var htLink = HypnoTubeLinkOf(_data)
+                ?? (_kind == AICommandType.video ? PoolLinkOf(_data, App.Mods?.GetVideoLinks()) : null);
             switch (Decide(_data, _kind, playable, htLink != null))
             {
                 case MediaPick.Random:
