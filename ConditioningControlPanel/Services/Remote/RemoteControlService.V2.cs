@@ -70,7 +70,11 @@ namespace ConditioningControlPanel.Services
         private void StopRemoteHaptics() => _remoteHaptics?.Stop();
 
         /// <summary>Every controller command counts as activity (the loop idle cap reads it).</summary>
-        private void NoteControllerActivity() => _remoteHaptics?.NoteCommand();
+        private void NoteControllerActivity()
+        {
+            _lastControllerCommandUtc = DateTime.UtcNow;
+            _remoteHaptics?.NoteCommand();
+        }
 
         // ------------------------------------------------------------------ Melt (Brain Drain)
 

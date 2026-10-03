@@ -8169,6 +8169,16 @@ namespace ConditioningControlPanel.Models
             set { _remoteShareAvatar = value; OnPropertyChanged(); }
         }
 
+        // Remote Control v2 (2026-10-03): the controller's live preview names the Scrolller
+        // niches pictures come from. Counts are always sent; the names only while this is on.
+        // Default ON (owner call to confirm). Never a file name, path or picture either way.
+        private bool _remoteShareMediaSources = true;
+        public bool RemoteShareMediaSources
+        {
+            get => _remoteShareMediaSources;
+            set { _remoteShareMediaSources = value; OnPropertyChanged(); }
+        }
+
         // SP5 layer 3 — Available Subjects directory opt-in.
         //
         // The opt-in checkbox itself NEVER persists across sessions: the user

@@ -3071,6 +3071,8 @@ namespace ConditioningControlPanel
         // browser when the controller actually started a video here — never the page the user
         // was browsing themselves.
         private bool _remoteBrowserVideoActive;
+        /// <summary>A controller's HypnoTube video is up in the embedded browser (v2 preview).</summary>
+        internal bool IsRemoteBrowserVideoActive => _remoteBrowserVideoActive;
 
         /// <summary>
         /// Names the screen-owning WebView2 host sitting ABOVE the control panel right now, or null

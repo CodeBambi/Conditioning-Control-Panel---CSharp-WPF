@@ -3630,6 +3630,8 @@
   "status_emote_no_session": "Сначала запустите удалённый сеанс",
   "label_remote_share_avatar": "Показывать мой аватар Discord контроллерам",
   "desc_remote_share_avatar": "По умолчанию выключено. Когда включено, ваш привязанный аватар Discord виден всем, кто управляет вашим сеансом. Когда выключено, вы остаётесь за силуэтом.",
+  "label_remote_share_media_sources": "Name my online picture sources to controllers",
+  "desc_remote_share_media_sources": "On by default. The controller's live preview names the Scrolller communities your online pictures come from. How many pictures and videos you have is shared either way, never a file name.",
   "label_ai_badge": "ИИ",
   "quiz_ai_disclaimer": "Вопросы и результат архетипа создаются ИИ.",
   "explicit_ack_title": "Подтверждение откровенного контента",

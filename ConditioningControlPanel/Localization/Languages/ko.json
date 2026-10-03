@@ -3630,6 +3630,8 @@
   "status_emote_no_session": "먼저 원격 세션을 시작하세요",
   "label_remote_share_avatar": "컨트롤러에게 내 Discord 아바타 표시",
   "desc_remote_share_avatar": "기본값은 꺼짐. 켜면 연결된 Discord 아바타가 세션을 제어하는 사람에게 표시됩니다. 끄면 실루엣 뒤에 가려집니다.",
+  "label_remote_share_media_sources": "Name my online picture sources to controllers",
+  "desc_remote_share_media_sources": "On by default. The controller's live preview names the Scrolller communities your online pictures come from. How many pictures and videos you have is shared either way, never a file name.",
   "label_ai_badge": "AI",
   "quiz_ai_disclaimer": "질문과 원형 결과는 AI가 생성합니다.",
   "explicit_ack_title": "성인 콘텐츠 확인",

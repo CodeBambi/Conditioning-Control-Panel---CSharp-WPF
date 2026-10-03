@@ -107,8 +107,14 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Show result window on all monitors
         /// </summary>
+        /// <summary>Remote Control v2 preview: the count being asked for and the last answer typed.</summary>
+        internal static int? LastCorrectAnswer { get; private set; }
+        internal static int? LastAnswer { get; private set; }
+
         public static void ShowOnAllMonitors(int correctAnswer, bool strictMode, Action<bool> onComplete)
         {
+            LastCorrectAnswer = correctAnswer;
+            LastAnswer = null;
             _allWindows.Clear();
             _sharedInput = "";
             
@@ -194,6 +200,7 @@ namespace ConditioningControlPanel
                 return;
             }
             
+            LastAnswer = answer;
             if (answer == _correctAnswer)
             {
                 // Correct! XP scaled by video duration

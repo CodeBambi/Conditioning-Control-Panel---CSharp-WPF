@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Services.Remote;
 
 namespace ConditioningControlPanel.Services
 {
@@ -198,6 +199,8 @@ namespace ConditioningControlPanel.Services
                 _currentPollInterval = PollIntervalSeconds;
                 _lastStatusPushUtc = DateTime.MinValue;
                 _statusBackoffUntil = DateTime.MinValue;
+                _pollBackedOff = false;
+                AttachScreenFeeds();
 
                 // Start polling
                 _pollTimer = new DispatcherTimer
@@ -363,6 +366,8 @@ namespace ConditioningControlPanel.Services
             _statusBackoffUntil = DateTime.MinValue;
             _lastOptInTags = null;
             _lastOptInStatus = null;
+            _pollBackedOff = false;
+            DetachScreenFeeds();
             IsActive = false;
             LastEndedUtc = DateTime.UtcNow;
             SessionCode = null;
@@ -454,8 +459,10 @@ namespace ConditioningControlPanel.Services
                     }
                     else if (response.StatusCode == (System.Net.HttpStatusCode)429)
                     {
-                        // Rate limited — exponential backoff
-                        _currentPollInterval = Math.Min(_currentPollInterval * 2, MaxBackoffSeconds);
+                        // Rate limited — exponential backoff (from at least the normal 5 s, so
+                        // hot mode's 1 s cadence backs off as hard as the cold one)
+                        _pollBackedOff = true;
+                        _currentPollInterval = Math.Min(Math.Max(_currentPollInterval, PollIntervalSeconds) * 2, MaxBackoffSeconds);
                         if (_pollTimer != null)
                             _pollTimer.Interval = TimeSpan.FromSeconds(_currentPollInterval);
                         var (cap, count) = await Read429CapAsync(response);
@@ -486,17 +493,18 @@ namespace ConditioningControlPanel.Services
                 var result = JObject.Parse(json);
 
                 // Track success — recover from backoff if needed
-                var wasBackedOff = _currentPollInterval > PollIntervalSeconds;
+                var wasBackedOff = _pollBackedOff;
                 var wasFailingConsecutively = _consecutivePollFailures > 0;
                 _consecutivePollSuccesses++;
                 _consecutivePollFailures = 0;
 
                 if (wasBackedOff)
                 {
-                    _currentPollInterval = PollIntervalSeconds;
+                    _pollBackedOff = false;
+                    _currentPollInterval = PollBaseSeconds;
                     if (_pollTimer != null)
-                        _pollTimer.Interval = TimeSpan.FromSeconds(PollIntervalSeconds);
-                    App.Logger?.Information("[RemoteControl] Recovered from backoff, restoring {Interval}s poll interval", PollIntervalSeconds);
+                        _pollTimer.Interval = TimeSpan.FromSeconds(_currentPollInterval);
+                    App.Logger?.Information("[RemoteControl] Recovered from backoff, restoring {Interval}s poll interval", _currentPollInterval);
                 }
                 else if (wasFailingConsecutively && _consecutivePollSuccesses == 1)
                 {
@@ -524,6 +532,8 @@ namespace ConditioningControlPanel.Services
                 var serverConnected = result["controller_connected"]?.Value<bool>() ?? false;
                 var connected = serverConnected;
                 var idle = result["controller_idle"]?.Value<bool>() ?? false;
+                var controllerName = RemoteControllerName.Sanitize(
+                    result["controller_name"]?.Type == JTokenType.String ? result["controller_name"]!.ToString() : null);
 
                 if (connected && _controllerAutoDisconnected)
                 {
@@ -547,6 +557,7 @@ namespace ConditioningControlPanel.Services
                 if (!serverConnected)
                     _controllerAutoDisconnected = false;
 
+                ControllerName = connected ? controllerName : null;
                 var controllerConnectedChanged = connected != ControllerConnected;
                 if (controllerConnectedChanged)
                 {
@@ -649,11 +660,15 @@ namespace ConditioningControlPanel.Services
                 // controller-connected state change; otherwise only every ~15s.
                 // This roughly halves client→server traffic and keeps us well under
                 // the server's per-user 40/min cap on both /poll and /status.
-                var statusDue = (DateTime.UtcNow - _lastStatusPushUtc).TotalSeconds >= StatusPushIntervalSeconds;
-                if (lastCmdId != null || controllerConnectedChanged || statusDue)
+                // v2: a 5 s heartbeat while a controller watches, and a push whenever the live
+                // preview moved (at most once a second).
+                var statusDue = (DateTime.UtcNow - _lastStatusPushUtc).TotalSeconds >= StatusHeartbeatSeconds;
+                var screen = ControllerConnected ? BuildScreenSafe() : null;
+                if (lastCmdId != null || controllerConnectedChanged || statusDue || ScreenWantsPush(screen))
                 {
-                    await SendStatusAsync(lastCmdId, lastAction);
+                    await SendStatusAsync(lastCmdId, lastAction, screen);
                 }
+                ApplyPollCadence();
             }
             catch (TaskCanceledException)
             {
@@ -673,7 +688,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private async Task SendStatusAsync(string? lastCmdId = null, string? lastAction = null)
+        private async Task SendStatusAsync(string? lastCmdId = null, string? lastAction = null, JObject? screen = null)
         {
             // Skip while we're in backoff from a previous 429 on /status.
             if (DateTime.UtcNow < _statusBackoffUntil) return;
@@ -705,6 +720,7 @@ namespace ConditioningControlPanel.Services
                 // Get available sessions and current session progress
                 var availableSessions = GetAvailableSessionsCallback?.Invoke();
                 var sessionInfo = GetSessionProgressCallback?.Invoke();
+                screen ??= BuildScreenSafe();
 
                 var body = JsonConvert.SerializeObject(new
                 {
@@ -716,7 +732,10 @@ namespace ConditioningControlPanel.Services
                     session_info = sessionInfo,
                     // Subject-side opt-in: false by default, governs whether the
                     // server exposes the resolved avatar URL on GET /remote/status.
-                    share_avatar = App.Settings?.Current?.RemoteShareAvatar == true
+                    share_avatar = App.Settings?.Current?.RemoteShareAvatar == true,
+                    // v2: what this desktop understands, and the live preview (brief section 4)
+                    caps = RemoteScreenState.Caps,
+                    screen
                 });
 
                 using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/status", body);
@@ -741,6 +760,7 @@ namespace ConditioningControlPanel.Services
                 else
                 {
                     _lastStatusPushUtc = DateTime.UtcNow;
+                    if (screen != null) _lastPushedScreenKey = RemoteScreenState.ChangeKey(screen);
                 }
             }
             catch (Exception ex)
@@ -1216,7 +1236,10 @@ namespace ConditioningControlPanel.Services
                         case "trigger_custom_subliminal":
                             var customText = parameters?["text"]?.ToString();
                             if (!string.IsNullOrWhiteSpace(customText))
+                            {
+                                NoteControllerWord(customText);
                                 App.Subliminal?.FlashSubliminalCustom(customText);
+                            }
                             break;
 
                         case "show_pink_filter":
