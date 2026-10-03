@@ -630,6 +630,7 @@
   "chaster_added_title": "Добавлено CCP, за всё время",
   "chaster_added_month": "В этом месяце {0}",
   "chaster_added_note": "Только добавленное. Снятое время не считается.",
+  "chaster_ladder_counts_note": "Таблица считает то, что подтвердил Chaster, а не это число. Она догоняет, когда время доходит до замка или открывается эта страница.",
   "chaster_added_hint": "Наведи, чтобы увидеть карточку розыгрыша Locktober. Кликни, чтобы закрепить.",
   "chaster_raffle_title": "Розыгрыш Locktober",
   "chaster_raffle_day": "День {0} из {1}",

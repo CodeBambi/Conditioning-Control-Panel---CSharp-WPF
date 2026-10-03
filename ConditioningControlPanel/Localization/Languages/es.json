@@ -630,6 +630,7 @@
   "chaster_added_title": "Añadido por CCP, en total",
   "chaster_added_month": "Este mes {0}",
   "chaster_added_note": "Solo lo añadido. El tiempo quitado no cuenta.",
+  "chaster_ladder_counts_note": "La clasificación cuenta lo que Chaster confirma, no este número. Se pone al día cuando llega tiempo al candado o abres esta página.",
   "chaster_added_hint": "Pasa el ratón para ver tu tarjeta del sorteo de Locktober. Haz clic para fijarla.",
   "chaster_raffle_title": "Sorteo de Locktober",
   "chaster_raffle_day": "Día {0} de {1}",

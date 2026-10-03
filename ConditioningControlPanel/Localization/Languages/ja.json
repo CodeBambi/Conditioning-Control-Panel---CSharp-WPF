@@ -630,6 +630,7 @@
   "chaster_added_title": "CCPが足した時間、累計",
   "chaster_added_month": "今月 {0}",
   "chaster_added_note": "足した分だけ。引いた時間は数えません。",
+  "chaster_ladder_counts_note": "ランキングはこの数字ではなく、Chasterが確認した分を数えます。時間がロックに届いたときか、このページを開いたときに追いつきます。",
   "chaster_added_hint": "ホバーでLocktober抽選カード。クリックで固定。",
   "chaster_raffle_title": "Locktober抽選",
   "chaster_raffle_day": "{1}日中{0}日目",

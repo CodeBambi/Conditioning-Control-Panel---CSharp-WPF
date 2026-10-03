@@ -635,6 +635,7 @@
   "chaster_added_title": "CCP 累计加时",
   "chaster_added_month": "本月 {0}",
   "chaster_added_note": "只算加上的。减掉的时间不计。",
+  "chaster_ladder_counts_note": "排行榜只算 Chaster 确认过的时间，不是这个数字。时间落到锁上或打开这个页面时，它会跟上。",
   "chaster_added_hint": "悬停查看你的 Locktober 抽奖卡。点击固定。",
   "chaster_raffle_title": "Locktober 抽奖",
   "chaster_raffle_day": "第 {0} 天，共 {1} 天",

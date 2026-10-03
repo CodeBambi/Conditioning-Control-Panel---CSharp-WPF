@@ -768,6 +768,7 @@
   "chaster_added_title": "Added by CCP, all time",
   "chaster_added_month": "This month {0}",
   "chaster_added_note": "Added only. Time taken off is not counted.",
+  "chaster_ladder_counts_note": "The ladder counts what Chaster confirms, not this number. It catches up when time lands on the lock or this page opens.",
   "chaster_added_hint": "Hover for your Locktober raffle card. Click to pin it.",
   "chaster_raffle_title": "Locktober raffle",
   "chaster_raffle_day": "Day {0} of {1}",

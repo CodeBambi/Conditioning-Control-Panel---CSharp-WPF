@@ -630,6 +630,7 @@
   "chaster_added_title": "Ajouté par CCP, depuis le début",
   "chaster_added_month": "Ce mois-ci {0}",
   "chaster_added_note": "Ajouts seulement. Le temps retiré ne compte pas.",
+  "chaster_ladder_counts_note": "Le classement compte ce que Chaster confirme, pas ce chiffre. Il se met à jour quand du temps arrive sur le cadenas ou quand cette page s'ouvre.",
   "chaster_added_hint": "Survole pour voir ta carte de tombola Locktober. Clique pour l'épingler.",
   "chaster_raffle_title": "Tombola Locktober",
   "chaster_raffle_day": "Jour {0} sur {1}",

@@ -630,6 +630,7 @@
   "chaster_added_title": "CCP가 더한 시간, 전체",
   "chaster_added_month": "이번 달 {0}",
   "chaster_added_note": "더한 시간만 들어가요. 뺀 시간은 세지 않아요.",
+  "chaster_ladder_counts_note": "순위표는 이 숫자가 아니라 Chaster가 확인한 시간을 세요. 시간이 자물쇠에 들어가거나 이 페이지를 열 때 따라잡아요.",
   "chaster_added_hint": "마우스를 올리면 Locktober 추첨 카드가 보여요. 클릭하면 고정돼요.",
   "chaster_raffle_title": "Locktober 추첨",
   "chaster_raffle_day": "{1}일 중 {0}일째",
