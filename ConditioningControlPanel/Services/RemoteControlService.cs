@@ -45,7 +45,7 @@ namespace ConditioningControlPanel.Services
         }
     }
 
-    public class RemoteControlService : IDisposable
+    public partial class RemoteControlService : IDisposable
     {
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
         // 5s gives comfortable headroom under the server's 40/min per-user poll cap
