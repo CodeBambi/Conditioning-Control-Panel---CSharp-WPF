@@ -133,7 +133,7 @@ namespace ConditioningControlPanel.Services.Remote
             {
                 var o = new JObject { ["k"] = e.Kind };
                 if (e.Kind == "flash") o["src"] = e.Src == "online" ? "online" : "local";
-                if (e.Kind == "word") o["text"] = e.Text == null ? null : Cut(e.Text, MaxEventText);
+                if (e.Kind == "word") o["text"] = Str(e.Text == null ? null : Cut(e.Text, MaxEventText));
                 o["at"] = e.AtUnixMs;
                 ev.Add(o);
             }
@@ -149,7 +149,7 @@ namespace ConditioningControlPanel.Services.Remote
                 ["haptic"] = new JObject
                 {
                     ["level"] = Math.Clamp(i.HapticLevel, 0, 100),
-                    ["pattern"] = i.HapticPattern,
+                    ["pattern"] = Str(i.HapticPattern),
                     ["loop"] = i.HapticLoop,
                     ["device"] = i.HapticDevice,
                 },
@@ -168,7 +168,7 @@ namespace ConditioningControlPanel.Services.Remote
             // Belt and braces: the only unbounded inputs are capped above, but never ship a
             // screen the server would throw away. Shed the optional words first.
             if (Size(screen) > MaxBytes) ((JObject)screen["media"]!)["online"] = new JArray();
-            if (Size(screen) > MaxBytes) foreach (var o in ev.OfType<JObject>()) if (o["text"] != null) o["text"] = null;
+            if (Size(screen) > MaxBytes) foreach (var o in ev.OfType<JObject>()) if (o["text"] != null) o["text"] = JValue.CreateNull();
             if (Size(screen) > MaxBytes && screen["lock"] is JObject l) l["text"] = "";
             return screen;
         }
@@ -193,6 +193,9 @@ namespace ConditioningControlPanel.Services.Remote
         public static int Strength(int opacity) => Math.Clamp(opacity * 2, 0, 100);
 
         private static string Cut(string s, int max) => s.Length <= max ? s : s.Substring(0, max);
+
+        /// <summary>A real JSON null for a missing string (an implicit null string is a String-typed JValue).</summary>
+        private static JToken Str(string? s) => s == null ? JValue.CreateNull() : new JValue(s);
     }
 
     /// <summary>The controller's typed name: trimmed, letters/digits/space/<c>._-</c> only,
