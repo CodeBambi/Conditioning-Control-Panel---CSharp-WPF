@@ -1139,6 +1139,15 @@ namespace ConditioningControlPanel
             };
             StateChanged += (_, __) => SyncSpeechPopupOpen();
             Closed += (_, __) => RestoreMadeRoom();
+            // A game opening or closing re-decides the bubble too: a line already up when Just Drop
+            // or chess opens hides at once, and a line still running when the game closes returns.
+            Action onGameChanged = () =>
+            {
+                if (Dispatcher.HasShutdownStarted) return;
+                Dispatcher.BeginInvoke(new Action(SyncSpeechPopupOpen));
+            };
+            ChaosWebViewHost.GameActiveChanged += onGameChanged;
+            Closed += (_, __) => ChaosWebViewHost.GameActiveChanged -= onGameChanged;
 
             SpeechBubble.SizeChanged += (_, __) =>
             {
