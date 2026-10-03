@@ -6159,6 +6159,8 @@
   "lockdown_poss_safety_dose": "什么都没开？封锁替你选",
   "lockdown_poss_safety_dose_tip": "封锁不会空转。开始时引擎没开：替你启动。什么功能都没开（或你中途全部关掉）：看守会替你打开功能，每次多一个，计时结束时全部还原。",
   "st4_braindrain_audio_rate": "音频片段频率",
+  "st4_braindrain_volume": "片段音量",
+  "st4_braindrain_volume_hint": "脑力流失片段的播放音量，叠加在主音量之上。其他声音保持不变。",
   "label_braindrain": "脑力流失",
   "tube_midnight_setting": "Midnight Glass",
   "tube_midnight_setting_hint": "A darker pane on her tube. The Prize Counter sells this one.",

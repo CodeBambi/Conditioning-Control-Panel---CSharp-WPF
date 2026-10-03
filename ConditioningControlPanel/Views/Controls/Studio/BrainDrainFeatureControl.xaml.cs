@@ -95,6 +95,8 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 ChkEnable.IsChecked = s.BrainDrainEnabled;
                 SliderIntensity.Value = s.BrainDrainIntensity;
                 TxtIntensity.Text = $"{s.BrainDrainIntensity}%";
+                SliderVolume.Value = s.BrainDrainVolume;
+                TxtVolume.Text = $"{s.BrainDrainVolume}%";
                 ChkHighRefresh.IsChecked = s.BrainDrainHighRefresh;
                 SliderBlurStrength.Value = s.BrainDrainBlurStrength;
                 TxtBlurStrength.Text = $"{s.BrainDrainBlurStrength}%";
@@ -205,6 +207,7 @@ namespace ConditioningControlPanel.Views.Controls.Studio
         {
             if (e.PropertyName == nameof(Models.AppSettings.BrainDrainEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainIntensity) ||
+                e.PropertyName == nameof(Models.AppSettings.BrainDrainVolume) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainHighRefresh) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainBlurStrength) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainMeltEnabled) ||
@@ -254,6 +257,26 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 try { App.BrainDrain?.UpdateSettings(); }
                 catch (Exception ex) { App.Logger?.Warning(ex, "Brain Drain UpdateSettings failed"); }
             }
+
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// AUDIO half: Brain Drain's own clip volume (BrainDrainVolume, ccp-bugs #1104), applied
+        /// to a clip that is already playing as well as the next one.
+        /// </summary>
+        private void SliderVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            var v = (int)e.NewValue;
+            TxtVolume.Text = $"{v}%";
+            s.BrainDrainVolume = v;
+
+            try { App.BrainDrain?.RefreshVolume(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Brain Drain volume refresh failed"); }
 
             App.Settings?.Save();
         }
