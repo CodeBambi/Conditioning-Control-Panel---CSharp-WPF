@@ -2973,7 +2973,8 @@ namespace ConditioningControlPanel.Models
         public static int ClampMercyAfterFails(int value) =>
             Math.Clamp(value, MercyAfterFailsMin, MercyAfterFailsMax);
 
-        private int _mercyAfterFails = 3;
+        public const int MercyAfterFailsDefault = 3;
+        private int _mercyAfterFails = MercyAfterFailsDefault;
         /// <summary>
         /// Strict Bubble Count and strict mandatory videos let the user go after this many wrong
         /// tries when <see cref="MercySystemEnabled"/> is on. Clamped 2..10, default 3 (ccp-bugs #1145).

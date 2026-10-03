@@ -68,6 +68,7 @@ namespace ConditioningControlPanel.Features
                 UpdateRepeatRowVisibility();
                 ChkStrict.IsChecked = s.LockCardStrict;
                 ChkResetOnTypo.IsChecked = s.LockCardResetOnTypo;
+                if (s.LockCardResetOnTypo) FoldMore.IsOpen = true; // never hide a changed setting
                 ChkVoiceMode.IsChecked = s.LockCardVoiceMode && s.MicConsentGiven;
                 UpdateVoiceHint();
             }

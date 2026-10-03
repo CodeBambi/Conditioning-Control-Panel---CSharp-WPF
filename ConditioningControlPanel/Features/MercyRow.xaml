@@ -3,9 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
 
-    <!-- ccp-bugs #1145. One row shared by the Bubble Count and Video panels: both edit the same
-         MercySystemEnabled / MercyAfterFails settings, so each copy follows the other through
-         PropertyChanged. The picker only shows while Mercy is on. -->
+    <!-- ccp-bugs #1145. Mercy for mandatory videos AND Bubble Count (one MercySystemEnabled /
+         MercyAfterFails pair). Shown once, in the Video panel's "More options" fold; it follows
+         the settings through PropertyChanged. The picker only shows while Mercy is on. -->
     <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_mercy}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>

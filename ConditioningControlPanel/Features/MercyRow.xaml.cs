@@ -8,9 +8,10 @@ using ConditioningControlPanel.Models;
 namespace ConditioningControlPanel.Features
 {
     /// <summary>
-    /// Mercy on/off plus "after N fails" (2..10). ccp-bugs #1145. Lives in both the Bubble Count
-    /// and the Video panels; the host calls <see cref="Rebind"/> from its own RebindToCurrentSettings
-    /// so a cloud restore that swaps the settings instance is followed here too.
+    /// Mercy on/off plus "after N fails" (2..10). ccp-bugs #1145. Covers both the mandatory video
+    /// and Bubble Count; it sits once, in the Video panel's "More options" fold. The host calls
+    /// <see cref="Rebind"/> from its own RebindToCurrentSettings so a cloud restore that swaps the
+    /// settings instance is followed here too.
     /// </summary>
     public partial class MercyRow : UserControl
     {

@@ -71,6 +71,12 @@ namespace ConditioningControlPanel.Features
                 TxtTargetSize.Text = s.AttentionSize.ToString();
                 ChkVideoGazeClick.IsChecked = s.VideoGazeClickEnabled;
                 PopulateMonitors();
+                // The fold opens on its own when a row inside is off its default, so a setting
+                // someone changed is never hidden from them. It never closes itself.
+                if (s.VideoTargetMonitor != App.MonitorTargetFollowGlobal
+                    || !s.MercySystemEnabled
+                    || s.MercyAfterFails != Models.AppSettings.MercyAfterFailsDefault)
+                    FoldMore.IsOpen = true;
             }
             finally { _isLoading = false; }
         }
