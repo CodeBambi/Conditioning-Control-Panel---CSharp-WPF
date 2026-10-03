@@ -1290,7 +1290,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null && parameters != null)
                             {
                                 var pinkVal = parameters["value"]?.Value<int>() ?? 25;
-                                App.Settings.Current.PinkFilterOpacity = Math.Clamp(pinkVal, 0, 50);
+                                App.Settings.Current.PinkFilterOpacity = _easedPink.Ask(pinkVal, 50, EasyFactor);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -1301,7 +1301,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null && parameters != null)
                             {
                                 var spiralVal = parameters["value"]?.Value<int>() ?? 25;
-                                App.Settings.Current.SpiralOpacity = Math.Clamp(spiralVal, 0, 100);
+                                App.Settings.Current.SpiralOpacity = _easedSpiral.Ask(spiralVal, 100, EasyFactor);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();

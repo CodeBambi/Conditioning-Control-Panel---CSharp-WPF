@@ -47,6 +47,12 @@ namespace ConditioningControlPanel.Services.Remote
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>The Easy factor moved: replay what plays at the new strength, from its top.</summary>
+        public void Rescale()
+        {
+            if (_player.Plan is { } plan) Play(plan);
+        }
+
         /// <summary>Every controller command counts as activity for the loop idle cap.</summary>
         public void NoteCommand() => _player.NoteCommand(Now);
 

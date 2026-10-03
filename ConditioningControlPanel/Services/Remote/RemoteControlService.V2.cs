@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Services.Remote;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services
@@ -40,9 +42,79 @@ namespace ConditioningControlPanel.Services
         /// The subject's own button: "more", "easy" or "stop". Sends the signal up the emote
         /// channel; Easy and Stop also act locally. Returns true when the signal reached the server.
         /// </summary>
-        public Task<bool> SendSignalAsync(string kind)
+        public async Task<bool> SendSignalAsync(string kind)
         {
-            return Task.FromResult(false);
+            kind = (kind ?? "").Trim().ToLowerInvariant();
+            if (Array.IndexOf(SignalKinds, kind) < 0 || !IsActive) return false;
+
+            // The button acts here first: Easy and Stop mean something even if the network
+            // never answers. The controller stays connected either way.
+            if (kind == "easy") DispatcherHelper.RunOnUISync(ApplyEasy);
+            else if (kind == "stop") DispatcherHelper.RunOnUISync(() => StopAllRemoteEffects(force: true));
+
+            var unifiedId = App.UnifiedUserId;
+            if (string.IsNullOrEmpty(unifiedId)) return false;
+            try
+            {
+                // Same door as an emote (same auth, same rate limit); no debounce, so a Stop
+                // right after an emote is never swallowed.
+                var body = JsonConvert.SerializeObject(new { unified_id = unifiedId, text = kind, icon = "", kind = "signal" });
+                using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/emote", body);
+                if (response.IsSuccessStatusCode)
+                {
+                    App.Logger?.Information("[RemoteControl] Signal sent: {Kind}", kind);
+                    return true;
+                }
+                App.Logger?.Warning("[RemoteControl] Signal {Kind} not sent: {Status}", kind, response.StatusCode);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[RemoteControl] Signal {Kind} failed", kind);
+                return false;
+            }
+        }
+
+        // ------------------------------------------------------------------ Easy
+
+        private readonly EasedOpacity _easedSpiral = new();
+        private readonly EasedOpacity _easedPink = new();
+
+        /// <summary>Halves the remote's strength for the rest of the session (floor 0.25): the
+        /// haptic replays at the new level, a controller-set (or showing) spiral and pink fade.</summary>
+        private void ApplyEasy()
+        {
+            var next = RemoteEasy.Next(EasyFactor);
+            if (next == EasyFactor) return;
+            EasyFactor = next;
+            App.Logger?.Information("[RemoteControl] Easy: remote strength now x{Factor}", next);
+
+            var s = App.Settings?.Current;
+            if (s != null)
+            {
+                var changed = false;
+                if (_easedSpiral.Rescale(s.SpiralOpacity, s.SpiralEnabled, next) is int sv) { s.SpiralOpacity = sv; changed = true; }
+                if (_easedPink.Rescale(s.PinkFilterOpacity, s.PinkFilterEnabled, next) is int pv) { s.PinkFilterOpacity = pv; changed = true; }
+                if (changed)
+                {
+                    App.Overlay?.RefreshOverlays();
+                    App.Settings!.Save();
+                }
+            }
+            _remoteHaptics?.Rescale();
+            EasyChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>Session end: where Easy faded the subject's own opacity, hand it back.</summary>
+        private void RestoreEasedOpacities()
+        {
+            var s = App.Settings?.Current;
+            var changed = false;
+            if (s != null && _easedSpiral.SubjectOriginal is int so) { s.SpiralOpacity = so; changed = true; }
+            if (s != null && _easedPink.SubjectOriginal is int po) { s.PinkFilterOpacity = po; changed = true; }
+            _easedSpiral.Reset();
+            _easedPink.Reset();
+            if (changed) App.Settings!.Save();
         }
 
         // ------------------------------------------------------------------ remote haptics
@@ -127,6 +199,7 @@ namespace ConditioningControlPanel.Services
         private void ResetV2SessionState()
         {
             _remoteTurnedOnBrainDrain = false;
+            RestoreEasedOpacities();
             ControllerName = null;
             ControllerConnectedSinceUtc = null;
             if (LastActionLabel != null)
