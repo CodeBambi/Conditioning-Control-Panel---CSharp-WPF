@@ -493,6 +493,13 @@ export function createHud(opts = {}) {
   follow?.addEventListener('change', followChange);
   replays?.addEventListener('change', replaysChange);
   undom.push(() => { follow?.removeEventListener('change', followChange); replays?.removeEventListener('change', replaysChange); });
+  const invertX = pick('game-invert-x');
+  const invertY = pick('game-invert-y');
+  const invertXChange = () => setPresentation({ invertX: invertX.checked });
+  const invertYChange = () => setPresentation({ invertY: invertY.checked });
+  invertX?.addEventListener('change', invertXChange);
+  invertY?.addEventListener('change', invertYChange);
+  undom.push(() => { invertX?.removeEventListener('change', invertXChange); invertY?.removeEventListener('change', invertYChange); });
   for (const button of root.querySelectorAll('[data-turncard]')) click(button, () => setPresentation({ turnCard: button.dataset.turncard }));
   for (const button of root.querySelectorAll('[data-amount]')) click(button, () => setPresentation({ amount: button.dataset.amount }));
   for (const button of root.querySelectorAll('[data-ramp]')) click(button, () => setPresentation({ rampSpeed: button.dataset.ramp }));
@@ -531,6 +538,8 @@ export function createHud(opts = {}) {
     // Reduced motion keeps the camera at the seat and drops the replay; the boxes say so.
     if (follow) { follow.checked = p.followCam && !p.reducedMotion; follow.disabled = p.reducedMotion; }
     if (replays) { replays.checked = p.replays && !p.reducedMotion; replays.disabled = p.reducedMotion; }
+    if (invertX) invertX.checked = p.invertX;
+    if (invertY) invertY.checked = p.invertY;
     for (const button of root.querySelectorAll('[data-turncard]')) button.setAttribute('aria-pressed', String(button.dataset.turncard === p.turnCard));
     const dials = pick('game-dials');
     if (dials) dials.hidden = p.experience !== 'distraction';

@@ -25,6 +25,7 @@
 
 import * as THREE from 'three';
 import { fitScaleFor } from './frame.js';
+import { invertDrag } from '../game/preferences.js';
 
 const DEG = Math.PI / 180;
 
@@ -163,6 +164,9 @@ export function createCameraRig({ camera, canvas, isDragging = null }) {
   }
 
   function orbitBy(dx, dy, dt) {
+    // Invert left/right and up/down (Options > Camera). Mouse and one-finger
+    // touch orbit both come through here; the flick's coast inherits the flip.
+    [dx, dy] = invertDrag(dx, dy);
     theta -= dx * T.orbitSpeed;
     phi = clamp(phi + dy * T.orbitSpeed, T.phiMin, T.phiMax);
     if (dt > 0) {
