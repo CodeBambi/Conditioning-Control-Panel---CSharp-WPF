@@ -81,6 +81,7 @@ public sealed partial class ChasterService
             // The picked lock and nothing else: one lock is still the player's to pick.
             var pick = string.IsNullOrEmpty(chosenId) ? null : locks.FirstOrDefault(l => l.Id == chosenId);
             if (pick == null) return SetLock(null, locks.Count == 0 ? LockLookup.None : LockLookup.Ambiguous);
+            NoteAddPermission(pick.Id, pick.WearerMayAddTime);
             var ends = pick.EndDate is { } end ? (end.Kind == DateTimeKind.Utc ? end : end.ToUniversalTime()) : (DateTime?)null;
             var started = pick.StartDate is { } from ? (from.Kind == DateTimeKind.Utc ? from : from.ToUniversalTime()) : (DateTime?)null;
             return SetLock(new LockSnapshot(pick.Id, pick.Title, ends, pick.IsFrozen, pick.TimerHidden, pick.IsTestLock, _utcNow()) { StartedAtUtc = started }, LockLookup.Chosen);
@@ -90,6 +91,36 @@ public sealed partial class ChasterService
             Diag.Swallowed(ex, "chaster lock refresh");
             return Lock;
         }
+    }
+
+    /// <summary>The lock id whose keyholder does not let the wearer add time, learned from the
+    /// lock's own permissions or from a 403 on the add. Forgotten on any link change, and when a
+    /// read of that lock says adding is allowed again.</summary>
+    private volatile string? _addsRefusedLockId;
+
+    /// <summary>The chosen lock does not take time from this wearer: whatever the tab holds waits
+    /// on the tab. Not an outage and not a dead link; the page says so in its own words.</summary>
+    public bool AddsBlocked => IsLinked && AddsBlockedFor((_options() ?? ChasterOptions.Off).LockId);
+
+    private bool AddsBlockedFor(string? lockId) =>
+        !string.IsNullOrEmpty(lockId) && string.Equals(_addsRefusedLockId, lockId, StringComparison.Ordinal);
+
+    /// <summary>Remember what Chaster said about the wearer adding time to <paramref name="lockId"/>.
+    /// False marks it blocked; true clears a block on that lock; null (not said) changes nothing,
+    /// so a 403 stays remembered until a read says otherwise.</summary>
+    private void NoteAddPermission(string lockId, bool? mayAdd)
+    {
+        bool changed;
+        lock (_gate)
+        {
+            var before = AddsBlockedFor(lockId);
+            if (mayAdd == false) _addsRefusedLockId = lockId;
+            else if (mayAdd == true && before) _addsRefusedLockId = null;
+            changed = before != AddsBlockedFor(lockId);
+        }
+        if (!changed) return;
+        App.Logger?.Information("[Chaster] the chosen lock {State} the wearer adding time", mayAdd == false ? "refuses" : "allows");
+        try { LockChanged?.Invoke(); } catch (Exception ex) { Diag.Swallowed(ex, "chaster lock changed listener"); }
     }
 
     private LockSnapshot? SetLock(LockSnapshot? snapshot, LockLookup lookup)

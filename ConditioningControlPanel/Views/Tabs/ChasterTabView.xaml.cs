@@ -267,7 +267,7 @@ namespace ConditioningControlPanel.Views.Tabs
             var chaster = App.Chaster;
             var key = TabPageText.SetupHint(chaster?.IsLinked == true,
                 chaster?.LockLookup ?? LockLookup.Unlinked, chaster?.Lock != null,
-                App.Settings?.Current?.ChasterTabEnabled == true);
+                App.Settings?.Current?.ChasterTabEnabled == true, chaster?.AddsBlocked == true);
             SetupHint.Text = key == null ? "" : Loc.Get(key);
             SetupHint.Visibility = key == null ? Visibility.Collapsed : Visibility.Visible;
         }
@@ -381,6 +381,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 case "chaster_state_pick": HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_pick"), AmberColour, "chaster_state_pick")); break;
                 case "chaster_state_away": HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_away"), AmberColour, "chaster_state_away")); break;
             }
+            if (lookup == LockLookup.Chosen && App.Chaster?.AddsBlocked == true)
+                HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_blocked"), AmberColour, "chaster_state_keyholder_blocked"));
             if (snapshot?.IsTestLock == true && state != "chaster_state_test")
                 HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_test"), MutedColour));
             else if (state == "chaster_state_test")
@@ -421,7 +423,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 : balance < 0 ? Frozen(Color.FromRgb(0x1E, 0x8A, 0x6E)) : Frozen(Color.FromRgb(0x24, 0x1A, 0x2E));
             var chaster = App.Chaster;
             var line = TabPageText.Tag(balance, chaster?.PushableTodaySeconds ?? 0, chaster?.IsPaused == true,
-                !string.IsNullOrEmpty(App.Settings?.Current?.ChasterLockId) && chaster?.LockLookup != LockLookup.Ambiguous);
+                !string.IsNullOrEmpty(App.Settings?.Current?.ChasterLockId) && chaster?.LockLookup != LockLookup.Ambiguous,
+                chaster?.AddsBlocked == true);
             TxtTagLands.Text = line.Today == null ? Loc.Get(line.Key) : Loc.GetF(line.Key, line.Today, line.Later!);
             TxtTagStamp.Text = Loc.Get(balance > 0 ? "chaster_tag_unpaid" : balance < 0 ? "chaster_tag_credit" : "chaster_tag_clear");
             var stampColour = balance > 0 ? Color.FromRgb(0xC8, 0x24, 0x4A) : balance < 0 ? Color.FromRgb(0x1E, 0x8A, 0x6E) : Color.FromRgb(0x6E, 0x66, 0x86);
