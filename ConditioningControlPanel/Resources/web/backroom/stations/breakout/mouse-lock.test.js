@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createMouseLock, lockedSteer, readEnabled, clampStep, lockedMovement, LOCK_MAX_STEP, LOCK_REFUSALS, LOCK_COOLDOWN_MS, STORE_KEY } from './mouse-lock.js';
@@ -184,4 +185,32 @@ test('a lock just taken drops its first move (the cursor jump), then steers ever
   doc.fire('pointerlockchange');                     // a repeat change while still locked is not a new lock
   assert.equal(lock.movement(moveEvent(-15)), -15);
   lock.dispose();
+});
+
+test('a press under the lock never throws out of capture (tester report 2026-09-28: a click on wall 8 did not launch)', () => {
+  // Chromium throws InvalidStateError from setPointerCapture while the document holds a pointer lock.
+  const doc = fakeDoc(), canvas = fakeCanvas(doc);
+  canvas.captured = [];
+  canvas.setPointerCapture = (id) => {
+    if (doc.pointerLockElement) { const e = new Error('InvalidStateError'); e.name = 'InvalidStateError'; throw e; }
+    canvas.captured.push(id);
+  };
+  const lock = createMouseLock({ canvas, doc, now: () => 0 });
+  assert.equal(lock.capture({ pointerId: 1 }), true, 'unlocked: the press is captured');
+  lock.request({ pointerType: 'mouse' });
+  assert.equal(lock.locked, true);
+  assert.doesNotThrow(() => lock.capture({ pointerId: 2 }));
+  assert.equal(lock.capture({ pointerId: 3 }), false, 'locked: no capture, and no throw');
+  assert.deepEqual(canvas.captured, [1]);
+  canvas.setPointerCapture = () => { throw new Error('NotFoundError'); };
+  doc.pointerLockElement = null; doc.fire('pointerlockchange');
+  assert.equal(lock.capture({ pointerId: 4 }), false, 'any other refusal is swallowed too');
+  lock.dispose();
+});
+
+test('the station never calls a bare setPointerCapture on its canvas', () => {
+  const src = readFileSync(new URL('./station.js', import.meta.url), 'utf8');
+  const calls = src.split(/\r?\n/).filter(line => line.includes('setPointerCapture('));
+  for (const line of calls) assert.ok(line.includes('try'), 'unguarded capture: ' + line.trim());
+  assert.match(src, /mouseLock\.capture\(e\)/);
 });

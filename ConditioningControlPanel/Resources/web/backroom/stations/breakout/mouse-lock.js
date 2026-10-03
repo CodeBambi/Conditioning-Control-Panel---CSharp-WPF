@@ -88,6 +88,16 @@ export function createMouseLock({ canvas, doc, now = () => (globalThis.performan
         return true;
       } catch (err) { failed(); return false; }
     },
+    /**
+     * Pointer capture for a press, safe under the lock. Chromium (and WebView2) THROWS InvalidStateError from
+     * setPointerCapture while the document holds a pointer lock, and an unguarded call there ended the press handler
+     * before it could launch: every click after the first one that took the mouse did nothing, which only showed where
+     * there is no auto launch (the wall 8 finale, tester report 2026-09-28). A locked pointer needs no capture anyway.
+     */
+    capture(e) {
+      if (!canvas || typeof canvas.setPointerCapture !== 'function' || (doc && doc.pointerLockElement === canvas)) return false;
+      try { canvas.setPointerCapture(e.pointerId); return true; } catch (err) { return false; }
+    },
     /** Lets the mouse go on purpose: the change it causes is meant, not lost, so `onLost` stays quiet. */
     release() {
       if (!doc || doc.pointerLockElement !== canvas) return;
