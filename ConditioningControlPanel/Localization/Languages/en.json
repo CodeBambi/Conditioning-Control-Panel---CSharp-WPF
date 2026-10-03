@@ -2142,6 +2142,8 @@
   "setting_lock_card_length_variance": "Variance",
   "tooltip_lock_card_length_variance": "How far above or below the target a card is allowed to land.",
   "setting_strict_lock": "Strict Lock",
+  "setting_lockcard_reset_on_typo": "Reset on typo",
+  "tooltip_lockcard_reset_on_typo": "One mistake wipes the line. Start that repeat over.",
   "tooltip_prevent_esc_key_from_closing_the_lock_card": "Prevent ESC key from closing the lock card",
   "tooltip_cannot_escape_must_complete_typing": "⚠ This one will not close until you type it.",
   "btn_manage_phrases": "📝 Manage Phrases",

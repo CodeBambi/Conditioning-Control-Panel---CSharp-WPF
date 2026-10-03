@@ -1306,6 +1306,8 @@
   "setting_lock_card_length_variance": "Variation",
   "tooltip_lock_card_length_variance": "De combien une carte peut dépasser la cible ou rester en dessous.",
   "setting_strict_lock": "Verrouillage Strict",
+  "setting_lockcard_reset_on_typo": "Effacer à la faute",
+  "tooltip_lockcard_reset_on_typo": "Une faute efface la ligne. Recommence cette répétition.",
   "tooltip_prevent_esc_key_from_closing_the_lock_card": "Empêcher la touche Échap de fermer la carte de verrouillage",
   "tooltip_cannot_escape_must_complete_typing": "⚠ Ça ne se ferme pas tant que tu ne l'as pas tapé.",
   "btn_manage_phrases": "📝 Gérer les Phrases",

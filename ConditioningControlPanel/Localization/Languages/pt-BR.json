@@ -1306,6 +1306,8 @@
   "setting_lock_card_length_variance": "Variação",
   "tooltip_lock_card_length_variance": "O quanto uma carta pode ficar acima ou abaixo do alvo.",
   "setting_strict_lock": "Bloqueio Rigoroso",
+  "setting_lockcard_reset_on_typo": "Zerar ao errar",
+  "tooltip_lockcard_reset_on_typo": "Um erro apaga a linha. Comece essa repetição de novo.",
   "tooltip_prevent_esc_key_from_closing_the_lock_card": "Impedir que a tecla ESC feche o cartão de bloqueio",
   "tooltip_cannot_escape_must_complete_typing": "⚠ Isso não fecha até você digitar.",
   "btn_manage_phrases": "📝 Gerenciar Frases",

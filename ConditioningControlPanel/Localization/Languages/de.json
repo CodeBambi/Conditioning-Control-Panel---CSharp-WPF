@@ -1306,6 +1306,8 @@
   "setting_lock_card_length_variance": "Abweichung",
   "tooltip_lock_card_length_variance": "Wie weit eine Karte über oder unter dem Ziel liegen darf.",
   "setting_strict_lock": "Strenge Sperre",
+  "setting_lockcard_reset_on_typo": "Bei Tippfehler neu",
+  "tooltip_lockcard_reset_on_typo": "Ein Fehler löscht die Zeile. Diese Wiederholung beginnt von vorn.",
   "tooltip_prevent_esc_key_from_closing_the_lock_card": "ESC-Taste am Schließen der Sperrkarte hindern",
   "tooltip_cannot_escape_must_complete_typing": "⚠ Das hier schließt sich erst, wenn du es tippst.",
   "btn_manage_phrases": "📝 Phrasen verwalten",

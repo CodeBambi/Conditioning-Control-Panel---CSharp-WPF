@@ -4584,6 +4584,18 @@ namespace ConditioningControlPanel.Models
             set { _lockCardStrict = value; OnPropertyChanged(); }
         }
 
+        private bool _lockCardResetOnTypo = false;
+        /// <summary>
+        /// When true, a typo on a lock card wipes the line and the user types that repeat again
+        /// from the start (ccp-bugs #1163). Off by default. Voice solving never types, so it is
+        /// unaffected; Win+H dictation into the box is judged like any other typing.
+        /// </summary>
+        public bool LockCardResetOnTypo
+        {
+            get => _lockCardResetOnTypo;
+            set { _lockCardResetOnTypo = value; OnPropertyChanged(); }
+        }
+
         private bool _lockCardVoiceMode = false; // Solve by speaking the phrase (offline mic) instead of typing
         /// <summary>
         /// When true, lock cards are solved by saying the phrase out loud (offline Vosk mic) rather

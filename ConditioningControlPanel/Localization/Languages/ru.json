@@ -1306,6 +1306,8 @@
   "setting_lock_card_length_variance": "Разброс",
   "tooltip_lock_card_length_variance": "Насколько карточка может оказаться выше или ниже цели.",
   "setting_strict_lock": "Строгий замок",
+  "setting_lockcard_reset_on_typo": "Сброс при опечатке",
+  "tooltip_lockcard_reset_on_typo": "Одна ошибка стирает строку. Этот повтор начинается заново.",
   "tooltip_prevent_esc_key_from_closing_the_lock_card": "Запретить закрытие карточки-замка клавишей ESC",
   "tooltip_cannot_escape_must_complete_typing": "⚠ Это не закроется, пока не наберёте текст.",
   "btn_manage_phrases": "📝 Управление фразами",

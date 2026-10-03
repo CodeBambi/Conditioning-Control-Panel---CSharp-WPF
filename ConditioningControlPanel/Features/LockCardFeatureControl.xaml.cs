@@ -67,6 +67,7 @@ namespace ConditioningControlPanel.Features
                 TxtTargetVariance.Text = $"\u00B1{s.LockCardTargetLengthVariance}";
                 UpdateRepeatRowVisibility();
                 ChkStrict.IsChecked = s.LockCardStrict;
+                ChkResetOnTypo.IsChecked = s.LockCardResetOnTypo;
                 ChkVoiceMode.IsChecked = s.LockCardVoiceMode && s.MicConsentGiven;
                 UpdateVoiceHint();
             }
@@ -84,6 +85,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.LockCardTargetLength) ||
                 e.PropertyName == nameof(Models.AppSettings.LockCardTargetLengthVariance) ||
                 e.PropertyName == nameof(Models.AppSettings.LockCardStrict) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardResetOnTypo) ||
                 e.PropertyName == nameof(Models.AppSettings.LockCardVoiceMode))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
@@ -232,6 +234,15 @@ namespace ConditioningControlPanel.Features
             }
 
             s.LockCardStrict = on;
+            App.Settings?.Save();
+        }
+
+        private void ChkResetOnTypo_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.LockCardResetOnTypo = ChkResetOnTypo.IsChecked ?? false;
             App.Settings?.Save();
         }
 

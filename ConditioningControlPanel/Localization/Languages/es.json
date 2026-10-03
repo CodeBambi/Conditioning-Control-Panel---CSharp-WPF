@@ -1306,6 +1306,8 @@
   "setting_lock_card_length_variance": "Variación",
   "tooltip_lock_card_length_variance": "Cuánto puede quedar una tarjeta por encima o por debajo del objetivo.",
   "setting_strict_lock": "Bloqueo Estricto",
+  "setting_lockcard_reset_on_typo": "Reiniciar al fallar",
+  "tooltip_lockcard_reset_on_typo": "Un error borra la línea. Empieza esa repetición de nuevo.",
   "tooltip_prevent_esc_key_from_closing_the_lock_card": "Evitar que la tecla ESC cierre la tarjeta de bloqueo",
   "tooltip_cannot_escape_must_complete_typing": "⚠ Esto no se cierra hasta que lo escribas.",
   "btn_manage_phrases": "📝 Gestionar Frases",

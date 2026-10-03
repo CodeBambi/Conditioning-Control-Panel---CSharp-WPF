@@ -1922,6 +1922,8 @@
   "setting_lock_card_length_variance": "浮动范围",
   "tooltip_lock_card_length_variance": "卡片允许高于或低于目标多少。",
   "setting_strict_lock": "严格锁定",
+  "setting_lockcard_reset_on_typo": "打错即重来",
+  "tooltip_lockcard_reset_on_typo": "错一个字就清空整行，这一遍从头再来。",
   "tooltip_prevent_esc_key_from_closing_the_lock_card": "阻止ESC键关闭锁定卡片",
   "tooltip_cannot_escape_must_complete_typing": "⚠ 这个要打出来才会关掉。",
   "btn_manage_phrases": "📝 管理短语",

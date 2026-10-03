@@ -208,6 +208,19 @@
                                               Checked="ChkStrict_Changed" Unchecked="ChkStrict_Changed"/>
                                 </Grid>
 
+                                <!-- Reset on typo (ccp-bugs #1163): a mistake wipes the line. -->
+                                <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_lockcard_reset_on_typo}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_lockcard_reset_on_typo}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkResetOnTypo"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkResetOnTypo_Changed" Unchecked="ChkResetOnTypo_Changed"/>
+                                </Grid>
+
                                 <!-- Solve by voice. TxtVoiceHint stays VISIBLE, not a ToolTip: code-behind
                                      repaints it with "no microphone detected" / "speech model not installed",
                                      which is the difference between the switch working and silently not. -->
