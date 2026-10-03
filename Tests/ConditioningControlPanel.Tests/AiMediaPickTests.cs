@@ -62,4 +62,25 @@ public class AiMediaPickTests
     [Fact]
     public void A_named_audio_that_does_not_resolve_keeps_its_random_fallback()
         => Assert.Equal(Pick.Random, MediaCommand.Decide(new Media("t", "nope.mp3"), AICommandType.audio, false));
+
+    static readonly System.Collections.Generic.Dictionary<string, string> Pool = new()
+    {
+        ["Sissy Dreams 3"] = "https://hypnotube.com/video/sissy-dreams-3-113979.html",
+        ["Bambi Bae"] = "https://hypnotube.com/video/bambi-bae-113980.html",
+    };
+
+    [Theory]
+    [InlineData("Sissy Dreams 3", "", "sissy-dreams-3-113979")]
+    [InlineData("sissy dreams 3", "", "sissy-dreams-3-113979")]   // case
+    [InlineData("", "Bambi Bae", "bambi-bae-113980")]            // the name arrives as Path
+    public void A_pool_title_resolves_to_its_hypnotube_link(string title, string path, string expect)
+        => Assert.Contains(expect, MediaCommand.PoolLinkOf(new Media(title, path), Pool));
+
+    [Fact]
+    public void A_title_outside_the_pool_resolves_to_nothing()
+        => Assert.Null(MediaCommand.PoolLinkOf(new Media("Totally unrelated thing", ""), Pool));
+
+    [Fact]
+    public void An_empty_pool_resolves_to_nothing()
+        => Assert.Null(MediaCommand.PoolLinkOf(new Media("Bambi Bae", ""), null));
 }

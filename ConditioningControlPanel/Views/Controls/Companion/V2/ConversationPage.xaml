@@ -160,6 +160,7 @@
         <Button Content="{loc:Str companion_v2_who}" Tag="who" Click="Sheet_Click"/>
         <Button Content="{loc:Str companion_v2_memory}" Tag="memory" Click="Sheet_Click"/>
         <Button Content="{loc:Str companion_v2_allowed}" Tag="permissions" Click="Sheet_Click"/>
+        <Button Content="{loc:Str companion_v2_videos}" Tag="videos" Click="Sheet_Click"/>
         <Button Content="{loc:Str companion_v2_connection}" Tag="connection" Click="Sheet_Click"/>
        </WrapPanel>
        <WrapPanel Margin="0,4,0,10">
