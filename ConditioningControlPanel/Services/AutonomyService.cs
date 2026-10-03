@@ -2025,9 +2025,13 @@ namespace ConditioningControlPanel.Services
                 // A beat longer than the old 8s so it's easier to get the whole phrase out in time.
                 var listenWindow = TimeSpan.FromSeconds(10);
 
+                // Show the "listening" cue while the mic is open (ccp-bugs #841): without it the
+                // player cannot tell when to start saying the phrase.
+                ShowListeningCue(phrase);
                 var result = await App.Speech!.RecognizePhraseAsync(
                     phrase, new Services.Speech.RecognizeOptions { Timeout = listenWindow })
                     .ConfigureAwait(false);
+                HideListeningCue();
 
                 // One gentle retry on ANY non-match — too quiet, misheard, or nothing said — as long as
                 // the engine is still available. Makes it much easier to land the phrase; only a clean
@@ -2043,9 +2047,11 @@ namespace ConditioningControlPanel.Services
                     await Task.Delay(900).ConfigureAwait(false);
                     for (int i = 0; i < 40 && (App.AvatarWindow?.IsSpeaking ?? false); i++)
                         await Task.Delay(75).ConfigureAwait(false);
+                    ShowListeningCue(phrase);
                     result = await App.Speech!.RecognizePhraseAsync(
                         phrase, new Services.Speech.RecognizeOptions { Timeout = listenWindow })
                         .ConfigureAwait(false);
+                    HideListeningCue();
                 }
 
                 if (result.Unavailable)
@@ -2090,7 +2096,24 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
+                HideListeningCue();
                 App.Logger?.Warning("AutonomyService: SpokenMantra failed: {Error}", ex.Message);
+            }
+
+            // The tube's dots bubble, marshalled like the voice command listen window does it.
+            // Hide no-ops once a real bubble (the retry or praise line) has taken over.
+            void ShowListeningCue(string text)
+            {
+                if (Application.Current?.Dispatcher != null)
+                    _ = Application.Current.Dispatcher.InvokeAsync(() =>
+                        { try { App.AvatarWindow?.ShowListeningBubble(text); } catch { } });
+            }
+
+            void HideListeningCue()
+            {
+                if (Application.Current?.Dispatcher != null)
+                    _ = Application.Current.Dispatcher.InvokeAsync(() =>
+                        { try { App.AvatarWindow?.HideListeningBubble(); } catch { } });
             }
 
             // Play a shared retry/timeout line (voiced if it ships audio), else fall back to plain text.
