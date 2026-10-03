@@ -117,6 +117,19 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkRemoteShareAvatar_Changed(sender, e);
         }
+        /// <summary>Remote Control v2: whether the controller's preview names the Scrolller niches.
+        /// Takes effect on the next status push, which goes out at once.</summary>
+        private void ChkRemoteShareMediaSources_Changed(object sender, RoutedEventArgs e)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var on = (sender as CheckBox)?.IsChecked ?? false;
+            if (s.RemoteShareMediaSources == on) return; // programmatic load echo
+            s.RemoteShareMediaSources = on;
+            App.Settings!.Save();
+            _ = App.RemoteControl?.PushStatusNowAsync();
+        }
+
         private void ChkStopEffectsOnRemoteDisconnect_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

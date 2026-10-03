@@ -1291,6 +1291,8 @@
   "desc_remote_stop_on_disconnect": "默认关闭：控制者离开后效果继续运行，新控制者可查看当前状态。开启可在断开时立即停止所有效果",
   "label_remote_share_avatar": "向控制者显示我的 Discord 头像",
   "desc_remote_share_avatar": "默认关闭。开启后，您链接的 Discord 头像将向控制您会话的任何人显示。关闭后保持剪影状态。",
+  "label_remote_share_media_sources": "Name my online picture sources to controllers",
+  "desc_remote_share_media_sources": "On by default. The controller's live preview names the Scrolller communities your online pictures come from. How many pictures and videos you have is shared either way, never a file name.",
   "label_remote_emotes": "表情",
   "btn_emote_send": "发送",
   "watermark_emote_custom": "输入消息...",

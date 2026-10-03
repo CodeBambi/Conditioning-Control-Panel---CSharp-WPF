@@ -3663,6 +3663,8 @@
   "status_emote_no_session": "まずリモートセッションを開始してください",
   "label_remote_share_avatar": "コントローラーに自分のDiscordアバターを表示",
   "desc_remote_share_avatar": "デフォルトはオフ。オンにすると、リンクされたDiscordアバターがセッションを操作している人に表示されます。オフにするとシルエットの背後に隠れます。",
+  "label_remote_share_media_sources": "Name my online picture sources to controllers",
+  "desc_remote_share_media_sources": "On by default. The controller's live preview names the Scrolller communities your online pictures come from. How many pictures and videos you have is shared either way, never a file name.",
   "label_ai_badge": "AI",
   "quiz_ai_disclaimer": "質問とアーキタイプ結果はAIによって生成されます。",
   "explicit_ack_title": "アダルトコンテンツの確認",

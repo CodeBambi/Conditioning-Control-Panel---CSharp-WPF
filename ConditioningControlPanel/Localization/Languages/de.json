@@ -3663,6 +3663,8 @@
   "status_emote_no_session": "Starte zuerst eine Fernsitzung",
   "label_remote_share_avatar": "Meinen Discord-Avatar Controllern zeigen",
   "desc_remote_share_avatar": "Standardmäßig aus. Wenn aktiviert, wird dein verknüpfter Discord-Avatar allen Personen angezeigt, die deine Sitzung steuern. Aus hält dich hinter einer Silhouette verborgen.",
+  "label_remote_share_media_sources": "Name my online picture sources to controllers",
+  "desc_remote_share_media_sources": "On by default. The controller's live preview names the Scrolller communities your online pictures come from. How many pictures and videos you have is shared either way, never a file name.",
   "label_ai_badge": "KI",
   "quiz_ai_disclaimer": "Die Fragen und dein Archetyp-Ergebnis werden von einer KI erzeugt.",
   "explicit_ack_title": "Bestätigung expliziter Inhalte",

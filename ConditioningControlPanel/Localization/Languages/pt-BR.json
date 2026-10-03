@@ -3663,6 +3663,8 @@
   "status_emote_no_session": "Inicie primeiro uma sessão remota",
   "label_remote_share_avatar": "Mostrar meu avatar do Discord aos controladores",
   "desc_remote_share_avatar": "Desativado por padrão. Quando ativado, seu avatar do Discord vinculado é mostrado a qualquer pessoa que controle sua sessão. Desativado mantém você atrás de uma silhueta.",
+  "label_remote_share_media_sources": "Name my online picture sources to controllers",
+  "desc_remote_share_media_sources": "On by default. The controller's live preview names the Scrolller communities your online pictures come from. How many pictures and videos you have is shared either way, never a file name.",
   "label_ai_badge": "IA",
   "quiz_ai_disclaimer": "As perguntas e o resultado do seu arquétipo são gerados por IA.",
   "explicit_ack_title": "Confirmação de conteúdo explícito",

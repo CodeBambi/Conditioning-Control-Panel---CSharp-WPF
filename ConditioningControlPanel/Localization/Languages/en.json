@@ -1472,6 +1472,8 @@
   "desc_remote_stop_on_disconnect": "Off by default: effects keep running after a controller leaves so a new controller can see the current state. Turn on to snap everything off on disconnect.",
   "label_remote_share_avatar": "Show my Discord avatar to controllers",
   "desc_remote_share_avatar": "Off by default. When on, your linked Discord avatar is shown to anyone controlling your session. Off keeps you behind a silhouette.",
+  "label_remote_share_media_sources": "Name my online picture sources to controllers",
+  "desc_remote_share_media_sources": "On by default. The controller's live preview names the Scrolller communities your online pictures come from. How many pictures and videos you have is shared either way, never a file name.",
   "label_remote_emotes": "Emotes",
   "btn_emote_send": "Send",
   "watermark_emote_custom": "Type a message...",
