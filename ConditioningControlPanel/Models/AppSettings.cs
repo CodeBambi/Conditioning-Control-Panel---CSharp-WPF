@@ -4172,7 +4172,7 @@ namespace ConditioningControlPanel.Models
             set { _fypVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
-        private double _fypWindowOpacity = 1.0;
+        private double _fypWindowOpacity = 0.6; // #832: ghost mode should read as see-through out of the box
         /// <summary>Ghost-mode translucency for the feed (0.01-1.0) - the DWM thumbnail opacity of
         /// the see-through mirror, never the real window's alpha (the WebView2 window must never be
         /// layered; see FypGhostOverlay). May go near-invisible: recovery is a single Esc/panic
