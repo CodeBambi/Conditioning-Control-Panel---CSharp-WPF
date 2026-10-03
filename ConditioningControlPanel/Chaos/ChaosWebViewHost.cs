@@ -203,6 +203,7 @@ internal sealed class ChaosWebViewHost : IDisposable
     private double _windowedW, _windowedH;   // remembered windowed size (default 85% of screen)
     private Window? _glueOwner;              // MainWindow, while OwnedByMainWindow glue is live
     private EventHandler? _glueOwnerStateChanged;
+    private DependencyPropertyChangedEventHandler? _glueOwnerVisibleChanged;
     private IntPtr _glueOwnerHandle;
     private bool _glueAttached;
     private HwndSource? _glueHwndSource;     // our own window's source, while the cascade veto is hooked
@@ -954,6 +955,9 @@ internal sealed class ChaosWebViewHost : IDisposable
                 catch (Exception ex) { Diag.Swallowed(ex); }
             };
             main.StateChanged += _glueOwnerStateChanged;
+            // The panel being hidden or shown changes whether the link may stand (see RefreshNativeOwner).
+            _glueOwnerVisibleChanged = (_, _) => RefreshNativeOwner();
+            main.IsVisibleChanged += _glueOwnerVisibleChanged;
             App.Logger?.Information("{Tag}: glued above MainWindow (native owner)", _opts.LogTag);
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.AttachMainWindowGlue: {E}", _opts.LogTag, ex.Message); }
@@ -965,7 +969,12 @@ internal sealed class ChaosWebViewHost : IDisposable
     {
         if (!_glueAttached) return;
         if (_glueSuspended) { ApplyNativeOwner(false); return; }
-        bool ownerDown = _glueOwner == null || _glueOwner.WindowState == WindowState.Minimized;
+        // A HIDDEN owner (panel tucked to the tray under the launcher, or still being built hidden
+        // for boot) is as good as minimized: the shell gives an owned window no taskbar button
+        // while its owner is not on screen, so chess and the other games had no icon and could only
+        // be reached from the tray. Unowned they always have one, and nothing can bury them then.
+        bool ownerDown = _glueOwner == null || _glueOwner.WindowState == WindowState.Minimized
+            || !_glueOwner.IsVisible || (_glueOwner as MainWindow)?.BuildingHiddenForBoot == true;
         ApplyNativeOwner(!ownerDown);
         // Main is minimized: nothing can bury us, so the link buys nothing and the cascade would
         // only take us down with it. Make sure we survived it.
@@ -1197,6 +1206,8 @@ internal sealed class ChaosWebViewHost : IDisposable
         {
             if (_glueOwner != null && _glueOwnerStateChanged != null)
                 _glueOwner.StateChanged -= _glueOwnerStateChanged;
+            if (_glueOwner != null && _glueOwnerVisibleChanged != null)
+                _glueOwner.IsVisibleChanged -= _glueOwnerVisibleChanged;
         }
         catch (Exception ex) { Diag.Swallowed(ex); }
         try
@@ -1209,6 +1220,7 @@ internal sealed class ChaosWebViewHost : IDisposable
         _glueAttached = false;
         _glueOwner = null;
         _glueOwnerStateChanged = null;
+        _glueOwnerVisibleChanged = null;
         _glueOwnerHandle = IntPtr.Zero;
         _glueHwndSource = null;
         _glueWndHook = null;
