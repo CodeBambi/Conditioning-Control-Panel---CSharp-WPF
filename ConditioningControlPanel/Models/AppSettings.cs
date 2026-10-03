@@ -268,6 +268,16 @@ namespace ConditioningControlPanel.Models
             set { _skipPauseXpWarning = value; OnPropertyChanged(); }
         }
 
+        // "Don't ask again" on the engine-start nudge about enhanced mandatory videos
+        // (ccp-bugs #644). Set only from that dialog's checkbox. It silences the question,
+        // it never switches enhancement or the webcam on by itself.
+        private bool _skipMandatoryVideoEnhanceNudge = false;
+        public bool SkipMandatoryVideoEnhanceNudge
+        {
+            get => _skipMandatoryVideoEnhanceNudge;
+            set { _skipMandatoryVideoEnhanceNudge = value; OnPropertyChanged(); }
+        }
+
         // Remote-control emote slots (5 fixed, user-editable). OnDeserialized
         // pads or truncates to exactly 5 so the UI never has to defend against
         // odd counts. Default set lives in DefaultRemoteEmotePresets() below.
