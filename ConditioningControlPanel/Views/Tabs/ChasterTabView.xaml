@@ -785,6 +785,8 @@
                                     <TextBlock x:Name="TxtAddedMonth" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="15" FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextLightBrush}" Margin="0,2,0,0"/>
                                     <TextBlock Text="{loc:Str chaster_added_note}" Style="{StaticResource CirceSub}" TextWrapping="Wrap"/>
+                                    <!-- this figure is the PC's own count; the ladder beside it is the server's Chaster reading (ticket 2026-10-02) -->
+                                    <TextBlock Text="{loc:Str chaster_ladder_counts_note}" Style="{StaticResource CirceSub}" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <Grid Grid.Column="2" VerticalAlignment="Center">
                                     <Grid.RowDefinitions>

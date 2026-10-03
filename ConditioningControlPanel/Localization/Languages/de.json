@@ -630,6 +630,7 @@
   "chaster_added_title": "Von CCP hinzugefügt, insgesamt",
   "chaster_added_month": "Diesen Monat {0}",
   "chaster_added_note": "Nur Hinzugefügtes. Abgezogene Zeit zählt nicht.",
+  "chaster_ladder_counts_note": "Die Rangliste zählt, was Chaster bestätigt, nicht diese Zahl. Sie zieht nach, sobald Zeit auf dem Schloss landet oder diese Seite aufgeht.",
   "chaster_added_hint": "Zeig darauf für deine Locktober-Verlosungskarte. Klick zum Anheften.",
   "chaster_raffle_title": "Locktober-Verlosung",
   "chaster_raffle_day": "Tag {0} von {1}",
