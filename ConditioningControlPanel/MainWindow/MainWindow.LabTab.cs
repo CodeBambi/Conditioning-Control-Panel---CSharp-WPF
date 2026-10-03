@@ -854,7 +854,41 @@ namespace ConditioningControlPanel
             // is running, calibrated and consented, and the status line says which.
             var enabled = App.Settings?.Current?.FocusGazeEnabled == true;
             SyncFocusGazeToggle(enabled);
-            if (enabled) App.GazeFocus.MasterEnabled = true;
+            if (enabled)
+            {
+                App.GazeFocus.MasterEnabled = true;
+                RestartFocusGazeCameraAtBoot();
+            }
+        }
+
+        /// <summary>
+        /// ccp-bugs #1106: restoring the switch armed the engine but never opened the camera, so
+        /// a player who left Focus Gaze on was counted absent until they flipped it again. Open
+        /// the camera here behind the same gates the switch uses. Never asks for consent at boot:
+        /// no current consent (or no calibration, or no tier) means the status line stays on
+        /// "waiting" and the switch does the asking, as before.
+        /// </summary>
+        private async void RestartFocusGazeCameraAtBoot()
+        {
+            try
+            {
+                var webcam = App.Webcam;
+                if (webcam == null || webcam.IsRunning) return;
+                if (!TierGate.RequiresLab(Loc.Get("label_focus_gaze")).Allowed) return;
+                if (!WebcamTrackingService.IsConsentCurrent()) return;
+                if (App.Settings?.Current?.WebcamCalibrated != true) return;
+
+                var started = await Task.Run(() => webcam.Start());
+                if (!started)
+                    App.Logger?.Information("Focus Gaze: webcam did not start at boot ({State})", webcam.State);
+                // The engine re-evaluates on the webcam's own state change; this only
+                // refreshes the line under the switch.
+                RefreshFocusGazeStatus();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Focus Gaze: webcam start at boot failed");
+            }
         }
 
         // PHASE 6: every LabTab.* accessor below became PlayTab.*. There is exactly ONE Focus Gaze
