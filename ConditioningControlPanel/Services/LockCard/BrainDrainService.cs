@@ -402,7 +402,13 @@ namespace ConditioningControlPanel.Services
                 }
 
                 DisposePair(displacedOut, displacedReader);
-                if (started) App.Audio?.NoteOutputSuccess();
+                if (started)
+                {
+                    App.Audio?.NoteOutputSuccess();
+                    // Logged once it actually plays, so a muted endpoint or a lost race never
+                    // leaves a Media Log row for a clip nobody heard (ccp-bugs #1098).
+                    App.MediaHistory?.RecordAudio(filePath);
+                }
                 else DisposePair(waveOut, reader);
             });
         }
