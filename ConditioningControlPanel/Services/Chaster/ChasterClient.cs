@@ -146,11 +146,30 @@ public sealed class ChasterClient : IDisposable
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         return await SendAsync(req, body =>
         {
-            var all = JsonConvert.DeserializeObject<List<ChasterLock>>(body) ?? new List<ChasterLock>();
+            var all = ParseLocks(body);
             return (IReadOnlyList<ChasterLock>)all
                 .Where(l => !string.IsNullOrEmpty(l.Id) && !string.Equals(l.Role, "keyholder", StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }, ct, api: true).ConfigureAwait(false);
+    }
+
+    /// <summary>The locks in a list body, one at a time: a lock whose fields do not fit the model
+    /// (someone else's lock type, an odd date) is skipped instead of failing the whole list, which
+    /// read as "Chaster is unreachable" for everyone wearing it (ccp-bugs #1332). A body that is
+    /// not a list at all still throws.</summary>
+    public static List<ChasterLock> ParseLocks(string? body)
+    {
+        var result = new List<ChasterLock>();
+        if (string.IsNullOrWhiteSpace(body)) return result;
+        var array = Newtonsoft.Json.Linq.JArray.Parse(body);
+        int skipped = 0;
+        foreach (var item in array)
+        {
+            try { if (item.ToObject<ChasterLock>() is { } one) result.Add(one); }
+            catch (Exception ex) when (ex is JsonException or FormatException or InvalidCastException) { skipped++; }
+        }
+        if (skipped > 0) App.Logger?.Information("[Chaster] {Skipped} lock(s) in the list could not be read and were skipped", skipped);
+        return result;
     }
 
     /// <summary>The linked account's name and picture (scope <c>profile</c>). Read-only.</summary>
