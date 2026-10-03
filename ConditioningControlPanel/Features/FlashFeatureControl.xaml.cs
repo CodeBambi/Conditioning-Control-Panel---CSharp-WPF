@@ -145,6 +145,10 @@ namespace ConditioningControlPanel.Features
                 TxtFrequency.Text = s.FlashFrequency.ToString();
                 SliderImages.Value = s.SimultaneousImages;
                 TxtImages.Text = s.SimultaneousImages.ToString();
+                ChkRandomImages.IsChecked = s.SimultaneousImagesRandom;
+                SliderImagesMin.Value = s.SimultaneousImagesMin;
+                TxtImagesMin.Text = s.SimultaneousImagesMin.ToString();
+                RowImagesMin.Visibility = s.SimultaneousImagesRandom ? Visibility.Visible : Visibility.Collapsed;
                 SliderMaxOnScreen.Value = s.HydraLimit;
                 TxtMaxOnScreen.Text = s.HydraLimit.ToString();
                 ChkClickable.IsChecked = s.FlashClickable;
@@ -179,6 +183,8 @@ namespace ConditioningControlPanel.Features
             if (e.PropertyName == nameof(Models.AppSettings.FlashEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashFrequency) ||
                 e.PropertyName == nameof(Models.AppSettings.SimultaneousImages) ||
+                e.PropertyName == nameof(Models.AppSettings.SimultaneousImagesRandom) ||
+                e.PropertyName == nameof(Models.AppSettings.SimultaneousImagesMin) ||
                 e.PropertyName == nameof(Models.AppSettings.HydraLimit) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashClickable) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashStayUntilPopped) ||
@@ -304,6 +310,28 @@ namespace ConditioningControlPanel.Features
             var v = (int)e.NewValue;
             TxtImages.Text = v.ToString();
             s.SimultaneousImages = v;
+            App.Settings?.Save();
+        }
+
+        private void ChkRandomImages_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var on = ChkRandomImages.IsChecked ?? false;
+            s.SimultaneousImagesRandom = on;
+            RowImagesMin.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            App.Settings?.Save();
+        }
+
+        private void SliderImagesMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtImagesMin.Text = v.ToString();
+            s.SimultaneousImagesMin = v;
             App.Settings?.Save();
         }
 

@@ -1184,6 +1184,40 @@ namespace ConditioningControlPanel.Models
             set { _simultaneousImages = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
         }
 
+        private bool _simultaneousImagesRandom = false;
+        /// <summary>
+        /// ccp-bugs #658: when true each flash rolls its image count between
+        /// <see cref="SimultaneousImagesMin"/> and <see cref="SimultaneousImages"/> inclusive
+        /// (see <see cref="RollFlashImageCount"/>). Default false keeps the flat count.
+        /// </summary>
+        public bool SimultaneousImagesRandom
+        {
+            get => _simultaneousImagesRandom;
+            set { _simultaneousImagesRandom = value; OnPropertyChanged(); }
+        }
+
+        private int _simultaneousImagesMin = 1; // Floor of the random range (1-20)
+        /// <summary>
+        /// Floor of the random images-per-flash range. A floor above
+        /// <see cref="SimultaneousImages"/> is sorted out by the roll, like the lock card pair.
+        /// </summary>
+        public int SimultaneousImagesMin
+        {
+            get => _simultaneousImagesMin;
+            set { _simultaneousImagesMin = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Images for one flash: the flat <see cref="SimultaneousImages"/>, or a roll between the
+        /// two ends (inclusive, either order) when <see cref="SimultaneousImagesRandom"/> is on.
+        /// </summary>
+        internal static int RollFlashImageCount(bool random, int min, int max, Random rng)
+        {
+            if (!random) return max;
+            int lo = Math.Min(min, max), hi = Math.Max(min, max);
+            return rng.Next(lo, hi + 1);
+        }
+
         [JsonProperty("ImageScale")]
         private int _imageScale = 100; // 50-250% (100 = normal size, 200 = double, etc)
 
