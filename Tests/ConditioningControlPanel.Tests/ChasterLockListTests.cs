@@ -23,4 +23,24 @@ public class ChasterLockListTests
 
     [Fact]
     public void An_empty_body_is_no_locks() => Assert.Empty(ChasterClient.ParseLocks(""));
+
+    /// <summary>Ticket (2026-10-03): a keyholder lock running a scripted extension carries its
+    /// Blockly program nested past 64 levels, and the whole list read as "offline".</summary>
+    [Fact]
+    public void A_lock_with_a_deeply_nested_extension_is_still_read()
+    {
+        const int depth = 300;
+        var deep = new System.Text.StringBuilder();
+        for (int i = 0; i < depth; i++) deep.Append("{\"block\":{\"next\":");
+        deep.Append("{\"fields\":{\"AMOUNT\":5}}");
+        for (int i = 0; i < depth; i++) deep.Append("}}");
+        var body = "[{\"_id\":\"k1\",\"title\":\"Locktober\",\"status\":\"active\",\"role\":\"wearer\","
+                   + "\"endDate\":\"2026-10-31T23:00:00.000Z\","
+                   + "\"extensions\":[{\"slug\":\"script\",\"config\":{\"codeHistory\":[{\"blockly\":" + deep + "}]}}]}]";
+
+        var only = Assert.Single(ChasterClient.ParseLocks(body));
+        Assert.Equal("k1", only.Id);
+        Assert.Equal("Locktober", only.Title);
+        Assert.NotNull(only.EndDate);
+    }
 }

@@ -156,20 +156,36 @@ public sealed class ChasterClient : IDisposable
     /// <summary>The locks in a list body, one at a time: a lock whose fields do not fit the model
     /// (someone else's lock type, an odd date) is skipped instead of failing the whole list, which
     /// read as "Chaster is unreachable" for everyone wearing it (ccp-bugs #1332). A body that is
-    /// not a list at all still throws.</summary>
+    /// not a list at all still throws.
+    /// The list is read with no depth limit and each lock is cut down to its flat fields before it
+    /// is mapped: a lock running a scripted extension carries its Blockly program in the body,
+    /// nested far past Newtonsoft's default 64 levels, which failed the whole list as "offline".</summary>
     public static List<ChasterLock> ParseLocks(string? body)
     {
         var result = new List<ChasterLock>();
         if (string.IsNullOrWhiteSpace(body)) return result;
-        var array = Newtonsoft.Json.Linq.JArray.Parse(body);
+        Newtonsoft.Json.Linq.JArray array;
+        using (var reader = new JsonTextReader(new System.IO.StringReader(body)) { MaxDepth = null })
+            array = Newtonsoft.Json.Linq.JArray.Load(reader);
         int skipped = 0;
         foreach (var item in array)
         {
-            try { if (item.ToObject<ChasterLock>() is { } one) result.Add(one); }
+            try { if (Flat(item).ToObject<ChasterLock>() is { } one) result.Add(one); }
             catch (Exception ex) when (ex is JsonException or FormatException or InvalidCastException) { skipped++; }
         }
         if (skipped > 0) App.Logger?.Information("[Chaster] {Skipped} lock(s) in the list could not be read and were skipped", skipped);
         return result;
+    }
+
+    /// <summary>A lock's top-level scalar fields only. <see cref="ChasterLock"/> maps nothing
+    /// nested, and mapping a deep subtree would trip the serializer's own depth limit.</summary>
+    private static Newtonsoft.Json.Linq.JToken Flat(Newtonsoft.Json.Linq.JToken item)
+    {
+        if (item is not Newtonsoft.Json.Linq.JObject obj) return item;
+        var flat = new Newtonsoft.Json.Linq.JObject();
+        foreach (var prop in obj.Properties())
+            if (prop.Value is Newtonsoft.Json.Linq.JValue value) flat[prop.Name] = value.DeepClone();
+        return flat;
     }
 
     /// <summary>The linked account's name and picture (scope <c>profile</c>). Read-only.</summary>
