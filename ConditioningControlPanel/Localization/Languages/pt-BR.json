@@ -459,6 +459,8 @@
   "chaster_limit_day": "Máximo por dia",
   "chaster_limit_backlog": "Máximo na comanda",
   "chaster_limit_backlog_hint": "O máximo de tempo não pago que a comanda guarda enquanto não há cadeado ou o Chaster está fora do ar.",
+  "chaster_pop_day_full": "day is full",
+  "chaster_pop_tab_full": "tab is full",
   "chaster_relock": "Trancar de novo quando o timer acabou",
   "chaster_relock_hint": "Se o timer do cadeado já acabou, um envio o tranca de novo a partir de agora, pelo preço. Só nas 6 horas depois que acabou. Desligado: a conta espera.",
   "chaster_fact_push_launch": "Enviado na hora",

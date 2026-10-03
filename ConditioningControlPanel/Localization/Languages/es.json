@@ -459,6 +459,8 @@
   "chaster_limit_day": "Máximo al día",
   "chaster_limit_backlog": "Máximo en la cuenta",
   "chaster_limit_backlog_hint": "El máximo de tiempo sin pagar que guarda la cuenta mientras no hay candado o Chaster está caído.",
+  "chaster_pop_day_full": "day is full",
+  "chaster_pop_tab_full": "tab is full",
   "chaster_relock": "Volver a cerrar cuando el temporizador se acabó",
   "chaster_relock_hint": "Si el temporizador del candado ya se acabó, un envío lo vuelve a cerrar desde ahora por el precio. Solo en las 6 horas después de que se acabó. Apagado: la cuenta espera.",
   "chaster_fact_push_launch": "Se envía al momento",
