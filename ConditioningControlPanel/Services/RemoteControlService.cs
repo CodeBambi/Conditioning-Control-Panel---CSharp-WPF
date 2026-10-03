@@ -68,6 +68,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>When the last Remote session ended (UTC). Circe's tab keeps counting bookings
         /// toward the Remote cap for a short grace after it (ChasterService.RemoteGrace).</summary>
         public DateTime? LastEndedUtc { get; private set; }
+
+        // The controller switched the panic key off during this session. Restored (and saved) when
+        // the session ends, so a crash or a quit after the session cannot leave it off on disk.
+        private bool _remoteDisabledPanic;
+        // The controller switched strict lock on (it was off before). Released when the controller
+        // leaves; a strict lock the wearer set themselves is never touched.
+        private bool _remoteSetStrictLock;
         public string? SessionCode { get; private set; }
         public string? ConnectPin { get; private set; }
         public string? Tier { get; private set; }
@@ -1048,8 +1055,35 @@ namespace ConditioningControlPanel.Services
             });
         }
 
+        /// <summary>The controller leaving always hands back what could trap the wearer: the panic
+        /// key comes back on, and a strict lock the controller switched on goes off (ccp-bugs
+        /// #1340). Panic always works. A strict lock the wearer set themselves stays, which is why
+        /// only the controller's own switch-on is undone. This does not depend on
+        /// StopEffectsOnRemoteDisconnect, which only governs the visible effects.</summary>
+        private void ReleaseRemoteSafetyState()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            bool changed = false;
+            if (_remoteSetStrictLock)
+            {
+                _remoteSetStrictLock = false;
+                if (s.StrictLockEnabled) { s.StrictLockEnabled = false; changed = true; }
+            }
+            if (!s.PanicKeyEnabled || _remoteDisabledPanic)
+            {
+                _remoteDisabledPanic = false;
+                if (!s.PanicKeyEnabled) { s.PanicKeyEnabled = true; changed = true; }
+            }
+            if (!changed) return;
+            App.Settings!.Save();
+            SyncPanicKeyUi();
+            App.Logger?.Information("[RemoteControl] Controller left: panic key back on, controller's strict lock released");
+        }
+
         private void HandleControllerDisconnectCleanup()
         {
+            ReleaseRemoteSafetyState();
             if (App.Settings?.Current?.StopEffectsOnRemoteDisconnect == true)
                 StopRemoteTriggeredEffects();
         }
@@ -1459,6 +1493,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 if (App.Settings?.Current != null)
                                 {
+                                    if (!App.Settings.Current.StrictLockEnabled) _remoteSetStrictLock = true;
                                     App.Settings.Current.StrictLockEnabled = true;
                                     App.Settings.Save();
                                 }
@@ -1483,6 +1518,7 @@ namespace ConditioningControlPanel.Services
                         case "enable_strict_lock":
                             if (App.Settings?.Current != null)
                             {
+                                if (!App.Settings.Current.StrictLockEnabled) _remoteSetStrictLock = true;
                                 App.Settings.Current.StrictLockEnabled = true;
                                 App.Settings.Save();
                             }

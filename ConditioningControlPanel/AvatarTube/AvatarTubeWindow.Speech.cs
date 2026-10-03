@@ -1006,7 +1006,9 @@ namespace ConditioningControlPanel
         {
             if (_bubbleWindow == null) return;
             var g = _parentGeom;
-            bool want = AvatarTubeLayout.SpeechBubbleVisibility.ShouldShow(
+            // No bubble over a game window: the attached tube sits above its sibling game window in the
+            // shared owner group, so its bubble drew over Just Drop, chess and the rest (ccp-bugs #1345).
+            bool want = !ChaosWebViewHost.AnyGameActive && AvatarTubeLayout.SpeechBubbleVisibility.ShouldShow(
                 SpeechBubble.Visibility == Visibility.Visible, IsVisible, WindowState == WindowState.Minimized,
                 _isAttached, g?.Visible ?? true, g?.Minimized ?? false);
             if (want == _bubbleWindow.IsVisible) return;

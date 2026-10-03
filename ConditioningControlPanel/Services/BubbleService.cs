@@ -577,7 +577,7 @@ public class BubbleService : IDisposable
         {
             var discs = new List<(double, double, double, bool)>(_bubbles.Count);
             foreach (var b in _bubbles)
-                if (b.UsesHost && b.HostHitClickable) { var d = b.HitDiscPx; discs.Add((d.X, d.Y, d.R, b.NeedsHoldDefuse)); }
+                if (b.UsesHost && b.HostHitClickable) { var d = b.HitDiscPx; discs.Add((d.X, d.Y, d.R, PressPassesThrough(b.NeedsHoldDefuse, b.IsNatasha))); }
             ChaosClickDiscsSnapshot = discs.ToArray();
         }
         else if (ChaosClickDiscsSnapshot.Length > 0)
@@ -585,6 +585,11 @@ public class BubbleService : IDisposable
             ChaosClickDiscsSnapshot = Array.Empty<(double, double, double, bool)>();
         }
     }
+
+    /// <summary>A press on this bubble must NOT be swallowed by the hook: it is judged by how long
+    /// the real button stays down, which only an unswallowed press registers. Live defuse bubbles
+    /// and the red Natasha bubble (pop on a click, resist on a hold) both read the button.</summary>
+    internal static bool PressPassesThrough(bool needsHoldDefuse, bool isNatasha) => needsHoldDefuse || isNatasha;
 
     /// <summary>HOOK THREAD: a press landed at this physical-px point (either button — the ambient
     /// field routes its right-button message here too; chaos keeps right for the Ripple). If it's
@@ -609,7 +614,9 @@ public class BubbleService : IDisposable
         if (disp == null || disp.HasShutdownStarted) return false;
         // Read on the hook thread, BEFORE this press's own button-up can arrive: a red bubble held
         // through a swallowed press knows it was let go when the count moves past this.
-        var upSeq = Interlocked.Read(ref PointerUpSeq);
+        // A press that passes through is judged by the real button state instead (-1): it never
+        // depends on this hook hearing the button-up (ccp-bugs #1342).
+        var upSeq = needsHold ? -1L : Interlocked.Read(ref PointerUpSeq);
         disp.BeginInvoke(new Action(() => PopTopmostAt(px, upSeq)));
         // Live hold-to-defuse bubbles must NOT swallow: the channel reads the held button via
         // GetAsyncKeyState, which never sees a swallowed low-level click (→ instant detonate). Let the

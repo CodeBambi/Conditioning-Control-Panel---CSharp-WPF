@@ -19,7 +19,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public WorkshopRosterCell Roster { get; } = new();
         public WorkshopBehaviorCell Behavior { get; } = new();
         public WorkshopTriggersCell Triggers { get; } = new();
-        public WorkshopLibraryCell Library { get; } = new();
+        public WorkshopLibraryCell Library { get; internal set; } = new();
         public WorkshopCommunityCell Community { get; } = new();
         public WorkshopAwarenessCell Awareness { get; } = new();
     }
