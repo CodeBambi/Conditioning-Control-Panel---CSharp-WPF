@@ -5991,7 +5991,7 @@ namespace ConditioningControlPanel.Services
             if (loop && !string.IsNullOrEmpty(_retryPath))
             {
                 _penalties++;
-                if (_penalties >= 3 && settings.MercySystemEnabled)
+                if (_penalties >= settings.MercyAfterFails && settings.MercySystemEnabled)
                     ShowMessage(App.Mods?.GetAttentionCheckMercyMessage() ?? "BAMBI GETS MERCY", 2500, Cleanup);
                 else
                 {

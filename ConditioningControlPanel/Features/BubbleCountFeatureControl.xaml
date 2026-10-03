@@ -116,6 +116,8 @@
                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                           Checked="ChkStrict_Changed" Unchecked="ChkStrict_Changed"/>
                             </Grid>
+
+                            <feat:MercyRow x:Name="MercyRow"/>
                         </StackPanel>
                     </Grid>
                 </Border>

@@ -2956,6 +2956,24 @@ namespace ConditioningControlPanel.Models
             set { _mercySystemEnabled = value; OnPropertyChanged(); }
         }
 
+        /// <summary>Fewest and most wrong tries Mercy can be set to (ccp-bugs #1145).</summary>
+        public const int MercyAfterFailsMin = 2, MercyAfterFailsMax = 10;
+
+        /// <summary>Clamp a Mercy threshold into 2..10.</summary>
+        public static int ClampMercyAfterFails(int value) =>
+            Math.Clamp(value, MercyAfterFailsMin, MercyAfterFailsMax);
+
+        private int _mercyAfterFails = 3;
+        /// <summary>
+        /// Strict Bubble Count and strict mandatory videos let the user go after this many wrong
+        /// tries when <see cref="MercySystemEnabled"/> is on. Clamped 2..10, default 3 (ccp-bugs #1145).
+        /// </summary>
+        public int MercyAfterFails
+        {
+            get => _mercyAfterFails;
+            set { _mercyAfterFails = ClampMercyAfterFails(value); OnPropertyChanged(); }
+        }
+
         private string _lastPreset = "DEFAULT";
         public string LastPreset
         {

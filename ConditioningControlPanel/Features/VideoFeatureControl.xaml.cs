@@ -41,6 +41,7 @@ namespace ConditioningControlPanel.Features
         {
             (_settingsHook ??= new SettingsHook(OnSettingsPropertyChanged)).Rebind();
             LoadFromSettings();
+            MercyRow.Rebind();
         }
 
         private void LoadFromSettings()

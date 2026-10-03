@@ -41,6 +41,7 @@ namespace ConditioningControlPanel.Features
         {
             (_settingsHook ??= new SettingsHook(OnSettingsPropertyChanged)).Rebind();
             LoadFromSettings();
+            MercyRow.Rebind();
         }
 
         private void LoadFromSettings()
@@ -151,7 +152,9 @@ namespace ConditioningControlPanel.Features
                     "• You will NOT be able to skip the bubble count challenge\n" +
                     "• You MUST answer correctly to dismiss\n" +
                     "• Wrong answers force you to REWATCH the video\n" +
-                    "• Mercy system grants escape after 3 retries (if enabled)\n" +
+                    "• " + (s.MercySystemEnabled
+                        ? Localization.Loc.GetF("warning_strict_mercy_line", s.MercyAfterFails)
+                        : Localization.Loc.Get("warning_strict_mercy_off")) + "\n" +
                     "• This can be very restrictive!");
 
                 if (!confirmed)
