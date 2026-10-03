@@ -774,6 +774,7 @@ namespace ConditioningControlPanel
                 KeywordVisualEffect.OverlayPulse,
                 KeywordVisualEffect.MindWipe,
                 KeywordVisualEffect.Bubbles,
+                KeywordVisualEffect.BrainDrain,
             };
             foreach (var v in effectValues)
             {
@@ -1175,6 +1176,8 @@ namespace ConditioningControlPanel
                 existing.Contains("VisualEffect:" + KeywordVisualEffect.MindWipe) ? "(already added)" : null);
             AddMenuItem(menu, "🫧 Bubbles",             () => AddAction(trigger, new VisualEffectAction { Effect = KeywordVisualEffect.Bubbles }, parentBorder),
                 existing.Contains("VisualEffect:" + KeywordVisualEffect.Bubbles) ? "(already added)" : null);
+            AddMenuItem(menu, "🫠 Brain Drain",         () => AddAction(trigger, new VisualEffectAction { Effect = KeywordVisualEffect.BrainDrain }, parentBorder),
+                existing.Contains("VisualEffect:" + KeywordVisualEffect.BrainDrain) ? "(already added)" : null);
 
             menu.PlacementTarget = anchor;
             menu.IsOpen = true;
@@ -1370,6 +1373,7 @@ namespace ConditioningControlPanel
             KeywordVisualEffect.OverlayPulse    => "Overlay Pulse",
             KeywordVisualEffect.MindWipe        => "Mind Wipe",
             KeywordVisualEffect.Bubbles         => "Bubbles (spawn once)",
+            KeywordVisualEffect.BrainDrain      => "Brain Drain (10 s melt)",
             _ => e.ToString(),
         };
 
@@ -1381,6 +1385,7 @@ namespace ConditioningControlPanel
             KeywordVisualEffect.OverlayPulse    => "🌫",
             KeywordVisualEffect.MindWipe        => "🧠",
             KeywordVisualEffect.Bubbles         => "🫧",
+            KeywordVisualEffect.BrainDrain      => "🫠",
             _ => "✨",
         };
 

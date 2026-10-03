@@ -1964,6 +1964,12 @@ namespace ConditioningControlPanel.Services
                         App.Bubbles?.SpawnOnce();
                         break;
 
+                    case KeywordVisualEffect.BrainDrain:
+                        // Ten seconds of the real Brain Drain melt (ccp-bugs #1214). The payload
+                        // stands down when a drain is already up or the blur dial is at 0.
+                        new Services.Chaos.BrainDrainMeltPayload().Fire();
+                        break;
+
                     case KeywordVisualEffect.HighlightOnly:
                     case KeywordVisualEffect.None:
                     default:
