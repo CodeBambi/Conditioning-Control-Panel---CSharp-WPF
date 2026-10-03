@@ -634,6 +634,32 @@ public class ChasterTabRenderTests
         });
     }
 
+    [Fact]
+    public void Every_fixed_figure_row_plays_a_scene_that_shows_its_own_sign()
+    {
+        // A cost row whose preview ends on time OFF, or an earn-back row whose preview ends on
+        // time ON, tells the player the opposite of its stamp. Tester ticket 2026-09-30:
+        // "Resisted the red" (-1:00) played the pop scene and flashed a red +figure; idle_day and
+        // dailies_left (costs) played the session and quest scenes, which end in mint.
+        var html = File.ReadAllText(System.IO.Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "web", "chaster", "trailers.html"));
+        foreach (var price in TabPrices.All)
+        {
+            if (!TabMenuCopy.HasFixedFigure(price.Id) || price.Seconds == 0) continue;
+            var scene = TabMenuCopy.VignetteFor(price.Id);
+            var start = html.IndexOf("V." + scene + "=", StringComparison.Ordinal);
+            Assert.True(start >= 0, $"scene {scene} is missing");
+            var end = html.IndexOf("\nV.", start + 2, StringComparison.Ordinal);
+            var block = html.IndexOf("\n})();", start, StringComparison.Ordinal);
+            if (end < 0 || (block >= 0 && block < end)) end = block;
+            var body = end < 0 ? html[start..] : html[start..end];
+            var kind = price.Seconds > 0 ? "add" : "sub";
+            Assert.True(System.Text.RegularExpressions.Regex.IsMatch(body, @"\.cost\([^;]*'" + kind + "'"),
+                $"{price.Id} plays the '{scene}' scene, which never flashes a {kind} figure");
+        }
+        Assert.Equal(TabDayEnd.IdleEventId, TabMenuCopy.VignetteFor(TabDayEnd.IdleEventId));
+        Assert.Equal(TabDayEnd.DailiesEventId, TabMenuCopy.VignetteFor(TabDayEnd.DailiesEventId));
+    }
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
