@@ -83,6 +83,25 @@ public class AssetPreset : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// The online (Scrolller) niche ids saved with this preset (ccp-bugs #1142). Null on a preset
+    /// saved before presets carried it: applying that preset leaves the current selection alone.
+    /// </summary>
+    [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace, NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? OnlineNiches { get; set; }
+
+    /// <summary>The user-added subreddits saved with this preset. Null = leave the current ones.</summary>
+    [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace, NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? OnlineCustomSubs { get; set; }
+
+    /// <summary>
+    /// The app-wide media source ("local" / "online" / "mixed") saved with this preset. Null =
+    /// leave the current source. Applying never turns online media on without the remote-media
+    /// consent (see <c>AssetPresetService.ApplyOnlineChoice</c>).
+    /// </summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string? MediaSource { get; set; }
+
+    /// <summary>
     /// Number of enabled images when this preset was saved
     /// </summary>
     [JsonProperty]
@@ -134,7 +153,7 @@ public class AssetPreset : INotifyPropertyChanged
     /// </summary>
     public static AssetPreset FromCurrentSettings(string name, int imageCount, int videoCount)
     {
-        return new AssetPreset
+        var preset = new AssetPreset
         {
             Name = name,
             DisabledAssetPaths = new HashSet<string>(App.Settings.Current.DisabledAssetPaths),
@@ -144,15 +163,31 @@ public class AssetPreset : INotifyPropertyChanged
             CreatedAt = DateTime.Now,
             LastUsed = DateTime.Now
         };
+        preset.CaptureOnlineChoice(App.Settings.Current);
+        return preset;
     }
 
     /// <summary>
-    /// Apply this preset to the current settings
+    /// Copies the online (Scrolller) selection and the media source off <paramref name="s"/>
+    /// (ccp-bugs #1142). Saving a preset is what opts it in to switching them.
+    /// </summary>
+    public void CaptureOnlineChoice(AppSettings s)
+    {
+        if (s == null) return;
+        OnlineNiches = new List<string>(s.FypOnlineNiches ?? new List<string>());
+        OnlineCustomSubs = new List<string>(s.FypOnlineCustomSubs ?? new List<string>());
+        MediaSource = s.MediaSource;
+    }
+
+    /// <summary>
+    /// Apply this preset to the current settings. Same write as
+    /// <c>Services.AssetPresetService.Apply</c>, which is the path the app uses.
     /// </summary>
     public void ApplyToSettings()
     {
         App.Settings.Current.DisabledAssetPaths = new HashSet<string>(DisabledAssetPaths);
         App.Settings.Current.DisabledAssetFolders = new HashSet<string>(DisabledAssetFolders);
+        Services.AssetPresetService.ApplyOnlineChoice(App.Settings.Current, this);
         LastUsed = DateTime.Now;
     }
 
@@ -163,6 +198,7 @@ public class AssetPreset : INotifyPropertyChanged
     {
         DisabledAssetPaths = new HashSet<string>(App.Settings.Current.DisabledAssetPaths);
         DisabledAssetFolders = new HashSet<string>(App.Settings.Current.DisabledAssetFolders);
+        CaptureOnlineChoice(App.Settings.Current);
         EnabledImageCount = imageCount;
         EnabledVideoCount = videoCount;
         LastUsed = DateTime.Now;

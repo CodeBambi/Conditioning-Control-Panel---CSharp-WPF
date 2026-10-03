@@ -71,6 +71,9 @@ public partial class LauncherMediaDialog : Window
             if (mw != null) mw.ApplyAssetPresetFromLauncher(preset.Id);
             else if (AssetPresetService.Apply(s, preset.Id) != null) App.Settings?.Save();
 
+            // The preset may have switched the source and niches too (ccp-bugs #1142).
+            Refresh();
+
             Log.Information("[Launcher] asset preset -> {Name}", preset.Name);
         }
         catch (Exception ex) { Log.Warning(ex, "[Launcher] asset preset change failed"); }
