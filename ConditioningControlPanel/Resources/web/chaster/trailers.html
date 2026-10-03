@@ -465,6 +465,51 @@ V.quest=async function(s){
   await s.wait(1700);
 };
 
+/* IDLE DAY: CCP is open, a few minutes go by, the day ends under the 10 minute mark: +figure.
+   A cost row, so it never borrows the session scene, which ends on time OFF (ticket 2026-09-30). */
+V.idle_day=async function(s){
+  var sc=s.screen(90,16,140,96);
+  var sp=el(sc,'<svg width="140" height="96" viewBox="0 0 140 96"><path d="'+CT.spiralPath(70,48,4,38)+'" fill="none" stroke="#a892cc" stroke-width="3" stroke-linecap="round" opacity=".6"/></svg>');
+  sp.style.transformOrigin='70px 48px';s.anim(sp,[{rotate:'0deg'},{rotate:'-240deg'}],{duration:2600,easing:'cubic-bezier(.2,.6,.4,1)'});
+  var clk=s.add('<div class="p-num" style="left:244px;top:18px;font-size:15px;color:#a892cc">23:57</div>');
+  var bar=s.add('<div class="p-bar" style="left:52px;top:142px;width:184px;height:11px"><i></i></div>');
+  var pc=s.add('<div class="p-num" style="left:244px;top:140px;font-size:12px;color:#a892cc">0/10</div>');
+  s.anim(bar.firstChild,[{width:'0%'},{width:'40%'}],{duration:1600,easing:'cubic-bezier(.3,.7,.3,1)'});
+  for(var i=1;i<=4;i++){await s.wait(400);pc.textContent=i+'/10'}
+  bar.firstChild.style.width='40%';
+  for(var m=58;m<=60;m++){await s.wait(520);clk.textContent=m<60?'23:'+m:'0:00';s.anim(clk,[{scale:'1.3'},{scale:'1'}],{duration:200,fill:'none'})}
+  clk.style.color='#ff3d71';bar.firstChild.style.background='linear-gradient(90deg,#8a1230,#ff3d71)';pc.style.color='#ff3d71';
+  sc.style.transition='filter .4s';sc.style.filter='grayscale(.8) brightness(.55)';
+  redFlash(s,s.root);s.shake(s.root,3);s.cross(160,64,44);
+  await s.wait(420);s.cost('+20:00',160,178,'add',30);
+  await s.wait(1700);
+};
+
+/* DAILIES LEFT: one daily done, two still open at midnight: each open one adds the figure.
+   A cost row, so it never borrows the quest scene, which ends on time OFF (ticket 2026-09-30). */
+V.dailies_left=async function(s){
+  var card=s.add('<div class="va-card"><div class="p-line" style="left:16px;top:16px;width:84px;height:6px;background:rgba(255,255,255,.3)"></div></div>',60,10);
+  var pr=el(card,'<div class="p-num" style="right:16px;top:9px;font-size:15px;color:#a892cc">0/3</div>'),cbs=[];
+  for(var i=0;i<3;i++){var y=38+i*32;
+    cbs.push(el(card,'<div class="va-cb" style="top:'+y+'px"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M4.5 10.5l3.5 3.5 7.5-8.5" fill="none" stroke="#4dffc3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'));
+    el(card,'<div class="p-line" style="left:48px;top:'+(y+3)+'px;width:'+[124,104,116][i]+'px"></div>');
+    el(card,'<div class="p-line" style="left:48px;top:'+(y+13)+'px;width:'+[70,84,56][i]+'px;opacity:.6"></div>')}
+  var clk=s.add('<div class="p-num" style="left:266px;top:14px;font-size:13px;color:#a892cc">23:58</div>');
+  await s.wait(500);
+  cbs[0].classList.add('on');s.spark(86,58,'sub',5);s.anim(cbs[0],[{scale:'1.4'},{scale:'1'}],{duration:240,easing:POP,fill:'none'});
+  pr.textContent='1/3';s.anim(pr,[{scale:'1.35'},{scale:'1'}],{duration:220,fill:'none'});
+  for(var m=59;m<=60;m++){await s.wait(650);clk.textContent=m<60?'23:'+m:'0:00';s.anim(clk,[{scale:'1.3'},{scale:'1'}],{duration:200,fill:'none'})}
+  clk.style.color='#ff3d71';pr.style.color='#ff3d71';
+  card.style.boxShadow='0 0 0 2.5px #ff3d71,0 0 26px -4px #ff3d71';
+  for(i=1;i<3;i++){s.cross(86,58+i*32,28);s.shake(card,3);await s.wait(300)}
+  redFlash(s,s.root);
+  var each=CT.figs.add!=null?CT.figs.add:300;
+  await s.wait(200);s.cost('+'+CT.fmt(2*each),160,170,'add',28,true);
+  var lab=s.add('<div class="p-txt" style="left:0;right:0;text-align:center;top:186px;font-size:11px;color:#ff9db3">2 × '+CT.fmt(each)+'</div>');
+  s.anim(lab,[{opacity:0},{opacity:1}],300);
+  await s.wait(1700);
+};
+
 /* VIDEO: watch it to the end: -5:00 */
 V.video=async function(s){
   var pl=s.add('<div class="p-panel" style="width:220px;height:126px"><div class="va-vid"><div class="va-play"></div></div></div>',50,12);
@@ -873,13 +918,17 @@ V.natasha_held=async function(s){
   await s.to(rb,{y:0,o:1},1100,'cubic-bezier(.2,.8,.3,1)');
   rb.classList.add('vb-bob');
   await s.to(cur,{x:-102,y:-70},560);
-  // press and keep holding: the cursor stays down while the ring fills over 1.2 s
-  s.ripple(162,95,'sub');
-  s.anim(cur,[{scale:'1'},{scale:'.78'}],120);
+  // press and keep holding: the cursor stays down while the ring fills over 1.2 s. No click
+  // ripple: a ripple reads as a click, and a click is the pop (tester ticket 2026-09-30).
+  var hold=s.add('<div class="p-txt" style="left:196px;top:112px;font-size:11px;letter-spacing:.16em;color:#4dffc3;text-shadow:0 0 8px rgba(77,255,195,.8)">HOLD</div>');
+  s.anim(hold,[{opacity:0},{opacity:1}],{duration:200});
+  // the press goes through to(): a CSS `scale` animation also scales the cursor's translate,
+  // which slid the pointer off the bubble for the whole hold
+  s.to(cur,{s:.78},120);
   s.anim(rb,[{scale:'1'},{scale:'.82'}],{duration:1200,easing:'linear'});
   await s.anim(arc,[{strokeDashoffset:C},{strokeDashoffset:0}],{duration:1200,easing:'linear'});
-  s.anim(cur,[{scale:'.78'},{scale:'1'}],120);
-  s.anim(ring,[{opacity:1},{opacity:0}],260);
+  s.to(cur,{s:1},120);
+  s.anim(ring,[{opacity:1},{opacity:0}],260);hold.remove();
   await s.anim(rb,[{scale:'.82',opacity:1},{scale:'0',opacity:0}],{duration:380,easing:'cubic-bezier(.5,0,.8,.4)'});
   s.spark(160,93,'sub',10);
   await s.wait(120);s.cost('-1:00',160,50,'sub',28);
