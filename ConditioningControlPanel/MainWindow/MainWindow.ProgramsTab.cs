@@ -590,7 +590,9 @@ namespace ConditioningControlPanel
         {
             var tab = ProgramsTab;
             var svc = App.Programs;
-            var library = svc?.Library ?? (IReadOnlyList<ProgramDefinition>)Array.Empty<ProgramDefinition>();
+            // The active mod's programs lead (ccp-bugs #966). ModChanged already repaints this tab
+            // (EnsureProgramsAppHooks), so a mod switch reorders the list in place.
+            var library = Services.Program.ProgramBrowseOrder.Sort(svc?.Library, App.Mods?.ActiveModId);
 
             var mutedBrush = ProgramThemeBrush("TextMutedBrush", Brushes.Gray);
             var pinkBrush = ProgramThemeBrush("PinkBrush", Brushes.HotPink);

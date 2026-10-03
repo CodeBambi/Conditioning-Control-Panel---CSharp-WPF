@@ -5103,6 +5103,18 @@ namespace ConditioningControlPanel.Models
             set { _brainDrainIntensity = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
         }
 
+        private int _brainDrainVolume = 100; // 0-100%
+        /// <summary>
+        /// Brain Drain's own clip volume (0-100), multiplied with <see cref="MasterVolume"/>
+        /// (ccp-bugs #1104). A comfort setting: not session-locked and not carried by presets.
+        /// Default 100 keeps the old level, which was master volume alone.
+        /// </summary>
+        public int BrainDrainVolume
+        {
+            get => _brainDrainVolume;
+            set { _brainDrainVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
         private bool _brainDrainHighRefresh = false;
         /// <summary>
         /// High refresh rate mode - reduces timer interval from 5s to 500ms for smoother effect.
