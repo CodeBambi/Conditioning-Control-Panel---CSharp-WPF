@@ -761,7 +761,10 @@ namespace ConditioningControlPanel
             }
 
             TxtUserInput.Text = "";
-            ToggleInputPanel();
+            // Keep the box open and focused so the player can type the next line
+            // (ccp-bugs #1279). The reply bubble lives in its own popup, so the open box
+            // never covers it. Esc, right-click and an outside click still close it.
+            ShowInputPanel();
             SeasonRecapService.TrackFeature(SeasonFeatureKeys.Companion);
 
             // Which of the send paths below this message takes. Decided ONCE, up front, so the
