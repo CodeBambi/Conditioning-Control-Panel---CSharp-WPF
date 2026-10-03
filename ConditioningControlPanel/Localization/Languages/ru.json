@@ -459,6 +459,8 @@
   "chaster_limit_day": "Максимум в день",
   "chaster_limit_backlog": "Максимум на счёте",
   "chaster_limit_backlog_hint": "Больше всего неоплаченного времени, которое держит счёт, пока нет замка или Chaster лежит.",
+  "chaster_pop_day_full": "day is full",
+  "chaster_pop_tab_full": "tab is full",
   "chaster_relock": "Запереть снова, если таймер уже вышел",
   "chaster_relock_hint": "Если таймер замка уже вышел, отправка снова запрёт его с этого момента на цену. Только в течение 6 часов после конца. Выключено: счёт ждёт.",
   "chaster_fact_push_launch": "Уходит сразу",

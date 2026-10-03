@@ -48,10 +48,12 @@ namespace ConditioningControlPanel
                 if (chaster is null) return;
 
                 chaster.BookedAt += OnChasterBooked;
+                chaster.CapRefused += OnChasterCapRefused;
                 InitializeCirceLines(); // MainWindow.CirceLines.cs
                 Closed += (_, _) =>
                 {
                     try { chaster.BookedAt -= OnChasterBooked; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { chaster.CapRefused -= OnChasterCapRefused; } catch (Exception ex) { Diag.Swallowed(ex); }
                     // An open pop is an unowned visible window: it must not hold OnLastWindowClose.
                     try { ChasterBookedPop.CloseAll(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 };
@@ -124,6 +126,36 @@ namespace ConditioningControlPanel
                 if (IsVisible && look is { } pulse) (anchor as ChasterRailChip)?.Pulse(pulse.Colour);
             }
             catch (Exception ex) { App.Logger?.Debug("[Chaster] booked flash: {E}", ex.Message); }
+        }
+
+        /// <summary>When the last "day is full" tag went up, so a burst of pops shows one.</summary>
+        private long? _chasterCapShownMs;
+
+        /// <summary>A red bubble the player popped found the tab full (owner, 2026-10-03): a short
+        /// muted tag where it popped instead of nothing. See <see cref="CapNotice"/>.</summary>
+        private void OnChasterCapRefused(string eventId, TabRefusal refusal, Point? originPx)
+        {
+            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
+            try
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Normal,
+                    new Action(() => ShowCapNotice(refusal, originPx)));
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Chaster] cap tag marshal: {E}", ex.Message); }
+        }
+
+        private void ShowCapNotice(TabRefusal refusal, Point? causePx)
+        {
+            try
+            {
+                var now = Environment.TickCount64;
+                if (CapNotice.Throttled(_chasterCapShownMs, now)) return;
+                if (BookedPopLayout.ResolveOrigin(Valid(causePx), CursorPx()) is not { } at) return;
+                var motion = MotionFx.Level;
+                var look = CapNotice.Look(Localization.Loc.Get(CapNotice.TextKey(refusal)), motion);
+                if (ChasterBookedPop.Show(at, look, CapNotice.Pop(motion)) is not null) _chasterCapShownMs = now;
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Chaster] cap tag: {E}", ex.Message); }
         }
 
         private static Point? Valid(Point? p) =>

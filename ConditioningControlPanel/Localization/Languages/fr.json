@@ -459,6 +459,8 @@
   "chaster_limit_day": "Au plus par jour",
   "chaster_limit_backlog": "Au plus sur l'ardoise",
   "chaster_limit_backlog_hint": "Le plus de temps impayé que l'ardoise garde tant qu'il n'y a pas de cadenas ou que Chaster est en panne.",
+  "chaster_pop_day_full": "day is full",
+  "chaster_pop_tab_full": "tab is full",
   "chaster_relock": "Reverrouiller quand le minuteur est écoulé",
   "chaster_relock_hint": "Si le minuteur du cadenas est écoulé, un envoi le reverrouille à partir de maintenant, pour le prix. Seulement dans les 6 heures qui suivent. Désactivé : l’ardoise attend.",
   "chaster_fact_push_launch": "Envoyé au fur et à mesure",

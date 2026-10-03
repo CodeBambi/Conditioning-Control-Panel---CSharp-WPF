@@ -129,6 +129,11 @@ public sealed partial class ChasterService : IDisposable
     /// cursor). A separate event so the older listeners keep their signature.</summary>
     public event Action<string, TabBooking, System.Windows.Point?>? BookedAt;
 
+    /// <summary>A pop the player caused had a price the tab had no room for (the day's limit or
+    /// the backlog limit). Only what <see cref="CapNotice.Shows"/> allows, with the same screen
+    /// point <see cref="BookedAt"/> would have used: the main window floats "day is full" there.</summary>
+    public event Action<string, TabRefusal, System.Windows.Point?>? CapRefused;
+
     /// <summary>Linked, unlinked, or the link died. Raised on whatever thread found out.</summary>
     public event Action? LinkChanged;
 
@@ -241,6 +246,7 @@ public sealed partial class ChasterService : IDisposable
         if (options.Prices.Contains(TabDayEnd.HeatId) && TabDayEnd.HeatApplies(eventId))
             seconds = TabDayEnd.Heated(seconds, HeatCount(eventId));
         var booking = BookSeconds(eventId, seconds, originPx, unprompted: unprompted);
+        if (CapNotice.Shows(eventId, seconds, booking, unprompted)) CapRefused?.Invoke(eventId, booking.Refusal, originPx);
         if (eventId == "session") NoteStreak(options);
         return booking;
     }

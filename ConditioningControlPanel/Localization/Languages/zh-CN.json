@@ -464,6 +464,8 @@
   "chaster_limit_day": "每天最多",
   "chaster_limit_backlog": "账上最多",
   "chaster_limit_backlog_hint": "没有锁或 Chaster 宕机时，账本最多能存下的未付时间。",
+  "chaster_pop_day_full": "day is full",
+  "chaster_pop_tab_full": "tab is full",
   "chaster_relock": "计时器到期后重新上锁",
   "chaster_relock_hint": "如果锁的计时器已经到期，发送时会从现在起按价格重新上锁。只在到期后 6 小时内。关闭时：记账会一直等着。",
   "chaster_fact_push_launch": "即时发送",
