@@ -61,15 +61,18 @@ namespace ConditioningControlPanel
 
                 if (AwarenessTab.SliderAwarenessGlobalCooldown != null)
                 {
-                    var v = Math.Clamp(settings.KeywordGlobalCooldownSeconds, 1, 180);
-                    AwarenessTab.SliderAwarenessGlobalCooldown.Value = v;
-                    if (AwarenessTab.TxtAwarenessGlobalCooldown != null) AwarenessTab.TxtAwarenessGlobalCooldown.Text = $"{v}s";
+                    // The slider is a stop index (ccp-bugs #640); the label shows the stored seconds.
+                    var v = Services.Awareness.AwarenessCooldownScale.Clamp(settings.KeywordGlobalCooldownSeconds);
+                    AwarenessTab.SliderAwarenessGlobalCooldown.Maximum = Services.Awareness.AwarenessCooldownScale.MaxIndex;
+                    AwarenessTab.SliderAwarenessGlobalCooldown.Value = Services.Awareness.AwarenessCooldownScale.IndexFor(v);
+                    if (AwarenessTab.TxtAwarenessGlobalCooldown != null) AwarenessTab.TxtAwarenessGlobalCooldown.Text = Services.Awareness.AwarenessCooldownScale.Format(v);
                 }
                 if (AwarenessTab.SliderAwarenessSameWordCooldown != null)
                 {
-                    var v = Math.Clamp(settings.KeywordPerKeywordCooldownSeconds, 1, 180);
-                    AwarenessTab.SliderAwarenessSameWordCooldown.Value = v;
-                    if (AwarenessTab.TxtAwarenessSameWordCooldown != null) AwarenessTab.TxtAwarenessSameWordCooldown.Text = $"{v}s";
+                    var v = Services.Awareness.AwarenessCooldownScale.Clamp(settings.KeywordPerKeywordCooldownSeconds);
+                    AwarenessTab.SliderAwarenessSameWordCooldown.Maximum = Services.Awareness.AwarenessCooldownScale.MaxIndex;
+                    AwarenessTab.SliderAwarenessSameWordCooldown.Value = Services.Awareness.AwarenessCooldownScale.IndexFor(v);
+                    if (AwarenessTab.TxtAwarenessSameWordCooldown != null) AwarenessTab.TxtAwarenessSameWordCooldown.Text = Services.Awareness.AwarenessCooldownScale.Format(v);
                 }
 
                 UpdateAwarenessStatusIndicator(masterOn);

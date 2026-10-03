@@ -7821,7 +7821,7 @@ namespace ConditioningControlPanel.Models
 
         private int _keywordGlobalCooldownSeconds = 10;
         /// <summary>
-        /// Global cooldown between any trigger firing, in seconds (clamped 1-300).
+        /// Global cooldown between any trigger firing, in seconds (clamped 1-3600).
         /// Enforced on all three match sources (OCR, keyboard, external text) —
         /// this is a hard ceiling on trigger frequency regardless of how many
         /// matches are on screen. Primarily prevents the OCR feedback loop
@@ -7833,13 +7833,13 @@ namespace ConditioningControlPanel.Models
         public int KeywordGlobalCooldownSeconds
         {
             get => _keywordGlobalCooldownSeconds;
-            set { _keywordGlobalCooldownSeconds = Math.Clamp(value, 1, 300); OnPropertyChanged(); }
+            set { _keywordGlobalCooldownSeconds = Math.Clamp(value, 1, 3600); OnPropertyChanged(); }
         }
 
         private int _keywordPerKeywordCooldownSeconds = 15;
         /// <summary>
         /// Hard minimum cooldown between two fires of the SAME keyword, in seconds
-        /// (clamped 1-600). Enforced at RecordFire time via the _mutedKeywords
+        /// (clamped 1-3600). Enforced at RecordFire time via the _mutedKeywords
         /// dictionary independent of AwarenessLoopProtectionEnabled. Floor for
         /// the per-trigger <see cref="KeywordTrigger.CooldownSeconds"/> — presets
         /// that declare a lower cooldown will still be gated at this minimum.
@@ -7848,7 +7848,7 @@ namespace ConditioningControlPanel.Models
         public int KeywordPerKeywordCooldownSeconds
         {
             get => _keywordPerKeywordCooldownSeconds;
-            set { _keywordPerKeywordCooldownSeconds = Math.Clamp(value, 1, 600); OnPropertyChanged(); }
+            set { _keywordPerKeywordCooldownSeconds = Math.Clamp(value, 1, 3600); OnPropertyChanged(); }
         }
 
         private double _keywordSessionMultiplier = 1.5;
