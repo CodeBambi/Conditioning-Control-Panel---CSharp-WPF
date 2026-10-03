@@ -36,7 +36,7 @@ public class InviteCopyTests
             .Where(k => !k.EndsWith("_", StringComparison.Ordinal))
             .Distinct().ToList();
         foreach (var reason in new[] { "unknown_code", "used", "own_code", "already_had_week",
-                     "already_subscribed", "too_fast", "offline", "bad_code", "anything_else" })
+                     "already_subscribed", "too_fast", "offline", "bad_code", "signin", "anything_else" })
             keys.Add(InvitePanel.ReasonKey(reason));
         return keys.Distinct().ToArray();
     }
@@ -69,6 +69,8 @@ public class InviteCopyTests
     [InlineData("used", "invites_err_used")]
     [InlineData("already_had_week", "invites_err_already_had_week")]
     [InlineData("offline", "invites_err_offline")]
+    [InlineData("signin", "invites_err_signin")]
+    [InlineData("account_too_old", "invites_err_generic")]
     [InlineData(null, "invites_err_generic")]
     [InlineData("not_a_reason_we_know", "invites_err_generic")]
     public void ReasonKey(string? reason, string expected) => Assert.Equal(expected, InvitePanel.ReasonKey(reason));

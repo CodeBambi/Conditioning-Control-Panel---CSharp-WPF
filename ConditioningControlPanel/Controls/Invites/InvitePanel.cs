@@ -438,7 +438,7 @@ public sealed class InvitePanel : Border
     internal static string ReasonKey(string? reason) => reason switch
     {
         "unknown_code" or "used" or "own_code" or "already_had_week" or "already_subscribed"
-            or "too_fast" or "offline" or "bad_code" => "invites_err_" + reason,
+            or "too_fast" or "offline" or "bad_code" or "signin" => "invites_err_" + reason,
         _ => "invites_err_generic",
     };
 
