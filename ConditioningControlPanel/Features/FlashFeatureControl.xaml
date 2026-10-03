@@ -297,6 +297,26 @@
                                                   SelectionChanged="CmbMotion_Changed"/>
                                     </Grid>
 
+                                    <!-- #1265: Drift and Bounce speed. Shown only while Drift and Bounce is
+                                         owned and picked (or Mix); see UpdateDriftSpeedRow. -->
+                                    <Grid x:Name="RowDriftSpeed" Height="36" Background="Transparent" Visibility="Collapsed"
+                                          ToolTip="{loc:Str tooltip_flash_drift_speed}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_drift_speed}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" x:Name="SliderDriftSpeed" Minimum="0.25" Maximum="3" Value="1"
+                                                TickFrequency="0.25" IsSnapToTickEnabled="True"
+                                                VerticalAlignment="Center" Margin="14,0"
+                                                ValueChanged="SliderDriftSpeed_Changed"/>
+                                        <TextBlock Grid.Column="2" x:Name="TxtDriftSpeed" Text="1x" HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                                   FontSize="13" FontWeight="Bold"/>
+                                    </Grid>
+
                                     <!-- Rounded corners (wave 2). Rides the motion grants, like the picker
                                          above it: nothing to round on an account with no v2 style. -->
                                     <Grid x:Name="RowRoundedCorners" Height="34" Background="Transparent" Visibility="Collapsed"

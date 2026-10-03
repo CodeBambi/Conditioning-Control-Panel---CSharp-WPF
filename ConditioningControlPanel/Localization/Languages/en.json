@@ -6557,6 +6557,8 @@
   "tooltip_flash_solid_mode": "Draws every flash on one shared overlay instead of a new window each time, so fullscreen games stop reacting to the churn. Flashes go click-through, so no mouse pop and no hydra clicks, but gaze pop and stare to keep still work. Takes effect on the next flash.",
   "setting_flash_motion": "Motion",
   "tooltip_flash_motion": "How a flash moves while it is up. Drift & Bounce wanders and rebounds off the screen edges; Pendulum swings from the top of the screen like a pocket watch; Mix rolls one per flash. Compositor flashes only; Reduced motion halves it and Off keeps them still.",
+  "setting_flash_drift_speed": "Drift speed",
+  "tooltip_flash_drift_speed": "How fast Drift & Bounce flashes travel. 1x is the normal speed.",
   "option_flash_motion_still": "Still",
   "option_flash_motion_drift": "Drift & Bounce",
   "option_flash_motion_pendulum": "Pendulum",

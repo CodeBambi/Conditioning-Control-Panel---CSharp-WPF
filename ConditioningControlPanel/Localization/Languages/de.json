@@ -5939,6 +5939,8 @@
   "tooltip_flash_solid_mode": "Zeichnet alle Flashes auf ein gemeinsames Overlay statt jedes Mal in ein neues Fenster, damit Vollbildspiele nicht mehr auf das Fensterchaos reagieren. Flashes werden klickdurchlässig, also kein Mausklick-Pop und keine Hydra-Klicks, aber Blick-Pop und Blick halten funktionieren weiter. Gilt ab dem nächsten Flash.",
   "setting_flash_motion": "Bewegung",
   "tooltip_flash_motion": "Wie ein Flash sich bewegt, solange er sichtbar ist. Drift & Bounce wandert und prallt von den Bildschirmrändern ab; Pendel schwingt vom oberen Rand wie eine Taschenuhr; Mix würfelt pro Flash. Nur Compositor-Flashes; reduzierte Bewegung halbiert sie, Aus lässt sie stillstehen.",
+  "setting_flash_drift_speed": "Drift-Tempo",
+  "tooltip_flash_drift_speed": "Wie schnell Drift & Bounce-Flashes wandern. 1x ist das normale Tempo.",
   "option_flash_motion_still": "Still",
   "option_flash_motion_drift": "Drift & Bounce",
   "option_flash_motion_pendulum": "Pendel",

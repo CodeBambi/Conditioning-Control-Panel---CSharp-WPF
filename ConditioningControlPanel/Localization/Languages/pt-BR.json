@@ -5939,6 +5939,8 @@
   "tooltip_flash_solid_mode": "Desenha todos os flashes em uma única camada compartilhada em vez de abrir uma janela a cada vez, então jogos em tela cheia param de reagir a esse vaivém. Os flashes ficam transparentes ao clique, ou seja, sem estourar com o mouse e sem cliques de hidra, mas olhar para estourar e olhar para manter continuam funcionando. Vale a partir do próximo flash.",
   "setting_flash_motion": "Movimento",
   "tooltip_flash_motion": "Como um flash se move enquanto está na tela. Drift & Bounce vagueia e rebate nas bordas; Pêndulo balança do topo da tela como um relógio de bolso; Mix sorteia um por flash. Só flashes do compositor; movimento reduzido corta pela metade e Desligado os deixa parados.",
+  "setting_flash_drift_speed": "Velocidade da deriva",
+  "tooltip_flash_drift_speed": "A velocidade dos flashes Drift & Bounce. 1x é a velocidade normal.",
   "option_flash_motion_still": "Parado",
   "option_flash_motion_drift": "Drift & Bounce",
   "option_flash_motion_pendulum": "Pêndulo",

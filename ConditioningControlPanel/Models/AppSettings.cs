@@ -1325,6 +1325,20 @@ namespace ConditioningControlPanel.Models
             set { _flashMotionStyle = value; OnPropertyChanged(); }
         }
 
+        private double _flashDriftSpeed = 1.0;
+        /// <summary>
+        /// Speed multiplier for the Drift and Bounce motion (ccp-bugs #1265). 1.0 is the authored
+        /// speed; clamped 0.25..3. Applied once per spawn to the rolled velocity.
+        /// </summary>
+        [JsonProperty("FlashDriftSpeed")]
+        public double FlashDriftSpeed
+        {
+            get => _flashDriftSpeed;
+            set { _flashDriftSpeed = ClampDriftSpeed(value); OnPropertyChanged(); }
+        }
+
+        internal static double ClampDriftSpeed(double v) => double.IsNaN(v) ? 1.0 : Math.Clamp(v, 0.25, 3.0);
+
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
         public int FlashDuration
         {

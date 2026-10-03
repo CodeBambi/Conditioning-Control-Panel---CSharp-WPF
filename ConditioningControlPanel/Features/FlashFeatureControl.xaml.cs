@@ -155,6 +155,9 @@ namespace ConditioningControlPanel.Features
                 ChkGlow.IsChecked = s.FlashGlowEnabled;
                 ChkSolidMode.IsChecked = s.FlashSolidMode;
                 SelectMotion(s.FlashMotionStyle);
+                SliderDriftSpeed.Value = s.FlashDriftSpeed;
+                TxtDriftSpeed.Text = FormatDriftSpeed(s.FlashDriftSpeed);
+                UpdateDriftSpeedRow();
                 ChkFlashGazePop.IsChecked = s.FlashGazePopEnabled;
                 ChkFlashGazeLinger.IsChecked = s.FlashGazeLingerEnabled;
                 SliderFlashLingerMs.Value = s.FlashGazeLingerExtensionMs;
@@ -185,6 +188,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashGlowEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashSolidMode) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashMotionStyle) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashDriftSpeed) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashRoundedCorners) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashDraggable) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashShatterEnabled) ||
@@ -394,6 +398,7 @@ namespace ConditioningControlPanel.Features
                 if (pendulum) AddMotionChoice(Models.FlashMotionStyle.Pendulum, "option_flash_motion_pendulum", v2: true);
                 if (drift || pendulum) AddMotionChoice(Models.FlashMotionStyle.Mix, "option_flash_motion_mix", v2: false);
                 SelectMotion(App.Settings?.Current?.FlashMotionStyle ?? Models.FlashMotionStyle.Still);
+                UpdateDriftSpeedRow();
             }
             catch (Exception ex) { App.Logger?.Debug("FlashFeatureControl.BuildMotionPicker: {E}", ex.Message); }
             finally { _isLoading = wasLoading; }
@@ -496,7 +501,34 @@ namespace ConditioningControlPanel.Features
             if (s.FlashMotionStyle == style) return;
             s.FlashMotionStyle = style;
             App.Settings?.Save();
+            UpdateDriftSpeedRow();
             // No service bounce: every spawn resolves the picker, so the next flash uses it.
+        }
+
+        /// <summary>
+        /// #1265: the Drift and Bounce speed row shows only while that style is owned and the
+        /// picker can actually roll it (Drift and Bounce itself, or Mix).
+        /// </summary>
+        private void UpdateDriftSpeedRow()
+        {
+            if (RowDriftSpeed == null || CmbMotion == null) return;
+            var picked = (CmbMotion.SelectedItem as ComboBoxItem)?.Tag as Models.FlashMotionStyle?;
+            bool show = PrizeGrants.IsGranted(PrizeGrants.FlashDriftBounce)
+                && picked is Models.FlashMotionStyle.DriftBounce or Models.FlashMotionStyle.Mix;
+            RowDriftSpeed.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static string FormatDriftSpeed(double v)
+            => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "x";
+
+        private void SliderDriftSpeed_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtDriftSpeed == null) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashDriftSpeed = e.NewValue;
+            TxtDriftSpeed.Text = FormatDriftSpeed(s.FlashDriftSpeed);
+            App.Settings?.Save();
         }
 
         // =====================================================================================

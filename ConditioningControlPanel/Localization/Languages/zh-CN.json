@@ -6451,6 +6451,8 @@
   "tooltip_flash_solid_mode": "把所有闪图画在一层共享覆盖层上，而不是每次都新开一个窗口，全屏游戏就不会再被窗口进出打断。闪图会变成点击穿透，所以没法用鼠标戳破，也没有九头蛇点击，但凝视戳破和凝视留存照样能用。下一张闪图起生效。",
   "setting_flash_motion": "运动",
   "tooltip_flash_motion": "闪图显示期间的移动方式。Drift & Bounce 漂移并在屏幕边缘反弹；钟摆从屏幕顶部像怀表一样摆动；混合为每张闪图随机选一种。仅对合成器闪图生效；减少动态时减半，关闭时保持静止。",
+  "setting_flash_drift_speed": "漂移速度",
+  "tooltip_flash_drift_speed": "Drift & Bounce 闪图的移动速度。1x 为正常速度。",
   "option_flash_motion_still": "静止",
   "option_flash_motion_drift": "Drift & Bounce",
   "option_flash_motion_pendulum": "钟摆",
