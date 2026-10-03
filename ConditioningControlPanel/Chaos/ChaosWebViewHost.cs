@@ -308,7 +308,7 @@ internal sealed class ChaosWebViewHost : IDisposable
         _window.Show();
         _countedActive = true;
         System.Threading.Interlocked.Increment(ref _activeHostCount);
-        if (_opts.IsGame) { _countedGame = true; System.Threading.Interlocked.Increment(ref _activeGameCount); }
+        if (_opts.IsGame) { _countedGame = true; System.Threading.Interlocked.Increment(ref _activeGameCount); RaiseGameActiveChanged(); }
         try
         {
             if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
@@ -1793,12 +1793,24 @@ internal sealed class ChaosWebViewHost : IDisposable
     private bool _countedGame;
     internal static bool AnyGameActive => System.Threading.Volatile.Read(ref _activeGameCount) > 0;
 
+    /// <summary>A game window opened or closed (<see cref="AnyGameActive"/> may have changed).
+    /// The companion's speech bubble listens: a line already up when a game opens must hide, and
+    /// one still running when the game closes comes back (ccp-bugs #1345). May be raised from
+    /// Dispose on any thread; listeners marshal themselves.</summary>
+    internal static event Action? GameActiveChanged;
+
+    private static void RaiseGameActiveChanged()
+    {
+        try { GameActiveChanged?.Invoke(); }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+    }
+
     /// <summary>Give back whatever this host is holding on the two counters. Idempotent, because
     /// both a failed constructor and Dispose call it.</summary>
     private void ReleaseActiveCounts()
     {
         if (_countedActive) { _countedActive = false; System.Threading.Interlocked.Decrement(ref _activeHostCount); }
-        if (_countedGame) { _countedGame = false; System.Threading.Interlocked.Decrement(ref _activeGameCount); }
+        if (_countedGame) { _countedGame = false; System.Threading.Interlocked.Decrement(ref _activeGameCount); RaiseGameActiveChanged(); }
     }
 
     // Passive backdrops absorb clicks (no WS_EX_TRANSPARENT) but never steal focus / show in Alt-Tab.
