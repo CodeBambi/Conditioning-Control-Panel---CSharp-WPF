@@ -3184,6 +3184,9 @@ namespace ConditioningControlPanel
         // Live name+URL rows in the mod-aware video link pool editor.
         private readonly List<(TextBox NameBox, TextBox UrlBox)> _videoLinkRows = new();
 
+        /// <summary>Rebuilds the link pool rows in whichever library cell is mounted.</summary>
+        internal void RefreshVideoLinkPool() => RefreshHypnotubeLinksUI();
+
         private void RefreshHypnotubeLinksUI()
         {
             if (CompanionTab.TxtHypnotubeModeLabel != null)

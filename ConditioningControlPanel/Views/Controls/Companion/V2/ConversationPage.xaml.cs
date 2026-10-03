@@ -21,6 +21,7 @@ public partial class ConversationPage : UserControl
     private BindingBase? _oldBinding;
     private object? _oldContext;
     private IInputElement? _returnFocus;
+    private WorkshopLibraryCell? _oldLibrary;
     public Action<Window>? PersonalityEditor { get; set; }
     internal ConversationPage(CompanionRoomRuntimeVm room, CompanionRoomView legacy)
     {
@@ -108,7 +109,7 @@ public partial class ConversationPage : UserControl
         App.Brain?.EnsureCurrentAccount();
         _vm.Room.Sync();
         string? source = kind switch { "memory" => "MemoryZone", "permissions" => "PermissionsZone", "connection" => "EngineZone", "personality" => "PersonalityZone", _ => null };
-        SheetTitle.Text = Loc.Get(kind switch { "memory" => "companion_v2_memory", "permissions" => "companion_v2_allowed", "connection" => "companion_v2_connection", _ => "companion_v2_who" });
+        SheetTitle.Text = Loc.Get(kind switch { "memory" => "companion_v2_memory", "permissions" => "companion_v2_allowed", "videos" => "companion_v2_videos", "connection" => "companion_v2_connection", _ => "companion_v2_who" });
         if (source != null && _legacy.FindName(source) is FrameworkElement existing && existing.Parent is Panel parent)
         {
             _borrowed = existing;
@@ -125,6 +126,17 @@ public partial class ConversationPage : UserControl
             if (kind == "memory") { contents.Children.Add(new PreferredNameEditor()); contents.Children.Add(new ConversationRecap()); }
             contents.Children.Add(existing);
             SheetContent.Content = contents;
+        }
+        else if (kind == "videos")
+        {
+            // The mod's video link pool, the list the AI picks videos from (ccp-bugs #1343). The page
+            // is not in the visual tree while the v2 page covers it, so a fresh cell takes the shelf slot
+            // for as long as the sheet is open and the old one is put back on close.
+            _oldLibrary = _vm.Room.Shelf.Library;
+            var library = new WorkshopLibraryCell();
+            _vm.Room.Shelf.Library = library;
+            SheetContent.Content = library;
+            if (Window.GetWindow(this) is MainWindow mw) mw.RefreshVideoLinkPool();
         }
         else if (kind == "who")
         {
@@ -165,6 +177,7 @@ public partial class ConversationPage : UserControl
                 else restored.DataContext = _oldContext;
             }
         }
+        if (_oldLibrary != null) { _vm.Room.Shelf.Library = _oldLibrary; _oldLibrary = null; }
         SheetContent.Content = null;
         _borrowed = null;
         _parent = null;
