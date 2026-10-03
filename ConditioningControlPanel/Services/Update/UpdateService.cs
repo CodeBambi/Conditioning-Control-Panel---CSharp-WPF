@@ -20,53 +20,56 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.0.2";
+        public const string AppVersion = "7.0.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.0.2 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.0.3 - Stay Tuned
 
-[a lobby, the fall, invite codes, and the fixes you sent in]
+[the remote grows up, plus a pile of your suggestions]
 
-NEW IN 7.0.2
+NEW IN 7.0.3
 
-THE LOBBY
-Available Subjects is now the Lobby. three lists side by side: open tables, playing now, and your friends' tables. every table says who, what game and how it is set up, with a Join button. host a chess, Goon or Remote table from the top of the page. the launcher has a Lobby chip too: it shows how many tables are open and drops down the list, so you can join without opening the panel.
+REMOTE CONTROL
+- the remote page is new. whoever holds your remote sees a live preview of what is on your screen, draws their own toy patterns or loops one, and has a Melt button for Brain Drain.
+- while someone has your remote you get a small pill at the top of the screen: who, how long, what they did last. More asks for more. Easy halves the strength and tells them. Stop ends everything here and tells them. click the pill to fold it.
+- your panic key always works now. a controller can no longer switch it off.
+- the preview can say where your online pictures come from. turn that off in the Remote tab. file names are never shared.
+- a buzz sent with no toy connected is refused, so the controller knows.
+- when a controller leaves, panic comes back on and a strict lock they set is released.
 
-INVITE CODES
-Basic and Prime get one invite code a month. anyone new who redeems it gets 7 days of Basic, free. no card, nothing renews. when a friend you invited subscribes, you climb a ladder of four badges, each with something new for the wardrobe. a ticket wiggles next to your profile while you have a code to give: click it, or find your code at the bottom of the Premium tab. the friends list has an invite link too.
-
-LOCKED FEATURES
-clicking a padlock opens a card instead of throwing you into Settings: what the feature is, what Basic and Prime cost in your currency, monthly or yearly, and a compare page. already a supporter? sign in from the same card. have a code? redeem it there.
-
-PIECE BY PIECE
-- the fall. in Distraction, thinking makes it worse: the longer you stare at the board, the more the room closes in. your move clears it, and it stays clear until your next turn comes round. every move you make is graded and your IQ starts at 140. it only goes down. your opponent never sees yours.
-- Distraction has its own dials under Options: how many pictures (less, normal, more), how strong they are, and how fast it climbs. it climbs slower than before by default.
-- the end card shows where it went wrong and the better move. Watch the fall plays your game back, and you can save or copy the picture.
-- open tables: see who is waiting for a game and who is playing right now, then host or join.
-- the first Distraction game asks which pictures you want. change it later under Options, Pictures.
-- the turn card is smaller and quicker, with a sound. the crowd reacts more.
+FROM YOUR SUGGESTIONS
+- Awareness cooldowns go up to an hour.
+- Brain Drain can be an Awareness keyword effect, has its own clip volume, and its clips show in the Media Log.
+- flashes: a random range of images per flash, a speed slider for Drift & Bounce, and a spiral you can actually see at high settings.
+- lock cards can wipe the line on a typo. off by default.
+- Mercy has an on/off switch, and you pick after how many fails.
+- mandatory videos can be pinned to one monitor.
+- asset presets remember your online picture picks.
+- chess: invert the camera drag under Options.
+- tube chat stays open after you send.
+- Focus Gaze left on starts with the app. it never asks at launch.
+- ""Locked away"" needs a lockdown of 20 minutes or more.
+- smaller ones: your mod's programs list first, the Deeper editor shows its opacity values, the Deeper video nudge has ""Don't ask again"", the bug report window opens on top, FYP ghost mode starts at 60%.
 
 CIRCE'S TAB
-- time taken off no longer shrinks your daily max. the day counts your adds minus your credits, so it can still reach the full limit, and a credit earned after you hit it cancels your next slip-up.
-- a quick pop on a red bubble could sometimes count as a hold. fixed.
-- the ""Resisted the red"" preview shows the hold and -1:00, not the pop.
-
-LOCKTOBER
-already live, no update needed: a lock's first day counts, so Oct 1 is back for locks made at the end of September. new Chaster accounts count too. the daily post in #locktober lists everyone with time and counts the rest.
+- a red bubble popped when your day or tab is full now says so.
+- the hover previews show each row's own sign, and the hold looks like a hold.
 
 FIXES
-- the AI's videos play again. when it names a video, you get your closest matching file, or its HypnoTube link opens. nothing plays only when you do not have it.
-- drop a preset file anywhere, including on the launcher. renamed downloads like ""name.preset (1).json"" work, and a file CCP does not know tells you so.
-- the companion can be switched back on after you dismiss it: Companion, Settings, Show companion.
-- the ""On Autopilot"" quest counts while CCP is minimised.
-- Breakout: the paddle no longer jumps when the mouse sends one wild movement.
-- videos in the in-app browser start right away instead of waiting for the page's ads.
+- the AI can play videos from your mod's video links again.
+- Video links are back in the companion's Settings.
+- red bubbles: a quick click pops and a hold resists, more reliably.
+- the companion's speech bubble hides when a game opens and comes back when it closes.
+- games get their own taskbar icon under the launcher, and desktop game shortcuts wear the game's icon.
+- Chaster: one unreadable lock no longer hides your whole lock list.
+- Breakout: clicking to launch works while the mouse is captured, and drops that go through a portal stay on screen.
+- missed from the 7.0.2 notes: a Surrender button in every chess mode, and the companion's speech bubble no longer pulls the app in front of what you are doing.
 
 EVERYTHING ELSE
-the rest is 7.0.0. if you are coming from 6.11.5, read the 7.0.0 notes on the release page.";
+the rest is 7.0.2. coming from 6.11.5? read the 7.0.0 notes on the release page.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
