@@ -2436,6 +2436,8 @@
   "voice_test_companion_off_body": "Компаньон выключен, а для голосового теста он нужен на экране. Включить сейчас?",
   "modmgr_avatar_single_hint": "У этого мода один облик.",
   "modmgr_more": "Ещё",
+  "fold_more_options": "Больше настроек",
+  "fold_fewer_options": "Меньше настроек",
   "modmgr_in_use": "АКТИВЕН",
   "modmgr_preview_tag": "ПРЕВЬЮ",
   "modmgr_preview_counts": "{0}  ·  {1}",

@@ -2436,6 +2436,8 @@
   "voice_test_companion_off_body": "El acompañante está desactivado y la prueba de voz lo necesita en pantalla. ¿Activarlo ahora?",
   "modmgr_avatar_single_hint": "Este mod tiene un aspecto.",
   "modmgr_more": "Más",
+  "fold_more_options": "Más opciones",
+  "fold_fewer_options": "Menos opciones",
   "modmgr_in_use": "EN USO",
   "modmgr_preview_tag": "VISTA PREVIA",
   "modmgr_preview_counts": "{0}  ·  {1}",

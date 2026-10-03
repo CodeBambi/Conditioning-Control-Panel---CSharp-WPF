@@ -2436,6 +2436,8 @@
   "voice_test_companion_off_body": "コンパニオンがオフになっています。音声テストには画面上のコンパニオンが必要です。今すぐオンにしますか？",
   "modmgr_avatar_single_hint": "このModの見た目は1つです。",
   "modmgr_more": "もっと見る",
+  "fold_more_options": "その他のオプション",
+  "fold_fewer_options": "オプションを閉じる",
   "modmgr_in_use": "使用中",
   "modmgr_preview_tag": "プレビュー",
   "modmgr_preview_counts": "{0}  ·  {1}",

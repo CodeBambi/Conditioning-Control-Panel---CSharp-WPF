@@ -2436,6 +2436,8 @@
   "voice_test_companion_off_body": "O companheiro está desligado, e o teste de voz precisa dele na tela. Ativar agora?",
   "modmgr_avatar_single_hint": "Este mod tem um visual.",
   "modmgr_more": "Mais",
+  "fold_more_options": "Mais opções",
+  "fold_fewer_options": "Menos opções",
   "modmgr_in_use": "EM USO",
   "modmgr_preview_tag": "PRÉVIA",
   "modmgr_preview_counts": "{0}  ·  {1}",

@@ -2436,6 +2436,8 @@
   "voice_test_companion_off_body": "컴패니언이 꺼져 있어요. 음성 테스트를 하려면 화면에 컴패니언이 있어야 해요. 지금 켤까요?",
   "modmgr_avatar_single_hint": "이 모드는 외형이 하나예요.",
   "modmgr_more": "더 보기",
+  "fold_more_options": "옵션 더 보기",
+  "fold_fewer_options": "옵션 접기",
   "modmgr_in_use": "사용 중",
   "modmgr_preview_tag": "미리보기",
   "modmgr_preview_counts": "{0}  ·  {1}",

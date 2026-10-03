@@ -3193,6 +3193,8 @@
   "voice_test_companion_off_body": "伙伴已关闭，语音测试需要伙伴显示在屏幕上。现在开启吗？",
   "modmgr_avatar_single_hint": "此模组只有一种外观。",
   "modmgr_more": "更多",
+  "fold_more_options": "更多选项",
+  "fold_fewer_options": "收起选项",
   "modmgr_in_use": "使用中",
   "modmgr_preview_tag": "预览",
   "modmgr_preview_counts": "{0}  ·  {1}",

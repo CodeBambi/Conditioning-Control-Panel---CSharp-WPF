@@ -2436,6 +2436,8 @@
   "voice_test_companion_off_body": "Die Begleitung ist ausgeschaltet. Der Sprachtest braucht die Begleitung auf dem Bildschirm. Jetzt einschalten?",
   "modmgr_avatar_single_hint": "Dieser Mod hat ein Aussehen.",
   "modmgr_more": "Mehr",
+  "fold_more_options": "Mehr Optionen",
+  "fold_fewer_options": "Weniger Optionen",
   "modmgr_in_use": "AKTIV",
   "modmgr_preview_tag": "VORSCHAU",
   "modmgr_preview_counts": "{0}  ·  {1}",

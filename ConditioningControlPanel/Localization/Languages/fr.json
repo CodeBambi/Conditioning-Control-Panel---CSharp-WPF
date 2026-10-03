@@ -2436,6 +2436,8 @@
   "voice_test_companion_off_body": "Le compagnon est désactivé, et le test vocal en a besoin à l'écran. L'activer maintenant ?",
   "modmgr_avatar_single_hint": "Ce mod a une seule apparence.",
   "modmgr_more": "Plus",
+  "fold_more_options": "Plus d'options",
+  "fold_fewer_options": "Moins d'options",
   "modmgr_in_use": "ACTIF",
   "modmgr_preview_tag": "APERÇU",
   "modmgr_preview_counts": "{0}  ·  {1}",

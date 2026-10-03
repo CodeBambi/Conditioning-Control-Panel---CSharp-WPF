@@ -170,28 +170,6 @@
 
                             <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
 
-                            <!-- Brain Drain's own clip volume (BrainDrainVolume, ccp-bugs #1104),
-                                 multiplied with the master volume. A comfort setting, so NOT
-                                 SessionLock-owned. Explicit 0-100 range (Slider defaults to Maximum=10). -->
-                            <Grid Height="36" ToolTip="{loc:Str st4_braindrain_volume_hint}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_volume}" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <Slider Grid.Column="1" x:Name="SliderVolume" x:FieldModifier="internal"
-                                        Minimum="0" Maximum="100" Value="100"
-                                        VerticalAlignment="Center" Margin="10,0"
-                                        ValueChanged="SliderVolume_Changed"/>
-                                <TextBlock Grid.Column="2" x:Name="TxtVolume" x:FieldModifier="internal" Text="100%"
-                                           HorizontalAlignment="Right" VerticalAlignment="Center"
-                                           FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
-                            </Grid>
-
-                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
-
                             <!-- Blur strength. The VISUAL half's dial (BrainDrainBlurStrength) - the
                                  dial above is the AUDIO trigger probability, this one is how hard the
                                  screen blur presses in. Explicit 0-100 range for the same
@@ -286,6 +264,29 @@
                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                           Checked="ChkAllowCapture_Changed" Unchecked="ChkAllowCapture_Changed"/>
                             </Grid>
+
+                            <!-- Power-user rows, folded (house rule: progressive disclosure). -->
+                            <feat:MoreFold x:Name="FoldMore">
+                                <!-- Brain Drain's own clip volume (BrainDrainVolume, ccp-bugs #1104),
+                                     multiplied with the master volume. A comfort setting, so NOT
+                                     SessionLock-owned. Explicit 0-100 range (Slider defaults to Maximum=10). -->
+                                <Grid Height="36" ToolTip="{loc:Str st4_braindrain_volume_hint}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_volume}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderVolume" x:FieldModifier="internal"
+                                            Minimum="0" Maximum="100" Value="100"
+                                            VerticalAlignment="Center" Margin="10,0"
+                                            ValueChanged="SliderVolume_Changed"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtVolume" x:FieldModifier="internal" Text="100%"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+                            </feat:MoreFold>
 
                         </StackPanel>
                     </Grid>

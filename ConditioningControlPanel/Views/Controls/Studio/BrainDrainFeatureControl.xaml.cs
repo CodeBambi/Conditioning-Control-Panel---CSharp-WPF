@@ -97,6 +97,7 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 TxtIntensity.Text = $"{s.BrainDrainIntensity}%";
                 SliderVolume.Value = s.BrainDrainVolume;
                 TxtVolume.Text = $"{s.BrainDrainVolume}%";
+                if (s.BrainDrainVolume != 100) FoldMore.IsOpen = true; // never hide a changed setting
                 ChkHighRefresh.IsChecked = s.BrainDrainHighRefresh;
                 SliderBlurStrength.Value = s.BrainDrainBlurStrength;
                 TxtBlurStrength.Text = $"{s.BrainDrainBlurStrength}%";

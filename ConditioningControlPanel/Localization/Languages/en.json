@@ -3541,6 +3541,8 @@
   "voice_test_companion_off_body": "The companion is switched off, and the voice test needs it on screen. Turn it on now?",
   "modmgr_avatar_single_hint": "This mod has one look.",
   "modmgr_more": "More",
+  "fold_more_options": "More options",
+  "fold_fewer_options": "Fewer options",
   "modmgr_in_use": "IN USE",
   "modmgr_preview_tag": "PREVIEW",
   "modmgr_preview_counts": "{0}  ·  {1}",
