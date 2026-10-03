@@ -791,7 +791,8 @@ export async function mount(ctx) {
 
     on(canvas, 'pointerdown', (e) => {
       if (menuOpen || paused || !e.isPrimary) return;
-      canvas.setPointerCapture(e.pointerId);
+      // Never a bare setPointerCapture: it throws while the mouse is locked and the click would not launch (mouse-lock.js capture).
+      if (mouseLock) mouseLock.capture(e); else { try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ } }
       touchDrag = null;
       const took = mouseLock?.request(e);            // a mouse click takes the mouse; the press itself still steers and launches
       startAudio(); if (!took) input.x = steer(e); input.launch = true; firstMove(); if (paused) setPaused(false);
