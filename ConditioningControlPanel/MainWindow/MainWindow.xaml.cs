@@ -165,6 +165,8 @@ namespace ConditioningControlPanel
             "trigger_flash", "trigger_subliminal",
             "set_pink_opacity", "set_spiral_opacity",
             "duck_audio", "unduck_audio",
+            // v2: hold-to-buzz sends one every second while held
+            "haptic_level", "haptic_stop",
         };
 
         /// <summary>

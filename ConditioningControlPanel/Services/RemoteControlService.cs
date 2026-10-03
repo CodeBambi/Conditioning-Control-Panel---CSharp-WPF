@@ -68,10 +68,6 @@ namespace ConditioningControlPanel.Services
         /// <summary>When the last Remote session ended (UTC). Circe's tab keeps counting bookings
         /// toward the Remote cap for a short grace after it (ChasterService.RemoteGrace).</summary>
         public DateTime? LastEndedUtc { get; private set; }
-
-        // The controller switched the panic key off during this session. Restored (and saved) when
-        // the session ends, so a crash or a quit after the session cannot leave it off on disk.
-        private bool _remoteDisabledPanic;
         public string? SessionCode { get; private set; }
         public string? ConnectPin { get; private set; }
         public string? Tier { get; private set; }
@@ -399,18 +395,7 @@ namespace ConditioningControlPanel.Services
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
             }
 
-            // StopAllRemoteEffects turns the key back on in memory; if the controller had turned it
-            // off, that off was saved, so save the restored value too.
-            if (_remoteDisabledPanic)
-            {
-                _remoteDisabledPanic = false;
-                if (App.Settings?.Current != null)
-                {
-                    App.Settings.Current.PanicKeyEnabled = true;
-                    App.Settings.Save();
-                    SyncPanicKeyUi();
-                }
-            }
+            ResetV2SessionState();
 
             App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
             SessionEnded?.Invoke(this, EventArgs.Empty);
@@ -566,6 +551,7 @@ namespace ConditioningControlPanel.Services
                 if (controllerConnectedChanged)
                 {
                     ControllerConnected = connected;
+                    ControllerConnectedSinceUtc = connected ? DateTime.UtcNow : null;
                     if (connected)
                     {
                         // A controller connecting does NOT tear the subject's own run down
@@ -589,6 +575,8 @@ namespace ConditioningControlPanel.Services
                         // Controller disconnected. By default we leave effects running
                         // so a new controller can see the current state and the sub
                         // isn't snapped to a halt mid-session. Opt-in setting stops them.
+                        // A remote haptic never outlives its controller (v2 brief).
+                        StopRemoteHaptics();
                         HandleControllerDisconnectCleanup();
 
                         // Re-publish to the Available Subjects directory so the subject
@@ -617,6 +605,8 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Information("[RemoteControl] Controller idle for {Seconds:F0}s — auto-disconnecting", idleDuration);
                         _controllerAutoDisconnected = true;
                         ControllerConnected = false;
+                        ControllerConnectedSinceUtc = null;
+                        StopRemoteHaptics();
                         HandleControllerDisconnectCleanup();
                         // Same rationale as the explicit-disconnect branch above: flip the
                         // directory entry back to available so the subject isn't stuck as
@@ -647,6 +637,7 @@ namespace ConditioningControlPanel.Services
                         {
                             App.Logger?.Information("[RemoteControl] Executing: {Action} (id: {Id})", action, id);
                             ExecuteCommand(action, cmd["params"] as JObject);
+                            if (_lastCommandStatus == "ok") NoteLandedCommand(action);
                             CommandReceived?.Invoke(this, action);
                             lastCmdId = id;
                             lastAction = action;
@@ -957,6 +948,7 @@ namespace ConditioningControlPanel.Services
                 // keeps running on its last commanded level until the per-command
                 // timeout expires (or forever for indefinite patterns), which is what
                 // bug #179 ("haptics server doesn't stop after escape") was about.
+                StopRemoteHaptics();
                 if (App.Haptics != null)
                 {
                     _ = App.Haptics.StopAsync();
@@ -997,6 +989,7 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.PanicKeyEnabled = true;
                     SyncPanicKeyUi();
                 }
+                RestoreRemoteBrainDrainSetting();
                 App.Overlay?.RefreshOverlays();
 
                 // Stop session engine and main engine — but ONLY when the controller owns the
@@ -1068,6 +1061,7 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("[RemoteControl] Controller disconnected — cleaning up remote effects only");
 
                 App.Autonomy?.CancelActivePulses();
+                StopRemoteHaptics();
 
                 App.Video?.Stop();
                 // Also stop any HypnoTube video the controller started in the embedded browser.
@@ -1098,6 +1092,7 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.PanicKeyEnabled = true;
                     SyncPanicKeyUi();
                 }
+                RestoreRemoteBrainDrainSetting();
                 App.Overlay?.RefreshOverlays();
 
                 // Restore window visibility but don't stop engine/autonomy
@@ -1146,14 +1141,14 @@ namespace ConditioningControlPanel.Services
         /// subject→controller path the controller page definitely renders). Before ccp-bugs#1138 a
         /// play_hypnotube that landed on a surface the subject could not see still reported "ok".
         /// </summary>
-        private void ReportCommandRefused(string action, string reason)
+        private void ReportCommandRefused(string action, string reason, string emotePrefix = "Can't open that")
         {
             _lastCommandStatus = "fail";
             _lastCommandReason = reason;
             App.Logger?.Warning("[RemoteControl] {Action} not delivered: {Reason}", action, reason);
             try
             {
-                var text = $"Can't open that: {reason}";
+                var text = $"{emotePrefix}: {reason}";
                 if (text.Length > 60) text = text.Substring(0, 60);
                 _ = SendEmoteAsync(text, "🚫", "custom");
             }
@@ -1167,6 +1162,7 @@ namespace ConditioningControlPanel.Services
         {
             _lastCommandStatus = "ok";
             _lastCommandReason = null;
+            NoteControllerActivity();
 
             // The Leash (owner, 2026-09-26): a leashed account keeps its way out. From ANY remote
             // session, Strict Lock never goes on, the panic key never goes off, and a session start
@@ -1337,7 +1333,25 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "trigger_haptic":
-                            _ = App.Haptics?.TriggerAsync("remote_control", 0.7, 2000);
+                            _ = App.Haptics?.TriggerAsync("remote_control", 0.7 * EasyFactor, 2000);
+                            break;
+
+                        // Remote Control v2 (2026-10-03)
+                        case "haptic_pattern":
+                        case "haptic_level":
+                            PlayRemoteHaptic(action, parameters);
+                            break;
+
+                        case "haptic_stop":
+                            StopRemoteHaptics();
+                            break;
+
+                        case "start_brain_drain":
+                            SetRemoteBrainDrain(true);
+                            break;
+
+                        case "stop_brain_drain":
+                            SetRemoteBrainDrain(false);
                             break;
 
                         case "duck_audio":
@@ -1483,13 +1497,9 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "disable_panic":
-                            if (App.Settings?.Current != null)
-                            {
-                                if (App.Settings.Current.PanicKeyEnabled) _remoteDisabledPanic = true;
-                                App.Settings.Current.PanicKeyEnabled = false;
-                                App.Settings.Save();
-                                SyncPanicKeyUi();
-                            }
+                            // v2 (owner, 2026-10-03): a controller can never switch the panic key
+                            // off. The server forbids it too; this is defence in depth.
+                            ReportCommandRefused(action, "the panic key stays on", "Not allowed");
                             break;
 
                         case "enable_panic":
