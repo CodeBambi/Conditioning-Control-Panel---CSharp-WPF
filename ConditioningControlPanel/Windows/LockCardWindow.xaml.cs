@@ -745,6 +745,18 @@ namespace ConditioningControlPanel
                 if (!LockCardText.IsPrefixOf(input, _phrase))
                 {
                     _totalErrors++;
+
+                    // "Reset on typo" (ccp-bugs #1163, off by default): a mistake wipes the line the
+                    // same way a finished repeat does, so the user starts this repeat over. The clear
+                    // re-enters this handler with an empty box, which is not an error.
+                    if (App.Settings?.Current?.LockCardResetOnTypo == true)
+                    {
+                        TxtInput.Clear();
+                        ResetKeystrokeGate();
+                        _sharedInput = "";
+                        SyncInputToAllWindows("");
+                        return;
+                    }
                 }
             }
             

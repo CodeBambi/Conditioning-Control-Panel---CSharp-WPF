@@ -914,6 +914,8 @@ namespace ConditioningControlPanel.Services
                 if (App.MindWipe?.IsRunning == true) services.Add("mind_wipe");
                 if (App.BouncingText?.IsRunning == true) services.Add("bounce_text");
                 if (App.Wallpaper?.IsActive == true) services.Add("wallpaper");
+                // A toy is reachable, so trigger_haptic will land (ccp-bugs #1065).
+                if (App.Haptics?.IsConnected == true) services.Add("haptics");
             }
             catch { }
             return services;
@@ -1367,7 +1369,14 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "trigger_haptic":
-                            _ = App.Haptics?.TriggerAsync("remote_control", 0.7, 2000);
+                            // ccp-bugs #1065: with no toy connected the buzz went nowhere and the
+                            // controller still saw "ok". Say so instead.
+                            if (App.Haptics?.IsConnected != true)
+                            {
+                                ReportCommandRefused("trigger_haptic", "no_device");
+                                break;
+                            }
+                            _ = App.Haptics.TriggerAsync("remote_control", 0.7, 2000);
                             break;
 
                         case "duck_audio":

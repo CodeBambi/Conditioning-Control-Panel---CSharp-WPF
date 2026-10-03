@@ -2601,6 +2601,16 @@ namespace ConditioningControlPanel.Models
             set { _pinkFilterTargetMonitor = value; OnPropertyChanged(); }
         }
 
+        private int _videoTargetMonitor = -1;
+        /// <summary>Monitor target for mandatory videos (and their attention targets and messages).
+        /// -1 = follow DualMonitorEnabled / "Show content on", -2 = all monitors, 0..N = specific
+        /// monitor index (ccp-bugs #1154). See <see cref="DualMonitorEnabled"/>.</summary>
+        public int VideoTargetMonitor
+        {
+            get => _videoTargetMonitor;
+            set { _videoTargetMonitor = value; OnPropertyChanged(); }
+        }
+
         private bool _fillAllMonitorsWithVideo;
         /// <summary>
         /// On 3+ monitors, give every secondary screen its own video decoder. Each LibVLC
@@ -3012,6 +3022,25 @@ namespace ConditioningControlPanel.Models
         {
             get => _mercySystemEnabled;
             set { _mercySystemEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>Fewest and most wrong tries Mercy can be set to (ccp-bugs #1145).</summary>
+        public const int MercyAfterFailsMin = 2, MercyAfterFailsMax = 10;
+
+        /// <summary>Clamp a Mercy threshold into 2..10.</summary>
+        public static int ClampMercyAfterFails(int value) =>
+            Math.Clamp(value, MercyAfterFailsMin, MercyAfterFailsMax);
+
+        public const int MercyAfterFailsDefault = 3;
+        private int _mercyAfterFails = MercyAfterFailsDefault;
+        /// <summary>
+        /// Strict Bubble Count and strict mandatory videos let the user go after this many wrong
+        /// tries when <see cref="MercySystemEnabled"/> is on. Clamped 2..10, default 3 (ccp-bugs #1145).
+        /// </summary>
+        public int MercyAfterFails
+        {
+            get => _mercyAfterFails;
+            set { _mercyAfterFails = ClampMercyAfterFails(value); OnPropertyChanged(); }
         }
 
         private string _lastPreset = "DEFAULT";
@@ -4622,6 +4651,18 @@ namespace ConditioningControlPanel.Models
         {
             get => _lockCardStrict;
             set { _lockCardStrict = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockCardResetOnTypo = false;
+        /// <summary>
+        /// When true, a typo on a lock card wipes the line and the user types that repeat again
+        /// from the start (ccp-bugs #1163). Off by default. Voice solving never types, so it is
+        /// unaffected; Win+H dictation into the box is judged like any other typing.
+        /// </summary>
+        public bool LockCardResetOnTypo
+        {
+            get => _lockCardResetOnTypo;
+            set { _lockCardResetOnTypo = value; OnPropertyChanged(); }
         }
 
         private bool _lockCardVoiceMode = false; // Solve by speaking the phrase (offline mic) instead of typing

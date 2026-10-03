@@ -2725,7 +2725,7 @@ namespace ConditioningControlPanel.Services
 
                 // Global "Show content on" picker, not every screen: with one monitor picked
                 // this list has exactly one entry and no secondary window is ever created.
-                var allScreens = App.GetGlobalScreens().ToList();
+                var allScreens = VideoScreens().ToList();
                 if (allScreens.Count == 0) return;
 
                 var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
@@ -2763,7 +2763,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static bool ShouldFillSecondaryMonitors(int screenCount)
         {
-            // screenCount is the TARGETED screen count (App.GetGlobalScreens), so the
+            // screenCount is the TARGETED screen count (VideoScreens), so the
             // DualMonitorEnabled test this used to open with is already applied: one targeted
             // screen means there is no secondary to fill.
             if (screenCount <= 1) return false;
@@ -3256,7 +3256,7 @@ namespace ConditioningControlPanel.Services
                     try
                     {
                         // Global "Show content on" picker, not every screen (see GetGlobalScreens).
-                        var allScreens = App.GetGlobalScreens().ToList();
+                        var allScreens = VideoScreens().ToList();
                         VideoDiag.Log("VIDEO", $"screens enumerated ({allScreens.Count}) +{showSw.ElapsedMilliseconds}ms");
                         if (allScreens.Count == 0)
                         {
@@ -5711,7 +5711,7 @@ namespace ConditioningControlPanel.Services
                 var pool = settings.AttentionPool.Where(p => p.Value).Select(p => p.Key).ToList();
                 var text = pool.Count > 0 ? pool[_random.Next(pool.Count)] : "CLICK ME";
 
-                var screens = App.GetGlobalScreens();
+                var screens = VideoScreens();
                 // Safety check: ensure we have at least one screen
                 if (screens == null || screens.Length == 0 || screens[0] == null)
                 {
@@ -5991,7 +5991,7 @@ namespace ConditioningControlPanel.Services
             if (loop && !string.IsNullOrEmpty(_retryPath))
             {
                 _penalties++;
-                if (_penalties >= 3 && settings.MercySystemEnabled)
+                if (_penalties >= settings.MercyAfterFails && settings.MercySystemEnabled)
                     ShowMessage(App.Mods?.GetAttentionCheckMercyMessage() ?? "BAMBI GETS MERCY", 2500, Cleanup);
                 else
                 {
@@ -6118,7 +6118,7 @@ namespace ConditioningControlPanel.Services
             _maxLenCapTimer = null;
             CloseAll(reason: "attention-check message");
 
-            var screens = App.GetGlobalScreens();
+            var screens = VideoScreens();
             // Safety check: ensure we have at least one screen
             if (screens == null || screens.Length == 0 || screens[0] == null)
             {
@@ -6588,6 +6588,15 @@ namespace ConditioningControlPanel.Services
             }
             _graceOverlays.Clear();
         }
+
+        /// <summary>
+        /// Where mandatory videos, their attention targets and their messages go: the Video panel's
+        /// own monitor pick (ccp-bugs #1154). -1 (default) follows the global "Show content on"
+        /// picker exactly as before; -2 = every monitor; 0..N = that monitor (an unplugged index
+        /// falls back to -1 inside App.ResolveScreens).
+        /// </summary>
+        private static Screen[] VideoScreens() =>
+            App.ResolveScreens(App.Settings?.Current?.VideoTargetMonitor ?? App.MonitorTargetFollowGlobal);
 
         private static Screen ScreenForWindow(Window win)
         {
