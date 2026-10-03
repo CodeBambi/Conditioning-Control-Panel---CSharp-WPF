@@ -1194,6 +1194,40 @@ namespace ConditioningControlPanel.Models
             set { _simultaneousImages = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
         }
 
+        private bool _simultaneousImagesRandom = false;
+        /// <summary>
+        /// ccp-bugs #658: when true each flash rolls its image count between
+        /// <see cref="SimultaneousImagesMin"/> and <see cref="SimultaneousImages"/> inclusive
+        /// (see <see cref="RollFlashImageCount"/>). Default false keeps the flat count.
+        /// </summary>
+        public bool SimultaneousImagesRandom
+        {
+            get => _simultaneousImagesRandom;
+            set { _simultaneousImagesRandom = value; OnPropertyChanged(); }
+        }
+
+        private int _simultaneousImagesMin = 1; // Floor of the random range (1-20)
+        /// <summary>
+        /// Floor of the random images-per-flash range. A floor above
+        /// <see cref="SimultaneousImages"/> is sorted out by the roll, like the lock card pair.
+        /// </summary>
+        public int SimultaneousImagesMin
+        {
+            get => _simultaneousImagesMin;
+            set { _simultaneousImagesMin = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Images for one flash: the flat <see cref="SimultaneousImages"/>, or a roll between the
+        /// two ends (inclusive, either order) when <see cref="SimultaneousImagesRandom"/> is on.
+        /// </summary>
+        internal static int RollFlashImageCount(bool random, int min, int max, Random rng)
+        {
+            if (!random) return max;
+            int lo = Math.Min(min, max), hi = Math.Max(min, max);
+            return rng.Next(lo, hi + 1);
+        }
+
         [JsonProperty("ImageScale")]
         private int _imageScale = 100; // 50-250% (100 = normal size, 200 = double, etc)
 
@@ -1334,6 +1368,20 @@ namespace ConditioningControlPanel.Models
             get => _flashMotionStyle;
             set { _flashMotionStyle = value; OnPropertyChanged(); }
         }
+
+        private double _flashDriftSpeed = 1.0;
+        /// <summary>
+        /// Speed multiplier for the Drift and Bounce motion (ccp-bugs #1265). 1.0 is the authored
+        /// speed; clamped 0.25..3. Applied once per spawn to the rolled velocity.
+        /// </summary>
+        [JsonProperty("FlashDriftSpeed")]
+        public double FlashDriftSpeed
+        {
+            get => _flashDriftSpeed;
+            set { _flashDriftSpeed = ClampDriftSpeed(value); OnPropertyChanged(); }
+        }
+
+        internal static double ClampDriftSpeed(double v) => double.IsNaN(v) ? 1.0 : Math.Clamp(v, 0.25, 3.0);
 
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
         public int FlashDuration
@@ -4134,7 +4182,7 @@ namespace ConditioningControlPanel.Models
             set { _fypVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
-        private double _fypWindowOpacity = 1.0;
+        private double _fypWindowOpacity = 0.6; // #832: ghost mode should read as see-through out of the box
         /// <summary>Ghost-mode translucency for the feed (0.01-1.0) - the DWM thumbnail opacity of
         /// the see-through mirror, never the real window's alpha (the WebView2 window must never be
         /// layered; see FypGhostOverlay). May go near-invisible: recovery is a single Esc/panic

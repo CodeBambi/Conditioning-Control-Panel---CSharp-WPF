@@ -60,7 +60,7 @@ let settings = {
   muted: false,
   volume: 100,             // 0-100; independent of `muted` (mute is the panic switch)
   audioGlow: true,
-  windowOpacity: 1,
+  windowOpacity: 0.6,     // #832: ghost mode default; never touches the opaque window
   eyeControl: false,
   eyeGaze: false,
   source: 'library',        // 'library' | 'mixed' | 'online'
@@ -921,7 +921,7 @@ function maybeFallBackToLibrary() {
 
 function clampOpacity(v) {
   const n = Number(v);
-  if (!Number.isFinite(n)) return 1;
+  if (!Number.isFinite(n)) return 0.6;
   return Math.min(1, Math.max(OPACITY_MIN, Math.round(n * 100) / 100));
 }
 
