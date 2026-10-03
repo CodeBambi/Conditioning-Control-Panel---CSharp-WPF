@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Services.Remote;
 
 namespace ConditioningControlPanel.Services
 {
@@ -45,7 +46,7 @@ namespace ConditioningControlPanel.Services
         }
     }
 
-    public class RemoteControlService : IDisposable
+    public partial class RemoteControlService : IDisposable
     {
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
         // 5s gives comfortable headroom under the server's 40/min per-user poll cap
@@ -205,6 +206,8 @@ namespace ConditioningControlPanel.Services
                 _currentPollInterval = PollIntervalSeconds;
                 _lastStatusPushUtc = DateTime.MinValue;
                 _statusBackoffUntil = DateTime.MinValue;
+                _pollBackedOff = false;
+                AttachScreenFeeds();
 
                 // Start polling
                 _pollTimer = new DispatcherTimer
@@ -370,6 +373,8 @@ namespace ConditioningControlPanel.Services
             _statusBackoffUntil = DateTime.MinValue;
             _lastOptInTags = null;
             _lastOptInStatus = null;
+            _pollBackedOff = false;
+            DetachScreenFeeds();
             IsActive = false;
             LastEndedUtc = DateTime.UtcNow;
             SessionCode = null;
@@ -402,18 +407,7 @@ namespace ConditioningControlPanel.Services
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
             }
 
-            // StopAllRemoteEffects turns the key back on in memory; if the controller had turned it
-            // off, that off was saved, so save the restored value too.
-            if (_remoteDisabledPanic)
-            {
-                _remoteDisabledPanic = false;
-                if (App.Settings?.Current != null)
-                {
-                    App.Settings.Current.PanicKeyEnabled = true;
-                    App.Settings.Save();
-                    SyncPanicKeyUi();
-                }
-            }
+            ResetV2SessionState();
 
             App.Friends?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Remote);
             SessionEnded?.Invoke(this, EventArgs.Empty);
@@ -472,8 +466,10 @@ namespace ConditioningControlPanel.Services
                     }
                     else if (response.StatusCode == (System.Net.HttpStatusCode)429)
                     {
-                        // Rate limited — exponential backoff
-                        _currentPollInterval = Math.Min(_currentPollInterval * 2, MaxBackoffSeconds);
+                        // Rate limited — exponential backoff (from at least the normal 5 s, so
+                        // hot mode's 1 s cadence backs off as hard as the cold one)
+                        _pollBackedOff = true;
+                        _currentPollInterval = Math.Min(Math.Max(_currentPollInterval, PollIntervalSeconds) * 2, MaxBackoffSeconds);
                         if (_pollTimer != null)
                             _pollTimer.Interval = TimeSpan.FromSeconds(_currentPollInterval);
                         var (cap, count) = await Read429CapAsync(response);
@@ -504,17 +500,18 @@ namespace ConditioningControlPanel.Services
                 var result = JObject.Parse(json);
 
                 // Track success — recover from backoff if needed
-                var wasBackedOff = _currentPollInterval > PollIntervalSeconds;
+                var wasBackedOff = _pollBackedOff;
                 var wasFailingConsecutively = _consecutivePollFailures > 0;
                 _consecutivePollSuccesses++;
                 _consecutivePollFailures = 0;
 
                 if (wasBackedOff)
                 {
-                    _currentPollInterval = PollIntervalSeconds;
+                    _pollBackedOff = false;
+                    _currentPollInterval = PollBaseSeconds;
                     if (_pollTimer != null)
-                        _pollTimer.Interval = TimeSpan.FromSeconds(PollIntervalSeconds);
-                    App.Logger?.Information("[RemoteControl] Recovered from backoff, restoring {Interval}s poll interval", PollIntervalSeconds);
+                        _pollTimer.Interval = TimeSpan.FromSeconds(_currentPollInterval);
+                    App.Logger?.Information("[RemoteControl] Recovered from backoff, restoring {Interval}s poll interval", _currentPollInterval);
                 }
                 else if (wasFailingConsecutively && _consecutivePollSuccesses == 1)
                 {
@@ -542,6 +539,8 @@ namespace ConditioningControlPanel.Services
                 var serverConnected = result["controller_connected"]?.Value<bool>() ?? false;
                 var connected = serverConnected;
                 var idle = result["controller_idle"]?.Value<bool>() ?? false;
+                var controllerName = RemoteControllerName.Sanitize(
+                    result["controller_name"]?.Type == JTokenType.String ? result["controller_name"]!.ToString() : null);
 
                 if (connected && _controllerAutoDisconnected)
                 {
@@ -565,10 +564,12 @@ namespace ConditioningControlPanel.Services
                 if (!serverConnected)
                     _controllerAutoDisconnected = false;
 
+                ControllerName = connected ? controllerName : null;
                 var controllerConnectedChanged = connected != ControllerConnected;
                 if (controllerConnectedChanged)
                 {
                     ControllerConnected = connected;
+                    ControllerConnectedSinceUtc = connected ? DateTime.UtcNow : null;
                     if (connected)
                     {
                         // A controller connecting does NOT tear the subject's own run down
@@ -592,6 +593,8 @@ namespace ConditioningControlPanel.Services
                         // Controller disconnected. By default we leave effects running
                         // so a new controller can see the current state and the sub
                         // isn't snapped to a halt mid-session. Opt-in setting stops them.
+                        // A remote haptic never outlives its controller (v2 brief).
+                        StopRemoteHaptics();
                         HandleControllerDisconnectCleanup();
 
                         // Re-publish to the Available Subjects directory so the subject
@@ -620,6 +623,8 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Information("[RemoteControl] Controller idle for {Seconds:F0}s — auto-disconnecting", idleDuration);
                         _controllerAutoDisconnected = true;
                         ControllerConnected = false;
+                        ControllerConnectedSinceUtc = null;
+                        StopRemoteHaptics();
                         HandleControllerDisconnectCleanup();
                         // Same rationale as the explicit-disconnect branch above: flip the
                         // directory entry back to available so the subject isn't stuck as
@@ -650,6 +655,7 @@ namespace ConditioningControlPanel.Services
                         {
                             App.Logger?.Information("[RemoteControl] Executing: {Action} (id: {Id})", action, id);
                             ExecuteCommand(action, cmd["params"] as JObject);
+                            if (_lastCommandStatus == "ok") NoteLandedCommand(action);
                             CommandReceived?.Invoke(this, action);
                             lastCmdId = id;
                             lastAction = action;
@@ -661,11 +667,15 @@ namespace ConditioningControlPanel.Services
                 // controller-connected state change; otherwise only every ~15s.
                 // This roughly halves client→server traffic and keeps us well under
                 // the server's per-user 40/min cap on both /poll and /status.
-                var statusDue = (DateTime.UtcNow - _lastStatusPushUtc).TotalSeconds >= StatusPushIntervalSeconds;
-                if (lastCmdId != null || controllerConnectedChanged || statusDue)
+                // v2: a 5 s heartbeat while a controller watches, and a push whenever the live
+                // preview moved (at most once a second).
+                var statusDue = (DateTime.UtcNow - _lastStatusPushUtc).TotalSeconds >= StatusHeartbeatSeconds;
+                var screen = ControllerConnected ? BuildScreenSafe() : null;
+                if (lastCmdId != null || controllerConnectedChanged || statusDue || ScreenWantsPush(screen))
                 {
-                    await SendStatusAsync(lastCmdId, lastAction);
+                    await SendStatusAsync(lastCmdId, lastAction, screen);
                 }
+                ApplyPollCadence();
             }
             catch (TaskCanceledException)
             {
@@ -685,7 +695,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private async Task SendStatusAsync(string? lastCmdId = null, string? lastAction = null)
+        private async Task SendStatusAsync(string? lastCmdId = null, string? lastAction = null, JObject? screen = null)
         {
             // Skip while we're in backoff from a previous 429 on /status.
             if (DateTime.UtcNow < _statusBackoffUntil) return;
@@ -717,6 +727,7 @@ namespace ConditioningControlPanel.Services
                 // Get available sessions and current session progress
                 var availableSessions = GetAvailableSessionsCallback?.Invoke();
                 var sessionInfo = GetSessionProgressCallback?.Invoke();
+                screen ??= BuildScreenSafe();
 
                 var body = JsonConvert.SerializeObject(new
                 {
@@ -728,7 +739,10 @@ namespace ConditioningControlPanel.Services
                     session_info = sessionInfo,
                     // Subject-side opt-in: false by default, governs whether the
                     // server exposes the resolved avatar URL on GET /remote/status.
-                    share_avatar = App.Settings?.Current?.RemoteShareAvatar == true
+                    share_avatar = App.Settings?.Current?.RemoteShareAvatar == true,
+                    // v2: what this desktop understands, and the live preview (brief section 4)
+                    caps = RemoteScreenState.Caps,
+                    screen
                 });
 
                 using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/status", body);
@@ -753,6 +767,7 @@ namespace ConditioningControlPanel.Services
                 else
                 {
                     _lastStatusPushUtc = DateTime.UtcNow;
+                    if (screen != null) _lastPushedScreenKey = RemoteScreenState.ChangeKey(screen);
                 }
             }
             catch (Exception ex)
@@ -914,6 +929,8 @@ namespace ConditioningControlPanel.Services
                 if (App.MindWipe?.IsRunning == true) services.Add("mind_wipe");
                 if (App.BouncingText?.IsRunning == true) services.Add("bounce_text");
                 if (App.Wallpaper?.IsActive == true) services.Add("wallpaper");
+                // A toy is reachable, so trigger_haptic will land (ccp-bugs #1065).
+                if (App.Haptics?.IsConnected == true) services.Add("haptics");
             }
             catch { }
             return services;
@@ -960,6 +977,7 @@ namespace ConditioningControlPanel.Services
                 // keeps running on its last commanded level until the per-command
                 // timeout expires (or forever for indefinite patterns), which is what
                 // bug #179 ("haptics server doesn't stop after escape") was about.
+                StopRemoteHaptics();
                 if (App.Haptics != null)
                 {
                     _ = App.Haptics.StopAsync();
@@ -1000,6 +1018,7 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.PanicKeyEnabled = true;
                     SyncPanicKeyUi();
                 }
+                RestoreRemoteBrainDrainSetting();
                 App.Overlay?.RefreshOverlays();
 
                 // Stop session engine and main engine — but ONLY when the controller owns the
@@ -1098,6 +1117,7 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("[RemoteControl] Controller disconnected — cleaning up remote effects only");
 
                 App.Autonomy?.CancelActivePulses();
+                StopRemoteHaptics();
 
                 App.Video?.Stop();
                 // Also stop any HypnoTube video the controller started in the embedded browser.
@@ -1128,6 +1148,7 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.PanicKeyEnabled = true;
                     SyncPanicKeyUi();
                 }
+                RestoreRemoteBrainDrainSetting();
                 App.Overlay?.RefreshOverlays();
 
                 // Restore window visibility but don't stop engine/autonomy
@@ -1176,14 +1197,14 @@ namespace ConditioningControlPanel.Services
         /// subject→controller path the controller page definitely renders). Before ccp-bugs#1138 a
         /// play_hypnotube that landed on a surface the subject could not see still reported "ok".
         /// </summary>
-        private void ReportCommandRefused(string action, string reason)
+        private void ReportCommandRefused(string action, string reason, string emotePrefix = "Can't open that")
         {
             _lastCommandStatus = "fail";
             _lastCommandReason = reason;
             App.Logger?.Warning("[RemoteControl] {Action} not delivered: {Reason}", action, reason);
             try
             {
-                var text = $"Can't open that: {reason}";
+                var text = $"{emotePrefix}: {reason}";
                 if (text.Length > 60) text = text.Substring(0, 60);
                 _ = SendEmoteAsync(text, "🚫", "custom");
             }
@@ -1197,6 +1218,7 @@ namespace ConditioningControlPanel.Services
         {
             _lastCommandStatus = "ok";
             _lastCommandReason = null;
+            NoteControllerActivity();
 
             // The Leash (owner, 2026-09-26): a leashed account keeps its way out. From ANY remote
             // session, Strict Lock never goes on, the panic key never goes off, and a session start
@@ -1250,7 +1272,10 @@ namespace ConditioningControlPanel.Services
                         case "trigger_custom_subliminal":
                             var customText = parameters?["text"]?.ToString();
                             if (!string.IsNullOrWhiteSpace(customText))
+                            {
+                                NoteControllerWord(customText);
                                 App.Subliminal?.FlashSubliminalCustom(customText);
+                            }
                             break;
 
                         case "show_pink_filter":
@@ -1301,7 +1326,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null && parameters != null)
                             {
                                 var pinkVal = parameters["value"]?.Value<int>() ?? 25;
-                                App.Settings.Current.PinkFilterOpacity = Math.Clamp(pinkVal, 0, 50);
+                                App.Settings.Current.PinkFilterOpacity = _easedPink.Ask(pinkVal, 50, EasyFactor);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -1312,7 +1337,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null && parameters != null)
                             {
                                 var spiralVal = parameters["value"]?.Value<int>() ?? 25;
-                                App.Settings.Current.SpiralOpacity = Math.Clamp(spiralVal, 0, 100);
+                                App.Settings.Current.SpiralOpacity = _easedSpiral.Ask(spiralVal, 100, EasyFactor);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -1367,7 +1392,32 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "trigger_haptic":
-                            _ = App.Haptics?.TriggerAsync("remote_control", 0.7, 2000);
+                            // ccp-bugs #1065: with no toy connected the buzz went nowhere and the
+                            // controller still saw "ok". Say so instead.
+                            if (App.Haptics?.IsConnected != true)
+                            {
+                                ReportCommandRefused("trigger_haptic", "no_device");
+                                break;
+                            }
+                            _ = App.Haptics.TriggerAsync("remote_control", 0.7 * EasyFactor, 2000);
+                            break;
+
+                        // Remote Control v2 (2026-10-03)
+                        case "haptic_pattern":
+                        case "haptic_level":
+                            PlayRemoteHaptic(action, parameters);
+                            break;
+
+                        case "haptic_stop":
+                            StopRemoteHaptics();
+                            break;
+
+                        case "start_brain_drain":
+                            SetRemoteBrainDrain(true);
+                            break;
+
+                        case "stop_brain_drain":
+                            SetRemoteBrainDrain(false);
                             break;
 
                         case "duck_audio":
@@ -1515,13 +1565,9 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "disable_panic":
-                            if (App.Settings?.Current != null)
-                            {
-                                if (App.Settings.Current.PanicKeyEnabled) _remoteDisabledPanic = true;
-                                App.Settings.Current.PanicKeyEnabled = false;
-                                App.Settings.Save();
-                                SyncPanicKeyUi();
-                            }
+                            // v2 (owner, 2026-10-03): a controller can never switch the panic key
+                            // off. The server forbids it too; this is defence in depth.
+                            ReportCommandRefused(action, "the panic key stays on", "Not allowed");
                             break;
 
                         case "enable_panic":

@@ -202,7 +202,7 @@
                                                         Minimum delay between any two Awareness reactions, from ANY trigger. Keeps her from spamming effects when lots of trigger words end up on screen or in your typing at once.
                                                     </TextBlock>
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
-                                                        Lower = more reactive, higher = calmer pacing. 10s is the default. Max 180s.
+                                                        Lower = more reactive, higher = calmer pacing. 10s is the default. Up to an hour.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </ToolTip>
@@ -215,7 +215,7 @@
                                         <TextBlock Grid.Column="0" Text="Cooldown between effects" FontSize="13" FontWeight="SemiBold"
                                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                         <Slider Grid.Column="1" x:Name="SliderAwarenessGlobalCooldown" x:FieldModifier="internal"
-                                                Minimum="1" Maximum="180" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Minimum="0" Maximum="73" TickFrequency="1" IsSnapToTickEnabled="True"
                                                 VerticalAlignment="Center" Margin="14,0"
                                                 ValueChanged="SliderAwarenessGlobalCooldown_ValueChanged"/>
                                         <TextBlock Grid.Column="2" x:Name="TxtAwarenessGlobalCooldown" x:FieldModifier="internal" Text="10s"
@@ -234,7 +234,7 @@
                                                         Minimum gap before the SAME word can fire again, regardless of which trigger caught it. Stops a single word on screen from re-triggering on every OCR scan.
                                                     </TextBlock>
                                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0">
-                                                        Independent of the "cooldown between effects" above — a different word can still fire within this window. 15s default. Max 180s.
+                                                        Independent of the "cooldown between effects" above — a different word can still fire within this window. 15s default. Up to an hour.
                                                     </TextBlock>
                                                 </StackPanel>
                                             </ToolTip>
@@ -247,7 +247,7 @@
                                         <TextBlock Grid.Column="0" Text="Same-word cooldown" FontSize="13" FontWeight="SemiBold"
                                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                         <Slider Grid.Column="1" x:Name="SliderAwarenessSameWordCooldown" x:FieldModifier="internal"
-                                                Minimum="1" Maximum="180" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Minimum="0" Maximum="73" TickFrequency="1" IsSnapToTickEnabled="True"
                                                 VerticalAlignment="Center" Margin="14,0"
                                                 ValueChanged="SliderAwarenessSameWordCooldown_ValueChanged"/>
                                         <TextBlock Grid.Column="2" x:Name="TxtAwarenessSameWordCooldown" x:FieldModifier="internal" Text="15s"

@@ -27,6 +27,9 @@ export function presentation() {
     followCam: saved.followCam !== false,
     replays: saved.replays !== false,
     turnCard: ['slam', 'ribbon', 'tag'].includes(saved.turnCard) ? saved.turnCard : 'slam',
+    // Camera drag direction (ccp-bugs #1329), off by default.
+    invertX: saved.invertX === true,
+    invertY: saved.invertY === true,
     // Distraction dials (owner, 2026-10-02): how many pictures, how strong, how fast it climbs.
     amount: AMOUNTS.includes(saved.amount) ? saved.amount : 'normal',
     strength: Number.isFinite(saved.strength) ? strength(saved.strength) : 1,
@@ -48,11 +51,17 @@ export function setPresentation(patch) {
   if (typeof patch.followCam === 'boolean') saved.followCam = patch.followCam;
   if (typeof patch.replays === 'boolean') saved.replays = patch.replays;
   if (['slam', 'ribbon', 'tag'].includes(patch.turnCard)) saved.turnCard = patch.turnCard;
+  if (typeof patch.invertX === 'boolean') saved.invertX = patch.invertX;
+  if (typeof patch.invertY === 'boolean') saved.invertY = patch.invertY;
   if (AMOUNTS.includes(patch.amount)) saved.amount = patch.amount;
   if (Number.isFinite(patch.strength)) saved.strength = strength(patch.strength);
   if (SPEEDS.includes(patch.rampSpeed)) saved.rampSpeed = patch.rampSpeed;
   try { globalThis.localStorage?.setItem(KEY, JSON.stringify(saved)); } catch { /* session only */ }
   return apply();
+}
+// The camera's orbit drag, flipped per axis when the player asked for it.
+export function invertDrag(dx, dy, p = presentation()) {
+  return [p.invertX ? -dx : dx, p.invertY ? -dy : dy];
 }
 export function onPresentation(fn) { listeners.add(fn); fn(presentation()); return () => listeners.delete(fn); }
 onHostMessage(m => {

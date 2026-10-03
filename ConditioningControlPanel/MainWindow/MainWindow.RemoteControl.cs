@@ -749,6 +749,7 @@ namespace ConditioningControlPanel
             }
 
             HideRemoteControlOverlay();
+            DisposeRemoteHud();
             UpdateStartButtonForRemoteControl(false);
             RemoteControlTab.RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
             RemoteControlTab.RemoteLinkPanel.Visibility = System.Windows.Visibility.Collapsed;
@@ -802,10 +803,12 @@ namespace ConditioningControlPanel
                     // comment in RemoteControlService's connect path.
                     ShowRemoteControlOverlay();
                     NotifyRemoteControllerJoined();
+                    EnsureRemoteHud();
                 }
                 else
                 {
                     HideRemoteControlOverlay();
+                    RefreshRemoteHud();
                 }
             });
         }
@@ -829,6 +832,7 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 HideRemoteControlOverlay();
+                DisposeRemoteHud();
                 UpdateStartButtonForRemoteControl(false);
                 // Unticking under _isLoading deliberately suppresses ChkRemoteControlEnabled_Changed
                 // (it early-returns on _isLoading), so StopRemoteControl never runs on this path and

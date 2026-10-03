@@ -2657,8 +2657,9 @@ namespace ConditioningControlPanel
             Services.Haptics.LockdownDoseKeeper.RecoverIfNeeded();
             LockdownDose = new Services.Haptics.LockdownDoseKeeper(Lockdown);
             LockdownDose.Install();
-            // Quest credit: each completed lockdown (Patreon-exclusive quest category).
-            Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch (Exception ex) { Diag.Swallowed(ex); } };
+            // Quest credit: each completed lockdown of 20+ minutes (Patreon-exclusive quest category).
+            // LastActiveDuration is set in Deactivate before the event fires.
+            Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(Lockdown.LastActiveDuration); } catch (Exception ex) { Diag.Swallowed(ex); } };
 
             // Initialize mantra lab service
             Mantra = new MantraService();

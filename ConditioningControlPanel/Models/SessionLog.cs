@@ -7,7 +7,10 @@ namespace ConditioningControlPanel.Models
     public enum MediaType
     {
         Video,
-        Image
+        Image,
+        // Appended LAST: the logs store this enum by ordinal, so a new member anywhere else would
+        // relabel every saved entry. Brain Drain clips (ccp-bugs #1098).
+        Audio
     }
 
     public class MediaLogEntry

@@ -268,6 +268,16 @@ namespace ConditioningControlPanel.Models
             set { _skipPauseXpWarning = value; OnPropertyChanged(); }
         }
 
+        // "Don't ask again" on the engine-start nudge about enhanced mandatory videos
+        // (ccp-bugs #644). Set only from that dialog's checkbox. It silences the question,
+        // it never switches enhancement or the webcam on by itself.
+        private bool _skipMandatoryVideoEnhanceNudge = false;
+        public bool SkipMandatoryVideoEnhanceNudge
+        {
+            get => _skipMandatoryVideoEnhanceNudge;
+            set { _skipMandatoryVideoEnhanceNudge = value; OnPropertyChanged(); }
+        }
+
         // Remote-control emote slots (5 fixed, user-editable). OnDeserialized
         // pads or truncates to exactly 5 so the UI never has to defend against
         // odd counts. Default set lives in DefaultRemoteEmotePresets() below.
@@ -1184,6 +1194,40 @@ namespace ConditioningControlPanel.Models
             set { _simultaneousImages = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
         }
 
+        private bool _simultaneousImagesRandom = false;
+        /// <summary>
+        /// ccp-bugs #658: when true each flash rolls its image count between
+        /// <see cref="SimultaneousImagesMin"/> and <see cref="SimultaneousImages"/> inclusive
+        /// (see <see cref="RollFlashImageCount"/>). Default false keeps the flat count.
+        /// </summary>
+        public bool SimultaneousImagesRandom
+        {
+            get => _simultaneousImagesRandom;
+            set { _simultaneousImagesRandom = value; OnPropertyChanged(); }
+        }
+
+        private int _simultaneousImagesMin = 1; // Floor of the random range (1-20)
+        /// <summary>
+        /// Floor of the random images-per-flash range. A floor above
+        /// <see cref="SimultaneousImages"/> is sorted out by the roll, like the lock card pair.
+        /// </summary>
+        public int SimultaneousImagesMin
+        {
+            get => _simultaneousImagesMin;
+            set { _simultaneousImagesMin = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Images for one flash: the flat <see cref="SimultaneousImages"/>, or a roll between the
+        /// two ends (inclusive, either order) when <see cref="SimultaneousImagesRandom"/> is on.
+        /// </summary>
+        internal static int RollFlashImageCount(bool random, int min, int max, Random rng)
+        {
+            if (!random) return max;
+            int lo = Math.Min(min, max), hi = Math.Max(min, max);
+            return rng.Next(lo, hi + 1);
+        }
+
         [JsonProperty("ImageScale")]
         private int _imageScale = 100; // 50-250% (100 = normal size, 200 = double, etc)
 
@@ -1324,6 +1368,20 @@ namespace ConditioningControlPanel.Models
             get => _flashMotionStyle;
             set { _flashMotionStyle = value; OnPropertyChanged(); }
         }
+
+        private double _flashDriftSpeed = 1.0;
+        /// <summary>
+        /// Speed multiplier for the Drift and Bounce motion (ccp-bugs #1265). 1.0 is the authored
+        /// speed; clamped 0.25..3. Applied once per spawn to the rolled velocity.
+        /// </summary>
+        [JsonProperty("FlashDriftSpeed")]
+        public double FlashDriftSpeed
+        {
+            get => _flashDriftSpeed;
+            set { _flashDriftSpeed = ClampDriftSpeed(value); OnPropertyChanged(); }
+        }
+
+        internal static double ClampDriftSpeed(double v) => double.IsNaN(v) ? 1.0 : Math.Clamp(v, 0.25, 3.0);
 
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
         public int FlashDuration
@@ -2543,6 +2601,16 @@ namespace ConditioningControlPanel.Models
             set { _pinkFilterTargetMonitor = value; OnPropertyChanged(); }
         }
 
+        private int _videoTargetMonitor = -1;
+        /// <summary>Monitor target for mandatory videos (and their attention targets and messages).
+        /// -1 = follow DualMonitorEnabled / "Show content on", -2 = all monitors, 0..N = specific
+        /// monitor index (ccp-bugs #1154). See <see cref="DualMonitorEnabled"/>.</summary>
+        public int VideoTargetMonitor
+        {
+            get => _videoTargetMonitor;
+            set { _videoTargetMonitor = value; OnPropertyChanged(); }
+        }
+
         private bool _fillAllMonitorsWithVideo;
         /// <summary>
         /// On 3+ monitors, give every secondary screen its own video decoder. Each LibVLC
@@ -2954,6 +3022,25 @@ namespace ConditioningControlPanel.Models
         {
             get => _mercySystemEnabled;
             set { _mercySystemEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>Fewest and most wrong tries Mercy can be set to (ccp-bugs #1145).</summary>
+        public const int MercyAfterFailsMin = 2, MercyAfterFailsMax = 10;
+
+        /// <summary>Clamp a Mercy threshold into 2..10.</summary>
+        public static int ClampMercyAfterFails(int value) =>
+            Math.Clamp(value, MercyAfterFailsMin, MercyAfterFailsMax);
+
+        public const int MercyAfterFailsDefault = 3;
+        private int _mercyAfterFails = MercyAfterFailsDefault;
+        /// <summary>
+        /// Strict Bubble Count and strict mandatory videos let the user go after this many wrong
+        /// tries when <see cref="MercySystemEnabled"/> is on. Clamped 2..10, default 3 (ccp-bugs #1145).
+        /// </summary>
+        public int MercyAfterFails
+        {
+            get => _mercyAfterFails;
+            set { _mercyAfterFails = ClampMercyAfterFails(value); OnPropertyChanged(); }
         }
 
         private string _lastPreset = "DEFAULT";
@@ -4124,7 +4211,7 @@ namespace ConditioningControlPanel.Models
             set { _fypVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
-        private double _fypWindowOpacity = 1.0;
+        private double _fypWindowOpacity = 0.6; // #832: ghost mode should read as see-through out of the box
         /// <summary>Ghost-mode translucency for the feed (0.01-1.0) - the DWM thumbnail opacity of
         /// the see-through mirror, never the real window's alpha (the WebView2 window must never be
         /// layered; see FypGhostOverlay). May go near-invisible: recovery is a single Esc/panic
@@ -4564,6 +4651,18 @@ namespace ConditioningControlPanel.Models
         {
             get => _lockCardStrict;
             set { _lockCardStrict = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockCardResetOnTypo = false;
+        /// <summary>
+        /// When true, a typo on a lock card wipes the line and the user types that repeat again
+        /// from the start (ccp-bugs #1163). Off by default. Voice solving never types, so it is
+        /// unaffected; Win+H dictation into the box is judged like any other typing.
+        /// </summary>
+        public bool LockCardResetOnTypo
+        {
+            get => _lockCardResetOnTypo;
+            set { _lockCardResetOnTypo = value; OnPropertyChanged(); }
         }
 
         private bool _lockCardVoiceMode = false; // Solve by speaking the phrase (offline mic) instead of typing
@@ -5043,6 +5142,18 @@ namespace ConditioningControlPanel.Models
         {
             get => _brainDrainIntensity;
             set { _brainDrainIntensity = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+
+        private int _brainDrainVolume = 100; // 0-100%
+        /// <summary>
+        /// Brain Drain's own clip volume (0-100), multiplied with <see cref="MasterVolume"/>
+        /// (ccp-bugs #1104). A comfort setting: not session-locked and not carried by presets.
+        /// Default 100 keeps the old level, which was master volume alone.
+        /// </summary>
+        public int BrainDrainVolume
+        {
+            get => _brainDrainVolume;
+            set { _brainDrainVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
         private bool _brainDrainHighRefresh = false;
@@ -7821,7 +7932,7 @@ namespace ConditioningControlPanel.Models
 
         private int _keywordGlobalCooldownSeconds = 10;
         /// <summary>
-        /// Global cooldown between any trigger firing, in seconds (clamped 1-300).
+        /// Global cooldown between any trigger firing, in seconds (clamped 1-3600).
         /// Enforced on all three match sources (OCR, keyboard, external text) —
         /// this is a hard ceiling on trigger frequency regardless of how many
         /// matches are on screen. Primarily prevents the OCR feedback loop
@@ -7833,13 +7944,13 @@ namespace ConditioningControlPanel.Models
         public int KeywordGlobalCooldownSeconds
         {
             get => _keywordGlobalCooldownSeconds;
-            set { _keywordGlobalCooldownSeconds = Math.Clamp(value, 1, 300); OnPropertyChanged(); }
+            set { _keywordGlobalCooldownSeconds = Math.Clamp(value, 1, 3600); OnPropertyChanged(); }
         }
 
         private int _keywordPerKeywordCooldownSeconds = 15;
         /// <summary>
         /// Hard minimum cooldown between two fires of the SAME keyword, in seconds
-        /// (clamped 1-600). Enforced at RecordFire time via the _mutedKeywords
+        /// (clamped 1-3600). Enforced at RecordFire time via the _mutedKeywords
         /// dictionary independent of AwarenessLoopProtectionEnabled. Floor for
         /// the per-trigger <see cref="KeywordTrigger.CooldownSeconds"/> — presets
         /// that declare a lower cooldown will still be gated at this minimum.
@@ -7848,7 +7959,7 @@ namespace ConditioningControlPanel.Models
         public int KeywordPerKeywordCooldownSeconds
         {
             get => _keywordPerKeywordCooldownSeconds;
-            set { _keywordPerKeywordCooldownSeconds = Math.Clamp(value, 1, 600); OnPropertyChanged(); }
+            set { _keywordPerKeywordCooldownSeconds = Math.Clamp(value, 1, 3600); OnPropertyChanged(); }
         }
 
         private double _keywordSessionMultiplier = 1.5;
@@ -8167,6 +8278,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _remoteShareAvatar;
             set { _remoteShareAvatar = value; OnPropertyChanged(); }
+        }
+
+        // Remote Control v2 (2026-10-03): the controller's live preview names the Scrolller
+        // niches pictures come from. Counts are always sent; the names only while this is on.
+        // Default ON (owner call to confirm). Never a file name, path or picture either way.
+        private bool _remoteShareMediaSources = true;
+        public bool RemoteShareMediaSources
+        {
+            get => _remoteShareMediaSources;
+            set { _remoteShareMediaSources = value; OnPropertyChanged(); }
         }
 
         // SP5 layer 3 — Available Subjects directory opt-in.

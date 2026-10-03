@@ -606,6 +606,24 @@
                                                   Checked="ChkRemoteShareAvatar_Changed"
                                                   Unchecked="ChkRemoteShareAvatar_Changed"/>
                                     </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                    <Grid Height="34" Background="Transparent"
+                                          ToolTip="{loc:Str desc_remote_share_media_sources}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str label_remote_share_media_sources}"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkRemoteShareMediaSources" x:FieldModifier="internal"
+                                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                  Margin="16,0,0,0"
+                                                  Checked="ChkRemoteShareMediaSources_Changed"
+                                                  Unchecked="ChkRemoteShareMediaSources_Changed"/>
+                                    </Grid>
                                 </StackPanel>
                             </Grid>
                         </Border>

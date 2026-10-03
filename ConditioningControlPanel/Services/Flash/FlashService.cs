@@ -945,7 +945,10 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var settings = App.Settings.Current;
-                var images = GetNextImages(amount ?? settings.SimultaneousImages);
+                // #658: roll the count ONCE per flash, so the pick and the retry target agree.
+                var count = amount ?? AppSettings.RollFlashImageCount(settings.SimultaneousImagesRandom,
+                    settings.SimultaneousImagesMin, settings.SimultaneousImages, _random);
+                var images = GetNextImages(count);
 
                 if (images.Count == 0)
                 {
@@ -996,7 +999,7 @@ namespace ConditioningControlPanel.Services
 
                 // Load images, retrying with fresh picks if some are corrupted/unsupported,
                 // until we reach the requested count or run out of candidates.
-                var targetCount = amount ?? settings.SimultaneousImages;
+                var targetCount = count;
 
                 // An AUTHORED burst (the Back Room, CONTRACT section 4 - `look` is what marks one) must
                 // never show the same picture twice inside one burst: five flashes of one GIF read as
@@ -2482,6 +2485,12 @@ namespace ConditioningControlPanel.Services
                     MotionFx.Level, _random,
                     motion == FlashMotionStyle.Pendulum ? LivePendulumsOn(bx, by, bw, bh) : null);
 
+            // #1265: the player's Drift and Bounce speed, before the preview slow-down below.
+            if (motionState is { Style: FlashMotionStyle.DriftBounce })
+            {
+                var drift = App.Settings?.Current?.FlashDriftSpeed ?? 1.0;
+                motionState.Vx *= drift; motionState.Vy *= drift;
+            }
             if (imageData.PreviewV2 && motionState != null) { motionState.Vx *= .35; motionState.Vy *= .35; }
             // Kept on the state bag from the moment it is rolled, not only once the layer item
             // exists: in a burst the flashes before this one are still converting frames off the

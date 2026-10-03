@@ -1589,6 +1589,9 @@ namespace ConditioningControlPanel
             // Sync thumbnail checkboxes with new preset state
             RefreshThumbnailCheckboxes();
 
+            // A preset can carry its own Scrolller niches and media source (ccp-bugs #1142).
+            RefreshRemoteMediaPicker();
+
             // Clear caches so services pick up new selection. A preset switch replaces the whole
             // disabled set, so it needs exactly the invalidation a manual uncheck gets: the video
             // AND bubble-count queues refill only when empty, so skipping them left the previous

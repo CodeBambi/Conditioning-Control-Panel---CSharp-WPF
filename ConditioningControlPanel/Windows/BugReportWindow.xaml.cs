@@ -49,6 +49,12 @@ namespace ConditioningControlPanel
             };
 
             Loaded += OnLoaded;
+            // ccp-bugs #704: topmost flashes and overlays used to cover the form. Topmost (XAML)
+            // keeps it above them; one Activate once it has painted takes the keyboard back.
+            ContentRendered += (_, _) =>
+            {
+                try { Activate(); TxtDescription.Focus(); } catch { /* best effort */ }
+            };
         }
 
         /// <summary>
