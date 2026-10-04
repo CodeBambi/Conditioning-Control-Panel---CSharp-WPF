@@ -177,16 +177,25 @@ public sealed class ChasterClient : IDisposable
         return result;
     }
 
-    /// <summary>A lock's top-level scalar fields only. <see cref="ChasterLock"/> maps nothing
-    /// nested, and mapping a deep subtree would trip the serializer's own depth limit.</summary>
+    /// <summary>A lock cut down to the fields <see cref="ChasterLock"/> maps, plus any other
+    /// scalar. Unmapped subtrees (extensions and their programs) are dropped: mapping a deep
+    /// subtree would trip the serializer's own depth limit. A nested field the model DOES map
+    /// is kept whole, so adding one to the model needs no change here.</summary>
     private static Newtonsoft.Json.Linq.JToken Flat(Newtonsoft.Json.Linq.JToken item)
     {
         if (item is not Newtonsoft.Json.Linq.JObject obj) return item;
         var flat = new Newtonsoft.Json.Linq.JObject();
         foreach (var prop in obj.Properties())
-            if (prop.Value is Newtonsoft.Json.Linq.JValue value) flat[prop.Name] = value.DeepClone();
+            if (prop.Value is Newtonsoft.Json.Linq.JValue || MappedLockFields.Contains(prop.Name))
+                flat[prop.Name] = prop.Value.DeepClone();
         return flat;
     }
+
+    private static readonly HashSet<string> MappedLockFields = typeof(ChasterLock).GetProperties()
+        .Select(p => p.GetCustomAttributes(typeof(JsonPropertyAttribute), false).OfType<JsonPropertyAttribute>().FirstOrDefault()?.PropertyName)
+        .Where(n => !string.IsNullOrEmpty(n))
+        .Select(n => n!)
+        .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>The linked account's name and picture (scope <c>profile</c>). Read-only.</summary>
     public async Task<ChasterResult<ChasterProfile>> GetProfileAsync(string accessToken, CancellationToken ct = default)
