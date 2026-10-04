@@ -1,0 +1,131 @@
+/* ============================================================================
+ * feel-field.css - the field's feel pass (Wave 1). Loaded after styles.css.
+ *
+ * A trance game: these make the field calmer and rounder, never louder.
+ * Every motion here has an IN and an OUT and reads html[data-motion]
+ * (shared/motion.js): reduced = half amplitude, off = fades only.
+ *
+ * One rule carried through the whole file: the bubble WRAP is placed by an
+ * inline translate3d, so nothing here animates the wrap's transform (a
+ * keyframed transform replaces the inline one and the bubble would jump to
+ * the corner). Shape lives on .cf-bubble-body; the wrap only fades.
+ * ==========================================================================*/
+
+:root {
+  /* idle breath: how far a resting bubble swells */
+  --cf-breath-amp: 0.028;
+  /* squash before the pop: about 80 ms wide and flat, then it lets go */
+  --cf-squash-x: 1.25;
+  --cf-squash-y: 0.78;
+  --cf-pop-grow: 1.45;
+  --cf-pop-ms: 380ms;          /* 80 ms squash + 300 ms release */
+  /* jelly: first overshoot of the ring-back after a hold lets go */
+  --cf-jelly-a: 0.14;
+  /* detonation dim (chaosField.js sets these per motion level) */
+  --cf-dim-sat: 0.35;
+  --cf-dim-bright: 0.72;
+  --cf-dim-ms: 2600ms;
+}
+html[data-motion="reduced"] {
+  --cf-breath-amp: 0.014;
+  --cf-squash-x: 1.125;
+  --cf-squash-y: 0.89;
+  --cf-pop-grow: 1.22;
+  --cf-jelly-a: 0.07;
+}
+
+/* ---- idle breath: each bubble on its own period and phase (set at spawn) ---- */
+.cf-bubble-body {
+  animation: cfFeelBreath var(--breath-dur, 4s) ease-in-out var(--breath-delay, 0s) infinite;
+}
+@keyframes cfFeelBreath {
+  0%, 100% { scale: 1; }
+  50% { scale: calc(1 + var(--cf-breath-amp)); }
+}
+/* the `scale` property rides beside `transform`, so the hold-channel squeeze
+   (an inline transform) and the breath do not fight */
+html[data-motion="off"] .cf-bubble-body { animation: none; }
+
+/* ---- pop: squash, then release. The wrap only fades. ---- */
+.cf-bubble.is-pop { animation: cfFeelPopFade var(--cf-pop-ms) ease-out forwards; }
+.cf-bubble.is-pop .cf-bubble-body { animation: cfFeelPop var(--cf-pop-ms) ease-out forwards; }
+@keyframes cfFeelPopFade {
+  0%, 21% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes cfFeelPop {
+  0% { transform: scale(1); animation-timing-function: cubic-bezier(.2, .9, .3, 1); }
+  21% { transform: scale(var(--cf-squash-x), var(--cf-squash-y)); }
+  100% { transform: scale(var(--cf-pop-grow)); }
+}
+/* a completed hold is already squeezed small: it springs out instead */
+.cf-bubble.is-pop.is-pop-jelly .cf-bubble-body { animation-name: cfFeelPopSpring; }
+@keyframes cfFeelPopSpring {
+  0% { transform: scale(0.82); animation-timing-function: cubic-bezier(.2, 1.5, .4, 1); }
+  34% { transform: scale(calc(1 + var(--cf-jelly-a)), calc(1 - var(--cf-jelly-a) * 0.6)); }
+  100% { transform: scale(var(--cf-pop-grow)); }
+}
+
+/* ---- jelly: a hold let go by a pause rings back to round ---- */
+.cf-bubble-body.is-jelly { animation: cfFeelJelly 0.44s ease-out; }
+@keyframes cfFeelJelly {
+  0% { transform: scale(calc(1 - var(--cf-jelly-a)), calc(1 + var(--cf-jelly-a))); }
+  30% { transform: scale(calc(1 + var(--cf-jelly-a) * 0.7), calc(1 - var(--cf-jelly-a) * 0.7)); }
+  58% { transform: scale(calc(1 - var(--cf-jelly-a) * 0.3), calc(1 + var(--cf-jelly-a) * 0.3)); }
+  82% { transform: scale(calc(1 + var(--cf-jelly-a) * 0.1), calc(1 - var(--cf-jelly-a) * 0.1)); }
+  100% { transform: scale(1); }
+}
+
+/* ---- failure subtracts: a detonated bubble drains and sinks, no flare ---- */
+.cf-bubble.is-detonate { animation: cfFeelGoneFade 0.42s ease-out forwards; }
+.cf-bubble.is-detonate .cf-bubble-body { animation: cfFeelDeflate 0.42s ease-in forwards; }
+@keyframes cfFeelGoneFade {
+  0% { opacity: 1; filter: saturate(1); }
+  100% { opacity: 0; filter: saturate(0.15) brightness(0.8); }
+}
+@keyframes cfFeelDeflate {
+  0% { transform: scale(1); }
+  100% { transform: scale(0.72); }
+}
+/* drift-off: same split (the wrap fades, the body eases down) */
+.cf-bubble.is-fade { animation: cfFeelFadeOnly 0.91s ease-out forwards; }
+.cf-bubble.is-fade .cf-bubble-body { animation: cfFeelSettle 0.91s ease-out forwards; }
+@keyframes cfFeelFadeOnly { 100% { opacity: 0; } }
+@keyframes cfFeelSettle { 100% { transform: scale(0.85); } }
+
+/* ---- the field after a detonation: colour and light drain, then ease back ---- */
+html.cf-dimmed #sf-canvas,
+html.cf-dimmed .cf-layer,
+html.cf-dimmed .cf-fx {
+  animation: cfFeelDim var(--cf-dim-ms) linear both;
+}
+@keyframes cfFeelDim {
+  0% { filter: saturate(1) brightness(1); animation-timing-function: ease-out; }
+  8% { filter: saturate(var(--cf-dim-sat)) brightness(var(--cf-dim-bright)); animation-timing-function: linear; }
+  30% { filter: saturate(var(--cf-dim-sat)) brightness(var(--cf-dim-bright)); animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
+  100% { filter: saturate(1) brightness(1); }
+}
+
+/* ---- reward flights: emotes and gold on their way to the HUD (chaosHud.js) ---- */
+.cf-fly {
+  position: fixed;
+  left: 0; top: 0;
+  z-index: 60;
+  pointer-events: none;
+  line-height: 1;
+  font-size: 1.5rem;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 0 8px rgba(255, 224, 150, 0.7)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+}
+.cf-fly--gold {
+  font-size: 1.35rem;
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.75)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+}
+
+/* ---- motion off: no squash, no spring, no deflate. Fades only. ---- */
+html[data-motion="off"] .cf-bubble.is-pop .cf-bubble-body,
+html[data-motion="off"] .cf-bubble.is-detonate .cf-bubble-body,
+html[data-motion="off"] .cf-bubble.is-fade .cf-bubble-body,
+html[data-motion="off"] .cf-bubble-body.is-jelly { animation: none; }
+html[data-motion="off"] .cf-bubble.is-pop { animation: cfFeelFadeOnly 0.2s ease-out forwards; }
+html[data-motion="off"] .cf-bubble.is-detonate { animation: cfFeelGoneFade 0.3s ease-out forwards; }
