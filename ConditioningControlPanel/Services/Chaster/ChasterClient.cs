@@ -36,9 +36,33 @@ public sealed class ChasterLock
     [JsonProperty("isAllowedToViewTime")] public bool IsAllowedToViewTime { get; set; } = true;
     [JsonProperty("isTestLock")] public bool IsTestLock { get; set; }
 
+    /// <summary>The lock's resolved permissions (ResolvedPermissionsDto), kept raw so an odd shape
+    /// never costs the whole lock. Read only through <see cref="WearerCanAddTime"/>.</summary>
+    [JsonProperty("permissions")] public Newtonsoft.Json.Linq.JToken? Permissions { get; set; }
+
     /// <summary>The keyholder hid the timer. CCP then never shows an end date either, not even
     /// one it could work out from its own pushes.</summary>
     [JsonIgnore] public bool TimerHidden => !DisplayRemainingTime || !IsAllowedToViewTime || EndDate == null;
+
+    /// <summary>What the lock says about the wearer adding time: true or false when the
+    /// <c>lock.time.add</c> grant is there and names the wearer, null when Chaster did not say.</summary>
+    [JsonIgnore] public bool? WearerMayAddTime => WearerCanAddTime(Permissions);
+
+    /// <summary>The <c>lock.time.add</c> grant in a ResolvedPermissionsDto: the wearer may add
+    /// time when their verbs hold "edit" (a keyholder lock with "the wearer can no longer add
+    /// time" lists none). Null for anything else: no permissions, no such grant, no wearer list.</summary>
+    public static bool? WearerCanAddTime(Newtonsoft.Json.Linq.JToken? permissions)
+    {
+        if (permissions is not Newtonsoft.Json.Linq.JObject obj || obj["grants"] is not Newtonsoft.Json.Linq.JArray grants) return null;
+        foreach (var grant in grants)
+        {
+            if (grant is not Newtonsoft.Json.Linq.JObject g) continue;
+            if (!string.Equals((g["resource"] as Newtonsoft.Json.Linq.JValue)?.Value as string, "lock.time.add", StringComparison.Ordinal)) continue;
+            if (g["subjects"]?["wearer"] is not Newtonsoft.Json.Linq.JArray verbs) return null;
+            return verbs.Any(v => string.Equals((v as Newtonsoft.Json.Linq.JValue)?.Value as string, "edit", StringComparison.OrdinalIgnoreCase));
+        }
+        return null;
+    }
 }
 
 /// <summary>Who the linked account is, from GET /auth/profile. Only the two fields the account
@@ -53,7 +77,8 @@ public enum ChasterStatus
     RateLimited,
     /// <summary>The lock is gone, unlocked, or not this wearer's.</summary>
     NotFound,
-    /// <summary>Chaster said no to this call on this lock (403). The link itself is fine.</summary>
+    /// <summary>Chaster said no to this call on this lock (403). The link itself is fine. On
+    /// update-time it means the wearer lacks lock.time.add: the keyholder turned adding off.</summary>
     Refused,
     /// <summary>Network, 5xx, a body we cannot read. Try later; never drop the link over it.</summary>
     Unavailable,

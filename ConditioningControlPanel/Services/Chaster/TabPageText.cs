@@ -29,12 +29,13 @@ public static class TabPageText
     }
 
     /// <summary>The next setup step stays visible until the tab can run.</summary>
-    internal static string? SetupHint(bool linked, LockLookup lookup, bool hasLock, bool enabled) =>
+    internal static string? SetupHint(bool linked, LockLookup lookup, bool hasLock, bool enabled, bool addsBlocked = false) =>
         !linked ? null
         : lookup == LockLookup.Away ? "chaster_state_away"
         : lookup == LockLookup.None ? "chaster_setup_none"
         : !hasLock ? "chaster_setup_pick"
         : !enabled ? "chaster_setup_run"
+        : addsBlocked && lookup == LockLookup.Chosen ? "chaster_state_keyholder_blocked"
         : null;
 
     // ============================== the hero: the lock, in words ==============================
@@ -99,12 +100,13 @@ public static class TabPageText
     /// for tomorrow; paused or with no lock picked, all of it waits.</summary>
     public readonly record struct TagLine(string Key, string? Today = null, string? Later = null);
 
-    public static TagLine Tag(int balanceSeconds, int pushableTodaySeconds, bool paused, bool lockPicked)
+    public static TagLine Tag(int balanceSeconds, int pushableTodaySeconds, bool paused, bool lockPicked, bool addsBlocked = false)
     {
         if (balanceSeconds < 0) return new("chaster_tag_credit_lands");
         if (balanceSeconds == 0) return new("chaster_tag_lands");
         if (paused) return new("chaster_tag_paused");
         if (!lockPicked) return new("chaster_tag_nolock");
+        if (addsBlocked) return new("chaster_tag_blocked");
         var today = Math.Clamp(pushableTodaySeconds, 0, balanceSeconds);
         var later = balanceSeconds - today;
         if (later == 0) return new("chaster_tag_lands");
