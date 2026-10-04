@@ -28,14 +28,24 @@ public static class TabPageText
                 all.Where(p => p.Seconds < 0).OrderBy(p => p.Seconds).ToList());
     }
 
-    /// <summary>The next setup step stays visible until the tab can run.</summary>
-    internal static string? SetupHint(bool linked, LockLookup lookup, bool hasLock, bool enabled) =>
+    /// <summary>The next setup step stays visible until the tab can run. A tab that is on with no
+    /// row switched on books nothing, ever, and sits at 0:00 looking broken (Haruka, 7.0.1): that
+    /// state gets its own line, and the page lights the keys while it lasts.</summary>
+    internal static string? SetupHint(bool linked, LockLookup lookup, bool hasLock, bool enabled,
+        bool anyRowOn = true) =>
         !linked ? null
         : lookup == LockLookup.Away ? "chaster_state_away"
         : lookup == LockLookup.None ? "chaster_setup_none"
         : !hasLock ? "chaster_setup_pick"
         : !enabled ? "chaster_setup_run"
+        : !anyRowOn ? "chaster_setup_nothing"
         : null;
+
+    /// <summary>True when at least one switched-on id is a row that can book: a priced row from
+    /// <see cref="TabPrices.All"/>, never a way-out id. A modifier alone (heat) prices nothing.</summary>
+    public static bool AnyRowOn(IEnumerable<string>? enabledIds) =>
+        enabledIds != null && enabledIds.Any(id =>
+            !string.IsNullOrEmpty(id) && !TabPrices.NeverPriced.Contains(id) && TabPrices.Find(id) != null);
 
     // ============================== the hero: the lock, in words ==============================
 

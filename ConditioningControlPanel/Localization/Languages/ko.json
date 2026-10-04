@@ -103,6 +103,7 @@
   "chaster_setup_pick": "1. 아래에서 잠금을 선택하세요. 2. 프리셋을 고르세요. 3. 위에서 시간 집계를 켜세요.",
   "chaster_setup_none": "활성 잠금이 없습니다. Chaster에서 잠금을 만들거나 참여한 뒤 여기로 돌아와 선택하세요.",
   "chaster_setup_run": "아래에서 프리셋을 고른 뒤 위에서 시간 집계를 켜세요. 선택한 효과는 집계가 켜져 있을 때만 작동합니다.",
+  "chaster_setup_nothing": "아직 아무것도 집계되지 않아요. 아래에서 열쇠를 고르면 집계가 시작됩니다.",
   "br_counter_sold": "판매 완료",
   "leash_explain_title": "목줄은 이렇게 작동해요",
   "leash_explain_offer_title": "{0}님에게 목줄 제안하기",

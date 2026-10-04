@@ -267,9 +267,20 @@ namespace ConditioningControlPanel.Views.Tabs
             var chaster = App.Chaster;
             var key = TabPageText.SetupHint(chaster?.IsLinked == true,
                 chaster?.LockLookup ?? LockLookup.Unlinked, chaster?.Lock != null,
-                App.Settings?.Current?.ChasterTabEnabled == true);
+                App.Settings?.Current?.ChasterTabEnabled == true,
+                TabPageText.AnyRowOn(App.Settings?.Current?.ChasterPrices));
             SetupHint.Text = key == null ? "" : Loc.Get(key);
             SetupHint.Visibility = key == null ? Visibility.Collapsed : Visibility.Visible;
+            // Nothing can count: the line says so and the keys glow until one is on.
+            FxNudgeKeys(key == "chaster_setup_nothing");
+        }
+
+        /// <summary>The hint line, when it is asking for a key, takes the player to the keys.</summary>
+        private void SetupHint_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_nudgingKeys) return;
+            PresetRow.BringIntoView();
+            e.Handled = true;
         }
 
         /// <summary>The "Ends" line counts to the same end the live clock does: Chaster's own end
@@ -1126,6 +1137,7 @@ namespace ConditioningControlPanel.Views.Tabs
             Stakes(TxtStakesCirce, TabPresets.Circe);
             RefreshMood(); // the heat row may have just gone on or off
             PaintMenuHelp(); // Natasha's row may have just gone on or off
+            RefreshSetupHint(); // the first row on ends the "nothing counts yet" nudge
         }
 
         /// <summary>Push the saved set onto the rows. Never the other way round: the settings

@@ -569,7 +569,8 @@
                                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                                     <TextBlock x:Name="SetupHint" Visibility="Collapsed" FontSize="16" FontWeight="SemiBold"
                                                Foreground="White" TextWrapping="Wrap" MaxWidth="480"
-                                               HorizontalAlignment="Left" Margin="0,8,0,12"/>
+                                               HorizontalAlignment="Left" Margin="0,8,0,12"
+                                               MouseLeftButtonUp="SetupHint_MouseLeftButtonUp"/>
                                     <!-- the state pills: test lock, frozen, hidden, offline, no lock, on hold -->
                                     <WrapPanel x:Name="HeroPills" Margin="0,10,0,0"/>
                                     <!-- The pick. Nothing is pushed to a lock the player did not pick, so this

@@ -155,6 +155,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 StartArtDrift();
                 StartTagSwing();
                 StartCalendarLoops();
+                if (_nudgingKeys) FxNudgeKeys(true);
                 HeroTitle.PlayEntry();
                 HeroTitle.Start();
                 if (_clockLead is { } lead) MotionFx.Odometer(lead.Block, 0, lead.Value, "{0:0}", 0.9);
@@ -202,6 +203,51 @@ namespace ConditioningControlPanel.Views.Tabs
             yield return FootRow;
         }
 
+        private bool _nudgingKeys;
+
+        /// <summary>Tab on, nothing switched on: the keys wear a glow that breathes until one is
+        /// pressed. The glow follows the tier's glow rail, the breathing the ambient-loop rail;
+        /// with neither, the hint line alone does the asking.</summary>
+        private void FxNudgeKeys(bool on)
+        {
+            try
+            {
+                _nudgingKeys = on;
+                SetupHint.Cursor = on ? Cursors.Hand : null;
+                SetupHint.Foreground = on ? new SolidColorBrush(JackpotColour) : Brushes.White;
+                var glow = PresetRow.Effect as DropShadowEffect;
+                glow?.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+                PresetRow.BeginAnimation(OpacityProperty, null);
+                PresetRow.Opacity = 1;
+                if (!on || !IsVisible) { PresetRow.Effect = null; return; }
+
+                var breathe = new DoubleAnimation(0.35, 0.95, TimeSpan.FromSeconds(1.1))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+                Timeline.SetDesiredFrameRate(breathe, 30);
+                if (PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+                {
+                    glow ??= new DropShadowEffect
+                    {
+                        Color = JackpotColour, ShadowDepth = 0, Opacity = 0.8,
+                        BlurRadius = Math.Min(26, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                        RenderingBias = RenderingBias.Performance,
+                    };
+                    PresetRow.Effect = glow;
+                    if (MotionFx.AllowAmbientLoops) glow.BeginAnimation(DropShadowEffect.OpacityProperty, breathe);
+                }
+                else if (MotionFx.AllowAmbientLoops)
+                {
+                    breathe.From = 0.7; breathe.To = 1.0;
+                    PresetRow.BeginAnimation(OpacityProperty, breathe);
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex, "chaster key nudge"); }
+        }
+
         /// <summary>The page hid: park every loop where it is, keep the composed state.</summary>
         private void FxPark()
         {
@@ -217,6 +263,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 FxTrailerStop();
                 PerimeterCometAdorner.Detach(_linkComet);
                 _linkComet = null;
+                (PresetRow.Effect as DropShadowEffect)?.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+                PresetRow.BeginAnimation(OpacityProperty, null);
             }
             catch (Exception ex) { Diag.Swallowed(ex, "chaster fx park"); }
         }
