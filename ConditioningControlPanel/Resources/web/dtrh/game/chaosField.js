@@ -22,6 +22,8 @@
  * Pop/chime SFX stay in-page (audioBus); chaos stingers go native from chaosRun.
  * ==========================================================================*/
 
+import { motionOff, motionScale } from '../shared/motion.js';
+import { SHARD_CAP, RAIN_CAP, shardCount, breathPhase, dimLevels } from './fieldFeel.js';
 import { MOTION, RING_FLASH_FROM_MS, RING_BRINK_MS, popWordFor,
   DARTER_SPEED_PXS, DARTER_MAX_BOUNCES, BOUND_WINDOW_MS, BOUND_ENRAGE_SPEED_MULT,
   TEASE_CENTER_PULL, CHAPERONE_ORBIT_RADIUS, CHAPERONE_ORBIT_GAP, CHAPERONE_ORBIT_PERIOD_SEC } from './variants.js';
@@ -202,6 +204,11 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       }
     }
     wrap.appendChild(body);
+    // Idle breath (feel-field.css): every bubble gets its own period and a
+    // negative delay, so copies never breathe in unison.
+    const bp = breathPhase(Math.random(), Math.random());
+    body.style.setProperty('--breath-dur', `${bp.durS.toFixed(2)}s`);
+    body.style.setProperty('--breath-delay', `${bp.delayS.toFixed(2)}s`);
 
     // Blindfold: plain bubbles dim to a whisper; pickups stay bright.
     if (phys.dimOpacity < 1 && (spec.kind === 'treat' || spec.kind === 'live')) {
@@ -223,6 +230,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     const b = {
       spec, wrap, body, ring, chan,
       size,
+      tint: dis ? INCOG_PLAIN_TINT : spec.tint,   // what the shards wear
       x: 0, y: 0,
       state: 'live',
       fuseLeft: spec.fuseMs,
@@ -414,6 +422,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     b.chan.style.display = 'none';
     b.wrap.classList.remove('is-channeling');
     b.body.style.transform = '';
+    if (held) jelly(b);           // let go by a pause: the body rings back to round
     if (complete || held) return; // defuse() already ran / paused field lets go clean
     try { onChannelBroken(b.spec, ms < CLICK_THRESHOLD_MS ? 'click' : 'release'); } catch (err) { /* ignore */ }
     detonate(b);
@@ -429,7 +438,12 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     if (kind === 'golden' || kind === 'droplet' || kind === 'heart' || kind === 'prism') return '#ffe27a';
     return '#ff9fd6';
   }
+  let liveShards = 0;   // .cf-spark nodes on the fx layer right now (bounded by SHARD_CAP)
+  let liveRain = 0;     // .rh-emorain nodes (bounded by RAIN_CAP)
+  let burstTint = null; // set by popVisual just before its burst, spent by that burst
   function sparkleBurst(x, y, kind, size = 110) {
+    const tint = burstTint;
+    burstTint = null;
     const rich = kind === 'golden' || kind === 'droplet' || kind === 'heart' || kind === 'prism';
     const snap = kind === 'live';
     const col = burstColor(kind);
@@ -445,6 +459,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     flash.style.setProperty('--bsize', `${Math.round(size * 0.95 * scale)}px`);
     fxLayer.appendChild(flash);
     flash.addEventListener('animationend', () => flash.remove(), { once: true });
+    if (motionOff()) return;   // still: the core fades, nothing flies outward
 
     // Crisp expanding shockwave ring.
     const ring = document.createElement('div');
@@ -457,7 +472,9 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     ring.addEventListener('animationend', () => ring.remove(), { once: true });
 
     // Radiating shards (the original sparkle burst), now tinted to the payload.
-    const n = rich ? 13 : 9;
+    // A live snap keeps its cool green; everything else sheds its own colour.
+    const shardCol = (!snap && tint) || col;
+    const n = shardCount(rich ? 13 : 9, liveShards, SHARD_CAP);
     for (let i = 0; i < n; i++) {
       const p = document.createElement('div');
       p.className = 'cf-spark';
@@ -465,12 +482,16 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       const dist = rand(40, 108) * scale;
       p.style.left = `${x}px`;
       p.style.top = `${y}px`;
-      p.style.color = col;
+      p.style.color = shardCol;
       p.style.setProperty('--dx', `${Math.cos(ang) * dist}px`);
       p.style.setProperty('--dy', `${Math.sin(ang) * dist}px`);
       p.style.setProperty('--fall', `${rand(28, 64)}px`);
       fxLayer.appendChild(p);
-      p.addEventListener('animationend', () => p.remove(), { once: true });
+      liveShards++;
+      let gone = false;
+      const drop = () => { if (gone) return; gone = true; liveShards--; p.remove(); };
+      p.addEventListener('animationend', drop, { once: true });
+      window.setTimeout(drop, 900);   // a held or hidden page never fires animationend
     }
   }
 
@@ -496,8 +517,12 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
   function emojiRain(x, y, count) {
     // Exactly one glyph per ✦ emote earned: 0 emotes -> no rain, capped so a
     // monster combo can't dump hundreds of spans at once.
-    const n = Math.max(0, Math.min(30, count | 0));
-    if (n === 0) return;
+    const earned = Math.max(0, count | 0);
+    if (earned === 0) return;
+    // The HUD flies the earned emotes from here into the wallet (chaosHud.js).
+    try { window.dispatchEvent(new CustomEvent('dtrh:field', { detail: { kind: 'emotes', x, y, count: earned } })); } catch (err) { /* ignore */ }
+    if (motionOff()) return;   // still: the wallet just updates, nothing rains
+    const n = shardCount(Math.min(30, Math.ceil(earned * motionScale())), liveRain, RAIN_CAP);
     for (let i = 0; i < n; i++) {
       const em = pickOf(EMORAIN);
       const s = document.createElement('span');
@@ -512,7 +537,11 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       s.style.setProperty('--dur', `${rand(0.9, 1.6)}s`);    // faster
       s.style.fontSize = `${rand(15, 24) | 0}px`;            // smaller
       fxLayer.appendChild(s);
-      s.addEventListener('animationend', () => s.remove(), { once: true });
+      liveRain++;
+      let gone = false;
+      const drop = () => { if (gone) return; gone = true; liveRain--; s.remove(); };
+      s.addEventListener('animationend', drop, { once: true });
+      window.setTimeout(drop, 1900);
     }
   }
 
@@ -530,6 +559,9 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
 
   function popVisual(b, sfxVol = 0.25) {
     b.state = 'popped';
+    burstTint = b.tint;   // the next sparkleBurst sheds this bubble's own colour
+    // Where the last pop happened: the HUD starts a gold flight from here.
+    try { window.dispatchEvent(new CustomEvent('dtrh:field', { detail: { kind: 'pop', x: b.x, y: b.y, bubble: b.spec.kind } })); } catch (err) { /* ignore */ }
     live.delete(b);
     unlink(b);
     b.wrap.classList.add('is-pop');
@@ -573,11 +605,21 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     else popBenign(b, b.x, b.y, src);
   }
 
+  /** Jelly: the body rings back to round after a hold lets go (feel-field.css). */
+  function jelly(b) {
+    if (motionOff()) return;
+    b.body.classList.remove('is-jelly');
+    void b.body.offsetWidth;
+    b.body.classList.add('is-jelly');
+    window.setTimeout(() => b.body.classList.remove('is-jelly'), 460);
+  }
+
   function defuse(b, viaChannel) {
     if (b.state !== 'live') return;
     const fuseSecLeft = Math.max(0, b.fuseLeft) / 1000;
     const bx = b.x, by = b.y;
-    if (b.channel) { b.channel = null; endChannelVisual(b); }
+    // A hold that completes springs out of its squeeze instead of squashing again.
+    if (b.channel) { b.channel = null; endChannelVisual(b); b.wrap.classList.add('is-pop-jelly'); }
     popVisual(b, 0.2);
     floatText('SNAP', bx, by - b.size * 0.2, 'cf-pop--snap');
     noteBoundDefused(b);
@@ -1366,6 +1408,25 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
 
   let pendingTimeScale = 1;   // slow-mo survives across a freeze
 
+  // ---- failure subtracts: a detonation drains the colour, then it eases back ----
+  // The audio lane closes the low-pass and tells us; no red, no flash.
+  let dimTimer = 0;
+  const dimRoot = document.documentElement;
+  function dimField() {
+    const lv = dimLevels(motionScale());
+    dimRoot.style.setProperty('--cf-dim-sat', String(lv.sat));
+    dimRoot.style.setProperty('--cf-dim-bright', String(lv.bright));
+    dimRoot.classList.remove('cf-dimmed');
+    void dimRoot.offsetWidth;
+    dimRoot.classList.add('cf-dimmed');
+    clearTimeout(dimTimer);
+    dimTimer = window.setTimeout(() => dimRoot.classList.remove('cf-dimmed'), lv.ms + 60);
+  }
+  function onFeel(e) {
+    if (e && e.detail && e.detail.kind === 'detonate') dimField();
+  }
+  window.addEventListener('dtrh:feel', onFeel);
+
   function clearAll(withBurst = false) {
     for (const b of live) {
       if (withBurst) { b.wrap.classList.add('is-pop'); window.setTimeout(() => b.wrap.remove(), 500); }
@@ -1394,6 +1455,9 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
   function dispose() {
     clearAll();
     window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('dtrh:feel', onFeel);
+    clearTimeout(dimTimer);
+    dimRoot.classList.remove('cf-dimmed');
     layer.remove();
     fxLayer.remove();
   }
