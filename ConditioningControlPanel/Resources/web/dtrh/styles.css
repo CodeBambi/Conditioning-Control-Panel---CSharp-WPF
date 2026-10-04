@@ -3243,3 +3243,222 @@ img.rh-fx-spiralspin {
 }
 .wr-paper-page.is-made { opacity: 0.62; filter: saturate(0.75); }
 .wr-paper-page.is-made .wr-paper-foot { color: #3e6d4c; font-weight: 700; font-style: normal; }
+
+/* ============================================================================
+   FEEL PASS (wave 1) - menu feel: press travel, eased hover, boon card thud.
+   The Back Room chrome recipe: a control has a body under it and really
+   travels on :active. Trance rule: small and soft, never a snap.
+   ==========================================================================*/
+:root {
+  --feel-press-y: 2px;          /* how far a button travels when held */
+  --feel-press-ms: 70ms;        /* down is fast */
+  --feel-ease-ms: 220ms;        /* hover lift and release ease */
+  --feel-ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --feel-thud-ms: 340ms;        /* boon card entrance */
+  --feel-thud: cubic-bezier(0.2, 1.5, 0.4, 1);
+  --feel-thud-gap: 80ms;        /* stagger between cards */
+  --feel-lift-y: -5px;          /* boon card hover lift */
+}
+.sf-btn, .wr-dock-btn, .wr-seg, .wr-pill, .wr-buy, .wr-fallin, .wr-intro-btn,
+.wr-fall-cap--btn, .wr-craft-mat, .wr-sheet-close, .cf-boon {
+  transition: transform var(--feel-ease-ms) var(--feel-ease), box-shadow var(--feel-ease-ms) var(--feel-ease),
+    background-color 0.15s, border-color 0.15s, filter 0.15s, color 0.15s, opacity 0.15s;
+}
+.sf-btn:active, .wr-dock-btn:active, .wr-seg:active, .wr-pill:active, .wr-buy:active,
+.wr-fallin:active, .wr-intro-btn:active, .wr-craft-mat:active, .wr-sheet-close:active {
+  transform: translateY(var(--feel-press-y));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+  filter: brightness(0.94);
+  transition-duration: var(--feel-press-ms);
+}
+.wr-fall-cap--btn:active { transform: scale(0.97) translateY(var(--feel-press-y)); transition-duration: var(--feel-press-ms); }
+
+/* Boon cards land with a soft thud, lift slowly under the pointer, and press in. */
+.cf-boon { animation: cfBoonThud var(--feel-thud-ms) var(--feel-thud) backwards; }
+.cf-boon:nth-child(2) { animation-delay: var(--feel-thud-gap); }
+.cf-boon:nth-child(3) { animation-delay: calc(var(--feel-thud-gap) * 2); }
+.cf-boon:nth-child(4) { animation-delay: calc(var(--feel-thud-gap) * 3); }
+@keyframes cfBoonThud {
+  0% { opacity: 0; transform: translateY(22px) scale(0.94); }
+  45% { opacity: 1; }
+}
+.cf-boon:hover { transform: translateY(var(--feel-lift-y)); }
+.cf-boon:active {
+  transform: translateY(1px) scale(0.985);
+  box-shadow: inset 0 3px 12px rgba(0, 0, 0, 0.5);
+  transition-duration: var(--feel-press-ms);
+}
+
+/* ============================================================================
+   MOTION LEVELS - html[data-motion] is written by shared/motion.js.
+     full     nothing here applies.
+     reduced  loops run at half speed; shakes, glitches and anything brighter
+              than a soft pulse are replaced by a plain fade.
+     off      nothing moves. Loops stop; one-shots become opacity fades.
+   One-shots are RENAMED, never removed: much of the page removes its nodes on
+   animationend, and `animation: none` would never fire it. Duration, delay and
+   fill are kept from the original rule.
+   Left alone on purpose: .sf-loader-ring (a still spinner reads as a hang) and
+   .rh-bubble-wrap's rise (that is the game object's own travel, not chrome).
+   ==========================================================================*/
+@keyframes dmHold { from { } to { } }   /* changes nothing; still fires animationend */
+@keyframes dmGone { from { opacity: 0; } to { opacity: 0; } }
+@keyframes dmIn { from { opacity: 0; } }
+@keyframes dmOut { to { opacity: 0; } }
+@keyframes dmInOut { 0% { opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes dmInOutC {   /* for nodes whose keyframes also carried their centring */
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pfx-rot, 0deg)); }
+  15% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--pfx-rot, 0deg)); }
+  80% { opacity: 1; transform: translate(-50%, -50%) rotate(var(--pfx-rot, 0deg)); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pfx-rot, 0deg)); }
+}
+@keyframes dmBlip { 0%, 100% { opacity: 0; } 30% { opacity: 0.6; } }
+@keyframes dmPulseSoft { 0% { opacity: 0.4; } 100% { opacity: 0; } }   /* the reduced full-screen pulse ceiling */
+
+/* ---- reduced: loops at half speed ---- */
+html[data-motion="reduced"] .sf-skip .sf-btn { animation-duration: 3.2s; }
+html[data-motion="reduced"] .sf-eyebrow-dot { animation-duration: 4s; }
+html[data-motion="reduced"] .rh-bubble { animation-duration: calc(var(--sway-dur, 4s) * 2); }
+html[data-motion="reduced"] img.rh-fx-spiralspin { animation-duration: 5s, 18s; }
+html[data-motion="reduced"] .rh-fx-flashclip { animation-duration: 0.2s, 2.4s; }
+html[data-motion="reduced"] .cf-bubble.is-brink .cf-bubble-body,
+html[data-motion="reduced"] .cf-bubble.is-enraged .cf-bubble-body,
+html[data-motion="reduced"] .sf-pfx-freeze span { animation-duration: 1s; }
+html[data-motion="reduced"] .cf-fuse-ring.is-flash,
+html[data-motion="reduced"] .cf-bubble--darter.is-telegraph .cf-bubble-body { animation-duration: 0.8s; }
+html[data-motion="reduced"] .cf-spotlight,
+html[data-motion="reduced"] .cf-mult-badge.tier-4,
+html[data-motion="reduced"] .cf-hud-focus.is-low .cf-focus-fill,
+html[data-motion="reduced"] .cf-bubble--tease .cf-bubble-label,
+html[data-motion="reduced"] .sf-pfx-freeze.is-lacquer span { animation-duration: 1.8s; }
+html[data-motion="reduced"] .cf-mult-badge.tier-3 { animation-duration: 2.2s; }
+html[data-motion="reduced"] .cf-mult-badge.tier-2 .cf-mult-core::before,
+html[data-motion="reduced"] .cf-mult-badge.tier-3 .cf-mult-core::before,
+html[data-motion="reduced"] .cf-mult-badge.tier-4 .cf-mult-core::before { animation-duration: 0.84s; }
+html[data-motion="reduced"] .cf-surfacing .cf-bubble-body { animation-duration: 9.2s; }
+html[data-motion="reduced"] .cf-bubble--brittle.is-armed .cf-bubble-body,
+html[data-motion="reduced"] .sf-pfx-gifwash.is-washing { animation-duration: 4.8s; }
+html[data-motion="reduced"] .cf-bubble--echo .cf-bubble-body { animation-duration: 3.2s; }
+html[data-motion="reduced"] .cf-bubble--prism .cf-bubble-body { animation-duration: 6s; }
+html[data-motion="reduced"] .cf-dvd--electric::after { animation-duration: 0.4s; }
+html[data-motion="reduced"] .wr-logo { animation-duration: 10.4s; }
+html[data-motion="reduced"] .wr-fall-cap,
+html[data-motion="reduced"] .wr-fall-hint { animation-duration: 6.8s; }
+html[data-motion="reduced"] .wr-craft-grid.is-match { animation-duration: 2.8s; }
+html[data-motion="reduced"] .sf-pfx-vidframe::after { animation-duration: 0.56s; }
+html[data-motion="reduced"] .sf-pfx-spiral { animation-duration: 28s; }
+html[data-motion="reduced"] .sf-pfx-pink.is-melting { animation-duration: var(--pfx-sag, 3000ms), 7.2s; }
+html[data-motion="reduced"] .sf-pfx-pinned { animation-duration: 68s; }
+
+/* ---- reduced: no shake, no glitch, nothing brighter than a soft pulse ---- */
+html[data-motion="reduced"] .sf-pfx-vidframe { animation-name: none, sf-pfx-vidarc; }
+html[data-motion="reduced"] .sf-pfx-drain.sf-pfx-glitching { animation: none; }
+html[data-motion="reduced"] .cf-bubble.cf-shudder,
+html[data-motion="reduced"] .cf-mult-core.is-break,
+html[data-motion="reduced"] .cf-mult-core.is-crack,
+html[data-motion="reduced"] .rh-canvas-glitch { animation-name: dmHold; }
+html[data-motion="reduced"] .rh-fx-glitch { animation-name: dmBlip; animation-timing-function: ease-out; }
+html[data-motion="reduced"] .cf-bubble.is-detonate,
+html[data-motion="reduced"] .cf-bubble.is-shatter { animation-name: cfPop; }
+html[data-motion="reduced"] .cf-pulse.is-on { animation-name: dmPulseSoft; }
+
+/* ---- off: loops stop ---- */
+html[data-motion="off"] .sf-skip .sf-btn,
+html[data-motion="off"] .rh-bubble,
+html[data-motion="off"] .cf-bubble.is-brink .cf-bubble-body,
+html[data-motion="off"] .cf-spotlight,
+html[data-motion="off"] .cf-mult-badge.tier-3,
+html[data-motion="off"] .cf-mult-badge.tier-4,
+html[data-motion="off"] .cf-mult-badge.tier-2 .cf-mult-core::before,
+html[data-motion="off"] .cf-mult-badge.tier-3 .cf-mult-core::before,
+html[data-motion="off"] .cf-mult-badge.tier-4 .cf-mult-core::before,
+html[data-motion="off"] .cf-surfacing .cf-bubble-body,
+html[data-motion="off"] .cf-bubble--darter.is-telegraph .cf-bubble-body,
+html[data-motion="off"] .cf-bubble--tease .cf-bubble-label,
+html[data-motion="off"] .cf-bubble--brittle.is-armed .cf-bubble-body,
+html[data-motion="off"] .cf-bubble--echo .cf-bubble-body,
+html[data-motion="off"] .cf-bubble.is-enraged .cf-bubble-body,
+html[data-motion="off"] .cf-bubble--prism .cf-bubble-body,
+html[data-motion="off"] .cf-dvd--electric::after,
+html[data-motion="off"] .wr-logo,
+html[data-motion="off"] .wr-craft-grid.is-match,
+html[data-motion="off"] .sf-pfx-vidframe,
+html[data-motion="off"] .sf-pfx-vidframe::after,
+html[data-motion="off"] .sf-pfx-spiral,
+html[data-motion="off"] .sf-pfx-pink.is-melting,
+html[data-motion="off"] .sf-pfx-drain.sf-pfx-glitching,
+html[data-motion="off"] .sf-pfx-gifwash.is-washing,
+html[data-motion="off"] .sf-pfx-freeze span,
+html[data-motion="off"] .sf-pfx-freeze.is-lacquer span { animation: none; }
+html[data-motion="off"] .sf-pfx-pinned { animation: none; transform: translate(-50%, -50%); }
+html[data-motion="off"] img.rh-fx-spiralspin { animation-name: rhFade30, none; transform: scale(2); }
+html[data-motion="off"] .rh-fx-flashclip { animation-name: rhVidIn, none; }
+/* opacity-only loops stay, slowed */
+html[data-motion="off"] .sf-eyebrow-dot { animation-duration: 4s; }
+html[data-motion="off"] .cf-fuse-ring.is-flash { animation-duration: 0.8s; }
+html[data-motion="off"] .cf-hud-focus.is-low .cf-focus-fill { animation-duration: 1.8s; }
+html[data-motion="off"] .wr-fall-cap,
+html[data-motion="off"] .wr-fall-hint { animation-duration: 6.8s; }
+
+/* ---- off: one-shots become fades ---- */
+html[data-motion="off"] .rh-bubble.is-pop,
+html[data-motion="off"] .cf-bubble.is-pop,
+html[data-motion="off"] .cf-bubble.is-detonate,
+html[data-motion="off"] .cf-bubble.is-fade,
+html[data-motion="off"] .cf-bubble.is-shatter,
+html[data-motion="off"] .cf-ripple { animation-name: dmOut; }
+html[data-motion="off"] .cf-ripple { width: calc(var(--r, 260px) * 2); height: calc(var(--r, 260px) * 2); }
+html[data-motion="off"] .rh-spark,
+html[data-motion="off"] .rh-emorain,
+html[data-motion="off"] .cf-spark,
+html[data-motion="off"] .cf-burst,
+html[data-motion="off"] .cf-shock,
+html[data-motion="off"] .cf-ember,
+html[data-motion="off"] .rh-fx-glitch,
+html[data-motion="off"] .sf-pfx-cascade,
+html[data-motion="off"] .cf-pulse.is-on { animation-name: dmGone; }
+html[data-motion="off"] .cf-pop,
+html[data-motion="off"] .cf-gold-delta.is-pop,
+html[data-motion="off"] .cf-bag-delta.is-pop,
+html[data-motion="off"] .cf-announce,
+html[data-motion="off"] .rh-fx-prism,
+html[data-motion="off"] .rh-fx-spiral { animation-name: dmInOut; }
+html[data-motion="off"] .rh-xp-pop,
+html[data-motion="off"] .rh-sublim-word,
+html[data-motion="off"] .sf-pfx-flash,
+html[data-motion="off"] .sf-pfx-sub { animation-name: dmInOutC; }
+html[data-motion="off"] .cf-toast,
+html[data-motion="off"] .cf-pick,
+html[data-motion="off"] .cf-hud-active-item,
+html[data-motion="off"] .cf-hud-loadout-item,
+html[data-motion="off"] .cf-boon,
+html[data-motion="off"] .cf-mat-fly.is-pop,
+html[data-motion="off"] .cf-shield-fly.is-pop,
+html[data-motion="off"] .wr-wins-head,
+html[data-motion="off"] .wr-win,
+html[data-motion="off"] .wr-wins-col--left .wr-win { animation-name: dmIn; animation-timing-function: ease-out; }
+html[data-motion="off"] .cf-pick--spent { animation: none; }
+html[data-motion="off"] .cf-bubble.cf-shudder,
+html[data-motion="off"] .cf-emote-val.is-gain,
+html[data-motion="off"] .cf-hud-gold.is-bump,
+html[data-motion="off"] .cf-hud-bag.is-bump,
+html[data-motion="off"] .cf-mult-core.is-punch,
+html[data-motion="off"] .cf-mult-core.is-break,
+html[data-motion="off"] .cf-mult-core.is-crack,
+html[data-motion="off"] .cf-countdown-num.is-beat,
+html[data-motion="off"] .cf-hud-shields.cf-shield-bounce,
+html[data-motion="off"] .cf-bubble.is-shield-bounce,
+html[data-motion="off"] .rh-canvas-glitch { animation-name: dmHold; }
+
+/* ---- off: chrome does not travel either (colour and shadow still answer) ---- */
+html[data-motion="off"] .sf-btn:hover, html[data-motion="off"] .sf-btn:active,
+html[data-motion="off"] .wr-dock-btn:active, html[data-motion="off"] .wr-seg:active,
+html[data-motion="off"] .wr-pill:active, html[data-motion="off"] .wr-buy:active,
+html[data-motion="off"] .wr-fallin:active, html[data-motion="off"] .wr-intro-btn:active,
+html[data-motion="off"] .wr-sheet-close:active,
+html[data-motion="off"] .wr-fall-cap--btn:hover, html[data-motion="off"] .wr-fall-cap--btn:active,
+html[data-motion="off"] .wr-craft-mat:hover, html[data-motion="off"] .wr-craft-mat:active,
+html[data-motion="off"] .cf-boon:hover, html[data-motion="off"] .cf-boon:active { transform: none; }
+/* reduced: half the travel */
+html[data-motion="reduced"] { --feel-press-y: 1px; --feel-lift-y: -2.5px; }
+html[data-motion="reduced"] .cf-boon { animation-name: cfBoonIn; animation-timing-function: ease-out; }
