@@ -12,6 +12,8 @@
 
 import { createHudTips } from './hudTips.js';
 import { HUD_TIPS, upgradeById } from './catalog.js';
+import { motionScale } from '../shared/motion.js';
+import { FLIGHT, flightCount, splitAmount, flightPoint } from './fieldFeel.js';
 
 const DEFUSE_COST = 30; // FOCUS bar low-threshold (ChaosTuning.DEFUSE_COST)
 const RIPPLE_COST = 30; // the ripple spends this much focus per cast (chaosRun RIPPLE_FOCUS_COST)
@@ -123,46 +125,142 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   let goldTarget = 0, goldShown = 0;
   let goldHideT1 = 0, goldHideT2 = 0;
   let tickerRaf = 0;
+  // Rewards still in the air (see flyReward): the counters wait for them, so the
+  // number climbs when the glyph lands, not when the pop happened.
+  let emoteHeld = 0, goldHeld = 0;
+  const heldGoal = (target, held, shown) => {
+    const g = Math.max(0, target - held);
+    return held > 0 && g < shown ? shown : g;   // never count DOWN because of a flight
+  };
   function runTicker() {
     tickerRaf = 0;
     let busy = false;
-    if (Math.abs(emoteTarget - emoteShown) > 0.5) {
-      emoteShown += (emoteTarget - emoteShown) * 0.18;
-      if (Math.abs(emoteTarget - emoteShown) < 0.5) emoteShown = emoteTarget; else busy = true;
+    const eGoal = heldGoal(emoteTarget, emoteHeld, emoteShown);
+    if (Math.abs(eGoal - emoteShown) > 0.5) {
+      emoteShown += (eGoal - emoteShown) * 0.18;
+      if (Math.abs(eGoal - emoteShown) < 0.5) emoteShown = eGoal; else busy = true;
       emoteNum.textContent = Math.round(emoteShown).toLocaleString();
     }
-    if (Math.abs(goldTarget - goldShown) > 0.5) {
-      goldShown += (goldTarget - goldShown) * 0.22;
-      if (Math.abs(goldTarget - goldShown) < 0.5) goldShown = goldTarget; else busy = true;
+    const gGoal = heldGoal(goldTarget, goldHeld, goldShown);
+    if (Math.abs(gGoal - goldShown) > 0.5) {
+      goldShown += (gGoal - goldShown) * 0.22;
+      if (Math.abs(gGoal - goldShown) < 0.5) goldShown = gGoal; else busy = true;
       goldTotal.textContent = Math.round(goldShown).toLocaleString();
     }
     if (busy) tickerRaf = requestAnimationFrame(runTicker);
   }
   const ensureTicker = () => { if (!tickerRaf) tickerRaf = requestAnimationFrame(runTicker); };
+  const pulseEmotes = () => {
+    emoteVal.classList.remove('is-gain'); void emoteVal.offsetWidth; emoteVal.classList.add('is-gain');
+  };
   function setEmotes(target) {
     const t = Math.max(0, target | 0);
-    if (t > emoteTarget) {   // a gain: pulse the hero number so the climb reads
-      emoteVal.classList.remove('is-gain'); void emoteVal.offsetWidth; emoteVal.classList.add('is-gain');
-    }
+    // a gain: pulse the hero number so the climb reads. A gain that is flying in
+    // pulses when it lands instead.
+    if (t - emoteHeld > emoteTarget) pulseEmotes();
     emoteTarget = t;
     ensureTicker();
   }
+
+  // ---- reward flights: emotes and gold travel from the pop to their HUD slot ----
+  // Same shape as the shield / material flights below. Bounded (FLIGHT.cap in the
+  // air); under reduced motion one glyph on a straight line; under motion off, or
+  // with the HUD hidden, nothing flies and the value just updates.
+  const EMOTE_FACES = ['\u{1F600}', '\u{1F60D}', '\u{1F62E}', '\u{1F634}'];
+  const fliers = new Set();
+  let flightEpoch = 0;          // bumped on reset: late arrivals from an old run do nothing
+  let lastPop = null;           // { x, y, t } of the field's latest pop (gold starts there)
+  let lastArriveAt = 0;
+  const arriveTick = (what) => {
+    // the audio lane voices the arrival; this lane adds no sound. A chain of pops
+    // lands as a few ticks, not a buzz.
+    const now = performance.now();
+    if (now - lastArriveAt < FLIGHT.arriveGapMs) return;
+    lastArriveAt = now;
+    try { window.dispatchEvent(new CustomEvent('dtrh:feel', { detail: { kind: 'arrive', what } })); } catch (e) { /* ignore */ }
+  };
+  /** Fly `amount` of a reward from (x,y) into its slot. Returns false when nothing
+   * flew (the caller lands the value at once). onLand runs at the first arrival. */
+  function flyReward(what, x, y, amount, onLand) {
+    const total = Math.max(0, amount | 0);
+    const destEl = what === 'gold' ? goldIcon : emoteIcon;
+    const shownHud = root.style.display !== 'none' && !hud.classList.contains('dtrh-hud-hidden');
+    const r0 = shownHud ? destEl.getBoundingClientRect() : null;
+    const scale = motionScale();
+    const n = r0 && r0.width > 0 ? flightCount(total, scale, fliers.size) : 0;
+    if (n === 0) return false;
+    const parts = splitAmount(total, n);
+    const epoch = flightEpoch;
+    if (what === 'gold') goldHeld += total; else emoteHeld += total;
+    let landed = false;
+    for (let i = 0; i < n; i++) {
+      const el = document.createElement('div');
+      el.className = `cf-fly cf-fly--${what}`;
+      el.textContent = what === 'gold' ? '\u{1FA99}' : EMOTE_FACES[(Math.random() * EMOTE_FACES.length) | 0];
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      fliers.add(el);
+      const arc = FLIGHT.arcPx * (scale >= 1 ? 1 : 0) * (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.8);
+      const delay = i * FLIGHT.staggerMs;
+      let t0 = null;
+      const step = (ts) => {
+        if (epoch !== flightEpoch) return;            // the run was reset under us
+        if (t0 == null) t0 = ts;
+        const k = Math.min(1, Math.max(0, (ts - t0 - delay) / FLIGHT.ms));
+        const r = destEl.getBoundingClientRect();
+        const p = flightPoint(x, y, r.left + r.width / 2, r.top + r.height / 2, k, arc);
+        // IN: fades up over the first tenth. OUT: shrinks into the slot.
+        el.style.opacity = String(Math.min(1, k * 10) * (1 - 0.25 * p.e));
+        el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0) translate(-50%, -50%) scale(${1 - 0.5 * p.e})`;
+        if (k < 1) { requestAnimationFrame(step); return; }
+        el.remove(); fliers.delete(el);
+        if (what === 'gold') goldHeld = Math.max(0, goldHeld - parts[i]);
+        else emoteHeld = Math.max(0, emoteHeld - parts[i]);
+        if (!landed) { landed = true; try { onLand && onLand(); } catch (e) { /* ignore */ } arriveTick(what); }
+        ensureTicker();
+      };
+      requestAnimationFrame(step);
+    }
+    return true;
+  }
+  function onFieldEvent(e) {
+    const d = e && e.detail;
+    if (!d) return;
+    if (d.kind === 'pop') { lastPop = { x: d.x, y: d.y, t: performance.now() }; return; }
+    if (d.kind === 'emotes' && d.count > 0) {
+      if (!flyReward('emote', d.x, d.y, d.count, pulseEmotes)) arriveTick('emote');
+    }
+  }
+  window.addEventListener('dtrh:field', onFieldEvent);
+  function clearFlights() {
+    flightEpoch++;
+    for (const el of fliers) el.remove();
+    fliers.clear();
+    emoteHeld = 0; goldHeld = 0; lastPop = null;
+  }
+
   function bumpGold(delta, total) {
     goldTarget = Math.max(0, total | 0);
     clearTimeout(goldHideT1); clearTimeout(goldHideT2);
     goldRow.style.display = '';
     goldRow.classList.remove('is-fading');
-    if (delta > 0) {
-      goldDelta.textContent = `+${delta | 0}`;
-      goldDelta.classList.remove('is-pop'); void goldDelta.offsetWidth; goldDelta.classList.add('is-pop');
-    }
-    goldRow.classList.remove('is-bump'); void goldRow.offsetWidth; goldRow.classList.add('is-bump');
-    ensureTicker();
+    const land = () => {
+      if (delta > 0) {
+        goldDelta.textContent = `+${delta | 0}`;
+        goldDelta.classList.remove('is-pop'); void goldDelta.offsetWidth; goldDelta.classList.add('is-pop');
+      }
+      goldRow.classList.remove('is-bump'); void goldRow.offsetWidth; goldRow.classList.add('is-bump');
+      ensureTicker();
+    };
+    // Gold tipped by a pop flies from that pop; the chip bumps when the coin lands.
+    const fromPop = delta > 0 && lastPop && performance.now() - lastPop.t <= FLIGHT.goldWindowMs;
+    const flew = fromPop && flyReward('gold', lastPop.x, lastPop.y, delta, land);
+    if (!flew) { land(); if (delta > 0) arriveTick('gold'); }
     // hold ~2.4s past the last coin, then fade the whole chip away
     goldHideT1 = window.setTimeout(() => {
       goldRow.classList.add('is-fading');
       goldHideT2 = window.setTimeout(() => { goldRow.style.display = 'none'; goldRow.classList.remove('is-fading'); }, 480);
-    }, 2400);
+    }, 2400 + (flew ? FLIGHT.ms : 0));
   }
   // the bag chip: show for the grabbed material, pop "+N ×runTotal", fade like gold
   let bagHideT1 = 0, bagHideT2 = 0;
@@ -186,6 +284,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
     clearTimeout(goldHideT1); clearTimeout(goldHideT2);
     clearTimeout(bagHideT1); clearTimeout(bagHideT2);
     cancelAnimationFrame(tickerRaf); tickerRaf = 0;
+    clearFlights();
     emoteTarget = emoteShown = 0; goldTarget = goldShown = 0;
     emoteNum.textContent = '0'; emoteVal.classList.remove('is-gain');
     goldTotal.textContent = '0';
@@ -838,6 +937,8 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       clearTimeout(bagHideT1); clearTimeout(bagHideT2);
       cancelAnimationFrame(tickerRaf);
       clearInterval(emberTimer);
+      window.removeEventListener('dtrh:field', onFieldEvent);
+      clearFlights();
       tips.dispose();
       root.remove(); annWrap.remove(); toastWrap.remove(); pulseEl.remove();
       picksWrap.remove(); dock.remove(); eyeBtn.remove(); heatTint.remove();
