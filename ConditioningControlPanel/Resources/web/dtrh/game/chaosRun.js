@@ -896,8 +896,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // and opens back (audioBus.failureDip), and the field dims on the same event.
     failureDip();
     feelEvent({ kind: 'detonate', x, y, strength: s });
-    // P1: the fall STUMBLES - a brightness punch + the speed boost dies on the spot.
-    ctx.fx.pulseFlash(0.5 + s * 0.3);
+    // P1: the fall STUMBLES - the speed boost dies on the spot. The old brightness
+    // punch is gone with the sting: it fought the field's dim on the same event.
     ctx.director.killBoost();
     // Heat Warp: a big streak dying while the tube runs hot cracks real lightning
     if (comboWarp >= 0.6 || comboBefore >= 15) ctx.fx.strikeNow();

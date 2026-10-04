@@ -3358,7 +3358,7 @@ html[data-motion="reduced"] .cf-mult-core.is-break,
 html[data-motion="reduced"] .cf-mult-core.is-crack,
 html[data-motion="reduced"] .rh-canvas-glitch { animation-name: dmHold; }
 html[data-motion="reduced"] .rh-fx-glitch { animation-name: dmBlip; animation-timing-function: ease-out; }
-html[data-motion="reduced"] .cf-bubble.is-detonate,
+html[data-motion="reduced"] .cf-bubble.is-detonate { animation-name: cfFeelGoneFade; }
 html[data-motion="reduced"] .cf-bubble.is-shatter { animation-name: cfPop; }
 html[data-motion="reduced"] .cf-pulse.is-on { animation-name: dmPulseSoft; }
 
