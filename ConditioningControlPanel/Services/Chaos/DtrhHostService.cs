@@ -235,6 +235,8 @@ internal static class DtrhHostService
                 type = "init",
                 protocol = Protocol,
                 settings = new { masterVolume = SafeMasterVolume() },
+                // The player's Motion setting (full / reduced / off) for shared/motion.js.
+                motionLevel = DtrhMotionWire.Current(),
                 // Active persona (builtin-bambisleep / builtin-sissyhypno / builtin-locked):
                 // the page's VN portrait picks the matching portrait set + tint.
                 modId = SafeActiveModId(),

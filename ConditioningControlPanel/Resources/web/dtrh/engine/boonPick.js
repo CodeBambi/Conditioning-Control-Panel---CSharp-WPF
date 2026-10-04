@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { boonTheme } from '../game/boons.js';
+import { softPulse } from '../shared/softPulse.js';
 
 const ART = 'https://ccp.art/';       // boon art lives on the CDN (matches overlays.js)
 
@@ -503,7 +504,7 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
     const chosen = cards[index];
     const boon = chosen.boon;
     // the Pow: a bright flash + a dive cue, then shatter the chosen card
-    try { fx && fx.pulseFlash && fx.pulseFlash(0.7); } catch (e) { /* ignore */ }
+    softPulse(fx, 0.7);   // capped under reduced motion, skipped under off
     try { opts && opts.sfx && opts.sfx('dive', 0.6); } catch (e) { /* ignore */ }
     // Dive THROUGH the chosen card, not straight past it: strafe the fall toward
     // the card's lateral offset and aim the camera at it so the Pow drops through

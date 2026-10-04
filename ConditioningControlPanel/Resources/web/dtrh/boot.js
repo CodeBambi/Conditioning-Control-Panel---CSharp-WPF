@@ -20,6 +20,7 @@ import { detectMode } from './shared/capability.js';
 import { createChaosGame } from './game/chaosRun.js';
 import { setLoomSpirals } from './engine/loomSpirals.js';
 import { createExit, installExitHold } from './exit.js';
+import { setMotionLevel } from './shared/motion.js';
 
 const dom = {
   canvas: document.getElementById('sf-canvas'),
@@ -138,6 +139,8 @@ const leave = createExit({
 
 bridge.on('init', (m) => {
   initMsg = m;
+  // The app's Motion setting ('full' | 'reduced' | 'off'). Absent (older host) = follow the OS.
+  setMotionLevel(m.motionLevel);
   setModContent(m.modContent);   // creator mods: the mod's own DTRH content (or null)
   armBootDeadline(); // progress milestone - reset the boot deadline
   if (m.m2Test) {
