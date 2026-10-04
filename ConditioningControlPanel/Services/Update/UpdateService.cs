@@ -20,15 +20,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.0.3";
+        public const string AppVersion = "7.0.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.0.3 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.0.4 - Stay Tuned
 
-[the remote grows up, plus a pile of your suggestions]
+[a Locktober hotfix]
+
+NEW IN 7.0.4
+
+CIRCE'S TAB
+- locks that run a scripted extension (several Locktober locks do) no longer read as ""Chaster is offline"". time waiting on your tab lands again.
+- when your keyholder has turned off adding time, the tab says so instead of quietly trying forever. the time waits on the tab.
+- tab on but no key picked? it says nothing counts yet, and the keys glow until you pick one.
+- the raffle card no longer runs its lines into each other in German.
+
+FIXES
+- mandatory videos: when your length filter keeps every video out, the message says so and where to change it, instead of telling you to add files.
+- invite codes: clearer messages when a code doesn't work. codes also work on existing free accounts now.
 
 NEW IN 7.0.3
 

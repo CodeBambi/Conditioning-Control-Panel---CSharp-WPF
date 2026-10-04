@@ -267,9 +267,21 @@ namespace ConditioningControlPanel.Views.Tabs
             var chaster = App.Chaster;
             var key = TabPageText.SetupHint(chaster?.IsLinked == true,
                 chaster?.LockLookup ?? LockLookup.Unlinked, chaster?.Lock != null,
-                App.Settings?.Current?.ChasterTabEnabled == true);
+                App.Settings?.Current?.ChasterTabEnabled == true,
+                addsBlocked: chaster?.AddsBlocked == true,
+                anyRowOn: TabPageText.AnyRowOn(App.Settings?.Current?.ChasterPrices));
             SetupHint.Text = key == null ? "" : Loc.Get(key);
             SetupHint.Visibility = key == null ? Visibility.Collapsed : Visibility.Visible;
+            // Nothing can count: the line says so and the keys glow until one is on.
+            FxNudgeKeys(key == "chaster_setup_nothing");
+        }
+
+        /// <summary>The hint line, when it is asking for a key, takes the player to the keys.</summary>
+        private void SetupHint_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_nudgingKeys) return;
+            PresetRow.BringIntoView();
+            e.Handled = true;
         }
 
         /// <summary>The "Ends" line counts to the same end the live clock does: Chaster's own end
@@ -381,6 +393,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 case "chaster_state_pick": HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_pick"), AmberColour, "chaster_state_pick")); break;
                 case "chaster_state_away": HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_away"), AmberColour, "chaster_state_away")); break;
             }
+            if (lookup == LockLookup.Chosen && App.Chaster?.AddsBlocked == true)
+                HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_blocked"), AmberColour, "chaster_state_keyholder_blocked"));
             if (snapshot?.IsTestLock == true && state != "chaster_state_test")
                 HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_test"), MutedColour));
             else if (state == "chaster_state_test")
@@ -421,7 +435,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 : balance < 0 ? Frozen(Color.FromRgb(0x1E, 0x8A, 0x6E)) : Frozen(Color.FromRgb(0x24, 0x1A, 0x2E));
             var chaster = App.Chaster;
             var line = TabPageText.Tag(balance, chaster?.PushableTodaySeconds ?? 0, chaster?.IsPaused == true,
-                !string.IsNullOrEmpty(App.Settings?.Current?.ChasterLockId) && chaster?.LockLookup != LockLookup.Ambiguous);
+                !string.IsNullOrEmpty(App.Settings?.Current?.ChasterLockId) && chaster?.LockLookup != LockLookup.Ambiguous,
+                chaster?.AddsBlocked == true);
             TxtTagLands.Text = line.Today == null ? Loc.Get(line.Key) : Loc.GetF(line.Key, line.Today, line.Later!);
             TxtTagStamp.Text = Loc.Get(balance > 0 ? "chaster_tag_unpaid" : balance < 0 ? "chaster_tag_credit" : "chaster_tag_clear");
             var stampColour = balance > 0 ? Color.FromRgb(0xC8, 0x24, 0x4A) : balance < 0 ? Color.FromRgb(0x1E, 0x8A, 0x6E) : Color.FromRgb(0x6E, 0x66, 0x86);
@@ -1126,6 +1141,7 @@ namespace ConditioningControlPanel.Views.Tabs
             Stakes(TxtStakesCirce, TabPresets.Circe);
             RefreshMood(); // the heat row may have just gone on or off
             PaintMenuHelp(); // Natasha's row may have just gone on or off
+            RefreshSetupHint(); // the first row on ends the "nothing counts yet" nudge
         }
 
         /// <summary>Push the saved set onto the rows. Never the other way round: the settings

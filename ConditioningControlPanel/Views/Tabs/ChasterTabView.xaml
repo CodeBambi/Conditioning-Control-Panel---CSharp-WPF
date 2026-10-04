@@ -569,7 +569,8 @@
                                                Foreground="{DynamicResource TextSecondaryBrush}"/>
                                     <TextBlock x:Name="SetupHint" Visibility="Collapsed" FontSize="16" FontWeight="SemiBold"
                                                Foreground="White" TextWrapping="Wrap" MaxWidth="480"
-                                               HorizontalAlignment="Left" Margin="0,8,0,12"/>
+                                               HorizontalAlignment="Left" Margin="0,8,0,12"
+                                               MouseLeftButtonUp="SetupHint_MouseLeftButtonUp"/>
                                     <!-- the state pills: test lock, frozen, hidden, offline, no lock, on hold -->
                                     <WrapPanel x:Name="HeroPills" Margin="0,10,0,0"/>
                                     <!-- The pick. Nothing is pushed to a lock the player did not pick, so this
@@ -1120,20 +1121,21 @@
                     <ScaleTransform x:Name="LadderUnroll"/>
                 </Border.RenderTransform>
                 <StackPanel>
-                    <Grid Margin="2,0,0,8">
+                    <!-- SplitRowPanel: side by side while both fit, the second drops under the first when a
+                         longer language does not (German ran the two lines into each other, v7.0.1) -->
+                    <ctrl:SplitRowPanel Margin="2,0,0,8">
                         <TextBlock Text="{loc:Str chaster_raffle_title}" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"
-                                   Foreground="#FFF3EAF7"/>
-                        <TextBlock x:Name="TxtRaffleDay" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
-                                   FontWeight="SemiBold" Foreground="#FFC9B8D8"/>
-                    </Grid>
+                                   Foreground="#FFF3EAF7" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TxtRaffleDay" FontSize="12" FontWeight="SemiBold" Foreground="#FFC9B8D8" TextWrapping="Wrap"/>
+                    </ctrl:SplitRowPanel>
                     <StackPanel x:Name="LadderRows">
                         <!-- one pip a day of the month: lit = a day CCP's add counted -->
                         <WrapPanel x:Name="RafflePips" Margin="0,0,0,10"/>
-                        <Grid Margin="0,0,0,2">
-                            <TextBlock x:Name="TxtRaffleDays" FontSize="13" Foreground="#FFF3EAF7"/>
-                            <TextBlock x:Name="TxtRaffleTotal" HorizontalAlignment="Right" FontFamily="Consolas, Courier New" FontSize="13"
-                                       FontWeight="Bold" Foreground="#FFFF6B8A"/>
-                        </Grid>
+                        <ctrl:SplitRowPanel x:Name="RaffleCountsRow" Margin="0,0,0,2">
+                            <TextBlock x:Name="TxtRaffleDays" FontSize="13" Foreground="#FFF3EAF7" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtRaffleTotal" FontFamily="Consolas, Courier New" FontSize="13"
+                                       FontWeight="Bold" Foreground="#FFFF6B8A" TextWrapping="Wrap"/>
+                        </ctrl:SplitRowPanel>
                         <Border x:Name="RaffleStatusChip" CornerRadius="10" Padding="10,5,10,5" Margin="0,8,0,0" HorizontalAlignment="Left">
                             <TextBlock x:Name="TxtRaffleStatus" FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="14" FontWeight="SemiBold"/>
                         </Border>

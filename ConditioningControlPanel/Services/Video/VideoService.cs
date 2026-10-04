@@ -179,6 +179,10 @@ namespace ConditioningControlPanel.Services
         // The "no videos found" guidance dialog is a per-LAUNCH one-off (#1124). Every trigger used
         // to raise its own modal, so a long session stacked dozens of them on the dispatcher.
         private static int _noVideosDialogShown;
+        // The last refill funnel's counts (#1352), so the dialog can tell "no files" from "the length
+        // filter kept none". -1 until the first refill runs.
+        private volatile int _lastFunnelEnabled = -1;
+        private volatile int _lastFunnelDuration = -1;
 
 #if DEBUG
         // Fault injection for the wedge cluster (#765/#766/#767). Set CCP_FAULT_WEDGE_STOP=1 and the
@@ -2471,17 +2475,29 @@ namespace ConditioningControlPanel.Services
                 var installedPackCount = App.ContentPacks?.InstalledPacks?.Count ?? 0;
                 var message = Loc.GetF("video_no_videos_found", _videosPath) + "\n\n";
 
-                if (installedPackCount > 0 && activePackCount == 0)
+                // #1352: files exist, the user's length filter kept none of them. "Add files" is the
+                // wrong advice there; name the filter and where it lives instead.
+                var lengthFilterEmptied = NoVideosReason.LengthFilterEmptied(_lastFunnelEnabled, _lastFunnelDuration);
+                if (lengthFilterEmptied)
                 {
-                    message += Loc.GetF("video_packs_installed_none_active", installedPackCount) + "\n";
-                    message += Loc.Get("video_enable_packs_hint") + "\n\n";
+                    message = Loc.GetF("video_length_filter_emptied", _lastFunnelEnabled,
+                        NoVideosReason.FormatRange(App.Settings?.Current?.VideoMinDurationSeconds ?? 0,
+                            App.Settings?.Current?.VideoMaxDurationSeconds ?? 0));
                 }
-                else if (activePackCount > 0)
+                else
                 {
-                    message += Loc.GetF("video_active_packs_no_videos", activePackCount) + "\n\n";
-                }
+                    if (installedPackCount > 0 && activePackCount == 0)
+                    {
+                        message += Loc.GetF("video_packs_installed_none_active", installedPackCount) + "\n";
+                        message += Loc.Get("video_enable_packs_hint") + "\n\n";
+                    }
+                    else if (activePackCount > 0)
+                    {
+                        message += Loc.GetF("video_active_packs_no_videos", activePackCount) + "\n\n";
+                    }
 
-                message += Loc.Get("video_add_files_hint");
+                    message += Loc.Get("video_add_files_hint");
+                }
 
                 // Posted, not called: MessageBox.Show blocks its caller and pumps a nested message
                 // loop, and this caller is the trigger path. It returns immediately now and the box
@@ -2498,7 +2514,8 @@ namespace ConditioningControlPanel.Services
                         // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
                         // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
                         // budget, shared with the flash/wallpaper/first-run dead ends.
-                        App.OfferRemoteMediaSource("videos");
+                        // The filter case has files; offering another source would be the wrong fix.
+                        if (!lengthFilterEmptied) App.OfferRemoteMediaSource("videos");
                     }
                     catch (Exception ex) { App.Logger?.Debug("VideoService: no-videos dialog failed: {Error}", ex.Message); }
                 }));
@@ -8483,6 +8500,8 @@ namespace ConditioningControlPanel.Services
                     beforeDur, files.Count, minSec, maxSec);
             }
             int keptDuration = files.Count;
+            _lastFunnelEnabled = keptEnabled;
+            _lastFunnelDuration = keptDuration;
 
             // The #1124 funnel line. Information, not Debug: the report that needs it is a Release
             // log from a user whose folder "has videos" and whose app says it has none, and until

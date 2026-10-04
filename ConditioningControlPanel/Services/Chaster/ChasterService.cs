@@ -67,6 +67,9 @@ public enum SettleOutcome
     /// <summary>The chosen lock's timer has run out and <see cref="LockRelock"/> says to leave it
     /// ready to unlock. Nothing went out; the balance waits.</summary>
     LockRanOut,
+    /// <summary>The chosen lock does not let the wearer add time (the keyholder turned it off,
+    /// or Chaster answered 403 to the add). Nothing went out; the balance waits on the tab.</summary>
+    AddsBlocked,
 }
 
 /// <summary>
@@ -476,6 +479,10 @@ public sealed partial class ChasterService : IDisposable
                 return SettleOutcome.LockRanOut;
             }
 
+            // The keyholder turned adding off (the fresh read above says so, or the last add was
+            // refused with 403 and no read has said otherwise since). Asking again changes nothing.
+            if (AddsBlockedFor(lockId!)) return SettleOutcome.AddsBlocked;
+
             lock (_gate)
             {
                 CircesTab.MarkPending(_tab, plan, _localNow());
@@ -502,6 +509,12 @@ public sealed partial class ChasterService : IDisposable
                 }
                 SaveTab();
             }
+            if (added.Status == ChasterStatus.Refused)
+            {
+                // update-time answers 403 only for a missing lock.time.add: the wearer may not add.
+                NoteAddPermission(lockId!, false);
+                return SettleOutcome.AddsBlocked;
+            }
             if (!added.Ok) return Failed(added.Status);
             App.Logger?.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
             LadderPushLanded();
@@ -519,6 +532,7 @@ public sealed partial class ChasterService : IDisposable
         var locks = await CallWithAccessAsync(a => _client.GetLocksAsync(a, ct), ct).ConfigureAwait(false);
         if (locks is not { Ok: true } ok) return false;
         var pick = ok.Value!.FirstOrDefault(l => l.Id == lockId);
+        if (pick != null) NoteAddPermission(lockId, pick.WearerMayAddTime);
         if (pick == null || pick.IsFrozen) return false;
         var end = pick.EndDate is { } e ? (e.Kind == DateTimeKind.Utc ? e : e.ToUniversalTime()) : (DateTime?)null;
         return !LockRelock.MayPush(end, _utcNow(), relockOptIn);
@@ -575,6 +589,7 @@ public sealed partial class ChasterService : IDisposable
         {
             if (generation is { } g && g != _linkGeneration) return null;
             _linkGeneration++;
+            _addsRefusedLockId = null;
             var old = _tokens.Read();
             _tokens.Clear();
             return old;
@@ -588,6 +603,7 @@ public sealed partial class ChasterService : IDisposable
         lock (_linkGate)
         {
             _linkGeneration++;
+            _addsRefusedLockId = null;
             var old = _tokens.Read();
             _tokens.Write(new ChasterStoredTokens(fresh.AccessToken, fresh.RefreshToken ?? "", _utcNow().AddSeconds(Math.Max(0, fresh.ExpiresIn))));
             return old;

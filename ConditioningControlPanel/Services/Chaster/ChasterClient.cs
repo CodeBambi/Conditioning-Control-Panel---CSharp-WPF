@@ -36,9 +36,33 @@ public sealed class ChasterLock
     [JsonProperty("isAllowedToViewTime")] public bool IsAllowedToViewTime { get; set; } = true;
     [JsonProperty("isTestLock")] public bool IsTestLock { get; set; }
 
+    /// <summary>The lock's resolved permissions (ResolvedPermissionsDto), kept raw so an odd shape
+    /// never costs the whole lock. Read only through <see cref="WearerCanAddTime"/>.</summary>
+    [JsonProperty("permissions")] public Newtonsoft.Json.Linq.JToken? Permissions { get; set; }
+
     /// <summary>The keyholder hid the timer. CCP then never shows an end date either, not even
     /// one it could work out from its own pushes.</summary>
     [JsonIgnore] public bool TimerHidden => !DisplayRemainingTime || !IsAllowedToViewTime || EndDate == null;
+
+    /// <summary>What the lock says about the wearer adding time: true or false when the
+    /// <c>lock.time.add</c> grant is there and names the wearer, null when Chaster did not say.</summary>
+    [JsonIgnore] public bool? WearerMayAddTime => WearerCanAddTime(Permissions);
+
+    /// <summary>The <c>lock.time.add</c> grant in a ResolvedPermissionsDto: the wearer may add
+    /// time when their verbs hold "edit" (a keyholder lock with "the wearer can no longer add
+    /// time" lists none). Null for anything else: no permissions, no such grant, no wearer list.</summary>
+    public static bool? WearerCanAddTime(Newtonsoft.Json.Linq.JToken? permissions)
+    {
+        if (permissions is not Newtonsoft.Json.Linq.JObject obj || obj["grants"] is not Newtonsoft.Json.Linq.JArray grants) return null;
+        foreach (var grant in grants)
+        {
+            if (grant is not Newtonsoft.Json.Linq.JObject g) continue;
+            if (!string.Equals((g["resource"] as Newtonsoft.Json.Linq.JValue)?.Value as string, "lock.time.add", StringComparison.Ordinal)) continue;
+            if (g["subjects"]?["wearer"] is not Newtonsoft.Json.Linq.JArray verbs) return null;
+            return verbs.Any(v => string.Equals((v as Newtonsoft.Json.Linq.JValue)?.Value as string, "edit", StringComparison.OrdinalIgnoreCase));
+        }
+        return null;
+    }
 }
 
 /// <summary>Who the linked account is, from GET /auth/profile. Only the two fields the account
@@ -53,7 +77,8 @@ public enum ChasterStatus
     RateLimited,
     /// <summary>The lock is gone, unlocked, or not this wearer's.</summary>
     NotFound,
-    /// <summary>Chaster said no to this call on this lock (403). The link itself is fine.</summary>
+    /// <summary>Chaster said no to this call on this lock (403). The link itself is fine. On
+    /// update-time it means the wearer lacks lock.time.add: the keyholder turned adding off.</summary>
     Refused,
     /// <summary>Network, 5xx, a body we cannot read. Try later; never drop the link over it.</summary>
     Unavailable,
@@ -156,21 +181,46 @@ public sealed class ChasterClient : IDisposable
     /// <summary>The locks in a list body, one at a time: a lock whose fields do not fit the model
     /// (someone else's lock type, an odd date) is skipped instead of failing the whole list, which
     /// read as "Chaster is unreachable" for everyone wearing it (ccp-bugs #1332). A body that is
-    /// not a list at all still throws.</summary>
+    /// not a list at all still throws.
+    /// The list is read with no depth limit and each lock is cut down to its flat fields before it
+    /// is mapped: a lock running a scripted extension carries its Blockly program in the body,
+    /// nested far past Newtonsoft's default 64 levels, which failed the whole list as "offline".</summary>
     public static List<ChasterLock> ParseLocks(string? body)
     {
         var result = new List<ChasterLock>();
         if (string.IsNullOrWhiteSpace(body)) return result;
-        var array = Newtonsoft.Json.Linq.JArray.Parse(body);
+        Newtonsoft.Json.Linq.JArray array;
+        using (var reader = new JsonTextReader(new System.IO.StringReader(body)) { MaxDepth = null })
+            array = Newtonsoft.Json.Linq.JArray.Load(reader);
         int skipped = 0;
         foreach (var item in array)
         {
-            try { if (item.ToObject<ChasterLock>() is { } one) result.Add(one); }
+            try { if (Flat(item).ToObject<ChasterLock>() is { } one) result.Add(one); }
             catch (Exception ex) when (ex is JsonException or FormatException or InvalidCastException) { skipped++; }
         }
         if (skipped > 0) App.Logger?.Information("[Chaster] {Skipped} lock(s) in the list could not be read and were skipped", skipped);
         return result;
     }
+
+    /// <summary>A lock cut down to the fields <see cref="ChasterLock"/> maps, plus any other
+    /// scalar. Unmapped subtrees (extensions and their programs) are dropped: mapping a deep
+    /// subtree would trip the serializer's own depth limit. A nested field the model DOES map
+    /// is kept whole, so adding one to the model needs no change here.</summary>
+    private static Newtonsoft.Json.Linq.JToken Flat(Newtonsoft.Json.Linq.JToken item)
+    {
+        if (item is not Newtonsoft.Json.Linq.JObject obj) return item;
+        var flat = new Newtonsoft.Json.Linq.JObject();
+        foreach (var prop in obj.Properties())
+            if (prop.Value is Newtonsoft.Json.Linq.JValue || MappedLockFields.Contains(prop.Name))
+                flat[prop.Name] = prop.Value.DeepClone();
+        return flat;
+    }
+
+    private static readonly HashSet<string> MappedLockFields = typeof(ChasterLock).GetProperties()
+        .Select(p => p.GetCustomAttributes(typeof(JsonPropertyAttribute), false).OfType<JsonPropertyAttribute>().FirstOrDefault()?.PropertyName)
+        .Where(n => !string.IsNullOrEmpty(n))
+        .Select(n => n!)
+        .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>The linked account's name and picture (scope <c>profile</c>). Read-only.</summary>
     public async Task<ChasterResult<ChasterProfile>> GetProfileAsync(string accessToken, CancellationToken ct = default)
