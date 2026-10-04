@@ -3286,6 +3286,7 @@
   "video_enable_packs_hint": "에셋 탭에서 콘텐츠 팩을 활성화하거나 에셋 프리셋을 선택하세요.",
   "video_active_packs_no_videos": "활성 팩 {0}개가 있지만 영상이 없어요.",
   "video_add_files_hint": "에셋 폴더에 .mp4, .mov, .avi, .wmv, .mkv, 또는 .webm 파일을 추가해 주세요.",
+  "video_length_filter_emptied": "영상 {0}개를 찾았지만 길이 필터({1})가 모두 걸러내고 있어요.\n\n필수 영상 > 길이 필터에서 바꿀 수 있어요.",
   "video_codec_required_title": "비디오 코덱 필요",
   "video_codec_required_body": "영상 재생에는 Windows Media 구성 요소가 필요해요.\n\nWindows N/KN 에디션이라면 Media Feature Pack을 설치해 주세요:\n\n1. 설정 > 앱 > 선택적 기능 열기\n2. '기능 추가' 클릭\n3. 'Media Feature Pack' 검색\n4. 설치 후 PC 재시작\n\n또는 codecguide.com에서 K-Lite Codec Pack을 설치하세요",
   "mindwipe_no_audio_files": "오디오 파일을 찾을 수 없어요!\n\nassets/mindwipe/에 .mp3, .wav, 또는 .ogg 파일을 넣어 주세요",

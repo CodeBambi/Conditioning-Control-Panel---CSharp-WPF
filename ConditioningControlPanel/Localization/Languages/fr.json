@@ -3286,6 +3286,7 @@
   "video_enable_packs_hint": "Va dans l'onglet Ressources et active tes packs de contenu, ou sélectionne un Préréglage de Ressources.",
   "video_active_packs_no_videos": "Tu as {0} pack(s) actif(s) mais aucun ne contient de vidéos.",
   "video_add_files_hint": "Ajoute des fichiers .mp4, .mov, .avi, .wmv, .mkv ou .webm dans ton dossier de ressources.",
+  "video_length_filter_emptied": "{0} vidéo(s) trouvée(s), mais ton filtre de durée ({1}) les exclut toutes.\n\nModifie-le dans Vidéo Obligatoire > Filtre de durée.",
   "video_codec_required_title": "Codec Vidéo Requis",
   "video_codec_required_body": "La lecture vidéo nécessite les composants Windows Media.\n\nSi tu utilises l'édition Windows N/KN, installe le Media Feature Pack :\n\n1. Ouvre Paramètres > Applications > Fonctionnalités facultatives\n2. Clique 'Ajouter une fonctionnalité'\n3. Recherche 'Media Feature Pack'\n4. Installe et redémarre ton PC\n\nAlternativement, installe K-Lite Codec Pack depuis codecguide.com",
   "mindwipe_no_audio_files": "Aucun fichier audio trouvé !\n\nPlace des fichiers .mp3, .wav ou .ogg dans :\nassets/mindwipe/",

@@ -3286,6 +3286,7 @@
   "video_enable_packs_hint": "Vá para a aba Recursos e ative seus pacotes de conteúdo, ou selecione uma Predefinição de Recursos.",
   "video_active_packs_no_videos": "Você tem {0} pacote(s) ativo(s) mas nenhum contém vídeos.",
   "video_add_files_hint": "Por favor, adicione arquivos .mp4, .mov, .avi, .wmv, .mkv ou .webm à sua pasta de recursos.",
+  "video_length_filter_emptied": "{0} vídeo(s) encontrado(s), mas seu filtro de duração ({1}) deixa todos de fora.\n\nAltere em Vídeo Obrigatório > Filtro de duração.",
   "video_codec_required_title": "Codec de Vídeo Necessário",
   "video_codec_required_body": "A reprodução de vídeo requer componentes de mídia do Windows.\n\nSe você está usando a edição Windows N/KN, por favor instale o Media Feature Pack:\n\n1. Abra Configurações > Aplicativos > Recursos opcionais\n2. Clique em 'Adicionar um recurso'\n3. Pesquise por 'Media Feature Pack'\n4. Instale e reinicie seu PC\n\nAlternativamente, instale o K-Lite Codec Pack de codecguide.com",
   "mindwipe_no_audio_files": "Nenhum arquivo de áudio encontrado!\n\nColoque arquivos .mp3, .wav ou .ogg em:\nassets/mindwipe/",

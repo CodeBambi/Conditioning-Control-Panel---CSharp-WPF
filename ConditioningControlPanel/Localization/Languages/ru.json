@@ -3286,6 +3286,7 @@
   "video_enable_packs_hint": "Перейди на вкладку «Ассеты» и включи контент-паки или выбери пресет ассетов.",
   "video_active_packs_no_videos": "У тебя {0} активных паков, но ни один не содержит видео.",
   "video_add_files_hint": "Добавь файлы .mp4, .mov, .avi, .wmv, .mkv или .webm в папку ассетов.",
+  "video_length_filter_emptied": "Найдено видео: {0}, но фильтр по длине ({1}) отсекает их все.\n\nИзмени его в разделе Обязательное видео > Фильтр по длине.",
   "video_codec_required_title": "Требуется видеокодек",
   "video_codec_required_body": "Для воспроизведения видео необходимы компоненты Windows Media.\n\nЕсли у тебя Windows N/KN, установи Media Feature Pack:\n\n1. Открой Настройки > Приложения > Дополнительные компоненты\n2. Нажми «Добавить компонент»\n3. Найди «Media Feature Pack»\n4. Установи и перезагрузи ПК\n\nАльтернативно: установи K-Lite Codec Pack с codecguide.com",
   "mindwipe_no_audio_files": "Аудиофайлы не найдены!\n\nПоложи файлы .mp3, .wav или .ogg в:\nassets/mindwipe/",

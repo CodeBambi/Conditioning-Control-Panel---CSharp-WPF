@@ -3286,6 +3286,7 @@
   "video_enable_packs_hint": "アセットタブでコンテンツパックを有効にするか、アセットプリセットを選択してください。",
   "video_active_packs_no_videos": "有効なパックが{0}個ありますが、動画を含むものがありません。",
   "video_add_files_hint": "アセットフォルダに.mp4、.mov、.avi、.wmv、.mkv、または.webmファイルを追加してください。",
+  "video_length_filter_emptied": "動画が{0}本見つかりましたが、長さフィルター（{1}）ですべて除外されています。\n\n強制動画 > 長さフィルターで変更できます。",
   "video_codec_required_title": "動画コーデックが必要",
   "video_codec_required_body": "動画再生にはWindowsメディアコンポーネントが必要です。\n\nWindows N/KNエディションをお使いの場合は、メディア機能パックをインストールしてください：\n\n1. 設定 > アプリ > オプション機能を開く\n2. 「機能を追加」をクリック\n3. 「メディア機能パック」を検索\n4. インストールしてPCを再起動\n\nまたは、codecguide.comからK-Lite Codec Packをインストール",
   "mindwipe_no_audio_files": "オーディオファイルが見つかりません！\n\n.mp3、.wav、または.oggファイルを以下に配置してください：\nassets/mindwipe/",
