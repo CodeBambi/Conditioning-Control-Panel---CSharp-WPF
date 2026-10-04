@@ -24,6 +24,7 @@
 import { S } from '../engine/settings.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
 import { pickSpiralUrl, pickSpiral } from '../engine/loomSpirals.js';
+import { softPulse } from '../shared/softPulse.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v) => clamp(v, 0, 1);
@@ -330,7 +331,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
 
   // ---- transient bursts (flash / subliminal / bambi freeze) ------------------
   async function flash(strength, durMult) {
-    try { fx && fx.pulseFlash && fx.pulseFlash(clamp01(0.45 + 0.004 * strength)); } catch { /* engine build without it */ }
+    softPulse(fx, clamp01(0.45 + 0.004 * strength));   // capped under reduced motion, skipped under off
     const amount = scale(1, 3, strength);
     // Preferred: the engine's clickable, MULTIPLYING hydra clips (same system the
     // tunnel's flash veils use) - popping one spawns two more. Count comes from the
