@@ -71,7 +71,10 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
 
   const audio = makeSfxPlayer();
   audio.preload([...POP_SFX, ...CHIME_SFX].map((f) => SFX_BASE + f));
-  const playPop = (vol = 0.25) => audio.play(SFX_BASE + pickOf(POP_SFX), vol * getLevel('fx'));
+  // Feel pass: the pop samples stay as the BODY of a pop, under the pitched ladder
+  // note chaosRun voices through game/feelAudio.js (the note carries the streak).
+  const POP_UNDER = 0.6;
+  const playPop = (vol = 0.25) => audio.play(SFX_BASE + pickOf(POP_SFX), vol * POP_UNDER * getLevel('fx'));
   const playChime = (vol = 0.3) => audio.play(SFX_BASE + pickOf(CHIME_SFX), vol * getLevel('fx'));
 
   const live = new Set();
