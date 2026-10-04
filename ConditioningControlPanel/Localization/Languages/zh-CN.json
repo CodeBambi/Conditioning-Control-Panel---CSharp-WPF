@@ -4055,6 +4055,7 @@
   "video_enable_packs_hint": "前往资源标签页启用你的内容包，或选择资源预设。",
   "video_active_packs_no_videos": "你有 {0} 个活跃内容包但没有一个包含视频。",
   "video_add_files_hint": "请将 .mp4、.mov、.avi、.wmv、.mkv 或 .webm 文件添加到你的资源文件夹。",
+  "video_length_filter_emptied": "找到 {0} 个视频，但你的时长筛选（{1}）把它们全部排除了。\n\n可在 强制视频 > 时长筛选 中修改。",
   "video_codec_required_title": "需要视频编解码器",
   "video_codec_required_body": "视频播放需要 Windows 媒体组件。\n\n如果你使用的是 Windows N/KN 版本，请安装 Media Feature Pack：\n\n1. 打开 设置 > 应用 > 可选功能\n2. 点击“添加功能”\n3. 搜索“Media Feature Pack”\n4. 安装并重启电脑\n\n或者，从 codecguide.com 安装 K-Lite Codec Pack",
   "mindwipe_no_audio_files": "未找到音频文件！\n\n请将 .mp3、.wav 或 .ogg 文件放入：\nassets/mindwipe/",

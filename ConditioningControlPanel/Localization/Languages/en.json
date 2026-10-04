@@ -4417,6 +4417,7 @@
   "video_enable_packs_hint": "Go to Assets tab and enable your content packs, or select an Asset Preset.",
   "video_active_packs_no_videos": "You have {0} active pack(s) but none contain videos.",
   "video_add_files_hint": "Please add .mp4, .mov, .avi, .wmv, .mkv, or .webm files to your assets folder.",
+  "video_length_filter_emptied": "{0} video(s) found, but your length filter ({1}) keeps all of them out.\n\nChange it in Mandatory Video > Duration filter.",
   "video_codec_required_title": "Video Codec Required",
   "video_codec_required_body": "Video playback requires Windows Media components.\n\nIf you're on Windows N/KN edition, please install the Media Feature Pack:\n\n1. Open Settings > Apps > Optional features\n2. Click 'Add a feature'\n3. Search for 'Media Feature Pack'\n4. Install and restart your PC\n\nAlternatively, install K-Lite Codec Pack from codecguide.com",
   "mindwipe_no_audio_files": "No audio files found!\n\nPlace .mp3, .wav, or .ogg files in:\nassets/mindwipe/",
