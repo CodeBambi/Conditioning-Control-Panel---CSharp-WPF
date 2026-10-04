@@ -103,6 +103,7 @@
   "chaster_setup_pick": "1. Wähle unten dein Schloss. 2. Wähle eine Vorlage. 3. Schalte die Abrechnung oben ein.",
   "chaster_setup_none": "Noch kein aktives Schloss. Erstelle eines auf Chaster oder tritt einem bei. Wähle es danach hier aus.",
   "chaster_setup_run": "Wähle unten eine Vorlage und schalte oben die Abrechnung ein. Markierte Effekte laufen nur bei eingeschalteter Abrechnung.",
+  "chaster_setup_nothing": "Noch zählt nichts: Wähle unten einen Schlüssel, damit die Abrechnung startet.",
   "br_counter_sold": "VERKAUFT",
   "leash_explain_title": "So funktioniert die Leine",
   "leash_explain_offer_title": "{0} die Leine anbieten",
