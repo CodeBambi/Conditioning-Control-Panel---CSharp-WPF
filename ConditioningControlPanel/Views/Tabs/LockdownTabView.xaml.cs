@@ -21,6 +21,7 @@ namespace ConditioningControlPanel.Views.Tabs
         public LockdownTabView()
         {
             InitializeComponent();
+            UpdateQuestHint();
 
             // Tabs are shown and hidden rather than rebuilt, so Loaded fires once. Re-read on every
             // show for the same reason BambiTakeoverTabView does: something else can move these
@@ -28,6 +29,22 @@ namespace ConditioningControlPanel.Views.Tabs
             // clears a flag) and a stale toggle here is a toggle that lies.
             Loaded += (_, _) => LoadPossessionSettings();
             IsVisibleChanged += (_, _) => { if (IsVisible) LoadPossessionSettings(); };
+        }
+
+        // ==== Duration ====================================================================
+
+        private void CmbLockdownDuration_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateQuestHint();
+
+        /// <summary>Shows the "does not count for quests" line while the picked duration is too short.</summary>
+        private void UpdateQuestHint()
+        {
+            // SelectionChanged fires inside InitializeComponent (SelectedIndex="1"), before the hint exists.
+            if (TxtLockdownQuestHint == null || CmbLockdownDuration == null) return;
+            var minutes = (CmbLockdownDuration.SelectedItem as ComboBoxItem)?.Tag is string tag
+                          && int.TryParse(tag, out var m) ? m : 0;
+            TxtLockdownQuestHint.Visibility = minutes > 0
+                && !Services.QuestService.LockdownCountsForQuests(TimeSpan.FromMinutes(minutes))
+                ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ==== Possession + Safeties ======================================================

@@ -180,12 +180,14 @@ namespace ConditioningControlPanel
             {
                 actions.AppendLine("  - Start/stop autonomy mode");
                 actions.AppendLine("  - Start/pause/stop sessions");
-                actions.AppendLine("  - Enable strict lock (videos cannot be skipped)");
-                actions.AppendLine("  - Disable panic button (ESC key won't work)");
+                // No strict lock or panic-off lines: since Remote v2 (7.0.3) the server refuses both
+                // for every tier (proxy/remote-commands.js FORBIDDEN_ACTIONS), so listing them here
+                // promised powers no controller has (ccp-bugs, Amelia 2026-10-04).
             }
 
             var message = $"You are about to allow another person to remotely control parts of your app.\n\n" +
                           $"The Controller will be able to:\n{actions}\n" +
+                          $"Your panic key always works. A controller cannot switch it off or turn Strict Lock on.\n" +
                           $"All media content shown comes from YOUR local files and settings.\n" +
                           $"You assume full responsibility for this interaction.\n" +
                           $"You can stop the session at ANY time by clicking \"Stop Session\" or closing the app.\n" +
