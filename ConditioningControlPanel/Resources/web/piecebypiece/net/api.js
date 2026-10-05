@@ -51,6 +51,8 @@ export const ROUTES = Object.freeze({
   claimTimeout: (id) => `${BASE}/match/${encodeURIComponent(id)}/claim_timeout`,
   heartbeat: (id) => `${BASE}/match/${encodeURIComponent(id)}/heartbeat`,
   history: () => `${BASE}/history`,
+  watch: (id) => `${BASE}/watch/${encodeURIComponent(id)}`,
+  watchEvents: (id) => `${BASE}/watch/${encodeURIComponent(id)}/events`,
 });
 
 /** Machine-readable `error` values. The UI maps these to sentences, not the reverse. */
@@ -77,6 +79,10 @@ export const ApiError = Object.freeze({
   Server: 'server_error',
   /** A 2xx whose body was not the JSON this file expects. */
   Malformed: 'malformed_response',
+  /** 403 on a watch route: a private game, a player who said no, or a friend's invite. */
+  NotWatchable: 'not_watchable',
+  /** 403 on a watch route: the caller is one of the two players. */
+  YourMatch: 'your_match',
 });
 
 /**
@@ -120,9 +126,13 @@ function envelope(ok, status, data, error, extra) {
 function classify(status, data) {
   if (status === 0) return ApiError.Offline;
   if (status === 409) return ApiError.Stale;
+  // the watch routes word their refusals; the server's word is the one the UI needs there
+  if (status === 403 && data && (data.error === ApiError.NotWatchable || data.error === ApiError.YourMatch)) return data.error;
   if (status === 401 || status === 403) return ApiError.Unauthorized;
   if (status === 429) return ApiError.RateLimited;
   if (status === 404) {
+    // A route behind a server flag says so in words (`PBP_WATCH` off).
+    if (data && data.error === ApiError.NotDeployed) return ApiError.NotDeployed;
     // A 404 that came back with a body the server clearly wrote is "no such
     // match"; a bare one is the route not being there at all. The difference
     // matters while the server is still being deployed piece by piece.
@@ -181,9 +191,22 @@ export function timeControl(initialMs, incrementMs) {
   };
 }
 
+/**
+ * "Let people watch my games" (Options, default on). Asked at every call that
+ * can put this player in a public match; only a NO travels (`watchable: false`),
+ * so a server without spectating never sees a field it does not know.
+ */
+let letPeopleWatch = () => true;
+export function setWatchPolicy(fn) { letPeopleWatch = (typeof fn === 'function') ? fn : () => true; }
+function withWatch(body) {
+  let yes = true;
+  try { yes = letPeopleWatch() !== false; } catch { yes = true; }
+  return yes ? body : Object.assign(body, { watchable: false });
+}
+
 /** Sit down in the lobby, advertising a time control. */
 export function lobbyEnter(tc) {
-  return call('POST', ROUTES.lobbyEnter(), withIdentity({ time_control: tc }));
+  return call('POST', ROUTES.lobbyEnter(), withWatch(withIdentity({ time_control: tc })));
 }
 
 /** Stand up again. Best-effort at every call site: a lost goodbye must not wedge anything. */
@@ -203,7 +226,7 @@ export function lobbyList() {
  * server's word rides on `serverError`).
  */
 export function join(target) {
-  return call('POST', ROUTES.join(), withIdentity({ target }));
+  return call('POST', ROUTES.join(), withWatch(withIdentity({ target })));
 }
 
 /**
@@ -211,7 +234,7 @@ export function join(target) {
  * or `{ waiting: true }` (you are in the queue; ask again).
  */
 export function quick(tc) {
-  return call('POST', ROUTES.quick(), withIdentity({ time_control: tc }));
+  return call('POST', ROUTES.quick(), withWatch(withIdentity({ time_control: tc })));
 }
 
 /**
@@ -306,4 +329,24 @@ export function heartbeat(id) { return call('POST', ROUTES.heartbeat(id), withId
 export function history(limit) {
   const n = Math.min(50, Math.max(1, Math.trunc(Number(limit) || 50)));
   return call('GET', withUid(`${ROUTES.history()}?limit=${n}`), undefined);
+}
+
+/* ------------------------------------------------------------- spectating */
+
+/**
+ * One public game, seen from the stands: `{ server_now_ms, delay_ms, watchers,
+ * match }`, where `match` is the seat route's body seen by nobody and cut off
+ * `delay_ms` behind the live game (so nobody can coach a player). 404
+ * `not_deployed` while the server's PBP_WATCH is off; 403 `not_watchable` /
+ * `your_match` on a game this caller may not watch.
+ */
+export function watch(id) {
+  return call('GET', withUid(ROUTES.watch(id)), undefined);
+}
+
+/** The long poll for the stands: the seat poll's envelope, just as late, plus `watchers`. */
+export function watchEvents(id, since, waitMs) {
+  const n = Math.max(0, Math.trunc(Number(since) || 0));
+  const w = Math.min(EVENT_WAIT_MS, Math.max(0, Math.trunc(Number(waitMs === undefined ? EVENT_WAIT_MS : waitMs) || 0)));
+  return call('GET', withUid(`${ROUTES.watchEvents(id)}?since=${n}&wait_ms=${w}`), undefined);
 }

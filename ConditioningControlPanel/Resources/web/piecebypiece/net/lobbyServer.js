@@ -22,7 +22,7 @@
  *
  *   Match   = { id, opponent: { id, name }, side: 'w' | 'b', clockMs }
  *   open    = [{ id, name, waitingSince, rating, timeControl }]   oldest first
- *   playing = [{ white, black, timeControl, startedMs, moves }]   names only
+ *   playing = [{ white, black, timeControl, startedMs, moves, matchId, watchable, watchers }]   names only
  *
  * BROWSING IS NOT SITTING. Watching the open tables reads GET /lobby and never
  * posts /lobby/enter, so a player looking at the list is not on it. Only
@@ -179,15 +179,23 @@ export function createServerLobby({
     };
   }
 
-  /** A `playing` row: two names and a count, never an id (contract). */
+  /**
+   * A `playing` row: two names and a count. With spectating on server-side a
+   * watchable game also carries its `match_id` (and only a watchable one does),
+   * which is all the Watch button needs; no player id ever comes with it.
+   */
   function toPlaying(p) {
     const name = (v) => String((v && typeof v === 'object' ? (v.display_name || v.name) : v) || 'someone');
+    const matchId = (p.match_id || p.matchId) ? String(p.match_id || p.matchId) : null;
     return {
       white: name(p.white),
       black: name(p.black),
       timeControl: p.time_control || null,
       startedMs: Number(p.started_ms) || 0,
       moves: Math.max(0, Number(p.moves) || 0),
+      matchId,
+      watchable: p.watchable === true && !!matchId,
+      watchers: Math.max(0, Math.trunc(Number(p.watchers) || 0)),
     };
   }
 

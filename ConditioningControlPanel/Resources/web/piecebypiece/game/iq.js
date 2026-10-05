@@ -9,7 +9,10 @@
  * down. A good move keeps what you have; nothing gives it back.
  *
  * Only the local seats are graded. Online, the opponent's moves never reach
- * the grader, and nothing on this page ever holds their score.
+ * the grader, and nothing on this page ever holds their score. The one
+ * exception is the stands (net/watch.js): a spectator's `local` event names
+ * both sides in `graded`, so a watched game shows both players' IQ, worked
+ * out here from the move list. Nothing about IQ ever travels over the wire.
  *
  *   Grade = { ply, side, san, best, cp, loss, value }
  *     ply   rules.ply() after the move (1-based half-move count)
@@ -142,7 +145,7 @@ export function createIqLive({ bus, game, tuning = IQ, workerFactory = () => new
   /** The seats the switch says are ours right now (an online seat can be corrected after the deal). */
   function refreshSides() {
     let live = null;
-    try { live = game.seats; } catch { live = null; }
+    try { live = game.graded || game.seats; } catch { live = null; }
     if (!Array.isArray(live) || !live.length) return;
     const next = live.filter(s => SIDES.includes(s));
     for (const s of sides) if (!next.includes(s)) trackers[s].reset();
@@ -216,7 +219,9 @@ export function createIqLive({ bus, game, tuning = IQ, workerFactory = () => new
     offs.push(bus.on('newgame', reset));
     offs.push(bus.on('local', (p) => {
       reset();
-      sides = Array.isArray(p?.sides) ? p.sides.filter(s => SIDES.includes(s)) : [];
+      // `graded` (the stands: both) wins over `sides` (the seats the player moves)
+      const list = Array.isArray(p?.graded) ? p.graded : p?.sides;
+      sides = Array.isArray(list) ? list.filter(s => SIDES.includes(s)) : [];
     }));
     offs.push(bus.on('turn', sync));
     offs.push(bus.on('gameover', sync));

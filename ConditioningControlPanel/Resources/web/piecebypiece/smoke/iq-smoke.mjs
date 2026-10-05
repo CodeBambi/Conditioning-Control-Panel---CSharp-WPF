@@ -176,6 +176,42 @@ function eq(what, got, want) {
   iq2.dispose();
 }
 
+// The stands (net/watch.js): a spectator's local event names no seat and grades both,
+// and a player's own online seat still grades only its own side.
+{
+  const workerFactory = () => {
+    const w = { onmessage: null, onerror: null, dead: false, terminate() { w.dead = true; },
+      postMessage(data) { setTimeout(() => { if (!w.dead) w.onmessage?.({ data: { id: data.id, ...(gradeMove(data) || { error: true }) } }); }, 0); } };
+    return w;
+  };
+  const play = (bus, rules, from, to) => { rules.move(from, to); bus.emit('turn', { ply: rules.ply() }); };
+  {
+    const bus = createBus(), rules = createRules();
+    // the switch in net/online.js: the stands say no seat and both graded
+    const iq = createIqLive({ bus, game: { rules, seats: [], graded: ['w', 'b'] }, workerFactory });
+    bus.emit('local', { sides: [], graded: ['w', 'b'], mode: 'watch' });
+    eq('the stands grade both sides', iq.sides(), ['w', 'b']);
+    play(bus, rules, 'e2', 'e4'); play(bus, rules, 'd7', 'd5'); play(bus, rules, 'd1', 'g4'); play(bus, rules, 'c8', 'g4');
+    play(bus, rules, 'g1', 'f3'); play(bus, rules, 'g4', 'f3');
+    await iq.settled(5000);
+    ok(`white's hung queen costs white (IQ ${iq.value('w')})`, iq.value('w') <= 140 - iqLoss(800));
+    ok(`black is graded too (IQ ${iq.value('b')})`, iq.value('b') !== null && iq.track('b').moves.length === 3);
+    eq('both tracks are there, in ply order', [iq.track('w').moves.map(m => m.ply), iq.track('b').moves.map(m => m.ply)], [[1, 3, 5], [2, 4, 6]]);
+    eq('the record carries both sides', Object.keys(iq.record()).sort(), ['b', 'w']);
+    iq.dispose();
+  }
+  {
+    const bus = createBus(), rules = createRules();
+    // a player's own online seat: one side, the opponent never graded, even with spectators on
+    const iq = createIqLive({ bus, game: { rules, seats: ['b'] }, workerFactory });
+    bus.emit('local', { sides: ['b'], mode: 'online' });
+    play(bus, rules, 'e2', 'e4'); play(bus, rules, 'e7', 'e5');
+    await iq.settled(5000);
+    eq('a player still never sees the opponent IQ',[iq.value('w'), iq.sides()], [null, ['b']]);
+    iq.dispose();
+  }
+}
+
 console.log(`${passed} checks passed`);
 for (const f of failures) console.log('FAILED ' + f);
 process.exit(failures.length ? 1 : 0);
