@@ -84,7 +84,7 @@ async function adapter() {
     const t = await lobby.tables();
     eq('tables(): open rows in the door shape', t.open.map((r) => [r.id, r.name, r.waitingSince, r.rating]), [['p_aaaaaaaaaaaa', 'velvet', 1000, 1301], ['p_bbbbbbbbbbbb', 'moth', 2000, null]]);
     eq('tables(): the table carries its clock', t.open[1].timeControl, { initial_ms: 300000, increment_ms: 3000 });
-    eq('tables(): playing rows are names and counts only', t.playing, [{ white: 'lace', black: 'hush', timeControl: { initial_ms: 900000, increment_ms: 10000 }, startedMs: 5, moves: 14 }]);
+    eq('tables(): playing rows are names and counts only', t.playing, [{ white: 'lace', black: 'hush', timeControl: { initial_ms: 900000, increment_ms: 10000 }, startedMs: 5, moves: 14, matchId: null, watchable: false, watchers: 0 }]);
     ok('a playing row carries no id', !JSON.stringify(t.playing).includes('"id"'));
 
     const seen = [];

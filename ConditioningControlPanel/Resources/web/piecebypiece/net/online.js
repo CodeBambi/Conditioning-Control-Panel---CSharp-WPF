@@ -21,6 +21,7 @@
  * ==========================================================================*/
 
 import { createOnlineMatch } from './match.js';
+import { createWatchSession } from './watch.js';
 
 /**
  * One stable driver-shaped object, forwarding to whichever driver is current.
@@ -72,6 +73,12 @@ export function createDriverSwitch(initial) {
     /** True while an online driver is in the chair. */
     get isOnline() { return !!cur.matchId; },
     get isSolo() { return !!cur.isSolo; },
+    /** True while a spectator's seat (net/watch.js) is in the chair: nothing here is ours to move. */
+    get isWatch() { return !!cur.isWatch; },
+    /** The sides game/iq.js grades: a driver may name them (the stands grade both); else the seats. */
+    get graded() { return cur.graded || cur.seats || ['w', 'b']; },
+    /** How many people watch the game in the chair (0 offline, or until the server says). */
+    watchers() { return cur.watchers ? cur.watchers() : 0; },
 
     /**
      * Put a different driver in the chair. The outgoing one is disposed, which
@@ -140,6 +147,24 @@ export function startOnlineMatch({ bus, board, hud = null, game, match, api = nu
 
   if (game && typeof game.switchTo === 'function') game.switchTo(driver);
   bus.emit('local', { sides: driver.seats, mode: 'online', match });
+  driver.start();
+  return driver;
+}
+
+/**
+ * Take a public game off "playing now" and watch it (net/watch.js). The `local`
+ * event names no seat (`sides: []`, so nothing is ours to move and Distraction
+ * never climbs) and grades both (`graded`), which is what game/iq.js reads.
+ * `match` is `{ id, state? }`; `state` is a GET watch answer already in hand.
+ */
+export function startWatchMatch({ bus, board, hud = null, game, match, api = null, now = null }) {
+  if (!match || !match.id) throw new Error('startWatchMatch: a match with an id is required');
+  const driver = createWatchSession({
+    bus, board, hud, matchId: match.id, initial: match.state || null,
+    api: api || undefined, now: now || undefined,
+  });
+  if (game && typeof game.switchTo === 'function') game.switchTo(driver);
+  bus.emit('local', { sides: [], graded: driver.graded, mode: 'watch', match });
   driver.start();
   return driver;
 }
