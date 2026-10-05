@@ -14,8 +14,10 @@
  *   TEN SECONDS LATE, ON PURPOSE (owner, 2026-10-05). The watch routes hand
  *   back the game cut off `delay_ms` behind the live one, so nobody can coach a
  *   player over Discord. The clocks are derived exactly as an online seat's are
- *   (createRemoteClock), on the DELAYED timeline: every answer's server_now_ms
- *   is read as server_now_ms - delay_ms, which is the instant the board shows.
+ *   (createRemoteClock), on the DELAYED timeline: the server already sends
+ *   server_now_ms as the cutoff (its real now minus delay_ms), on the envelope
+ *   and in match.clocks, so it is read as-is. delay_ms only feeds the
+ *   "10 s behind" tag. A finished game answers the poll at once.
  *
  *   BOTH SIDES ARE GRADED. `seats` is empty (nobody here owns a colour) and
  *   `graded` is both, which game/iq.js reads off the `local` event: the stands
@@ -52,13 +54,14 @@ export function playerOf(p) {
 }
 
 /**
- * The instant a watch answer describes: the server's now, minus the delay. Null
- * when the answer carries no server_now_ms.
+ * The instant a watch answer describes. The watch routes send server_now_ms as
+ * the cutoff already (real now minus delay_ms, CCP-Server pbp-online-api.md
+ * section 10), so it is taken as-is; subtracting delay_ms again would run the
+ * clocks ten seconds behind the board. Null when the answer carries none.
  */
-export function cutoffOf(data, fallbackDelay = WATCH_DELAY_MS) {
+export function cutoffOf(data) {
   if (!data || !Number.isFinite(Number(data.server_now_ms))) return null;
-  const delay = Number.isFinite(Number(data.delay_ms)) ? Math.max(0, Number(data.delay_ms)) : fallbackDelay;
-  return Number(data.server_now_ms) - delay;
+  return Number(data.server_now_ms);
 }
 
 /** The end of a watched game in plain words: no "you" in it, the stands won nothing. */
@@ -194,7 +197,7 @@ export function createWatchSession({
     if (disposed || !data || typeof data !== 'object' || !data.match || typeof data.match !== 'object') return false;
     noteMeta(data);
     const state = data.match;
-    const cut = cutoffOf(data, delayMs);
+    const cut = cutoffOf(data);
 
     const next = { w: playerOf(state.white), b: playerOf(state.black) };
     if (JSON.stringify(next) !== JSON.stringify(players)) {
@@ -259,7 +262,7 @@ export function createWatchSession({
   function applyEnvelope(data) {
     if (!data || typeof data !== 'object') return 'resync';
     noteMeta(data);
-    const cut = cutoffOf(data, delayMs);
+    const cut = cutoffOf(data);
     if (cut !== null) clock.noteServerNow(cut);
     const list = Array.isArray(data.events) ? data.events : [];
     const sorted = list.slice().sort((a, b) => Number(a && a.seq) - Number(b && b.seq));

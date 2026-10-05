@@ -246,12 +246,13 @@ export function challenge(target, tc, color) {
   const body = { target };
   if (tc) body.time_control = tc;
   if (color === 'w' || color === 'b' || color === 'random') body.color = color;
-  return call('POST', ROUTES.challenge(), withIdentity(body));
+  // a challenge to a lobby row is a public, listed game; the server ignores it on a friend's invite
+  return call('POST', ROUTES.challenge(), withWatch(withIdentity(body)));
 }
 
 /** Take one up. Answers `{ match_id, color }`. */
 export function acceptChallenge(id) {
-  return call('POST', ROUTES.challengeAccept(id), withIdentity({}));
+  return call('POST', ROUTES.challengeAccept(id), withWatch(withIdentity({})));
 }
 
 /** Turn one down. Either side may: the challenger declining his own is a cancel. */

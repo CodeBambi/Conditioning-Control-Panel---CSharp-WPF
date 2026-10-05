@@ -98,14 +98,16 @@ function fakeServer() {
       calls.push('watch:' + id);
       if (st.refuse) return env(st.refuse.status, { error: st.refuse.error }, st.refuse.error);
       const v = view();
-      return env(200, { ok: true, server_now_ms: st.now, delay_ms: DELAY_MS, watchers: st.watchers, match: v.match });
+      // the server's own shape: server_now_ms IS the cutoff, on the envelope and in match.clocks
+      return env(200, { ok: true, server_now_ms: v.cut, delay_ms: DELAY_MS, watchers: st.watchers, match: { ...v.match, clocks: { ...v.match.clocks, server_now_ms: v.cut } } });
     },
     watchEvents: async (id, since) => {
       calls.push('events:' + since);
       if (st.refuse) return env(st.refuse.status, { error: st.refuse.error }, st.refuse.error);
       const v = view();
       const events = v.seen.filter((e) => e.seq > since).map(({ at, ...e }) => e);
-      return env(200, { ok: true, server_now_ms: st.now, delay_ms: DELAY_MS, watchers: st.watchers, events });
+      // seq = the last seq visible at the cutoff; delay_ms, and no opponent_online
+      return env(200, { ok: true, server_now_ms: v.cut, delay_ms: DELAY_MS, watchers: st.watchers, seq: v.seen.length, events });
     },
   };
   return { st, play, resign, view, api: api2, chess, log };
@@ -113,9 +115,8 @@ function fakeServer() {
 
 /* ------------------------------------------------------------------ pure bits */
 {
-  eq('the cutoff is now minus the delay', cutoffOf({ server_now_ms: 50000, delay_ms: 10000 }), 40000);
+  eq('server_now_ms is the cutoff already: never delayed twice', cutoffOf({ server_now_ms: 40000, delay_ms: 10000 }), 40000);
   eq('no server time, no cutoff', cutoffOf({}), null);
-  eq('the delay defaults to ten seconds', cutoffOf({ server_now_ms: 50000 }), 40000);
   eq('a player off the wire', playerOf({ display_name: 'velvet', rating: 1301.4 }), { name: 'velvet', rating: 1301 });
   eq('a player with no rating', playerOf({ display_name: 'moth', rating: null }), { name: 'moth', rating: null });
   eq('the stands say who won, with no "you"', watchLine({ result: 'resign', winner: 'b' }), 'white resigned, black wins');
@@ -164,11 +165,19 @@ function fakeServer() {
   eq('white\'s clock stands still while black thinks', w.clock.remaining('w'), v.match.clocks.w_ms);
 
   // EVENTS IN ORDER. The next poll brings b8c6 once it is old enough.
-  srv.st.now += DELAY_MS;
+  srv.st.now += DELAY_MS + 3000;   // and white has been thinking 3 s at the cutoff
   const evs = await srv.api.watchEvents('m_watch', w.seq());
   eq('the poll only carries what is new and old enough', evs.data.events.map((e) => e.uci), ['b8c6']);
   eq('it applies', w._applyEnvelope(evs.data), 'ok');
   eq('b8c6 is on the board', board.men.get('c6'), 'bn');
+  // THE DOUBLE DELAY TRAP. The event's clocks are stamped at the move on the server's real timeline
+  // and the envelope's server_now_ms is already the cutoff; read as-is, white's clock shows what it
+  // showed at the cutoff. Subtracting delay_ms again would hand white ten seconds back.
+  {
+    const ev = evs.data.events[0];
+    const want = ev.clocks.w_ms - (evs.data.server_now_ms - ev.clocks.turn_started_ms);
+    ok(`white's clock after the event is the cutoff's, not ten seconds richer (got ${w.clock.remaining('w')}, wanted ${want})`, Math.abs(w.clock.remaining('w') - want) <= 1);
+  }
   eq('seq moved on', w.seq(), 4);
   eq('a repeat of an old event is ignored', w._applyEnvelope({ events: [{ seq: 4, type: 'move', uci: 'b8c6' }] }), 'ok');
   eq('a gap is a resync', w._applyEnvelope({ events: [{ seq: 6, type: 'move', uci: 'f1c4' }] }), 'resync');
@@ -270,7 +279,8 @@ function fakeServer() {
   eq('off: watchable:false on enter, quick and join', sent.map((s) => s.body.watchable), [false, false, false]);
   sent.length = 0;
   await api.challenge('p_x');
-  ok('a challenge never carries it (a friend\'s game is never watchable anyway)', !('watchable' in sent[0].body));
+  await api.acceptChallenge('c_1');
+  eq('off: watchable:false on a challenge and its accept too (the server ignores it on a friend invite)', sent.map((s) => s.body.watchable), [false, false]);
   api.setWatchPolicy(() => { throw new Error('boom'); });
   sent.length = 0;
   await api.quick(api.timeControl(300000, 0));
