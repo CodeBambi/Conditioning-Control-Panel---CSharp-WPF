@@ -135,6 +135,9 @@ export function createHud(opts = {}) {
       accept: pick('hud-draw-accept'),
       decline: pick('hud-draw-decline'),
     },
+    // the stands (net/watch.js), and "N watching" for everyone; optional like the rest
+    watch: { root: pick('hud-watch'), tag: pick('hud-watch-tag'), flip: pick('hud-flip'), leave: pick('hud-leave') },
+    watchers: pick('hud-watchers'),
   };
 
   // The IQ readout (game/iq.js), beside the name on a LOCAL seat's card only. The opponent's card
@@ -167,6 +170,9 @@ export function createHud(opts = {}) {
   let away = false;         // the server's last word: he is not there
   let flash = '';           // a passing note, and the timer that takes it down
   let flashTimer = null;
+  let watching = false;     // a spectator's seat is in the chair: both IQs, no verbs
+  let watcherCount = 0;     // "N watching", from the seat's or the stands' poll
+  let viewSide = 'w';       // the side the stands look from; flip board turns it
   const timers = new Set();
   const unbind = [];
   const undom = [];         // DOM listeners, taken off on dispose
@@ -193,6 +199,10 @@ export function createHud(opts = {}) {
       const name = typeof supplied === 'string' ? supplied : supplied?.name;
       const label = name || (online && side === seat ? own : online ? deal?.match?.opponent?.name : '') || (side === 'w' ? 'White' : 'Black');
       if (el.names[side]) { el.names[side].textContent = label; el.names[side].title = label; }
+      // a rating, when the deal carries one (the stands), rides on the seat label: "White 1520"
+      const seatLabel = el.chip[side] && el.chip[side].querySelector('.seat-label');
+      const rating = supplied && typeof supplied === 'object' && supplied.rating !== null && Number.isFinite(Number(supplied.rating)) ? Math.round(Number(supplied.rating)) : null;
+      if (seatLabel) seatLabel.textContent = (side === 'w' ? 'White' : 'Black') + (rating !== null ? ' ' + rating : '');
     }
   }
 
@@ -381,9 +391,28 @@ export function createHud(opts = {}) {
     paintOnline();
   }
 
+  /** The stands' block, and the "N watching" line every seat gets once somebody is. */
+  function paintWatch() {
+    const w = el.watch;
+    if (w.root) w.root.hidden = !watching;
+    if (w.tag && watching) {
+      let ms = 10000;
+      try { const d = game?.current?.delayMs?.(); if (Number.isFinite(d)) ms = d; } catch { /* the default */ }
+      w.tag.textContent = 'Watching - ' + Math.round(ms / 1000) + ' s behind';
+    }
+    if (el.watchers) {
+      const show = !!deal && watcherCount > 0;
+      el.watchers.hidden = !show;
+      if (show) el.watchers.textContent = watcherCount + ' watching';
+    }
+  }
+
   /** A new deal. The mode on the `local` event is the word; the getter is the fallback. */
   function newDeal(p) {
     if (p) deal = p;
+    try { watching = p ? p.mode === 'watch' : !!(game && game.isWatch); } catch { watching = false; }
+    watcherCount = 0;
+    viewSide = 'w';
     let isOnline = false;
     try { isOnline = !!(game && game.isOnline); } catch { isOnline = false; }
     if (p && typeof p.mode === 'string') isOnline = p.mode === 'online';
@@ -395,6 +424,7 @@ export function createHud(opts = {}) {
     paintNames();
     paintCheck();
     paintOnline();
+    paintWatch();
     paintMenu();
   }
 
@@ -421,6 +451,11 @@ export function createHud(opts = {}) {
   click(el.online.draw, () => { verb('offerDraw'); paintOnline(); });
   click(el.online.accept, () => { verb('acceptDraw'); paintOnline(); });
   click(el.online.decline, () => { verb('declineDraw'); paintOnline(); });
+  click(el.watch.leave, () => bus?.emit('watch-leave'));
+  click(el.watch.flip, () => {
+    viewSide = other(viewSide);
+    try { opts.board?.setSide?.(viewSide, reducedMotion()); } catch { /* no rig */ }
+  });
 
   const seenNotices = new Set();
   on('notice', p => {
@@ -455,7 +490,7 @@ export function createHud(opts = {}) {
     if (repaint) paintSurrender();
   }
   function paintSurrender() {
-    let live = !!deal && !over;
+    let live = !!deal && !over && !watching;   // the stands have nothing to give up
     try { if (window.PBP?.door?.isUp?.() || game?.isOver?.()) live = false; } catch { /* no referee yet */ }
     if (!live) stopSurrender(false);
     if (surrenderBox) surrenderBox.hidden = !live;
@@ -479,11 +514,15 @@ export function createHud(opts = {}) {
   const menuButton = pick('game-menu');
   function paintMenu() {
     paintSurrender();
-    if (menuButton) { menuButton.textContent = deal?.mode === 'solo' ? 'Save and menu' : 'Menu'; menuButton.disabled = online && !over; }
+    if (menuButton) { menuButton.textContent = deal?.mode === 'solo' ? 'Save and menu' : watching ? 'Leave' : 'Menu'; menuButton.disabled = online && !over; }
     const note = pick('game-menu-note');
     if (note) note.hidden = !online || !!over;
   }
-  click(menuButton, () => { if (online && !over) return; closeOptions(); bus?.emit('menu-request'); });
+  click(menuButton, () => { if (online && !over) return; closeOptions(); bus?.emit(watching ? 'watch-leave' : 'menu-request'); });
+  const watchable = pick('game-watchable');
+  const watchableChange = () => setPresentation({ letPeopleWatch: watchable.checked });
+  watchable?.addEventListener('change', watchableChange);
+  undom.push(() => watchable?.removeEventListener('change', watchableChange));
   const soundChange = () => setPresentation({ volume: sound.checked ? .6 : 0 });
   const motionChange = () => setPresentation({ reducedMotion: motion.checked });
   const follow = pick('game-follow');
@@ -538,6 +577,7 @@ export function createHud(opts = {}) {
     // Reduced motion keeps the camera at the seat and drops the replay; the boxes say so.
     if (follow) { follow.checked = p.followCam && !p.reducedMotion; follow.disabled = p.reducedMotion; }
     if (replays) { replays.checked = p.replays && !p.reducedMotion; replays.disabled = p.reducedMotion; }
+    if (watchable) watchable.checked = p.letPeopleWatch !== false;
     if (invertX) invertX.checked = p.invertX;
     if (invertY) invertY.checked = p.invertY;
     for (const button of root.querySelectorAll('[data-turncard]')) button.setAttribute('aria-pressed', String(button.dataset.turncard === p.turnCard));
@@ -590,6 +630,14 @@ export function createHud(opts = {}) {
     if (by && by !== mySide()) note('draw declined'); else paintOnline();
   });
   on('opponent', (p) => { away = !!(p && p.online === false); paintOnline(); });
+  on('watchers', (p) => { watcherCount = Math.max(0, Number(p && p.count) || 0); paintWatch(); });
+  // the stands learn both names off the server's first answer, not off the deal
+  on('players', (p) => {
+    if (!watching || !p) return;
+    deal = Object.assign({}, deal, { players: { w: p.white || null, b: p.black || null } });
+    paintNames();
+    paintCheck();
+  });
   on('gameover', (p) => {
     over = p || { result: 'over' };
     const line = endLine(over);
@@ -688,6 +736,12 @@ export function createHud(opts = {}) {
           note: el.online.note && !el.online.note.hidden ? el.online.note.textContent : null,
           buttons: !!(el.online.btns && !el.online.btns.hidden),
           offerRow: !!(el.online.offer && !el.online.offer.hidden),
+        },
+        watch: {
+          on: watching,
+          shown: !!(el.watch.root && !el.watch.root.hidden),
+          watchers: el.watchers && !el.watchers.hidden ? el.watchers.textContent : null,
+          names: { w: el.names.w ? el.names.w.textContent : null, b: el.names.b ? el.names.b.textContent : null },
         },
       };
     },

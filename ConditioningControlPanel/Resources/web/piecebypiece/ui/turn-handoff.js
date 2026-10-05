@@ -63,7 +63,7 @@ export function createTurnHandoff({ bus, game, board, root = null, menuOpen = ()
   function reset() { clear(); hide(); lastPly = null; }
   function mine(side) { return !game.isSolo && !game.isOnline ? side === 'w' : !!game.seats?.includes(side); }
   function label(side) {
-    if (game.isSolo || game.isOnline) {
+    if ((game.isSolo || game.isOnline) && !game.isWatch) {
       if (game.seats?.includes(side)) return 'Your turn';
       return game.isSolo ? "Computer's turn" : "Opponent's turn";
     }

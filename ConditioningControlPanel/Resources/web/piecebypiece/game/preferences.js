@@ -1,5 +1,5 @@
 // Local presentation choices. Host and OS motion restrictions always win.
-import { onHostMessage } from '../bridge.js';
+import { onHostMessage, postToHost } from '../bridge.js';
 const KEY = 'pbp-presentation-v1';
 let saved = {};
 try { saved = JSON.parse(globalThis.localStorage?.getItem(KEY) || '{}') || {}; } catch { /* private storage */ }
@@ -7,6 +7,9 @@ if (!saved || typeof saved !== 'object' || Array.isArray(saved)) saved = {};
 const settings = () => globalThis.window?.PBP?.settings || {};
 let hostReduced = !!settings().reducedMotion;
 let hostVolume = Number.isFinite(settings().sfxVolume) ? settings().sfxVolume : .6;
+// "Let people watch my games": the desktop keeps it in AppSettings (pbp:settings letPeopleWatch);
+// a web or phone page keeps its own. null = the host has not said.
+let hostWatch = null;
 const listeners = new Set();
 const osMotion = globalThis.window?.matchMedia?.('(prefers-reduced-motion: reduce)');
 const clamp = value => Math.max(0, Math.min(1, value));
@@ -35,6 +38,8 @@ export function presentation() {
     strength: Number.isFinite(saved.strength) ? strength(saved.strength) : 1,
     rampSpeed: SPEEDS.includes(saved.rampSpeed) ? saved.rampSpeed : 'normal',
     soundLocked: hostVolume === 0,
+    // Spectators (owner, 2026-10-05): on by default; off sends watchable:false when a public game is made.
+    letPeopleWatch: hostWatch !== null ? hostWatch : saved.letPeopleWatch !== false,
   };
 }
 function apply() {
@@ -56,6 +61,12 @@ export function setPresentation(patch) {
   if (AMOUNTS.includes(patch.amount)) saved.amount = patch.amount;
   if (Number.isFinite(patch.strength)) saved.strength = strength(patch.strength);
   if (SPEEDS.includes(patch.rampSpeed)) saved.rampSpeed = patch.rampSpeed;
+  if (typeof patch.letPeopleWatch === 'boolean') {
+    saved.letPeopleWatch = patch.letPeopleWatch;
+    if (hostWatch !== null) hostWatch = patch.letPeopleWatch;
+    // the host keeps it too (desktop: AppSettings.PbpLetPeopleWatch); no host, no-op
+    postToHost({ type: 'pbp:setting', key: 'letPeopleWatch', value: patch.letPeopleWatch });
+  }
   try { globalThis.localStorage?.setItem(KEY, JSON.stringify(saved)); } catch { /* session only */ }
   return apply();
 }
@@ -68,6 +79,7 @@ onHostMessage(m => {
   if (m.type !== 'pbp:settings') return;
   if (typeof m.reducedMotion === 'boolean') hostReduced = m.reducedMotion;
   if (Number.isFinite(m.sfxVolume)) hostVolume = clamp(m.sfxVolume);
+  if (typeof m.letPeopleWatch === 'boolean') hostWatch = m.letPeopleWatch;
   apply();
 });
 osMotion?.addEventListener?.('change', apply);
