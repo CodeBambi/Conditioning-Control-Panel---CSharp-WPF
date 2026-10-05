@@ -103,6 +103,7 @@
             <button type="button" class="hud-btn" data-turncard="ribbon" aria-pressed="false">Ribbon</button>
             <button type="button" class="hud-btn" data-turncard="tag" aria-pressed="false">Tag</button>
           </div>
+          <label><input type="checkbox" id="game-watchable" checked> Let people watch my games</label>
           <label><input type="checkbox" id="game-sound" checked> Sound effects</label>
           <label><input type="checkbox" id="game-reduced"> Reduce motion</label>
           <small id="game-preference-note" hidden></small>
@@ -124,6 +125,7 @@
     <div class="statuscol" id="status-col">
       <p class="status" id="status" role="status" aria-live="polite">White to move</p>
       <p class="game-notice" id="game-notice" role="status" hidden></p>
+      <p class="watchers" id="hud-watchers" role="status" hidden></p>
       <div class="intensity" id="game-intensity" hidden><div><span>Distraction</span><span id="intensity-label">Calm</span></div><meter id="intensity-meter" min="0" max="1" value="0" aria-label="Distraction intensity"></meter></div>
       <p class="hint" id="hud-hint" hidden>Hold Esc to open the menu</p>
       <div class="dots" id="hud-dots" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -154,6 +156,17 @@
       <div class="online-row" id="hud-online-btns">
         <button type="button" class="hud-btn" id="hud-draw">offer draw</button>
         <button type="button" class="hud-btn" id="hud-resign">resign</button>
+      </div>
+    </div>
+
+    <!-- The stands (net/watch.js): shown in place of the block above while a
+         watched game is in the chair. Nobody here moves, so the only buttons
+         are the view and the way out. -->
+    <div class="online" id="hud-watch" hidden>
+      <p class="online-note" id="hud-watch-tag">Watching - 10 s behind</p>
+      <div class="online-row">
+        <button type="button" class="hud-btn" id="hud-flip">flip board</button>
+        <button type="button" class="hud-btn" id="hud-leave">leave</button>
       </div>
     </div>
   </div>

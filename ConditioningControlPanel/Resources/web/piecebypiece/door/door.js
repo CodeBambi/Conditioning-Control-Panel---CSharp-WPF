@@ -56,6 +56,8 @@ import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, 
 import { recapHtml, keptIq, plainIq, fallPlan, goneLine } from './fall.js';
 import { saveFallCard, copyFallCard } from './fall-card.js';
 import { pictureChoice } from '../ui/pictures.js';
+import { watch as watchRoute } from '../net/api.js';
+import { watchLine } from '../net/watch.js';
 
 /** Every number the door decides with. */
 export const TUNING = Object.freeze({
@@ -65,6 +67,7 @@ export const TUNING = Object.freeze({
   replayStepMs: 900,        // auto-play cadence in a replay
   iqSettleMs: 2500,         // the last move's IQ grade may still be in the worker at the end; wait this long for it
   menuSway: 0.3,            // camera drift while the door is up
+  watchEndMs: 4000,         // a watched game's last position stays up this long, then the tables
 });
 const T = TUNING;
 
@@ -83,6 +86,15 @@ const SEAT_NOTES = Object.freeze({
   blocked: 'that table is not open to you',
   self: 'that is your own table',
   left: 'nobody answered',
+});
+
+/** Why a Watch did not open, in the same one line. An empty line says nothing. */
+const WATCH_NOTES = Object.freeze({
+  not_watchable: 'that game is not open to watch',
+  your_match: 'that is your own game',
+  not_found: 'that game just ended',
+  not_deployed: '',
+  offline: 'could not reach that game',
 });
 
 /** 600000 + 5000 -> "10+5". Minutes that are not whole read as m:ss. */
@@ -123,7 +135,8 @@ export function createDoor(opts = {}) {
   let looking = false;
   let ask = null;               // an incoming challenge { id, name, accept, decline, timer }
   let people = [];
-  let playingNow = [];          // [{ white, black, timeControl, moves }], names only
+  let playingNow = [];          // [{ white, black, timeControl, moves, matchId?, watchable, watchers }], names only
+  const watchApi = opts.watchApi || watchRoute;   // GET /v2/pbp/watch/:id, swappable for a harness
   let lookKind = null;          // 'quick' | 'join' | 'host' | 'challenge' while looking
   let joiningId = null;         // the table a Join is sitting down at
   let note = '';                // one line after a refused seat
@@ -380,9 +393,12 @@ export function createDoor(opts = {}) {
     for (const p of people) seenTables.add(p.id);
     const open = (mine || rows) ? `<ul class="tables-list" aria-label="Open tables">${mine}${rows}</ul>`
       : '<div class="door-empty tables-empty">no open tables. host one</div>';
+    // A watchable game (spectating on, both players said yes) gets a Watch button; `spectate`,
+    // because `watch` is already the shelf's review of a past game.
     const games = playingNow.map((g) => `
       <li class="playing-row"><span class="who">${esc(g.white)} <i>vs</i> ${esc(g.black)}</span>
-        <span class="meta">${esc([tcWord(g.timeControl), fmtMoves(g.moves)].filter(Boolean).join(' - '))}</span></li>`).join('');
+        <span class="meta">${esc([tcWord(g.timeControl), fmtMoves(g.moves), g.watchers > 0 ? g.watchers + ' watching' : ''].filter(Boolean).join(' - '))}</span>${g.watchable && g.matchId ? `
+        <button type="button" class="table-join" data-act="spectate" data-id="${esc(g.matchId)}" aria-label="watch ${esc(g.white)} against ${esc(g.black)}">watch</button>` : ''}</li>`).join('');
     return `<div class="tables-scroll" tabindex="0" aria-label="Open tables and games on now">${open}
       <h2 class="tables-h">playing now</h2>
       ${games ? `<ul class="playing-list">${games}</ul>` : '<p class="tables-none">no games on right now</p>'}</div>`;
@@ -642,6 +658,12 @@ export function createDoor(opts = {}) {
 
   function onGameOver() {
     if (!current) return;
+    // A watched game is not ours: nothing goes on the shelf. The last position stays up a moment, then the tables.
+    if (current.mode === 'watch') {
+      const watched = current;
+      later(() => { if (current === watched) leaveWatch(watchLine(game.result && game.result())); }, still() ? 1500 : T.watchEndMs);
+      return;
+    }
     let rec = {};
     try { rec = game.record ? game.record() : {}; } catch { rec = {}; }
     const m = current.match;
@@ -768,6 +790,53 @@ export function createDoor(opts = {}) {
     show('menu');
   }
 
+  // ---------------------------------------------------------------- the stands
+  /**
+   * Watch one public game (net/watch.js): ask the server first, so a game that is
+   * not open to watch says so in the tables' note line instead of dealing a board.
+   * A live game of our own is never left for it.
+   */
+  let watchSeq = 0;
+  async function spectate(id) {
+    if (!id) return;
+    if (current && current.mode === 'online' && !game.isOver()) return;
+    const mine = ++watchSeq;
+    await askHost();
+    if (mine !== watchSeq) return;
+    if (signedOut) { note = 'sign in to watch'; if (screen === 'lobby') render(); return; }
+    let res = null;
+    try { res = await watchApi(String(id)); } catch { res = null; }
+    if (mine !== watchSeq || (current && current.mode === 'online' && !game.isOver())) return;
+    if (!res || !res.ok || !res.data || !res.data.match) {
+      const why = (res && res.error) || 'offline';
+      note = WATCH_NOTES[why] !== undefined ? WATCH_NOTES[why] : 'that game cannot be watched';
+      if (note) sfx('squelch');
+      if (screen === 'lobby') render(); else if (note) show('lobby');
+      return;
+    }
+    if (current) toMenu();
+    leaveLobby();
+    deal('watch', { id: String(id), state: res.data });
+  }
+
+  /** Out of the stands, back to the tables (the menu with no lobby), with one line about why. */
+  function leaveWatch(text = '') {
+    const watching = (current && current.mode === 'watch') || !!game.isWatch;
+    if (!watching) return;
+    current = null;
+    board.anim?.skip?.();
+    try { if (typeof game.switchBack === 'function') game.switchBack(); } catch { /* one driver only */ }
+    try { game.reset(); board.pieces.setPosition(game.rules.position()); } catch { /* the board stays as it is */ }
+    try { board.setSide('w', true); } catch { /* no rig */ }
+    show(lobby ? 'lobby' : 'menu');
+    if (text) { note = text; if (screen === 'lobby') render(); }
+  }
+  /** The watch session said the game closed to us mid-way. */
+  function watchClosed(p) {
+    const why = p && p.reason;
+    leaveWatch(why === 'not_found' ? 'that game ended' : (WATCH_NOTES[why] || ''));
+  }
+
   // ---------------------------------------------------------------- replay
   function openReplay(id) {
     if (current?.mode === 'online' && !game.isOver()) return;
@@ -846,6 +915,7 @@ export function createDoor(opts = {}) {
       case 'go': go(); break;
       case 'stake': { const [k, a] = String(id || '').split(':'); stake.choose(k, Number(a)); break; }
       case 'watch': openReplay(id); break;
+      case 'spectate': spectate(id); break;
       case 'rstart': stopReplay(); stepReplay(0); break;
       case 'rprev': stopReplay(); stepReplay(replay ? replay.i - 1 : 0); break;
       case 'rnext': stopReplay(); stepReplay(replay ? replay.i + 1 : 0, true); break;
@@ -888,6 +958,8 @@ export function createDoor(opts = {}) {
     unbind.push(bus.on('menu-request', toMenu));
     unbind.push(bus.on('capture', onCapture));
     unbind.push(bus.on('gameover', onGameOver));
+    unbind.push(bus.on('watch-leave', () => leaveWatch()));
+    unbind.push(bus.on('watch-closed', watchClosed));
   }
 
   // ---------------------------------------------------------------- friends drawer
@@ -899,12 +971,14 @@ export function createDoor(opts = {}) {
    *   { mode: 'accept', challengeId }   the friend's side: take it up, straight to the board
    *   { mode: 'join', target }          the desktop Lobby: sit at that open table (a p_ id)
    *   { mode: 'host' }                  the desktop Lobby: list a table and wait
+   *   { mode: 'spectate', matchId }     the desktop Lobby: watch that public game (ten seconds behind)
    * A live online game is never interrupted; the host hears null and says so.
    */
   function friend(intent) {
     const m = intent || {};
     const tell = (challengeId) => { try { postToHost({ type: 'pbp:friend-challenge', friendId: m.friendId || null, challengeId: challengeId || null }); } catch { /* no host */ } };
     const busy = current && current.mode === 'online' && !game.isOver();
+    if (!busy && m.mode === 'spectate' && m.matchId) { spectate(String(m.matchId)); return; }
     if (busy || !lobby) { if (m.mode === 'challenge') tell(null); return; }
     // a friend's game is a start too: the picture ask comes first while nothing is saved
     if (m.mode === 'challenge' && m.friendId) {
@@ -940,6 +1014,8 @@ export function createDoor(opts = {}) {
       act,
       openReplay,
       matched,
+      spectate,
+      leaveWatch,
       stake,
       shelf: { save: saveGame, list: listGames },
       /**

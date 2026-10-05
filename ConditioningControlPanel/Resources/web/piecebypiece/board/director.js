@@ -120,7 +120,8 @@ export function createDirector({ view, anim, bus, game, root = null, random = Ma
     if (!s || s.untimed || s.total === 0) return Infinity;
     return Math.min(s.w ?? Infinity, s.b ?? Infinity);
   }
-  const mineSide = side => !game?.seats || game.seats.includes(side);
+  // no seat at all (hotseat's switch says both; the stands say none) follows every move fully
+  const mineSide = side => !game?.seats?.length || game.seats.includes(side);
   const paused = () => !!globalThis.window?.PBP?.isPaused?.();
   let underDoor = false;   // the end card's "watch the fall" review: see allowUnderDoor()
   const menuUp = () => !underDoor && !!globalThis.window?.PBP?.door?.isUp?.();

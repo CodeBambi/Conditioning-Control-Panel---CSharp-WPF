@@ -18,7 +18,8 @@ import { createHotseat } from './game/hotseat.js';
 import { createSolo } from './game/solo.js';
 import { createTurnHandoff } from './ui/turn-handoff.js';
 import { createDirector } from './board/director.js';
-import { createDriverSwitch, startOnlineMatch } from './net/online.js';
+import { createDriverSwitch, startOnlineMatch, startWatchMatch } from './net/online.js';
+import { setWatchPolicy } from './net/api.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
 import { createPauseHush } from './ui/pause-hush.js';
@@ -120,19 +121,29 @@ function main() {
    * know the game changed hands.
    */
   window.PBP.startOnline = (match) => startOnlineMatch({ bus, board, hud: dom.hud, game, match });
+  // The stands: watch a public game from "playing now" (net/watch.js), ten seconds behind.
+  window.PBP.startWatch = (match) => startWatchMatch({ bus, board, hud: dom.hud, game, match });
+  // "Let people watch my games" (Options): off sends watchable:false when a public game is made.
+  setWatchPolicy(() => presentation().letPeopleWatch);
   // The friends drawer: challenge a friend, or take a friend's challenge up. Heard here, early,
   // because the frame can land before the door exists; it waits for the door.
   onHostMessage((m) => {
     if (!m || m.type !== 'pbp:friend') return;
     Promise.resolve(window.PBP.doorReady).then((door) => { if (door && door.friend) door.friend(m); }).catch(() => {});
   });
+  const spectated = new Set();
   onHostMessage((m) => {
     if (m.type !== 'pbp:settings') return;
     // The envelope's own key is not a setting, and reducedMotion belongs to preferences.js: it folds the
     // host's value in with the saved choice and the OS (they can only add reduction). Copying the raw host
     // value here wrote a false over a ticked "Reduce motion" on every launch.
-    const { type, reducedMotion, ...values } = m;
+    const { type, reducedMotion, spectateMatchId, letPeopleWatch, ...values } = m;
     Object.assign(window.PBP.settings, values);
+    // The desktop Lobby's Watch: the window opens straight into the stands, once per game id.
+    if (spectateMatchId && !spectated.has(String(spectateMatchId))) {
+      spectated.add(String(spectateMatchId));
+      Promise.resolve(window.PBP.doorReady).then((door) => { if (door && door.friend) door.friend({ mode: 'spectate', matchId: String(spectateMatchId) }); }).catch(() => {});
+    }
   });
   // The host names the player from the account (pbp:identity, displayName),
   // and that is the name the server lists in the lobby - so it is the name the
@@ -238,9 +249,11 @@ function main() {
       if (saved?.iq) iq.restore(saved.iq);
     });
     bus.on('iq', () => { if (mode === 'solo') patchSoloIq(); });
+    // the stands keep nothing on the shelf (door/door.js does not save a watched game)
     const record = game.record;
     game.record = (...a) => { const r = record.apply(game, a); const fall = iq.record(); return fall ? { ...r, iq: fall } : r; };
     bus.on('gameover', () => {
+      if (mode === 'watch') return;
       const plies = game.plies(), last = game.rules.chess.history().pop(), epoch = iq.epoch();
       iq.settled().then(() => {
         // a rematch or the menu before the last grade came in: the trackers belong to the next game now
@@ -366,13 +379,15 @@ function main() {
   // The panel has already spent a first Escape as the game's pause (not a panic), so a part of the page that
   // keeps the key for itself (the Options panel, the promotion picker) pauses the game through this too, or
   // nothing pauses at all (bug hunt 2026-09-29, CHESS-1).
-  window.PBP.escapePause = () => { if (!pausedGame && inGameNow()) setGamePaused(true); };
+  window.PBP.escapePause = () => { if (!pausedGame && inGameNow() && !window.PBP.game.isWatch) setGamePaused(true); };
   window.addEventListener('keydown', (e) => {
     // A held Escape is one press (the panel counts it once too); its key repeats must not leave the pause.
     if (e.key !== 'Escape' || e.repeat) return;
     if (pausedGame) { postToHost({ type: 'pbp:exit' }); return; }   // still hushed: nothing comes back on the way out
     if (drag.isDragging()) { drag.drop(); window.PBP.escapePause(); return; }
     const inGame = inGameNow();
+    // In the stands there is nothing to pause: Esc goes back to the tables, during or after the game.
+    if (!window.PBP.door?.isUp() && window.PBP.game?.isWatch) { bus.emit('watch-leave'); return; }
     if (inGame) setGamePaused(true);
     else postToHost({ type: 'pbp:exit' });
   });
@@ -422,6 +437,7 @@ function main() {
     // an online seat is built and switched in by net/online.js; the hotseat's
     // reset-and-start is not what it wants
     if (mode === 'online' && match) { window.PBP.startOnline(match); return; }
+    if (mode === 'watch' && match) { window.PBP.startWatch(match); return; }
     if (mode === 'solo') {
       const solo = createSolo({ bus, board, hud: dom.hud, options, restore });
       game.switchTo(solo);
