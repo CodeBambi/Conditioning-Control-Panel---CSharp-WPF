@@ -184,7 +184,8 @@
                                                            VerticalAlignment="Center"/>
                                                 <ComboBox Grid.Column="1" x:Name="CmbLockdownDuration" x:FieldModifier="internal"
                                                           Width="160" SelectedIndex="1" VerticalAlignment="Center" FontSize="13"
-                                                          Style="{DynamicResource DarkComboBoxStyle}">
+                                                          Style="{DynamicResource DarkComboBoxStyle}"
+                                                          SelectionChanged="CmbLockdownDuration_SelectionChanged">
                                                     <ComboBoxItem Content="{loc:Str btn_5_minutes}" Tag="5"/>
                                                     <ComboBoxItem Content="{loc:Str btn_10_minutes}" Tag="10"/>
                                                     <ComboBoxItem Content="{loc:Str btn_15_minutes}" Tag="15"/>
@@ -194,6 +195,13 @@
                                                     <ComboBoxItem Content="{loc:Str btn_4_hours}" Tag="240"/>
                                                 </ComboBox>
                                             </Grid>
+
+                                            <!-- A lockdown counts for quests only from QuestService.LockdownQuestMinimum
+                                                 (20 min, ccp-bugs #705). Said here, before Activate, because the quest
+                                                 card cannot say it after the fact (ccp-bugs #1360/#1361). -->
+                                            <TextBlock x:Name="TxtLockdownQuestHint" Text="{loc:Str lockdown_quest_min_hint}"
+                                                       FontSize="11.5" Foreground="{StaticResource TextMutedBrush}"
+                                                       TextWrapping="Wrap" Margin="0,0,0,4" Visibility="Collapsed"/>
 
                                             <!-- Hide the clock. The digits' TextBlock stays in place either way (it is the
                                                  five-click exit handle); only what it says changes. Masks the badge and the

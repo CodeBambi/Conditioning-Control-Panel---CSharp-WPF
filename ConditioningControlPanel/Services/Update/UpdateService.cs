@@ -20,15 +20,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.0.4";
+        public const string AppVersion = "7.0.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.0.4 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.0.5 - Stay Tuned
 
-[a Locktober hotfix]
+[a small hotfix]
+
+NEW IN 7.0.5
+
+FIXES
+- Circe's Spiral Overlay picture got a touch-up.
+- Lockdown quests now say what they meant all along: a lockdown of 20 minutes or more. the Lockdown page tells you when the time you picked is too short to count.
+- the Remote ""Full"" warning no longer lists turning on strict lock or switching off the panic key. a controller can do neither. your panic key always works.
 
 NEW IN 7.0.4
 
@@ -50,7 +57,7 @@ REMOTE CONTROL
 - your panic key always works now. a controller can no longer switch it off.
 - the preview can say where your online pictures come from. turn that off in the Remote tab. file names are never shared.
 - a buzz sent with no toy connected is refused, so the controller knows.
-- when a controller leaves, panic comes back on and a strict lock they set is released.
+- when a controller leaves, any strict lock they set is released.
 
 FROM YOUR SUGGESTIONS
 - Awareness cooldowns go up to an hour.

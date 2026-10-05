@@ -222,11 +222,12 @@ public class CirceNeutralPackPatchTests : IDisposable
 
     /// <summary>
     /// Every old voice line has its replacement in LockedMod\overrides, none of the old names ships
-    /// there, and the four replaced PNGs are present. Without this, a missing override would leave its
+    /// there, and the five replaced PNGs are present (the fifth, spiral_overlay.png, takes the extra
+    /// arm off Circe, ccp-bugs #1354). Without this, a missing override would leave its
     /// old line in place forever (the delete waits for the replacement).
     /// </summary>
     [Fact]
-    public void Shipped_overrides_cover_every_old_voice_line_and_the_four_pngs()
+    public void Shipped_overrides_cover_every_old_voice_line_and_the_five_pngs()
     {
         var overrides = Path.Combine(RepoRoot(), "ConditioningControlPanel", CirceNeutralPackPatch.OverridesRelativeDir);
         var flashes = Path.Combine(overrides, Flashes);
@@ -242,10 +243,11 @@ public class CirceNeutralPackPatchTests : IDisposable
                      Path.Combine("resources", "features", "subliminal.png"),
                      Path.Combine("resources", "features", "bouncing_text.png"),
                      Path.Combine("resources", "features", "Phrase_Lock.png"),
+                     Path.Combine("resources", "features", "spiral_overlay.png"),
                      Path.Combine("resources", "achievements", "Dumb_Bimbo.png"),
                  })
             Assert.True(File.Exists(Path.Combine(overrides, rel)), "missing override: " + rel);
 
-        Assert.Equal(29, Directory.GetFiles(overrides, "*", SearchOption.AllDirectories).Length);
+        Assert.Equal(30, Directory.GetFiles(overrides, "*", SearchOption.AllDirectories).Length);
     }
 }
