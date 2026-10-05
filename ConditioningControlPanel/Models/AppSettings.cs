@@ -8518,6 +8518,17 @@ namespace ConditioningControlPanel.Models
             set { _pbpMediaChosen = value; OnPropertyChanged(); }
         }
 
+        private bool _pbpLetPeopleWatch = true;
+        /// <summary>"Let people watch my games" (owner, 2026-10-05): default on. Off = this player's
+        /// public matches are never watchable (the page sends <c>watchable:false</c> on lobby enter,
+        /// quick and join). Friend-invite matches are never watchable either way.</summary>
+        [JsonProperty("pbpLetPeopleWatch")]
+        public bool PbpLetPeopleWatch
+        {
+            get => _pbpLetPeopleWatch;
+            set { _pbpLetPeopleWatch = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region The Arcademy (webview mini-game hub)

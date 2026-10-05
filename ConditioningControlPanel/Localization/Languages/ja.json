@@ -4230,6 +4230,7 @@
   "lobby_friend_tip": "フレンド",
   "lobby_row_versus": "{0} 対 {1}",
   "lobby_moves": "{0}手",
+  "lobby_watchers": "{0}人が観戦中",
   "lobby_goon_song": "曲あり",
   "lobby_goon_cards": "カード{0}秒",
   "lobby_goon_pictures": "画像あり",

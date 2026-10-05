@@ -4230,6 +4230,7 @@
   "lobby_friend_tip": "Друг",
   "lobby_row_versus": "{0} против {1}",
   "lobby_moves": "ходов: {0}",
+  "lobby_watchers": "зрителей: {0}",
   "lobby_goon_song": "песня",
   "lobby_goon_cards": "карты по {0} с",
   "lobby_goon_pictures": "картинки",

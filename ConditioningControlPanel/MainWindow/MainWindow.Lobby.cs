@@ -191,10 +191,20 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>A row's button. Signed out asks to sign in; a gate refusal shows the gate.</summary>
+        /// <summary>A row's button. Signed out asks to sign in; a gate refusal shows the gate.
+        /// A Playing chess row's Watch opens the match as a spectator (free with an account, like
+        /// joining a chess table).</summary>
         internal async void OnLobbyRowClick(LobbyRowView view, FrameworkElement button)
         {
             var row = view.Row;
+            if (row.CanWatch && row.Game == LobbyGame.Chess && !string.IsNullOrEmpty(row.Key))
+            {
+                var watchGates = CurrentLobbyGates();
+                if (!watchGates.SignedIn || !watchGates.CanJoin(LobbyGame.Chess)) { OpenUnifiedLoginDialog(); return; }
+                try { PieceByPieceHostService.HostSpectate(row.Key); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[Lobby] watch failed"); }
+                return;
+            }
             if (!row.CanJoin || string.IsNullOrEmpty(row.Key)) return;
             var gates = CurrentLobbyGates();
             if (!gates.SignedIn) { OpenUnifiedLoginDialog(); return; }
