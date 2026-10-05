@@ -19,6 +19,8 @@
 import * as THREE from 'three';
 import { FOG_COLOR, FOG_DENSITY } from './tunnel.js';
 import { S, onSettings } from './settings.js';
+import { softPulseAmount } from '../shared/softPulse.js';
+import { motionLevel } from '../shared/motion.js';
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const hslOf = (intOrColor) => {
@@ -520,7 +522,11 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
   // pulseFlash: bump the tunnel shader's uFlash directly (the lightning-strike
   // light) - used for loop boundaries and ripple shockwaves.
   function pulseFlash(amount = 0.6) {
-    flash = Math.min(1.3, flash + amount);
+    // Every caller passes its full-motion amount; the motion level caps it here
+    // (reduced: a soft pulse at most, off: none), so no call site can skip the rule.
+    const a = softPulseAmount(amount, motionLevel());
+    if (a <= 0) return;
+    flash = Math.min(1.3, flash + a);
   }
   // seedZoneAhead: pre-roll the NEXT zone index to a special mood different
   // from the current one, so every loop boundary is followed by a visible

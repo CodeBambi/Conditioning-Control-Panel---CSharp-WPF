@@ -46,7 +46,8 @@ import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL, setRegionCycle } from './regions.js';
 import { rollBiomeIds, biomeForWave, biomeById, BIOMES_ALL, setBiomeCycle } from './biomes.js';
 import { createBiomeMech } from './biomeMech.js';
-import { setAudioColor } from '../engine/audioBus.js';
+import { setAudioColor, setDepthTone, failureDip, getAudioCtx, getMasterOut } from '../engine/audioBus.js';
+import { createFeelAudio } from './feelAudio.js';
 import { getVoice, setVoiceDefault, onVoice, getLevel } from '../engine/audioLevels.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
@@ -65,7 +66,7 @@ import { createHubGuide } from './hubGuide.js';
 import { createCheshireVn, CHESHIRE_DISABLED } from './cheshireVn.js';
 import { createCheshireGuide } from './cheshireGuide.js';
 import { CHESHIRE } from '../assets/vn/cheshire_script.js';
-import { setDucked, isMuted } from '../shared/audioMute.js';
+import { setDucked, isMuted, isDucked } from '../shared/audioMute.js';
 import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS, RANKS } from './catalog.js';
 
 // ---- first-discovery lesson copy (catalog is the single source of truth) ----
@@ -549,6 +550,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // ~2s cadence like the liveness heartbeat; all pattern/cooldown thinking is C#-side.
   setInterval(() => {
     const running = state === 'running' && !heldNow();
+    // Feel pass: the same depth signal warms the mix (master low-pass + drone bed).
+    // Held (drafts, pause) keeps the last depth; only leaving the run opens it back up.
+    if (running) setDepthTone(intensity());
+    else if (state !== 'drafting' && state !== 'running') setDepthTone(0);
     bridge.send({
       type: 'haptic-state',
       running,
@@ -563,7 +568,34 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // NOTE: region-mode wave drafts now prefer the draft ROOM (openDraftRoom -
   // one tube per boon); this presenter serves the scripted run-1 draft, the
   // Court's Landing, and 4-choice drafts.
+  // ---- feel pass (game/feelAudio.js): the pop ladder, arrivals, the landing root ----
+  const feel = createFeelAudio({
+    getCtx: getAudioCtx,
+    getOut: getMasterOut,
+    silent: () => isMuted() || isDucked(),
+    level: () => getLevel('fx'),
+    voiceActive: () => { try { return !!(ctx && ctx.drift && ctx.drift.isSpeaking && ctx.drift.isSpeaking()); } catch (e) { return false; } },
+  });
+  /** The one hook other lanes listen to: window 'dtrh:feel', detail.kind = pop | detonate | arrive. */
+  const feelEvent = (detail) => {
+    try { window.dispatchEvent(new CustomEvent('dtrh:feel', { detail })); } catch (e) { /* ignore */ }
+  };
+  const FEEL_GOLD_KINDS = new Set(['golden', 'droplet', 'material', 'heart']);
+  /** Wrap a field pop callback: after the game has counted it, voice the rung the streak reached. */
+  const withPopFeel = (handler, xyAt) => (...args) => {
+    const before = st ? st.combo : 0;
+    handler(...args);
+    if (!st || state !== 'running') return;
+    const spec = args[0] || {};
+    const gold = FEEL_GOLD_KINDS.has(spec.kind);
+    if (!gold && st.combo <= before) return;   // the pop did not count (held, absorbed): no note
+    feel.pop(st.combo, { gold });
+    feelEvent({ kind: 'pop', streak: st.combo, x: args[xyAt], y: args[xyAt + 1], gold });
+  };
+  const onFeelEvent = (e) => { if (e && e.detail && e.detail.kind === 'arrive') feel.arrive(); };
+  window.addEventListener('dtrh:feel', onFeelEvent);
   const presentDraft = (o) => {
+    feel.resolve();   // a landing: the ladder comes home to its root
     if (ctx && ctx.boonPick) ctx.boonPick.open({ ...o, sfx });
     else overlays.showDraft(o);
   };
@@ -860,10 +892,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     st.combo = 0;
     st.lastComboBig = 0;
     st.heat = 0;
-    sfx('trigger', 0.55);
-    pulse('255,50,50', 0.4 + s * 0.35);
-    // P1: the fall STUMBLES - a brightness punch + the speed boost dies on the spot.
-    ctx.fx.pulseFlash(0.5 + s * 0.3);
+    // Feel pass: failure SUBTRACTS. No sting and no red pulse: the whole mix closes
+    // and opens back (audioBus.failureDip), and the field dims on the same event.
+    failureDip();
+    feelEvent({ kind: 'detonate', x, y, strength: s });
+    // P1: the fall STUMBLES - the speed boost dies on the spot. The old brightness
+    // punch is gone with the sting: it fought the field's dim on the same event.
     ctx.director.killBoost();
     // Heat Warp: a big streak dying while the tube runs hot cracks real lightning
     if (comboWarp >= 0.6 || comboBefore >= 15) ctx.fx.strikeNow();
@@ -2407,6 +2441,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function openDraftRoom(options) {
+    feel.resolve();   // a landing: the ladder comes home to its root
     draftRoomActive = true;
     draftRoomSkip = false;
     draftRoomDoors = options.length;
@@ -4067,6 +4102,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
      * the idling tunnel; a descent starts when the host answers request-run. */
     attach(sceneCtx) {
       ctx = sceneCtx;
+      window.addEventListener('dtrh:feel', onFeelEvent);   // same fn: a re-attach never doubles it
       preloadRecipeArt();   // warm the ingredient photos so a deep-run recipe plaster draws them, not glyphs
       ffx = createFieldFx(ctx.hud);
       payloadFx = createPayloadFx({ hud: ctx.hud, fx: ctx.fx, media: ctx.media, flashBurst: ctx.flashBurst });
@@ -4136,8 +4172,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       });
       field = createChaosField({
         hud: ctx.hud, fx: ffx,
-        canChannel, onBenignPopped, onFreezeCaught,
-        onDefused, onDetonated, onTreatExpired, onChannelBroken,
+        canChannel, onBenignPopped: withPopFeel(onBenignPopped, 1), onFreezeCaught,
+        onDefused: withPopFeel(onDefused, 3), onDetonated, onTreatExpired, onChannelBroken,
         onDarterCaught, onTeaseTouched, onTeaseDenied, onBrittleShattered, onBoundEnraged,
         onRabbitSmacked: (first) => lessons.onRabbitSmacked(first),
         // Autoplay duo: the logo found a corner - the whole screen pays.
@@ -4525,6 +4561,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       window.removeEventListener('pointerdown', onGlobalPointerDownCapture, true);
       window.removeEventListener('contextmenu', onContextMenu);
       window.removeEventListener('keydown', onToyKey);
+      window.removeEventListener('dtrh:feel', onFeelEvent);
+      setDepthTone(0);
       hideDraftRoomChrome();
       if (draftDom && draftDom.root.parentNode) draftDom.root.parentNode.removeChild(draftDom.root);
       draftDom = null; draftRoomActive = false; bonusRoomActive = false;

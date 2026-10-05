@@ -17,6 +17,9 @@
 
 import { isMuted, isDucked } from '../shared/audioMute.js';
 import { audioUrl, altAudioUrl } from '../shared/audioSrc.js';
+import { depthCutoffHz, depthDroneMul, FAIL_HZ, FAIL_CLOSE_S, FAIL_BACK_S } from '../game/feelAudio.js';
+
+const DEPTH_GLIDE_TC = 1.6;   // seconds; the depth tone is felt, never heard moving
 
 const GESTURES = ['pointerdown', 'touchstart', 'keydown', 'wheel'];
 
@@ -63,18 +66,62 @@ export function getMasterOut() {
   return master;
 }
 
-/** Ease the whole mix toward a biome color ('muffled' | 'underwater' | null). */
-export function setAudioColor(mode) {
-  const target = (mode && AUDIO_COLORS[mode]) || COLOR_OPEN_HZ;
+// The master filter has three owners and ONE rule: it rests at the LOWER of the
+// biome color and the depth tone, and a failure dip borrows it for a moment.
+//   color - the chamber's own muffle (setAudioColor, below)
+//   depth - the feel pass: deeper is warmer (setDepthTone)
+//   dip   - a detonation closes the mix and it opens back (failureDip)
+let colorHz = COLOR_OPEN_HZ;
+let depthHz = COLOR_OPEN_HZ;
+let depthDrone = 1;      // drone bed multiplier the scene reads each frame
+let dipTimer = 0;        // non-zero while a failure dip owns the filter
+const restHz = () => Math.min(colorHz, depthHz);
+
+function glideMaster(timeConstant) {
+  const target = restHz();
   if (target >= COLOR_OPEN_HZ && !master) return;   // nothing was colored: nothing to restore
   getMasterOut();
-  if (!master || !ctx) return;
+  if (!master || !ctx || dipTimer) return;          // a dip in flight lands on the rest value itself
   try {
     master.frequency.cancelScheduledValues(ctx.currentTime);
-    master.frequency.setTargetAtTime(target, ctx.currentTime, 0.35);
+    master.frequency.setTargetAtTime(target, ctx.currentTime, timeConstant);
   } catch (e) {
     try { master.frequency.value = target; } catch (e2) { /* ignore */ }
   }
+}
+
+/** Ease the whole mix toward a biome color ('muffled' | 'underwater' | null). */
+export function setAudioColor(mode) {
+  colorHz = (mode && AUDIO_COLORS[mode]) || COLOR_OPEN_HZ;
+  glideMaster(0.35);
+}
+
+/** Depth drives the mix: 0 = open, 1 = warmest. One slow glide, never a step. */
+export function setDepthTone(depth) {
+  depthHz = Math.min(COLOR_OPEN_HZ, depthCutoffHz(depth));
+  depthDrone = depthDroneMul(depth);
+  glideMaster(DEPTH_GLIDE_TC);
+}
+
+/** The drone bed's depth multiplier (1 at the surface). The scene smooths it. */
+export function depthDroneLevel() { return depthDrone; }
+
+/** Failure subtracts: close the mix fast, open it back slowly. Nothing is added. */
+export function failureDip(hz = FAIL_HZ, backSec = FAIL_BACK_S) {
+  getMasterOut();
+  if (!master || !ctx) return;
+  const rest = restHz();
+  if (hz >= rest) return;   // the chamber is already darker than the dip
+  try {
+    const f = master.frequency, t = ctx.currentTime;
+    const from = Math.max(40, Math.min(COLOR_OPEN_HZ, f.value));
+    f.cancelScheduledValues(t);
+    f.setValueAtTime(from, t);
+    f.exponentialRampToValueAtTime(hz, t + FAIL_CLOSE_S);
+    f.exponentialRampToValueAtTime(rest, t + FAIL_CLOSE_S + backSec);
+  } catch (e) { return; }
+  if (dipTimer) clearTimeout(dipTimer);
+  dipTimer = setTimeout(() => { dipTimer = 0; glideMaster(0.35); }, (FAIL_CLOSE_S + backSec) * 1000 + 30);
 }
 
 // Panel diagnostics: report without creating (getAudioCtx would spin one up).
@@ -91,6 +138,8 @@ export function closeAudioBus() {
   }
   if (ctx) { try { ctx.close(); } catch (e) { /* ignore */ } ctx = null; }
   master = null;   // died with its context
+  if (dipTimer) { clearTimeout(dipTimer); dipTimer = 0; }
+  colorHz = depthHz = COLOR_OPEN_HZ; depthDrone = 1;
   dead = false;
 }
 
