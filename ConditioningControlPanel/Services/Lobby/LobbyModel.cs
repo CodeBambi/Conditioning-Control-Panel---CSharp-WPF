@@ -11,13 +11,14 @@ namespace ConditioningControlPanel.Services.Lobby;
 public enum LobbyGame { Chess, Goon, Remote }
 
 /// <summary>Open = waiting for a player (Join). Playing = a game under way (Watch only where the
-/// game supports spectating; none does today, so no button).</summary>
+/// game supports spectating: a public chess match both players let people watch).</summary>
 public enum LobbyRowState { Open, Playing }
 
 /// <summary>
 /// One Lobby row. <see cref="Key"/> is what a Join sends: a chess <c>p_</c> id off
 /// <c>GET /v2/pbp/lobby</c>, a Goon room code off <c>/v2/goon/open</c>, or a Remote subject's
-/// unified id off <c>/v2/directory/list</c>. Null on rows nobody can join (Playing, presence).
+/// unified id off <c>/v2/directory/list</c>. On a watchable Playing chess row it is the match's
+/// <c>m_</c> id, what a Watch sends. Null on rows nobody can join or watch (presence).
 /// No host free text rides here except what the existing directory already shows.
 /// </summary>
 public sealed record LobbyRow
@@ -38,6 +39,8 @@ public sealed record LobbyRow
     public int InitialMs { get; init; }
     public int IncrementMs { get; init; }
     public int Moves { get; init; }
+    /// <summary>Playing chess: how many people watch it (names are never shown).</summary>
+    public int Watchers { get; init; }
     // goon
     public bool Song { get; init; }
     public int CardSec { get; init; }
@@ -46,8 +49,8 @@ public sealed record LobbyRow
     public string? RemoteTier { get; init; }
     public IReadOnlyList<string> Tags { get; init; } = Array.Empty<string>();
 
-    /// <summary>No game supports spectating yet (chess, Goon, Remote). Kept as a field so the
-    /// row template already has the seat for it.</summary>
+    /// <summary>A public chess match both seats let people watch: the row's Watch button opens
+    /// it as a spectator (<see cref="Key"/> = the match id). Goon and Remote never.</summary>
     public bool CanWatch { get; init; }
 
     public bool CanJoin => State == LobbyRowState.Open && !string.IsNullOrEmpty(Key);
@@ -55,7 +58,10 @@ public sealed record LobbyRow
 
 /// <summary>A chess lobby answer from <c>GET /v2/pbp/lobby</c>, reduced to what the Lobby shows.</summary>
 public sealed record PbpOpenSeat(string Id, string Name, int InitialMs, int IncrementMs, long SinceMs);
-public sealed record PbpPlayingGame(string White, string Black, int InitialMs, int IncrementMs, long StartedMs, int Moves);
+/// <summary>A chess match under way. <paramref name="MatchId"/> is set only when the server says
+/// it is <paramref name="Watchable"/> (public, and neither seat switched watching off).</summary>
+public sealed record PbpPlayingGame(string White, string Black, int InitialMs, int IncrementMs, long StartedMs, int Moves,
+    string? MatchId = null, bool Watchable = false, int Watchers = 0);
 public sealed record PbpLobbyReply(IReadOnlyList<PbpOpenSeat> Open, IReadOnlyList<PbpPlayingGame> Playing, bool Ok)
 {
     public static readonly PbpLobbyReply Empty = new(Array.Empty<PbpOpenSeat>(), Array.Empty<PbpPlayingGame>(), false);
@@ -119,13 +125,17 @@ public static class LobbyMerge
                     Friend = friendNames.Contains(s.Name),
                 });
             foreach (var p in chess.Playing)
+            {
+                bool watchable = p.Watchable && !string.IsNullOrEmpty(p.MatchId);
                 rows.Add(new LobbyRow
                 {
                     Game = LobbyGame.Chess, State = LobbyRowState.Playing, HostName = p.White, OpponentName = p.Black,
+                    Key = watchable ? p.MatchId : null, CanWatch = watchable, Watchers = Math.Max(0, p.Watchers),
                     InitialMs = p.InitialMs, IncrementMs = p.IncrementMs, Moves = p.Moves,
                     AgeSec = AgeSec(nowMs, p.StartedMs),
                     Friend = friendNames.Contains(p.White) || friendNames.Contains(p.Black),
                 });
+            }
         }
 
         if (goon != null)
@@ -216,6 +226,8 @@ public static class LobbySummary
                 if (row.InitialMs > 0) parts.Add(Clock(row.InitialMs, row.IncrementMs));
                 if (row.State == LobbyRowState.Playing && row.Moves > 0)
                     parts.Add(string.Format(CultureInfo.InvariantCulture, loc("lobby_moves"), row.Moves));
+                if (row.State == LobbyRowState.Playing && row.Watchers > 0)
+                    parts.Add(string.Format(CultureInfo.InvariantCulture, loc("lobby_watchers"), row.Watchers));
                 break;
             case LobbyGame.Goon:
                 if (row.Song) parts.Add(loc("lobby_goon_song"));

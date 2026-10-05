@@ -84,8 +84,15 @@ public sealed class PbpLobbyApi
                 if (playing.Count >= MaxRows) break;
                 if (t is not JObject g) continue;
                 var (init, inc) = Tc(g["time_control"]);
+                // Spectating (PBP_WATCH): a row is watchable only when the server says so AND hands a
+                // well-formed match id; anything else is an ordinary row with no Watch button.
+                var matchId = Str(g["match_id"]);
+                bool watchable = g["watchable"]?.Type == JTokenType.Boolean && g.Value<bool>("watchable")
+                                 && PieceByPiece.PbpWatchRules.IsMatchId(matchId);
+                int watchers = (int)Math.Clamp(Long(g["watchers"]), 0, 99999);
                 playing.Add(new PbpPlayingGame(Seat(g["white"]), Seat(g["black"]), init, inc,
-                    Long(g["started_ms"]), (int)Math.Max(0, Long(g["moves"]))));
+                    Long(g["started_ms"]), (int)Math.Max(0, Long(g["moves"])),
+                    watchable ? matchId : null, watchable, watchers));
             }
         return new PbpLobbyReply(open, playing, true);
     }
