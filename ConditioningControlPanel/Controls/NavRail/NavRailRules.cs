@@ -138,5 +138,67 @@ namespace ConditioningControlPanel.Controls.NavRail
             Models.MotionLevel.Reduced => fullMs / 2,
             _ => fullMs,
         };
+
+        // ============================== the coin (polish wave 10, depth) ==============================
+        // Every rail medallion is a COIN in a socket (Controls/Depth/DepthRules.cs is the law and
+        // owns every height, alpha and timing; these only say how the rail applies them).
+
+        /// <summary>The coin's contact shadow: a flat disc under the tile's foot, centred on the
+        /// tile's bottom edge and pushed down by <see cref="DepthRules.ShadowFor"/> (RaisedPx at
+        /// rest). Wider than tall so only its lower half shows below the coin.</summary>
+        internal const double CoinDiscWidth = 54, CoinDiscHeight = 12;
+
+        /// <summary>The coin's lip: a 1 px rim just INSIDE the 3 px hue ring (56 - 2 x 3 = 50), so
+        /// the ring keeps its job and the lip still catches the lamp.</summary>
+        internal const double CoinRimSize = 50, CoinRimRadius = 12;
+
+        /// <summary>The pointer tilt eases over the launcher tile's own 90 ms.</summary>
+        internal const int CoinTiltMs = 90;
+
+        /// <summary>Where a coin's face sits, px DOWN from rest: the shared travel rule.</summary>
+        internal static double CoinTravel(bool pressed, bool active, bool hovered) =>
+            Depth.DepthRules.TravelFor(enabled: true, pressed, active, hovered);
+
+        /// <summary>The contact shadow's offset below the face for a state; 0 means no shadow
+        /// (pressed or lit: the coin sits on the sheet).</summary>
+        internal static double CoinShadow(bool pressed, bool active, bool hovered) =>
+            Depth.DepthRules.ShadowFor(enabled: true, pressed, active, hovered);
+
+        /// <summary>The spring's overshoot point on release: past the target by ReleaseOvershootPx
+        /// in the direction of travel, then back. No travel, no overshoot.</summary>
+        internal static double CoinOvershoot(double from, double to) =>
+            to == from ? to : to + Math.Sign(to - from) * Depth.DepthRules.ReleaseOvershootPx;
+
+        /// <summary>The hover lean toward the pointer (the launcher recipe): nx, ny are the pointer
+        /// over the tile in -1..1; right side dips when the pointer is right, flipped by the
+        /// vertical half. Never past TiltDegrees.</summary>
+        internal static double CoinTilt(double nx, double ny)
+        {
+            nx = Math.Clamp(nx, -1, 1);
+            ny = Math.Clamp(ny, -1, 1);
+            return nx * -ny * Depth.DepthRules.TiltDegrees;
+        }
+
+        /// <summary>A lit coin sits in its socket and never leans; an idle one leans on hover
+        /// where the motion level and tier allow it.</summary>
+        internal static bool CoinTilts(bool active, Models.MotionLevel level, Models.PerformanceTier tier) =>
+            !active && Depth.DepthRules.TiltAllowed(level, tier);
+
+        /// <summary>The contact disc's stops, tinted by the row's hue: the DepthDropDisc shape
+        /// (ShadowAlpha at the centre, 0x5C at 60%, clear at the edge) in DepthRules.ShadowColor.</summary>
+        internal static (System.Windows.Media.Color Color, double Offset)[] CoinDiscStops(System.Windows.Media.Color hue) => new[]
+        {
+            (Depth.DepthRules.ShadowColor(hue), 0.0),
+            (Depth.DepthRules.ShadowColor(hue, 0x5C / 255.0), 0.6),
+            (Depth.DepthRules.ShadowColor(hue, 0), 1.0),
+        };
+
+        /// <summary>The rail's shadow on the page, tinted by the section: DepthRailShadow's 0xBF
+        /// at the rail's edge, clear at RailShadowPx.</summary>
+        internal static (System.Windows.Media.Color Color, double Offset)[] RailShadowStops(System.Windows.Media.Color hue) => new[]
+        {
+            (Depth.DepthRules.ShadowColor(hue, 0xBF / 255.0), 0.0),
+            (Depth.DepthRules.ShadowColor(hue, 0), 1.0),
+        };
     }
 }

@@ -51,6 +51,11 @@
                NavFocusRing  - 2px white ring for keyboard focus, never shown for the current row's
                                selection, so focus and "you are here" can never be confused.
              ChromeFx's SetNavIndicator also finds NavActiveBar/NavActiveFill by name; keep them.
+             DEPTH (polish wave 10): each medallion is a COIN. NavRail.cs BuildNavCoin adds, around
+             the authored tile, a hue-tinted contact disc under it, DepthCoinDish over it (under the
+             art), DepthPressedShade + a 1px lip (DepthCoinRim / DepthPressedBevel) under the ring.
+             The row's content Grid travels (DepthRules.TravelFor: hover lifts, lit sits in its
+             socket, press drops and springs) and leans toward the pointer; the template is untouched.
              BorderBrush on a row IS its hue (bar, tile ring, glow). Hues stay off gold (T1),
              cyan (T2), red (Circe) and mint (credit). -->
         <Style x:Key="NavSectionButton" TargetType="Button">
@@ -125,6 +130,12 @@
             <Setter Property="BorderBrush" Value="#E6101020"/>
             <Setter Property="BorderThickness" Value="1.5"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
+            <!-- Depth (polish wave 10): a raised chip, lamp top-left, so its shadow falls down-right. -->
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#06020F" Direction="315" ShadowDepth="1.5" BlurRadius="3" Opacity="0.62"/>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -784,6 +795,12 @@
                 </StackPanel>
             </Grid>
         </Border>
+        <!-- THE RAIL'S SHADOW (depth, polish wave 10): the rail stands above the page, so it throws
+             DepthRules.RailShadowPx of shade onto the page at its right edge. Never hit-testable;
+             NavRail.cs PaintDepthRail tints it with the section hue (neutral DepthRailShadow until then). -->
+        <Rectangle x:Name="NavRailShadow" Grid.Row="1" Grid.RowSpan="5" Grid.Column="1"
+                   Width="6" HorizontalAlignment="Left" Panel.ZIndex="59"
+                   Fill="{DynamicResource DepthRailShadow}" IsHitTestVisible="False"/>
 
         <!-- THE HUD BAND (nav polish wave 2, 2026-10-06): the header row and the XP row read as one
              zone. Paint only: 20% black over the window ground (the page colour mixed 20% toward
