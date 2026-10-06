@@ -38,124 +38,49 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
-        <!-- ===================== Phase 1: the nav rail =====================
-             New style keys on purpose. "TabButton"/"TabButtonActive" are ALSO used by
-             the quest sub-tabs and the roadmap track buttons (MainWindow.Roadmap.cs,
-             QuestsTabView.xaml), so restyling them for a vertical rail would silently
-             restyle the Quests tab.
-
-             Every rail template exposes two parts the code drives directly:
-               NavActiveBar  - the 3px accent bar on the row's left edge
-               NavActiveFill - the tinted row background
-             ApplyNavActiveGlow (MainWindow.ChromeFx.cs) finds them by name; it replaced
-             the old outer DropShadow, which only ever existed because the 32px header
-             strip had no room for a real indicator.
-
-             The row shape is Grid > [fill][hover][bar][ContentPresenter] and the button's
-             Content stays a Panel holding an Image, because NudgeNavIcon's hover nudge
-             hard-requires that shape (ChromeFx.cs:450-486).
-
-             Height 30 + Margin 0,1 = the 32px row pitch the accordion measures with
-             (NavEntryRowHeight in MainWindow.TabNavigation.cs). Change one, change both. -->
-        <Style x:Key="NavRailButton" TargetType="Button">
-            <!-- Background is the row TINT (used by both the active fill and the hover
-                 wash), never a painted background: the template's own Grid takes the
-                 hit-test area instead. -->
-            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="Margin" Value="0,1"/>
-            <!-- 21 centers a 14px entry icon in the 56px collapsed strip (21+14+21). -->
-            <Setter Property="Padding" Value="21,0,8,0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Grid Background="Transparent">
-                            <Border x:Name="NavActiveFill" Background="{TemplateBinding Background}"
-                                    CornerRadius="0,6,6,0" Opacity="0" IsHitTestVisible="False"/>
-                            <Border x:Name="NavHover" Background="{TemplateBinding Background}"
-                                    CornerRadius="0,6,6,0" Opacity="0" IsHitTestVisible="False"/>
-                            <Border x:Name="NavActiveBar" Width="3" HorizontalAlignment="Left"
-                                    Background="{TemplateBinding BorderBrush}" CornerRadius="0,2,2,0"
-                                    Visibility="Collapsed" IsHitTestVisible="False"/>
-                            <ContentPresenter Margin="{TemplateBinding Padding}"
-                                              HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="NavHover" Property="Opacity" Value="0.6"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- ============ Door header: the MEDALLION row (Velvet Kit, UI polish 2) ============
-             2026-08-11 emoji purge: door icons are painted art thumbnails
-             (Resources/nav/door_*.png, 64x64 native). 2026-08-12 (CONTRACT.md "Nav rail
-             interaction spec"): the row became a medallion tile that grows with the rail -
-             44px r12 tile with a 40px icon while the rail is shut, 50px tile with a 46px icon
-             and a big centred name once it opens. Every size in that sentence is animated
-             from MainWindow.NavRail.cs (which also says why the open tile is 50 and not the
-             contract's 64); nothing here animates itself.
-
-             2026-08-13 (owner: the door art is too small and sits in a grey ring): the icon
-             went 28/44 -> 40/46 inside the SAME tile, and the tile's permanent GlassBorder
-             hairline became Transparent. The 1px edge is still there and still 1px - it is
-             what RefreshNavDoorActive paints the door's hue on - it just carries no colour
-             until you are standing in that door. Nothing about the row's size moved: the tile
-             is 44/56, the row is 64 tall, the rail is 56 wide, the hit target is the whole row.
-
-             The row is a FIXED 64px tall in BOTH states on purpose: only the tile inside it
-             grows. Animating the row height as well would re-layout the whole rail (and shove
-             the open accordion around) on every hover, for a change nobody can see once the
-             doors are spread out by the distribution grid below.
-
-             Template parts that are API, not decoration:
-               NavActiveBar  - 3px hue bar on the row's left edge
-               NavActiveFill - tinted row background
-             ApplyNavActiveGlow (MainWindow.ChromeFx.cs) finds BOTH by name. The bar paints
-             {TemplateBinding BorderBrush}, so a door's BorderBrush IS its hue: set it once on
-             the Button and the bar, the active tile ring, the label colour and the radial glow
-             all follow (NavRail.cs reads the same brush back to build the glow).
-
-             The ContentPresenter stretches, so the HorizontalContentAlignment flip
-             SetNavRailExpanded does is inert here - the icon is centred by the content grid's
-             fixed 56px first column instead (56 = NavRailCollapsedWidth). Same story as the
-             entry rows, which centre theirs with a 21px padding. -->
-        <Style x:Key="NavDoorButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
+        <!-- ===================== the SECTION RAIL (nav rework, 2026-10-06) =====================
+             Seven always-labelled section rows + a Settings gear, inside the 96px canvas column.
+             No flyout, no door rows, no hover-open: a row is the medallion tile with the section
+             name UNDER it. State lives in the template parts (MainWindow.NavRail.cs drives them):
+               NavHover      - +8% white tint while the pointer is on the row
+               NavActiveFill - the section's tint behind the current row (the "filled tile")
+               NavActiveBar  - 3px bar on the left edge in the section hue (BorderBrush)
+               NavFocusRing  - 2px white ring for keyboard focus, never shown for the current row's
+                               selection, so focus and "you are here" can never be confused.
+             ChromeFx's SetNavIndicator also finds NavActiveBar/NavActiveFill by name; keep them.
+             BorderBrush on a row IS its hue (bar, tile ring, glow). Hues stay off gold (T1),
+             cyan (T2), red (Circe) and mint (credit). -->
+        <Style x:Key="NavSectionButton" TargetType="Button">
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
             <Setter Property="Height" Value="64"/>
-            <Setter Property="Margin" Value="0,2"/>
-            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="ToolTipService.InitialShowDelay" Value="500"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Grid Background="Transparent">
                             <Border x:Name="NavActiveFill" Background="{TemplateBinding Background}"
-                                    CornerRadius="0,12,12,0" Opacity="0" IsHitTestVisible="False"/>
-                            <Border x:Name="NavHover" Background="{TemplateBinding Background}"
-                                    CornerRadius="0,12,12,0" Opacity="0" IsHitTestVisible="False"/>
-                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                    CornerRadius="0,12,12,0" Margin="0,0,4,0" Opacity="0" IsHitTestVisible="False"/>
+                            <Border x:Name="NavHover" Background="#14FFFFFF"
+                                    CornerRadius="0,12,12,0" Margin="0,0,4,0" Opacity="0" IsHitTestVisible="False"/>
+                            <ContentPresenter Margin="0,2,0,2"
                                               HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-                            <!-- LAST, unlike the entry rows: the open medallion is 56px wide in a
-                                 56px column, so it sits ON the 3px bar. Behind the content the bar
-                                 would simply vanish on the one row that needs it. -->
-                            <Border x:Name="NavActiveBar" Width="3" HorizontalAlignment="Left"
+                            <Border x:Name="NavFocusRing" BorderBrush="#E6FFFFFF" BorderThickness="2"
+                                    CornerRadius="10" Margin="6,0,8,0" Visibility="Collapsed" IsHitTestVisible="False"/>
+                            <Border x:Name="NavActiveBar" Width="3" HorizontalAlignment="Left" Margin="0,10"
                                     Background="{TemplateBinding BorderBrush}" CornerRadius="0,2,2,0"
                                     Visibility="Collapsed" IsHitTestVisible="False"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="NavHover" Property="Opacity" Value="0.6"/>
+                                <Setter TargetName="NavHover" Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="NavFocusRing" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -163,116 +88,37 @@
             </Setter>
         </Style>
 
-        <!-- The big door name. Width 160 = the open rail (236) minus the 56px medallion column
-             minus the 10px lead-in, and it is FIXED so the Viewbox inside never re-scales the
-             text mid-flyout: the label slides up and fades in at a constant size while the
-             rail's own ClipToBounds reveals it. Opacity 0 is the shut state; NavRail.cs owns
-             this property (and a TranslateTransform it installs at cache time) from Loaded on.
-             Centred both ways since 2026-08-13 (owner: "bigger and centered"): the host sits
-             mid-row and the name's mod-glow/shimmer fx (built per row in CacheNavDoorRows -
-             a Style Effect would be one shared instance, the stagger's old enemy) breathe
-             around a centred baseline instead of a bottom-left one.
-
-             Tag is API: CacheNavRailParts uses it to tell "a label I drive per row, with a
-             stagger" apart from "a label the global collapse fade owns" (every entry label).
-             No letter-spacing: WPF's TextBlock has no CharacterSpacing (that is a WinUI
-             property) and faking tracking by injecting hair spaces breaks CJK shaping and the
-             9 shipped locales, so the contract's ~1.5 tracking is carried by 21px/ExtraBold. -->
-        <Style x:Key="NavDoorLabelHost" TargetType="Grid">
-            <Setter Property="Tag" Value="navdoorlabel"/>
-            <Setter Property="Width" Value="160"/>
-            <Setter Property="HorizontalAlignment" Value="Left"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="10,0,0,0"/>
-            <Setter Property="Opacity" Value="0"/>
-        </Style>
-
-        <Style x:Key="NavDoorLabelText" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="21"/>
+        <!-- The section name under the tile: small ExtraBold caps (NavRail.cs upper-cases it
+             through the mod-aware binding), full contrast at rest, never faded. -->
+        <Style x:Key="NavSectionLabel" TargetType="TextBlock">
+            <Setter Property="Tag" Value="navsectionlabel"/>
+            <Setter Property="FontSize" Value="10.5"/>
             <Setter Property="FontWeight" Value="ExtraBold"/>
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="TextWrapping" Value="NoWrap"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="MaxWidth" Value="86"/>
+            <Setter Property="Margin" Value="0,1,0,0"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
 
-        <Style x:Key="NavEntryButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}"/>
-
-        <!-- Brand-accented entries. Same template, different accent: Deeper violet,
-             Available Subjects neon purple, Profile Discord blue, Premium Patreon red -
-             the four identities the old header strip carried in inline styles. -->
-        <Style x:Key="NavEntryButtonDeeper" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
-            <Setter Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
-        </Style>
-
-        <Style x:Key="NavEntryButtonNeon" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
-            <Setter Property="Background" Value="{DynamicResource NeonPurpleTransparent20Brush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource NeonPurpleBrush}"/>
-        </Style>
-
-        <Style x:Key="NavEntryButtonDiscord" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
-            <Setter Property="Background" Value="#335865F2"/>
-            <Setter Property="BorderBrush" Value="#5865F2"/>
-            <Setter Property="Foreground" Value="#8E9BFF"/>
-        </Style>
-
-        <Style x:Key="NavEntryButtonPatreon" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
-            <Setter Property="Background" Value="#33FF424D"/>
-            <Setter Property="BorderBrush" Value="#FF424D"/>
-            <Setter Property="Foreground" Value="#FF8A91"/>
-        </Style>
-
-        <!-- ============ the PREMIUM tag on a rail entry (Mort's re-tree, LAYER A) ============
-             A ~26px gold pill that rides after an entry's label and says "this door is sold".
-             MainWindow.NavPremiumTags.cs owns WHICH rows wear one and when it goes away; this
-             is only the shape.
-
-             WHY A GLYPH AND NOT THE WORD "PREMIUM". An entry row spends 21 (left padding) + 14
-             (icon) + 6 (icon margin) + 8 (right padding) = 49px before its text starts, and the
-             open rail is 236 (NavRailExpandedWidth) - so the tag has to fit in 187px MINUS the
-             label. The worst premium label in the nine shipped locales is es "Entrenador de
-             Parpadeo" at ~122px, which leaves ~65. A word pill at FontSize 8 costs ~52 of that,
-             i.e. ~13px of headroom against font metrics and the next translation; the star costs
-             ~26 and clears every locale with room to spare. Rail rows measure at INFINITE width
-             (see NavRailExpandedWidth's note on why TextTrimming cannot save one), so an overrun
-             is not a wider rail - it is a tag silently cut off by the rail's ClipToBounds, which
-             is precisely the failure a tag must not have.
-
-             The star is also already the rail's premium mark: BtnPatreonExclusives has led with
-             one since Phase 1, and these rows ARE that shelf's roster (Models/ExclusiveFeature.cs).
-
-             Gold is LITERAL, exactly like Tier1GoldBorderBrush in Resources/Theme/Brushes.xaml
-             and for the same two reasons: a tier mark is commerce and must not take colour from
-             the mod chain, and a Window.Resources StaticResource reaching into a merged App
-             dictionary is the BAML EndOfStream trap. -->
-        <Style x:Key="NavEntryPremiumTag" TargetType="Border">
-            <Setter Property="Background" Value="#26F0C24B"/>
-            <Setter Property="BorderBrush" Value="#66F0C24B"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="3"/>
-            <Setter Property="Padding" Value="4,0"/>
-            <Setter Property="Margin" Value="6,0,0,0"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <!-- The ToolTip is NOT here. It is the only place the tag gets to explain itself,
-                 so it has to be the localized one that re-reads on a language switch - and
-                 {loc:Str} in a Setter.Value is a Binding in a Style setter: legal WPF, but
-                 with no precedent anywhere in this codebase, and the rail (which has blanked
-                 itself before) is not where to go find out. Each pill carries it as an
-                 ordinary attribute instead - the path this file already uses hundreds of
-                 times. -->
-            <!-- Collapsed AS AUTHORED: a rail whose Loaded hook never ran (InitializeNavRail
-                 catches and degrades to the authored state) must show no tags at all rather
-                 than tag every row - "locked" is the one thing a rail may not say wrongly. -->
+        <!-- The count pill on a row's tile corner (NavBadges). Collapsed at 0, "9+" past nine. -->
+        <Style x:Key="NavSectionBadge" TargetType="Border">
+            <Setter Property="Tag" Value="navbadge"/>
             <Setter Property="Visibility" Value="Collapsed"/>
-        </Style>
-
-        <Style x:Key="NavEntryPremiumTagText" TargetType="TextBlock">
-            <Setter Property="Text" Value="★"/>
-            <Setter Property="FontSize" Value="9"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="#F0C24B"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="Margin" Value="0,0,16,0"/>
+            <Setter Property="MinWidth" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="BorderBrush" Value="#E6101020"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
     </Window.Resources>
 
@@ -505,42 +351,19 @@
             </Grid>
         </Border>
 
-        <!-- ===================== NAV RAIL (canvas column 0) =====================
-             Six doors + a pinned Settings door. A door header navigates to the door's
-             default tab AND expands its entry list; exactly one door is open at a time
-             (MainWindow.TabNavigation.cs: NavDoorMap / SetExpandedDoor / ExpandDoorForTab).
-
-             The entry buttons are the ORIGINAL header tab buttons, moved here whole -
-             same x:Name, Click handler, Tag, tooltip, icon-inside-a-Panel content shape
-             and (Programs/Deeper) first-visit pulse ScaleTransform. Only the Style changed.
-
-             Collapsed doors keep Visibility=Visible and animate Height to 0 instead, so an
-             entry in a shut door still measures and still maps through TransformToVisual
-             (a Collapsed anchor maps nowhere). Where it maps is meaningless, though - every
-             entry of a shut door lands on one zero-height strip - so EventFx bursts and the
-             first-visit pulses route through MainWindow.NavAnchorForTab, which hands back
-             the DOOR HEADER while that door is shut. -->
-        <!-- ColumnSpan=2 + left alignment + a hard Width is what makes the open rail a flyout
-             OVER the page rather than a column that shoves it. ZIndex lifts it above the page
-             content; ClipToBounds keeps the labels inside the 56px strip while it is shut.
-             The Width here is the COLLAPSED width and is owned by MainWindow.NavRail.cs from
-             the first Loaded onwards.
-
-             HorizontalAlignment=Left is also what creates the 40px gutter: column 0 is 96
-             wide now, and this Border refuses to fill it, so the first 40px the flyout grows
-             land on dead canvas instead of on the page. Do NOT switch this to Stretch. -->
-        <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2"
-                HorizontalAlignment="Left" Width="56" Panel.ZIndex="60" ClipToBounds="True"
+        <!-- ===================== THE SECTION RAIL (canvas column 0, nav rework 2026-10-06) =====================
+             Always labelled, inside the 96px column, never over the page and never scrolling at
+             the 901px canvas height. Seven sections in NavSections.Order (frozen by a test), the
+             Settings gear pinned at the foot. A row opens its section's last tab
+             (AppSettings.NavLastTabBySection, written by the tab strip) or its default tab; the
+             rows a door used to fold out now live as pills on the page (SectionTabStrip).
+             Rows keep the medallion identity: ImgDoor* art (mods re-art them through
+             ApplyDoorArt, nav/door_*.png), the hue halo, ChromeFx's hover nudge (the Viewbox
+             stays a DIRECT child of the row's Grid) and the possession reroute seam.
+             Panel.ZIndex is kept for PageAdornerScopeTests; nothing overlays the page any more. -->
+        <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0"
+                HorizontalAlignment="Stretch" Panel.ZIndex="60" ClipToBounds="True"
                 BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="0,0,1,0">
-            <!-- Static depth gradient (was flat PanelBgBrush): top matches the panel tone the
-                 title bar hands off, sinking slightly by the bottom so the rail reads as its own
-                 column instead of a stripe of the same slab every panel uses. Not animated.
-
-                 2026-08-12 (Velvet Kit): the three hand-mixed hexes were #262649 / #222240 /
-                 #1C1C36 - i.e. ElevatedSurface and PanelBg with a 4-unit lift on the top stop.
-                 They are the tokens now, so a mod that repaints the palette repaints the rail
-                 too instead of leaving one lilac column behind. DynamicResource on the *Color*
-                 keys, which is how Brushes.xaml itself does it. -->
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                     <GradientStop Color="{DynamicResource ElevatedSurface}" Offset="0"/>
@@ -548,41 +371,23 @@
                     <GradientStop Color="{DynamicResource PanelBg}" Offset="1"/>
                 </LinearGradientBrush>
             </Border.Background>
-            <Grid Margin="0,10,0,10">
+            <Grid Margin="0,8,0,8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- THE SEARCH PILL. The Ctrl+K palette existed for a full release without a
-                     single pixel advertising it; this is that pixel. Clicking it routes through
-                     the exact same Toggle the InputBindings entry in MainWindow.xaml.cs uses, so
-                     the pill and the shortcut can never open two different things.
-
-                     Deliberately NOT a door medallion: no NavDoorMap row, no four-child contract,
-                     and no 40px Grid.Column="0" Viewbox (NavRailFlyoutTests counts those - keep it
-                     that way). It is a plain pill whose parts ride the rail's existing machinery:
-                     - the lens glyph is a TextBlock tagged "navrailstatic", the one tag
-                       CacheNavRailParts (MainWindow.NavRail.cs) exempts from the global label
-                       fade, so it stays visible while the rail is shut;
-                     - the name and the keycap text are ordinary rail TextBlocks, so the same
-                       global fade that reveals every other label reveals them (authored Opacity 0
-                       = the shut state, and what a failed InitializeNavRail leaves on screen);
-                     - the keycap's chrome is a Border, which the fade walk cannot drive, so its
-                       Opacity is BOUND to the name's - one animation, two riders.
-                     Sized for the shut rail: 56 column - 8px margins - 1px borders = a 40x30 pill
-                     with the lens centred in its fixed 38px first column. -->
                 <StackPanel Grid.Row="0">
                 <!-- BACK: returns to the tab shown before this one (MainWindow.TabHistory.cs).
-                     Collapsed until there is somewhere to go back to. Same shut-rail recipe as the
-                     search pill below: the arrow is "navrailstatic", the label fades with the rail. -->
-                <Button x:Name="BtnNavBack" Height="26" Margin="8,0,8,6" Visibility="Collapsed"
+                     Collapsed until there is somewhere to go back to. -->
+                <Button x:Name="BtnNavBack" Height="24" Margin="6,0,7,4" Visibility="Collapsed"
                         Cursor="Hand" Click="BtnNavBack_Click"
+                        ToolTipService.InitialShowDelay="500"
                         ToolTip="{loc:Str tooltip_nav_back}">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="BackPillBg" CornerRadius="13" Background="Transparent"
+                            <Border x:Name="BackPillBg" CornerRadius="12" Background="Transparent"
                                     BorderBrush="Transparent" BorderThickness="1">
                                 <ContentPresenter/>
                             </Border>
@@ -597,25 +402,22 @@
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="38"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Tag="navrailstatic" Text="&#x2190;" FontSize="16" FontWeight="Bold"
-                                   Foreground="{DynamicResource TextLightBrush}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
-                        <TextBlock Grid.Column="1" Text="{loc:Str nav_back_label}" FontSize="12" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"
-                                   Opacity="{Binding Opacity, ElementName=TxtNavSearchLabel}"/>
-                    </Grid>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="&#x2190;" FontSize="13" FontWeight="Bold" Margin="0,-2,4,0"
+                                   Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str nav_back_label}" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
                 </Button>
-                <Button x:Name="BtnNavSearch" Height="30" Margin="8,0,8,10"
+                <!-- THE SEARCH PILL: the same Toggle the Ctrl+K InputBinding uses. The keycap moved
+                     into the tooltip; the 96px rail has room for the lens and the word only. -->
+                <Button x:Name="BtnNavSearch" Height="28" Margin="6,0,7,8"
                         Cursor="Hand" Click="BtnNavSearch_Click"
+                        ToolTipService.InitialShowDelay="500"
                         ToolTip="{loc:Str tooltip_nav_search}">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="SearchPillBg" CornerRadius="15"
+                            <Border x:Name="SearchPillBg" CornerRadius="14"
                                     Background="#14FFFFFF"
                                     BorderBrush="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1">
@@ -629,873 +431,291 @@
                                 <Trigger Property="IsPressed" Value="True">
                                     <Setter TargetName="SearchPillBg" Property="Background" Value="#33FF69B4"/>
                                 </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="SearchPillBg" Property="BorderBrush" Value="#E6FFFFFF"/>
+                                </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="38"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <helpers:EmojiTextBlock Grid.Column="0" Tag="navrailstatic" Text="🔍" FontSize="13"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtNavSearchLabel" Grid.Column="1" Opacity="0"
-                                   Text="{loc:Str nav_search_label}" FontSize="13" FontWeight="SemiBold"
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <helpers:EmojiTextBlock Text="🔍" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtNavSearchLabel"
+                                   Text="{loc:Str nav_search_label}" FontSize="11" FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextLightBrush}"
-                                   VerticalAlignment="Center" TextWrapping="NoWrap"/>
-                        <Border Grid.Column="2" CornerRadius="6" Margin="0,0,9,0" Padding="6,1"
-                                VerticalAlignment="Center" IsHitTestVisible="False"
-                                Background="#22000000" BorderThickness="1"
-                                BorderBrush="{DynamicResource PanelAccentBrush}"
-                                Opacity="{Binding Opacity, ElementName=TxtNavSearchLabel}">
-                            <TextBlock Text="{loc:Str nav_search_keys}" Opacity="0" FontSize="11"
-                                       Foreground="{DynamicResource TextMutedBrush}"
-                                       TextWrapping="NoWrap"/>
-                        </Border>
-                    </Grid>
+                                   VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
                 </Button>
                 </StackPanel>
 
-                <!-- VerticalScrollBarVisibility authors the COLLAPSED state, like every other
-                     rail part: Hidden, because a WPF vertical scrollbar is ~17px and the shut
-                     rail is 56px of which the medallion tile is 44 - the bar does not sit BESIDE
-                     the icons, it lands on top of the right third of every one of them, and once
-                     the extent clears the viewport by even a rounding pixel (the content grid's
-                     MinHeight is bound to the viewport, under a Viewbox at a fractional scale) it
-                     never goes away again. Reported on Discord against v6.8.6 as a permanent
-                     scrollbar drawn over the collapsed rail.
-
-                     Hidden, not Disabled: the wheel still scrolls, so a rail that really does
-                     overflow while shut is still reachable. MainWindow.NavRail.cs hands it back
-                     to Auto while the flyout is out, where 236px has room to show a bar. -->
-                <ScrollViewer x:Name="NavRailScroll" Grid.Row="1" VerticalScrollBarVisibility="Hidden"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <!-- ============ TOP-PACKED DOORS (Velvet Kit, UI polish 2) ============
-                         Six Auto door rows with fixed SPACER rows between them, all pooled at
-                         the top: row 0 is 0, the five gaps between doors are 8, and the LAST
-                         spacer is the only star, so every bit of slack lands at the bottom.
-
-                         This replaces the space-evenly version of this grid (seven star
-                         spacers). Owner call 2026-08-12: even distribution pushed the
-                         medallions far enough apart that the rail read as six unrelated
-                         buttons instead of one menu. Skewed to the top is explicitly fine;
-                         the doors just have to keep opening big and staying functional, which
-                         is all NavRail.cs hover work and is untouched by row heights.
-
-                         Pitch: each door carries Margin 0,2 around a 64px row = 68, plus the
-                         8px spacer = ~76px between medallion centres.
-
-                         Why the spacers are their own rows instead of margin on the doors: the
-                         doors stay Auto rows, and an Auto row is guaranteed its measured height
-                         at arrange time where a star row is not (a star row only keeps what a
-                         MEASURE recorded as its minimum - exactly the case this grid is in the
-                         middle of while an accordion tweens). Empty spacers can be squeezed
-                         without losing anything, so overflow degrades trivially: the bottom
-                         star collapses to 0, then the fixed gaps are all that is left, and when
-                         the doors plus an open accordion still exceed the viewport this
-                         ScrollViewer takes over. No mode switch, no code.
-
-                         MinHeight is what makes the bottom star resolve to anything: a
-                         ScrollViewer measures its content at infinite height, where star rows
-                         resolve to nothing, so without this the grid would be exactly as tall
-                         as its content. Binding it to the viewport (never to the extent - that
-                         WOULD be a layout cycle) makes the grid fill the column when the
-                         content is short and overflow it when it is not.
-
-                         Headroom, in fixed canvas units (the whole UI is a Viewbox over a
-                         1585x901 canvas, so this NEVER changes with the window size): the
-                         column is ~760px minus the 40px search pill row above = ~720, the six
-                         68px door rows plus five 8px gaps are 448, and the widest accordion
-                         (Play, 8 entries x NavEntryRowHeight 32) is 256 - 704 total. A door
-                         would need ~9 entries before the rail starts scrolling. -->
-                    <Grid MinHeight="{Binding ViewportHeight, ElementName=NavRailScroll}">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="0"/>
-                            <RowDefinition Height="Auto"/>   <!-- 1: home -->
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 3: studio -->
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 5: companion -->
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 7: play -->
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 9: you -->
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>   <!-- 11: library -->
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-
-                        <!-- ===== HOME (default: settings) ===== -->
-                        <StackPanel Grid.Row="1">
-                        <Button x:Name="DoorHome" Tag="home" Style="{StaticResource NavDoorButton}"
-                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Home door"
-                                Background="#22FF69B4" BorderBrush="#FF69B4"
-                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_home}">
-                            <!-- THE MEDALLION. Child order and TYPES are API: NavRail.cs's
-                                 CacheNavDoorRows picks the glow (Ellipse), the tile (Border),
-                                 the icon (Viewbox) and the label host (Tag="navdoorlabel") out
-                                 of this panel BY TYPE, and ChromeFx's NudgeNavIcon takes the
-                                 first "Image or Viewbox" among the direct children as the icon
-                                 to nudge on hover. So: the icon Viewbox stays a direct child,
-                                 and the label's Viewbox stays nested inside its host grid, or
-                                 the hover nudge starts scaling the door's name.
-
-                                 The icon is a Viewbox around the art at its native 64px rather
-                                 than a resized Image because a Clip does not scale with Width:
-                                 the Viewbox's own scale carries the rounded clip with it, and
-                                 it leaves the Image's RenderTransform free for the nudge.
-
-                                 BorderBrush (not Background) is the door's hue - see the style. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <!-- 56 = the collapsed rail, so the tile is centred on the
-                                         icon strip and does not move sideways when it grows. -->
-                                    <ColumnDefinition Width="56"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                         IsHitTestVisible="False"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="46" Height="46"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <!-- x:Name = the handle ApplyDoorArt (MainWindow.NavRail.cs) uses to
-                                         re-point the art at the active mod's override. The literal
-                                         Source stays: it is what renders before that call, and what
-                                         stays on screen if the resolver comes back empty. -->
-                                    <Image x:Name="ImgDoorHome"
-                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
-                                           Source="pack://application:,,,/Resources/nav/door_home.png">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
-                                        </Image.Clip>
-                                    </Image>
-                                </Viewbox>
-                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Str nav_door_home}"
-                                                   Style="{StaticResource NavDoorLabelText}"/>
-                                    </Viewbox>
-                                </Grid>
-                            </Grid>
-                        </Button>
-                        <!-- The one door open at startup, so it keeps auto height in markup. -->
-                        <Border x:Name="DoorPanelHome" ClipToBounds="True">
-                            <StackPanel x:Name="DoorEntriesHome">
-                                <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnSettings_Click" ToolTip="{loc:Str tooltip_dashboard}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_dashboard}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-
-                        </StackPanel>
-
-                        <!-- ===== STUDIO (default: presets) ===== -->
-                        <StackPanel Grid.Row="3">
-                        <Button x:Name="DoorStudio" Tag="studio" Style="{StaticResource NavDoorButton}"
-                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Studio door"
-                                Background="#22FF7E6B" BorderBrush="#FF7E6B"
-                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_studio}">
-                            <!-- Medallion: see DoorHome for what the four children are for. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="56"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                         IsHitTestVisible="False"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="46" Height="46"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image x:Name="ImgDoorStudio"
-                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
-                                           Source="pack://application:,,,/Resources/nav/door_studio.png">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
-                                        </Image.Clip>
-                                    </Image>
-                                </Viewbox>
-                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Str nav_door_studio}"
-                                                   Style="{StaticResource NavDoorLabelText}"/>
-                                    </Viewbox>
-                                </Grid>
-                            </Grid>
-                        </Button>
-                        <Border x:Name="DoorPanelStudio" ClipToBounds="True" Height="0" IsHitTestVisible="False">
-                            <StackPanel x:Name="DoorEntriesStudio">
-                                <!-- Phase 4: the effects rack. First entry, so it is what the
-                                     Studio door header lands on (NavDoorMap default = "studio"). -->
-                                <Button x:Name="BtnNavStudio" Tag="Studio" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavStudio_Click" ToolTip="{loc:Str st4_nav_studio_tip}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🎚️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str st4_nav_studio}" VerticalAlignment="Center"/>
-                                        <!-- v6.8.0 NEW pill: remove in 6.9 -->
-                                        <!-- Literal properties only, no StaticResource: a cross-file style
-                                             reference here is the BAML EndOfStream trap. Sized to the rail's
-                                             own BETA pill (BtnPrograms) and kept narrow because the flyout is
-                                             a hard 176px - see NavRailExpandedWidth's label-floor arithmetic. -->
-                                        <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
-                                                Padding="3,0" Background="#33FF69B4"
-                                                BorderBrush="#FF69B4" BorderThickness="1">
-                                            <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
-                                                       FontWeight="Bold" Foreground="#FF8FC7"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnPresets" Tag="Presets" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnPresets_Click" ToolTip="{loc:Str tooltip_presets_sessions}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_presets}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavHaptics" Tag="Haptics" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavHaptics_Click" ToolTip="{loc:Str tooltip_nav_haptics}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📳', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_haptics}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumHaptics" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <!-- JUST DROP (owner decision, 2026-09-11): a creator tool, not a game, so its
-                                     row is here at the tail of the Studio door and the Play rack card is gone. Still a
-                                     WINDOW: ShowTab("justdrop") intercepts the key, owns the withheld refusal
-                                     and launches the shop - the same path the Exclusives shelf, the dashboard
-                                     tease tile and the Ctrl+K row take. Collapsed by default: the row is never
-                                     shown by markup, only by ApplyJustDropDoorVisibility once the server has
-                                     opened the door for this account. The pill wears the Tier 2 tooltip. -->
-                                <Button x:Name="BtnNavJustDrop" Tag="JustDrop" Style="{StaticResource NavEntryButton}"
-                                        Visibility="Collapsed"
-                                        Click="BtnNavJustDrop_Click" ToolTip="{loc:Str jd_door_title}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumJustDrop" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_lab_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-
-                        </StackPanel>
-
-                        <!-- ===== COMPANION (default: companion) ===== -->
-                        <StackPanel Grid.Row="5">
-                        <Button x:Name="DoorCompanion" Tag="companion" Style="{StaticResource NavDoorButton}"
-                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Companion door"
-                                Background="#22E85CE0" BorderBrush="#E85CE0"
-                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_companion}">
-                            <!-- Medallion: see DoorHome for what the four children are for. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="56"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                         IsHitTestVisible="False"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="46" Height="46"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image x:Name="ImgDoorCompanion"
-                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
-                                           Source="pack://application:,,,/Resources/nav/door_companion.png">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
-                                        </Image.Clip>
-                                    </Image>
-                                </Viewbox>
-                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Str nav_door_companion}"
-                                                   Style="{StaticResource NavDoorLabelText}"/>
-                                    </Viewbox>
-                                </Grid>
-                            </Grid>
-                        </Button>
-                        <Border x:Name="DoorPanelCompanion" ClipToBounds="True" Height="0" IsHitTestVisible="False">
-                            <StackPanel x:Name="DoorEntriesCompanion">
-                                <Button x:Name="BtnCompanion" Tag="Companion" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnCompanion_Click" ToolTip="{loc:Str tooltip_companion_settings}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_companion}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavBambiTakeover" Tag="Takeover" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavBambiTakeover_Click" ToolTip="{loc:Str tooltip_nav_takeover}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_takeover}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumTakeover" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavSheListening" Tag="SheListening" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavSheListening_Click" ToolTip="{loc:Str tab_shelistening}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🎙️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_shelistening}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumSheListening" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <!-- Awareness finally gets a real button: BtnAwareness_Click has been an
-                                     orphan handler (MainWindow.AccountShell.cs) with no XAML owner. -->
-                                <Button x:Name="BtnNavAwareness" Tag="Awareness" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAwareness_Click" ToolTip="{loc:Str tooltip_nav_awareness}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='👁️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_awareness}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumAwareness" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-
-                        </StackPanel>
-
-                        <!-- ===== PLAY (default: play) ===== -->
-                        <StackPanel Grid.Row="7">
-                        <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavDoorButton}"
-                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Play door"
-                                Background="#22B8E85C" BorderBrush="#B8E85C"
-                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
-                            <!-- Medallion: see DoorHome for what the four children are for. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="56"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                         IsHitTestVisible="False"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="46" Height="46"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image x:Name="ImgDoorPlay"
-                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
-                                           Source="pack://application:,,,/Resources/nav/door_play.png">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
-                                        </Image.Clip>
-                                    </Image>
-                                </Viewbox>
-                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Str nav_door_play}"
-                                                   Style="{StaticResource NavDoorLabelText}"/>
-                                    </Viewbox>
-                                </Grid>
-                            </Grid>
-                        </Button>
-                        <Border x:Name="DoorPanelPlay" ClipToBounds="True" Height="0" IsHitTestVisible="False">
-                            <StackPanel x:Name="DoorEntriesPlay">
-                                <!-- Phase 6: this row is the Play card wall now (ShowTab("play")),
-                                     the Play door's first entry and therefore its default
-                                     destination. The x:Name STAYS BtnLab: it is API for
-                                     NavButtonForTab, MainWindow.ChromeFx's NavButtons list and
-                                     TutorialService.NavEntryDoorKeys, which is keyed by the
-                                     x:Names the nav has always used. The old "Lab" label and the
-                                     🧪 flask went with the page - the flask is the Tier 2 badge on
-                                     the wall's lockbands now, and nothing else. -->
-                                <Button x:Name="BtnLab" Tag="Play" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavPlay_Click" ToolTip="{loc:Str nav_door_play}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🕹️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str nav_door_play}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnDeeper" Tag="Deeper" Style="{StaticResource NavEntryButtonDeeper}"
-                                        Click="BtnDeeper_Click" ToolTip="{loc:Str tooltip_deeper}"
-                                        RenderTransformOrigin="0.5,0.5">
-                                    <Button.RenderTransform>
-                                        <ScaleTransform x:Name="BtnDeeperScale" ScaleX="1" ScaleY="1"/>
-                                    </Button.RenderTransform>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_deeper}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnPatreonExclusives" Tag="Patreon" Style="{StaticResource NavEntryButtonPatreon}"
-                                        Click="BtnPatreonExclusives_Click" ToolTip="{loc:Str tooltip_patreon_exclusives}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="⭐" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str tab_exclusives}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavGradedIntake" Tag="GradedIntake" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavGradedIntake_Click" ToolTip="{loc:Str tooltip_nav_graded_intake}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📝', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_gradedintake}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumGradedIntake" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavLockdown" Tag="Lockdown" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavLockdown_Click" ToolTip="{loc:Str tooltip_nav_lockdown}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_lockdown_mode}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumLockdown" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavBlinkTrainer" Tag="BlinkTrainer" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavBlinkTrainer_Click" ToolTip="{loc:Str tooltip_nav_blink_trainer}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='👀', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_blink_trainer}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumBlinkTrainer" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavRemoteControl" Tag="RemoteControl" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavRemoteControl_Click" ToolTip="{loc:Str tooltip_nav_remote_control}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📱', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_remote_control}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumRemoteControl" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_premium_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnAvailableSubjects" Tag="AvailableSubjects"
-                                        Style="{StaticResource NavEntryButtonNeon}"
-                                        Click="BtnAvailableSubjects_Click"
-                                        ToolTip="{loc:Str tooltip_available_subjects}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🛰️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_available_subjects}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-
-                        </StackPanel>
-
-                        <!-- ===== YOU (default: discord / Profile) ===== -->
-                        <StackPanel Grid.Row="9">
-                        <Button x:Name="DoorYou" Tag="you" Style="{StaticResource NavDoorButton}"
-                                poss:Possession.Role="TabHeader" poss:Possession.Name="the You door"
-                                Background="#225EA8FF" BorderBrush="#5EA8FF"
-                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_you}">
-                            <!-- Medallion: see DoorHome for what the four children are for. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="56"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                         IsHitTestVisible="False"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="46" Height="46"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image x:Name="ImgDoorYou"
-                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
-                                           Source="pack://application:,,,/Resources/nav/door_you.png">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
-                                        </Image.Clip>
-                                    </Image>
-                                </Viewbox>
-                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Str nav_door_you}"
-                                                   Style="{StaticResource NavDoorLabelText}"/>
-                                    </Viewbox>
-                                </Grid>
-                            </Grid>
-                        </Button>
-                        <Border x:Name="DoorPanelYou" ClipToBounds="True" Height="0" IsHitTestVisible="False">
-                            <StackPanel x:Name="DoorEntriesYou">
-                                <Button x:Name="BtnDiscordTab" Tag="Profile" Style="{StaticResource NavEntryButtonDiscord}"
-                                        Click="BtnDiscordTab_Click" ToolTip="{loc:Str tab_profile}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='👤', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_profile}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <!-- THE SPIRAL ROOM (CONTRACT-FUSE-0816 2.4). Collapsed unless this
-                                     account is in the fog era or has an open spiral - a fuse-dark
-                                     account with no descent block, which is every install today,
-                                     never sees this row and the You door measures exactly as it
-                                     did before. MainWindow.SpiralRoom.cs owns the visibility and
-                                     the label: during the fog era the row is a gold ellipsis,
-                                     because naming the room would spoil it. -->
-                                <Button x:Name="BtnNavSpiral" Tag="Spiral" Style="{StaticResource NavEntryButton}"
-                                        Visibility="Collapsed"
-                                        Click="BtnNavSpiral_Click" ToolTip="{loc:Str tooltip_spiral_room}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🌀', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock x:Name="TxtNavSpiral" Text="{loc:Str tab_spiral}"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnQuests_Click" ToolTip="{loc:Str tooltip_daily_weekly_quests}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📜', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_quests}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAchievements_Click" ToolTip="{loc:Str tooltip_nav_achievements}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_achievements}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnEnhancements_Click" ToolTip="{loc:Str tooltip_enhancement_tree}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_enhancements}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <!-- Training Programs — multi-day arcs (Programs tab, v6.6) -->
-                                <Button x:Name="BtnPrograms" Tag="Programs" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnPrograms_Click" ToolTip="{loc:Str tooltip_programs}"
-                                        RenderTransformOrigin="0.5,0.5">
-                                    <Button.RenderTransform>
-                                        <ScaleTransform x:Name="BtnProgramsScale" ScaleX="1" ScaleY="1"/>
-                                    </Button.RenderTransform>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_programs}" VerticalAlignment="Center"/>
-                                        <!-- BETA pill: gold on purpose - it must stand apart from the pink
-                                             accent so it reads as a status, not a highlight. Literal text
-                                             like the version strings, not a loc key. -->
-                                        <Border Margin="5,0,0,0" VerticalAlignment="Center" CornerRadius="9999"
-                                                Padding="4,0" Background="#33FFD700"
-                                                BorderBrush="#AAFFD700" BorderThickness="1">
-                                            <TextBlock Text="BETA" FontSize="8" FontWeight="Bold" Foreground="#FFD700"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnLeaderboard_Click" ToolTip="{loc:Str tooltip_nav_leaderboard}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_leaderboard}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-
-                        </StackPanel>
-
-                        <!-- ===== LIBRARY (default: assets) ===== -->
-                        <StackPanel Grid.Row="11">
-                        <Button x:Name="DoorLibrary" Tag="library" Style="{StaticResource NavDoorButton}"
-                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Library door"
-                                Background="#225ED4E8" BorderBrush="#5ED4E8"
-                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_library}">
-                            <!-- Medallion: see DoorHome for what the four children are for. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="56"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                         IsHitTestVisible="False"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                        BorderThickness="1" BorderBrush="Transparent"/>
-                                <Viewbox Grid.Column="0" Width="46" Height="46"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Image x:Name="ImgDoorLibrary"
-                                           Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
-                                           Source="pack://application:,,,/Resources/nav/door_library.png">
-                                        <Image.Clip>
-                                            <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
-                                        </Image.Clip>
-                                    </Image>
-                                </Viewbox>
-                                <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Str nav_door_library}"
-                                                   Style="{StaticResource NavDoorLabelText}"/>
-                                    </Viewbox>
-                                    <!-- v6.8.0 NEW pill: remove in 6.9 -->
-                                    <!-- On the DOOR, not only on its rows: the panel below ships shut
-                                         (Height=0), so a row-only pill is invisible until the door is
-                                         already open. It also stands in for the Phrases row, which has
-                                         no pixels left for a pill of its own. Top-right overlay so the
-                                         DownOnly label Viewbox keeps its full width budget. -->
-                                    <Border HorizontalAlignment="Right" VerticalAlignment="Top"
-                                            Margin="0,2,2,0" CornerRadius="6"
-                                            Padding="3,0" Background="#33FF69B4"
-                                            BorderBrush="#FF69B4" BorderThickness="1">
-                                        <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
-                                                   FontWeight="Bold" Foreground="#FF8FC7"/>
-                                    </Border>
-                                </Grid>
-                            </Grid>
-                        </Button>
-                        <Border x:Name="DoorPanelLibrary" ClipToBounds="True" Height="0" IsHitTestVisible="False">
-                            <StackPanel x:Name="DoorEntriesLibrary">
-                                <!-- Assets STAYS first: it is the Library door's default destination
-                                     in NavDoorMap ("library" -> "assets"), and the four rows below
-                                     are launchers, not tabs. -->
-                                <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='📁', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_assets}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <!-- Phase 7 · Library door. These four rows are LAUNCHERS, not tabs:
-                                     none of them calls ShowTab, none of them appears in NavDoorMap,
-                                     and none of them may (a rail row that claims a tab key the app
-                                     has no view for would leave the active indicator pointing at
-                                     nothing). Each one calls the EXACT handler that already owned
-                                     the launch, so there is precisely one code path per window:
-
-                                       Mods      -> BtnManageMods_Click   (MainWindow.xaml.cs:1789,
-                                                    the title-bar gear's own handler - _isLoading
-                                                    guard, share-badge poll and ApplyActiveModChange
-                                                    all included). The Mod Creator is untouched: it
-                                                    is a button INSIDE ModManagerDialog.
-                                       Catalogue -> BtnCatalogue_Click    (MainWindow.Presets.cs:1104)
-                                       Phrases   -> BtnManagePhrases_Click(MainWindow.Patreon.cs:898,
-                                                    which also refreshes the Companion tab's count)
-                                       Media Log -> BtnNavMediaLog_Click  (TabNavigation.cs), which
-                                                    re-fires the Assets tab's own BtnMediaLog rather
-                                                    than newing a second MediaHistoryWindow - see the
-                                                    comment there for why that matters.
-
-                                     Deliberately NOT duplicated here: the Mod Catalogue browser
-                                     (a button inside ModManagerDialog) and Session History (a
-                                     Studio/Presets surface). -->
-                                <Button x:Name="BtnNavMods" Tag="Mods" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnManageMods_Click" ToolTip="{loc:Str yl7_nav_mods_tip}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🧩', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str yl7_nav_mods}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavCatalogue" Tag="Catalogue" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnCatalogue_Click" ToolTip="{loc:Str yl7_nav_catalogue_tip}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🌐', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str yl7_nav_catalogue}" VerticalAlignment="Center"/>
-                                        <!-- v6.8.0 NEW pill: remove in 6.9 -->
-                                        <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
-                                                Padding="3,0" Background="#33FF69B4"
-                                                BorderBrush="#FF69B4" BorderThickness="1">
-                                            <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
-                                                       FontWeight="Bold" Foreground="#FF8FC7"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavPhrases" Tag="Phrases" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnManagePhrases_Click" ToolTip="{loc:Str yl7_nav_phrases_tip}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str yl7_nav_phrases}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="BtnNavMediaLog" Tag="MediaLog" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavMediaLog_Click" ToolTip="{loc:Str yl7_nav_medialog_tip}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🎞️', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str yl7_nav_medialog}" VerticalAlignment="Center"/>
-                                        <!-- v6.8.0 NEW pill: remove in 6.9 -->
-                                        <Border Margin="4,0,0,0" VerticalAlignment="Center" CornerRadius="6"
-                                                Padding="3,0" Background="#33FF69B4"
-                                                BorderBrush="#FF69B4" BorderThickness="1">
-                                            <TextBlock Text="NEW" FontFamily="Consolas, Courier New" FontSize="8"
-                                                       FontWeight="Bold" Foreground="#FF8FC7"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- ===== JUST DROP: NO DOOR OF ITS OWN, BY DECISION =====
-                             Just Drop had a rail door and a tab until it became a WINDOW
-                             (Services/JustDrop/JustDropHostService.cs), the same shell the Graded
-                             Intake and DtRH use. On 2026-09-11 the owner placed it: a creator
-                             tool, not a game. So it is one ROW, under Studio > Creator Tools
-                             (BtnNavJustDrop, above), and nothing else on this rail. The Play rack
-                             card that used to open it went with that call; the Exclusives shelf,
-                             the dashboard tease tile and the Ctrl+K row stay.
-
-                             The key "justdrop" still routes through ShowTab, which intercepts it
-                             and launches the window (exactly as it does for "fyp"), so none of
-                             those callers know a window is involved. -->
-                        </StackPanel>
-                    </Grid>
-                </ScrollViewer>
-
-                <!-- Settings door: pinned to the bottom and visually separated. Phase 1 routes
-                     it at the Dashboard; Phase 2 gives it its own view (key "appsettings"). -->
-                <StackPanel Grid.Row="2">
-                    <!-- THE SPIRAL RAIL (CONTRACTS-0812-FINISH §9). On by default since 6.9.3
-                         (AppSettings.DescentSpiralRailEnabled, no editor), and the control still
-                         stays collapsed until the server ships this account a descent block. Collapsed measures as zero, so the rail's
-                         layout is identical to the build before this element existed.
-                         Native WPF (a SpiralGlyph in a medallion) since 2026-09-09: the WebView2
-                         it used to host was a native child HWND, and an HWND on the rail stole
-                         the pointer from NavSidebar and made the flyout open and shut on a loop.
-                         See Controls/SpiralRailHost.cs. -->
-                    <!-- 2026-09-21 (owner): the medallion left the rail and CIRCE'S TAB took its slot.
-                         The Spiral Room keeps its other doors (the You row, the fuse chip, the Trainer
-                         Card plate, the account menu row). Controls/SpiralRailHost.cs stays in the tree:
-                         SpiralGlyph still reads its StageNumeral. See Controls/ChasterRailChip.cs. -->
-                    <controls:ChasterRailChip x:Name="ChasterRail"/>
-                    <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
-                    <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). A gold clock that appears
-                         seven days before the migration ceremony, shakes harder the closer it gets,
-                         and is gone for good once this account has taken its ceremony. Clicking it
-                         opens the Spiral Room.
-                         Self-wiring and Collapsed by default, so a build with no cached ceremony
-                         timestamp - i.e. every install today - measures as if it were not here.
-                         Code-built on purpose: it is NOT a door medallion. It has no NavDoorMap
-                         row, ChromeFx never lights it, CacheNavDoorRows never walks it, and it must
-                         not contribute the 40px door Viewbox markup NavRailFlyoutTests counts.
-                         See Controls/DescentFuseRailChip.cs. -->
-                    <controls:DescentFuseRailChip x:Name="FuseRailChip"/>
-                    <!-- v6.8.0 Web App door: a LAUNCHER, not a tab (same rule as the four Library
-                         launchers) - it opens app.cclabs.app in the default browser, so it has its
-                         own Click and deliberately no NavDoorMap row: NavDoor_Click on this Tag
-                         would log-and-stay, and the "you are here" ring must never light for a
-                         door you cannot be in. The medallion keeps the full four-child shape
-                         (see DoorHome) because CacheNavDoorRows walks it via NavLauncherDoors. -->
-                    <Button x:Name="DoorWebApp" Tag="webapp" Style="{StaticResource NavDoorButton}"
-                            Background="#225EC8F2" BorderBrush="#5EC8F2"
-                            Click="DoorWebApp_Click" ToolTip="{loc:Str tooltip_nav_door_webapp}">
+                <!-- Seven section rows, top-packed, no ScrollViewer: 7 x 66 = 462px, the foot and the
+                     two pills above take the rest of the 885px column (rendered check in
+                     NavSectionRailTests). Order frozen by NavSectionsTests and NavSectionRailTests. -->
+                <StackPanel x:Name="NavSectionRows" Grid.Row="1" VerticalAlignment="Top">
+                    <Button x:Name="DoorHome" Tag="home" Style="{StaticResource NavSectionButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Home door"
+                            Background="#33C9A0FF" BorderBrush="#C9A0FF"
+                            AutomationProperties.Name="{loc:Str nav_door_home}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_home}">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="56"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                     IsHitTestVisible="False"
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
+                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Column="0" Width="46" Height="46"
+                            <Viewbox Grid.Row="0" Width="40" Height="40"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Image x:Name="ImgDoorWebApp"
+                                <Image x:Name="ImgDoorHome"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
-                                       Source="pack://application:,,,/Resources/nav/door_webapp.png">
+                                       Source="pack://application:,,,/Resources/nav/door_home.png">
                                     <Image.Clip>
                                         <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
-                            <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str nav_door_webapp}"
-                                               Style="{StaticResource NavDoorLabelText}"/>
-                                </Viewbox>
-                            </Grid>
+                            <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
+                                <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{loc:Str nav_door_home}" Style="{StaticResource NavSectionLabel}"/>
                         </Grid>
                     </Button>
-                    <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
-                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Settings door"
-                            Background="#225CE0A5" BorderBrush="#5CE0A5"
-                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
-                        <!-- Medallion: see DoorHome for what the four children are for. -->
+                    <Button x:Name="DoorStudio" Tag="studio" Style="{StaticResource NavSectionButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Studio door"
+                            Background="#33FF69B4" BorderBrush="#FF69B4"
+                            AutomationProperties.Name="{loc:Str nav_door_studio}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_studio}">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="56"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Ellipse Grid.Column="0" Width="64" Height="64" Opacity="0"
-                                     IsHitTestVisible="False"
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Column="0" Width="50" Height="50" CornerRadius="12"
+                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Column="0" Width="46" Height="46"
+                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="ImgDoorStudio"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_studio.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
+                                <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{loc:Str nav_door_studio}" Style="{StaticResource NavSectionLabel}"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="DoorCompanion" Tag="companion" Style="{StaticResource NavSectionButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Companion door"
+                            Background="#33E85CE0" BorderBrush="#E85CE0"
+                            AutomationProperties.Name="{loc:Str nav_door_companion}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_companion}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="ImgDoorCompanion"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_companion.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
+                                <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{loc:Str nav_door_companion}" Style="{StaticResource NavSectionLabel}"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavSectionButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Play door"
+                            Background="#338C7CFF" BorderBrush="#8C7CFF"
+                            AutomationProperties.Name="{loc:Str nav_door_play}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="ImgDoorPlay"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_play.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
+                                <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{loc:Str nav_door_play}" Style="{StaticResource NavSectionLabel}"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="DoorSocial" Tag="social" Style="{StaticResource NavSectionButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Social door"
+                            Background="#337A8CFF" BorderBrush="#7A8CFF"
+                            AutomationProperties.Name="{loc:Str nav_section_social}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_section_social}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="ImgDoorSocial"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/skills/hive_mind.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
+                                <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{loc:Str nav_section_social}" Style="{StaticResource NavSectionLabel}"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="DoorYou" Tag="you" Style="{StaticResource NavSectionButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the You door"
+                            Background="#33FF8A7A" BorderBrush="#FF8A7A"
+                            AutomationProperties.Name="{loc:Str nav_door_you}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_you}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="ImgDoorYou"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_you.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
+                                <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{loc:Str nav_door_you}" Style="{StaticResource NavSectionLabel}"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="DoorLibrary" Tag="library" Style="{StaticResource NavSectionButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Library door"
+                            Background="#33B79CFF" BorderBrush="#B79CFF"
+                            AutomationProperties.Name="{loc:Str nav_door_library}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_library}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Image x:Name="ImgDoorLibrary"
+                                       Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_library.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,64,64" RadiusX="16" RadiusY="16"/>
+                                    </Image.Clip>
+                                </Image>
+                            </Viewbox>
+                            <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
+                                <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{loc:Str nav_door_library}" Style="{StaticResource NavSectionLabel}"/>
+                        </Grid>
+                    </Button>
+                </StackPanel>
+
+                <!-- PINNED FOOT: Circe's tab, the fuse chip (Collapsed unless a ceremony is near),
+                     EMI's dock, Friends, then the Settings gear. Frozen order (WebNudgeTests). -->
+                <StackPanel Grid.Row="2">
+                    <!-- CIRCE'S TAB (2026-09-21): took the old spiral medallion's slot. See
+                         Controls/ChasterRailChip.cs. -->
+                    <controls:ChasterRailChip x:Name="ChasterRail"/>
+                    <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,4,10,4"/>
+                    <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). Self-wiring, Collapsed by default.
+                         See Controls/DescentFuseRailChip.cs. -->
+                    <controls:DescentFuseRailChip x:Name="FuseRailChip"/>
+                    <!-- EMI's dock. See Controls/EmiDock.xaml. -->
+                    <controls:EmiDock x:Name="EmiDockChip"/>
+                    <!-- Friends (2026-09-23): the quick drawer; Social > Friends is the full page. -->
+                    <friends:FriendsRailChip x:Name="FriendsChip"/>
+                    <!-- THE GEAR. Tag "appsettings" (the tab key "settings" is the dashboard). -->
+                    <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavSectionButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Settings door"
+                            Background="#33B8B8D0" BorderBrush="#B8B8D0"
+                            AutomationProperties.Name="{loc:Str nav_door_settings}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="40" Height="40"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorSettings"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -1505,24 +725,13 @@
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
-                            <Grid Grid.Column="1" Style="{StaticResource NavDoorLabelHost}">
-                                <Viewbox StretchDirection="DownOnly" Stretch="Uniform"
-                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str nav_door_settings}"
-                                               Style="{StaticResource NavDoorLabelText}"/>
-                                </Viewbox>
-                            </Grid>
+                            <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
+                                <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Grid.Row="1" Text="{loc:Str nav_door_settings}" Style="{StaticResource NavSectionLabel}"/>
                         </Grid>
                     </Button>
-                    <!-- EMI DESK's dock chip: the last thing in the pinned stack, under the
-                         Settings door. NOT a door - no NavDoorMap row, no "you are here" ring, and
-                         no 40px door Viewbox markup in THIS file (NavRailFlyoutTests counts eight
-                         of those). Self-wiring like the fuse chip: adding the element is the whole
-                         integration. See Controls/EmiDock.xaml. -->
-                    <controls:EmiDock x:Name="EmiDockChip"/>
-                    <!-- FRIENDS: you, bottom-left, the Hearthstone way. Opens the friends drawer upward over the
-                         rail. Self-wiring and not a door, like the dock chip above. See Controls/Friends/FriendsRailChip.cs. -->
-                    <friends:FriendsRailChip x:Name="FriendsChip"/>
                 </StackPanel>
             </Grid>
         </Border>
