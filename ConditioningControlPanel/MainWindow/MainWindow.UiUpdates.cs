@@ -56,7 +56,8 @@ namespace ConditioningControlPanel
             var xp = s.PlayerXP;
             var xpNeeded = App.Progression.GetXPForLevel(level);
 
-            TxtLevel.Text = $"Lvl {level}";
+            // Nav polish wave 4: the XP bar's chip is the one level readout (the header's
+            // "Lvl N" pill was cut as a duplicate).
             TxtLevelLabel.Text = $"LVL {level}";
 
             // XP readout + bar fill (chrome FX): the number odometers from its previous value and

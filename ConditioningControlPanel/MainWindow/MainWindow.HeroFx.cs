@@ -636,6 +636,16 @@ namespace ConditioningControlPanel
         /// blooms the bar and fires the burst) rather than shipped as a second, competing moment:
         /// the number that changed is the one thing the burst does not point at.
         /// </summary>
+        internal void PaintLevelChip(Color accent)
+        {
+            // The XP row's LVL pill (MainWindow.xaml, LevelChip). Mod accent and Lockdown both
+            // repaint it through here so the fill and its glow never disagree.
+            if (LevelChip == null) return;
+            LevelChip.Background = new SolidColorBrush(accent);
+            if (LevelChip.Effect is System.Windows.Media.Effects.DropShadowEffect glow)
+                glow.Color = accent;
+        }
+
         internal void PopLevelChip()
         {
             try
