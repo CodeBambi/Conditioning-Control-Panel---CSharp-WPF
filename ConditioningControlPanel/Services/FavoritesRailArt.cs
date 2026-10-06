@@ -171,6 +171,30 @@ namespace ConditioningControlPanel.Services
             ["tab.playsessions"] = Cover("features/deeper_editor.png"),
             ["tab.playeyes"] = Cover("features/lab_gaze_hero.png"),
             ["tab.ramp"] = Cover("features/loom.png"),
+
+            // Nav polish (2026-10-06): launcher games and Studio rack modules pin too. Games wear
+            // their launcher tile art; a rack module wears its feature card. rack.visuals has no
+            // picture of its own, so it is not listed and FavoritesRailRule keeps it off the rail.
+            ["game.backroom"] = Cover("features/backroom.png"),
+            ["game.race"] = Cover("features/race.png"),
+            ["game.dtrh"] = Cover("features/dtrh.png"),
+            ["game.arcademy"] = Cover("features/arcademy.png"),
+            ["game.goon"] = Cover("features/goon_game_tile.png"),
+            ["game.piecebypiece"] = Cover("features/piecebypiece.png"),
+            ["game.breakout"] = Cover("features/breakout.png"),
+            ["game.breakoutdemo"] = Cover("features/breakout.png"),
+            ["game.intake"] = Cover("features/lab_quiz_hero.png"),
+            ["rack.flash"] = Cover("features/flash.png"),
+            ["rack.video"] = Cover("features/mandatory_videos.png"),
+            ["rack.subliminal"] = Cover("features/subliminal.png"),
+            ["rack.spiral"] = Cover("features/spiral_overlay.png"),
+            ["rack.pinkfilter"] = Cover("features/Pink_filter.png"),
+            ["rack.bubbles"] = Cover("features/Bubble_pop.png"),
+            ["rack.bubblecount"] = Cover("features/Bubble_count.png"),
+            ["rack.lockcard"] = Cover("features/Phrase_Lock.png"),
+            ["rack.bouncingtext"] = Cover("features/bouncing_text.png"),
+            ["rack.mindwipe"] = Cover("features/Mind_Wipers.png"),
+            ["rack.braindrain"] = Cover("features/brain_drain.png"),
         };
 
         private static RailChipArt Cover(string path) => new(path, RailArtFit.Cover);

@@ -34,6 +34,10 @@
             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}"/>
             <!-- Single click activates: a palette row is a destination, not a selection. -->
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="Item_Click"/>
+            <!-- Right-click pins or unpins the row to the dashboard's Favourites, the same verb as
+                 right-clicking a rail entry. The only pin door for games and rack modules whose
+                 cards carry no x:Name. -->
+            <EventSetter Event="PreviewMouseRightButtonUp" Handler="Item_RightClick"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">

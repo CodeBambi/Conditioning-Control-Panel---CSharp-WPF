@@ -154,8 +154,13 @@ namespace ConditioningControlPanel
             TxtQuery.Focus();
         }
 
+        /// <summary>True while a row's pin menu is up: its popup takes the pointer, and that
+        /// must not read as a click-away.</summary>
+        private bool _pinMenuOpen;
+
         private void Window_Deactivated(object sender, EventArgs e)
         {
+            if (_pinMenuOpen) return;
             // Click-away dismiss. Deliberately NOT an Escape close: it must not arm the panic
             // hand-off, because no Escape press happened.
             ClosePalette(fromEscape: false);
@@ -547,6 +552,39 @@ namespace ConditioningControlPanel
                 _pulseTarget = null;
                 _pulsePrevEffect = null;
             }
+        }
+
+        private void Item_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not ListBoxItem item || item.DataContext is not PaletteRow row) return;
+            e.Handled = true;
+            var id = row.Entry.Id;
+            if (!FavoritesRailRule.IsDestination(id) || Owner is not MainWindow owner) return;
+
+            bool pinned = MainWindow.IsPinned(id);
+            bool full = !pinned && MainWindow.FavoritesFull();
+            var menu = new ContextMenu { PlacementTarget = item };
+            var entry = new MenuItem
+            {
+                Header = pinned ? Localization.Loc.Get("rail_unpin")
+                       : full ? Localization.Loc.Get("rail_favorites_full")
+                       : Localization.Loc.Get("rail_pin"),
+                IsEnabled = !full,
+            };
+            entry.Click += (_, _) =>
+            {
+                try { owner.TogglePinned(id); }
+                catch (Exception ex) { App.Logger?.Debug("Palette pin {Id}: {E}", id, ex.Message); }
+            };
+            menu.Items.Add(entry);
+            menu.Closed += (_, _) =>
+            {
+                _pinMenuOpen = false;
+                // Focus back to the search box so typing and Enter keep working.
+                try { if (IsLoaded) { Activate(); TxtQuery.Focus(); } } catch { }
+            };
+            _pinMenuOpen = true;
+            menu.IsOpen = true;
         }
 
         private void Item_Click(object sender, MouseButtonEventArgs e)
