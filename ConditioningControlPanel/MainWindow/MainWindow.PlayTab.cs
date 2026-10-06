@@ -47,7 +47,8 @@ namespace ConditioningControlPanel
         /// scrolls to the zone header and glows it once (PlayTabView.ScrollToZone).</summary>
         partial void ScrollPlayZone(string zone)
         {
-            try { PlayTab?.ScrollToZone(zone); }
+            if (PlayTab == null) { App.Logger?.Debug("ScrollPlayZone({Zone}): no Play view", zone); return; }
+            try { PlayTab.ScrollToZone(zone); }
             catch (Exception ex) { App.Logger?.Debug("ScrollPlayZone({Zone}): {E}", zone, ex.Message); }
         }
 

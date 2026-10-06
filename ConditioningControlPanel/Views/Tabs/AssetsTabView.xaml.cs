@@ -41,8 +41,10 @@ namespace ConditioningControlPanel.Views.Tabs
                 try
                 {
                     ZoneFolders.BringIntoView();
-                    GlowOnce(ZoneFolders);
-                    GlowOnce(CmbAssetPresets);
+                    App.Logger?.Debug("Assets ScrollToZone(folders)");
+                    var lilac = global::ConditioningControlPanel.Controls.NavRail.NavStripRules.Lilac;
+                    global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(ZoneFolders, lilac, why: "library.folders");
+                    global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(CmbAssetPresets, lilac, why: "library.presets");
                 }
                 catch (Exception ex) { App.Logger?.Debug("Assets ScrollToZone: {E}", ex.Message); }
             }), System.Windows.Threading.DispatcherPriority.Normal);
@@ -64,28 +66,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.RequestPickAssetsFolder();
             PaintAssetsFolder();
-        }
-
-        private static void GlowOnce(FrameworkElement target)
-        {
-            if (!Services.MotionFx.AllowAmbientLoops) return;
-            var glow = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                Color = System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4),
-                BlurRadius = 16,
-                ShadowDepth = 0,
-                Opacity = 0,
-            };
-            target.Effect = glow;
-            var anim = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(2) };
-            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0.9,
-                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(250))));
-            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0.9,
-                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400))));
-            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0,
-                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromSeconds(2))));
-            anim.Completed += (_, _) => { if (ReferenceEquals(target.Effect, glow)) target.Effect = null; };
-            glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, anim);
         }
 
         private void PackCard_MouseEnter(object sender, MouseEventArgs e)

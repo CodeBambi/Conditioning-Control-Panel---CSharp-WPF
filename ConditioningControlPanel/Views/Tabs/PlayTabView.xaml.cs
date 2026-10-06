@@ -51,24 +51,34 @@ namespace ConditioningControlPanel.Views.Tabs
         public void ScrollToZone(string zone)
         {
             var header = ZoneHeader(zone);
-            if (header == null) return;
+            if (header == null) { App.Logger?.Debug("Play ScrollToZone({Zone}): unknown zone", zone); return; }
 
             Dispatcher.BeginInvoke(new Action(() =>
             {
                 try
                 {
-                    // Top-align, not just "into view": BringIntoView settles for the nearest edge.
-                    if (WallScroll.Content is Visual content && header.IsDescendantOf(content))
+                    // Games is the top of the wall: go to 0 so the intro line above it shows too.
+                    // Any other zone: its header sits ZoneTopGap under the strip, never clipped.
+                    double target = 0;
+                    if (!string.Equals(zone, "games", StringComparison.OrdinalIgnoreCase))
                     {
-                        var y = header.TransformToAncestor(content).Transform(new Point(0, 0)).Y;
-                        WallScroll.ScrollToVerticalOffset(Math.Max(0, y - 8));
+                        if (WallScroll.Content is Visual content && header.IsDescendantOf(content))
+                            target = Math.Max(0, header.TransformToAncestor(content).Transform(new Point(0, 0)).Y - ZoneTopGap);
+                        else { header.BringIntoView(); target = -1; }
                     }
-                    else header.BringIntoView();
-                    GlowZoneHeader(header);
+                    if (target >= 0) WallScroll.ScrollToVerticalOffset(target);
+                    App.Logger?.Debug("Play ScrollToZone({Zone}) -> {Y}", zone, target);
+                    // Glow after the scroll has landed, so the ring is drawn where the eye goes.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                        global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(header, global::ConditioningControlPanel.Controls.NavRail.NavStripRules.VioletBlue, why: "play." + zone)),
+                        System.Windows.Threading.DispatcherPriority.Loaded);
                 }
                 catch (Exception ex) { App.Logger?.Debug("Play ScrollToZone({Zone}): {E}", zone, ex.Message); }
             }), System.Windows.Threading.DispatcherPriority.Normal);
         }
+
+        /// <summary>Gap kept above a zone header after a zone scroll (header fully visible).</summary>
+        internal const double ZoneTopGap = 16;
 
         /// <summary>The header element a zone key names, or null.</summary>
         internal FrameworkElement? ZoneHeader(string? zone) => (zone ?? "").Trim().ToLowerInvariant() switch
@@ -78,27 +88,5 @@ namespace ConditioningControlPanel.Views.Tabs
             "eyes" => ZoneEyes,
             _ => null,
         };
-
-        private static void GlowZoneHeader(FrameworkElement header)
-        {
-            if (!Services.MotionFx.AllowAmbientLoops) return;
-            var glow = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                Color = Color.FromRgb(0xFF, 0x69, 0xB4),
-                BlurRadius = 18,
-                ShadowDepth = 0,
-                Opacity = 0,
-            };
-            header.Effect = glow;
-            var anim = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(2) };
-            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0.9,
-                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(250))));
-            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0.9,
-                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400))));
-            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0,
-                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromSeconds(2))));
-            anim.Completed += (_, _) => { if (ReferenceEquals(header.Effect, glow)) header.Effect = null; };
-            glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, anim);
-        }
     }
 }
