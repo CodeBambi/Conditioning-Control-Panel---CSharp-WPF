@@ -41,6 +41,11 @@ namespace ConditioningControlPanel
             internal Button Button = null!;
             internal Ellipse? Glow;
             internal Border? Tile;
+            /// <summary>The ring drawn OVER the art (Tag "navring", polish wave 9). Null on a row
+            /// authored without it: the ring then paints on <see cref="Tile"/> as before.</summary>
+            internal Border? Ring;
+            /// <summary>The hue wash over the art (Tag "navtint", polish wave 9).</summary>
+            internal Border? Tint;
             internal Border? Badge;
             internal TextBlock? BadgeText;
             internal TextBlock? Label;
@@ -53,7 +58,10 @@ namespace ConditioningControlPanel
         private readonly List<NavSectionRow> _navSectionRows = new();
         private bool _navRailReady;
 
-        private const double NavGlowActive = 0.35;
+        // Polish wave 9: the lit halo reads louder (0.35 -> 0.55); idle stays 0, chrome never idles lit.
+        private const double NavGlowActive = 0.55;
+        private const string NavRingTag = "navring";
+        private const string NavTintTag = "navtint";
         private const int NavGlowFadeMs = 160;
         private const int NavPressMs = 80;
         private const double NavPressScale = 0.97;
@@ -119,6 +127,8 @@ namespace ConditioningControlPanel
                             case Ellipse e: row.Glow = e; break;
                             case Border b when (b.Tag as string) == NavBadgeTag:
                                 row.Badge = b; row.BadgeText = b.Child as TextBlock; break;
+                            case Border b when (b.Tag as string) == NavRingTag: row.Ring = b; break;
+                            case Border b when (b.Tag as string) == NavTintTag: row.Tint = b; break;
                             case Border b: row.Tile ??= b; break;
                             case TextBlock t when (t.Tag as string) == NavSectionLabelTag: row.Label = t; break;
                         }
@@ -136,6 +146,7 @@ namespace ConditioningControlPanel
                 }
                 if (row.Tile != null)
                     row.Tile.Background = NavFrozen(NavRailRules.WithAlpha(hue, NavRailRules.TileTintAlpha));
+                PaintNavTint(row);
                 HookNavPress(row);
                 var captured = row;
                 btn.MouseEnter += (_, __) => PaintNavRing(captured, hover: true);
@@ -278,7 +289,7 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Lights the row that owns <paramref name="tabKey"/>: filled tile, 3px bar in the
+        /// Lights the row that owns <paramref name="tabKey"/>: filled tile, 4px bar in the
         /// section hue, full-opacity tile, hue ring, halo. Called from ShowTab (through
         /// ExpandDoorForTab) on every navigation, so the lit row follows deep links, the palette
         /// and the strip. A key no section owns leaves the current row lit.
@@ -312,6 +323,8 @@ namespace ConditioningControlPanel
                 }
                 if (btn.Template?.FindName("NavActiveFill", btn) is FrameworkElement fill)
                     fill.Opacity = row.Active ? 1 : 0;
+                PaintNavSpur(row);
+                PaintNavTint(row);
 
                 // A pale medallion carries a shade (x:Name "Shade" + door name) so it idles at its
                 // neighbours' weight; lit, it shows its art in full.
@@ -343,16 +356,54 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("PaintNavRowActive: {E}", ex.Message); }
         }
 
-        /// <summary>The medallion ring: idle = the hue at 45% (hover 80%), 1.5 px; active = the
-        /// solid hue, 2 px. Alphas live in NavRailRules so a test can pin them.</summary>
+        /// <summary>The medallion ring (polish wave 9): idle = the hue at 80% (hover 95%), 3 px;
+        /// active = the hue lifted 25% toward white, solid, 3.5 px. Painted on the "navring" Border
+        /// that sits over the art, so a thicker ring eats no picture; a row without one falls back
+        /// to the tile's own border. Values live in NavRailRules so a test can pin them.</summary>
         private static void PaintNavRing(NavSectionRow row, bool hover)
         {
-            if (row.Tile == null || row.Hue == null) return;
+            var target = row.Ring ?? row.Tile;
+            if (target == null || row.Hue == null) return;
+            if (row.Tile != null) row.Tile.Opacity = 1.0;
+            target.BorderBrush = NavFrozen(NavRailRules.RingColor(row.Hue.Color, row.Active, hover));
+            target.BorderThickness = new Thickness(NavRailRules.RingThickness(row.Active));
+        }
+
+        /// <summary>The hue wash over the medallion art: a touch louder on the lit row.</summary>
+        private static void PaintNavTint(NavSectionRow row)
+        {
+            if (row.Tint == null || row.Hue == null) return;
+            row.Tint.Background = NavFrozen(NavRailRules.WithAlpha(row.Hue.Color, NavRailRules.ArtTintAlpha(row.Active)));
+        }
+
+        /// <summary>
+        /// The spur (template part NavEdgeSpur): a short hue tab from the window edge into the lit
+        /// medallion's ring, so the rail selection and the window edge read as one line. Built from
+        /// the row's hue (the edge at 90%, the ring end at 60%), faded in over the halo's timing
+        /// (160 ms, Reduced 80, Off instant). Hidden on every other row.
+        /// </summary>
+        private static void PaintNavSpur(NavSectionRow row)
+        {
+            var btn = row.Button;
+            if (btn.Template?.FindName("NavEdgeSpur", btn) is not Border spur) return;
+            spur.BeginAnimation(UIElement.OpacityProperty, null);
+            if (!row.Active || row.Hue == null)
+            {
+                spur.Opacity = 0;
+                spur.Visibility = Visibility.Collapsed;
+                return;
+            }
             var c = row.Hue.Color;
-            byte a = NavRailRules.RingAlpha(row.Active, hover);
-            row.Tile.Opacity = 1.0;
-            row.Tile.BorderBrush = NavFrozen(NavRailRules.WithAlpha(c, a));
-            row.Tile.BorderThickness = new Thickness(row.Active ? 2.5 : 2.0);
+            var g = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5) };
+            g.GradientStops.Add(new GradientStop(NavRailRules.WithAlpha(c, NavRailRules.SpurEdgeAlpha), 0));
+            g.GradientStops.Add(new GradientStop(NavRailRules.WithAlpha(c, NavRailRules.SpurRingAlpha), 1));
+            g.Freeze();
+            spur.Background = g;
+            spur.Visibility = Visibility.Visible;
+            int ms = NavRailRules.Ms(NavGlowFadeMs, MotionFx.Level);
+            if (ms <= 0) { spur.Opacity = 1; return; }
+            spur.Opacity = 0;
+            spur.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ms)));
         }
 
         private static SolidColorBrush NavFrozen(Color c)
