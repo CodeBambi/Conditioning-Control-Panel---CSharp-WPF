@@ -15,7 +15,8 @@ namespace ConditioningControlPanel.Tests;
 /// Nav polish wave 2 (2026-10-06, lane PILLS): the pills wear their section's hue. The active
 /// pill's text reads at 4.5:1 or better on its solid fill for every section, rest pills, the
 /// track, the crumb word and the "Moved" note all come from the one hue table, pills are at
-/// least 34 px tall, and every section's header row keeps one height.
+/// least 36 px tall (polish wave 3: filled plates on a real tab bar), and every section's header
+/// row keeps one height.
 /// Set NAV_STRIP_SHOTS to a folder to save an offscreen render of every section's strip.
 /// </summary>
 public class NavStripHueTests
@@ -69,7 +70,7 @@ public class NavStripHueTests
             var ground = NavStripRules.RestGround(hue);
             var ratio = NavStripRules.Contrast(NavStripRules.Over(text, ground), ground);
             var plain = NavStripRules.Contrast(NavStripRules.Over(NavStripRules.WithAlpha(hue, NavStripRules.RestTextAlpha), ground), ground);
-            _out.WriteLine($"{s.Key,-10} rest text #{text.R:X2}{text.G:X2}{text.B:X2}@{text.A} {ratio:0.00}:1 (plain hue at 85% {plain:0.00}:1)");
+            _out.WriteLine($"{s.Key,-10} rest text #{text.R:X2}{text.G:X2}{text.B:X2}@{text.A} {ratio:0.00}:1 (plain hue at 95% {plain:0.00}:1)");
             Assert.True(ratio >= 4.5, $"{s.Key}: rest pill text is only {ratio:0.00}:1 on its track");
             Assert.Equal((byte)Math.Round(NavStripRules.RestTextAlpha * 255), text.A);
         }
@@ -96,11 +97,14 @@ public class NavStripHueTests
                     {
                         Assert.Equal(NavStripRules.ActiveTextOn(hue), ColorOf(text));
                         Assert.Equal(Colors.Transparent, ColorOf(outline));
+                        Assert.Equal(Colors.Transparent, ColorOf(strip.PillFill(key)));
                     }
                     else
                     {
                         Assert.Equal(NavStripRules.RestTextOn(hue), ColorOf(text));
                         Assert.Equal(NavStripRules.WithAlpha(hue, NavStripRules.RestOutlineAlpha), ColorOf(outline));
+                        // Every inactive pill is a filled plate, not text in an outline.
+                        Assert.Equal(NavStripRules.WithAlpha(hue, NavStripRules.RestFillAlpha), ColorOf(strip.PillFill(key)));
                     }
                 }
 
@@ -111,7 +115,7 @@ public class NavStripHueTests
     }
 
     [Fact]
-    public void PillsAreAtLeast34TallAndEveryHeaderRowIsOneHeight()
+    public void PillsAreAtLeast36TallAndEveryHeaderRowIsOneHeight()
     {
         WpfRenderHarness.OnStaThread(() =>
         {
@@ -120,7 +124,7 @@ public class NavStripHueTests
             {
                 var strip = Laid(s.Key, s.Key == NavSections.Settings ? "appsettings" : s.DefaultTab);
                 foreach (var key in strip.PillKeys)
-                    Assert.True(strip.PillHeight(key) >= 34, $"{s.Key}/{key} pill is {strip.PillHeight(key)} px tall");
+                    Assert.True(strip.PillHeight(key) >= NavStripRules.PillHeight, $"{s.Key}/{key} pill is {strip.PillHeight(key)} px tall");
                 _out.WriteLine($"{s.Key,-10} header row {strip.DesiredSize.Height:0.0} px");
                 row ??= strip.DesiredSize.Height;
                 Assert.Equal(row.Value, strip.DesiredSize.Height, 1);

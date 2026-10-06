@@ -40,19 +40,22 @@
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
-                    <TextBlock x:Name="CrumbSectionText" FontSize="15" FontWeight="ExtraBold" />
+                    <TextBlock x:Name="CrumbSectionText" FontSize="14" FontWeight="ExtraBold" />
                 </Button>
-                <TextBlock x:Name="CrumbSep" FontSize="15" Margin="4,0" VerticalAlignment="Center"
+                <TextBlock x:Name="CrumbSep" FontSize="14" Margin="4,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource TextMutedBrush}" />
-                <TextBlock x:Name="CrumbPage" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"
+                <TextBlock x:Name="CrumbPage" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
                            Foreground="{DynamicResource TextLightBrush}" />
             </StackPanel>
 
+            <!-- Polish wave 3: the track is a real tab bar (hue at 10%, a 1.5 px border at 40%),
+                 so the pills read as THE page tabs at one glance. 36 px pills + 2 x 4 padding +
+                 2 x 1.5 border = 47. -->
             <Border x:Name="PillTrack" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
-                    CornerRadius="19" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" Padding="3"
-                    MinHeight="42">
+                    CornerRadius="20" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1.5" Padding="4"
+                    MinHeight="47">
                 <Grid>
-                    <Border x:Name="ActiveFill" CornerRadius="15" HorizontalAlignment="Left" Width="0"
+                    <Border x:Name="ActiveFill" CornerRadius="18" HorizontalAlignment="Left" Width="0"
                             IsHitTestVisible="False">
                         <Border.RenderTransform>
                             <TranslateTransform x:Name="ActiveFillShift" />

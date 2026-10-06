@@ -156,15 +156,85 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>Dark ink for text on a light fill (the app's deepest plum).</summary>
         public static readonly Color DarkInk = Color.FromRgb(0x15, 0x12, 0x1F);
 
-        /// <summary>Inactive pill text: the hue at 85%.</summary>
-        public const double RestTextAlpha = 0.85;
-        /// <summary>Inactive pill outline: the hue at 35%.</summary>
-        public const double RestOutlineAlpha = 0.35;
-        /// <summary>Hovered inactive pill: a fill in the hue at 18%.</summary>
-        public const double HoverFillAlpha = 0.18;
-        /// <summary>The pill track: the hue at 8%, its border at 25%.</summary>
-        public const double TrackFillAlpha = 0.08;
-        public const double TrackBorderAlpha = 0.25;
+        // Polish wave 3 (owner: inactive pills were "barely distinguishable as a standalone
+        // item"): every pill is a FILLED plate, so the strip reads as a tab bar at one glance.
+
+        /// <summary>Inactive pill text: the hue at 95%.</summary>
+        public const double RestTextAlpha = 0.95;
+        /// <summary>Inactive pill plate: the hue at 14%.</summary>
+        public const double RestFillAlpha = 0.14;
+        /// <summary>Inactive pill border: the hue at 45%.</summary>
+        public const double RestOutlineAlpha = 0.45;
+        /// <summary>Hovered inactive pill: the plate in the hue at 26%.</summary>
+        public const double HoverFillAlpha = 0.26;
+        /// <summary>The pill track (a real bar): the hue at 10%, its 1.5 px border at 40%.</summary>
+        public const double TrackFillAlpha = 0.10;
+        public const double TrackBorderAlpha = 0.40;
+        /// <summary>The active pill's soft outer glow in the hue (static, 0 offset).</summary>
+        public const double ActiveGlowBlur = 10;
+        public const double ActiveGlowOpacity = 0.55;
+        /// <summary>Pill size: 36 px tall, 14 px SemiBold label, 16 px padding, 6 px between pills.</summary>
+        public const double PillHeight = 36;
+        public const double PillFontSize = 14;
+        public const double PillPadding = 16;
+        public const double PillGap = 6;
+        /// <summary>The leading glyph: 16 px in Segoe MDL2 Assets, wearing the label's colour.</summary>
+        public const double GlyphSize = 16;
+        public const string GlyphFont = "Segoe MDL2 Assets";
+
+        /// <summary>
+        /// One leading glyph per tab key (Segoe MDL2 Assets code points). A key not in the table
+        /// draws no glyph; a glyph the font lacks also draws none (never a box), and
+        /// NavStripPolishGlyphTests checks every entry against the font on the machine.
+        /// </summary>
+        public static readonly IReadOnlyDictionary<string, char> Glyphs = new Dictionary<string, char>
+        {
+            // Home
+            ["settings"] = '\uE80F',         // Dashboard: a home
+            // Studio
+            ["studio"] = '\uE790',           // Effects: a palette
+            ["presets"] = '\uE9E9',          // sliders
+            ["haptics"] = '\uE877',          // a vibrating phone
+            ["justdrop"] = '\uEB42',         // a droplet
+            ["ramp"] = '\uE9D2',             // a rising line
+            // Companion
+            ["companion"] = '\uE8BD',        // Chat: a speech balloon
+            ["personality"] = '\uE76E',      // a face (the font has no mask)
+            ["permissions"] = '\uEA18',      // a shield
+            ["companionlinks"] = '\uE71B',   // a link
+            ["bambitakeover"] = '\uE7AD',    // a swirl
+            ["shelistening"] = '\uE720',     // a microphone
+            ["awareness"] = '\uEA80',        // a light bulb
+            // Play
+            ["play"] = '\uE7FC',             // Games: a controller
+            ["playeyes"] = '\uE7B3',         // an eye
+            ["playsessions"] = '\uE768',     // play
+            ["deeper"] = '\uE81E',           // layers
+            // Social
+            ["availablesubjects"] = '\uE7EE', // Lobby: a host at a table (the font has no door)
+            ["friends"] = '\uE716',          // two people
+            ["leaderboard"] = '\uE9F9',      // a bar chart (the font has no trophy)
+            ["remotecontrol"] = '\uE703',    // two linked screens
+            ["leash"] = '\uE71B',            // a chain link
+            // You
+            ["discord"] = '\uE77B',          // Profile: a person
+            ["quests"] = '\uE9D5',           // a checklist
+            ["achievements"] = '\uE734',     // a star
+            ["enhancements"] = '\uE945',     // a bolt
+            ["programs"] = '\uE787',         // a calendar
+            ["chaster"] = '\uE72E',          // a padlock
+            // Library
+            ["assets"] = '\uE8B7',           // a folder
+            ["folders"] = '\uE838',          // an open folder
+            ["mods"] = '\uEA86',             // a puzzle piece
+            ["catalogue"] = '\uE736',        // a book
+            ["phrases"] = '\uE8D2',          // letters (the font has no quote mark)
+            ["medialog"] = '\uE8FD',         // a list
+        };
+
+        /// <summary>The glyph a tab key wears, or null (no glyph).</summary>
+        public static string? Glyph(string? key) =>
+            key != null && Glyphs.TryGetValue(key.ToLowerInvariant(), out var c) ? c.ToString() : null;
         /// <summary>The "Moved" note's text: the hue at 90%.</summary>
         public const double NoteTextAlpha = 0.90;
 
@@ -207,12 +277,12 @@ namespace ConditioningControlPanel.Controls.NavRail
         }
 
         /// <summary>The worst ground a rest pill's text sits on: the page with the section wash
-        /// (lane CHROME, up to 14%) and the track (8%) both in the hue.</summary>
+        /// (lane CHROME, up to 14%), the track (10%) and the pill's own plate (14%), all in the hue.</summary>
         public static Color RestGround(Color hue) =>
-            Over(WithAlpha(hue, TrackFillAlpha), Over(WithAlpha(hue, 0.14), PageGround));
+            Over(WithAlpha(hue, RestFillAlpha), Over(WithAlpha(hue, TrackFillAlpha), Over(WithAlpha(hue, 0.14), PageGround)));
 
         /// <summary>
-        /// A rest pill's text: the hue at 85%. A dark hue (Play's violet-blue) reads muddy at 85%
+        /// A rest pill's text: the hue at 95%. A dark hue (Play's violet-blue) reads muddy at 95%
         /// on the dark track, so it is lifted toward white in small steps until the text reads at
         /// 4.5:1 on <see cref="RestGround"/>. Light hues come back unchanged.
         /// </summary>
@@ -241,9 +311,11 @@ namespace ConditioningControlPanel.Controls.NavRail
         private Brush _activeText = Brushes.Black;
         private Brush _restText = Brushes.Gainsboro;
         private Brush _restOutline = Brushes.Transparent;
+        private Brush _restFill = Brushes.Transparent;
         private Brush _hoverFill = Brushes.Transparent;
+        private Color _hue = NavStripRules.Lilac;
 
-        private readonly List<(NavTab Tab, Button Pill, Border Face, TextBlock Label)> _pills = new();
+        private readonly List<(NavTab Tab, Button Pill, Border Face, TextBlock Label, TextBlock? Glyph)> _pills = new();
         private string? _section;
         private string? _activePill;
         private string? _crumbKey;
@@ -358,6 +430,8 @@ namespace ConditioningControlPanel.Controls.NavRail
             _activeText = Freeze(new SolidColorBrush(NavStripRules.ActiveTextOn(hue)));
             _restText = Freeze(new SolidColorBrush(NavStripRules.RestTextOn(hue)));
             _restOutline = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.RestOutlineAlpha)));
+            _restFill = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.RestFillAlpha)));
+            _hue = hue;
             _hoverFill = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.HoverFillAlpha)));
             PillTrack.Background = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.TrackFillAlpha)));
             PillTrack.BorderBrush = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.TrackBorderAlpha)));
@@ -369,6 +443,15 @@ namespace ConditioningControlPanel.Controls.NavRail
             var p = _pills.FirstOrDefault(x => x.Tab.Key == key);
             return (p.Label?.Foreground ?? Brushes.Transparent, p.Face?.BorderBrush ?? Brushes.Transparent);
         }
+
+        /// <summary>Test seam: a pill's plate fill (transparent on the active pill: the ActiveFill shows).</summary>
+        internal Brush PillFill(string key) => _pills.FirstOrDefault(x => x.Tab.Key == key).Face?.Background ?? Brushes.Transparent;
+
+        /// <summary>Test seam: the glyph text a pill shows, or null.</summary>
+        internal string? PillGlyph(string key) => _pills.FirstOrDefault(x => x.Tab.Key == key).Glyph?.Text;
+
+        /// <summary>Test seam: the active fill's glow (null when Motion is Off).</summary>
+        internal System.Windows.Media.Effects.DropShadowEffect? ActiveGlow => ActiveFill.Effect as System.Windows.Media.Effects.DropShadowEffect;
 
         internal Brush TrackFill => PillTrack.Background;
         internal Brush TrackBorder => PillTrack.BorderBrush;
@@ -401,7 +484,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                 var label = new TextBlock
                 {
                     Text = SafeLoc(tab.LabelKey, tab.Key),
-                    FontSize = 13.5,
+                    FontSize = NavStripRules.PillFontSize,
                     FontWeight = FontWeights.SemiBold,
                     VerticalAlignment = VerticalAlignment.Center,
                     Foreground = _restText,
@@ -411,6 +494,23 @@ namespace ConditioningControlPanel.Controls.NavRail
                 label.MinWidth = BoldWidth(label);
                 label.TextAlignment = TextAlignment.Center;
                 var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                // The leading glyph (polish wave 3): one per tab key, in the label's colour. A
+                // glyph the font lacks draws nothing, never a box.
+                TextBlock? glyph = null;
+                var glyphText = NavStripRules.Glyph(tab.Key);
+                if (glyphText != null && GlyphRenders(glyphText))
+                {
+                    glyph = new TextBlock
+                    {
+                        Text = glyphText,
+                        FontFamily = GlyphFamily,
+                        FontSize = NavStripRules.GlyphSize,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(0, 0, 8, 0),
+                        Foreground = _restText,
+                    };
+                    content.Children.Add(glyph);
+                }
                 content.Children.Add(label);
                 if (tab.Tier > 0)
                 {
@@ -446,21 +546,21 @@ namespace ConditioningControlPanel.Controls.NavRail
                     });
                 }
 
-                // The face: a 1 px outline in the hue at rest. Its 1 px outer ring is the focus
-                // ring, so border + ring add up to the 2 px wave 1 spent and no pill grows.
+                // The face: a filled plate in the hue at rest (14% fill, 45% border). Its 1 px
+                // outer ring is the focus ring, so border + ring never grow the pill.
                 var face = new Border
                 {
-                    CornerRadius = new CornerRadius(14),
-                    Padding = new Thickness(14, 0, 14, 0),
-                    MinHeight = 32,   // + the 1 px ring = a 34 px pill; the row stays 50 px
-                    Background = Brushes.Transparent,
+                    CornerRadius = new CornerRadius(17),
+                    Padding = new Thickness(NavStripRules.PillPadding, 0, NavStripRules.PillPadding, 0),
+                    MinHeight = NavStripRules.PillHeight - 2,   // + the 1 px ring = a 36 px pill
+                    Background = _restFill,
                     BorderThickness = new Thickness(1),
                     BorderBrush = _restOutline,
                     Child = content,
                 };
                 var ring = new Border
                 {
-                    CornerRadius = new CornerRadius(15),
+                    CornerRadius = new CornerRadius(18),
                     BorderThickness = new Thickness(1),
                     BorderBrush = Brushes.Transparent,
                     Child = face,
@@ -483,6 +583,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                     FocusVisualStyle = null,
                     Tag = tab.Key,
                     ToolTip = PillToolTip(section, tab, label.Text),
+                    Margin = new Thickness(PillRow.Children.Count == 0 ? 0 : NavStripRules.PillGap, 0, 0, 0),
                 };
                 ToolTipService.SetInitialShowDelay(pill, 500);
                 KeyboardNavigation.SetIsTabStop(pill, false);
@@ -491,7 +592,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                 System.Windows.Automation.AutomationProperties.SetAutomationId(pill, "NavPill_" + tab.Key);
 
                 pill.MouseEnter += (_, _) => { if (!IsActive(tab.Key)) face.Background = _hoverFill; };
-                pill.MouseLeave += (_, _) => { face.Background = Brushes.Transparent; if (!pill.IsPressed) MotionFx.PressSquish(ring, false); };
+                pill.MouseLeave += (_, _) => { face.Background = IsActive(tab.Key) ? Brushes.Transparent : _restFill; if (!pill.IsPressed) MotionFx.PressSquish(ring, false); };
                 pill.PreviewMouseLeftButtonDown += (_, _) => MotionFx.PressSquish(ring, true);
                 pill.LostMouseCapture += (_, _) => MotionFx.PressSquish(ring, false);
                 pill.Click += (_, e) =>
@@ -504,12 +605,35 @@ namespace ConditioningControlPanel.Controls.NavRail
                 pill.LostKeyboardFocus += (_, _) => ring.BorderBrush = Brushes.Transparent;
 
                 PillRow.Children.Add(pill);
-                _pills.Add((tab, pill, face, label));
+                _pills.Add((tab, pill, face, label, glyph));
                 PillCreated?.Invoke(tab, pill);
             }
 
             // One tab stop for the whole strip (ARIA tabs): the active pill, else the first.
             if (_pills.Count > 0) KeyboardNavigation.SetIsTabStop(_pills[0].Pill, true);
+        }
+
+        private static readonly FontFamily GlyphFamily = new(NavStripRules.GlyphFont);
+        private static readonly Dictionary<string, bool> GlyphCache = new();
+
+        /// <summary>True when the glyph font on this machine has the glyph (else the pill shows
+        /// no glyph rather than a box). Cached per glyph.</summary>
+        internal static bool GlyphRenders(string glyph)
+        {
+            lock (GlyphCache)
+            {
+                if (GlyphCache.TryGetValue(glyph, out var known)) return known;
+                bool ok = false;
+                try
+                {
+                    var typeface = new Typeface(GlyphFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+                    if (typeface.TryGetGlyphTypeface(out var gt) && gt.FamilyNames.Values.Contains(NavStripRules.GlyphFont))
+                        ok = glyph.All(ch => gt.CharacterToGlyphMap.TryGetValue(ch, out var index) && index != 0);
+                }
+                catch { ok = false; }
+                GlyphCache[glyph] = ok;
+                return ok;
+            }
         }
 
         /// <summary>Template for a pill button: a transparent hit backing and the face.</summary>
@@ -602,16 +726,18 @@ namespace ConditioningControlPanel.Controls.NavRail
         private void SetActive(string? key, bool animate)
         {
             _activePill = key;
-            foreach (var (tab, pill, face, label) in _pills)
+            foreach (var (tab, pill, face, label, glyph) in _pills)
             {
                 bool on = IsActive(tab.Key);
                 // Active: dark ink (or white) on the solid hue the ActiveFill slides under; the
-                // outline steps aside so the fill reads as one shape. Rest: the hue at 85% inside
-                // a 35% outline. The ExtraBold width stays reserved, so nothing moves either way.
+                // plate and its border step aside so the fill reads as one shape. Rest: the hue at
+                // 95% on a 14% plate inside a 45% border. The ExtraBold width stays reserved, so
+                // nothing moves either way.
                 label.Foreground = on ? _activeText : _restText;
                 label.FontWeight = FontWeights.SemiBold;
+                if (glyph != null) glyph.Foreground = label.Foreground;
                 face.BorderBrush = on ? Brushes.Transparent : _restOutline;
-                if (on) face.Background = Brushes.Transparent;
+                face.Background = on ? Brushes.Transparent : (pill.IsMouseOver ? _hoverFill : _restFill);
                 KeyboardNavigation.SetIsTabStop(pill, on);
                 System.Windows.Automation.AutomationProperties.SetItemStatus(pill, on ? "selected" : string.Empty);
             }
@@ -646,6 +772,16 @@ namespace ConditioningControlPanel.Controls.NavRail
             catch (InvalidOperationException) { return; }
             ActiveFill.Visibility = Visibility.Visible;
             ActiveFill.Height = pill.ActualHeight;
+            // The lit tab floats: a soft static glow in the hue (0 offset), none at Motion Off.
+            if (Level == MotionLevel.Off) ActiveFill.Effect = null;
+            else if (ActiveFill.Effect is not System.Windows.Media.Effects.DropShadowEffect glow || glow.Color != _hue)
+                ActiveFill.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = _hue,
+                    ShadowDepth = 0,
+                    BlurRadius = NavStripRules.ActiveGlowBlur,
+                    Opacity = NavStripRules.ActiveGlowOpacity,
+                };
 
             int ms = animate && ActiveFill.Width > 0 ? NavStripRules.SlideMs(Level) : 0;
             if (ms <= 0)
