@@ -52,9 +52,10 @@ public class WebNudgeTests
 
         // NOT in NavDoorMap - a map row drags in a default tab, a ShowTab case and a palette
         // door row (PaletteDoorParityTests), none of which a browser link has.
-        var map = Regex.Match(tabNav, @"NavDoorMap =\s*\{.*?\};", RegexOptions.Singleline);
-        Assert.True(map.Success, "NavDoorMap has moved or changed shape");
-        Assert.DoesNotContain("webapp", map.Value);
+        // Nav rework BASE (2026-10-06): NavDoorMap is derived (NavLegacyDoors.Build()).
+        Assert.Contains("NavLegacyDoors.Build()", tabNav);
+        var map = ConditioningControlPanel.Services.UI.NavLegacyDoors.Build();
+        Assert.DoesNotContain(map, d => d.Door == "webapp" || d.Tabs.Contains("webapp"));
 
         // In the launcher list and the parts switch instead, so the rail walker can animate it.
         Assert.Contains("NavLauncherDoors = { \"webapp\" }", tabNav);

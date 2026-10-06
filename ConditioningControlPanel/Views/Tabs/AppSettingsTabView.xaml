@@ -168,6 +168,23 @@
                         </Grid>
                     </RadioButton>
 
+                    <RadioButton x:Name="SectionPillMonitors" Tag="monitors"
+                                 Style="{StaticResource SectionPill}" Click="SectionPill_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueDevicesBrush}"/>
+                            <Image Grid.Column="1" Width="14" Height="14" Margin="0,0,7,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='🖥', Converter={StaticResource EmojiToImageSource}}"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str settings_section_monitors}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
                     <RadioButton x:Name="SectionPillPerformance" Tag="performance"
                                  Style="{StaticResource SectionPill}" Click="SectionPill_Click">
                         <Grid>
@@ -286,6 +303,7 @@
                     <appset:GeneralSettingsSection       x:Name="SectionGeneral"       Margin="0,0,0,10"/>
                     <appset:AudioSettingsSection         x:Name="SectionAudio"         Margin="0,0,0,10"/>
                     <appset:DevicesSettingsSection       x:Name="SectionDevices"       Margin="0,0,0,10"/>
+                    <appset:MonitorsSettingsSection      x:Name="SectionMonitors"      Margin="0,0,0,10"/>
                     <appset:PerformanceSettingsSection   x:Name="SectionPerformance"   Margin="0,0,0,10"/>
                     <appset:NotificationsSettingsSection x:Name="SectionNotifications" Margin="0,0,0,10"/>
                     <appset:EmiDeskSettingsSection       x:Name="SectionEmidesk"       Margin="0,0,0,10"/>

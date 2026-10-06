@@ -47,7 +47,7 @@ namespace ConditioningControlPanel.Views.Tabs
         /// <summary>Rail order, and the only section keys <see cref="FocusSection"/> answers to.</summary>
         internal static readonly string[] SectionKeys =
         {
-            "general", "audio", "devices", "performance",
+            "general", "audio", "devices", "monitors", "performance",
             "notifications", "emidesk", "account", "data", "updates",
         };
 
@@ -68,6 +68,7 @@ namespace ConditioningControlPanel.Views.Tabs
             "general" => SectionGeneral,
             "audio" => SectionAudio,
             "devices" => SectionDevices,
+            "monitors" => SectionMonitors,
             "performance" => SectionPerformance,
             "notifications" => SectionNotifications,
             "emidesk" => SectionEmidesk,
@@ -82,6 +83,7 @@ namespace ConditioningControlPanel.Views.Tabs
             "general" => SectionPillGeneral,
             "audio" => SectionPillAudio,
             "devices" => SectionPillDevices,
+            "monitors" => SectionPillMonitors,
             "performance" => SectionPillPerformance,
             "notifications" => SectionPillNotifications,
             "emidesk" => SectionPillEmidesk,

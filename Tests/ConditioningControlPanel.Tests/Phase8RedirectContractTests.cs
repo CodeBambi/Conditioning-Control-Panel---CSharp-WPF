@@ -139,8 +139,11 @@ public class Phase8RedirectContractTests
                         StringComparison.Ordinal);
         Assert.Contains("\"progression\"", StripComments(ReadSource("Services", "ChromeFxNav.cs")),
                         StringComparison.Ordinal);
-        // The door map: the Home door owns both "settings" and "progression".
-        Assert.Matches(new Regex(@"""settings""\s*,\s*""progression"""), StripComments(TabNavigation()));
+        // The door map: the Home door owns both "settings" and "progression" (nav rework: the
+        // map is derived from NavSections through NavLegacyDoors; "progression" redirects Home).
+        Assert.Contains(ConditioningControlPanel.Services.UI.NavLegacyDoors.Build(),
+            d => d.Door == "home" && d.Tabs.Contains("settings") && d.Tabs.Contains("progression"));
+        Assert.Equal("home", ConditioningControlPanel.Services.UI.NavSections.SectionForTab("progression"));
     }
 
     [Fact]

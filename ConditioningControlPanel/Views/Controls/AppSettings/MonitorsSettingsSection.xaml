@@ -1,0 +1,20 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.AppSettingsSections.MonitorsSettingsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="760">
+
+    <!-- ================================================================
+         SETTINGS · MONITORS (nav rework 2026-10-06, BASE lane shell)
+
+         Empty on purpose. The REHOME lane lifts the monitor picker and the
+         video checkboxes out of Features/SystemFeatureControl into here; the
+         Home System pill then opens this section.
+         ================================================================ -->
+
+    <StackPanel>
+        <TextBlock Text="{loc:Str settings_section_monitors}" Style="{StaticResource SectionHeader}"/>
+    </StackPanel>
+</UserControl>

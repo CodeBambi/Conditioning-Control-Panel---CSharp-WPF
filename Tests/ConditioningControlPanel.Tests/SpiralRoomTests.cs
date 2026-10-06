@@ -601,8 +601,11 @@ public class SpiralRoomTests
         Assert.Contains("SpiralTab.Visibility = Visibility.Collapsed", nav, StringComparison.Ordinal);
         Assert.Contains("case \"spiral\":", nav, StringComparison.Ordinal);
         Assert.Contains("SpiralTab.OnTabShown()", nav, StringComparison.Ordinal);
-        // The You door owns it, right after the profile.
-        Assert.Contains("\"discord\", \"spiral\"", nav, StringComparison.Ordinal);
+        // The You door owns it (nav rework: the door map is derived from NavSections through
+        // NavLegacyDoors), and the You section lists it, hidden unless fog era.
+        Assert.Contains(ConditioningControlPanel.Services.UI.NavLegacyDoors.Build(),
+            d => d.Door == "you" && d.Tabs.Contains("spiral"));
+        Assert.Equal("you", ConditioningControlPanel.Services.UI.NavSections.SectionForTab("spiral"));
 
         Assert.Contains("\"spiral\" => BtnNavSpiral",
             AppFile("MainWindow", "MainWindow.ChromeFx.cs"), StringComparison.Ordinal);

@@ -57,16 +57,11 @@ public class PaletteDoorParityTests
     /// <summary>(door, defaultTab) straight out of MainWindow.TabNavigation.cs's NavDoorMap.</summary>
     private static List<(string Door, string DefaultTab)> RailDoors()
     {
-        var src = TabNavigationSource();
-        var start = src.IndexOf("NavDoorMap =", StringComparison.Ordinal);
-        Assert.True(start > 0, "NavDoorMap not found in MainWindow.TabNavigation.cs");
-        var end = src.IndexOf("};", start, StringComparison.Ordinal);
-        Assert.True(end > start, "NavDoorMap's initializer never closes");
-
-        var block = src.Substring(start, end - start);
-        var doors = new List<(string, string)>();
-        foreach (Match m in Regex.Matches(block, @"\(""(\w+)"",\s*""(\w+)"",\s*new\[\]"))
-            doors.Add((m.Groups[1].Value, m.Groups[2].Value));
+        // Nav rework BASE (2026-10-06): NavDoorMap is derived from NavSections through
+        // NavLegacyDoors, so read the projection instead of scraping a literal.
+        Assert.Contains("NavLegacyDoors.Build()", TabNavigationSource());
+        var doors = ConditioningControlPanel.Services.UI.NavLegacyDoors.Build()
+            .Select(d => (d.Door, d.DefaultTab)).ToList();
 
         Assert.True(doors.Count >= 6, "NavDoorMap parsed as only " + doors.Count + " doors — the regex has rotted");
         return doors;

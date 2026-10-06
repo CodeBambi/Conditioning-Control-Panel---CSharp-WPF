@@ -165,10 +165,10 @@ public class YouLibraryDoorTests
     {
         // A rail row that claims a key the app has no view for leaves the active indicator
         // pointing at nothing. These four open a dialog, a website, a dialog and a window.
-        var nav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
-        var row = Regex.Match(nav, @"\(""library"",\s*""assets"",\s*new\[\]\s*\{([^}]*)\}");
-        Assert.True(row.Success, "the NavDoorMap row for the Library door has moved or changed shape");
-        Assert.Equal("\"assets\"", row.Groups[1].Value.Trim());
+        // Nav rework BASE (2026-10-06): NavDoorMap is derived (NavLegacyDoors.Build()).
+        var row = ConditioningControlPanel.Services.UI.NavLegacyDoors.Build().Single(d => d.Door == "library");
+        Assert.Equal("assets", row.DefaultTab);
+        Assert.Equal(new[] { "assets" }, row.Tabs);
     }
 
     [Fact]

@@ -632,27 +632,11 @@ namespace ConditioningControlPanel
         /// panel and the accordion simply has nothing to open for it.
         /// </summary>
         private static readonly (string Door, string DefaultTab, string[] Tabs)[] NavDoorMap =
-        {
-            ("home",      "settings",  new[] { "settings", "progression" }),
-            // "justdrop" is a window key like "fyp": filed here so the Studio row's door resolves;
-            // ShowTab intercepts it before any door would expand.
-            ("studio",    "studio",    new[] { "studio", "presets", "haptics", "justdrop" }),
-            ("companion", "companion", new[] { "companion", "bambitakeover", "shelistening", "awareness" }),
-            // Phase 6: "play" replaced "lab" in place as this door's first entry and default
-            // destination. "lab" is deliberately NOT listed - it is a legacy alias, resolved by
-            // NavDoorForTab below so an old ShowTab("lab") still opens this door, and listing it
-            // as a real entry would claim the rail has a row for it, which it does not.
-            ("play",      "play",      new[] { "play", "deeper", "exclusives", "gradedintake", "lockdown",
-                                               "blinktrainer", "remotecontrol", "availablesubjects" }),
-            // "spiral" sits right after "discord": the Spiral Room's other two doors are both on
-            // the profile (the Trainer Card plate and the account menu row), so the rail row belongs
-            // beside the tab those live on. Its entry is Collapsed unless this account is in the fog
-            // era or has an open spiral - see MainWindow.SpiralRoom.cs.
-            ("you",       "discord",   new[] { "discord", "spiral", "quests", "achievements", "enhancements",
-                                               "programs", "leaderboard" }),
-            ("library",   "assets",    new[] { "assets" }),
-            ("appsettings", "appsettings", new[] { "appsettings" }),
-        };
+            Services.UI.NavLegacyDoors.Build();
+
+        // Nav rework BASE bridge (2026-10-06): derived from Services.UI.NavSections and projected
+        // back onto the old six doors + Settings, membership unchanged. See NavLegacyDoors; the
+        // RAIL lane replaces this when the labelled rail lands.
 
         /// <summary>
         /// v6.8.0: rail doors that LAUNCH instead of navigating - full medallion treatment, no
