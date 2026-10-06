@@ -45,7 +45,9 @@
              name UNDER it. State lives in the template parts (MainWindow.NavRail.cs drives them):
                NavHover      - +8% white tint while the pointer is on the row
                NavActiveFill - the section's tint behind the current row (the "filled tile")
-               NavActiveBar  - 3px bar on the left edge in the section hue (BorderBrush)
+               NavActiveBar  - 4px bar on the left edge in the section hue (BorderBrush)
+               NavEdgeSpur   - 20x8 hue tab from the window edge into the lit medallion's ring
+                               (polish wave 9); NavRail.cs builds its gradient and fades it in
                NavFocusRing  - 2px white ring for keyboard focus, never shown for the current row's
                                selection, so focus and "you are here" can never be confused.
              ChromeFx's SetNavIndicator also finds NavActiveBar/NavActiveFill by name; keep them.
@@ -68,11 +70,14 @@
                                     CornerRadius="0,12,12,0" Margin="0,0,4,0" Opacity="0" IsHitTestVisible="False"/>
                             <Border x:Name="NavHover" Background="#14FFFFFF"
                                     CornerRadius="0,12,12,0" Margin="0,0,4,0" Opacity="0" IsHitTestVisible="False"/>
+                            <Border x:Name="NavEdgeSpur" Width="20" Height="8" HorizontalAlignment="Left"
+                                    VerticalAlignment="Top" Margin="0,25,0,0" CornerRadius="0,4,4,0"
+                                    Visibility="Collapsed" IsHitTestVisible="False" Opacity="0"/>
                             <ContentPresenter Margin="0,1,0,0"
                                               HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                             <Border x:Name="NavFocusRing" BorderBrush="#E6FFFFFF" BorderThickness="2"
                                     CornerRadius="10" Margin="6,0,8,0" Visibility="Collapsed" IsHitTestVisible="False"/>
-                            <Border x:Name="NavActiveBar" Width="3" HorizontalAlignment="Left" Margin="0,10"
+                            <Border x:Name="NavActiveBar" Width="4" HorizontalAlignment="Left" Margin="0,8"
                                     Background="{TemplateBinding BorderBrush}" CornerRadius="0,2,2,0"
                                     Visibility="Collapsed" IsHitTestVisible="False"/>
                         </Grid>
@@ -467,7 +472,7 @@
                             <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                                    BorderThickness="0" BorderBrush="Transparent"/>
                             <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorHome"
@@ -478,6 +483,11 @@
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
+                            <Border Grid.Row="0" Tag="navtint" Width="52" Height="52" CornerRadius="13"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Border Grid.Row="0" Tag="navring" Width="56" Height="56" CornerRadius="15"
+                                    BorderThickness="3" BorderBrush="Transparent" IsHitTestVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
                                 <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -499,7 +509,7 @@
                             <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                                    BorderThickness="0" BorderBrush="Transparent"/>
                             <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorStudio"
@@ -510,6 +520,11 @@
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
+                            <Border Grid.Row="0" Tag="navtint" Width="52" Height="52" CornerRadius="13"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Border Grid.Row="0" Tag="navring" Width="56" Height="56" CornerRadius="15"
+                                    BorderThickness="3" BorderBrush="Transparent" IsHitTestVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
                                 <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -531,7 +546,7 @@
                             <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                                    BorderThickness="0" BorderBrush="Transparent"/>
                             <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorCompanion"
@@ -542,6 +557,11 @@
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
+                            <Border Grid.Row="0" Tag="navtint" Width="52" Height="52" CornerRadius="13"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Border Grid.Row="0" Tag="navring" Width="56" Height="56" CornerRadius="15"
+                                    BorderThickness="3" BorderBrush="Transparent" IsHitTestVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
                                 <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -563,7 +583,7 @@
                             <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                                    BorderThickness="0" BorderBrush="Transparent"/>
                             <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorPlay"
@@ -574,6 +594,11 @@
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
+                            <Border Grid.Row="0" Tag="navtint" Width="52" Height="52" CornerRadius="13"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Border Grid.Row="0" Tag="navring" Width="56" Height="56" CornerRadius="15"
+                                    BorderThickness="3" BorderBrush="Transparent" IsHitTestVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
                                 <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -595,7 +620,7 @@
                             <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                                    BorderThickness="0" BorderBrush="Transparent"/>
                             <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Grid Width="64" Height="64">
@@ -614,6 +639,11 @@
                                             IsHitTestVisible="False"/>
                                 </Grid>
                             </Viewbox>
+                            <Border Grid.Row="0" Tag="navtint" Width="52" Height="52" CornerRadius="13"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Border Grid.Row="0" Tag="navring" Width="56" Height="56" CornerRadius="15"
+                                    BorderThickness="3" BorderBrush="Transparent" IsHitTestVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
                                 <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -635,7 +665,7 @@
                             <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                                    BorderThickness="0" BorderBrush="Transparent"/>
                             <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorYou"
@@ -646,6 +676,11 @@
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
+                            <Border Grid.Row="0" Tag="navtint" Width="52" Height="52" CornerRadius="13"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Border Grid.Row="0" Tag="navring" Width="56" Height="56" CornerRadius="15"
+                                    BorderThickness="3" BorderBrush="Transparent" IsHitTestVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
                                 <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -667,7 +702,7 @@
                             <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                                    BorderThickness="0" BorderBrush="Transparent"/>
                             <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorLibrary"
@@ -678,6 +713,11 @@
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
+                            <Border Grid.Row="0" Tag="navtint" Width="52" Height="52" CornerRadius="13"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Border Grid.Row="0" Tag="navring" Width="56" Height="56" CornerRadius="15"
+                                    BorderThickness="3" BorderBrush="Transparent" IsHitTestVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
                                 <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -714,7 +754,7 @@
                             <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                                    BorderThickness="0" BorderBrush="Transparent"/>
                             <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorSettings"
@@ -725,6 +765,11 @@
                                     </Image.Clip>
                                 </Image>
                             </Viewbox>
+                            <Border Grid.Row="0" Tag="navtint" Width="52" Height="52" CornerRadius="13"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <Border Grid.Row="0" Tag="navring" Width="56" Height="56" CornerRadius="15"
+                                    BorderThickness="3" BorderBrush="Transparent" IsHitTestVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <Border Grid.Row="0" Style="{StaticResource NavSectionBadge}">
                                 <TextBlock FontSize="9.5" FontWeight="ExtraBold" Foreground="White"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>

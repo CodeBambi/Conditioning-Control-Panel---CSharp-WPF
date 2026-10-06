@@ -20,14 +20,46 @@ namespace ConditioningControlPanel.Controls.NavRail
         internal const byte FillAlpha = 0x33;
         /// <summary>The faint inner tint of every medallion tile (about 18%).</summary>
         internal const byte TileTintAlpha = 0x40;
-        /// <summary>The idle ring (about 45%), its hover (about 80%), the active ring (solid).</summary>
-        // Idle ring 72%: at 45% the door art's own pink rims drowned the hue (desk shot
-        // chrome-rail-2x.png, polish wave 2), and the owner asked for the hue AROUND the icons.
-        internal const byte RingIdleAlpha = 0xB8, RingHoverAlpha = 0xE6, RingActiveAlpha = 0xFF;
+        /// <summary>The idle ring (80%), its hover (95%), the active ring (solid).</summary>
+        // Idle ring 80% (polish wave 9, was 72%): the owner asked for the hue around the icons to
+        // be more noticeable and the ring thicker. Still under the active ring, which is solid
+        // AND lifted toward white (RingActiveLift).
+        internal const byte RingIdleAlpha = 0xCC, RingHoverAlpha = 0xF2, RingActiveAlpha = 0xFF;
 
-        /// <summary>The ring alpha for a row: solid when active, brighter on hover, else 45%.</summary>
+        /// <summary>How far the active ring is mixed toward white (25%): brighter in the hue, so
+        /// the lit row reads at a glance without a second colour.</summary>
+        internal const double RingActiveLift = 0.25;
+
+        /// <summary>Ring thickness: 3 px at rest and on hover, 3.5 px on the lit row. The ring is
+        /// its own Border drawn OVER the art (Tag "navring"), so the thickness eats no art.</summary>
+        internal const double RingIdleThickness = 3.0, RingActiveThickness = 3.5;
+
+        /// <summary>The hue wash over the medallion art (Tag "navtint"): about 18% lit, 8% idle.
+        /// WPF has no multiply blend without a shader, so the icon leans toward the hue by a wash.</summary>
+        internal const byte ArtTintActiveAlpha = 0x2E, ArtTintIdleAlpha = 0x14;
+
+        /// <summary>The spur that bridges the window edge to the lit medallion: 20 x 8 px, its top
+        /// at 25 px so its centre sits on the tile centre (ContentPresenter top 1 + 56 / 2 = 29).
+        /// The gradient runs from the hue at 90% at the window edge to 60% against the ring.</summary>
+        internal const double SpurWidth = 20, SpurHeight = 8, SpurTop = 25;
+        internal const byte SpurEdgeAlpha = 0xE6, SpurRingAlpha = 0x99;
+
+        /// <summary>The ring alpha for a row: solid when active, brighter on hover, else 80%.</summary>
         internal static byte RingAlpha(bool active, bool hover) =>
             active ? RingActiveAlpha : hover ? RingHoverAlpha : RingIdleAlpha;
+
+        /// <summary>The ring colour: the plain hue at <see cref="RingAlpha"/> idle and on hover,
+        /// the hue lifted 25% toward white, solid, when active.</summary>
+        internal static System.Windows.Media.Color RingColor(System.Windows.Media.Color hue, bool active, bool hover) =>
+            active
+                ? WithAlpha(NavStripRules.Mix(hue, System.Windows.Media.Colors.White, RingActiveLift), RingActiveAlpha)
+                : WithAlpha(hue, RingAlpha(false, hover));
+
+        /// <summary>The ring thickness for a row.</summary>
+        internal static double RingThickness(bool active) => active ? RingActiveThickness : RingIdleThickness;
+
+        /// <summary>The art wash alpha for a row.</summary>
+        internal static byte ArtTintAlpha(bool active) => active ? ArtTintActiveAlpha : ArtTintIdleAlpha;
 
         /// <summary>A colour with its alpha replaced.</summary>
         internal static System.Windows.Media.Color WithAlpha(System.Windows.Media.Color c, byte a) =>
