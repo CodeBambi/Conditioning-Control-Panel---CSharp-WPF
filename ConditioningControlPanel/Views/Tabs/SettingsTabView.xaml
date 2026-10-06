@@ -2126,186 +2126,55 @@
         </Grid>
     
         <!-- ============================================================ -->
-        <!-- QUICK TOGGLES ROW - full width, under both the feature grid  -->
-        <!-- AND the right half. (Historic x:Name VelvetHelperButtonRow.) -->
+        <!-- QUICK TOGGLES - five hover bubbles at the bottom right.      -->
+        <!-- (Historic x:Name VelvetHelperButtonRow.)                      -->
         <!--                                                               -->
-        <!-- Phase 3 added the fifth pill: "System" used to be a mosaic    -->
-        <!-- tile, but it is not a feature - it is the display/video       -->
-        <!-- switches - so it traded its tile for Brain Drain and became a -->
-        <!-- pill. Same handler, same popup, new caller. Keep this row at  -->
-        <!-- Height=30: it sits between the mosaic and the marquee inside  -->
-        <!-- the fixed 1489x901 canvas, and every unit it grows comes off  -->
-        <!-- the mosaic's star row (WPF clips silently - #860).            -->
+        <!-- Nav polish wave 4 (owner, 2026-10-06): "this whole rail can   -->
+        <!-- be lost, make them little bubbles that expand on hover, have  -->
+        <!-- them on the bottom right under the join our discord           -->
+        <!-- community". The five wide pills became a speed dial           -->
+        <!-- (Controls/HoverBubbleBar.cs): 34 px round bubbles with a      -->
+        <!-- glyph, right-aligned under the account strip; hover or focus  -->
+        <!-- slides the label out to the left of the glyph. Every button   -->
+        <!-- keeps its x:Name, Click and ToolTip. It spans columns 0-2 so  -->
+        <!-- its right edge is the account strip's, not the favourites     -->
+        <!-- drawer's (column 3, row 1 only). The row is 36 tall with      -->
+        <!-- a 4 px top margin: the same 40 units the old 30 + 10 took, so -->
+        <!-- the mosaic's star row loses nothing (WPF clips silently, #860).-->
+        <!--                                                               -->
+        <!-- VelvetBtnSystem is the ONLY route to MainWindow.CardSystem_Click -->
+        <!-- (the System popup, its mod-aware title, NotifyFeatureOpened   -->
+        <!-- "System"): never retire it without moving the handler.        -->
+        <!-- VelvetBtnSchedulerRamp navigates to the Studio rack (Phase 8  -->
+        <!-- deleted the wrapper popup); VelvetBtnCatalogue opens          -->
+        <!-- app.cclabs.app/catalogue in the browser.                      -->
         <!-- ============================================================ -->
-        <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" x:Name="VelvetHelperButtonRow"
-              Height="30" Margin="5,10,5,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <!-- Webcam card — surfaced from the Lab for discoverability.
-                 Distinct Secondary (cyan) accent + tinted fill so it stands
-                 out from the two neutral cards beside it. -->
-            <Button Grid.Column="0" x:Name="VelvetBtnWebcam"
-                    Click="VelvetBtnWebcam_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource AccentTintedBgBrush}"
-                                BorderBrush="{DynamicResource SecondaryBrush}"
-                                BorderThickness="1.5"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0"
-                                       Source="{Binding Source='📷', Converter={StaticResource EmojiToImageSource}}"/>
-                                <TextBlock Text="Webcam &amp; Mic" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-    
-            <!-- System — the display / video switches (multi-monitor, GPU decode, blurred
-                 video background, browser video engine) plus the read-only jumps Phase 2 added
-                 into Settings. It used to be the ⚙ mosaic tile; the tile went to Brain Drain
-                 and the entry point came here. Phase 8 deleted the Collapsed tile, so this pill
-                 is now the ONLY route to MainWindow.CardSystem_Click - the popup, its title, and
-                 its NotifyFeatureOpened("System") bark are unchanged, but this button is the last
-                 thing holding them: never retire it without moving the handler somewhere else. -->
-            <Button Grid.Column="2" x:Name="VelvetBtnSystem"
-                    Click="VelvetBtnSystem_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource ElevatedSurfaceBrush}"
-                                BorderBrush="{DynamicResource GlassBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <!-- No separate cog image and no x:Name: section_system already
-                                     starts with the gear glyph (same idiom as the Scheduler pill
-                                     below), and a name inside a ControlTemplate belongs to the
-                                     template's namescope, not the UserControl's, so it would
-                                     generate no field and reach nothing. -->
-                                <helpers:EmojiTextBlock Text="{loc:Str section_system}" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-
-            <Button Grid.Column="8" x:Name="VelvetBtnAppInfo"
-                    Click="VelvetBtnAppInfo_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource ElevatedSurfaceBrush}"
-                                BorderBrush="{DynamicResource GlassBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="ℹ" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"
-                                           Foreground="{DynamicResource PinkBrush}"/>
-                                <TextBlock Text="{loc:Str label_app_info}" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-    
-            <!-- Combined Scheduler + Intensity Ramp card. Label is two live-localized
-                 strings joined by " + " so both halves stay translated.
-                 Phase 3: this no longer opens a second popup around the old
-                 SchedulerRampFeatureControl wrapper - Phase 4 gave both panels rack entries
-                 ("scheduler" / "ramp") and Phase 8 deleted the wrapper, so the pill navigates
-                 to the rack instead. One surface,
-                 nothing lost: the rack fires the same single "SchedulerRamp"
-                 NotifyFeatureOpened key the popup did (StudioTabView.xaml.cs:229-230). -->
-            <Button Grid.Column="4" x:Name="VelvetBtnSchedulerRamp"
-                    Click="VelvetBtnSchedulerRamp_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource ElevatedSurfaceBrush}"
-                                BorderBrush="{DynamicResource GlassBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <!-- No separate 📅 image: section_scheduler already starts with the
-                                     calendar emoji (matches the inline ⚡ on Intensity Ramp). -->
-                                <helpers:EmojiTextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
-                                <TextBlock Text=" + " Foreground="White" VerticalAlignment="Center"/>
-                                <helpers:EmojiTextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-
-            <!-- CCP Catalogue card — opens the web catalogue to browse/share
-                 community presets and sessions. Pink-tinted to flag it as the
-                 community/social action of the row. -->
-            <Button Grid.Column="6" x:Name="VelvetBtnCatalogue"
-                    Click="VelvetBtnCatalogue_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold"
-                    ToolTip="Opens app.cclabs.app/catalogue in your browser">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource TransparentPinkBrush}"
-                                BorderBrush="{DynamicResource PinkBrush}"
-                                BorderThickness="1.5"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0"
-                                       Source="{Binding Source='📚', Converter={StaticResource EmojiToImageSource}}"/>
-                                <TextBlock Text="CCP Catalogue" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
+        <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
+              Height="36" Margin="5,4,5,0">
+            <fx:HoverBubbleBar x:Name="HomeBubbleBar" x:FieldModifier="internal"
+                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,2,0">
+                <Button x:Name="VelvetBtnWebcam" x:FieldModifier="internal"
+                        Click="VelvetBtnWebcam_Click"
+                        fx:HoverBubbleBar.Glyph="&#xE722;"
+                        fx:HoverBubbleBar.LabelKeys="btn_home_webcam_mic"/>
+                <Button x:Name="VelvetBtnSystem" x:FieldModifier="internal"
+                        Click="VelvetBtnSystem_Click"
+                        fx:HoverBubbleBar.Glyph="&#xE713;"
+                        fx:HoverBubbleBar.LabelKeys="section_system"/>
+                <Button x:Name="VelvetBtnSchedulerRamp" x:FieldModifier="internal"
+                        Click="VelvetBtnSchedulerRamp_Click"
+                        fx:HoverBubbleBar.Glyph="&#xE787;"
+                        fx:HoverBubbleBar.LabelKeys="section_scheduler+section_intensity_ramp"/>
+                <Button x:Name="VelvetBtnCatalogue" x:FieldModifier="internal"
+                        Click="VelvetBtnCatalogue_Click"
+                        ToolTip="Opens app.cclabs.app/catalogue in your browser"
+                        fx:HoverBubbleBar.Glyph="&#xE8F1;"
+                        fx:HoverBubbleBar.LabelKeys="btn_home_catalogue"/>
+                <Button x:Name="VelvetBtnAppInfo" x:FieldModifier="internal"
+                        Click="VelvetBtnAppInfo_Click"
+                        fx:HoverBubbleBar.Glyph="&#xE946;"
+                        fx:HoverBubbleBar.LabelKeys="label_app_info"/>
+            </fx:HoverBubbleBar>
         </Grid>
 
         <!-- Scrolling Marquee Banner - row 3, spans all columns -->
