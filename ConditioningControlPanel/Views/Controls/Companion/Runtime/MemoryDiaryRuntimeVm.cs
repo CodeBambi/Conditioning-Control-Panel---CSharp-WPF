@@ -85,29 +85,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// "moment"; <see cref="MemoryFactKind.Identity"/> has no chip of its own and so appears only
         /// under "all", which is deliberate — an identity fact is not something anyone filters FOR.
         /// </summary>
-        internal static string KindKeyFor(MemoryFactKind kind) => kind switch
-        {
-            MemoryFactKind.Boundary => "boundary",
-            MemoryFactKind.Joke => "joke",
-            MemoryFactKind.Preference => "preference",
-            MemoryFactKind.Goal => "goal",
-            MemoryFactKind.Identity => "identity",
-            _ => "moment"
-        };
+        internal static string KindKeyFor(MemoryFactKind kind) => CompanionRoomLogic.KindKeyFor(kind);
 
         /// <summary>"used 4× · last: 2d ago", or the provenance line for a hand-edited fact.</summary>
         internal static string BuildMeta(int uses, DateTime? lastUsed, bool userEdited)
-        {
-            var parts = new List<string>(3);
-            if (uses > 0) parts.Add(Loc.GetF("companion_memory_meta_uses", uses));
-            if (lastUsed.HasValue)
-                parts.Add(Loc.GetF(
-                    "companion_memory_meta_last", ChatThresholdRuntimeVm.RelativeTime(lastUsed.Value)));
-            if (userEdited) parts.Add(Loc.Get("companion_memory_meta_edited"));
-            return parts.Count == 0
-                ? Loc.Get("companion_memory_meta_new")
-                : string.Join(" · ", parts);
-        }
+            => CompanionRoomLogic.BuildMeta(uses, lastUsed, userEdited);
     }
 
     /// <summary>

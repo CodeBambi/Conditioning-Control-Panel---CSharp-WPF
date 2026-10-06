@@ -1218,3 +1218,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/ci-sweep: +126
 - CI: Avalonia tests sharded (5 processes, completeness guard) to stay under the runner's memory; root-cause fixes for the Windows/Linux CI test failures on #1962–#1990. Native leak logged for follow-up.
+
+## avalonia-port/her-room-chat: +716
+- Her Room chat and memory diary live over the brain (Core CompanionRoomLogic + CompanionMemoryViewModel, WPF delegates); forget/wipe/switch-off
+  really delete, incl. temp/backup siblings. Fail-proven tests.

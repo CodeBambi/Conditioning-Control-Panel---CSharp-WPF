@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Windows.Input;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
@@ -36,7 +35,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
     internal sealed class ChatThresholdRuntimeVm : CompanionObservable, IChatThresholdVm
     {
         /// <summary>How many turns the threshold shows. It is a doorway, not a chat app.</summary>
-        public const int VisibleTurnCount = 3;
+        public const int VisibleTurnCount = CompanionRoomLogic.VisibleTurnCount;
 
         private readonly CompanionRuntimeContext _ctx;
         private readonly ObservableCollection<IChatBubbleVm> _turns = new();
@@ -201,15 +200,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// </summary>
         internal static CompanionZoneState ResolveState(
             bool brainRouting, bool aiEnabled, bool cloudProvider, bool entitled)
-        {
-            if (!aiEnabled) return CompanionZoneState.Disabled;
-            // Entitlement is checked before the kill switch: a free user is being SOLD something,
-            // and telling them "that's about to change" instead of showing the veil would bury the
-            // one surface on this page that converts.
-            if (cloudProvider && !entitled) return CompanionZoneState.Locked;
-            if (!brainRouting) return CompanionZoneState.Dormant;
-            return CompanionZoneState.Live;
-        }
+            => CompanionRoomLogic.ResolveState(brainRouting, aiEnabled, cloudProvider, entitled);
 
         private static CompanionZoneState ResolveState()
         {
@@ -237,22 +228,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         internal static IReadOnlyList<IChatBubbleVm> ProjectThread(
             IReadOnlyList<CompanionTurn>? turns, int take = VisibleTurnCount)
         {
-            if (turns == null || turns.Count == 0) return Array.Empty<IChatBubbleVm>();
-
-            var picked = new List<CompanionTurn>(take);
-            for (int i = turns.Count - 1; i >= 0 && picked.Count < take; i--)
-            {
-                var turn = turns[i];
-                if (turn == null) continue;
-                if (turn.Kind is not (TurnKind.UserChat or TurnKind.AssistantChat or TurnKind.BarkEcho)) continue;
-                picked.Add(turn);
-            }
-            picked.Reverse();
+            var picked = CompanionRoomLogic.PickThread(turns, take);
+            if (picked.Count == 0) return Array.Empty<IChatBubbleVm>();
 
             var bubbles = new List<IChatBubbleVm>(picked.Count);
             foreach (var turn in picked)
             {
-                var text = turn.Kind == TurnKind.BarkEcho ? UnwrapEcho(turn.Text) : turn.Text;
+                var text = CompanionRoomLogic.BubbleText(turn);
 
                 // She names titles; the app owns links (see IChatBubbleVm.LinkTitle). Only her own
                 // lines get a chip — a title inside the USER's message is them talking, not a
@@ -270,7 +252,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                     },
                     text: text,
                     // App capability responses keep their provenance after a session reload.
-                    isAi: turn.Kind == TurnKind.AssistantChat && !turn.IsApplicationReply,
+                    isAi: CompanionRoomLogic.IsAiBubble(turn),
                     timestamp: RelativeTime(turn.Utc),
                     linkTitle: link?.Title,
                     openLink: link is { } hit ? CompanionLinkLauncher.CommandFor(hit.Url) : null));
@@ -283,12 +265,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// actually spoke. The sigil is prompt plumbing; printing it would be showing the user our
         /// wire format.
         /// </summary>
-        internal static string UnwrapEcho(string? text)
-        {
-            var body = text ?? string.Empty;
-            var match = Regex.Match(body, "^«[^:]*:\\s*\"(.*)\"»$", RegexOptions.Singleline);
-            return match.Success ? match.Groups[1].Value : body.Trim('«', '»').Trim();
-        }
+        internal static string UnwrapEcho(string? text) => CompanionRoomLogic.UnwrapEcho(text);
 
         private void RebuildThread()
         {
@@ -336,15 +313,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         }
 
         /// <summary>"just now" / "22m ago" / "2h ago" / "3d ago". Never a raw timestamp.</summary>
-        internal static string RelativeTime(DateTime utc)
-        {
-            var delta = DateTime.UtcNow - utc;
-            if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
-            if (delta.TotalMinutes < 1) return Loc.Get("companion_chat_time_now");
-            if (delta.TotalHours < 1) return Loc.GetF("companion_chat_time_minutes", (int)delta.TotalMinutes);
-            if (delta.TotalDays < 1) return Loc.GetF("companion_chat_time_hours", (int)delta.TotalHours);
-            return Loc.GetF("companion_chat_time_days", (int)delta.TotalDays);
-        }
+        internal static string RelativeTime(DateTime utc) => CompanionRoomLogic.RelativeTime(utc);
 
         // =====================================================================================
         //  sending
