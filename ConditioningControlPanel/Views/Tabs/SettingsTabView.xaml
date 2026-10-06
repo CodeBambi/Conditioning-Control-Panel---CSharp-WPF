@@ -9,6 +9,17 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <!-- Account strip (nav polish wave 5): a thin dot of a divider between the line's
+             groups (name + phone + logout | Discord + status | the five bubbles). -->
+        <Style x:Key="AccountStripDividerStyle" TargetType="Border">
+            <Setter Property="Width" Value="1"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Margin" Value="12,0,4,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#40FFFFFF"/>
+        </Style>
+    </UserControl.Resources>
         <Grid>
         <Grid.ColumnDefinitions>
             <!-- Nav polish wave 3 (owner, 2026-10-06: "move the favourite rail on the other side,
@@ -1906,8 +1917,21 @@
             </Border>
 
             <!-- ============================================================ -->
-            <!-- ACCOUNT STRIP (Phase 3) - the old "Quick Links" card,         -->
-            <!-- compressed from a four-row tile into one line.                -->
+            <!-- ACCOUNT STRIP (Phase 3, one line since nav polish wave 5).    -->
+            <!--                                                               -->
+            <!-- Owner, 2026-10-06, after the wave-4 build: compact the strip  -->
+            <!-- and the bubble row under it into ONE line. Left to right:     -->
+            <!-- the starred name alone (the "Logged in as" caption is its     -->
+            <!-- tooltip now, the pink card around it is gone: the line is the -->
+            <!-- card), Link phone and Logout as glass bubbles (Logout keeps a -->
+            <!-- pink fill: it is the dangerous one), a divider, the Discord   -->
+            <!-- pill (the one call to action a newcomer should see without    -->
+            <!-- hovering, so it keeps its label), the Rich Presence switch as -->
+            <!-- a status bubble (lit when on; nobody read "RP"), a divider,   -->
+            <!-- the five quick bubbles, and the "?" at the end. One           -->
+            <!-- HoverBubbleBar dresses every glyph button so one label opens  -->
+            <!-- at a time and the idle pulse walks the whole line. The row    -->
+            <!-- the bubbles used to take (40 px) went back to the mosaic.     -->
             <!--                                                               -->
             <!-- Settings - Account has been the real account page since        -->
             <!-- Phase 2, so this is the glance-and-go surface, not the editor. -->
@@ -1915,17 +1939,22 @@
             <!-- live code and none may be dropped before Phase 8 -             -->
             <!--   BtnUnifiedLogin ............ Login.cs:337, UiUpdates.cs      -->
             <!--                                offline gating (:3022)          -->
-            <!--   LoggedInStatusPanel ........ Login.cs:338                    -->
+            <!--   LoggedInStatusPanel ........ Login.cs:338 (Link phone and    -->
+            <!--                                Logout follow its Visibility)   -->
             <!--   TxtLoggedInName ............ Login.cs:346/:351 (incl. the    -->
             <!--                                OG star prefix)                 -->
             <!--   ChkQuickDiscordRichPresence  AccountShell.cs:291/:302 mirror -->
             <!--                                + MainWindow.xaml.cs:2397 load  -->
             <!--   HelpBtnQuickLinks .......... Presets.cs:49 SetHelpContent    -->
             <!--                                ("QuickLinks")                  -->
-            <!-- The card's old section_quick_links caption is gone with the    -->
-            <!-- header row; the "?" popover still explains the strip.          -->
+            <!--   VelvetBtnSystem is the ONLY route to MainWindow.CardSystem_  -->
+            <!--   Click (the System popup, its mod-aware title, Notify-        -->
+            <!--   FeatureOpened "System"): never retire it without moving the  -->
+            <!--   handler. VelvetBtnSchedulerRamp navigates to the Studio rack;-->
+            <!--   VelvetBtnCatalogue opens app.cclabs.app/catalogue.           -->
+            <!-- The "?" popover still explains the strip.                      -->
             <!-- ============================================================ -->
-            <Border Grid.Row="2" CornerRadius="12" Padding="9,7"
+            <Border x:Name="AccountStrip" x:FieldModifier="internal" Grid.Row="2" CornerRadius="12" Padding="9,6"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                 <Grid>
@@ -1933,13 +1962,12 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- The logged-out and logged-in faces share ONE cell: MainWindow.Login.cs
                          flips exactly these two Visibilities against each other, so they must
                          never be able to claim two slots' worth of width between them. -->
-                    <Grid Grid.Column="0">
+                    <Grid Grid.Column="0" Margin="0,0,10,0">
                         <!-- Unified Login Button -->
                         <Button x:Name="BtnUnifiedLogin" x:FieldModifier="internal" Content="{loc:Str btn_login_2}"
                                 Click="BtnUnifiedLogin_Click"
@@ -1974,184 +2002,134 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-    
-                        <!-- Logged In Status (shown when logged in) -->
+
+                        <!-- Logged In Status (shown when logged in): the name alone. No caption,
+                             no card; the "Logged in as" line is the name's tooltip. -->
                         <Border x:Name="LoggedInStatusPanel" x:FieldModifier="internal" Visibility="Collapsed"
-                                Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="9,4"
-                                VerticalAlignment="Center"
-                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtLoggedInAs" Text="{loc:Str label_logged_in_as}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="TxtLoggedInName" x:FieldModifier="internal" Text="{loc:Str label_username}"
-                                               Foreground="White" FontWeight="Bold" FontSize="14" Margin="0,1,0,0"
-                                               TextTrimming="CharacterEllipsis">
-                                        <TextBlock.Effect>
-                                            <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.65"/>
-                                        </TextBlock.Effect>
-                                    </TextBlock>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button x:Name="BtnLinkPhone" Content="📱 Link phone"
-                                        Click="BtnLinkPhone_Click" Margin="0,0,6,0" VerticalAlignment="Center"
-                                        ToolTip="Sign in to the CCP mobile app by scanning a QR code"
-                                        Padding="8,3" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
-                                        BorderThickness="0" FontSize="10" Cursor="Hand"/>
-                                <!-- Prominent, high-contrast Logout button -->
-                                <Button x:Name="BtnQuickLogout" Content="{loc:Str btn_logout}"
-                                        Click="BtnQuickLogout_Click" VerticalAlignment="Center"
-                                        Padding="12,4" FontSize="11" FontWeight="Bold" Cursor="Hand"
-                                        ToolTip="{loc:Str btn_logout}">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Foreground" Value="White"/>
-                                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                                            <Setter Property="BorderThickness" Value="0"/>
-                                            <Setter Property="Template">
-                                                <Setter.Value>
-                                                    <ControlTemplate TargetType="Button">
-                                                        <Border x:Name="lborder" Background="{TemplateBinding Background}"
-                                                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                        </Border>
-                                                        <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="lborder" Property="Background" Value="#E055A0"/>
-                                                            </Trigger>
-                                                            <Trigger Property="IsPressed" Value="True">
-                                                                <Setter TargetName="lborder" Property="Background" Value="#C04888"/>
-                                                            </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                    </ControlTemplate>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                                </StackPanel>
-                            </Grid>
+                                Background="Transparent" Padding="4,0" HorizontalAlignment="Left"
+                                VerticalAlignment="Center" ToolTip="{loc:Str label_logged_in_as}">
+                            <TextBlock x:Name="TxtLoggedInName" x:FieldModifier="internal" Text="{loc:Str label_username}"
+                                       Foreground="White" FontWeight="Bold" FontSize="15" MaxWidth="220"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <TextBlock.Effect>
+                                    <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.65"/>
+                                </TextBlock.Effect>
+                            </TextBlock>
                         </Border>
                     </Grid>
 
-                    <!-- Discord Join Button -->
-                    <Button Grid.Column="1" Click="BtnDiscord_Click"
-                            ToolTip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
-                            VerticalAlignment="Center" Margin="10,0,0,0">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                        <Setter Property="BorderThickness" Value="0"/>
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="border" Background="#5865F2" CornerRadius="5"
-                                                            Padding="12,5" HorizontalAlignment="Stretch">
-                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                            <Image Width="13" Height="13" VerticalAlignment="Center"
-                                                                   Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
-                                                            <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="10" FontWeight="Bold"
-                                                                       VerticalAlignment="Center" Margin="5,0,0,0"/>
-                                                        </StackPanel>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="border" Property="Background" Value="#6C75F2"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
-                                <StackPanel.ToolTip>
-                                    <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
-                                        <StackPanel MaxWidth="280">
-                                            <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
-                                            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
-                                                Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
-                                            </TextBlock>
-                                            <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                                            <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap">
-                                                Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </StackPanel.ToolTip>
-                                <CheckBox x:Name="ChkQuickDiscordRichPresence" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed">
-                                    <CheckBox.LayoutTransform>
-                                        <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
-                                    </CheckBox.LayoutTransform>
-                                </CheckBox>
-                                <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9"
-                                           VerticalAlignment="Center" Margin="4,0,0,0"/>
-                    </StackPanel>
+                    <!-- The line: every button with a Glyph is a 34 px bubble (HoverBubbleBar
+                         dresses them); the Discord pill and the dividers carry no Glyph and are
+                         left alone. Link phone, Logout and their divider follow the logged-in
+                         face's Visibility, so a signed-out strip reads Login | Discord | ... -->
+                    <fx:HoverBubbleBar x:Name="HomeBubbleBar" x:FieldModifier="internal" Grid.Column="1"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button x:Name="BtnLinkPhone" x:FieldModifier="internal"
+                                Click="BtnLinkPhone_Click"
+                                Visibility="{Binding Visibility, ElementName=LoggedInStatusPanel}"
+                                ToolTip="Sign in to the CCP mobile app by scanning a QR code"
+                                fx:HoverBubbleBar.Glyph="&#xE8EA;"
+                                fx:HoverBubbleBar.LabelKeys="btn_home_link_phone"/>
+                        <!-- Logout keeps the pink fill: still the dangerous one at a glance. -->
+                        <Button x:Name="BtnQuickLogout" x:FieldModifier="internal"
+                                Click="BtnQuickLogout_Click"
+                                Visibility="{Binding Visibility, ElementName=LoggedInStatusPanel}"
+                                ToolTip="{loc:Str btn_logout}"
+                                fx:HoverBubbleBar.Glyph="&#xE7E8;"
+                                fx:HoverBubbleBar.Fill="#FF69B4"
+                                fx:HoverBubbleBar.LabelKeys="btn_logout"/>
+                        <Border x:Name="AccountStripDivider" x:FieldModifier="internal" Style="{StaticResource AccountStripDividerStyle}"
+                                Visibility="{Binding Visibility, ElementName=LoggedInStatusPanel}"/>
 
-                    <Button x:Name="HelpBtnQuickLinks" x:FieldModifier="internal" Grid.Column="3"
+                        <!-- Discord Join Button: the one labelled pill on the line. -->
+                        <Button x:Name="BtnJoinDiscord" x:FieldModifier="internal" Click="BtnDiscord_Click"
+                                ToolTip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
+                                VerticalAlignment="Center">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="border" Background="#5865F2" CornerRadius="17" Height="34"
+                                                        Padding="14,0" HorizontalAlignment="Stretch">
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                        <Image Width="13" Height="13" VerticalAlignment="Center"
+                                                               Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
+                                                        <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="11" FontWeight="Bold"
+                                                                   VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                                    </StackPanel>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="#6C75F2"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <!-- Rich Presence as a status bubble: lit when on. Still the CheckBox the
+                             AccountShell mirror writes (IsChecked), just dressed by the bar. -->
+                        <CheckBox x:Name="ChkQuickDiscordRichPresence" x:FieldModifier="internal"
+                                  Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"
+                                  fx:HoverBubbleBar.Glyph="&#xE7FC;"
+                                  fx:HoverBubbleBar.LabelKeys="btn_home_discord_status">
+                            <CheckBox.ToolTip>
+                                <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
+                                    <StackPanel MaxWidth="280">
+                                        <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                                        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
+                                            Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
+                                        </TextBlock>
+                                        <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap">
+                                            Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
+                                        </TextBlock>
+                                    </StackPanel>
+                                </ToolTip>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
+                        <Border Style="{StaticResource AccountStripDividerStyle}"/>
+
+                        <!-- The five quick bubbles (nav polish wave 4). -->
+                        <Button x:Name="VelvetBtnWebcam" x:FieldModifier="internal"
+                                Click="VelvetBtnWebcam_Click"
+                                fx:HoverBubbleBar.Glyph="&#xE722;"
+                                fx:HoverBubbleBar.LabelKeys="btn_home_webcam_mic"/>
+                        <Button x:Name="VelvetBtnSystem" x:FieldModifier="internal"
+                                Click="VelvetBtnSystem_Click"
+                                fx:HoverBubbleBar.Glyph="&#xE713;"
+                                fx:HoverBubbleBar.LabelKeys="section_system"/>
+                        <Button x:Name="VelvetBtnSchedulerRamp" x:FieldModifier="internal"
+                                Click="VelvetBtnSchedulerRamp_Click"
+                                fx:HoverBubbleBar.Glyph="&#xE787;"
+                                fx:HoverBubbleBar.LabelKeys="section_scheduler+section_intensity_ramp"/>
+                        <Button x:Name="VelvetBtnCatalogue" x:FieldModifier="internal"
+                                Click="VelvetBtnCatalogue_Click"
+                                ToolTip="Opens app.cclabs.app/catalogue in your browser"
+                                fx:HoverBubbleBar.Glyph="&#xE8F1;"
+                                fx:HoverBubbleBar.LabelKeys="btn_home_catalogue"/>
+                        <Button x:Name="VelvetBtnAppInfo" x:FieldModifier="internal"
+                                Click="VelvetBtnAppInfo_Click"
+                                fx:HoverBubbleBar.Glyph="&#xE946;"
+                                fx:HoverBubbleBar.LabelKeys="label_app_info"/>
+                    </fx:HoverBubbleBar>
+
+                    <Button x:Name="HelpBtnQuickLinks" x:FieldModifier="internal" Grid.Column="2"
                             Style="{StaticResource HelpButtonStyle}" Tag="QuickLinks"
-                            VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            VerticalAlignment="Center" Margin="10,0,0,0"/>
                 </Grid>
             </Border>
         </Grid>
     
-        <!-- ============================================================ -->
-        <!-- QUICK TOGGLES - five hover bubbles at the bottom right.      -->
-        <!-- (Historic x:Name VelvetHelperButtonRow.)                      -->
-        <!--                                                               -->
-        <!-- Nav polish wave 4 (owner, 2026-10-06): "this whole rail can   -->
-        <!-- be lost, make them little bubbles that expand on hover, have  -->
-        <!-- them on the bottom right under the join our discord           -->
-        <!-- community". The five wide pills became a speed dial           -->
-        <!-- (Controls/HoverBubbleBar.cs): 34 px round bubbles with a      -->
-        <!-- glyph, right-aligned under the account strip; hover or focus  -->
-        <!-- slides the label out to the left of the glyph. Every button   -->
-        <!-- keeps its x:Name, Click and ToolTip. It spans columns 0-2 so  -->
-        <!-- its right edge is the account strip's, not the favourites     -->
-        <!-- drawer's (column 3, row 1 only). The row is 36 tall with      -->
-        <!-- a 4 px top margin: the same 40 units the old 30 + 10 took, so -->
-        <!-- the mosaic's star row loses nothing (WPF clips silently, #860).-->
-        <!--                                                               -->
-        <!-- VelvetBtnSystem is the ONLY route to MainWindow.CardSystem_Click -->
-        <!-- (the System popup, its mod-aware title, NotifyFeatureOpened   -->
-        <!-- "System"): never retire it without moving the handler.        -->
-        <!-- VelvetBtnSchedulerRamp navigates to the Studio rack (Phase 8  -->
-        <!-- deleted the wrapper popup); VelvetBtnCatalogue opens          -->
-        <!-- app.cclabs.app/catalogue in the browser.                      -->
-        <!-- ============================================================ -->
-        <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
-              Height="36" Margin="5,4,5,0">
-            <fx:HoverBubbleBar x:Name="HomeBubbleBar" x:FieldModifier="internal"
-                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,2,0">
-                <Button x:Name="VelvetBtnWebcam" x:FieldModifier="internal"
-                        Click="VelvetBtnWebcam_Click"
-                        fx:HoverBubbleBar.Glyph="&#xE722;"
-                        fx:HoverBubbleBar.LabelKeys="btn_home_webcam_mic"/>
-                <Button x:Name="VelvetBtnSystem" x:FieldModifier="internal"
-                        Click="VelvetBtnSystem_Click"
-                        fx:HoverBubbleBar.Glyph="&#xE713;"
-                        fx:HoverBubbleBar.LabelKeys="section_system"/>
-                <Button x:Name="VelvetBtnSchedulerRamp" x:FieldModifier="internal"
-                        Click="VelvetBtnSchedulerRamp_Click"
-                        fx:HoverBubbleBar.Glyph="&#xE787;"
-                        fx:HoverBubbleBar.LabelKeys="section_scheduler+section_intensity_ramp"/>
-                <Button x:Name="VelvetBtnCatalogue" x:FieldModifier="internal"
-                        Click="VelvetBtnCatalogue_Click"
-                        ToolTip="Opens app.cclabs.app/catalogue in your browser"
-                        fx:HoverBubbleBar.Glyph="&#xE8F1;"
-                        fx:HoverBubbleBar.LabelKeys="btn_home_catalogue"/>
-                <Button x:Name="VelvetBtnAppInfo" x:FieldModifier="internal"
-                        Click="VelvetBtnAppInfo_Click"
-                        fx:HoverBubbleBar.Glyph="&#xE946;"
-                        fx:HoverBubbleBar.LabelKeys="label_app_info"/>
-            </fx:HoverBubbleBar>
-        </Grid>
+        <!-- Row 2 (Auto) is empty since nav polish wave 5: the five quick bubbles that sat here
+             after wave 4 live on the account strip's one line now (see ACCOUNT STRIP above), and
+             the 40 px went back to the mosaic. -->
 
         <!-- Scrolling Marquee Banner - row 3, spans all columns -->
         <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4"

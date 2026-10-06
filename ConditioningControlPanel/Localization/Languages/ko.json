@@ -1201,6 +1201,8 @@
   "label_discord_rich_presence": "Discord 풍부한 상태 표시",
   "label_who_can_see_this": "누가 볼 수 있나요?",
   "label_rp": "RP",
+  "btn_home_link_phone": "Link phone",
+  "btn_home_discord_status": "Show in Discord status",
   "label_v5_2_1_is_out_thanks_to_all_the_100_patreons": "v5.2.1 출시 - 100명 이상의 Patreon 후원자와 모든 지원자/테스터 여러분께 감사드려요 💖🔒",
   "section_presets": "📋 프리셋",
   "tooltip_create_a_new_preset_from_current_settings": "현재 설정으로 새 프리셋 만들기",

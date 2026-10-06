@@ -1819,6 +1819,8 @@
   "label_discord_rich_presence": "Discord 动态状态",
   "label_who_can_see_this": "谁能看到这个？",
   "label_rp": "动态",
+  "btn_home_link_phone": "Link phone",
+  "btn_home_discord_status": "Show in Discord status",
   "label_v5_2_1_is_out_thanks_to_all_the_100_patreons": "v5.2.1 已发布 - 感谢所有100多位 Patreon 支持者和测试者 💖🔒",
   "section_presets": "📋 预设",
   "tooltip_create_a_new_preset_from_current_settings": "从当前设置创建新预设",

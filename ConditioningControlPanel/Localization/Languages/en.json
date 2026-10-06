@@ -2041,6 +2041,8 @@
   "label_discord_rich_presence": "Discord Rich Presence",
   "label_who_can_see_this": "Who can see this?",
   "label_rp": "RP",
+  "btn_home_link_phone": "Link phone",
+  "btn_home_discord_status": "Show in Discord status",
   "label_v5_2_1_is_out_thanks_to_all_the_100_patreons": "v5.2.1 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 💖🔒",
   "section_presets": "📋 Presets",
   "tooltip_create_a_new_preset_from_current_settings": "Create a new preset from current settings",

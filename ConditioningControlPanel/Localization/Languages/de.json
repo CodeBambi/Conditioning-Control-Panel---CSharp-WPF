@@ -1201,6 +1201,8 @@
   "label_discord_rich_presence": "Discord Rich Presence",
   "label_who_can_see_this": "Wer kann das sehen?",
   "label_rp": "RP",
+  "btn_home_link_phone": "Link phone",
+  "btn_home_discord_status": "Show in Discord status",
   "label_v5_2_1_is_out_thanks_to_all_the_100_patreons": "v5.2.1 IST DA - DANKE AN ALLE 100+ PATREONS UND AN ALLE UNTERSTÜTZER/TESTER 💖🔒",
   "section_presets": "📋 Vorlagen",
   "tooltip_create_a_new_preset_from_current_settings": "Neue Vorlage aus aktuellen Einstellungen erstellen",

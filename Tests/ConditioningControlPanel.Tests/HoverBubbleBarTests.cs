@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Controls;
@@ -13,13 +14,15 @@ using Xunit;
 namespace ConditioningControlPanel.Tests;
 
 /// <summary>
-/// Nav polish wave 4, BUBBLES lane: the five Home pills (Webcam &amp; Mic, System, Scheduler +
-/// Intensity Ramp, CCP Catalogue, App Info &amp; Data) became round hover bubbles at the bottom
-/// right, under the account strip (owner, 2026-10-06). Realizes the REAL SettingsTabView at the
-/// page width and holds: five 34 px bubbles right-aligned under the right column, 8 px apart,
-/// never over the account strip; one opens at a time and its label is fully readable; the row
-/// costs the mosaic nothing. Set <c>CCP_NAV_PNG_DIR</c> to write bubbles-rest.png and
-/// bubbles-open.png.
+/// Nav polish wave 4 made the five Home pills (Webcam &amp; Mic, System, Scheduler + Intensity
+/// Ramp, CCP Catalogue, App Info &amp; Data) round hover bubbles; wave 5 (owner, 2026-10-06:
+/// compact the account strip and the bubble row into ONE line) put them on the account strip
+/// beside the name, Link phone, Logout, the Discord pill and the Rich Presence switch, which is
+/// a bubble too. Realizes the REAL SettingsTabView at the page width and holds: the strip is one
+/// line, the order reads name | phone, logout | Discord, status | the five | ?, every bubble is
+/// 34 px and 8 px from the next, Logout wears the pink fill, the switch lights up when checked,
+/// phone and Logout follow the signed-in face, one label opens at a time and is fully readable.
+/// Set <c>CCP_NAV_PNG_DIR</c> to write strip-out.png, strip-in.png and strip-open.png.
 /// </summary>
 [Collection(CompanionWpfRenderCollection.Name)]
 public class HoverBubbleBarTests
@@ -57,34 +60,86 @@ public class HoverBubbleBarTests
         e.TransformToAncestor(root).TransformBounds(new Rect(0, 0, e.ActualWidth, e.ActualHeight));
 
     [Fact]
-    public void Five_bubbles_sit_bottom_right_and_one_opens_with_a_readable_label() => WpfRenderHarness.OnStaThread(() =>
+    public void The_strip_is_one_line_in_order_and_one_bubble_opens_at_a_time() => WpfRenderHarness.OnStaThread(() =>
     {
         var page = new SettingsTabView();
         var bar = page.HomeBubbleBar;
-        Assert.Equal(new[] { page.VelvetBtnWebcam, page.VelvetBtnSystem, page.VelvetBtnSchedulerRamp,
-                             page.VelvetBtnCatalogue, page.VelvetBtnAppInfo }, bar.Bubbles.ToArray());
+        ButtonBase[] expected =
+        {
+            page.BtnLinkPhone, page.BtnQuickLogout, page.ChkQuickDiscordRichPresence,
+            page.VelvetBtnWebcam, page.VelvetBtnSystem, page.VelvetBtnSchedulerRamp,
+            page.VelvetBtnCatalogue, page.VelvetBtnAppInfo,
+        };
+        Assert.Equal(expected, bar.Bubbles.ToArray());
+        ButtonBase[] five = { page.VelvetBtnWebcam, page.VelvetBtnSystem, page.VelvetBtnSchedulerRamp,
+                              page.VelvetBtnCatalogue, page.VelvetBtnAppInfo };
 
         var host = Realize(page);
-        var row = Bounds(page.VelvetHelperButtonRow, host);
-        Assert.InRange(page.VelvetHelperButtonRow.ActualHeight, 30, 40);
+        var strip = Bounds(page.AccountStrip, host);
+        Assert.InRange(page.AccountStrip.ActualHeight, 40, 56);   // one line: a 34 px bubble plus the padding
 
-        var rects = bar.Bubbles.Select(b => Bounds(b, host)).ToArray();
-        foreach (var r in rects)
+        // Signed out: the Login pill on the left, Link phone and Logout (and their divider) gone.
+        Assert.Equal(Visibility.Collapsed, page.LoggedInStatusPanel.Visibility);
+        Assert.Equal(Visibility.Collapsed, page.BtnLinkPhone.Visibility);
+        Assert.Equal(Visibility.Collapsed, page.BtnQuickLogout.Visibility);
+        Assert.Equal(Visibility.Collapsed, page.AccountStripDivider.Visibility);
+        Assert.Equal(Visibility.Visible, page.BtnUnifiedLogin.Visibility);
+
+        void HoldsTheLine(string when)
         {
-            Assert.Equal(HoverBubbleBar.BubbleSize, r.Width, 1);
-            Assert.Equal(HoverBubbleBar.BubbleSize, r.Height, 1);
+            var sr = Bounds(page.AccountStrip, host);
+            foreach (var b in bar.Bubbles.Where(b => b.Visibility == Visibility.Visible))
+            {
+                var r = Bounds(b, host);
+                Assert.Equal(HoverBubbleBar.BubbleSize, r.Width, 1);
+                Assert.Equal(HoverBubbleBar.BubbleSize, r.Height, 1);
+                Assert.True(r.Top >= sr.Top && r.Bottom <= sr.Bottom + 0.5, $"{when}: a bubble leaves the line");
+            }
+            var rects = five.Select(b => Bounds(b, host)).ToArray();
+            for (int i = 1; i < rects.Length; i++)
+                Assert.Equal(HoverBubbleBar.Gap, rects[i].Left - rects[i - 1].Right, 1);
+
+            // Order: name face | Discord pill | status bubble | the five | ?
+            var face = Bounds(page.BtnUnifiedLogin.Visibility == Visibility.Visible ? page.BtnUnifiedLogin : page.LoggedInStatusPanel, host);
+            var pill = Bounds(page.BtnJoinDiscord, host);
+            var status = Bounds(page.ChkQuickDiscordRichPresence, host);
+            var help = Bounds(page.HelpBtnQuickLinks, host);
+            Assert.True(face.Right < pill.Left, $"{when}: the Discord pill is not right of the name");
+            Assert.True(pill.Right < status.Left, $"{when}: the status bubble is not right of the pill");
+            Assert.True(status.Right < rects[0].Left, $"{when}: the five are not right of the status bubble");
+            Assert.True(rects[^1].Right < help.Left, $"{when}: the ? is not last");
+            Assert.True(help.Right <= sr.Right, $"{when}: the ? runs past the strip");
+            Assert.Equal(34, pill.Height, 1);
         }
-        for (int i = 1; i < rects.Length; i++)
-            Assert.Equal(HoverBubbleBar.Gap, rects[i].Left - rects[i - 1].Right, 1);
+        HoldsTheLine("signed out");
+        var crop = new Rect(strip.Left - 4, strip.Top - 8, strip.Width + 8, strip.Height + 16);
+        MaybeRender(host, crop, "strip-out.png");
 
-        // Right-aligned under the right column (the account strip's right edge), never under the
-        // favourites drawer handle, and below the right column: nothing overlaps the strip.
-        var rightColumn = Bounds(page.VelvetFeatureGrid, host);
-        Assert.True(rects[^1].Right <= PageWidth - 22, $"last bubble ends at {rects[^1].Right}, under the drawer");
-        Assert.True(rects[0].Left > rightColumn.Right, "bubbles reach left over the mosaic column");
-        Assert.True(Bounds(page.VelvetBtnWebcam, host).Left > rightColumn.Right, "bubbles reach left over the mosaic column");
-        Assert.True(rects.All(r => r.Top >= row.Top - 0.5), "a bubble pokes above its row");
+        // Signed in (MainWindow.Login.cs flips exactly these): the starred name, then phone + Logout.
+        page.LoggedInStatusPanel.Visibility = Visibility.Visible;
+        page.BtnUnifiedLogin.Visibility = Visibility.Collapsed;
+        page.TxtLoggedInName.Text = "⭐ CodeBambi";
+        host.UpdateLayout();
+        Assert.Equal(Visibility.Visible, page.BtnLinkPhone.Visibility);
+        Assert.Equal(Visibility.Visible, page.BtnQuickLogout.Visibility);
+        Assert.Equal(Visibility.Visible, page.AccountStripDivider.Visibility);
+        Assert.InRange(page.AccountStrip.ActualHeight, 40, 56);
+        var name = Bounds(page.LoggedInStatusPanel, host);
+        var phone = Bounds(page.BtnLinkPhone, host);
+        var logout = Bounds(page.BtnQuickLogout, host);
+        Assert.True(name.Right < phone.Left, "Link phone is not right of the name");
+        Assert.Equal(HoverBubbleBar.Gap, logout.Left - phone.Right, 1);
+        Assert.True(logout.Right < Bounds(page.BtnJoinDiscord, host).Left, "Logout is not left of the Discord pill");
+        Assert.Equal(Color.FromRgb(0xFF, 0x69, 0xB4), bar.RestFillOf(page.BtnQuickLogout));   // the dangerous one stays pink
+        Assert.Equal(HoverBubbleBar.RestFill, bar.RestFillOf(page.BtnLinkPhone));
+        Assert.Equal("Logged in as", page.LoggedInStatusPanel.ToolTip);
+        HoldsTheLine("signed in");
+        MaybeRender(host, crop, "strip-in.png");
 
+        // Labels.
+        Assert.Equal("Link phone", bar.LabelOf(page.BtnLinkPhone));
+        Assert.Equal("Logout", bar.LabelOf(page.BtnQuickLogout));
+        Assert.Equal("Show in Discord status", bar.LabelOf(page.ChkQuickDiscordRichPresence));
         Assert.Equal("Webcam & Mic", bar.LabelOf(page.VelvetBtnWebcam));
         Assert.Equal("System", bar.LabelOf(page.VelvetBtnSystem));
         Assert.Equal("Scheduler + Intensity Ramp", bar.LabelOf(page.VelvetBtnSchedulerRamp));
@@ -93,23 +148,40 @@ public class HoverBubbleBarTests
         Assert.Equal("System", AutomationProperties.GetName(page.VelvetBtnSystem));
         Assert.Equal("Opens app.cclabs.app/catalogue in your browser", page.VelvetBtnCatalogue.ToolTip);
 
-        var crop = new Rect(row.Right - 560, row.Top - 60, 560, row.Height + 70);
-        MaybeRender(host, crop, "bubbles-rest.png");
+        // The status bubble lights up with the CheckBox the AccountShell mirror writes.
+        Assert.False(bar.IsLit(page.ChkQuickDiscordRichPresence));
+        page.ChkQuickDiscordRichPresence.IsChecked = true;
+        Assert.True(bar.IsLit(page.ChkQuickDiscordRichPresence));
+        page.ChkQuickDiscordRichPresence.IsChecked = false;
+        Assert.False(bar.IsLit(page.ChkQuickDiscordRichPresence));
 
         // Open the widest one (forcing the hover state), then another: only one stays open.
+        var rightEnd = Bounds(page.VelvetBtnAppInfo, host).Right;
+        var nameBefore = Bounds(page.LoggedInStatusPanel, host);
+        var leftNeighbour = Bounds(page.VelvetBtnSystem, host);
         bar.Expand(page.VelvetBtnAppInfo, animate: false);
         bar.Expand(page.VelvetBtnSchedulerRamp, animate: false);
         host.UpdateLayout();
         Assert.True(bar.IsExpanded(page.VelvetBtnSchedulerRamp));
         Assert.False(bar.IsExpanded(page.VelvetBtnAppInfo));
-        var open = Bounds(page.VelvetBtnSchedulerRamp, host);
         var label = (TextBlock)FindLabel(page.VelvetBtnSchedulerRamp);
         label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Assert.True(open.Width >= HoverBubbleBar.BubbleSize + label.DesiredSize.Width - 1,
-            $"open bubble {open.Width} does not fit its label {label.DesiredSize.Width}");
-        // The glyph end stays put (bar is right-aligned): bubbles to its right do not move.
-        Assert.Equal(rects[^1].Right, Bounds(page.VelvetBtnAppInfo, host).Right, 1);
-        MaybeRender(host, crop, "bubbles-open.png");
+        var plate = (Border)page.VelvetBtnSchedulerRamp.Content;
+        Assert.True(plate.ActualWidth >= HoverBubbleBar.BubbleSize + label.DesiredSize.Width - 1,
+            $"open plate {plate.ActualWidth} does not fit its label {label.DesiredSize.Width}");
+        // The label FLOATS: the button's layout stays one bubble wide, so nothing on the line
+        // moves (the glyph end, the name, the neighbours) and the plate reaches left over the
+        // bubble beside it, opaque, on top.
+        Assert.Equal(HoverBubbleBar.BubbleSize, page.VelvetBtnSchedulerRamp.ActualWidth, 1);
+        Assert.Equal(rightEnd, Bounds(page.VelvetBtnAppInfo, host).Right, 1);
+        Assert.Equal(nameBefore, Bounds(page.LoggedInStatusPanel, host));
+        Assert.Equal(leftNeighbour, Bounds(page.VelvetBtnSystem, host));
+        var plateRect = Bounds(plate, host);
+        Assert.True(plateRect.Left < leftNeighbour.Right, "the open plate does not reach over its left neighbour");
+        Assert.Equal(1, Panel.GetZIndex(page.VelvetBtnSchedulerRamp));
+        Assert.Equal(255, ((SolidColorBrush)plate.Background).Color.A);
+        Assert.InRange(page.AccountStrip.ActualHeight, 40, 56);
+        MaybeRender(host, crop, "strip-open.png");
 
         bar.Collapse(page.VelvetBtnSchedulerRamp, animate: false);
         host.UpdateLayout();
@@ -117,7 +189,7 @@ public class HoverBubbleBarTests
         Assert.Equal(HoverBubbleBar.BubbleSize, page.VelvetBtnSchedulerRamp.ActualWidth, 1);
     });
 
-    private static FrameworkElement FindLabel(Button b)
+    private static FrameworkElement FindLabel(ButtonBase b)
     {
         var plate = (Border)b.Content;
         var row = (StackPanel)plate.Child;

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -27,6 +28,16 @@ namespace ConditioningControlPanel.Controls
     /// 160 ms with a 1.06 pop; leaving collapses it. One bubble open at a time. Every 9 s one
     /// bubble (round robin) gives a 1.15 pulse so the row is findable, under AllowAmbientLoops
     /// only. Motion Off = instant states, no pulse.
+    ///
+    /// Nav polish wave 5 (owner, 2026-10-06: the account strip and the bubble row become ONE
+    /// line): the bar dresses any <see cref="ButtonBase"/> that carries a Glyph, so a CheckBox
+    /// (the Rich Presence switch) is a bubble too and lights up while checked; a child with no
+    /// Glyph (the Discord pill, a divider) is left exactly as written. <see cref="FillProperty"/>
+    /// gives a bubble a solid rest fill (Logout stays pink: the dangerous one at a glance).
+    /// On that line the label FLOATS: the plate grows to the left under a negative margin of the
+    /// same width, so the button's layout stays 34 px, nothing beside it moves (the name used
+    /// to trim to a star when a label opened) and the open plate, painted opaque, covers its
+    /// left neighbour for the moment it is open.
     /// </summary>
     public sealed class HoverBubbleBar : StackPanel
     {
@@ -51,17 +62,26 @@ namespace ConditioningControlPanel.Controls
         public static string GetLabelKeys(DependencyObject o) => (string)o.GetValue(LabelKeysProperty);
         public static void SetLabelKeys(DependencyObject o, string v) => o.SetValue(LabelKeysProperty, v);
 
+        /// <summary>A solid rest fill (alpha 0 = the glass plate). Hover lightens it a little.</summary>
+        public static readonly DependencyProperty FillProperty = DependencyProperty.RegisterAttached(
+            "Fill", typeof(Color), typeof(HoverBubbleBar), new PropertyMetadata(Colors.Transparent));
+        public static Color GetFill(DependencyObject o) => (Color)o.GetValue(FillProperty);
+        public static void SetFill(DependencyObject o, Color v) => o.SetValue(FillProperty, v);
+
         private sealed class Parts
         {
             public Border Plate = null!;
             public Border LabelHost = null!;
             public TextBlock Label = null!;
+            public TextBlock Glyph = null!;
             public ScaleTransform Scale = null!;
+            public Color RestColor;
+            public Color HoverColor;
             public bool Expanded;
         }
 
-        private readonly Dictionary<Button, Parts> _parts = new();
-        private readonly List<Button> _order = new();
+        private readonly Dictionary<ButtonBase, Parts> _parts = new();
+        private readonly List<ButtonBase> _order = new();
         private DispatcherTimer? _pulseTimer;
         private int _pulseIndex;
 
@@ -76,29 +96,36 @@ namespace ConditioningControlPanel.Controls
             Unloaded += (_, _) => StopPulse();
         }
 
-        /// <summary>The bubbles in XAML order (left to right).</summary>
-        public IReadOnlyList<Button> Bubbles => _order;
+        /// <summary>The bubbles in XAML order (left to right): every child with a Glyph.</summary>
+        public IReadOnlyList<ButtonBase> Bubbles => _order;
 
         protected override void OnInitialized(EventArgs e)
         {
             base.OnInitialized(e);
-            foreach (var b in Children.OfType<Button>().ToList())
+            foreach (var b in Children.OfType<ButtonBase>().Where(b => !string.IsNullOrEmpty(GetGlyph(b))).ToList())
                 Dress(b);
         }
 
+        // ButtonBase so the same bare template fits a Button and a CheckBox (WPF refuses a
+        // template whose TargetType is not the element's type or one of its bases).
         private static readonly ControlTemplate BareTemplate = BuildBareTemplate();
 
         private static ControlTemplate BuildBareTemplate()
         {
-            var t = new ControlTemplate(typeof(Button)) { VisualTree = new FrameworkElementFactory(typeof(ContentPresenter)) };
+            var t = new ControlTemplate(typeof(ButtonBase)) { VisualTree = new FrameworkElementFactory(typeof(ContentPresenter)) };
             t.Seal();
             return t;
         }
 
-        private void Dress(Button b)
+        private void Dress(ButtonBase b)
         {
             if (_parts.ContainsKey(b)) return;
             var hue = Hue;
+            var fill = GetFill(b);
+            bool filled = fill.A > 0;
+            var rest = filled ? fill : RestFill;
+            // Opaque while open: the floating label sits over the bubble to its left.
+            var hover = filled ? Lighten(fill, 0.14) : Over(WithAlpha(hue, 0.30), OpenBase);
 
             var label = new TextBlock
             {
@@ -136,11 +163,11 @@ namespace ConditioningControlPanel.Controls
                 MinWidth = BubbleSize,
                 CornerRadius = new CornerRadius(BubbleSize / 2),
                 BorderThickness = new Thickness(1.5),
-                Background = new SolidColorBrush(RestFill),
-                BorderBrush = new SolidColorBrush(WithAlpha(hue, 0.55)),
+                Background = new SolidColorBrush(rest),
+                BorderBrush = new SolidColorBrush(filled ? Lighten(fill, 0.25) : WithAlpha(hue, 0.55)),
                 Child = row,
                 RenderTransform = scale,
-                RenderTransformOrigin = new Point(0.5, 0.5),
+                RenderTransformOrigin = new Point(1, 0.5),
                 SnapsToDevicePixels = true,
             };
 
@@ -153,8 +180,15 @@ namespace ConditioningControlPanel.Controls
             b.Margin = new Thickness(index == 0 ? 0 : Gap, 0, 0, 0);
             b.VerticalAlignment = VerticalAlignment.Center;
 
-            _parts[b] = new Parts { Plate = plate, LabelHost = labelHost, Label = label, Scale = scale };
+            _parts[b] = new Parts { Plate = plate, LabelHost = labelHost, Label = label, Glyph = glyph, Scale = scale, RestColor = rest, HoverColor = hover };
             _order.Add(b);
+
+            if (b is ToggleButton toggle)
+            {
+                PaintToggle(toggle);
+                toggle.Checked += (_, _) => PaintToggle(toggle);
+                toggle.Unchecked += (_, _) => PaintToggle(toggle);
+            }
 
             b.MouseEnter += (_, _) => Expand(b, MotionFx.AllowTransitions);
             b.MouseLeave += (_, _) => { if (!b.IsKeyboardFocusWithin) Collapse(b, MotionFx.AllowTransitions); };
@@ -172,17 +206,54 @@ namespace ConditioningControlPanel.Controls
 
         public static readonly Color RestFill = Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF);
 
+        /// <summary>What an open glass plate is composited over: the strip's dark surface.</summary>
+        public static readonly Color OpenBase = Color.FromRgb(0x1E, 0x1B, 0x33);
+
+        /// <summary>Source-over: <paramref name="top"/> (with its alpha) over an opaque <paramref name="under"/>.</summary>
+        public static Color Over(Color top, Color under)
+        {
+            double a = top.A / 255.0;
+            return Color.FromRgb(
+                (byte)Math.Round(top.R * a + under.R * (1 - a)),
+                (byte)Math.Round(top.G * a + under.G * (1 - a)),
+                (byte)Math.Round(top.B * a + under.B * (1 - a)));
+        }
+
         public static Color WithAlpha(Color c, double a) =>
             Color.FromArgb((byte)Math.Round(Math.Clamp(a, 0, 1) * 255), c.R, c.G, c.B);
 
+        public static Color Lighten(Color c, double t) => Color.FromArgb(c.A,
+            (byte)Math.Round(c.R + (255 - c.R) * t), (byte)Math.Round(c.G + (255 - c.G) * t), (byte)Math.Round(c.B + (255 - c.B) * t));
+
+        /// <summary>A switch bubble reads its state on the ring: lit (full hue border, a glow,
+        /// a bright glyph) while checked, dim (half-alpha ring, glyph at 55%) while not. The
+        /// plate's background stays the hover channel so the two never fight.</summary>
+        private void PaintToggle(ToggleButton t)
+        {
+            if (!_parts.TryGetValue(t, out var p)) return;
+            bool on = t.IsChecked == true;
+            var hue = Hue;
+            p.Plate.BorderBrush = new SolidColorBrush(on ? hue : WithAlpha(hue, 0.45));
+            p.Glyph.Opacity = on ? 1.0 : 0.55;
+            p.Plate.Effect = on
+                ? new System.Windows.Media.Effects.DropShadowEffect { Color = hue, BlurRadius = 12, ShadowDepth = 0, Opacity = 0.75 }
+                : null;
+        }
+
+        /// <summary>Is a switch bubble painted lit?</summary>
+        public bool IsLit(ButtonBase b) => _parts.TryGetValue(b, out var p) && p.Plate.Effect != null;
+
         /// <summary>Is this bubble showing its label?</summary>
-        public bool IsExpanded(Button b) => _parts.TryGetValue(b, out var p) && p.Expanded;
+        public bool IsExpanded(ButtonBase b) => _parts.TryGetValue(b, out var p) && p.Expanded;
 
         /// <summary>The label text a bubble shows when open (for tests and the desk run).</summary>
-        public string LabelOf(Button b) => _parts.TryGetValue(b, out var p) ? p.Label.Text : "";
+        public string LabelOf(ButtonBase b) => _parts.TryGetValue(b, out var p) ? p.Label.Text : "";
+
+        /// <summary>The rest fill a bubble was dressed with (glass, or its own Fill).</summary>
+        public Color RestFillOf(ButtonBase b) => _parts.TryGetValue(b, out var p) ? p.RestColor : Colors.Transparent;
 
         /// <summary>Open one bubble (closing any other first).</summary>
-        public void Expand(Button b, bool animate)
+        public void Expand(ButtonBase b, bool animate)
         {
             if (!_parts.TryGetValue(b, out var p)) return;
             foreach (var other in _order)
@@ -193,18 +264,36 @@ namespace ConditioningControlPanel.Controls
 
             p.Label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             double target = Math.Ceiling(p.Label.DesiredSize.Width);
+            Panel.SetZIndex(b, 1);
             Animate(p.LabelHost, FrameworkElement.WidthProperty, target, animate);
-            AnimateColor(p.Plate.Background, WithAlpha(Hue, 0.30), animate);
+            AnimateMargin(p.Plate, new Thickness(-target, 0, 0, 0), animate);
+            AnimateColor(p.Plate.Background, p.HoverColor, animate);
             AnimateScale(p.Scale, HoverScale, animate);
         }
 
-        public void Collapse(Button b, bool animate)
+        public void Collapse(ButtonBase b, bool animate)
         {
             if (!_parts.TryGetValue(b, out var p) || !p.Expanded) return;
             p.Expanded = false;
+            Panel.SetZIndex(b, 0);
             Animate(p.LabelHost, FrameworkElement.WidthProperty, 0, animate);
-            AnimateColor(p.Plate.Background, RestFill, animate);
+            AnimateMargin(p.Plate, new Thickness(0), animate);
+            AnimateColor(p.Plate.Background, p.RestColor, animate);
             AnimateScale(p.Scale, 1.0, animate);
+        }
+
+        /// <summary>The plate's negative left margin: the label grows left, the layout does not.</summary>
+        private static void AnimateMargin(FrameworkElement el, Thickness to, bool animate)
+        {
+            if (!animate)
+            {
+                el.BeginAnimation(FrameworkElement.MarginProperty, null);
+                el.Margin = to;
+                return;
+            }
+            var a = new ThicknessAnimation(to, TimeSpan.FromMilliseconds(ExpandMs)) { EasingFunction = Ease, FillBehavior = FillBehavior.HoldEnd };
+            a.Completed += (_, _) => { el.BeginAnimation(FrameworkElement.MarginProperty, null); el.Margin = to; };
+            el.BeginAnimation(FrameworkElement.MarginProperty, a);
         }
 
         private static IEasingFunction Ease => new CubicEase { EasingMode = EasingMode.EaseOut };
@@ -274,8 +363,14 @@ namespace ConditioningControlPanel.Controls
         {
             if (!MotionFx.AllowAmbientLoops || !IsVisible || _order.Count == 0) return;
             if (_order.Any(b => _parts[b].Expanded)) return;
-            var b = _order[_pulseIndex % _order.Count];
-            _pulseIndex = (_pulseIndex + 1) % _order.Count;
+            ButtonBase? b = null;
+            for (int tries = 0; tries < _order.Count && b == null; tries++)
+            {
+                var candidate = _order[_pulseIndex % _order.Count];
+                _pulseIndex = (_pulseIndex + 1) % _order.Count;
+                if (candidate.IsVisible) b = candidate;
+            }
+            if (b == null) return;
             var s = _parts[b].Scale;
             var a = new DoubleAnimation(1.0, PulseScale, TimeSpan.FromMilliseconds(220))
             {
