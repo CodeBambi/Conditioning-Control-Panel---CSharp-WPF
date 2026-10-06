@@ -33,10 +33,13 @@ namespace ConditioningControlPanel.Services
                     continue;
                 }
                 foreach (var t in section.Tabs)
-                    if (t.Kind is ConditioningControlPanel.Services.UI.NavTabKind.Tab
+                    if (t.Key != "spiral" && t.Kind is ConditioningControlPanel.Services.UI.NavTabKind.Tab
                                or ConditioningControlPanel.Services.UI.NavTabKind.Zone)
                         keys.Add(t.Key);
             }
+            // "spiral" stays APPENDED: it is an airspace tab (never slides) and SpiralRoomTests
+            // pins it last.
+            keys.Add("spiral");
             return keys.ToArray();
         }
 

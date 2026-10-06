@@ -31,10 +31,10 @@ public class ChromeFxNavTests
     [InlineData("lab", 12)]         // Play, first pill (Games)
     [InlineData("playsessions", 13)] // Play zone pill
     [InlineData("availablesubjects", 19)] // Social, first pill (Lobby)
-    [InlineData("assets", 31)]      // Library, first pill
+    [InlineData("assets", 30)]      // Library, first pill
     // No "justdrop" row: the shop became a window (JustDropHostService), so it left the rail and
     // "appsettings" moved back from 24 to 23. A key that is not on the strip indexes -1.
-    [InlineData("appsettings", 33)] // Settings gear, pinned below everything
+    [InlineData("appsettings", 32)] // Settings gear, pinned below everything
     public void IndexOf_FollowsTheNavStrip(string tab, int expected)
         => Assert.Equal(expected, ChromeFxNav.IndexOf(tab));
 

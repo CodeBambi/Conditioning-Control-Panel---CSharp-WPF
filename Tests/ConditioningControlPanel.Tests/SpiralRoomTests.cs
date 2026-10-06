@@ -483,9 +483,10 @@ public class SpiralRoomTests
 
         // The four pinned neighbours are exactly where ChromeFxNavTests left them.
         Assert.Equal(0, ChromeFxNav.IndexOf("settings"));
-        Assert.Equal(8, ChromeFxNav.IndexOf("lab"));
-        Assert.Equal(22, ChromeFxNav.IndexOf("assets"));
-        Assert.Equal(23, ChromeFxNav.IndexOf("appsettings"));
+        // Nav rework 2026-10-06: NavOrder is derived from NavSections (rail, then pills).
+        Assert.Equal(12, ChromeFxNav.IndexOf("lab"));
+        Assert.Equal(30, ChromeFxNav.IndexOf("assets"));
+        Assert.Equal(32, ChromeFxNav.IndexOf("appsettings"));
     }
 
     // ================================================================
