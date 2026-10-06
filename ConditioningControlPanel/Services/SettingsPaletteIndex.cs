@@ -479,7 +479,7 @@ namespace ConditioningControlPanel.Services
             Tab("lockdown", "tab_lockdown_mode", "🔒", "lockdown", "lockdown lock kiosk");
             Tab("blinktrainer", "tab_blink_trainer", "👀", "blinktrainer", "blink trainer eyes");
             Tab("remotecontrol", "tab_remote_control", "📱", "remotecontrol", "remote control phone");
-            Tab("availablesubjects", "nav_tab_lobby", "🛰️", "availablesubjects", "lobby tables open join host chess goon remote subjects online users");
+            Tab("availablesubjects", "nav_tab_lobby", "🛰️", "availablesubjects", "lobby tables open tables open join host chess goon remote subjects online users social");
             Tab("discord", "tab_profile", "👤", "discord", "profile trainer card wardrobe");
             // The Spiral Room (CONTRACT-FUSE-0816 2.4), which replaced the map window. Listed like
             // every other live ShowTab key and deliberately NOT gated on the block: the palette has
@@ -497,7 +497,7 @@ namespace ConditioningControlPanel.Services
                 "skill tree enhancements perks streak pause streak freeze streak shield streak fix " +
                 "vacation away days off");
             Tab("programs", "tab_programs", "📅", "programs", "programs training multi day");
-            Tab("leaderboard", "tab_leaderboard", "📊", "leaderboard", "leaderboard ranks");
+            Tab("leaderboard", "tab_leaderboard", "📊", "leaderboard", "leaderboard ranks ranking rankings top players");
             Tab("assets", "tab_assets", "📁", "assets", "assets images videos packs folder");
             Tab("fyp", "tab_fyp", "📲", "fyp", "for you feed scroll fyp");
             Tab("appsettings", "tab_settings", "⚙️", "appsettings", "settings options preferences");
