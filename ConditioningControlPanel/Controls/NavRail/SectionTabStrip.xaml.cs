@@ -154,7 +154,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         private static readonly SolidColorBrush HoverTint = Freeze(new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)));
         private static readonly SolidColorBrush FocusRing = Freeze(new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)));
 
-        private readonly List<(NavTab Tab, Border Pill, TextBlock Label)> _pills = new();
+        private readonly List<(NavTab Tab, Button Pill, Border Face, TextBlock Label)> _pills = new();
         private string? _section;
         private string? _activePill;
         private string? _crumbKey;
@@ -167,7 +167,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         public event Action<string>? SectionRequested;
 
         /// <summary>A pill was built (the host attaches its pin menu here).</summary>
-        public event Action<NavTab, Border>? PillCreated;
+        public event Action<NavTab, FrameworkElement>? PillCreated;
 
         /// <summary>Test seam: forces a motion level instead of asking MotionFx.</summary>
         internal MotionLevel? MotionOverride { get; set; }
@@ -183,7 +183,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         internal string? Section => _section;
         internal string? ActivePillKey => _activePill;
         internal IReadOnlyList<string> PillKeys => _pills.Select(p => p.Tab.Key).ToArray();
-        internal Border? PillFor(string key) => _pills.FirstOrDefault(p => p.Tab.Key == key).Pill;
+        internal Button? PillFor(string key) => _pills.FirstOrDefault(p => p.Tab.Key == key).Pill;
         internal string CrumbText => $"{CrumbSectionText.Text} {CrumbSep.Text} {CrumbPage.Text}".Trim();
 
         private MotionLevel Level => MotionOverride ?? MotionFx.Level;
@@ -207,13 +207,16 @@ namespace ConditioningControlPanel.Controls.NavRail
 
             if (sectionChanged)
             {
+                FixCrumbWidth(section!);
                 BuildPills(section!, accent);
                 AccentLine.Background = new LinearGradientBrush(
                     NavStripRules.Accent(section), Color.FromArgb(0, 0, 0, 0), 0);
                 ActiveFill.Background = accent;
                 CrumbSectionText.Foreground = accent;
             }
-            PillTrack.Visibility = _pills.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // Hidden, not Collapsed: the track keeps the row's height, so Settings (no pills) has the
+            // same header height as every other section.
+            PillTrack.Visibility = _pills.Count > 0 ? Visibility.Visible : Visibility.Hidden;
 
             // Breadcrumb: two levels only; the section word is a link back to its last tab.
             var sectionLabel = SafeLoc(NavSections.Find(section)?.LabelKey, section ?? string.Empty);
@@ -285,6 +288,10 @@ namespace ConditioningControlPanel.Controls.NavRail
                     VerticalAlignment = VerticalAlignment.Center,
                     Foreground = (Brush?)TryFindResource("TextSecondaryBrush") ?? Brushes.Gainsboro,
                 };
+                // The active pill turns ExtraBold: reserve that width now, or lighting a pill
+                // would widen it and push every pill after it sideways.
+                label.MinWidth = BoldWidth(label);
+                label.TextAlignment = TextAlignment.Center;
                 var content = new StackPanel { Orientation = Orientation.Horizontal };
                 content.Children.Add(label);
                 if (tab.Tier > 0)
@@ -309,39 +316,55 @@ namespace ConditioningControlPanel.Controls.NavRail
                     });
                 }
 
-                var pill = new Border
+                var face = new Border
                 {
                     CornerRadius = new CornerRadius(14),
                     Padding = new Thickness(14, 6, 14, 6),
                     Background = Brushes.Transparent,
                     BorderThickness = new Thickness(2),
                     BorderBrush = Brushes.Transparent,
+                    Child = content,
+                    RenderTransformOrigin = new Point(0.5, 0.5),
+                };
+                // A real Button (UIA: a named, invokable control) wearing the pill face. The
+                // button captures the mouse on press, so the release always reaches it: a press
+                // that squished the face away from the pointer, a focus hand-back after a dialog
+                // or a window activation no longer swallows the first click. The transparent
+                // backing keeps the whole unsquished rectangle hit-testable.
+                var pill = new Button
+                {
+                    Template = PillTemplate,
+                    Content = face,
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(0),
                     Cursor = Cursors.Hand,
                     Focusable = true,
                     FocusVisualStyle = null,
-                    Child = content,
                     Tag = tab.Key,
-                    RenderTransformOrigin = new Point(0.5, 0.5),
-                    ToolTip = label.Text,
+                    ToolTip = PillToolTip(section, tab, label.Text),
                 };
                 ToolTipService.SetInitialShowDelay(pill, 500);
                 KeyboardNavigation.SetIsTabStop(pill, false);
-                AutomationProperties_SetName(pill, label.Text);
+                System.Windows.Automation.AutomationProperties.SetName(pill, label.Text);
+                System.Windows.Automation.AutomationProperties.SetHelpText(pill, CrumbFor(section, label.Text));
+                System.Windows.Automation.AutomationProperties.SetAutomationId(pill, "NavPill_" + tab.Key);
 
-                pill.MouseEnter += (_, _) => { if (!IsActive(tab.Key)) pill.Background = HoverTint; };
-                pill.MouseLeave += (_, _) => { pill.Background = Brushes.Transparent; MotionFx.PressSquish(pill, false); };
-                pill.MouseLeftButtonDown += (_, e) => { MotionFx.PressSquish(pill, true); e.Handled = true; };
-                pill.MouseLeftButtonUp += (_, e) =>
+                pill.MouseEnter += (_, _) => { if (!IsActive(tab.Key)) face.Background = HoverTint; };
+                pill.MouseLeave += (_, _) => { face.Background = Brushes.Transparent; if (!pill.IsPressed) MotionFx.PressSquish(face, false); };
+                pill.PreviewMouseLeftButtonDown += (_, _) => MotionFx.PressSquish(face, true);
+                pill.LostMouseCapture += (_, _) => MotionFx.PressSquish(face, false);
+                pill.Click += (_, e) =>
                 {
-                    MotionFx.PressSquish(pill, false);
                     e.Handled = true;
+                    MotionFx.PressSquish(face, false);
                     Choose(tab, focus: false);
                 };
-                pill.GotKeyboardFocus += (_, _) => pill.BorderBrush = FocusRing;
-                pill.LostKeyboardFocus += (_, _) => pill.BorderBrush = Brushes.Transparent;
+                pill.GotKeyboardFocus += (_, _) => face.BorderBrush = FocusRing;
+                pill.LostKeyboardFocus += (_, _) => face.BorderBrush = Brushes.Transparent;
 
                 PillRow.Children.Add(pill);
-                _pills.Add((tab, pill, label));
+                _pills.Add((tab, pill, face, label));
                 PillCreated?.Invoke(tab, pill);
             }
 
@@ -349,8 +372,82 @@ namespace ConditioningControlPanel.Controls.NavRail
             if (_pills.Count > 0) KeyboardNavigation.SetIsTabStop(_pills[0].Pill, true);
         }
 
-        private static void AutomationProperties_SetName(DependencyObject d, string name) =>
-            System.Windows.Automation.AutomationProperties.SetName(d, name);
+        /// <summary>Template for a pill button: a transparent hit backing and the face.</summary>
+        private static readonly ControlTemplate PillTemplate = BuildPillTemplate();
+
+        private static ControlTemplate BuildPillTemplate()
+        {
+            var grid = new FrameworkElementFactory(typeof(Grid));
+            grid.SetValue(Panel.BackgroundProperty, Brushes.Transparent);
+            var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            grid.AppendChild(presenter);
+            var t = new ControlTemplate(typeof(Button)) { VisualTree = grid };
+            t.Seal();
+            return t;
+        }
+
+        /// <summary>"Play > Games": the section and page a pill leads to.</summary>
+        internal static string CrumbFor(string section, string page)
+        {
+            var sectionLabel = SafeLoc(NavSections.Find(section)?.LabelKey, section);
+            return $"{sectionLabel} {SafeLoc("nav_crumb_sep", ">")} {page}";
+        }
+
+        /// <summary>The pill tooltip says more than its label: where it leads, an optional
+        /// "label key + _tip" line, and the tier line for a locked page.</summary>
+        internal static string PillToolTip(string section, NavTab tab, string label)
+        {
+            var lines = new List<string> { CrumbFor(section, label) };
+            var tip = SafeLoc(tab.LabelKey + "_tip", string.Empty);
+            if (!string.IsNullOrEmpty(tip)) lines.Add(tip);
+            if (tab.Tier == 1) lines.Add(SafeLoc("nav_tag_premium_tip", string.Empty));
+            else if (tab.Tier >= 2) lines.Add(SafeLoc("nav_tag_lab_tip", string.Empty));
+            return string.Join(Environment.NewLine, lines.Where(l => !string.IsNullOrEmpty(l)));
+        }
+
+        /// <summary>
+        /// The page word gets one fixed width per section: the longest page name the section can
+        /// show (hidden pages and Settings' sections included). The crumb then never pushes the
+        /// pills sideways when the page changes, so a second click at the same spot hits the
+        /// same pill.
+        /// </summary>
+        private void FixCrumbWidth(string section)
+        {
+            double widest = 0;
+            try
+            {
+                var typeface = new Typeface(CrumbPage.FontFamily, CrumbPage.FontStyle, FontWeights.SemiBold, CrumbPage.FontStretch);
+                double dpi = 1.0;
+                try { dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip; } catch { }
+                foreach (var t in NavSections.Find(section)?.Tabs ?? Array.Empty<NavTab>())
+                {
+                    var text = SafeLoc(t.LabelKey, t.Key);
+                    var ft = new FormattedText(text, System.Globalization.CultureInfo.CurrentUICulture,
+                        FlowDirection.LeftToRight, typeface, CrumbPage.FontSize, Brushes.White, dpi);
+                    widest = Math.Max(widest, ft.WidthIncludingTrailingWhitespace);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("FixCrumbWidth({Section}): {E}", section, ex.Message); }
+            CrumbPage.Width = widest > 0 ? Math.Ceiling(widest) + 2 : double.NaN;
+        }
+
+        /// <summary>A pill label's width at the active (ExtraBold) weight.</summary>
+        private double BoldWidth(TextBlock label)
+        {
+            try
+            {
+                double dpi = 1.0;
+                try { dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip; } catch { }
+                var typeface = new Typeface(label.FontFamily, label.FontStyle, FontWeights.ExtraBold, label.FontStretch);
+                var ft = new FormattedText(label.Text ?? string.Empty, System.Globalization.CultureInfo.CurrentUICulture,
+                    FlowDirection.LeftToRight, typeface, label.FontSize, Brushes.White, dpi);
+                return Math.Ceiling(ft.WidthIncludingTrailingWhitespace) + 1;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>Test seam: the fixed width of the breadcrumb's page word.</summary>
+        internal double CrumbPageWidth => CrumbPage.Width;
 
         private bool IsActive(string key) => string.Equals(_activePill, key, StringComparison.OrdinalIgnoreCase);
 
@@ -365,13 +462,13 @@ namespace ConditioningControlPanel.Controls.NavRail
         private void SetActive(string? key, bool animate)
         {
             _activePill = key;
-            foreach (var (tab, pill, label) in _pills)
+            foreach (var (tab, pill, face, label) in _pills)
             {
                 bool on = IsActive(tab.Key);
                 label.Foreground = on ? ActiveText
                     : (Brush?)TryFindResource("TextSecondaryBrush") ?? Brushes.Gainsboro;
                 label.FontWeight = on ? FontWeights.ExtraBold : FontWeights.SemiBold;
-                if (on) pill.Background = Brushes.Transparent;
+                if (on) face.Background = Brushes.Transparent;
                 KeyboardNavigation.SetIsTabStop(pill, on);
                 System.Windows.Automation.AutomationProperties.SetItemStatus(pill, on ? "selected" : string.Empty);
             }
@@ -399,7 +496,7 @@ namespace ConditioningControlPanel.Controls.NavRail
             PlaceFill(pill, animate);
         }
 
-        private void PlaceFill(Border pill, bool animate)
+        private void PlaceFill(FrameworkElement pill, bool animate)
         {
             double x;
             try { x = pill.TranslatePoint(new Point(0, 0), PillRow).X; }
