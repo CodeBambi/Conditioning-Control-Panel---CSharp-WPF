@@ -102,7 +102,7 @@ public class AssetsMediaBlockRenderTests
         var pink = FlavourPresets.All.Single(f => f.Id == "pink");
         var sel = FlavourPresets.Resolve(pink, FypOnlineCoordinator.Catalog);
         var (page, tiles, _) = Build(sel.NicheIds.ToArray(), sel.CustomSubs.ToArray());
-        Assert.Equal(Visibility.Collapsed, page.RemoteFineTuneBody.Visibility);   // closed by default
+        Assert.Equal(Visibility.Collapsed, page.RemoteFineTuneScroll.Visibility);   // closed by default
 
         Realize(page, 1469, 891);
         MaybeRender(page.RemoteMediaBlock, "picker-closed.png");
@@ -130,7 +130,7 @@ public class AssetsMediaBlockRenderTests
         var on = new[] { "hypno", "bimbo" };
         var customs = new[] { "Bimbos" };
         var (page, tiles, rows) = Build(on, customs);
-        page.RemoteFineTuneBody.Visibility = Visibility.Visible;
+        page.RemoteFineTuneScroll.Visibility = Visibility.Visible;
         page.TxtRemoteSubError.Text = "r/Bimbos is already in your pool.";
         page.TxtRemoteSubError.Visibility = Visibility.Visible;
 
@@ -154,7 +154,7 @@ public class AssetsMediaBlockRenderTests
         // A switch is on in the niche's tint when its row is on, grey when off.
         var hypno = rows.Single(r => (string)r.Tag == "hypno");
         var track = (Border)((Grid)hypno.Content).Children[0];
-        Assert.Equal(MainWindow.RemoteNicheTintOf("hypno"), ((SolidColorBrush)track.Background).Color);
+        Assert.Equal(Color.FromRgb(0xFF, 0x69, 0xB4), ((SolidColorBrush)track.Background).Color);   // on = Pink, never a pale tint
         var offRow = rows.First(r => r.IsChecked != true);
         var offTrack = (Border)((Grid)offRow.Content).Children[0];
         Assert.True(((SolidColorBrush)offTrack.Background).Color.A < 0x40);

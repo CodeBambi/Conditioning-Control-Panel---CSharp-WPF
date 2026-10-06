@@ -2290,8 +2290,12 @@ namespace ConditioningControlPanel
             _remoteFineTuneOpen = open;
             var tab = AssetsTab;
             if (tab == null) return;
-            if (tab.RemoteFineTuneBody != null)
-                tab.RemoteFineTuneBody.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            if (tab.RemoteFineTuneScroll != null)
+                tab.RemoteFineTuneScroll.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            // One decision at a time: the browser steps aside while the list is open, which is
+            // also the only way the list fits on a page that never scrolls (desk run 4).
+            if (tab.AssetBrowserSection != null)
+                tab.AssetBrowserSection.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
             if (tab.TxtRemoteFineTuneChevron != null)
                 tab.TxtRemoteFineTuneChevron.Text = open ? "" : "";
         }
@@ -2824,10 +2828,12 @@ namespace ConditioningControlPanel
             Child = new System.Windows.Shapes.Ellipse { Width = 14, Height = 14, Margin = new Thickness(3, 0, 3, 0) }
         };
 
-        /// <summary>On: the row's tint with a white knob at the right. Off: grey, knob left.</summary>
+        /// <summary>On: Pink with a white knob at the right. Off: grey, knob left. The flavour tint
+        /// stays on the name only: a pale tint on the track (Trance lilac, Censored steel) read as
+        /// neither on nor off beside the pink ones (desk run 4).</summary>
         internal static void PaintRemoteSwitch(Border track, bool on, Color tint)
         {
-            track.Background = on ? new SolidColorBrush(tint) : RemoteTintBrush(Colors.White, 0.16);
+            track.Background = on ? new SolidColorBrush(RemoteNicheDefaultTint) : RemoteTintBrush(Colors.White, 0.16);
             if (track.Child is System.Windows.Shapes.Ellipse knob)
             {
                 knob.Fill = on ? Brushes.White : RemoteTintBrush(Colors.White, 0.62);
@@ -2974,6 +2980,24 @@ namespace ConditioningControlPanel
         private static string RemoteCommunitiesText(int n) =>
             Plural(LocOr("label_remote_communities_n", "{0} community|{0} communities"), n);
 
+        /// <summary>How many distinct communities choosing the flavour puts in the pool: the catalog
+        /// niches it selects plus the leftovers it adds as your own, the figure Fine-tune shows
+        /// after the click (the flavour's own core count read smaller than the row, desk run 4).</summary>
+        internal static int RemoteFlavourPoolCount(Services.Fyp.Online.FlavourPresets.Flavour f)
+        {
+            try
+            {
+                var sel = Services.Fyp.Online.FlavourPresets.Resolve(f, Services.Fyp.Online.FypOnlineCoordinator.Catalog);
+                var subs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var n in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
+                    if (n?.Id != null && sel.NicheIds.Contains(n.Id, StringComparer.OrdinalIgnoreCase))
+                        foreach (var s in n.Subs ?? Array.Empty<string>()) subs.Add(s);
+                foreach (var s in sel.CustomSubs) subs.Add(s);
+                return subs.Count;
+            }
+            catch { return f.Subs.Count; }
+        }
+
         /// <summary>One flavour card: a 4 px accent bar in its tint, name, one-liner, how many
         /// communities, and a check glyph (Tag "check") shown on the chosen one.</summary>
         internal static Button CreateRemoteFlavourTile(Services.Fyp.Online.FlavourPresets.Flavour f, Style? style)
@@ -3012,7 +3036,7 @@ namespace ConditioningControlPanel
             stack.Children.Add(new TextBlock
             {
                 Tag = "count",
-                Text = mine ? string.Empty : RemoteCommunitiesText(f.Subs.Count),
+                Text = mine ? string.Empty : RemoteCommunitiesText(RemoteFlavourPoolCount(f)),
                 FontSize = 11,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Foreground = muted
