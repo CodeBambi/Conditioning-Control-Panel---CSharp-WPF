@@ -644,6 +644,8 @@ namespace ConditioningControlPanel
             LevelChip.Background = new SolidColorBrush(accent);
             if (LevelChip.Effect is System.Windows.Media.Effects.DropShadowEffect glow)
                 glow.Color = accent;
+            // Depth (wave 10, lane B): the chip's drop band takes the chip's own colour too.
+            PaintHudChipDepth(accent);
         }
 
         internal void PopLevelChip()
