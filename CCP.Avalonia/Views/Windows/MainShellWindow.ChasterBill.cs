@@ -24,6 +24,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>One second of the live bill's countdown; the tests drive it instead of waiting.</summary>
         internal Action? ExitBillTick { get; private set; }
 
+        /// <summary>The live bill's real 1 s timer. Tests stop it so a slow runner cannot tick the bill
+        /// shut (and close the window) under a test that drives <see cref="ExitBillTick"/> itself.</summary>
+        internal DispatcherTimer? ExitBillTimer { get; private set; }
+
         /// <summary>The exits WPF takes straight to Shutdown (double panic, the declined 18+ gate, an
         /// ungated first run): no bill, whatever is on the tab.</summary>
         internal void ExitWithoutBill()
@@ -88,6 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 timer.Tick += (_, _) => Tick();
                 ExitBillTick = Tick;
+                ExitBillTimer = timer;
 
                 if (AmbientFxCanvas.Env.AllowTransitions)
                 {

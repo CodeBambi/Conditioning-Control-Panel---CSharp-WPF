@@ -108,7 +108,13 @@ public sealed class WebAssetServer : IDisposable
         var res = ctx.Response;
         bool queryToken = IsToken(req.QueryString["ccp_t"]);
         bool cookieToken = IsToken(req.Cookies[CookieName]?.Value);
-        // A foreign Host header (DNS rebinding) never gets here: HttpListener 404s it against the 127.0.0.1 prefix.
+        // A foreign Host header (DNS rebinding): the managed (Linux) listener 404s it against the
+        // 127.0.0.1 prefix, but Windows' http.sys routes it here (CI answered 200), so refuse it alike.
+        if (!string.Equals(req.UserHostName, $"127.0.0.1:{Port}", StringComparison.OrdinalIgnoreCase))
+        {
+            res.StatusCode = 404;
+            return;
+        }
         if (!IPAddress.IsLoopback(req.RemoteEndPoint.Address)
             || !(queryToken || cookieToken)
             || (req.HttpMethod != "GET" && req.HttpMethod != "HEAD"))

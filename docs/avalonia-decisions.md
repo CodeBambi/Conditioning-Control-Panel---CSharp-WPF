@@ -428,6 +428,22 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Live voice panel partials/level are subscribed for the mantra prompt only (WPF subscribes always; the panel is only
   visible during a mantra prompt, so nothing differs on screen). MantraChantService is not used by this path: out of scope.
 - Advisor: worker (supervisor informed).
+
+## 2026-10-06: Avalonia test suite sharded; known native leak per MainShellWindow (avalonia-port/ci-sweep)
+- Symptom: core-linux on #1974-#1988 died in `dotnet test CCP.Avalonia.Tests` with "The runner has received a shutdown
+  signal" then MSB4166 (child node exited prematurely). The runner was killed, not a test.
+- Measured locally (one testhost, whole suite): RSS climbs to 12-15 GB; the ubuntu runner has 16 GB. Growth tracks the
+  classes that build a `MainShellWindow`, ~250 MB each (ChasterBillTests: 7 tests, 1.86 GB peak; VoiceCommandsTests:
+  7 tests, 2.0 GB). At 1.5 GB RSS, 643 MB of it was the glibc `[heap]`: native, not the GC heap.
+- Not reclaimable by GC: a forced GC + WaitForPendingFinalizers after every test, `DOTNET_GCHeapHardLimit=3 GB`, and
+  `MALLOC_ARENA_MAX=2` each left a 26-test subset at the same ~6.1 GB peak. So it is still referenced (or native memory not
+  owned by a finalizer), i.e. a leak, not lazy collection. Owner not yet identified (no gcdump tooling on this box).
+- Mitigation, not a fix: `.github/scripts/avalonia-tests-sharded.sh` runs the suite as 5 testhosts by class initial
+  (last shard = complement of the others) and fails unless the shards' totals equal `--list-tests` (417 = 417; proven to
+  fail at 7 of 417 with the complement dropped). Peak 6.0 GB, suite 12 min -> ~4.5 min.
+- Follow-up branch: find what a closed `MainShellWindow` keeps alive (static event subscriptions, Skia/WebView natives);
+  a real app builds one shell, so it matters for tests and for any head that rebuilds the shell.
+- Advisor: worker.
 ## 2026-10-01: Her Room chat and memory diary over the brain (avalonia-port/her-room-chat)
 - Question: how to put Z2 (ChatThresholdRuntimeVm) and Z3 (MemoryDiaryRuntimeVm) on the Avalonia brain without a second copy of their logic.
 - Choice: `CompanionMemoryViewModel` is a pure git mv into `CCP.Core/ViewModels/` (dry-run: 0 errors). The runtime VMs read `App.*`
