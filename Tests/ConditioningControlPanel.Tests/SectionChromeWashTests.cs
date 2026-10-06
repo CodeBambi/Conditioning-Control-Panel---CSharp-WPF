@@ -50,7 +50,7 @@ public class SectionChromeWashTests
     [Fact]
     public void TheRingIsQuietAtRestBrighterOnHoverAndSolidWhenActive()
     {
-        Assert.InRange(NavRailRules.RingAlpha(false, false), 0x66, 0x80);   // about 45%
+        Assert.InRange(NavRailRules.RingAlpha(false, false), 0xA0, 0xCC);   // about 72%
         Assert.True(NavRailRules.RingAlpha(false, true) > NavRailRules.RingAlpha(false, false));
         Assert.Equal(0xFF, NavRailRules.RingAlpha(true, false));
         Assert.Equal(0xFF, NavRailRules.RingAlpha(true, true));

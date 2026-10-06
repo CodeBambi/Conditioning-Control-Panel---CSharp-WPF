@@ -19,9 +19,11 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>The active row's fill behind the medallion (about 20%).</summary>
         internal const byte FillAlpha = 0x33;
         /// <summary>The faint inner tint of every medallion tile (about 18%).</summary>
-        internal const byte TileTintAlpha = 0x2E;
+        internal const byte TileTintAlpha = 0x40;
         /// <summary>The idle ring (about 45%), its hover (about 80%), the active ring (solid).</summary>
-        internal const byte RingIdleAlpha = 0x73, RingHoverAlpha = 0xCC, RingActiveAlpha = 0xFF;
+        // Idle ring 72%: at 45% the door art's own pink rims drowned the hue (desk shot
+        // chrome-rail-2x.png, polish wave 2), and the owner asked for the hue AROUND the icons.
+        internal const byte RingIdleAlpha = 0xB8, RingHoverAlpha = 0xE6, RingActiveAlpha = 0xFF;
 
         /// <summary>The ring alpha for a row: solid when active, brighter on hover, else 45%.</summary>
         internal static byte RingAlpha(bool active, bool hover) =>

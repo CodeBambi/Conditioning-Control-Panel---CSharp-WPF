@@ -352,7 +352,7 @@ namespace ConditioningControlPanel
             byte a = NavRailRules.RingAlpha(row.Active, hover);
             row.Tile.Opacity = 1.0;
             row.Tile.BorderBrush = NavFrozen(NavRailRules.WithAlpha(c, a));
-            row.Tile.BorderThickness = new Thickness(row.Active ? 2.0 : 1.5);
+            row.Tile.BorderThickness = new Thickness(row.Active ? 2.5 : 2.0);
         }
 
         private static SolidColorBrush NavFrozen(Color c)
