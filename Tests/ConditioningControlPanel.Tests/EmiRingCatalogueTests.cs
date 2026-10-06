@@ -175,7 +175,7 @@ public class EmiRingCatalogueTests
     public void All_nine_language_files_parse_strictly_and_carry_every_new_key()
     {
         var files = Directory.GetFiles(LangDir(), "*.json");
-        Assert.Equal(9, files.Length);
+        Assert.Equal(10, files.Length);
 
         var needed = NewKeys().ToList();
         foreach (var f in files)

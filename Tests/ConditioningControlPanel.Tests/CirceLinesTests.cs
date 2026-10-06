@@ -142,7 +142,7 @@ public class CirceLinesTests
     public void Every_line_is_in_all_nine_languages()
     {
         var files = Directory.GetFiles(LanguagesDir(), "*.json");
-        Assert.Equal(9, files.Length);
+        Assert.Equal(10, files.Length);
         foreach (var file in files)
         {
             var json = JObject.Parse(File.ReadAllText(file));

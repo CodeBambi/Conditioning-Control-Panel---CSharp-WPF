@@ -380,7 +380,7 @@ public class LeashUiTests
         Assert.True(keys.Count > 120, "found only " + keys.Count);
 
         var dir = Path.Combine(root, "ConditioningControlPanel", "Localization", "Languages");
-        foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
+        foreach (var lang in new[] { "en", "de", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
             var raw = File.ReadAllBytes(Path.Combine(dir, lang + ".json"));
             Assert.False(raw.Length > 2 && raw[0] == 0xEF && raw[1] == 0xBB, lang + ".json has a BOM");

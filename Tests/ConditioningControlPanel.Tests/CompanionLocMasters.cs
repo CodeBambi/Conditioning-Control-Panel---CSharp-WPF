@@ -29,7 +29,7 @@ internal static class CompanionLocMasters
 {
     /// <summary>Every language code with a file in <c>Localization/Languages</c>.</summary>
     public static readonly string[] Languages =
-        { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" };
+        { "en", "de", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" };
 
     private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> Cache = new(StringComparer.Ordinal);
     private static IReadOnlyDictionary<string, string>? _companion;

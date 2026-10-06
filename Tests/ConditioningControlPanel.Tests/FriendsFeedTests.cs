@@ -398,7 +398,7 @@ public class FriendsFeedTests
             .Concat(InviteDestination.All.Select(d => "friends_invite_" + d))
             .ToList();
         var dir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
-        foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
+        foreach (var lang in new[] { "en", "de", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
             var json = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(dir, lang + ".json")));
             foreach (var k in keys)

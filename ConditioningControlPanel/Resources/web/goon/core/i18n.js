@@ -10,7 +10,7 @@
  *
  * i18n/en.js is the flat English table, GENERATED from the decks
  * (`node test/gen-i18n-en.js`); test/selftest-i18n.js fails the moment it and
- * the decks drift apart. The other eight tables carry exactly en's keys.
+ * the decks drift apart. The other nine tables carry exactly en's keys.
  *
  * Interpolated lines are `tpl('text {name}', (a) => ({ name: a }))`. A line
  * whose wording depends on its argument (plurals, a missing name) carries
@@ -25,8 +25,8 @@
 
 import EN from '../i18n/en.js';
 
-/** The nine app languages, in AppSettings.Language's own spelling. */
-export const LANGS = Object.freeze(['en', 'de', 'es', 'fr', 'ja', 'ko', 'pt-BR', 'ru', 'zh-CN']);
+/** The ten app languages, in AppSettings.Language's own spelling. */
+export const LANGS = Object.freeze(['en', 'de', 'es', 'fr', 'it', 'ja', 'ko', 'pt-BR', 'ru', 'zh-CN']);
 
 const TABLES = { en: EN };
 let current = 'en';

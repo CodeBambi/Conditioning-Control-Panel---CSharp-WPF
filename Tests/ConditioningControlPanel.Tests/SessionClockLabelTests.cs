@@ -86,7 +86,7 @@ public class SessionClockLabelTests
     // ---- the four new keys, in all nine files ---------------------------------------------
 
     private static readonly string[] Languages =
-        { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" };
+        { "en", "de", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" };
 
     private static readonly string[] NewKeys =
     {

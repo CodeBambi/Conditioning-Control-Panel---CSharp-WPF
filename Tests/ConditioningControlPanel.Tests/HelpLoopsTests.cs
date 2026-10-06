@@ -28,7 +28,7 @@ public sealed class HelpLoopsTests
     };
 
     private static readonly string[] Languages =
-        { "de", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" };
+        { "de", "en", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" };
 
     public static TheoryData<string> Ids()
     {

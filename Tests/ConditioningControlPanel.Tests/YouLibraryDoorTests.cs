@@ -90,7 +90,7 @@ public class YouLibraryDoorTests
     }
 
     private static readonly string[] AllLanguages =
-        { "en.json", "de.json", "es.json", "fr.json", "ja.json", "ko.json", "pt-BR.json", "ru.json", "zh-CN.json" };
+        { "en.json", "de.json", "es.json", "fr.json", "it.json", "ja.json", "ko.json", "pt-BR.json", "ru.json", "zh-CN.json" };
 
     /// <summary>The four Library rows added in Phase 7, and the handler each one binds.</summary>
     public static IEnumerable<object[]> LibraryLaunchers => new[]
