@@ -2422,10 +2422,10 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- What moved in 6.8 - FIRST row on purpose: for an upgrader this is the
-                                     only question they have, and this row is the permanent re-run path for
-                                     the tour the What's New dialog offers once. Copy is hardcoded English
-                                     (same convention as Windows/FeatureIntroPopup) - no new loc keys. -->
+                                <!-- What moved - FIRST row on purpose: for an upgrader this is the only
+                                     question they have. Nav rework 2026-10-06: it opens the current What
+                                     moved card (seven sections, pills up top, Ctrl+K knows the old names);
+                                     the 6.8 six-door tour it used to start is retired from this row. -->
                                 <Border Background="#3A2542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand"
                                         BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
                                     <Grid>
@@ -2437,11 +2437,11 @@
                                         <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
                                                Source="{Binding Source='🚪', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="What moved in 6.8" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
-                                            <TextBlock Text="The 60-second map: the six doors, where your old tabs went, and why left-click and right-click swapped."
+                                            <TextBlock Text="{loc:Str whatmoved_title}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{loc:Str help_whatmoved_row_sub}"
                                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
-                                        <Button Grid.Column="2" Content="{loc:Str btn_start_guide}" Click="BtnTutorialWhatMoved_Click"
+                                        <Button Grid.Column="2" Content="{loc:Str whatmoved_show}" Click="BtnWhatMovedReplay_Click"
                                                 Style="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>
