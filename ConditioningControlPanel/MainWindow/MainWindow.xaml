@@ -767,10 +767,10 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <controls:SparkleWallet x:Name="HeaderSparkleWallet" Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
-                    <!-- Owner 2026-10-02: the whole wallet reads 25% smaller in the header. -->
-                    <controls:SparkleWallet.LayoutTransform><ScaleTransform ScaleX="0.75" ScaleY="0.75"/></controls:SparkleWallet.LayoutTransform>
-                </controls:SparkleWallet>
+                <!-- Owner 2026-10-02: the whole wallet reads 25% smaller in the header (a 0.75
+                     LayoutTransform). Nav polish wave 6: 20% smaller again, with its "?" on the
+                     pill; the control is now sized natively at 29 x 138, so no transform. -->
+                <controls:SparkleWallet x:Name="HeaderSparkleWallet" Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center"/>
 
                 <!-- Title + Player Title + App Name + Version -->
                 <!-- #860: a Grid, not a StackPanel, so this cluster can give width back.
@@ -921,47 +921,6 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <!-- Account chip (Phase 1, net-new). Sits beside the mod chip so the two
-                             "who am I / what am I running" facts read as one cluster.
-                             States are painted by RefreshAccountChip (MainWindow.UiUpdates.cs):
-                             signed out = pink CTA border, no badge; signed in free = neutral;
-                             T1 = gold 🔒; T2/whitelist = violet 🧪. Background/BorderBrush are
-                             TemplateBindings on purpose - the refresh sets them on the Button,
-                             and the signed-out/free states use SetResourceReference so a mod
-                             switch still repaints the accent.
-                             Phase 2 re-points the click at the real Settings/Account page. -->
-                        <Button x:Name="BtnAccountChip" Click="BtnAccountChip_Click"
-                                Margin="8,0,0,0" Height="24" VerticalAlignment="Center" Cursor="Hand"
-                                Background="{DynamicResource SurfaceBgBrush}"
-                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                ToolTip="{loc:Str tooltip_account_chip}">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="chip" CornerRadius="12" Padding="9,0"
-                                            Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}">
-                                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Left"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="chip" Property="Background"
-                                                    Value="{DynamicResource TransparentPink20Brush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <helpers:EmojiTextBlock x:Name="TxtAccountChipBadge" Text="🔒" FontSize="10"
-                                           Margin="0,0,5,0" VerticalAlignment="Center"
-                                           Visibility="Collapsed"/>
-                                <TextBlock x:Name="TxtAccountChipName" Text="{loc:Str account_chip_sign_in}"
-                                           FontSize="11" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextLightBrush}"
-                                           VerticalAlignment="Center"
-                                           MaxWidth="110" TextTrimming="CharacterEllipsis"/>
-                            </StackPanel>
-                        </Button>
                     </StackPanel>
                     <!-- The rank title used to ellipsise here: "PERFECT FUCKPUPPET" (level 100+,
                          MainWindow.UiUpdates.cs) measures past 200px at 18px bold and rendered as
@@ -1370,13 +1329,56 @@
                         </Grid>
                     </Button>
 
+                    <!-- Account chip (Phase 1, net-new). Nav polish wave 6 (owner): it moved out of the
+                         identity cluster to sit immediately left of the profile bubble, the two
+                         reading as one "who am I" unit (chip then bubble, 6px apart). It used to sit beside the mod chip so the two
+                         "who am I / what am I running" facts read as one cluster.
+                         States are painted by RefreshAccountChip (MainWindow.UiUpdates.cs):
+                         signed out = pink CTA border, no badge; signed in free = neutral;
+                         T1 = gold 🔒; T2/whitelist = violet 🧪. Background/BorderBrush are
+                         TemplateBindings on purpose - the refresh sets them on the Button,
+                         and the signed-out/free states use SetResourceReference so a mod
+                         switch still repaints the accent.
+                         Phase 2 re-points the click at the real Settings/Account page. -->
+                    <Button x:Name="BtnAccountChip" Click="BtnAccountChip_Click"
+                            Margin="8,0,0,0" Height="24" VerticalAlignment="Center" Cursor="Hand"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                            ToolTip="{loc:Str tooltip_account_chip}">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="chip" CornerRadius="12" Padding="9,0"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="chip" Property="Background"
+                                                Value="{DynamicResource TransparentPink20Brush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <helpers:EmojiTextBlock x:Name="TxtAccountChipBadge" Text="🔒" FontSize="10"
+                                       Margin="0,0,5,0" VerticalAlignment="Center"
+                                       Visibility="Collapsed"/>
+                            <TextBlock x:Name="TxtAccountChipName" Text="{loc:Str account_chip_sign_in}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextLightBrush}"
+                                       VerticalAlignment="Center"
+                                       MaxWidth="110" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Button>
                     <!-- Profile bubble: the user's avatar (Discord photo / preset bust / initials).
                          Hover opens the account menu below; a direct click jumps to the Profile
                          tab (key "discord"). It also reacts to app moments - XP pulses, level-up
                          bounce+burst, flash wobble, achievement glow. All logic lives in
                          MainWindow.ProfileBubble.cs; the visuals are named here so that partial
                          can paint and animate them without template digging. -->
-                    <Button x:Name="BtnProfileBubble" Width="34" Height="34" Margin="8,0,0,0"
+                    <Button x:Name="BtnProfileBubble" Width="34" Height="34" Margin="6,0,0,0"
                             Click="BtnProfileBubble_Click" Cursor="Hand"
                             MouseEnter="ProfileBubble_MouseEnter" MouseLeave="ProfileBubble_MouseLeave">
                         <Button.Template>
