@@ -24,7 +24,6 @@ public class NavSectionsTests
     /// lands fails <see cref="PendingKeysAreStillPending"/>.</summary>
     private static readonly string[] PendingShowTabKeys =
     {
-        "folders",                                        // LIBRARY page (REHOME)
     };
 
     private static string RepoRoot()

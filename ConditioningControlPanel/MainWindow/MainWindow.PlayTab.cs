@@ -43,6 +43,14 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MainWindow
     {
+        /// <summary>Nav strip zone pills (Sessions / Eyes / Games) land here: the Play wall
+        /// scrolls to the zone header and glows it once (PlayTabView.ScrollToZone).</summary>
+        partial void ScrollPlayZone(string zone)
+        {
+            try { PlayTab?.ScrollToZone(zone); }
+            catch (Exception ex) { App.Logger?.Debug("ScrollPlayZone({Zone}): {E}", zone, ex.Message); }
+        }
+
         internal void LaunchPlayBreakoutDemo() => Services.BackRoom.BreakoutHostService.LaunchDemo();
         internal void LaunchPlayBreakout() => Services.BackRoom.BreakoutHostService.LaunchFull();
         // Same rule as the launcher tile: every game but the Breakout demo needs an account.

@@ -202,7 +202,7 @@ namespace ConditioningControlPanel
             "achievements", "companion", "lab", "play", "playsessions", "playeyes", "leaderboard",
             "assets", "discord", "awareness", "remotecontrol", "availablesubjects", "bambitakeover",
             "studio", "ramp", "haptics", "lockdown", "blinktrainer", "shelistening", "gradedintake",
-            "appsettings", "spiral", "chaster",
+            "appsettings", "spiral", "chaster", "folders",
         };
 
         internal void ShowTab(string tab)
@@ -357,7 +357,6 @@ namespace ConditioningControlPanel
             if (SheListeningTab != null) SheListeningTab.Visibility = Visibility.Collapsed;
             if (GradedIntakeTab != null) GradedIntakeTab.Visibility = Visibility.Collapsed;
             if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
-            if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
             // Collapsing the Spiral Room is what tears its WebView2 down: the view watches
             // IsVisibleChanged (Loaded fires once) and disposes the embed on the way out, so
             // leaving the tab leaves no idle Chromium behind it.
@@ -563,11 +562,16 @@ namespace ConditioningControlPanel
                     break;
 
                 case "assets":
+                case "folders":
                     AssetsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(AssetsTab);
                     RefreshAssetTree();
                     InitializeAssetPresets();
                     if (PacksSectionEnabled) _ = RefreshPacksAsync();
+                    // Library > Folders is a zone of the Assets page (the folder chip in its header
+                    // row): same page, then scroll + glow the chip once layout has settled.
+                    if (string.Equals(tab, "folders", StringComparison.OrdinalIgnoreCase))
+                        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => AssetsTab.ScrollToZone("folders")));
                     break;
 
                 case "discord":

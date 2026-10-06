@@ -2718,7 +2718,6 @@
                 <!-- Exclusives Tab — "the Velvet Vault". Registry-driven showcase of the
                      supporter-only features (ExclusiveFeature.All); replaced the launcher
                      popup submenu. Cards navigate; destination tabs own the premium gates. -->
-                <views:ExclusivesTabView x:Name="ExclusivesTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
                 <!-- Settings Tab ("appsettings") — the Settings door's own page, added in Phase 2 of
