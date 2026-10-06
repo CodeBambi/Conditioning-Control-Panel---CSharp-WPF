@@ -6186,6 +6186,8 @@
   "inbox_discord_share_summary": "Deine Erfolge im Community-Discord posten?",
   "dash_toggle_hint": "Rechtsklick auf eine Kachel schaltet sie ein oder aus · Linksklick öffnet sie",
   "rail_favorites_caption": "FAVORITEN",
+  "rail_favorites_drawer": "Favorites",
+  "tooltip_rail_favorites_drawer": "Favorites and recent pages",
   "rail_recent_caption": "ZULETZT",
   "rail_favorites_empty": "Rechtsklick auf etwas, um es hier anzuheften",
   "rail_recent_empty": "Noch nichts geöffnet",

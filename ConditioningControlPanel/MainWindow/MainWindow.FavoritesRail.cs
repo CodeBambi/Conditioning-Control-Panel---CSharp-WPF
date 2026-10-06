@@ -95,6 +95,7 @@ namespace ConditioningControlPanel
             }
             WireFavoritePinMenus();
             RefreshDashboardRail();
+            SettingsTab?.ApplyFavoritesDrawerSetting();
         }
 
         /// <summary>
@@ -412,12 +413,21 @@ namespace ConditioningControlPanel
         {
             var s = App.Settings?.Current;
             if (s == null) return;
-            bool changed = FavoritesRailRule.IsPinned(s.RailFavorites, id)
+            bool wasPinned = FavoritesRailRule.IsPinned(s.RailFavorites, id);
+            bool changed = wasPinned
                 ? FavoritesRailRule.Unpin(s.RailFavorites, id)
                 : FavoritesRailRule.TryPin(s.RailFavorites, id);
             if (!changed) return;
             App.Settings?.Save();
             RefreshFavoritesRail();
+            // The column is a drawer at the right edge since nav polish wave 3, closed by
+            // default: a pin the player cannot see landing reads as a pin that did nothing, so
+            // a new favorite slides the drawer out for a moment with the glow on its chip.
+            if (!wasPinned)
+            {
+                try { SettingsTab?.PeekFavoritesDrawer(id); }
+                catch (Exception ex) { App.Logger?.Debug("PeekFavoritesDrawer({Id}): {E}", id, ex.Message); }
+            }
         }
 
         /// <summary>

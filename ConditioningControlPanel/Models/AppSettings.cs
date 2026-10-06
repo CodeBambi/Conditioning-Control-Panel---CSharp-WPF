@@ -9250,6 +9250,14 @@ namespace ConditioningControlPanel.Models
             set { _railRecent = value ?? new List<string>(); OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// Nav polish wave 3: the FAVORITES + RECENT column is a drawer at the right edge of Home.
+        /// True = open. Closed by default; only the drawer's handle writes it (a pin opening it
+        /// for a moment never does), so it is where the player left it on the next launch.
+        /// </summary>
+        [JsonProperty("favorites_drawer_open")]
+        public bool FavoritesDrawerOpen { get; set; } = false;
+
         #endregion
 
         #region First-time experience

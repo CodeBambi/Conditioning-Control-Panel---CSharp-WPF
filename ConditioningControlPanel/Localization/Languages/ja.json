@@ -6186,6 +6186,8 @@
   "inbox_discord_share_summary": "実績をコミュニティ Discord に投稿しますか？",
   "dash_toggle_hint": "タイルを右クリックでオン/オフ · 左クリックで開く",
   "rail_favorites_caption": "お気に入り",
+  "rail_favorites_drawer": "Favorites",
+  "tooltip_rail_favorites_drawer": "Favorites and recent pages",
   "rail_recent_caption": "最近",
   "rail_favorites_empty": "右クリックでここにピン留め",
   "rail_recent_empty": "まだ何も開いていません",

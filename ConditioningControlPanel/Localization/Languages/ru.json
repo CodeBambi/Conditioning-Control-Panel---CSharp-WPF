@@ -6186,6 +6186,8 @@
   "inbox_discord_share_summary": "Публиковать достижения в Discord сообщества?",
   "dash_toggle_hint": "правый клик по плитке включает или выключает её · левый клик открывает",
   "rail_favorites_caption": "ИЗБРАННОЕ",
+  "rail_favorites_drawer": "Favorites",
+  "tooltip_rail_favorites_drawer": "Favorites and recent pages",
   "rail_recent_caption": "НЕДАВНИЕ",
   "rail_favorites_empty": "Правый клик на чём угодно, чтобы закрепить здесь",
   "rail_recent_empty": "Пока ничего не открыто",

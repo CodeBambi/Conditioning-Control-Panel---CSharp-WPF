@@ -45,6 +45,126 @@ namespace ConditioningControlPanel.Views.Tabs
             // app's life, but the hook is balanced on Loaded/Unloaded all the same.
             Loaded += (_, _) => { Services.Prizes.PrizeGrants.GrantsChanged += RefreshV2Badges; RefreshV2Badges(); };
             Unloaded += (_, _) => Services.Prizes.PrizeGrants.GrantsChanged -= RefreshV2Badges;
+
+            // The favorites drawer (nav polish wave 3). Painted closed by the XAML; the saved
+            // state lands here when settings already exist and again from InitFavoritesRail.
+            _drawerPeekTimer.Tick += (_, _) => { _drawerPeekTimer.Stop(); if (!FavoritesDrawer.IsMouseOver) EndFavoritesDrawerPeek(animate: true); };
+            FavoritesDrawer.MouseLeave += (_, _) => { if (_drawerPeeking && !_drawerPeekTimer.IsEnabled) EndFavoritesDrawerPeek(animate: true); };
+            IsVisibleChanged += (_, _) => { if (!IsVisible && _drawerPeeking) EndFavoritesDrawerPeek(animate: false); };
+            ApplyFavoritesDrawerSetting();
+        }
+
+        // ------------------------------------------------------------ the favorites drawer
+
+        /// <summary>The open body's width: the old column 0 (see FavoritesDrawerBody in the XAML).</summary>
+        internal const double FavoritesDrawerWidth = 92;
+        /// <summary>Open and close slide, in ms; instant under Motion Off.</summary>
+        internal const int FavoritesDrawerSlideMs = 200;
+        /// <summary>How long a pin keeps a closed drawer open before it closes again.</summary>
+        internal const int FavoritesDrawerPeekMs = 2500;
+
+        private readonly System.Windows.Threading.DispatcherTimer _drawerPeekTimer = new()
+        {
+            Interval = TimeSpan.FromMilliseconds(FavoritesDrawerPeekMs),
+        };
+        private bool _drawerOpen;
+        private bool _drawerPeeking;
+
+        /// <summary>True while the body is showing (open for good, or open for a pin's peek).</summary>
+        internal bool FavoritesDrawerIsOpen => _drawerOpen;
+
+        /// <summary>Paint the saved state with no slide (startup, settings reload).</summary>
+        internal void ApplyFavoritesDrawerSetting()
+        {
+            if (_drawerPeeking) return;
+            SetFavoritesDrawer(App.Settings?.Current?.FavoritesDrawerOpen == true, animate: false);
+        }
+
+        /// <summary>Open or close the body. Writes nothing: only the handle persists.</summary>
+        internal void SetFavoritesDrawer(bool open, bool animate)
+        {
+            _drawerOpen = open;
+            // The chevron points the way a click goes: left opens (the body comes in from the
+            // edge), right closes.
+            FavoritesDrawerChevron.Text = open ? "›" : "‹";
+            double to = open ? FavoritesDrawerWidth : 0;
+            double from = FavoritesDrawerBody.Width;   // the animated value while one is running
+            FavoritesDrawerBody.Width = to;
+            if (!animate || !Services.MotionFx.AllowTransitions || double.IsNaN(from) || from == to)
+            {
+                FavoritesDrawerBody.BeginAnimation(WidthProperty, null);
+                return;
+            }
+            var slide = new System.Windows.Media.Animation.DoubleAnimation(from, to, TimeSpan.FromMilliseconds(FavoritesDrawerSlideMs))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+                FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop,
+            };
+            FavoritesDrawerBody.BeginAnimation(WidthProperty, slide);
+        }
+
+        private void FavoritesDrawerHandle_Click(object sender, RoutedEventArgs e)
+        {
+            // A click during a pin's peek reads what the player sees: the body is out, so the
+            // handle puts it away.
+            _drawerPeeking = false;
+            _drawerPeekTimer.Stop();
+            bool open = !_drawerOpen;
+            SetFavoritesDrawer(open, animate: true);
+            var s = App.Settings?.Current;
+            if (s == null || s.FavoritesDrawerOpen == open) return;
+            s.FavoritesDrawerOpen = open;
+            try { App.Settings?.Save(); }
+            catch (Exception ex) { App.Logger?.Debug("Favorites drawer save: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// A destination was just pinned. Closed drawer on a visible Home: slide it out for
+        /// <see cref="FavoritesDrawerPeekMs"/>, glow the new chip, then put it away again unless
+        /// the pointer is inside (then it goes on MouseLeave). Open drawer: just the glow. Home
+        /// not on screen (a pin from Ctrl+K on another page): nothing to show, nothing moves.
+        /// </summary>
+        internal void PeekFavoritesDrawer(string pinnedId)
+        {
+            if (!IsVisible) return;
+            int glowAfter = 0;
+            if (!_drawerOpen)
+            {
+                _drawerPeeking = true;
+                SetFavoritesDrawer(true, animate: true);
+                glowAfter = Services.MotionFx.AllowTransitions ? FavoritesDrawerSlideMs + 40 : 0;
+            }
+            if (_drawerPeeking)
+            {
+                _drawerPeekTimer.Stop();
+                _drawerPeekTimer.Start();
+            }
+
+            var glow = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(1, glowAfter)) };
+            glow.Tick += (_, _) =>
+            {
+                glow.Stop();
+                var chip = FindFavoriteChip(pinnedId);
+                ConditioningControlPanel.Controls.NavRail.NavGlow.Once(chip, ConditioningControlPanel.Controls.NavRail.NavStripRules.Lilac, why: "favorites pin " + pinnedId);
+            };
+            glow.Start();
+        }
+
+        /// <summary>The FAVORITES chip for a palette id (chips carry the id in Tag).</summary>
+        internal FrameworkElement? FindFavoriteChip(string id)
+        {
+            foreach (var child in FavoritesList.Children)
+                if (child is FrameworkElement fe && fe.Tag is string tag && string.Equals(tag, id, StringComparison.Ordinal))
+                    return fe;
+            return null;
+        }
+
+        private void EndFavoritesDrawerPeek(bool animate)
+        {
+            if (!_drawerPeeking) return;
+            _drawerPeeking = false;
+            _drawerPeekTimer.Stop();
+            SetFavoritesDrawer(App.Settings?.Current?.FavoritesDrawerOpen == true, animate);
         }
 
         private readonly System.Windows.Threading.DispatcherTimer _clickChoiceClose = new()
