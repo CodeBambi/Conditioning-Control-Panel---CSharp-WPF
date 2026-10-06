@@ -80,8 +80,9 @@ jobs:
       # Core/session roots, so it must keep its own testhost and process-global App state.
       - name: Test Avalonia catalogue startup fallback
         run: dotnet test Tests/CCP.Avalonia.CatalogueStartup.Tests/CCP.Avalonia.CatalogueStartup.Tests.csproj -c Release
+      # Sharded: one testhost for the whole suite outgrew the 16 GB runner (see the script).
       - name: Test Avalonia notification suite
-        run: dotnet test Tests/CCP.Avalonia.Tests/CCP.Avalonia.Tests.csproj -c Release
+        run: bash .github/scripts/avalonia-tests-sharded.sh
         env:
           CCP_REQUIRE_VOSK: "1"
       - name: Test Avalonia scheduler gesture

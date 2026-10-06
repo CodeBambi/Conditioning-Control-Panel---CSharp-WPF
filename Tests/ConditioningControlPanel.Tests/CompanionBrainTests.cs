@@ -237,7 +237,9 @@ public class CompanionBrainTests
             };
             using var brain = new CompanionBrain(transport, new StubAssembler(), memory, new FakeStore(), preview: () => true);
             for (int i = 0; i < 8; i++) await brain.ChatAsync("I am growing a small garden");
-            await summaryEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // The summary waits out the brain's fixed 3 s idle on the thread pool first; 5 s left a
+            // loaded runner 2 s of slack and timed out. The bound only stops a hang, it asserts nothing.
+            await summaryEntered.Task.WaitAsync(TimeSpan.FromSeconds(30));
             var foreground = brain.ChatAsync("Can we keep talking?");
             Assert.True(foreground.IsCompleted);
             Assert.True((await foreground).IsAiGenerated);
