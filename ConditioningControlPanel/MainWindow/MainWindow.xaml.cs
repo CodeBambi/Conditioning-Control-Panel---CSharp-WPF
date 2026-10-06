@@ -251,6 +251,8 @@ namespace ConditioningControlPanel
         public MainWindow()
         {
             InitializeComponent();
+            // Nav rework: lane-owned pages register their ShowTab hosts (MainWindow.TabNavigation.cs).
+            RegisterLaneNavTabs();
 
             // Apply the user-configured chat shortcut. AvatarTubeWindow does the same
             // for itself; both windows respond to the same RoutedUICommand. We ALSO

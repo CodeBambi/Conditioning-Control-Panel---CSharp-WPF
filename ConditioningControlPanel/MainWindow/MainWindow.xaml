@@ -2554,7 +2554,19 @@
              moved onto the wrapper. Nothing about tab visibility, ShowTab or any x:Name
              changed. -->
         <AdornerDecorator Grid.Row="4" Grid.Column="1">
-            <Grid>
+          <!-- Nav rework 2026-10-06: two rows. Row 0 = the section's pill strip + breadcrumb
+               (hidden on Home), row 1 = the one-cell stack of tab views, unchanged. Both live
+               inside the decorator so the strip's TierBadge adorners are page-scoped too. -->
+          <Grid x:Name="PageAreaGrid">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid x:Name="PageViewsGrid" Grid.Row="1">
+                <!-- Lane-registered pages (RegisterNavTab) are created lazily into this cell on
+                     their first ShowTab, the same cell as every view below. -->
+                <Grid x:Name="LaneTabHost" />
+
                 <!-- Main Content - Settings Tab -->
                 <views:SettingsTabView x:Name="SettingsTab" Margin="10,5,10,2" />
 
@@ -2726,6 +2738,7 @@
                      opened from its Studio > Creator Tools row - owner call 2026-09-11, see the
                      rail comment above. -->
             </Grid>
+          </Grid>
         </AdornerDecorator>
 
 
