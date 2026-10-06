@@ -42,9 +42,9 @@ namespace ConditioningControlPanel.Views.Tabs
                 {
                     ZoneFolders.BringIntoView();
                     App.Logger?.Debug("Assets ScrollToZone(folders)");
-                    var lilac = global::ConditioningControlPanel.Controls.NavRail.NavStripRules.Lilac;
-                    global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(ZoneFolders, lilac, why: "library.folders");
-                    global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(CmbAssetPresets, lilac, why: "library.presets");
+                    var sage = global::ConditioningControlPanel.Controls.NavRail.NavStripRules.Accent(global::ConditioningControlPanel.Services.UI.NavSections.Library);
+                    global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(ZoneFolders, sage, why: "library.folders");
+                    global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(CmbAssetPresets, sage, why: "library.presets");
                 }
                 catch (Exception ex) { App.Logger?.Debug("Assets ScrollToZone: {E}", ex.Message); }
             }), System.Windows.Threading.DispatcherPriority.Normal);

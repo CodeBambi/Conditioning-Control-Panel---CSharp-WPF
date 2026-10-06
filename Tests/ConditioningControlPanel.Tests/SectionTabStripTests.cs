@@ -200,16 +200,18 @@ public class SectionTabStripTests
     {
         // gold = T1, cyan = T2, red = danger / Circe's tab, mint = credit.
         var reserved = new Dictionary<string, double> { ["gold"] = 45, ["cyan"] = 190, ["red"] = 0, ["mint"] = 155 };
-        var hues = new[] { NavStripRules.Lilac, NavStripRules.Pink, NavStripRules.VioletBlue, NavStripRules.Coral };
+        var hues = new[] { NavStripRules.Lilac, NavStripRules.Pink, NavStripRules.Orchid, NavStripRules.VioletBlue,
+                           NavStripRules.Sky, NavStripRules.Coral, NavStripRules.Sage };
         foreach (var c in hues)
             foreach (var (name, h) in reserved)
                 Assert.True(HueGap(Hue(c), h) >= 15, $"{c} sits {HueGap(Hue(c), h):0} degrees from {name}");
 
-        // Four families, never a hue per section.
-        Assert.Equal(4, NavSections.Order.Select(s => NavStripRules.Accent(s.Key)).Distinct().Count());
-        Assert.Equal(NavStripRules.Accent(NavSections.Studio), NavStripRules.Accent(NavSections.Companion));
-        Assert.Equal(NavStripRules.Accent(NavSections.Play), NavStripRules.Accent(NavSections.Social));
-        Assert.Equal(NavStripRules.Accent(NavSections.Home), NavStripRules.Accent(NavSections.Library));
+        // One hue per section (polish wave 2), every pair telling apart, the gear sharing Home.
+        Assert.Equal(7, NavSections.Order.Select(s => NavStripRules.Accent(s.Key)).Distinct().Count());
+        for (var i = 0; i < hues.Length; i++)
+            for (var j = i + 1; j < hues.Length; j++)
+                Assert.True(HueGap(Hue(hues[i]), Hue(hues[j])) >= 18, $"{hues[i]} and {hues[j]} are only {HueGap(Hue(hues[i]), Hue(hues[j])):0} degrees apart");
+        Assert.Equal(NavStripRules.Accent(NavSections.Home), NavStripRules.Accent(NavSections.Settings));
     }
 
     [Fact]

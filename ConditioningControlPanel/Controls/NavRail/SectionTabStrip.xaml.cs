@@ -81,19 +81,27 @@ namespace ConditioningControlPanel.Controls.NavRail
             };
         }
 
-        // Section hues. Four families only, static (commerce-neutral) tokens, never gold (T1),
-        // cyan (T2), red (Circe / danger) or mint (credit): SectionTabStripTests pins the gaps.
-        public static readonly Color Lilac = Color.FromRgb(0xB7, 0x9C, 0xFF);       // Home, Library
-        public static readonly Color Pink = Color.FromRgb(0xFF, 0x69, 0xB4);        // Studio, Companion (SectionHueGeneral)
-        public static readonly Color VioletBlue = Color.FromRgb(0x8A, 0x7D, 0xFF);  // Play, Social
+        // Section hues (polish wave 2, owner 2026-10-06: one hue PER SECTION so a page, its pills
+        // and its rail medallion read as one place). Static (commerce-neutral) tokens, never gold
+        // (T1), cyan (T2), red (Circe / danger) or mint (credit), and every pair at least 18
+        // degrees apart: SectionTabStripTests pins the gaps. The gear shares Home's lilac.
+        public static readonly Color Lilac = Color.FromRgb(0xB7, 0x9C, 0xFF);       // Home, Settings
+        public static readonly Color Pink = Color.FromRgb(0xFF, 0x69, 0xB4);        // Studio (SectionHueGeneral)
+        public static readonly Color Orchid = Color.FromRgb(0xE0, 0x70, 0xFF);      // Companion
+        public static readonly Color VioletBlue = Color.FromRgb(0x7A, 0x86, 0xFF);  // Play
+        public static readonly Color Sky = Color.FromRgb(0x5F, 0xB0, 0xFF);         // Social
         public static readonly Color Coral = Color.FromRgb(0xFF, 0x9A, 0x6B);       // You
+        public static readonly Color Sage = Color.FromRgb(0xA8, 0xD8, 0xA0);        // Library
 
         public static Color Accent(string? section) => section switch
         {
-            NavSections.Studio or NavSections.Companion => Pink,
-            NavSections.Play or NavSections.Social => VioletBlue,
+            NavSections.Studio => Pink,
+            NavSections.Companion => Orchid,
+            NavSections.Play => VioletBlue,
+            NavSections.Social => Sky,
             NavSections.You => Coral,
-            _ => Lilac,   // Home, Library, Settings
+            NavSections.Library => Sage,
+            _ => Lilac,   // Home, Settings
         };
 
         /// <summary>Last-tab memory: section -> tab, stored as JSON in AppSettings.NavLastTabBySection.</summary>

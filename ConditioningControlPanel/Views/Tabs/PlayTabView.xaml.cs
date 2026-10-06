@@ -70,7 +70,7 @@ namespace ConditioningControlPanel.Views.Tabs
                     App.Logger?.Debug("Play ScrollToZone({Zone}) -> {Y}", zone, target);
                     // Glow after the scroll has landed, so the ring is drawn where the eye goes.
                     Dispatcher.BeginInvoke(new Action(() =>
-                        global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(header, global::ConditioningControlPanel.Controls.NavRail.NavStripRules.VioletBlue, why: "play." + zone)),
+                        global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(header, global::ConditioningControlPanel.Controls.NavRail.NavStripRules.Accent(global::ConditioningControlPanel.Services.UI.NavSections.Play), why: "play." + zone)),
                         System.Windows.Threading.DispatcherPriority.Loaded);
                 }
                 catch (Exception ex) { App.Logger?.Debug("Play ScrollToZone({Zone}): {E}", zone, ex.Message); }
