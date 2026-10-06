@@ -1222,3 +1222,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/her-room-chat: +716
 - Her Room chat and memory diary live over the brain (Core CompanionRoomLogic + CompanionMemoryViewModel, WPF delegates); forget/wipe/switch-off
   really delete, incl. temp/backup siblings. Fail-proven tests.
+
+## avalonia-port/flake-minepoll: +17
+- Test-order flakes fixed at the source: a leaked auth token (MinePoll) and a shared awareness cooldown (AWindowChange). OpensPlays unconfirmed.
