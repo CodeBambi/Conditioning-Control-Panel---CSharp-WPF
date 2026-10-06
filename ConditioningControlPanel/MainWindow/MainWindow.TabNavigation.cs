@@ -202,7 +202,7 @@ namespace ConditioningControlPanel
             "achievements", "companion", "lab", "play", "playsessions", "playeyes", "leaderboard",
             "assets", "discord", "awareness", "remotecontrol", "availablesubjects", "bambitakeover",
             "studio", "ramp", "haptics", "lockdown", "blinktrainer", "shelistening", "gradedintake",
-            "appsettings", "spiral", "chaster", "exclusives",
+            "appsettings", "spiral", "chaster",
         };
 
         internal void ShowTab(string tab)
@@ -216,6 +216,10 @@ namespace ConditioningControlPanel
             // key in this file is lower-case, so normalising once at the door unifies all of
             // them without touching a single comparison.
             tab = (tab ?? string.Empty).ToLowerInvariant();
+
+            // Nav rework: old keys with a new home ("exclusives" -> Settings > Account & Plans,
+            // "together" -> Social > Lobby) land there and say "Moved" the first three times.
+            if (TryRedirectMovedTab(tab)) return;
 
             // The dashboard's RECENT rail. At the door, before the three intercepts below, so a
             // window key (fyp, justdrop) counts as an open like any tab; the rule itself skips
@@ -731,13 +735,8 @@ namespace ConditioningControlPanel
                     }
                     break;
 
-                case "exclusives":
-                    ExclusivesTab.Visibility = Visibility.Visible;
-                    AnimateTabIn(ExclusivesTab);
-                    EnsureExclusivesBuilt();     // lazy: first visit builds the shelf
-                    RefreshExclusivesTab();      // chips/veils/tier plates from live state
-                    StartExclusivesMotion();     // fog canvas + Ken Burns + card sheens
-                    break;
+                // "exclusives" has no arm: the Velvet Vault retired into Settings > Account & Plans
+                // and TryRedirectMovedTab lands the old key there before this switch.
 
                 // Lane-registered pages (RegisterNavTab). The door check at the top already
                 // refused keys nobody registered.

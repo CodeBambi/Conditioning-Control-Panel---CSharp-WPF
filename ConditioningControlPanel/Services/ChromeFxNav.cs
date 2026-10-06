@@ -11,43 +11,34 @@ namespace ConditioningControlPanel.Services
     public static class ChromeFxNav
     {
         /// <summary>
-        /// Tab keys in nav-rail order, top to bottom: each door's entries in the order they sit
-        /// under their header (Home, Studio, Companion, Play, You, Library). The incoming tab's
-        /// position relative to the outgoing one decides the slide direction, so this list is the
-        /// visual order the user sees, not an arbitrary enum order. Phase 1 replaced the old
-        /// two-header-rows order with this one; every reachable key is now on the rail, so a
-        /// -1 lookup means a genuine ghost ("patreon", "fyp") rather than a submenu destination.
-        ///
-        /// INSERTING A KEY SHIFTS EVERY LATER INDEX, and ChromeFxNavTests asserts four of them
-        /// by number. Phase 4 inserted "studio" at index 1 (it is the Studio door's first rail
-        /// entry, so appending it instead would give the slide the wrong direction); the test's
-        /// InlineData rows moved with it. Phase 6 RENAMED index 8 ("lab" -> "play") in place
-        /// instead of inserting, so no index moved and the alias in <see cref="IndexOf"/> keeps
-        /// the old key scoring the same 8.
+        /// Tab keys in nav order, derived from <see cref="ConditioningControlPanel.Services.UI.NavSections"/>
+        /// (nav rework 2026-10-06): each section's Tab and Zone keys in pill order, hidden pages
+        /// included (they still get a slide direction), windows and launchers left out (they have
+        /// no tab transition), and the Settings gear as its page key "appsettings", last. The
+        /// incoming tab's position relative to the outgoing one decides the slide direction, so
+        /// this is the visual order the user reads: rail top to bottom, then pills left to right.
+        /// Old keys ("lab", "progression") score through the aliases in <see cref="IndexOf"/>;
+        /// "exclusives" is a redirect now and is off the strip.
         /// </summary>
-        public static readonly string[] NavOrder =
+        public static readonly string[] NavOrder = BuildNavOrder();
+
+        private static string[] BuildNavOrder()
         {
-            "settings",                                                        // Home
-            "studio", "presets", "haptics",                                    // Studio
-            "companion", "bambitakeover", "shelistening", "awareness",         // Companion
-            "play", "deeper", "exclusives", "gradedintake", "lockdown",
-            "blinktrainer", "remotecontrol", "availablesubjects",              // Play
-            "discord", "quests", "achievements", "enhancements",
-            "programs", "leaderboard",                                         // You
-            "assets",                                                          // Library
-            // No "justdrop" row: it stopped being a rail door when the shop became a window
-            // (JustDropHostService). This list is the VISUAL order and the slide direction is read
-            // straight off it, so removing the key put "appsettings" back from 24 to 23 - and
-            // ChromeFxNavTests asserts that index by number, so its InlineData row moved back too.
-            "appsettings",                                                     // Settings (pinned last)
-            // APPENDED, NOT INSERTED. "spiral" is the You door's second row visually, but putting it
-            // there would shift every later index and ChromeFxNavTests pins four of them by number
-            // (settings=0, lab=8, assets=22, appsettings=23). The cost of appending is that the
-            // slide direction into and out of the Spiral Room is computed from the wrong end of the
-            // strip - which costs exactly nothing, because "spiral" is an AIRSPACE tab: it hosts a
-            // WebView2, it never slides at all, and EntranceOffset's answer for it is discarded.
-            "spiral",
-        };
+            var keys = new List<string>();
+            foreach (var section in ConditioningControlPanel.Services.UI.NavSections.Order)
+            {
+                if (section.Key == ConditioningControlPanel.Services.UI.NavSections.Settings)
+                {
+                    keys.Add(section.DefaultTab);   // "appsettings": its pills are Settings zones
+                    continue;
+                }
+                foreach (var t in section.Tabs)
+                    if (t.Kind is ConditioningControlPanel.Services.UI.NavTabKind.Tab
+                               or ConditioningControlPanel.Services.UI.NavTabKind.Zone)
+                        keys.Add(t.Key);
+            }
+            return keys.ToArray();
+        }
 
         /// <summary>
         /// Tabs that host a WebView2. It is a native HWND in its own airspace: it ignores WPF

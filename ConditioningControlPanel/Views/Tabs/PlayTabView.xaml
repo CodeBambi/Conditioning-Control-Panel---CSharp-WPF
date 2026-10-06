@@ -325,14 +325,7 @@
             <StackPanel Margin="20">
 
                 <!-- ============================== HEADER ============================== -->
-                <TextBlock Text="{loc:Str nav_door_play}" Foreground="White" FontSize="24" FontWeight="Bold"
-                           Margin="0,0,0,4">
-                    <TextBlock.Effect>
-                        <!-- Mod-chain colour. The Lab header hard-coded #00FF88 here, which was the
-                             one non-mod-aware literal on that page; it is not carried forward. -->
-                        <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
-                    </TextBlock.Effect>
-                </TextBlock>
+                <!-- No "Play" H1: the section breadcrumb above the page says it (nav rework 2026-10-06). -->
                 <TextBlock Text="{loc:Str pl6_play_subtitle}" Foreground="{DynamicResource TextDimBrush}"
                            FontSize="12" Margin="0,0,0,16"/>
 

@@ -8,6 +8,7 @@
         xmlns:local="clr-namespace:ConditioningControlPanel"
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
         xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
+        xmlns:navrail="clr-namespace:ConditioningControlPanel.Controls.NavRail"
         xmlns:friends="clr-namespace:ConditioningControlPanel.Controls.Friends"
         xmlns:poss="clr-namespace:ConditioningControlPanel.Services.Possession"
         Title="Conditioning Control Panel"
@@ -2562,6 +2563,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
+            <navrail:SectionTabStrip x:Name="SectionStrip" Grid.Row="0" Margin="10,2,10,4" Visibility="Collapsed" />
             <Grid x:Name="PageViewsGrid" Grid.Row="1">
                 <!-- Lane-registered pages (RegisterNavTab) are created lazily into this cell on
                      their first ShowTab, the same cell as every view below. -->
