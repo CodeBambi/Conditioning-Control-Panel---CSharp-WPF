@@ -86,25 +86,43 @@ public class NavStripHueTests
                 var hue = NavStripRules.Accent(s.Key);
                 var strip = Laid(s.Key, s.DefaultTab);
                 Assert.Equal(hue, ColorOf(strip.CrumbWordBrush));
-                Assert.Equal(NavStripRules.WithAlpha(hue, NavStripRules.TrackFillAlpha), ColorOf(strip.TrackFill));
-                Assert.Equal(NavStripRules.WithAlpha(hue, NavStripRules.TrackBorderAlpha), ColorOf(strip.TrackBorder));
+                // Polish wave 7: the track is a tray (the hue over deep ink) with a shaded top edge.
+                Assert.Equal(NavStripRules.TrackFill(hue), ColorOf(strip.TrackFill));
+                var tray = Assert.IsType<LinearGradientBrush>(strip.TrackBorder);
+                Assert.Equal(NavStripRules.WithAlpha(NavStripRules.DarkInk, NavStripRules.TrackInsetAlpha), tray.GradientStops[0].Color);
+                Assert.Equal(NavStripRules.WithAlpha(hue, NavStripRules.TrackBorderAlpha), tray.GradientStops[^1].Color);
 
                 var active = strip.ActivePillKey;
-                foreach (var key in strip.PillKeys)
+                var keys = strip.PillKeys;
+                for (int i = 0; i < keys.Count; i++)
                 {
+                    var key = keys[i];
+                    var tint = NavStripRules.TabTint(s.Key, key, i, keys.Count);
+                    Assert.Equal(tint, strip.PillTint(key));
                     var (text, outline) = strip.PillPaint(key);
+                    var glyph = strip.PillGlyphBrush(key);
                     if (key == active)
                     {
                         Assert.Equal(NavStripRules.ActiveTextOn(hue), ColorOf(text));
-                        Assert.Equal(Colors.Transparent, ColorOf(outline));
+                        // A near-white gloss ring in the tab's tint, strong at the top.
+                        var ring = Assert.IsType<LinearGradientBrush>(outline);
+                        Assert.Equal(NavStripRules.ActiveRingColor(tint, NavStripRules.ActiveRingTopAlpha), ring.GradientStops[0].Color);
                         Assert.Equal(Colors.Transparent, ColorOf(strip.PillFill(key)));
+                        if (glyph != null) Assert.Equal(NavStripRules.ActiveGlyphOn(hue, tint), ColorOf(glyph));
                     }
                     else
                     {
-                        Assert.Equal(NavStripRules.RestTextOn(hue), ColorOf(text));
-                        Assert.Equal(NavStripRules.WithAlpha(hue, NavStripRules.RestOutlineAlpha), ColorOf(outline));
-                        // Every inactive pill is a filled plate, not text in an outline.
-                        Assert.Equal(NavStripRules.WithAlpha(hue, NavStripRules.RestFillAlpha), ColorOf(strip.PillFill(key)));
+                        Assert.Equal(NavStripRules.RestTextOn(hue, tint), ColorOf(text));
+                        // A bevelled outline in the tint: lit top, the tint at 75% in the middle, shaded foot.
+                        var bevel = Assert.IsType<LinearGradientBrush>(outline);
+                        Assert.Equal(NavStripRules.WithAlpha(tint, NavStripRules.RestOutlineAlpha), bevel.GradientStops[1].Color);
+                        Assert.True(NavStripRules.Luminance(Opaque(bevel.GradientStops[0].Color)) > NavStripRules.Luminance(Opaque(bevel.GradientStops[^1].Color)),
+                            $"{s.Key}/{key}: the outline's top edge is not lighter than its foot");
+                        // Every inactive pill is a raised plate: the tint, lit at the top, centred on 24%.
+                        var plate = Assert.IsType<LinearGradientBrush>(strip.PillFill(key));
+                        Assert.Equal(NavStripRules.WithAlpha(tint, NavStripRules.RestFillAlpha + NavStripRules.PlateLift), plate.GradientStops[0].Color);
+                        Assert.Equal(NavStripRules.WithAlpha(tint, NavStripRules.RestFillAlpha - NavStripRules.PlateLift), plate.GradientStops[^1].Color);
+                        if (glyph != null) Assert.Equal(NavStripRules.RestGlyphOn(hue, tint), ColorOf(glyph));
                     }
                 }
 
@@ -112,6 +130,58 @@ public class NavStripHueTests
                 Assert.Equal(NavStripRules.WithAlpha(hue, NavStripRules.NoteTextAlpha), ColorOf(strip.MovedNoteBrush));
             }
         });
+    }
+
+    private static Color Opaque(Color c) => Color.FromRgb(c.R, c.G, c.B);
+
+    [Fact]
+    public void EveryTabTintReadsAndNeighboursStepNineDegrees()
+    {
+        // Polish wave 7 (owner: "subtle identity to the subtabs, maybe a colour coding"): each
+        // pill wears the section hue turned by (index - middle) x 9 degrees. Every label on every
+        // tint reads at 4.5:1, every rest glyph at 4.5:1, every active glyph at 3:1 on the solid
+        // section hue (the WCAG graphics floor), and neighbouring tints sit 9 degrees apart
+        // (8.5 measured: 8-bit rounding moves a hue by a fraction of a degree).
+        foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
+        {
+            var hue = NavStripRules.Accent(s.Key);
+            var pills = NavStripRules.Pills(s.Key);
+            double? prevHue = null;
+            for (int i = 0; i < pills.Count; i++)
+            {
+                var tint = NavStripRules.TabTint(s.Key, pills[i].Key, i, pills.Count);
+                var ground = NavStripRules.RestGround(hue, tint);
+                var label = NavStripRules.Contrast(NavStripRules.Over(NavStripRules.RestTextOn(hue, tint), ground), ground);
+                var glyph = NavStripRules.Contrast(NavStripRules.Over(NavStripRules.RestGlyphOn(hue, tint), ground), ground);
+                var lit = NavStripRules.Contrast(NavStripRules.ActiveGlyphOn(hue, tint), hue);
+                var h = NavStripRules.ToHsl(tint).H;
+                _out.WriteLine($"{s.Key,-10} {pills[i].Key,-18} #{tint.R:X2}{tint.G:X2}{tint.B:X2} h {h,6:0.0} label {label:0.00} glyph {glyph:0.00} lit glyph {lit:0.00}");
+                Assert.True(label >= 4.5, $"{s.Key}/{pills[i].Key}: label {label:0.00}:1 on its tint");
+                Assert.True(glyph >= 4.5, $"{s.Key}/{pills[i].Key}: rest glyph {glyph:0.00}:1 on its tint");
+                Assert.True(lit >= 3.0, $"{s.Key}/{pills[i].Key}: active glyph {lit:0.00}:1 on the section hue");
+                if (prevHue != null)
+                    Assert.True(NavStripRules.HueDistance(prevHue.Value, h) >= NavStripRules.TabHueStep - 0.5,
+                        $"{s.Key}: pill {i} is only {NavStripRules.HueDistance(prevHue.Value, h):0.0} degrees from its neighbour");
+                prevHue = h;
+            }
+            // The bar still reads as one section: the middle of the bar is the section hue.
+            if (pills.Count % 2 == 1)
+                Assert.Equal(hue, NavStripRules.TabTint(s.Key, pills[pills.Count / 2].Key, pills.Count / 2, pills.Count));
+        }
+    }
+
+    [Fact]
+    public void HslRoundTripsAndRotationKeepsSaturationAndLightness()
+    {
+        foreach (var c in new[] { NavStripRules.Pink, NavStripRules.Orchid, NavStripRules.Sky, NavStripRules.Sage, NavStripRules.Coral })
+        {
+            Assert.Equal(c, NavStripRules.FromHsl(NavStripRules.ToHsl(c).H, NavStripRules.ToHsl(c).S, NavStripRules.ToHsl(c).L));
+            var turned = NavStripRules.ToHsl(NavStripRules.RotateHue(c, 27));
+            var was = NavStripRules.ToHsl(c);
+            Assert.Equal(was.S, turned.S, 1);
+            Assert.Equal(was.L, turned.L, 1);
+            Assert.Equal(27, NavStripRules.HueDistance(was.H, turned.H), 0);
+        }
     }
 
     [Fact]

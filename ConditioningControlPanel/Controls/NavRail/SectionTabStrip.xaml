@@ -48,14 +48,14 @@
                            Foreground="{DynamicResource TextLightBrush}" />
             </StackPanel>
 
-            <!-- Polish wave 3: the track is a real tab bar (hue at 10%, a 1.5 px border at 40%),
-                 so the pills read as THE page tabs at one glance. 36 px pills + 2 x 4 padding +
-                 2 x 1.5 border = 47. -->
+            <!-- Polish wave 3: the track is a real tab bar, so the pills read as THE page tabs at
+                 one glance. Polish wave 7: a tray darker than the page wash (paint in PaintFor),
+                 38 px pills + 2 x 4 padding + 2 x 1.5 border = 49. -->
             <Border x:Name="PillTrack" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
-                    CornerRadius="20" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1.5" Padding="4"
-                    MinHeight="47">
+                    CornerRadius="21" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1.5" Padding="4"
+                    MinHeight="49">
                 <Grid>
-                    <Border x:Name="ActiveFill" CornerRadius="18" HorizontalAlignment="Left" Width="0"
+                    <Border x:Name="ActiveFill" CornerRadius="19" HorizontalAlignment="Left" Width="0"
                             IsHitTestVisible="False">
                         <Border.RenderTransform>
                             <TranslateTransform x:Name="ActiveFillShift" />
