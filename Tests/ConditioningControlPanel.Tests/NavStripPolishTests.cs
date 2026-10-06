@@ -2,6 +2,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Media;
 using ConditioningControlPanel.Controls.NavRail;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.UI;
@@ -89,5 +90,54 @@ public class NavStripPolishTests
         Assert.Equal(0, NavGlow.TotalMs(MotionLevel.Off));
         Assert.Equal(2000, NavGlow.TotalMs(MotionLevel.Reduced));
         Assert.True(NavGlow.TotalMs(MotionLevel.Full) >= 2000);
+    }
+
+    // Polish wave 9 (owner: "make the border of the pills for the subtabs more noticeable, right
+    // now they seem flat"): a heavier face border, a bevel that reads, a solid shaded foot.
+
+    [Fact]
+    public void PillFacesAreOneAndAHalfAtRestAndTwoWhenLit()
+    {
+        Assert.Equal(1.5, NavStripRules.RestFaceThickness);
+        Assert.Equal(2.0, NavStripRules.ActiveFaceThickness);
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
+            {
+                var strip = Laid(s.Key, s.DefaultTab);
+                foreach (var key in strip.PillKeys)
+                {
+                    double want = key == strip.ActivePillKey ? NavStripRules.ActiveFaceThickness : NavStripRules.RestFaceThickness;
+                    Assert.Equal(want, strip.PillFaceThickness(key));
+                    // The heavier ring stays inside the face: every pill is still 38 px tall.
+                    Assert.Equal(NavStripRules.PillHeight, strip.PillFor(key)!.ActualHeight, 1);
+                }
+            }
+        });
+    }
+
+    [Fact]
+    public void TheOutlineFootIsASolidShadedLine()
+    {
+        Assert.Equal(0.85, NavStripRules.OutlineFootOffset);
+        var bevel = NavStripRules.OutlineBrush(NavStripRules.Lilac);
+        Assert.Equal(new[] { 0.0, 0.35, 0.65, 0.85 }, bevel.GradientStops.Select(g => g.Offset).ToArray());
+    }
+
+    [Fact]
+    public void TheBevelIsVisibleOnEveryTint()
+    {
+        static Color Opaque(Color c) => Color.FromRgb(c.R, c.G, c.B);
+        foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
+        {
+            var keys = s.Tabs.Select(t => t.Key).ToList();
+            for (int i = 0; i < keys.Count; i++)
+            {
+                var tint = NavStripRules.TabTint(s.Key, keys[i], i, keys.Count);
+                var stops = NavStripRules.OutlineBrush(tint).GradientStops;
+                double delta = NavStripRules.Luminance(Opaque(stops[0].Color)) - NavStripRules.Luminance(Opaque(stops[^1].Color));
+                Assert.True(delta >= 0.20, $"{s.Key}/{keys[i]}: bevel luminance delta {delta:F3} under 0.20");
+            }
+        }
     }
 }

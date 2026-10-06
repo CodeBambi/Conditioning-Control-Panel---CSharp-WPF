@@ -197,15 +197,25 @@ namespace ConditioningControlPanel.Controls.NavRail
         // gradient around RestFillAlpha (lit top, shaded foot) inside a bevelled outline, and each
         // pill wears its own near-hue of the section (TabTint), so the bar still reads as one place.
 
-        /// <summary>Inactive pill plate: the tab's tint at 24% (30% across the top, 18% at the foot).</summary>
+        /// <summary>Inactive pill plate: the tab's tint at 24% (34% across the top, 14% at the foot).</summary>
         public const double RestFillAlpha = 0.24;
-        /// <summary>How far a plate's top and foot sit from its middle alpha.</summary>
-        public const double PlateLift = 0.06;
-        /// <summary>Inactive pill border: the tint at 75%, lit along the top and shaded along the foot.</summary>
-        public const double RestOutlineAlpha = 0.75;
-        /// <summary>The outline's top edge mixes this far toward white, its foot this far toward ink.</summary>
-        public const double BevelLight = 0.45;
-        public const double BevelShade = 0.45;
+        /// <summary>How far a plate's top and foot sit from its middle alpha (polish wave 9: 0.06 -> 0.10,
+        /// owner: the pills "seem flat").</summary>
+        public const double PlateLift = 0.10;
+        /// <summary>Inactive pill border: the tint at 95%, lit along the top and shaded along the foot.</summary>
+        public const double RestOutlineAlpha = 0.95;
+        /// <summary>The outline's top edge mixes this far toward white, its foot this far toward ink
+        /// (polish wave 9: strong enough that the bevel reads, not merely orders).</summary>
+        public const double BevelLight = 0.70;
+        public const double BevelShade = 0.75;
+        /// <summary>Where the outline's shaded foot starts: a solid line along the bottom rather than
+        /// a hairline fade into the last pixel.</summary>
+        public const double OutlineFootOffset = 0.85;
+        /// <summary>Pill face border: 1.5 px at rest, 2 px on the lit tab. Both sit inside the 36 px
+        /// face, so a pill stays 38 tall; the lit face gives the extra half pixel back from its
+        /// padding, so the label and the pill width never move.</summary>
+        public const double RestFaceThickness = 1.5;
+        public const double ActiveFaceThickness = 2.0;
         /// <summary>Hovered inactive pill: the plate in the tint at 38%.</summary>
         public const double HoverFillAlpha = 0.38;
         /// <summary>The pill track is a tray: deep ink at 40% under the hue at 10%, so the pills sit in
@@ -218,11 +228,11 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>The active pill's soft outer glow in the hue (static, 0 offset).</summary>
         public const double ActiveGlowBlur = 16;
         public const double ActiveGlowOpacity = 0.75;
-        /// <summary>The active pill's 1 px inner ring: near-white in the tab's tint, 35% on average
-        /// (55% across the top, 18% at the foot, so it reads as a gloss rather than a frame).</summary>
-        public const double ActiveRingAlpha = 0.35;
-        public const double ActiveRingTopAlpha = 0.55;
-        public const double ActiveRingFootAlpha = 0.18;
+        /// <summary>The active pill's 2 px inner ring: near-white in the tab's tint, 55% on average
+        /// (80% across the top, 30% at the foot, so it reads as a gloss rather than a frame).</summary>
+        public const double ActiveRingAlpha = 0.55;
+        public const double ActiveRingTopAlpha = 0.80;
+        public const double ActiveRingFootAlpha = 0.30;
         public const double ActiveRingWhite = 0.75;
         /// <summary>The active pill's glyph: the label's ink mixed this far toward the tab's tint
         /// (less when the mix would drop under 3:1 on the solid hue).</summary>
@@ -493,7 +503,7 @@ namespace ConditioningControlPanel.Controls.NavRail
             Vertical((WithAlpha(Mix(tint, Colors.White, BevelLight), RestOutlineAlpha), 0),
                      (WithAlpha(tint, RestOutlineAlpha), 0.35),
                      (WithAlpha(tint, RestOutlineAlpha), 0.65),
-                     (WithAlpha(Mix(tint, DarkInk, BevelShade), RestOutlineAlpha), 1));
+                     (WithAlpha(Mix(tint, DarkInk, BevelShade), RestOutlineAlpha), OutlineFootOffset));
 
         /// <summary>The active pill's inner ring: a near-white gloss, strong at the top.</summary>
         public static LinearGradientBrush ActiveRingBrush(Color tint) =>
@@ -534,6 +544,7 @@ namespace ConditioningControlPanel.Controls.NavRail
             public Brush ActiveRing = Brushes.Transparent;
             public Brush Plate = Brushes.Transparent;
             public Brush Hover = Brushes.Transparent;
+            public Thickness RestPadding;
         }
 
         private readonly List<PillParts> _pills = new();
@@ -672,6 +683,9 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>Test seam: a pill's plate fill (transparent on the active pill: the ActiveFill shows).</summary>
         internal Brush PillFill(string key) => Part(key)?.Face.Background ?? Brushes.Transparent;
 
+        /// <summary>Test seam: a pill face's border thickness (polish wave 9).</summary>
+        internal double PillFaceThickness(string key) => Part(key)?.Face.BorderThickness.Top ?? 0;
+
         /// <summary>Test seam: the glyph text a pill shows, or null.</summary>
         internal string? PillGlyph(string key) => Part(key)?.Glyph?.Text;
 
@@ -799,7 +813,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                     Padding = new Thickness(NavStripRules.PillPadding, 0, rightPad, 0),
                     MinHeight = NavStripRules.PillHeight - 2,   // + the 1 px ring = a 38 px pill
                     Background = parts.Plate,
-                    BorderThickness = new Thickness(1),
+                    BorderThickness = new Thickness(NavStripRules.RestFaceThickness),
                     BorderBrush = parts.Outline,
                     Child = content,
                 };
@@ -852,6 +866,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                 PillRow.Children.Add(pill);
                 parts.Pill = pill;
                 parts.Face = face;
+                parts.RestPadding = face.Padding;
                 parts.Label = label;
                 parts.Glyph = glyph;
                 _pills.Add(parts);
@@ -987,6 +1002,12 @@ namespace ConditioningControlPanel.Controls.NavRail
                 p.Label.FontWeight = FontWeights.SemiBold;
                 if (p.Glyph != null) p.Glyph.Foreground = on ? p.ActiveGlyph : p.RestGlyph;
                 p.Face.BorderBrush = on ? p.ActiveRing : p.Outline;
+                // The lit ring is half a pixel heavier; the padding gives it back so the label
+                // and the pill's width stay exactly where they were (PillsStayPutWhenThePageChanges).
+                double grow = on ? NavStripRules.ActiveFaceThickness - NavStripRules.RestFaceThickness : 0;
+                p.Face.BorderThickness = new Thickness(on ? NavStripRules.ActiveFaceThickness : NavStripRules.RestFaceThickness);
+                var pad = p.RestPadding;
+                p.Face.Padding = new Thickness(Math.Max(0, pad.Left - grow), pad.Top, Math.Max(0, pad.Right - grow), pad.Bottom);
                 p.Face.Background = on ? Brushes.Transparent : (p.Pill.IsMouseOver ? p.Hover : p.Plate);
                 KeyboardNavigation.SetIsTabStop(p.Pill, on);
                 System.Windows.Automation.AutomationProperties.SetItemStatus(p.Pill, on ? "selected" : string.Empty);
