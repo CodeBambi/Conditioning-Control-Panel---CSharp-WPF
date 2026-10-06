@@ -3023,7 +3023,7 @@ namespace ConditioningControlPanel
             {
                 Tag = "check",
                 Text = "",
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontFamily = new FontFamily("Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"),
                 FontSize = 12,
                 Margin = new Thickness(0, 9, 10, 0),
                 HorizontalAlignment = HorizontalAlignment.Right,

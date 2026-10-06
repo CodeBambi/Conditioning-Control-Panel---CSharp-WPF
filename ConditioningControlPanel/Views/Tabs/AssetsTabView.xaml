@@ -306,7 +306,7 @@
                             Style="{StaticResource RemoteFineTuneRow}">
                         <DockPanel>
                             <TextBlock x:Name="TxtRemoteFineTuneChevron" x:FieldModifier="internal"
-                                       DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets"
+                                       DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
                                        FontSize="12" Foreground="{StaticResource TextMutedBrush}"
                                        VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtRemoteSummary" x:FieldModifier="internal"
