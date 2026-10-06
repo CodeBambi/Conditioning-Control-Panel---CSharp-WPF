@@ -31,6 +31,22 @@ namespace ConditioningControlPanel.Controls.NavRail
             section != null && section != NavSections.Home;
 
         /// <summary>The pills a section draws, in table order, hidden tabs skipped.</summary>
+        /// <summary>Is a pill of this tier locked for the account on this machine? A paying
+        /// account sees no tier sign on the pages it already owns (review fix, 2026-10-06: every
+        /// Basic pill wore a BASIC plate even for subscribers). No account service (tests, early
+        /// startup) reads as locked, so the sign is never hidden by mistake.</summary>
+        public static bool PillLocked(int tier)
+        {
+            if (tier <= 0) return false;
+            try
+            {
+                var patreon = App.Patreon;
+                if (patreon == null) return true;
+                return tier == 1 ? !patreon.HasPremiumAccess : !patreon.HasLabAccess;
+            }
+            catch { return true; }
+        }
+
         public static IReadOnlyList<NavTab> Pills(string? section)
         {
             if (!ShowsPills(section)) return Array.Empty<NavTab>();
@@ -769,7 +785,8 @@ namespace ConditioningControlPanel.Controls.NavRail
                     content.Children.Add(glyph);
                 }
                 content.Children.Add(label);
-                if (tab.Tier > 0)
+                bool locked = NavStripRules.PillLocked(tab.Tier);
+                if (locked)
                 {
                     // Locked stays visible: the tier sign sits in the pill, the click still
                     // navigates and the page's own gate explains the lock. Static on chrome.
@@ -806,7 +823,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                 // The face: a raised plate in the tab's tint at rest (a lit-top gradient around
                 // 24%, a bevelled 75% border). Its 1 px outer ring is the focus ring, so border +
                 // ring never grow the pill.
-                double rightPad = NavStripRules.PillPadding + (tab.Tier > 0 ? NavStripRules.BadgePadExtra : 0);
+                double rightPad = NavStripRules.PillPadding + (locked ? NavStripRules.BadgePadExtra : 0);
                 var face = new Border
                 {
                     CornerRadius = new CornerRadius(NavStripRules.PillHeight / 2 - 1),
@@ -928,7 +945,8 @@ namespace ConditioningControlPanel.Controls.NavRail
             var lines = new List<string> { CrumbFor(section, label) };
             var tip = SafeLoc(tab.LabelKey + "_tip", string.Empty);
             if (!string.IsNullOrEmpty(tip)) lines.Add(tip);
-            if (tab.Tier == 1) lines.Add(SafeLoc("nav_tag_premium_tip", string.Empty));
+            if (!NavStripRules.PillLocked(tab.Tier)) { }
+            else if (tab.Tier == 1) lines.Add(SafeLoc("nav_tag_premium_tip", string.Empty));
             else if (tab.Tier >= 2) lines.Add(SafeLoc("nav_tag_lab_tip", string.Empty));
             return string.Join(Environment.NewLine, lines.Where(l => !string.IsNullOrEmpty(l)));
         }

@@ -58,7 +58,8 @@ public class SectionEdgeRenderTests
         // Glow first, then the line on top of it.
         var kids = host.Elements().ToList();
         Assert.Equal("SectionEdgeGlow", (string?)kids[0].Attribute(X + "Name"));
-        Assert.Equal("GlassWindowEdge", (string?)kids[^1].Attribute(X + "Name"));
+        Assert.Equal("GlassWindowEdge", (string?)kids[^2].Attribute(X + "Name"));
+        Assert.Equal("SectionEdgeLift", (string?)kids[^1].Attribute(X + "Name"));
         Assert.All(host.Descendants().Where(e => e.Name.LocalName is "Rectangle" or "Border" or "Grid"),
             e => Assert.Equal("False", (string?)e.Attribute("IsHitTestVisible")));
 
@@ -95,7 +96,24 @@ public class SectionEdgeRenderTests
         var lineStops = lineBrush.Elements().Where(e => e.Name.LocalName == "GradientStop")
             .Select(s => ((string)s.Attribute("Color")!).ToUpperInvariant()).ToArray();
         Assert.Equal(SectionEdgeRules.LineStops(lilac, Models.MotionLevel.Full).Select(Hex), lineStops);
-        Assert.Equal("RotateTransform", Named(doc, "SectionEdgeSpin").Name.LocalName);
+        // The line carries NO transform: the lift travels on four 3 px strips of its own, so a
+        // tick never dirties the full-window Border (review fix, 2026-10-06).
+        Assert.DoesNotContain(lineBrush.Descendants(), e => e.Name.LocalName.EndsWith("Transform", StringComparison.Ordinal));
+
+        var lift = Named(doc, "SectionEdgeLift");
+        var strips = lift.Elements().Where(e => e.Name.LocalName == "Rectangle").ToList();
+        Assert.Equal(4, strips.Count);
+        var liftStops = SectionEdgeRules.LiftStops(lilac, Models.MotionLevel.Full).Select(Hex).ToArray();
+        foreach (var s in strips)
+        {
+            Assert.Equal("3", (string?)s.Attribute("Height") ?? (string?)s.Attribute("Width"));
+            var stops = s.Descendants().Where(e => e.Name.LocalName == "GradientStop").ToList();
+            Assert.Equal(new[] { "0.4", "0.5", "0.6" }, stops.Select(st => (string)st.Attribute("Offset")!));
+            Assert.Equal(liftStops, stops.Select(st => ((string)st.Attribute("Color")!).ToUpperInvariant()));
+            Assert.Single(s.Descendants().Where(e => e.Name.LocalName == "TranslateTransform"));
+        }
+        foreach (var side in new[] { "Top", "Right", "Bottom", "Left" })
+            Assert.Equal("TranslateTransform", Named(doc, "SectionEdgeLift" + side).Name.LocalName);
 
         var edge = Named(doc, "GlassWindowEdge");
         Assert.Equal("3", (string?)edge.Attribute("BorderThickness"));

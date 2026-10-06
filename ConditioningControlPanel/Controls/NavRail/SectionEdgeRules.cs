@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Media;
+using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Controls.NavRail
@@ -33,9 +34,10 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>One lap of the travelling lift, and the frame rate it asks for.</summary>
         internal const double SpinSeconds = 12;
         internal const int SpinFps = 24;
-        /// <summary>The lift's rest angle when it does not travel. The brush runs left to right,
-        /// so at 0 the lift band is vertical and meets the frame at the top (and bottom) centre.</summary>
-        internal const double FixedAngle = 0;
+        /// <summary>One leg of the lap: the lift crosses one side in a quarter of the lap.</summary>
+        internal const double LiftLegSeconds = SpinSeconds / 4;
+        /// <summary>The lift strip's three stops: a soft band 20% wide around its middle.</summary>
+        internal static readonly double[] LiftOffsets = { 0.4, 0.5, 0.6 };
 
         /// <summary>The glow's edge alpha balances perceived brightness on the dark page:
         /// 0.20 x sqrt(0.40 / luminance), clamped 0.14..0.26, as a byte. Light hues (Sage, Coral)
@@ -61,14 +63,47 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>The glow stops' offsets (pinned beside <see cref="GlowStops"/>).</summary>
         internal static readonly double[] GlowOffsets = { 0, GlowMidOffset, 1 };
 
-        /// <summary>The frame line's three stops (offsets 0, 0.5, 1): the hue at 0xE6, the lift
-        /// (hue toward white, solid), the hue again. Off has no lift: all three are the hue.</summary>
+        /// <summary>The frame line's three stops (offsets 0, 0.5, 1): the hue at 0xE6, three
+        /// times. The line never carries the lift itself (see <see cref="LiftStops"/>), so it
+        /// is the same at every motion level; the parameter stays so the painter reads one shape.</summary>
         internal static Color[] LineStops(Color hue, MotionLevel level)
         {
             var line = NavRailRules.WithAlpha(hue, LineAlpha);
-            var lift = level == MotionLevel.Off ? line : NavStripRules.Mix(hue, Colors.White, LiftWhite);
-            return new[] { line, lift, line };
+            return new[] { line, line, line };
         }
+
+        /// <summary>The lift colour: the hue this far toward white, solid.</summary>
+        internal static Color LiftColor(Color hue) => NavStripRules.Mix(hue, Colors.White, LiftWhite);
+
+        /// <summary>A lift strip's three stops (offsets 0.4, 0.5, 0.6): clear, the lift, clear.
+        /// Off has no lift at all, so every stop is clear.</summary>
+        internal static Color[] LiftStops(Color hue, MotionLevel level)
+        {
+            var lift = LiftColor(hue);
+            var clear = NavRailRules.WithAlpha(lift, 0);
+            return level == MotionLevel.Off
+                ? new[] { clear, clear, clear }
+                : new[] { clear, lift, clear };
+        }
+
+        /// <summary>Where a side's lift starts and ends its leg, in the brush's relative units:
+        /// the lap runs clockwise, so top and right travel -1 -> 1 and bottom and left 1 -> -1.
+        /// At either end the band sits off the strip.</summary>
+        internal static (double From, double To) LiftTravel(EdgeSide side) => side switch
+        {
+            EdgeSide.Top => (-1, 1),
+            EdgeSide.Right => (-1, 1),
+            EdgeSide.Bottom => (1, -1),
+            _ => (1, -1),
+        };
+
+        /// <summary>When a side's leg begins inside the lap, seconds: top 0, right 3, bottom 6, left 9.</summary>
+        internal static double LiftLegStart(EdgeSide side) => (int)side * LiftLegSeconds;
+
+        /// <summary>Where a side's lift rests when it does not travel: Reduced holds the top lift
+        /// at the centre of the top edge, every other side parks its band off the strip.</summary>
+        internal static double LiftRest(EdgeSide side, SectionEdgeMotion motion) =>
+            motion == SectionEdgeMotion.Fixed && side == EdgeSide.Top ? 0 : LiftTravel(side).From;
 
         /// <summary>What the line does at a motion level. The spin also needs ambient loops
         /// allowed (a tier that refuses them gets the fixed lift, never a slower spin).</summary>

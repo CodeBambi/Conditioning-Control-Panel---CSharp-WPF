@@ -21,6 +21,18 @@ namespace ConditioningControlPanel
 
         private string? _navBaseTitle;
         private bool _sectionStripWired;
+        /// <summary>The last crumb the title was built from, so a sync notice can rebuild it.</summary>
+        private (string? Section, string Tab, string? Page) _navTitleParts = (null, "settings", null);
+        private bool _syncIssueTitle;
+
+        /// <summary>The cloud sync notice rides the title beside the crumb (review fix: it used
+        /// to overwrite the title, so the crumb latched "Cloud sync issue" as its base when the
+        /// notice came first, and wiped the notice on the next tab click when it came second).</summary>
+        internal void SetSyncIssueTitle(bool on)
+        {
+            _syncIssueTitle = on;
+            UpdateNavTitle(_navTitleParts.Section, _navTitleParts.Tab, _navTitleParts.Page);
+        }
 
         /// <summary>Old keys that land on a new home with a "Moved" note. "lab", "progression" and
         /// "patreon" keep their own ShowTab arms (bark and tutorial API), so they are not here.</summary>
@@ -330,12 +342,14 @@ namespace ConditioningControlPanel
         private void UpdateNavTitle(string? section, string tab, string? pageLabel)
         {
             _navBaseTitle ??= Title;
+            _navTitleParts = (section, tab, pageLabel);
             var sectionLabel = section == null ? null : Loc.Get(NavSections.Find(section)?.LabelKey ?? string.Empty);
             var page = pageLabel ?? (section == NavSections.Home ? null : Loc.Get(NavStripRules.PageLabelKey(tab) ?? string.Empty));
-            if (string.IsNullOrEmpty(sectionLabel)) { Title = _navBaseTitle; return; }
-            Title = string.IsNullOrEmpty(page)
-                ? $"{_navBaseTitle} - {sectionLabel}"
-                : $"{_navBaseTitle} - {sectionLabel} {Loc.Get("nav_crumb_sep")} {page}";
+            var title = string.IsNullOrEmpty(sectionLabel) ? _navBaseTitle
+                : string.IsNullOrEmpty(page)
+                    ? $"{_navBaseTitle} - {sectionLabel}"
+                    : $"{_navBaseTitle} - {sectionLabel} {Loc.Get("nav_crumb_sep")} {page}";
+            Title = _syncIssueTitle ? $"{title} - Cloud sync issue" : title;
         }
     }
 }

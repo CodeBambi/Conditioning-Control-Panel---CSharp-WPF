@@ -548,7 +548,8 @@
              StaticResource lookup; see the FocusGlowTextBox note above). Brushes are
              DynamicResource: mods retheme the colours and the section ink is painted per page.
              ============================================================ -->
-        <!-- One per page. The Companion page title keeps its glow BasedOn this. -->
+        <!-- One per page. The Companion page title COPIES these setters (CompanionTheme.xaml is
+             pack-merged into controls, where a BasedOn to an app key is unsafe). -->
         <Style x:Key="Type.PageTitle" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
             <Setter Property="FontSize" Value="26"/>

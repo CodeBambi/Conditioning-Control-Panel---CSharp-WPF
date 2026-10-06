@@ -285,6 +285,10 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Settings is one scrolling page, so PlansView reads visible on every section.
+                // The motion runs only while Account & Plans is the section in view (its pill lit).
+                if (visible && AppSettingsTab?.CurrentSectionKey is { } current && current != "account")
+                    visible = false;
                 if (visible)
                 {
                     EnsureExclusivesBuilt();

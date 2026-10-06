@@ -93,7 +93,13 @@ public class HeaderBannerFxTests
 
         var body = Regex.Match(xaml, "x:Name=\"HeaderBannerHost\".*?x:Name=\"BannerSparkleLayer\"", RegexOptions.Singleline).Value;
         Assert.True(body.Length > 0, "the sparkle layer left the banner host");
-        Assert.Contains("x:Name=\"BannerGlow\"", body);
+        // Review fix (2026-10-06): the glow is a sibling Border BEHIND the host, never an
+        // Effect on the host (that rendered the whole banner subtree to a surface).
+        Assert.DoesNotContain("x:Name=\"BannerGlow\"", body);
+        var glowHost = Regex.Match(xaml, "<Border Grid.Column=\"3\" x:Name=\"HeaderBannerGlowHost\".*?</Border>", RegexOptions.Singleline).Value;
+        Assert.Contains("x:Name=\"BannerGlow\"", glowHost);
+        Assert.Contains("ElementName=HeaderBannerHost", glowHost);
+        Assert.True(xaml.IndexOf("x:Name=\"HeaderBannerGlowHost\"", StringComparison.Ordinal) < xaml.IndexOf("x:Name=\"HeaderBannerHost\"", StringComparison.Ordinal));
         Assert.Contains("x:Name=\"BannerFlashRing\"", body);
         foreach (var beat in new[] { "TxtBannerPrimary", "TxtBannerSecondary", "TxtBannerWeb", "TxtBannerPool" })
         {

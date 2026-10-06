@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Windows.Media;
+using ConditioningControlPanel.Controls;
 using ConditioningControlPanel.Controls.NavRail;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.UI;
@@ -55,20 +56,43 @@ public class SectionEdgeRulesTests
     }
 
     [Fact]
-    public void LineIsTheHueWithALiftExceptAtOff()
+    public void LineIsTheHueAndTheLiftRidesItsOwnStripsExceptAtOff()
     {
         var hue = NavStripRules.Sky;
-        var full = SectionEdgeRules.LineStops(hue, MotionLevel.Full);
-        Assert.Equal(Color.FromArgb(0xE6, hue.R, hue.G, hue.B), full[0]);
-        Assert.Equal(full[0], full[2]);
-        Assert.Equal(NavStripRules.Mix(hue, Colors.White, 0.35), full[1]);
-        Assert.Equal(0xFF, full[1].A);
-        Assert.True(NavStripRules.Luminance(full[1]) > NavStripRules.Luminance(hue));
+        var line = Color.FromArgb(0xE6, hue.R, hue.G, hue.B);
+        foreach (var level in new[] { MotionLevel.Full, MotionLevel.Reduced, MotionLevel.Off })
+            Assert.All(SectionEdgeRules.LineStops(hue, level), c => Assert.Equal(line, c));
 
-        Assert.Equal(full, SectionEdgeRules.LineStops(hue, MotionLevel.Reduced));
+        var lift = SectionEdgeRules.LiftStops(hue, MotionLevel.Full);
+        Assert.Equal(NavStripRules.Mix(hue, Colors.White, 0.35), lift[1]);
+        Assert.Equal(0xFF, lift[1].A);
+        Assert.True(NavStripRules.Luminance(lift[1]) > NavStripRules.Luminance(hue));
+        Assert.Equal(0, lift[0].A);
+        Assert.Equal(0, lift[2].A);
+        Assert.Equal(lift, SectionEdgeRules.LiftStops(hue, MotionLevel.Reduced));
+        Assert.All(SectionEdgeRules.LiftStops(hue, MotionLevel.Off), c => Assert.Equal(0, c.A));
+        Assert.Equal(new[] { 0.4, 0.5, 0.6 }, SectionEdgeRules.LiftOffsets);
+    }
 
-        var off = SectionEdgeRules.LineStops(hue, MotionLevel.Off);
-        Assert.All(off, c => Assert.Equal(Color.FromArgb(0xE6, hue.R, hue.G, hue.B), c));
+    [Fact]
+    public void TheLiftLapsClockwiseOneSideAtATimeAndParksOffTheStrip()
+    {
+        Assert.Equal(SectionEdgeRules.SpinSeconds / 4, SectionEdgeRules.LiftLegSeconds);
+        Assert.Equal(0, SectionEdgeRules.LiftLegStart(EdgeSide.Top));
+        Assert.Equal(3, SectionEdgeRules.LiftLegStart(EdgeSide.Right));
+        Assert.Equal(6, SectionEdgeRules.LiftLegStart(EdgeSide.Bottom));
+        Assert.Equal(9, SectionEdgeRules.LiftLegStart(EdgeSide.Left));
+        // Clockwise: left to right along the top, down the right, right to left along the
+        // bottom, up the left. Every From and To is a full width off the strip.
+        Assert.Equal((-1.0, 1.0), SectionEdgeRules.LiftTravel(EdgeSide.Top));
+        Assert.Equal((-1.0, 1.0), SectionEdgeRules.LiftTravel(EdgeSide.Right));
+        Assert.Equal((1.0, -1.0), SectionEdgeRules.LiftTravel(EdgeSide.Bottom));
+        Assert.Equal((1.0, -1.0), SectionEdgeRules.LiftTravel(EdgeSide.Left));
+        // Reduced holds one lift at the top centre and parks the rest; Spin parks all at From.
+        Assert.Equal(0, SectionEdgeRules.LiftRest(EdgeSide.Top, SectionEdgeMotion.Fixed));
+        Assert.Equal(-1, SectionEdgeRules.LiftRest(EdgeSide.Right, SectionEdgeMotion.Fixed));
+        Assert.Equal(1, SectionEdgeRules.LiftRest(EdgeSide.Bottom, SectionEdgeMotion.Fixed));
+        Assert.Equal(-1, SectionEdgeRules.LiftRest(EdgeSide.Top, SectionEdgeMotion.Spin));
     }
 
     [Fact]

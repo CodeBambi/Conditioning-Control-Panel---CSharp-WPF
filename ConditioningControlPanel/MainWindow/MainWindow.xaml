@@ -1028,16 +1028,27 @@
                          its opacity (ambient loop, Full motion + window active only) and flares
                          it with BannerFlashRing on every beat change. Everything decorative in
                          here is IsHitTestVisible="False" so the beats' hyperlinks stay live. -->
+                    <!-- Review fix (2026-10-06): the halo is a SIBLING behind the pill, not an
+                         Effect on it. An Effect on the container rendered the whole banner
+                         subtree (both beats, their own text shadows, the sparkles) into an
+                         intermediate surface every breath and cost the text its ClearType. -->
+                    <Border Grid.Column="3" x:Name="HeaderBannerGlowHost"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            CornerRadius="16" Height="31" Margin="12,0,12,0"
+                            Width="{Binding ActualWidth, ElementName=HeaderBannerHost}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            IsHitTestVisible="False">
+                        <Border.Effect>
+                            <DropShadowEffect x:Name="BannerGlow" Color="{DynamicResource PinkColor}"
+                                              BlurRadius="12" ShadowDepth="0" Opacity="0.35"/>
+                        </Border.Effect>
+                    </Border>
                     <Border Grid.Column="3" x:Name="HeaderBannerHost"
                             Background="{DynamicResource SurfaceBgBrush}"
                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                             CornerRadius="16" Padding="0" Height="31" MaxWidth="744"
                             Margin="12,0,12,0"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Border.Effect>
-                            <DropShadowEffect x:Name="BannerGlow" Color="{DynamicResource PinkColor}"
-                                              BlurRadius="12" ShadowDepth="0" Opacity="0.35"/>
-                        </Border.Effect>
                         <Grid>
                         <Border x:Name="BannerFlashRing" CornerRadius="15" BorderThickness="1.5"
                                 BorderBrush="{DynamicResource PinkButtonHoveredBrush}"
@@ -2905,18 +2916,76 @@
              retints them per section. -->
         <navrail:EdgeParticles x:Name="SectionEdgeParticles"/>
 
+        <!-- The line itself is still: three equal stops, retinted per section. The lift that
+             travels round it lives in SectionEdgeLift below, never in this brush (review fix,
+             2026-10-06: a brush transform animated on a full-window Border dirtied 1661x1002 px
+             24 times a second and re-rendered everything under it). -->
         <Border x:Name="GlassWindowEdge" BorderThickness="3" CornerRadius="8" IsHitTestVisible="False">
             <Border.BorderBrush>
                 <LinearGradientBrush x:Name="SectionEdgeLineBrush" StartPoint="0,0.5" EndPoint="1,0.5">
-                    <LinearGradientBrush.RelativeTransform>
-                        <RotateTransform x:Name="SectionEdgeSpin" CenterX="0.5" CenterY="0.5" Angle="0"/>
-                    </LinearGradientBrush.RelativeTransform>
                     <GradientStop Offset="0" Color="#E6B79CFF"/>
-                    <GradientStop Offset="0.5" Color="#FFD0BFFF"/>
+                    <GradientStop Offset="0.5" Color="#E6B79CFF"/>
                     <GradientStop Offset="1" Color="#E6B79CFF"/>
                 </LinearGradientBrush>
             </Border.BorderBrush>
         </Border>
+
+        <!-- The travelling lift: four 3 px strips inside the corner curve, each carrying the
+             white-lifted hue over the line and sliding it along its edge in turn (top, right,
+             bottom, left: one lap in SectionEdgeRules.SpinSeconds). Thin separate elements on
+             purpose, so a tick dirties a 3 px strip and nothing else. MainWindow.SectionEdge.cs
+             drives the four TranslateTransforms; Reduced parks the lift at the top centre, Off
+             collapses the grid. -->
+        <Grid x:Name="SectionEdgeLift" IsHitTestVisible="False">
+            <Rectangle Height="3" VerticalAlignment="Top" Margin="8,0,8,0" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                        <LinearGradientBrush.RelativeTransform>
+                            <TranslateTransform x:Name="SectionEdgeLiftTop" X="-1"/>
+                        </LinearGradientBrush.RelativeTransform>
+                        <GradientStop Offset="0.4" Color="#00D0BFFF"/>
+                        <GradientStop Offset="0.5" Color="#FFD0BFFF"/>
+                        <GradientStop Offset="0.6" Color="#00D0BFFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle Width="3" HorizontalAlignment="Right" Margin="0,8,0,8" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                        <LinearGradientBrush.RelativeTransform>
+                            <TranslateTransform x:Name="SectionEdgeLiftRight" Y="-1"/>
+                        </LinearGradientBrush.RelativeTransform>
+                        <GradientStop Offset="0.4" Color="#00D0BFFF"/>
+                        <GradientStop Offset="0.5" Color="#FFD0BFFF"/>
+                        <GradientStop Offset="0.6" Color="#00D0BFFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle Height="3" VerticalAlignment="Bottom" Margin="8,0,8,0" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                        <LinearGradientBrush.RelativeTransform>
+                            <TranslateTransform x:Name="SectionEdgeLiftBottom" X="1"/>
+                        </LinearGradientBrush.RelativeTransform>
+                        <GradientStop Offset="0.4" Color="#00D0BFFF"/>
+                        <GradientStop Offset="0.5" Color="#FFD0BFFF"/>
+                        <GradientStop Offset="0.6" Color="#00D0BFFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle Width="3" HorizontalAlignment="Left" Margin="0,8,0,8" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                        <LinearGradientBrush.RelativeTransform>
+                            <TranslateTransform x:Name="SectionEdgeLiftLeft" Y="1"/>
+                        </LinearGradientBrush.RelativeTransform>
+                        <GradientStop Offset="0.4" Color="#00D0BFFF"/>
+                        <GradientStop Offset="0.5" Color="#FFD0BFFF"/>
+                        <GradientStop Offset="0.6" Color="#00D0BFFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+        </Grid>
     </Grid>
 
     <!-- THE FUSE's corner readout (CONTRACT-FUSE-0816 2.2). From T-1h the T-minus stops being a

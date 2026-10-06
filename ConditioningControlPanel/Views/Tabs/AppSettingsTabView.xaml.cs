@@ -171,6 +171,9 @@ namespace ConditioningControlPanel.Views.Tabs
             return true;
         }
 
+        /// <summary>The section the lit pill names: the one the reader is on (scroll spy or click).</summary>
+        internal string? CurrentSectionKey { get; private set; }
+
         private void CheckPill(string key)
         {
             var pill = PillFor(key);
@@ -178,6 +181,18 @@ namespace ConditioningControlPanel.Views.Tabs
             _syncingPills = true;
             try { pill.IsChecked = true; }
             finally { _syncingPills = false; }
+
+            // Account & Plans runs the vault's ambient motion, and Settings is ONE scrolling page:
+            // PlansView is "visible" on every section. So the motion follows the lit pill instead
+            // (review fix, 2026-10-06): on while the reader is on Account, parked elsewhere.
+            var was = CurrentSectionKey;
+            CurrentSectionKey = key;
+            bool wasAccount = was == "account", isAccount = key == "account";
+            if (wasAccount != isAccount && IsVisible)
+            {
+                try { App.MainWindowRef?.OnPlansVisibilityChanged(isAccount); }
+                catch (Exception ex) { App.Logger?.Debug("Plans motion follow: {E}", ex.Message); }
+            }
         }
 
         private void SectionPill_Click(object sender, RoutedEventArgs e)

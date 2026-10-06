@@ -775,13 +775,14 @@ namespace ConditioningControlPanel
                 if (failureCount >= 3)
                 {
                     App.Logger?.Warning("[SyncHealth] {Count} consecutive sync failures — notifying user", failureCount);
-                    // Show a subtle notification in the title bar area
-                    Title = $"Conditioning Control Panel — Cloud sync issue";
+                    // Show a subtle notification in the title bar area (composed with the
+                    // section crumb by UpdateNavTitle, so neither state wipes the other).
+                    SetSyncIssueTitle(true);
                 }
                 else if (failureCount == 0)
                 {
                     // Restore normal title
-                    Title = "Conditioning Control Panel";
+                    SetSyncIssueTitle(false);
                 }
             });
         }

@@ -2538,6 +2538,16 @@ namespace ConditioningControlPanel
             // now, not at the next section change.
             try { PaintSectionEdge(_edgeHue, 0); SectionEdgeParticles?.Refresh(); }
             catch (Exception ex) { App.Logger?.Debug("Edge motion refresh failed: {E}", ex.Message); }
+            // Review fix: the Home favourites handle glow and the fold-arrow glow are Forever
+            // breaths that read the gate only when they start, and the strip's sheen clock stops
+            // itself below Full and only Loaded restarted it. All three re-read the level here.
+            try
+            {
+                SettingsTab?.PaintFavoritesDrawer();
+                SettingsTab?.PaintFoldArrow(BrowserFolded);
+                SectionStrip?.UpdateSheenClock();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Chrome glow refresh failed: {E}", ex.Message); }
             // Loops read the gate when they start, so a switch to Reduced/Off needs the running ones
             // stopped now; a switch back to Full re-arms them on the next tab visit.
             if (!Services.MotionFx.AllowAmbientLoops)
