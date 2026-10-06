@@ -68,12 +68,13 @@ namespace ConditioningControlPanel.Services.Descent
         }
 
         /// <summary>
-        /// True when the XP readout should carry the "(+N%)" suffix: a Cycle receipt whose bonus
-        /// is actually above 1.0. A zero bonus gets the chip (the choice still happened) but not a
-        /// suffix on a number it is not moving.
+        /// True when the XP readout should carry the "(+N%)" suffix: any migration receipt (Cycle
+        /// or Restore, since every migrated account earns the bonus as of 2026-10-06) whose bonus
+        /// is actually above 1.0. A zero bonus gets the chip but not a suffix on a number it is
+        /// not moving.
         /// </summary>
         public static bool ShowsXpMultiplier(DescentReceiptKind kind, double multiplier) =>
-            kind == DescentReceiptKind.Cycle
+            kind != DescentReceiptKind.None
             && !double.IsNaN(multiplier)
             && multiplier > 1.0;
     }

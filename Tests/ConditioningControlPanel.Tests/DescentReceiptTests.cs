@@ -120,12 +120,13 @@ public class DescentReceiptTests
     // ------------------------------------------------------ the XP readout suffix
 
     [Fact]
-    public void OnlyACycleWithARealBonus_EarnsTheXpSuffix()
+    public void AnyMigrationWithARealBonus_EarnsTheXpSuffix()
     {
         Assert.True(DescentReceipt.ShowsXpMultiplier(DescentReceiptKind.Cycle, 1.10));
 
-        // Restore has no multiplier to advertise, and neither has a card nobody migrated.
-        Assert.False(DescentReceipt.ShowsXpMultiplier(DescentReceiptKind.Restore, 1.10));
+        // Every migrated account earns the bonus since 2026-10-06, Restore included; a card
+        // nobody migrated has nothing to advertise.
+        Assert.True(DescentReceipt.ShowsXpMultiplier(DescentReceiptKind.Restore, 1.10));
         Assert.False(DescentReceipt.ShowsXpMultiplier(DescentReceiptKind.None, 1.10));
 
         // A Cycle whose bonus went missing still gets the chip (the choice happened) but must not

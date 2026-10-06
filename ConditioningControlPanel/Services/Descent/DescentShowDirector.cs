@@ -88,7 +88,6 @@ namespace ConditioningControlPanel.Services.Descent
                 }
 
                 var migration = App.DescentMigration;
-                if (migration != null) migration.CeremonyClosed += OnCeremonyClosed;
 
                 // Settled by Start() before the first tick, and never true at the same time as a
                 // live zero. Read once: the flags behind it are about to be written by the show.
@@ -390,31 +389,9 @@ namespace ConditioningControlPanel.Services.Descent
         // The ignition (§2.4)
         // ------------------------------------------------------------------
 
-        /// <summary>
-        /// The ceremony window closed. <paramref name="committed"/> is the whole decision: a
-        /// "Not tonight" close is a deferral and gets nothing, because there is no Year One to
-        /// light yet. Runs for BOTH the live and the catch-up ceremonies — the ignition belongs to
-        /// the choice, not to the night.
-        /// </summary>
-        private void OnCeremonyClosed(object? sender, bool committed)
-        {
-            if (!committed) return;
-            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
-
-            try
-            {
-                var window = DescentFuseWindow.Open(DescentShowKind.Ignition);
-                if (window is null) { RestoreChrome(); BeginFirstLight(); return; }
-
-                window.Closed += (_, _) => { RestoreChrome(); BeginFirstLight(); };
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "[Fuse] The Year One ignition could not start.");
-                RestoreChrome();
-                BeginFirstLight();
-            }
-        }
+        // THE IGNITION had one door: the ceremony window closing on a committed choice. The
+        // ceremony is retired (2026-10-06): an offer now restores silently, so nothing opens a
+        // fullscreen show from a sync, and the Year One ignition has no live path.
 
         // ------------------------------------------------------------------
         // The first light (§2.4, owner ruling 2026-08-16)
@@ -594,8 +571,6 @@ namespace ConditioningControlPanel.Services.Descent
                     fuse.ZeroObservedLate -= OnZeroObservedLate;
                     fuse.PhaseChanged -= OnPhaseChanged;
                 }
-                var migration = App.DescentMigration;
-                if (migration != null) migration.CeremonyClosed -= OnCeremonyClosed;
             }
             catch { /* teardown races are not worth a log line */ }
 

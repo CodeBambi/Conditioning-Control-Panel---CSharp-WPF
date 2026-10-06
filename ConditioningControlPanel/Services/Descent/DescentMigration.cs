@@ -134,26 +134,35 @@ namespace ConditioningControlPanel.Services.Descent
     public static class DescentMigration
     {
         /// <summary>
-        /// The Cycle XP bonus. TUNABLE AND UNBLESSED — CONTRACTS §3 records that the owner has
-        /// not signed off on 1.10, only on "there is a lasting bonus". It ships dark with the
-        /// ceremony; changing it is a one-line edit here and nowhere else.
+        /// The lasting XP bonus a migrated account earns. Originally the Cycle door's alone; since
+        /// the ceremony's retirement (owner, 2026-10-06: "give the 10% boost to anyone that comes
+        /// back") it is every migrated account's. Changing it is a one-line edit here.
         /// </summary>
         public const double CycleXpBonus = 1.10;
 
         /// <summary>
-        /// The multiplier <see cref="ProgressionService.AddXP"/> actually applies. 1.0 for every
-        /// account that has not taken a Cycle, which today is every account in existence.
-        /// Defensive clamp on the persisted value: a hand-edited settings.json must not be able
-        /// to write itself a 50x XP tap.
+        /// The multiplier <see cref="ProgressionService.AddXP"/> actually applies:
+        /// <see cref="CycleXpBonus"/> for a migrated account, 1.0 for everyone else.
         /// </summary>
-        public static double ActiveCycleXpBonus
+        public static double ActiveCycleXpBonus => XpBonusFor(App.Settings?.Current);
+
+        /// <summary>
+        /// ONE RULE: migrated = bonus. Migrated means curve v2 is this account's curve
+        /// (<c>DescentEpoch</c>), or the server has acked the migration, or a valid choice is on
+        /// disk waiting to land (the relevel is already applied by then). Restore, Cycle and the
+        /// silent auto-restore all qualify alike.
+        ///
+        /// <para>The persisted <c>DescentCycleXpBonus</c> is no longer an input: a hand-edited
+        /// settings file can never buy more than the constant, and an account that lost the field
+        /// still gets the bonus its migration earned.</para>
+        /// </summary>
+        public static double XpBonusFor(Models.AppSettings? settings)
         {
-            get
-            {
-                var stored = App.Settings?.Current?.DescentCycleXpBonus ?? 1.0;
-                if (double.IsNaN(stored) || stored < 1.0) return 1.0;
-                return Math.Min(stored, CycleXpBonus);
-            }
+            if (settings is null) return 1.0;
+            var migrated = settings.DescentEpoch == DescentEpochs.AccountDescent
+                           || settings.DescentMigrationCompleted
+                           || DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice);
+            return migrated ? CycleXpBonus : 1.0;
         }
 
         /// <summary>
