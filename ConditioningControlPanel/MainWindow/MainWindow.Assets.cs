@@ -2857,6 +2857,9 @@ namespace ConditioningControlPanel
                 chip.BorderThickness = new Thickness(0);
                 chip.Background = Brushes.Transparent;
                 var stack = new Grid();
+                // The Grid sits INSIDE the chip's padding, so the outline grows back out by that
+                // padding to frame the whole pill, not just the text (desk run 3, shot 14b).
+                var pad = chip.Padding;
                 stack.Children.Add(new Rectangle
                 {
                     RadiusX = 13,
@@ -2864,7 +2867,9 @@ namespace ConditioningControlPanel
                     Fill = Brushes.Transparent,
                     Stroke = accent ?? Brushes.Gray,
                     StrokeThickness = 1,
-                    StrokeDashArray = new DoubleCollection { 3, 2 }
+                    StrokeDashArray = new DoubleCollection { 3, 2 },
+                    Margin = new Thickness(-pad.Left, -pad.Top, -pad.Right, -pad.Bottom),
+                    IsHitTestVisible = false,
                 });
                 stack.Children.Add(row);
                 chip.Child = stack;
@@ -3105,8 +3110,17 @@ namespace ConditioningControlPanel
                 foreach (var s in n.Subs ?? Array.Empty<string>()) subs.Add(s);
             }
             foreach (var s in customSubs ?? Array.Empty<string>()) subs.Add(s);
-            return string.Format(LocOr("label_remote_summary", "{0} niches, {1} subreddits in your pool"),
-                niches, subs.Count);
+            return string.Format(LocOr("label_remote_summary", "{0}, {1} in your pool"),
+                Plural(LocOr("unit_remote_niches", "{0} niche|{0} niches"), niches),
+                Plural(LocOr("unit_remote_subs", "{0} subreddit|{0} subreddits"), subs.Count));
+        }
+
+        /// <summary>"{0} niche|{0} niches": the form after the bar for every count but one.</summary>
+        internal static string Plural(string forms, int n)
+        {
+            var parts = (forms ?? string.Empty).Split('|');
+            var form = parts.Length > 1 && n != 1 ? parts[1] : parts[0];
+            return string.Format(form, n);
         }
 
         private void RepaintRemoteSummary(Models.AppSettings settings)
