@@ -274,6 +274,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF StopLink_Click.</summary>
         private void StopLink_Click(object? sender, RoutedEventArgs e)
         {
+            // ponytail: no LockdownVeil on this head yet; this refusal stands in for it.
+            if (MainShellWindow.RefuseStopUnderLockdown()) return;
             try { MainShellWindow.StopEngine(); }
             catch (Exception ex) { Log.Warning(ex, "[Launcher] StopEngine failed"); }
             RefreshStatus();
@@ -281,6 +283,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF RefreshStatus: running since HH:mm + Stop, or idle; the CTA reads Open or Launch.
         /// ponytail: WPF also refreshes at once on EngineStopped; here the 1 s tick catches it.</summary>
+        private bool? _ctaRunning;
+
         internal void RefreshStatus()
         {
             try
@@ -290,6 +294,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ? Loc.GetF("launcher_panel_running", (CoreEngine.StartedUtc ?? DateTime.UtcNow).ToLocalTime().ToString("HH:mm"))
                     : Loc.Get("launcher_panel_idle");
                 StopLink.IsVisible = running;
+                if (_ctaRunning == running) return;
+                _ctaRunning = running;
                 PanelCtaText.Bind(TextBlock.TextProperty,
                     (global::Avalonia.Data.Binding)new Localization.StrExtension(running ? "launcher_panel_open" : "launcher_panel_launch")
                         .ProvideValue(null!));
@@ -404,6 +410,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF ModPill_Click: installed mods in stock order, the active one ticked, then Manage mods.</summary>
         private void ModPill_Click(object? sender, RoutedEventArgs e)
         {
+            // ponytail: no LockdownVeil on this head yet; this refusal stands in for it.
+            if (MainShellWindow.LockdownActive) return;
             try
             {
                 var mods = App.Mods;
@@ -435,6 +443,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         internal void SwitchMod(string modId)
         {
+            if (MainShellWindow.LockdownActive) { Log.Information("[Launcher] mod switch refused under Lockdown"); return; }
             try
             {
                 var panel = Panel;

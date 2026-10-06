@@ -406,4 +406,66 @@ public sealed class LauncherWindowTests
             CoreSettings.Current.ActiveModId = BuiltInMods.CCPDefaultId;
         }
     });
+    [Fact]
+    public void Lockdown_StopLinkRefuses_EngineKeepsRunning() => Run(shell =>
+    {
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            CoreSettings.Current.FlashEnabled = true;
+            shell.StartEngine();
+            ld.Activate(TimeSpan.FromMinutes(30));
+            w.FindControl<Button>("StopLink")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.True(CoreEngine.IsRunning);
+        }
+        finally { ld.Deactivate(); CoreEngine.Stop(); }
+    });
+
+    [Fact]
+    public void Lockdown_ModPillOpensNoMenu_AndSwitchModRefuses() => Run(shell =>
+    {
+        var snapshot = new CoreModsSnapshot();
+        var oldResources = Application.Current!.Resources.Keys.ToHashSet();
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            CoreSettings.Current.ActiveModId = BuiltInMods.CCPDefaultId;
+            global::ConditioningControlPanel.Avalonia.App.StartMods();
+            LauncherWindow.BackToLauncher(shell);
+            Dispatcher.UIThread.RunJobs();
+            var w = LauncherWindow.Instance!;
+            ld.Activate(TimeSpan.FromMinutes(30));
+            var pill = w.FindControl<Button>("ModPill")!;
+            pill.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.Null(pill.ContextMenu);
+            w.SwitchMod(BuiltInMods.DronificationId);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(BuiltInMods.CCPDefaultId, global::ConditioningControlPanel.Avalonia.App.Mods!.ActiveModId);
+        }
+        finally
+        {
+            ld.Deactivate();
+            foreach (var key in Application.Current.Resources.Keys.Where(k => !oldResources.Contains(k)).ToList())
+                Application.Current.Resources.Remove(key);
+            snapshot.Dispose();
+            global::ConditioningControlPanel.Avalonia.App.ResetReleaseContent();
+            CoreSettings.Current.ActiveModId = BuiltInMods.CCPDefaultId;
+        }
+    });
+
+    [Fact]
+    public void StatusTimer_StopsWhenTheLauncherHides() => Run(shell =>
+    {
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var timer = (DispatcherTimer)typeof(LauncherWindow)
+            .GetField("_statusTimer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(w)!;
+        Assert.True(timer.IsEnabled);
+        w.Hide();
+        Assert.False(timer.IsEnabled);
+    });
 }
