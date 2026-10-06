@@ -107,10 +107,18 @@ public class NavSectionRailTests
         double rowH = double.Parse(Regex.Match(xaml,
             @"x:Key=""NavSectionButton""[\s\S]*?Property=""Height"" Value=""([\d.]+)""").Groups[1].Value,
             CultureInfo.InvariantCulture);
-        double rows = 8 * (rowH + 2);
-        double top = 28 + 8 + 24 + 4;     // search pill + back pill (when shown)
-        Assert.True(rows + top <= 849 - 230,
-            $"rows ({rows}) + top ({top}) leave under 230px for the foot chips");
+        // Polish wave 2 (2026-10-06): 76px rows with no margin carry a 60px medallion and its
+        // label; the rail's own margin is 4+4 and the two pills shrank to buy the height. The
+        // foot chips (Circe's tab, divider, EMI, Friends) measure about 167px; the rendered
+        // check in NavFinalRenderTests is the authority, this is the cheap static guard.
+        double rowMargin = double.Parse(Regex.Match(xaml,
+            @"x:Key=""NavSectionButton""[\s\S]*?Property=""Margin"" Value=""([\d.]+)""").Groups[1].Value,
+            CultureInfo.InvariantCulture);
+        Assert.True(rowH >= 74, $"the section rows shrank back to {rowH}px; the medallions need 74+");
+        double rows = 8 * (rowH + 2 * rowMargin);
+        double top = 26 + 4 + 22 + 2;     // search pill + back pill (when shown)
+        Assert.True(rows + top <= 857 - 170,
+            $"rows ({rows}) + top ({top}) leave under 170px for the foot chips");
     }
 
     [Fact]

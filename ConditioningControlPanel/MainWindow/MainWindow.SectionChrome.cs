@@ -84,6 +84,7 @@ namespace ConditioningControlPanel
                 string? pageLabel = null;
                 if (section == NavSections.Settings) pageLabel = CurrentSettingsSectionLabel();
                 SectionStrip?.Show(section, tab, pageLabel);
+                PaintSectionWash(section);
 
                 UpdateNavTitle(section, tab, pageLabel);
 
@@ -103,6 +104,49 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Debug("SyncSectionChrome({Tab}) failed: {E}", tab, ex.Message);
             }
+        }
+
+        /// <summary>The page wash's top-left alpha (about 14%) and its hue line's (about 35%).</summary>
+        internal const byte SectionWashAlpha = 0x24, SectionWashLineAlpha = 0x59;
+
+        /// <summary>The wash's colour change, 250 ms (Reduced halves it, Off is instant).</summary>
+        internal const int SectionWashMs = 250;
+
+        private string? _washSection;
+
+        /// <summary>Tints the page ground in the section hue (NavStripRules.Accent, the one table).
+        /// A tab no section owns keeps the current wash.</summary>
+        private void PaintSectionWash(string? section)
+        {
+            try
+            {
+                if (section == null || section == _washSection) return;
+                _washSection = section;
+                var hue = NavStripRules.Accent(section);
+                int ms = NavRailRules.Ms(SectionWashMs, MotionFx.Level);
+                Tint(SectionWashTop, NavRailRules.WithAlpha(hue, SectionWashAlpha));
+                Tint(SectionWashEnd, NavRailRules.WithAlpha(hue, 0));
+                if (SectionWashLineBrush != null)
+                    Animate(SectionWashLineBrush, SolidColorBrush.ColorProperty,
+                            NavRailRules.WithAlpha(hue, SectionWashLineAlpha));
+
+                void Tint(GradientStop? stop, Color to)
+                {
+                    if (stop != null) Animate(stop, GradientStop.ColorProperty, to);
+                }
+                void Animate(Animatable target, DependencyProperty dp, Color to)
+                {
+                    if (ms <= 0)
+                    {
+                        target.BeginAnimation(dp, null);
+                        target.SetValue(dp, to);
+                        return;
+                    }
+                    target.BeginAnimation(dp, new ColorAnimation(to, TimeSpan.FromMilliseconds(ms))
+                    { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("PaintSectionWash failed: {E}", ex.Message); }
         }
 
         private void WireSectionStrip()

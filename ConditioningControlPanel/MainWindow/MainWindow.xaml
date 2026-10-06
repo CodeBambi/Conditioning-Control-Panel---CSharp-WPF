@@ -53,8 +53,8 @@
              cyan (T2), red (Circe) and mint (credit). -->
         <Style x:Key="NavSectionButton" TargetType="Button">
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
-            <Setter Property="Height" Value="64"/>
-            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Height" Value="76"/>
+            <Setter Property="Margin" Value="0"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -68,7 +68,7 @@
                                     CornerRadius="0,12,12,0" Margin="0,0,4,0" Opacity="0" IsHitTestVisible="False"/>
                             <Border x:Name="NavHover" Background="#14FFFFFF"
                                     CornerRadius="0,12,12,0" Margin="0,0,4,0" Opacity="0" IsHitTestVisible="False"/>
-                            <ContentPresenter Margin="0,2,0,2"
+                            <ContentPresenter Margin="0,1,0,0"
                                               HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                             <Border x:Name="NavFocusRing" BorderBrush="#E6FFFFFF" BorderThickness="2"
                                     CornerRadius="10" Margin="6,0,8,0" Visibility="Collapsed" IsHitTestVisible="False"/>
@@ -101,7 +101,7 @@
             <Setter Property="TextWrapping" Value="NoWrap"/>
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
             <Setter Property="MaxWidth" Value="86"/>
-            <Setter Property="Margin" Value="0,1,0,0"/>
+            <Setter Property="Margin" Value="0,0,0,0"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
 
@@ -372,7 +372,7 @@
                     <GradientStop Color="{DynamicResource PanelBg}" Offset="1"/>
                 </LinearGradientBrush>
             </Border.Background>
-            <Grid Margin="0,8,0,8">
+            <Grid Margin="0,4,0,4">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -383,7 +383,7 @@
                 <!-- BACK: returns to the tab shown before this one (MainWindow.TabHistory.cs).
                      Hidden (never Collapsed) until there is somewhere to go back to, so the
                      rail keeps its height and the section rows never jump between Home and the rest. -->
-                <Button x:Name="BtnNavBack" Height="24" Margin="6,0,7,4" Visibility="Hidden"
+                <Button x:Name="BtnNavBack" Height="22" Margin="6,0,7,2" Visibility="Hidden"
                         Cursor="Hand" Click="BtnNavBack_Click"
                         ToolTipService.InitialShowDelay="500"
                         ToolTip="{loc:Str tooltip_nav_back}">
@@ -413,7 +413,7 @@
                 </Button>
                 <!-- THE SEARCH PILL: the same Toggle the Ctrl+K InputBinding uses. The keycap moved
                      into the tooltip; the 96px rail has room for the lens and the word only. -->
-                <Button x:Name="BtnNavSearch" Height="28" Margin="6,0,7,8"
+                <Button x:Name="BtnNavSearch" Height="26" Margin="6,0,7,4"
                         Cursor="Hand" Click="BtnNavSearch_Click"
                         ToolTipService.InitialShowDelay="500"
                         ToolTip="{loc:Str tooltip_nav_search}">
@@ -455,21 +455,20 @@
                 <StackPanel x:Name="NavSectionRows" Grid.Row="1" VerticalAlignment="Top">
                     <Button x:Name="DoorHome" Tag="home" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Home door"
-                            Background="#33C9A0FF" BorderBrush="#C9A0FF"
                             AutomationProperties.Name="{loc:Str nav_door_home}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_home}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="60"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                    Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="56" Height="56"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorHome"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -488,21 +487,20 @@
                     </Button>
                     <Button x:Name="DoorStudio" Tag="studio" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Studio door"
-                            Background="#33FF69B4" BorderBrush="#FF69B4"
                             AutomationProperties.Name="{loc:Str nav_door_studio}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_studio}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="60"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                    Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="56" Height="56"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorStudio"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -521,21 +519,20 @@
                     </Button>
                     <Button x:Name="DoorCompanion" Tag="companion" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Companion door"
-                            Background="#33E85CE0" BorderBrush="#E85CE0"
                             AutomationProperties.Name="{loc:Str nav_door_companion}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_companion}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="60"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                    Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="56" Height="56"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorCompanion"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -554,21 +551,20 @@
                     </Button>
                     <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Play door"
-                            Background="#338C7CFF" BorderBrush="#8C7CFF"
                             AutomationProperties.Name="{loc:Str nav_door_play}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="60"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                    Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="56" Height="56"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorPlay"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -587,21 +583,20 @@
                     </Button>
                     <Button x:Name="DoorSocial" Tag="social" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Social door"
-                            Background="#337A8CFF" BorderBrush="#7A8CFF"
                             AutomationProperties.Name="{loc:Str nav_section_social}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_section_social}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="60"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                    Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="56" Height="56"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Grid Width="64" Height="64">
                                     <Image x:Name="ImgDoorSocial"
@@ -628,21 +623,20 @@
                     </Button>
                     <Button x:Name="DoorYou" Tag="you" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the You door"
-                            Background="#33FF8A7A" BorderBrush="#FF8A7A"
                             AutomationProperties.Name="{loc:Str nav_door_you}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_you}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="60"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                    Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="56" Height="56"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorYou"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -661,21 +655,20 @@
                     </Button>
                     <Button x:Name="DoorLibrary" Tag="library" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Library door"
-                            Background="#33B79CFF" BorderBrush="#B79CFF"
                             AutomationProperties.Name="{loc:Str nav_door_library}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_library}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="60"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                    Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="56" Height="56"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorLibrary"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -711,21 +704,20 @@
                     <!-- THE GEAR. Tag "appsettings" (the tab key "settings" is the dashboard). -->
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Settings door"
-                            Background="#33B8B8D0" BorderBrush="#B8B8D0"
                             AutomationProperties.Name="{loc:Str nav_door_settings}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="46"/>
+                                <RowDefinition Height="60"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="58" Height="58" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="44" Height="44" CornerRadius="12"
+                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Opacity="0.85" Background="{DynamicResource PanelAccentBrush}"
-                                    BorderThickness="1" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="40" Height="40"
+                                    Background="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1.5" BorderBrush="Transparent"/>
+                            <Viewbox Grid.Row="0" Width="56" Height="56"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorSettings"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -744,6 +736,16 @@
                     </Button>
                 </StackPanel>
             </Grid>
+        </Border>
+
+        <!-- THE HUD BAND (nav polish wave 2, 2026-10-06): the header row and the XP row read as one
+             zone. Paint only: 20% black over the window ground (the page colour mixed 20% toward
+             black) and a 1px TextMuted divider at 30% under the XP row. Drawn first in the canvas
+             so the header and XP controls sit on it untouched; never hit-testable. -->
+        <Border x:Name="HudBand" Grid.Row="1" Grid.RowSpan="3" Grid.Column="1"
+                Background="#33000000" IsHitTestVisible="False">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource TextMutedBrush}"
+                    Opacity="0.3"/>
         </Border>
 
         <!-- Header Bar - Row 1 -->
@@ -1772,6 +1774,23 @@
              which is all Row 4 / Column 1 ever was, so the per-view Grid.Row/Grid.Column
              moved onto the wrapper. Nothing about tab visibility, ShowTab or any x:Name
              changed. -->
+        <!-- THE SECTION WASH (nav polish wave 2): a soft gradient in the section hue behind the
+             tab canvas plus a 1px hue line under the HUD band. Colours come from
+             NavStripRules.Accent through MainWindow.SectionChrome.cs (PaintSectionWash); the
+             authored lilac is Home's. Behind the AdornerDecorator, never hit-testable. -->
+        <Border x:Name="SectionPageWash" Grid.Row="4" Grid.Column="1" IsHitTestVisible="False">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop x:Name="SectionWashTop" Color="#24B79CFF" Offset="0"/>
+                    <GradientStop x:Name="SectionWashEnd" Color="#00B79CFF" Offset="0.66"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Border x:Name="SectionWashLine" Height="1" VerticalAlignment="Top">
+                <Border.Background>
+                    <SolidColorBrush x:Name="SectionWashLineBrush" Color="#59B79CFF"/>
+                </Border.Background>
+            </Border>
+        </Border>
         <AdornerDecorator Grid.Row="4" Grid.Column="1">
           <!-- Nav rework 2026-10-06: two rows. Row 0 = the section's pill strip + breadcrumb
                (hidden on Home), row 1 = the one-cell stack of tab views, unchanged. Both live
@@ -1781,7 +1800,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <navrail:SectionTabStrip x:Name="SectionStrip" Grid.Row="0" Margin="10,2,10,4" Visibility="Collapsed" />
+            <navrail:SectionTabStrip x:Name="SectionStrip" Grid.Row="0" Margin="10,8,10,4" Visibility="Collapsed" />
             <Grid x:Name="PageViewsGrid" Grid.Row="1">
                 <!-- Lane-registered pages (RegisterNavTab) are created lazily into this cell on
                      their first ShowTab, the same cell as every view below. -->

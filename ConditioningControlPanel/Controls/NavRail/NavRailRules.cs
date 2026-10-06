@@ -15,6 +15,22 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>The badge pill caps here: anything above reads "9+".</summary>
         internal const int BadgeCap = 9;
 
+        // Polish wave 2: every rail hue comes from NavStripRules.Accent; these are only alphas.
+        /// <summary>The active row's fill behind the medallion (about 20%).</summary>
+        internal const byte FillAlpha = 0x33;
+        /// <summary>The faint inner tint of every medallion tile (about 18%).</summary>
+        internal const byte TileTintAlpha = 0x2E;
+        /// <summary>The idle ring (about 45%), its hover (about 80%), the active ring (solid).</summary>
+        internal const byte RingIdleAlpha = 0x73, RingHoverAlpha = 0xCC, RingActiveAlpha = 0xFF;
+
+        /// <summary>The ring alpha for a row: solid when active, brighter on hover, else 45%.</summary>
+        internal static byte RingAlpha(bool active, bool hover) =>
+            active ? RingActiveAlpha : hover ? RingHoverAlpha : RingIdleAlpha;
+
+        /// <summary>A colour with its alpha replaced.</summary>
+        internal static System.Windows.Media.Color WithAlpha(System.Windows.Media.Color c, byte a) =>
+            System.Windows.Media.Color.FromArgb(a, c.R, c.G, c.B);
+
         /// <summary>The rail's rows, top to bottom: every section but the Settings gear.</summary>
         internal static IReadOnlyList<NavSection> RailSections { get; } =
             NavSections.Order.Where(s => s.Key != NavSections.Settings).ToArray();

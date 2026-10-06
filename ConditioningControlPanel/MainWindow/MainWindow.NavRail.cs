@@ -53,8 +53,7 @@ namespace ConditioningControlPanel
         private readonly List<NavSectionRow> _navSectionRows = new();
         private bool _navRailReady;
 
-        private const double NavTileIdleOpacity = 0.85;
-        private const double NavGlowActive = 0.50;
+        private const double NavGlowActive = 0.35;
         private const int NavGlowFadeMs = 160;
         private const int NavPressMs = 80;
         private const double NavPressScale = 0.97;
@@ -104,8 +103,13 @@ namespace ConditioningControlPanel
                 {
                     Section = NavRailRules.SectionForDoorTag(tag),
                     Button = btn,
-                    Hue = btn.BorderBrush as SolidColorBrush,
                 };
+                // Polish wave 2: the hue comes from the ONE table (NavStripRules.Accent), never
+                // from per-button XAML. The template's fill and bar read Background/BorderBrush.
+                var hue = NavStripRules.Accent(row.Section);
+                row.Hue = NavFrozen(hue);
+                btn.Background = NavFrozen(NavRailRules.WithAlpha(hue, NavRailRules.FillAlpha));
+                btn.BorderBrush = row.Hue;
                 if (btn.Content is Panel grid)
                 {
                     foreach (var child in grid.Children.OfType<FrameworkElement>())
@@ -130,8 +134,13 @@ namespace ConditioningControlPanel
                         Color = FxTheme.GlowColor, BlurRadius = 6, ShadowDepth = 0, Opacity = 0.45,
                     };
                 }
+                if (row.Tile != null)
+                    row.Tile.Background = NavFrozen(NavRailRules.WithAlpha(hue, NavRailRules.TileTintAlpha));
                 HookNavPress(row);
                 var captured = row;
+                btn.MouseEnter += (_, __) => PaintNavRing(captured, hover: true);
+                btn.MouseLeave += (_, __) => PaintNavRing(captured, hover: false);
+                PaintNavRing(row, hover: false);
                 btn.ToolTipOpening += (_, __) => btn.ToolTip = BuildNavRowToolTip(captured);
                 _navSectionRows.Add(row);
             }
@@ -309,11 +318,11 @@ namespace ConditioningControlPanel
                 if (btn.FindName("Shade" + btn.Name) is UIElement shade)
                     shade.Opacity = row.Active ? 0 : 1;
 
-                if (row.Tile != null)
+                PaintNavRing(row, hover: btn.IsMouseOver);
+                if (row.Label != null)
                 {
-                    row.Tile.Opacity = row.Active ? 1.0 : NavTileIdleOpacity;
-                    if (row.Active && row.Hue != null) row.Tile.BorderBrush = row.Hue;
-                    else row.Tile.ClearValue(Border.BorderBrushProperty);
+                    if (row.Active && row.Hue != null) row.Label.Foreground = row.Hue;
+                    else row.Label.ClearValue(TextBlock.ForegroundProperty);
                 }
                 if (row.Glow != null)
                 {
@@ -334,6 +343,25 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("PaintNavRowActive: {E}", ex.Message); }
         }
 
+        /// <summary>The medallion ring: idle = the hue at 45% (hover 80%), 1.5 px; active = the
+        /// solid hue, 2 px. Alphas live in NavRailRules so a test can pin them.</summary>
+        private static void PaintNavRing(NavSectionRow row, bool hover)
+        {
+            if (row.Tile == null || row.Hue == null) return;
+            var c = row.Hue.Color;
+            byte a = NavRailRules.RingAlpha(row.Active, hover);
+            row.Tile.Opacity = 1.0;
+            row.Tile.BorderBrush = NavFrozen(NavRailRules.WithAlpha(c, a));
+            row.Tile.BorderThickness = new Thickness(row.Active ? 2.0 : 1.5);
+        }
+
+        private static SolidColorBrush NavFrozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
         /// <summary>The medallion's halo: the row's hue fading to transparent. Frozen.</summary>
         private static Brush? BuildNavDoorGlow(SolidColorBrush? hue)
         {
@@ -346,8 +374,8 @@ namespace ConditioningControlPanel
                 RadiusX = 0.5,
                 RadiusY = 0.5,
             };
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(0xC0, c.R, c.G, c.B), 0.0));
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(0x60, c.R, c.G, c.B), 0.42));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0xFF, c.R, c.G, c.B), 0.0));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0x80, c.R, c.G, c.B), 0.60));
             b.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, c.R, c.G, c.B), 1.0));
             b.Freeze();
             return b;
