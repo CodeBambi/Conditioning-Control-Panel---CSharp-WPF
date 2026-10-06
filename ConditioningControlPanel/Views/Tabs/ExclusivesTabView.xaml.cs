@@ -95,6 +95,37 @@ namespace ConditioningControlPanel.Views.Tabs
             };
         }
 
+        /// <summary>
+        /// Account &amp; Plans mode (nav rework 2026-10-06). The Premium page retired into
+        /// Settings · Account &amp; Plans, which hosts this view inline: the vault header with the
+        /// tier plates, the spotlight and the invites stay; the collection shelf does not (every
+        /// card on it now has its own home on the rail). The inner ScrollViewer is unhooked so a
+        /// wheel notch reaches the Settings page scroller instead of dying here.
+        /// </summary>
+        public bool PlansMode
+        {
+            get => _plansMode;
+            set
+            {
+                _plansMode = value;
+                var v = value ? Visibility.Collapsed : Visibility.Visible;
+                CollectionLabel.Visibility = v;
+                ExclusivesShelf.Visibility = v;
+                ContentScroll.VerticalScrollBarVisibility =
+                    value ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+                if (value && ContentScroll.Content is UIElement content && ContentScroll.Parent is Panel host)
+                {
+                    // Lift the content out of the ScrollViewer: a ScrollViewer marks every wheel
+                    // notch Handled even when it has nothing to scroll.
+                    var index = host.Children.IndexOf(ContentScroll);
+                    ContentScroll.Content = null;
+                    host.Children.RemoveAt(index);
+                    host.Children.Insert(index, content);
+                }
+            }
+        }
+        private bool _plansMode;
+
         private void Spotlight_Click(object sender, RoutedEventArgs e) => OpenSpotlight();
 
         private void Spotlight_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenSpotlight();

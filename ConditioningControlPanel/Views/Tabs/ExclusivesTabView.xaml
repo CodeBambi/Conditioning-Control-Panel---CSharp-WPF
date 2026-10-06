@@ -61,7 +61,7 @@
             <fx:AmbientFxCanvas x:Name="ExclusivesAmbientFx" x:FieldModifier="internal"/>
 
             <!-- 2 + 3. Content -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
+            <ScrollViewer x:Name="ContentScroll" x:FieldModifier="internal" VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="26,20,26,22">
 
@@ -277,7 +277,7 @@
                     </Border>
 
                     <!-- Collection label -->
-                    <Grid Margin="2,0,2,12">
+                    <Grid x:Name="CollectionLabel" x:FieldModifier="internal" Margin="2,0,2,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>

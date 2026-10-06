@@ -269,45 +269,83 @@ namespace ConditioningControlPanel
         internal static IEnumerable<ExclusiveFeature> ShelfOrder(IEnumerable<ExclusiveFeature> roster) =>
             roster.OrderBy(f => f.Tier switch { 2 => 0, 1 => 1, _ => 2 });
 
+        /// <summary>
+        /// The view this file paints. Since the nav rework (2026-10-06) that is the copy hosted in
+        /// Settings · Account &amp; Plans, not the retired Exclusives tab mounted in MainWindow.xaml
+        /// (left mounted and never shown until the integrator removes its line). Null before the
+        /// Settings page is built; every caller here already tolerates that.
+        /// </summary>
+        private Views.Tabs.ExclusivesTabView VaultView => (AppSettingsTab?.SectionAccount?.PlansView)!;
+
+        /// <summary>
+        /// Account &amp; Plans became visible or hidden (Settings shown, another tab chosen, panel
+        /// to tray). Same three steps the old "exclusives" ShowTab case ran, and the park on leave.
+        /// </summary>
+        internal void OnPlansVisibilityChanged(bool visible)
+        {
+            try
+            {
+                if (visible)
+                {
+                    EnsureExclusivesBuilt();
+                    RefreshExclusivesTab();
+                    StartExclusivesMotion();
+                }
+                else
+                {
+                    StopExclusivesMotion();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[Exclusives] plans visibility change failed: {E}", ex.Message);
+            }
+        }
+
         // ============================== build ==============================
 
         private void EnsureExclusivesBuilt()
         {
-            if (_exclusivesBuilt || ExclusivesTab == null) return;
+            if (_exclusivesBuilt || VaultView == null) return;
             _exclusivesBuilt = true;
 
             try
             {
                 var spot = ExclusiveFeature.All[0];
                 ApplySpotlightArt(spot);
-                ExclusivesTab.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
-                ExclusivesTab.TxtSpotTagline.Text = Loc.Get(spot.TaglineLocKey);
+                VaultView.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
+                VaultView.TxtSpotTagline.Text = Loc.Get(spot.TaglineLocKey);
                 if (spot.BadgeLocKey != null)
-                    ExclusivesTab.TxtSpotBadge.Text = Loc.Get(spot.BadgeLocKey);
+                    VaultView.TxtSpotBadge.Text = Loc.Get(spot.BadgeLocKey);
                 else
-                    ExclusivesTab.SpotBadge.Visibility = Visibility.Collapsed;
+                    VaultView.SpotBadge.Visibility = Visibility.Collapsed;
 
                 // EVERY feature gets a card - the spotlight is a highlight on top of
                 // the collection, not a hole in it. (The hero and its card share the
                 // same registry entry, so chips/veils/titles refresh identically.)
-                foreach (var feature in ShelfOrder(ExclusiveFeature.All))
-                    ExclusivesTab.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
+                // Account & Plans (nav rework 2026-10-06) does not carry the shelf: every card on it
+                // has its own home on the rail now. The full page (PlansMode false) still builds it.
+                if (!VaultView.PlansMode)
+                {
+                    foreach (var feature in ShelfOrder(ExclusiveFeature.All))
+                        VaultView.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
 
-                // The casino fills the first former teaser. Two seats remain reserved.
-                ExclusivesTab.ExclusivesShelf.Children.Add(BuildComingSoonCard(2,
-                    "play_racing_reserved_title", "play_racing_reserved_blurb"));
-                ExclusivesTab.ExclusivesShelf.Children.Add(BuildComingSoonCard(3,
-                    "play_future_reserved_title", "play_future_reserved_blurb"));
+                    // The casino fills the first former teaser. Two seats remain reserved.
+                    VaultView.ExclusivesShelf.Children.Add(BuildComingSoonCard(2,
+                        "play_racing_reserved_title", "play_racing_reserved_blurb"));
+                    VaultView.ExclusivesShelf.Children.Add(BuildComingSoonCard(3,
+                        "play_future_reserved_title", "play_future_reserved_blurb"));
+                }
 
                 // Parks/resumes with tab switches like every other ambient canvas.
-                RegisterTabFx("exclusives", ExclusivesTab.ExclusivesAmbientFx);
+                RegisterTabFx("appsettings", VaultView.ExclusivesAmbientFx);
 
                 // Columns follow the width: a wide window gets more cards a row, never an empty strip.
-                ExclusivesTab.ExclusivesShelf.SizeChanged += (_, e) => { if (e.WidthChanged) FitExclusiveShelf(); };
+                VaultView.ExclusivesShelf.SizeChanged += (_, e) => { if (e.WidthChanged) FitExclusiveShelf(); };
                 FitExclusiveShelf();
 
                 _invitePanel = new Controls.Invites.InvitePanel();
-                ExclusivesTab.InvitesHost.Child = _invitePanel;
+                VaultView.InvitesHost.Child = _invitePanel;
                 // Every read the card makes also repaints the header ticket (MainWindow.InviteTicket.cs).
                 _invitePanel.Read += ApplyInviteTicket;
             }
@@ -330,7 +368,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var img = ExclusivesTab.SpotArtImage;
+                var img = VaultView.SpotArtImage;
                 ImageSource? art = null;
                 bool banner = false;
 
@@ -756,7 +794,7 @@ namespace ConditioningControlPanel
         {
             // Lazily built on first tab show (ShowTab calls EnsureExclusivesBuilt);
             // until then there is nothing to repaint and startup pays nothing.
-            if (ExclusivesTab == null || !_exclusivesBuilt) return;
+            if (VaultView == null || !_exclusivesBuilt) return;
 
             try
             {
@@ -795,17 +833,17 @@ namespace ConditioningControlPanel
                 var spot = ExclusiveFeature.All[0];
                 var spotState = spot.GateState();
                 bool spotFree = IsExclusiveFreeToday(spot, spotState);
-                ExclusivesTab.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
+                VaultView.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
                 ApplySpotlightArt(spot);   // banner/card art, in place on the hero Image
 
                 // The header plate's vault art. ImageSource is swapped ON the existing brush -
                 // replacing the brush would drop the OpacityMask fade the header is composed with.
                 var heroArt = ModTileVariant("vault", ExclusiveHeroDecodeWidth);
-                if (heroArt != null && ExclusivesTab.VaultHeroBrush is { IsFrozen: false } heroBrush)
+                if (heroArt != null && VaultView.VaultHeroBrush is { IsFrozen: false } heroBrush)
                     heroBrush.ImageSource = heroArt;
-                ExclusivesTab.SpotVeil.Visibility =
+                VaultView.SpotVeil.Visibility =
                     spotState == ExclusiveGateState.Locked && !spotFree ? Visibility.Visible : Visibility.Collapsed;
-                ApplyVeilLockBreath(ExclusivesTab.SpotVeilLock, ExclusivesTab.SpotVeil.Visibility == Visibility.Visible);
+                ApplyVeilLockBreath(VaultView.SpotVeilLock, VaultView.SpotVeil.Visibility == Visibility.Visible);
 
                 // Hero weight of the same livery the shelf wears (4px, not the cards' 3), plus the
                 // stamped sign. A tiered spotlight says its free day with the re-stamp, so the
@@ -816,12 +854,12 @@ namespace ConditioningControlPanel
                 // owns BOTH writes, which is why the old unconditional BorderBrush/Thickness pair
                 // is gone rather than moved - two writers is how the two states drift apart.
                 bool spotPill = VaultLivery.Apply(
-                    ExclusivesTab.SpotlightCard, ExclusivesTab.SpotTierBadge,
+                    VaultView.SpotlightCard, VaultView.SpotTierBadge,
                     spot.Tier, spotFree, SpotlightEdgeDefault(), VaultLivery.SpotlightRim);
 
-                ExclusivesTab.TxtSpotFreeToday.Text = Loc.Get("mosaic_free_today");
-                ExclusivesTab.SpotFreeToday.Visibility = spotPill ? Visibility.Visible : Visibility.Collapsed;
-                _spotFreeFx = ApplyFreeTodayPulse(ExclusivesTab.SpotFreeToday, _spotFreeFx, spotPill);
+                VaultView.TxtSpotFreeToday.Text = Loc.Get("mosaic_free_today");
+                VaultView.SpotFreeToday.Visibility = spotPill ? Visibility.Visible : Visibility.Collapsed;
+                _spotFreeFx = ApplyFreeTodayPulse(VaultView.SpotFreeToday, _spotFreeFx, spotPill);
 
                 RefreshExclusiveTierPlates();
                 RestartExclusiveSheens();
@@ -871,9 +909,9 @@ namespace ConditioningControlPanel
                     teaser.BorderBrush = Freeze(WithAlpha(partner, 0x33));
 
                 // XAML-authored, so these are reached by name rather than by list.
-                TintShadow(ExclusivesTab.TxtSpotTitle, accent);
-                TintGradient(ExclusivesTab.SpotBadgeFill, accent, partner);
-                TintGradient(ExclusivesTab.SpotVeilPillFill, accent, partner);
+                TintShadow(VaultView.TxtSpotTitle, accent);
+                TintGradient(VaultView.SpotBadgeFill, accent, partner);
+                TintGradient(VaultView.SpotVeilPillFill, accent, partner);
             }
             catch (Exception ex) { App.Logger?.Debug("Exclusives chrome re-tint: {E}", ex.Message); }
         }
@@ -1115,8 +1153,8 @@ namespace ConditioningControlPanel
 
         private void RefreshExclusiveTierPlates()
         {
-            var p1 = ExclusivesTab.TierPlate1;
-            var p2 = ExclusivesTab.TierPlate2;
+            var p1 = VaultView.TierPlate1;
+            var p2 = VaultView.TierPlate2;
             if (p1 == null || p2 == null) return;
 
             // The access properties, not the raw Patreon tier: SubscribeStar Prime, the whitelist
@@ -1158,7 +1196,7 @@ namespace ConditioningControlPanel
             if (!_exclusivesBuilt) return;
             try
             {
-                ExclusivesTab.ExclusivesAmbientFx.StartLayers(new AmbientFxConfig
+                VaultView.ExclusivesAmbientFx.StartLayers(new AmbientFxConfig
                 {
                     Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash,
                     Intensity = 0.55,
@@ -1174,8 +1212,8 @@ namespace ConditioningControlPanel
                         EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
                     };
                     Timeline.SetDesiredFrameRate(drift, AmbientFrameRate);
-                    ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, drift);
-                    ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, drift);
+                    VaultView.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, drift);
+                    VaultView.SpotArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, drift);
 
                     AttachExclusiveSheens();
                 }
@@ -1189,8 +1227,8 @@ namespace ConditioningControlPanel
                     TierFxBorder.Resume(ui.Card);
                     ui.Badge?.StartMotion();
                 }
-                TierFxBorder.Resume(ExclusivesTab.SpotlightCard);
-                ExclusivesTab.SpotTierBadge?.StartMotion();
+                TierFxBorder.Resume(VaultView.SpotlightCard);
+                VaultView.SpotTierBadge?.StartMotion();
             }
             catch (Exception ex) { App.Logger?.Debug("StartExclusivesMotion: {E}", ex.Message); }
         }
@@ -1201,16 +1239,16 @@ namespace ConditioningControlPanel
             if (!_exclusivesBuilt) return;
             try
             {
-                ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                VaultView.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                VaultView.SpotArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
                 foreach (var ui in _exclusiveCards)
                 {
                     ui.Sheen?.Stop();
                     TierFxBorder.Park(ui.Card);
                     ui.Badge?.StopMotion();
                 }
-                TierFxBorder.Park(ExclusivesTab.SpotlightCard);
-                ExclusivesTab.SpotTierBadge?.StopMotion();
+                TierFxBorder.Park(VaultView.SpotlightCard);
+                VaultView.SpotTierBadge?.StopMotion();
                 // The AmbientFxCanvas parks itself via SwitchTabFx (it's registered).
             }
             catch (Exception ex) { App.Logger?.Debug("StopExclusivesMotion: {E}", ex.Message); }
@@ -1247,7 +1285,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (ExclusivesTab?.Visibility != Visibility.Visible || !MotionFx.AllowAmbientLoops) return;
+                if (VaultView?.IsVisible != true || !MotionFx.AllowAmbientLoops) return;
                 foreach (var ui in _exclusiveCards)
                 {
                     if (ui.Sheen == null) continue;
@@ -1290,7 +1328,7 @@ namespace ConditioningControlPanel
                     _exclusivesSheenRetryQueued = false;
                     try
                     {
-                        if (ExclusivesTab?.Visibility == Visibility.Visible && MotionFx.AllowAmbientLoops)
+                        if (VaultView?.IsVisible == true && MotionFx.AllowAmbientLoops)
                             AttachExclusiveSheens();
                     }
                     catch (Exception ex) { App.Logger?.Debug("Exclusives sheen retry: {E}", ex.Message); }
@@ -1328,7 +1366,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var shelf = ExclusivesTab?.ExclusivesShelf;
+                var shelf = VaultView?.ExclusivesShelf;
                 if (shelf == null || shelf.ActualWidth <= 0) return;
                 var (_, w, h) = Services.UI.ExclusiveShelfFit.For(shelf.ActualWidth);
                 foreach (var child in shelf.Children)
