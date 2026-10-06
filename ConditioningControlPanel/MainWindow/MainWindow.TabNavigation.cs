@@ -103,6 +103,108 @@ namespace ConditioningControlPanel
         private static string CanonicalTabKey(string tab) =>
             string.Equals(tab, "lab", StringComparison.OrdinalIgnoreCase) ? "play" : tab;
 
+        // ============================== lane tab registry ==============================
+        // Nav rework 2026-10-06 (BRIEF contract 1). New section pages (Friends, Leash,
+        // Personality, Permissions, Links, Folders...) are not XAML children of MainWindow:
+        // each lane registers a host here from its own partial file and ShowTab falls through
+        // to it when the switch has no case. The view is created on its first show, into the
+        // LaneTabHost cell (same cell as every other view, inside the page AdornerDecorator).
+
+        /// <summary>One lane-owned page. <paramref name="Create"/> runs once, on the first ShowTab(key).</summary>
+        internal sealed record NavTabHost(string Key, Func<FrameworkElement> Create,
+            Action<FrameworkElement>? OnShown = null, Action<FrameworkElement>? OnHidden = null);
+
+        private readonly Dictionary<string, NavTabHost> _navTabHosts = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, FrameworkElement> _navTabViews = new(StringComparer.OrdinalIgnoreCase);
+        private string? _shownLaneTab;
+
+        /// <summary>Register a lane page. A second registration of the same key replaces the
+        /// first only while the view has not been created yet.</summary>
+        internal void RegisterNavTab(NavTabHost host)
+        {
+            if (host == null || string.IsNullOrWhiteSpace(host.Key)) return;
+            var key = host.Key.ToLowerInvariant();
+            if (_navTabViews.ContainsKey(key))
+            {
+                App.Logger?.Warning("RegisterNavTab({Key}) ignored: the view already exists", key);
+                return;
+            }
+            _navTabHosts[key] = host with { Key = key };
+        }
+
+        /// <summary>True when a lane registered this key.</summary>
+        internal bool IsRegisteredNavTab(string key) => _navTabHosts.ContainsKey(key ?? string.Empty);
+
+        // Implemented by the SOCIAL / COMPANION / REHOME lanes in their own partial files.
+        partial void RegisterSocialTabs();
+        partial void RegisterCompanionTabs();
+        partial void RegisterRehomeTabs();
+
+        private bool _laneTabsRegistered;
+
+        /// <summary>Called once from the constructor, after InitializeComponent.</summary>
+        private void RegisterLaneNavTabs()
+        {
+            if (_laneTabsRegistered) return;
+            _laneTabsRegistered = true;
+            try { RegisterSocialTabs(); } catch (Exception ex) { App.Logger?.Warning(ex, "RegisterSocialTabs failed"); }
+            try { RegisterCompanionTabs(); } catch (Exception ex) { App.Logger?.Warning(ex, "RegisterCompanionTabs failed"); }
+            try { RegisterRehomeTabs(); } catch (Exception ex) { App.Logger?.Warning(ex, "RegisterRehomeTabs failed"); }
+        }
+
+        /// <summary>Collapse the shown lane page (part of ShowTab's collapse-all).</summary>
+        private void HideLaneTabs()
+        {
+            foreach (var view in _navTabViews.Values) view.Visibility = Visibility.Collapsed;
+            if (_shownLaneTab != null && _navTabHosts.TryGetValue(_shownLaneTab, out var host)
+                && _navTabViews.TryGetValue(_shownLaneTab, out var shown))
+            {
+                try { host.OnHidden?.Invoke(shown); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "NavTab {Key} OnHidden failed", _shownLaneTab); }
+            }
+            _shownLaneTab = null;
+        }
+
+        /// <summary>Show a registered lane page, creating it on first use. False when the key
+        /// is not registered or its view could not be built.</summary>
+        private bool ShowLaneTab(string key)
+        {
+            if (!_navTabHosts.TryGetValue(key, out var host)) return false;
+            if (!_navTabViews.TryGetValue(key, out var view))
+            {
+                try { view = host.Create(); }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "NavTab {Key} failed to build", key);
+                    return false;
+                }
+                if (view == null) return false;
+                if (view.Margin == default) view.Margin = new Thickness(10, 5, 10, 10);
+                _navTabViews[key] = view;
+                LaneTabHost.Children.Add(view);
+            }
+            view.Visibility = Visibility.Visible;
+            _shownLaneTab = key;
+            AnimateTabIn(view);
+            try { host.OnShown?.Invoke(view); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "NavTab {Key} OnShown failed", key); }
+            return true;
+        }
+
+        /// <summary>
+        /// Every key the ShowTab switch answers itself (its case labels). ShowTab refuses a key
+        /// that is neither here nor registered BEFORE it collapses anything, so an unknown key
+        /// logs and leaves the page on screen. Pinned against the switch by SectionTabStripTests.
+        /// </summary>
+        internal static readonly HashSet<string> BuiltInTabKeys = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "settings", "presets", "progression", "quests", "programs", "enhancements", "deeper",
+            "achievements", "companion", "lab", "play", "playsessions", "playeyes", "leaderboard",
+            "assets", "discord", "awareness", "remotecontrol", "availablesubjects", "bambitakeover",
+            "studio", "ramp", "haptics", "lockdown", "blinktrainer", "shelistening", "gradedintake",
+            "appsettings", "spiral", "chaster", "exclusives",
+        };
+
         internal void ShowTab(string tab)
         {
             // Case is NOT significant here, and every key resolver downstream already agrees:
@@ -156,6 +258,14 @@ namespace ConditioningControlPanel
                     return;
                 }
                 Services.JustDrop.JustDropHostService.LaunchShop();
+                return;
+            }
+
+            // Unknown key: log and stay. Checked before anything is collapsed, so a typo from a
+            // deep link, a tutorial step or a third-party .ccpmod never leaves a blank page.
+            if (!BuiltInTabKeys.Contains(tab) && !_navTabHosts.ContainsKey(tab))
+            {
+                App.Logger?.Warning("ShowTab({Tab}) ignored: no such tab", tab);
                 return;
             }
 
@@ -250,6 +360,8 @@ namespace ConditioningControlPanel
             if (SpiralTab != null) SpiralTab.Visibility = Visibility.Collapsed;
             if (ChasterTab != null) ChasterTab.Visibility = Visibility.Collapsed;
             if (AppSettingsTab != null) AppSettingsTab.Visibility = Visibility.Collapsed;
+            // Lane-registered pages (the registry above).
+            HideLaneTabs();
 
             // Phase 1: no more per-tab style swapping. The rail's active state is a real
             // indicator (3px accent bar + tinted row) driven by ApplyNavActiveGlow at the
@@ -394,6 +506,10 @@ namespace ConditioningControlPanel
                 // BarkTabAliases["play"]. One announcement either way; never two.
                 case "lab":
                 case "play":
+                // Nav rework zone pills: Sessions and Eyes are places on the Play wall, not pages
+                // of their own. Same body as "play", then a scroll to the zone after layout.
+                case "playsessions":
+                case "playeyes":
                     PlayTab.Visibility = Visibility.Visible;
                     AnimateTabIn(PlayTab);
                     // Phase 5: SyncLabEffectPermsUI() used to be called here because the AI
@@ -418,6 +534,18 @@ namespace ConditioningControlPanel
                     // Lab page became this wall. Shares the Play door's one-card-per-launch
                     // budget with the lockdown and blink-trainer cards.
                     MaybeShowFeatureIntro("play-wall", "play");
+                    {
+                        // The Games pill scrolls back to the top only when the previous pill was
+                        // another Play zone; a plain return to Play keeps its scroll.
+                        string? zone = tab switch
+                        {
+                            "playsessions" => "sessions",
+                            "playeyes" => "eyes",
+                            _ => _navCurrentTab is "playsessions" or "playeyes" ? "games" : null,
+                        };
+                        if (zone != null)
+                            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ScrollPlayZone(zone)));
+                    }
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a
@@ -519,6 +647,15 @@ namespace ConditioningControlPanel
                     MaybeShowFeatureIntro("haptics");
                     break;
 
+                // Nav rework zone pill "Scheduler & Ramp": the Studio rack's scheduler module.
+                case "ramp":
+                    StudioTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(StudioTab);
+                    StudioTab.FocusRackEntry("scheduler");
+                    RefreshSessionFeatureLock();
+                    UpdatePatreonUI();
+                    break;
+
                 case "lockdown":
                     LockdownTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LockdownTab);
@@ -602,7 +739,17 @@ namespace ConditioningControlPanel
                     StartExclusivesMotion();     // fog canvas + Ken Burns + card sheens
                     break;
 
+                // Lane-registered pages (RegisterNavTab). The door check at the top already
+                // refused keys nobody registered.
+                default:
+                    if (!ShowLaneTab(tab))
+                        App.Logger?.Warning("ShowTab({Tab}): the registered page could not be shown", tab);
+                    break;
             }
+
+            // Nav rework: the strip, the breadcrumb, the window title and last-tab memory.
+            _navCurrentTab = tab;
+            SyncSectionChrome(tab);
 
             // Reveal the entry we just navigated to. Code-driven navigation (tutorial steps,
             // Exclusives cards, notifications) has to open the owning door too, or the active

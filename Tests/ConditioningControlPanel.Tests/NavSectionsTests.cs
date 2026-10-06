@@ -27,7 +27,6 @@ public class NavSectionsTests
         "personality", "permissions", "companionlinks",   // COMPANION pages (REHOME)
         "friends", "leash",                               // SOCIAL pages (REHOME)
         "folders",                                        // LIBRARY page (REHOME)
-        "playsessions", "playeyes", "ramp",               // zone keys (TABSTRIP)
     };
 
     private static string RepoRoot()
@@ -42,9 +41,18 @@ public class NavSectionsTests
     private static string TabNavigationSource() =>
         File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.TabNavigation.cs"));
 
-    private static HashSet<string> ShowTabCases() =>
-        new(Regex.Matches(TabNavigationSource(), @"(?m)^\s*case ""(\w+)"":").Select(m => m.Groups[1].Value),
+    /// <summary>Keys ShowTab answers: its own case labels plus every page a lane registers
+    /// through the tab registry (<c>new NavTabHost("key", ...)</c> in any MainWindow partial).</summary>
+    private static HashSet<string> ShowTabCases()
+    {
+        var keys = new HashSet<string>(
+            Regex.Matches(TabNavigationSource(), @"(?m)^\s*case ""(\w+)"":").Select(m => m.Groups[1].Value),
             StringComparer.OrdinalIgnoreCase);
+        foreach (var f in Directory.GetFiles(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow"), "*.cs"))
+            foreach (Match m in Regex.Matches(File.ReadAllText(f), @"new NavTabHost\(\s*""(\w+)"""))
+                keys.Add(m.Groups[1].Value);
+        return keys;
+    }
 
     private static string[] LanguageFiles() => Directory
         .GetFiles(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages"), "*.json")
