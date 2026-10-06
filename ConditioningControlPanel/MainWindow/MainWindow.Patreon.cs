@@ -1623,23 +1623,32 @@ namespace ConditioningControlPanel
         // COMPANION TAB — Hero + AI Brain redesign (v5.9)
         // ============================================================
 
-        /// <summary>
-        /// The hero's Switch chip. The roster tray it used to toggle is a Workshop pigeonhole now
-        /// (design §6: "kept — Z8 Roster, opened by the hero's Switch chip"), so this opens the
-        /// drawer and scrolls the roster into view instead of flipping a Visibility.
-        ///
-        /// <para>Deliberately not a toggle any more: the old one hid the tray on a second click,
-        /// which is why the tutorial had to reach past it to reveal the roster.</para>
-        /// </summary>
-        internal void BtnSwitchCompanion_Click(object sender, RoutedEventArgs e)
-            => RevealCompanionWorkshopCell(Views.Controls.Companion.CompanionRoomAnchors.WorkshopRosterCell);
-
         /// <summary>Opens the Workshop drawer on a named pigeonhole. Safe before the tab exists.</summary>
         internal void RevealCompanionWorkshopCell(string? cellKey)
         {
+            // Under v2 the room is collapsed: each Workshop cell has a Companion page now.
+            var page = CompanionPageForWorkshopCell(cellKey);
+            if (page != null && Services.Companion.CompanionExperience.IsV2Enabled && IsRegisteredNavTab(page))
+            {
+                ShowTab(page);
+                return;
+            }
             try { CompanionTab?.Room?.RevealWorkshop(cellKey); }
             catch (Exception ex) { App.Logger?.Debug("RevealCompanionWorkshopCell: {E}", ex.Message); }
         }
+
+        /// <summary>The Companion page that hosts a Workshop cell (null = no page; the Awareness
+        /// cell lives on the Awareness tab).</summary>
+        internal static string? CompanionPageForWorkshopCell(string? cellKey) => cellKey switch
+        {
+            null => "personality",
+            Views.Controls.Companion.CompanionRoomAnchors.WorkshopRosterCell => "personality",
+            Views.Controls.Companion.CompanionRoomAnchors.WorkshopBehaviorCell => "personality",
+            Views.Controls.Companion.CompanionRoomAnchors.WorkshopTriggersCell => "personality",
+            Views.Controls.Companion.CompanionRoomAnchors.WorkshopCommunityCell => "personality",
+            Views.Controls.Companion.CompanionRoomAnchors.WorkshopLibraryCell => "companionlinks",
+            _ => null,
+        };
 
         // The four provider radios became Z7's segmented row (design §6: "demoted — Z7 Engine
         // Room, verbatim"). SetAiProviderMode (MainWindow.CompanionRoom.cs) writes the same two

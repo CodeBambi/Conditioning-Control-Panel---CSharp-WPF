@@ -372,6 +372,10 @@
                                         </Grid>
                                     </Border>
 
+                                    <!-- One home for what the companion may do: Companion > Permissions -->
+                                    <TextBlock x:Name="TxtPermissionsLiveInCompanion" FontSize="12" Margin="2,0,0,8" TextWrapping="Wrap">
+                                        <Hyperlink Click="OpenCompanionPermissions_Click" Foreground="{DynamicResource PinkBrush}" TextDecorations="{x:Null}"><Run Text="{loc:Str companion_page_permissions_live_here}"/></Hyperlink>
+                                    </TextBlock>
                                     <!-- ============ SUBSECTION 3: BEHAVIORS (folded into an expander) ============ -->
                                     <Expander IsExpanded="False" Margin="0,0,0,10" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold">
                                         <Expander.Header>

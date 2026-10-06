@@ -24,7 +24,6 @@ public class NavSectionsTests
     /// lands fails <see cref="PendingKeysAreStillPending"/>.</summary>
     private static readonly string[] PendingShowTabKeys =
     {
-        "personality", "permissions", "companionlinks",   // COMPANION pages (REHOME)
         "folders",                                        // LIBRARY page (REHOME)
     };
 
