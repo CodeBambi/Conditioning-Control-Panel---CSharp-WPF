@@ -2234,16 +2234,13 @@ namespace ConditioningControlPanel
         private readonly List<ToggleButton> _remoteSourceChipButtons = new();
         private readonly List<ToggleButton> _remoteNicheChipButtons = new();
 
-        /// <summary>Niche ids whose sub list is currently unfolded under the chip row. Session
-        /// state on purpose: which disclosure triangles you left open is not worth a settings
-        /// key, and a fresh launch showing every niche as one tidy line is the better default.</summary>
-        private readonly HashSet<string> _remoteNicheExpanded = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Flavour tiles (five flavours + Mine) and each niche's tint, built once.</summary>
+        private readonly List<Button> _remoteFlavourTiles = new();
 
-        /// <summary>Whether the custom-subreddit block (hint, add row, library chips) is
-        /// unfolded. Folded on every launch for the same reason the niche lines are: the block
-        /// is the tallest thing in the media-source panel and the asset browser below pays for
-        /// every pixel of it (AssetsTabView.xaml, RemoteMediaScroll). Session-only, no key.</summary>
-        private bool _remoteCustomSubsExpanded;
+        /// <summary>The player's own selection from before their first flavour click this
+        /// session, so the Mine tile can bring it back. Session-only, no key.</summary>
+        private List<string>? _remoteMineNiches;
+        private List<string>? _remoteMineSubs;
 
         /// <summary>The sub being probed right now, or null. Held as state rather than as a
         /// captured Border so the pending pill survives a picker repaint mid-probe.</summary>
@@ -2265,6 +2262,7 @@ namespace ConditioningControlPanel
                 {
                     _remotePickerWired = true;
                     BuildRemoteSourceChips();
+                    BuildRemoteFlavourTiles();
                     BuildRemoteNicheChips();
 
                     if (tab.SliderRemoteRatio != null)
@@ -2273,8 +2271,6 @@ namespace ConditioningControlPanel
                         tab.BtnRemoteAddSub.Click += BtnRemoteAddSub_Click;
                     if (tab.TxtRemoteCustomSub != null)
                         tab.TxtRemoteCustomSub.KeyDown += TxtRemoteCustomSub_KeyDown;
-                    if (tab.RemoteCustomSubsToggle != null)
-                        tab.RemoteCustomSubsToggle.MouseLeftButtonUp += RemoteCustomSubsToggle_Click;
                 }
 
                 RefreshRemoteMediaPicker();
@@ -2322,16 +2318,12 @@ namespace ConditioningControlPanel
             var host = AssetsTab?.RemoteNicheChips;
             if (host == null || host.Children.Count > 0) return;
 
-            var chipStyle = TryFindResource("AchievementFilterChip") as Style;
+            var chipStyle = host.TryFindResource("RemoteNichePill") as Style
+                ?? TryFindResource("AchievementFilterChip") as Style;
 
             foreach (var niche in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
             {
-                var chip = new ToggleButton
-                {
-                    Style = chipStyle,
-                    Tag = niche.Id,
-                    Content = niche.Label
-                };
+                var chip = CreateRemoteNicheChip(niche, chipStyle);
                 chip.Checked += RemoteNicheChip_Changed;
                 chip.Unchecked += RemoteNicheChip_Changed;
                 _remoteNicheChipButtons.Add(chip);
@@ -2371,7 +2363,7 @@ namespace ConditioningControlPanel
                 foreach (var chip in _remoteNicheChipButtons)
                     chip.IsChecked = chip.Tag is string id && selected.Contains(id);
 
-                RebuildRemoteNicheSubs(settings);
+                PaintRemotePickerChrome(settings);
                 RebuildRemoteCustomSubChips(settings);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Remote media picker refresh failed"); }
@@ -2463,7 +2455,7 @@ namespace ConditioningControlPanel
                 settings.FypOnlineNiches = selected;
                 PersistRemoteChannelChange();
                 // The sub list under the row is a projection of exactly this selection.
-                RebuildRemoteNicheSubs(settings);
+                PaintRemotePickerChrome(settings);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Remote niche toggle failed"); }
         }
@@ -2805,52 +2797,7 @@ namespace ConditioningControlPanel
                 host.Children.Add(MutedRemoteNote(LocOr("label_remote_custom_subs_none",
                     "None yet - the niches above are plenty to start with.")));
 
-            PaintRemoteCustomSubsToggle(settings);
-        }
-
-        /// <summary>The disclosure line above the custom-sub block. Folded it reads
-        /// "▸ Your own subreddits · 2 in use · 5 kept", so the counts the chips would have shown
-        /// are still one glance away; unfolded it is just the heading with a ▾. Runs after every
-        /// chip rebuild because the counts move with the library.</summary>
-        private void PaintRemoteCustomSubsToggle(Models.AppSettings settings)
-        {
-            var tab = AssetsTab;
-            if (tab?.RemoteCustomSubsToggle == null || tab.RemoteCustomSubsBody == null) return;
-
-            try
-            {
-                var title = LocOr("label_remote_custom_subs", "Your own subreddits");
-                if (_remoteCustomSubsExpanded)
-                {
-                    tab.RemoteCustomSubsToggle.Text = $"▾ {title}";
-                    tab.RemoteCustomSubsBody.Visibility = Visibility.Visible;
-                    return;
-                }
-
-                int kept = 0, inUse = 0;
-                foreach (var row in settings.BuildRemoteSubLibraryView())
-                {
-                    kept++;
-                    if (row.Selected) inUse++;
-                }
-                tab.RemoteCustomSubsToggle.Text = $"▸ {title} · " +
-                    string.Format(LocOr("label_remote_custom_subs_summary", "{0} in use · {1} kept"), inUse, kept);
-                tab.RemoteCustomSubsBody.Visibility = Visibility.Collapsed;
-            }
-            catch (Exception ex) { App.Logger?.Debug("Painting the custom sub toggle failed: {E}", ex.Message); }
-        }
-
-        private void RemoteCustomSubsToggle_Click(object sender, MouseButtonEventArgs e)
-        {
-            try
-            {
-                _remoteCustomSubsExpanded = !_remoteCustomSubsExpanded;
-                var settings = App.Settings?.Current;
-                if (settings != null) PaintRemoteCustomSubsToggle(settings);
-                // Unfolding is nearly always a prelude to typing a name.
-                if (_remoteCustomSubsExpanded) AssetsTab?.TxtRemoteCustomSub?.Focus();
-            }
-            catch (Exception ex) { App.Logger?.Debug("Custom sub toggle failed: {E}", ex.Message); }
+            RepaintRemoteSummary(settings);
         }
 
         /// <summary>A removable pill. Same look as the niche toggles, with the companion tab's
@@ -2930,69 +2877,242 @@ namespace ConditioningControlPanel
             return chip;
         }
 
-        /// <summary>One grey line per checked niche, naming the subs it really resolves to.
-        /// Collapsed to a count by default and unfolded on click - the picker should never hide
-        /// that "Censored" is two subreddits, or that Bambi Sleep borrows from Hypno.
-        /// Single-sub niches skip the disclosure entirely: there is nothing to unfold, and the
-        /// name is shorter than the promise to show it.</summary>
-        private void RebuildRemoteNicheSubs(Models.AppSettings settings)
-        {
-            var host = AssetsTab?.RemoteNicheSubs;
-            if (host == null) return;
+        // ---- Flavours, niche pills and the summary (nav polish wave 2) -------------------
+        // The look is built by STATIC helpers (no window state), so AssetsMediaBlockRenderTests
+        // can draw the real pills and tiles offscreen without a MainWindow.
 
+        /// <summary>The Pink of the app, used for a niche no flavour owns.</summary>
+        private static readonly Color RemoteNicheDefaultTint = Color.FromRgb(0xFF, 0x69, 0xB4);
+
+        private static Color RemoteTint(string hex)
+        {
+            try { return (Color)ColorConverter.ConvertFromString(hex); }
+            catch { return RemoteNicheDefaultTint; }
+        }
+
+        private static SolidColorBrush RemoteTintBrush(Color c, double alpha) =>
+            new(Color.FromArgb((byte)Math.Round(255 * Math.Clamp(alpha, 0, 1)), c.R, c.G, c.B));
+
+        /// <summary>A niche wears the tint of the flavour whose preset selects it, Pink otherwise.</summary>
+        internal static Color RemoteNicheTintOf(string? nicheId)
+        {
+            if (nicheId == null) return RemoteNicheDefaultTint;
+            var owner = Services.Fyp.Online.FlavourPresets.OwnerOf(nicheId,
+                Services.Fyp.Online.FypOnlineCoordinator.Catalog);
+            return owner != null ? RemoteTint(owner.Tint) : RemoteNicheDefaultTint;
+        }
+
+        /// <summary>One niche pill: label plus a count badge, the subreddits in its tooltip.</summary>
+        internal static ToggleButton CreateRemoteNicheChip(Services.Fyp.Online.FypOnlineCoordinator.Niche niche, Style? style)
+        {
+            var subs = niche.Subs ?? Array.Empty<string>();
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(new TextBlock
+            {
+                Text = niche.Label,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextWrapping = TextWrapping.NoWrap
+            });
+            row.Children.Add(new Border
+            {
+                CornerRadius = new CornerRadius(9),
+                Padding = new Thickness(6, 1, 6, 1),
+                Margin = new Thickness(7, 0, 0, 0),
+                MinWidth = 20,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock
+                {
+                    Text = subs.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    FontSize = 10.5,
+                    FontWeight = FontWeights.SemiBold,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                }
+            });
+
+            var chip = new ToggleButton
+            {
+                Style = style,
+                Tag = niche.Id,
+                Content = row,
+                ToolTip = string.Format(LocOr("label_remote_niche_subs", "{0} subs"), subs.Length)
+                    + "\n" + string.Join(" · ", subs.Select(x => "r/" + x))
+            };
+            chip.Checked += (_, _) => PaintRemoteNicheChip(chip);
+            chip.Unchecked += (_, _) => PaintRemoteNicheChip(chip);
+            PaintRemoteNicheChip(chip);
+            return chip;
+        }
+
+        /// <summary>One flavour tile: the name in its tint over its one-line.</summary>
+        internal static Button CreateRemoteFlavourTile(Services.Fyp.Online.FlavourPresets.Flavour f, Style? style)
+        {
+            var tint = RemoteTint(f.Tint);
+            var stack = new StackPanel();
+            stack.Children.Add(new TextBlock
+            {
+                Text = f.Name,
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(tint)
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = f.Line,
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = Application.Current?.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray
+            });
+
+            string tip;
+            if (f.Id == Services.Fyp.Online.FlavourPresets.MineId)
+                tip = LocOr("tooltip_remote_flavour_mine", "Your own niches and subreddits, as you left them.");
+            else
+                tip = string.Join(" · ", f.Subs.Select(s => "r/" + s)) + "\n" + string.Format(
+                    LocOr("tooltip_remote_flavour",
+                        "One click sets your niches and pool to this flavour. Also worth a try: {0}"),
+                    string.Join(", ", f.Extras.Select(s => "r/" + s)));
+
+            return new Button { Style = style, Tag = f.Id, Content = stack, ToolTip = tip };
+        }
+
+        /// <summary>Six tiles: the five flavours plus Mine, copied from the web pickers
+        /// (Services/Fyp/Online/FlavourPresets.cs). Built once; painted on every refresh.</summary>
+        private void BuildRemoteFlavourTiles()
+        {
+            var host = AssetsTab?.RemoteFlavourTiles;
+            if (host == null || host.Children.Count > 0) return;
+            var style = host.TryFindResource("RemoteFlavourTile") as Style;
+
+            foreach (var f in Services.Fyp.Online.FlavourPresets.All.Append(Services.Fyp.Online.FlavourPresets.Mine))
+            {
+                var flavour = f;   // captured per tile
+                var tile = CreateRemoteFlavourTile(f, style);
+                tile.Click += (_, _) => ApplyRemoteFlavour(flavour);
+                _remoteFlavourTiles.Add(tile);
+                host.Children.Add(tile);
+            }
+        }
+
+        /// <summary>
+        /// One click on a flavour: select the catalog niches that cover it and put the rest in
+        /// the pool as custom subs, through the same settings the chips write. The selection
+        /// the player had before their first flavour click is kept for this session, so Mine
+        /// brings it back.
+        /// </summary>
+        private void ApplyRemoteFlavour(Services.Fyp.Online.FlavourPresets.Flavour flavour)
+        {
             try
             {
-                host.Children.Clear();
-                var muted = Application.Current?.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
-                var selected = new HashSet<string>(settings.FypOnlineNiches ?? new List<string>(),
-                    StringComparer.OrdinalIgnoreCase);
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+                var catalog = Services.Fyp.Online.FypOnlineCoordinator.Catalog;
+                var current = Services.Fyp.Online.FlavourPresets.Match(
+                    settings.FypOnlineNiches, settings.FypOnlineCustomSubs, catalog);
 
-                foreach (var niche in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
+                ShowRemoteSubError(null);
+                if (flavour.Id == Services.Fyp.Online.FlavourPresets.MineId)
                 {
-                    if (niche?.Id == null || !selected.Contains(niche.Id)) continue;
-                    var subs = niche.Subs ?? Array.Empty<string>();
-                    if (subs.Length == 0) continue;
-
-                    var id = niche.Id;
-                    var names = string.Join(" · ", subs.Select(x => "r/" + x));
-
-                    var line = new TextBlock
-                    {
-                        Foreground = muted,
-                        FontSize = 11,
-                        TextWrapping = TextWrapping.Wrap,
-                        Margin = new Thickness(2, 0, 0, 3),
-                        Background = Brushes.Transparent   // so the whole row is a hit target
-                    };
-
-                    if (subs.Length == 1)
-                    {
-                        line.Text = $"{niche.Label} · {names}";
-                        host.Children.Add(line);
-                        continue;
-                    }
-
-                    line.Cursor = Cursors.Hand;
-                    void Paint() => line.Text = _remoteNicheExpanded.Contains(id)
-                        ? $"▾ {niche.Label} · {names}"
-                        : $"▸ {niche.Label} · " +
-                          string.Format(LocOr("label_remote_niche_subs", "{0} subs"), subs.Length);
-                    Paint();
-
-                    line.MouseLeftButtonUp += (_, _) =>
-                    {
-                        try
-                        {
-                            if (!_remoteNicheExpanded.Add(id)) _remoteNicheExpanded.Remove(id);
-                            Paint();
-                        }
-                        catch (Exception ex) { App.Logger?.Debug("Niche sub toggle failed: {E}", ex.Message); }
-                    };
-
-                    host.Children.Add(line);
+                    if (current == null || _remoteMineNiches == null) return;   // already Mine
+                    settings.FypOnlineNiches = new List<string>(_remoteMineNiches);
+                    settings.FypOnlineCustomSubs = new List<string>(_remoteMineSubs ?? new List<string>());
                 }
+                else
+                {
+                    if (current == null)
+                    {
+                        _remoteMineNiches = new List<string>(settings.FypOnlineNiches ?? new List<string>());
+                        _remoteMineSubs = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
+                    }
+                    var sel = Services.Fyp.Online.FlavourPresets.Resolve(flavour, catalog);
+                    var pool = new List<string>();
+                    foreach (var sub in sel.CustomSubs)
+                    {
+                        if (pool.Count >= RemoteCustomSubCap) break;
+                        // Kept first (the library), then used here (the pool), same as a typed add.
+                        if (settings.LibraryHasSub(sub) || settings.TryAddLibrarySub(sub)) pool.Add(sub);
+                        else ShowRemoteSubOutcome(Services.Fyp.Online.RemoteSubAddOutcome.LibraryFull, sub);
+                    }
+                    settings.FypOnlineNiches = sel.NicheIds.ToList();
+                    settings.FypOnlineCustomSubs = pool;
+                }
+
+                PersistRemoteChannelChange();
+                RefreshRemoteMediaPicker();
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Rebuilding the niche sub list failed"); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Applying a media flavour failed"); }
+        }
+
+        /// <summary>Repaints everything that is a projection of the selection: niche pill
+        /// colours, the lit flavour tile and the summary line.</summary>
+        private void PaintRemotePickerChrome(Models.AppSettings settings)
+        {
+            try
+            {
+                foreach (var chip in _remoteNicheChipButtons) PaintRemoteNicheChip(chip);
+                PaintRemoteFlavourTiles(_remoteFlavourTiles, settings.FypOnlineNiches, settings.FypOnlineCustomSubs);
+                RepaintRemoteSummary(settings);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Painting the media picker failed: {E}", ex.Message); }
+        }
+
+        /// <summary>Lights the tile whose preset equals the selection exactly; Mine otherwise.</summary>
+        internal static void PaintRemoteFlavourTiles(IEnumerable<Button> tiles,
+            IEnumerable<string>? niches, IEnumerable<string>? customSubs)
+        {
+            var lit = Services.Fyp.Online.FlavourPresets.Match(niches, customSubs,
+                Services.Fyp.Online.FypOnlineCoordinator.Catalog) ?? Services.Fyp.Online.FlavourPresets.Mine;
+            foreach (var tile in tiles)
+            {
+                var f = Services.Fyp.Online.FlavourPresets.ById(tile.Tag as string);
+                if (f == null) continue;
+                var tint = RemoteTint(f.Tint);
+                bool on = f.Id == lit.Id;
+                tile.Background = RemoteTintBrush(tint, on ? 0.28 : 0.07);
+                tile.BorderBrush = RemoteTintBrush(tint, on ? 1.0 : 0.32);
+                tile.BorderThickness = new Thickness(on ? 2 : 1);
+            }
+        }
+
+        /// <summary>On: filled and bright in the pill's own tint. Off: dim, outline only.</summary>
+        internal static void PaintRemoteNicheChip(ToggleButton chip)
+        {
+            var tint = RemoteNicheTintOf(chip.Tag as string);
+            bool on = chip.IsChecked == true;
+            chip.Background = RemoteTintBrush(tint, on ? 0.26 : 0.05);
+            chip.BorderBrush = RemoteTintBrush(tint, on ? 1.0 : 0.28);
+            if (chip.Content is StackPanel row && row.Children.Count == 2
+                && row.Children[0] is TextBlock label && row.Children[1] is Border badge
+                && badge.Child is TextBlock count)
+            {
+                label.Foreground = on ? new SolidColorBrush(tint) : RemoteTintBrush(Colors.White, 0.55);
+                label.FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal;
+                badge.Background = RemoteTintBrush(tint, on ? 0.38 : 0.10);
+                count.Foreground = on ? Brushes.White : RemoteTintBrush(Colors.White, 0.5);
+            }
+        }
+
+        /// <summary>"N niches, M subreddits in your pool": the selected catalog niches and the
+        /// distinct subreddits they and the custom subs bring.</summary>
+        internal static string RemoteSummaryText(IEnumerable<string>? nicheIds, IEnumerable<string>? customSubs)
+        {
+            var selected = new HashSet<string>(nicheIds ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            var subs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int niches = 0;
+            foreach (var n in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
+            {
+                if (n?.Id == null || !selected.Contains(n.Id)) continue;
+                niches++;
+                foreach (var s in n.Subs ?? Array.Empty<string>()) subs.Add(s);
+            }
+            foreach (var s in customSubs ?? Array.Empty<string>()) subs.Add(s);
+            return string.Format(LocOr("label_remote_summary", "{0} niches, {1} subreddits in your pool"),
+                niches, subs.Count);
+        }
+
+        private void RepaintRemoteSummary(Models.AppSettings settings)
+        {
+            var label = AssetsTab?.TxtRemoteSummary;
+            if (label != null) label.Text = RemoteSummaryText(settings.FypOnlineNiches, settings.FypOnlineCustomSubs);
         }
 
         private static TextBlock MutedRemoteNote(string text) => new()
