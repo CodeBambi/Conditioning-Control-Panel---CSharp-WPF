@@ -130,6 +130,7 @@ namespace ConditioningControlPanel
                 if (SectionWashLineBrush != null)
                     Animate(SectionWashLineBrush, SolidColorBrush.ColorProperty,
                             NavRailRules.WithAlpha(hue, SectionWashLineAlpha));
+                PaintSectionEdge(hue, ms);
 
                 void Tint(GradientStop? stop, Color to)
                 {

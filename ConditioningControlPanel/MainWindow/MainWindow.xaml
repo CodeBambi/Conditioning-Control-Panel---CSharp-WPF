@@ -2805,13 +2805,71 @@
     </Grid>
 
     <!-- 2026-08-13: accent window frame. A 3px edge so the app pops off the desktop instead
-         of melting into whatever sits behind it. Rides PinkBrush = the mod accent, so it
-         re-tints with the mod. CornerRadius matches the DWMWCP_ROUND corner DWM already
-         clips the window to. Below EventFxHost (9998) and the fullscreen browser overlay
-         (9999) on purpose. -->
-    <Border x:Name="GlassWindowEdge" Grid.RowSpan="6" Grid.ColumnSpan="2" Panel.ZIndex="9997"
-            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3" CornerRadius="8"
-            IsHitTestVisible="False"/>
+         of melting into whatever sits behind it. CornerRadius matches the DWMWCP_ROUND corner
+         DWM already clips the window to. Below EventFxHost (9998) and the fullscreen browser
+         overlay (9999) on purpose.
+         Nav polish wave 9 (2026-10-06): the frame wears the SECTION hue, not the mod accent, and
+         a faint band of that hue fades 28 px into the window. Authored in Home's Lilac so the
+         first frame never flashes another hue; MainWindow.SectionEdge.cs repaints it on every
+         section change (crossfade with the page wash) and runs the travelling lift on the line.
+         Four linear gradients, no Effect: no shader, no full-window intermediate surface. -->
+    <Grid x:Name="SectionEdgeHost" Grid.RowSpan="6" Grid.ColumnSpan="2" Panel.ZIndex="9997"
+          IsHitTestVisible="False">
+        <Grid x:Name="SectionEdgeGlow" IsHitTestVisible="False">
+            <Rectangle Height="28" VerticalAlignment="Top" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Offset="0" Color="#32B79CFF"/>
+                        <GradientStop Offset="0.45" Color="#15B79CFF"/>
+                        <GradientStop Offset="1" Color="#00B79CFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle Height="28" VerticalAlignment="Bottom" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                        <GradientStop Offset="0" Color="#32B79CFF"/>
+                        <GradientStop Offset="0.45" Color="#15B79CFF"/>
+                        <GradientStop Offset="1" Color="#00B79CFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle Width="28" HorizontalAlignment="Left" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Offset="0" Color="#32B79CFF"/>
+                        <GradientStop Offset="0.45" Color="#15B79CFF"/>
+                        <GradientStop Offset="1" Color="#00B79CFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle Width="28" HorizontalAlignment="Right" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="1,0" EndPoint="0,0">
+                        <GradientStop Offset="0" Color="#32B79CFF"/>
+                        <GradientStop Offset="0.45" Color="#15B79CFF"/>
+                        <GradientStop Offset="1" Color="#00B79CFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+        </Grid>
+
+        <!-- EdgeParticles slot (polish wave 9, the embers lane): the four ember strips go here,
+             above the glow and under the line. -->
+
+        <Border x:Name="GlassWindowEdge" BorderThickness="3" CornerRadius="8" IsHitTestVisible="False">
+            <Border.BorderBrush>
+                <LinearGradientBrush x:Name="SectionEdgeLineBrush" StartPoint="0,0.5" EndPoint="1,0.5">
+                    <LinearGradientBrush.RelativeTransform>
+                        <RotateTransform x:Name="SectionEdgeSpin" CenterX="0.5" CenterY="0.5" Angle="0"/>
+                    </LinearGradientBrush.RelativeTransform>
+                    <GradientStop Offset="0" Color="#E6B79CFF"/>
+                    <GradientStop Offset="0.5" Color="#FFD0BFFF"/>
+                    <GradientStop Offset="1" Color="#E6B79CFF"/>
+                </LinearGradientBrush>
+            </Border.BorderBrush>
+        </Border>
+    </Grid>
 
     <!-- THE FUSE's corner readout (CONTRACT-FUSE-0816 2.2). From T-1h the T-minus stops being a
          hover reward and becomes a thing in the room: a small clock in the corner that does not go
