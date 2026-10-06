@@ -25,7 +25,6 @@ public class NavSectionsTests
     private static readonly string[] PendingShowTabKeys =
     {
         "personality", "permissions", "companionlinks",   // COMPANION pages (REHOME)
-        "friends", "leash",                               // SOCIAL pages (REHOME)
         "folders",                                        // LIBRARY page (REHOME)
     };
 
