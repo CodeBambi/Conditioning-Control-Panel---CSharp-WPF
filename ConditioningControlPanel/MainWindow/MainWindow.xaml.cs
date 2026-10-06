@@ -3527,8 +3527,13 @@ namespace ConditioningControlPanel
                     RelaxSizeFloorsTo(screenWidth, screenHeight);
 
                     if (SizeToContent != SizeToContent.Manual) SizeToContent = SizeToContent.Manual;
-                    if (screenWidth > 0) Width = Math.Min(Width, screenWidth);
-                    if (screenHeight > 0) Height = Math.Min(Height, screenHeight);
+                    // Uniform fit (nav polish wave 7): the canvas is Stretch="Fill", so capping each
+                    // axis on its own squashed the panel whenever only one axis overflowed, which the
+                    // 1954x1179 default does on every 1080p desk (height first). Both axes shrink by
+                    // the same factor; a window that already fits is left alone.
+                    var (fitW, fitH) = Services.UI.WindowFitRule.Fit(Width, Height, screenWidth, screenHeight);
+                    if (Math.Abs(fitW - Width) > 0.5) Width = fitW;
+                    if (Math.Abs(fitH - Height) > 0.5) Height = fitH;
 
                     Left = Math.Max(screenLeft, screenLeft + (screenWidth - Width) / 2);
                     Top = Math.Max(screenTop, screenTop + (screenHeight - Height) / 2);
