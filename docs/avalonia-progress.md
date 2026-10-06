@@ -1215,3 +1215,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/spoken-mantras: +577
 - Spoken mantras: Core SpokenMantra + MantraVoiceService (WPF delegates); Takeover Spoken Mantra and the wake/PTT fallback; the mic opens only
   after her clip ends; panic/revoke close it. WAV + fake-mic tests, fail-proven.
+
+## avalonia-port/ci-sweep: +126
+- CI: Avalonia tests sharded (5 processes, completeness guard) to stay under the runner's memory; root-cause fixes for the Windows/Linux CI test failures on #1962–#1990. Native leak logged for follow-up.
