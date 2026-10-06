@@ -84,6 +84,10 @@ namespace ConditioningControlPanel.Services
         /// <summary>LauncherCatalogue id: the row starts the game the way the launcher does.</summary>
         public string? GameId { get; init; }
 
+        /// <summary>Library launcher key (mods, catalogue, phrases, medialog): the row opens that
+        /// dialog or window through MainWindow.OpenLibraryLauncher, the same verb as the strip pill.</summary>
+        public string? LauncherKey { get; init; }
+
         /// <summary>The caption key carries its own leading emoji (rack form labels); the palette
         /// draws the glyph itself, so the label drops it.</summary>
         public bool StripLeadingGlyph { get; init; }
@@ -392,6 +396,7 @@ namespace ConditioningControlPanel.Services
             // still a working alias but is no longer the name of anything that exists.
             Door("play", "nav_door_play", "🎮", "play", "play games lab");
             Door("you", "nav_door_you", "👤", "discord", "you profile progress");
+            Door("social", "nav_section_social", "🫂", "availablesubjects", "social lobby friends leash remote leaderboard together");
             Door("library", "nav_door_library", "📚", "assets", "library assets media");
             // The withheld Just Drop row (Studio > Creator Tools since 2026-09-11, a creator tool by
             // owner call). It carries the first IsAvailable predicate in this index: the row is
@@ -502,36 +507,30 @@ namespace ConditioningControlPanel.Services
             Tab("fyp", "tab_fyp", "📲", "fyp", "for you feed scroll fyp");
             Tab("appsettings", "tab_settings", "⚙️", "appsettings", "settings options preferences");
 
-            // ---- Library launchers (Phase 7) --------------------------------------------
-            // Four things the Library door opens that are NOT tabs: a dialog, a website, a dialog
-            // and a window. The palette has exactly one navigation verb - ShowTab - so a row here
-            // cannot press a button for the user, and inventing a second verb would put window
-            // launches behind a search box where a mistyped Enter opens a modal. These rows
-            // therefore do what the index says it does everywhere else: they take you to where the
-            // thing LIVES. TabKey "assets" is the Library door's default destination (opening the
-            // door via ExpandDoorForTab for free), and ElementNames pulses the rail row that
-            // launches it, so the answer to "where is the phrase manager" is the button itself.
-            //
-            // If the palette ever grows a launch verb, these four are its first customers.
-            void Launcher(string id, string labelKey, string glyph, string element, string aliases) =>
+            // ---- Library launchers -------------------------------------------------------
+            // Four things the Library opens that are NOT tabs: a dialog, a website, a dialog and a
+            // window. Nav rework (2026-10-06): their rail rows are gone, so these rows open the
+            // thing itself through MainWindow.OpenLibraryLauncher, the verb the Library strip's
+            // pills use. Same rows, same ids, so pinned favourites keep working.
+            void Launcher(string id, string labelKey, string glyph, string aliases) =>
                 list.Add(new SettingsPaletteEntry
                 {
                     Id = "launch." + id,
                     LabelKey = labelKey,
                     Glyph = glyph,
                     TabKey = "assets",
-                    ElementNames = new[] { element },
+                    LauncherKey = id,
                     ContextKeys = new[] { GroupNav, "nav_door_library" },
                     Aliases = aliases,
                 });
 
-            Launcher("mods", "yl7_nav_mods", "🧩", "BtnNavMods",
+            Launcher("mods", "yl7_nav_mods", "🧩",
                      "mods mod manager install ccpmod creator themes packs");
-            Launcher("catalogue", "yl7_nav_catalogue", "🌐", "BtnNavCatalogue",
+            Launcher("catalogue", "yl7_nav_catalogue", "🌐",
                      "catalogue community share browse presets sessions download");
-            Launcher("phrases", "yl7_nav_phrases", "💬", "BtnNavPhrases",
+            Launcher("phrases", "yl7_nav_phrases", "💬",
                      "phrase manager text pools mantras subliminals barks lines");
-            Launcher("medialog", "yl7_nav_medialog", "🎞️", "BtnNavMediaLog",
+            Launcher("medialog", "yl7_nav_medialog", "🎞️",
                      "media log history what did i see flashes videos recently shown");
 
             // ---- two title-bar buttons ---------------------------------------------------

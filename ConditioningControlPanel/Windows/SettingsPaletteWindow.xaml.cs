@@ -351,6 +351,10 @@ namespace ConditioningControlPanel
                     return;
                 }
 
+                // A Library launcher: the dialog or window itself, as its strip pill opens it.
+                if (!string.IsNullOrWhiteSpace(entry.LauncherKey) && mw.OpenLibraryLauncher(entry.LauncherKey!))
+                    return;
+
                 if (!string.IsNullOrWhiteSpace(entry.TabKey)) mw.ShowTab(entry.TabKey);
 
                 if (!string.IsNullOrWhiteSpace(entry.SectionKey))

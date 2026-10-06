@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using ConditioningControlPanel.Services;
 using Xunit;
 
 namespace ConditioningControlPanel.Tests;
@@ -295,28 +296,23 @@ public class YouLibraryDoorTests
     // =====================================================================================
 
     [Fact]
-    public void TheLibraryPaletteRowsPointAtElementsThatExist()
+    public void TheLibraryPaletteRowsOpenTheLaunchersThemselves()
     {
-        // Navigate() logs a miss at Debug and returns — correct behaviour, invisible in review.
-        var palette = ReadSource("Services", "SettingsPaletteIndex.cs");
-        var xaml = MainWindowXaml();
+        // Nav rework (2026-10-06): the rail rows these rows used to pulse are gone. Each row now
+        // carries a LauncherKey that MainWindow.OpenLibraryLauncher handles; an unhandled key
+        // would fall back to the Assets page and open nothing, silently.
+        var chrome = ReadSource("MainWindow", "MainWindow.SectionChrome.cs");
         var en = Language("en.json");
+        var rows = SettingsPaletteIndex.All.Where(e => e.Id.StartsWith("launch.", StringComparison.Ordinal)).ToList();
 
-        // Explicitly Match, not var: MatchCollection's pattern-based GetEnumerator is the
-        // non-generic one, so `var` here binds to object.
-        foreach (Match launcher in Regex.Matches(palette, @"Launcher\(""(\w+)"",\s*""(\w+)"",\s*""[^""]+"",\s*""(\w+)"""))
+        foreach (var row in rows)
         {
-            var id = launcher.Groups[1].Value;
-            var labelKey = launcher.Groups[2].Value;
-            var element = launcher.Groups[3].Value;
-
-            Assert.True(en.ContainsKey(labelKey), $"palette row launch.{id} labels itself with the unknown key {labelKey}");
-            // Nav rework: the rail rows left; the palette pulse finds nothing and still navigates
-            // to Assets (SEARCH lane re-points these rows at the Library pills).
-            Assert.DoesNotContain("x:Name=\"" + element + "\"", xaml);
+            Assert.True(en.ContainsKey(row.LabelKey), $"palette row {row.Id} labels itself with the unknown key {row.LabelKey}");
+            Assert.False(string.IsNullOrEmpty(row.LauncherKey), $"palette row {row.Id} has no LauncherKey");
+            Assert.Contains("case \"" + row.LauncherKey + "\":", chrome);
         }
 
         // All four, not three: a dropped row is a feature nobody can search for.
-        Assert.Equal(4, Regex.Matches(palette, @"\n\s*Launcher\(""").Count);
+        Assert.Equal(4, rows.Count);
     }
 }

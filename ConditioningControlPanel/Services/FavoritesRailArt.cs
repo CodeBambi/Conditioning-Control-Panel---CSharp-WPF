@@ -102,6 +102,7 @@ namespace ConditioningControlPanel.Services
             ["door.companion"] = Plate("nav/door_companion.png"),
             ["door.play"] = Plate("nav/door_play.png"),
             ["door.you"] = Plate("nav/door_you.png"),
+            ["door.social"] = Cover("skills/hive_mind.png"), // same face as its Lobby tab (no nav medallion yet)
             ["door.library"] = Plate("nav/door_library.png"),
             ["door.settings"] = Plate("nav/door_settings.png"),
             // The tab rows that land on the same room as a door wear the same medallion.

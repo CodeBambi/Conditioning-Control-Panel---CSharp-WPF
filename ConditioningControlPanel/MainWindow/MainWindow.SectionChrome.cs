@@ -126,25 +126,32 @@ namespace ConditioningControlPanel
             switch (tab.Kind)
             {
                 case NavTabKind.Launcher:
-                    // The Library's dialogs and sites: same handlers as their rail rows (the
-                    // x:Names stay, so this reaches them wherever the rail draws them).
-                    var name = tab.Key switch
-                    {
-                        "mods" => "BtnNavMods",
-                        "catalogue" => "BtnNavCatalogue",
-                        "phrases" => "BtnNavPhrases",
-                        "medialog" => "BtnNavMediaLog",
-                        _ => null,
-                    };
-                    if (name != null && FindName(name) is ButtonBase button)
-                        button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, button));
-                    else
+                    // The Library's dialogs and sites: the same handlers the old rail rows called.
+                    if (!OpenLibraryLauncher(tab.Key))
                         App.Logger?.Debug("Launcher pill {Key} has no handler", tab.Key);
                     break;
                 default:
                     // Pages, zones and the Just Drop window all go through ShowTab.
                     ShowTab(tab.Key);
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Opens one of the Library's launchers (mods, catalogue, phrases, media log) through the
+        /// handler its rail row used to call. The strip pills and the Ctrl+K rows share this, so
+        /// neither depends on a button that is no longer drawn. False for an unknown key.
+        /// </summary>
+        internal bool OpenLibraryLauncher(string key)
+        {
+            var e = new RoutedEventArgs();
+            switch (key)
+            {
+                case "mods": BtnManageMods_Click(this, e); return true;
+                case "catalogue": BtnCatalogue_Click(this, e); return true;
+                case "phrases": BtnManagePhrases_Click(this, e); return true;
+                case "medialog": BtnNavMediaLog_Click(this, e); return true;
+                default: return false;
             }
         }
 

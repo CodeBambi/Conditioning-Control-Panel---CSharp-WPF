@@ -63,7 +63,7 @@ namespace ConditioningControlPanel
         private static readonly (string Element, string Id)[] FavoritePinMap =
         {
             ("DoorHome", "door.home"), ("DoorStudio", "door.studio"), ("DoorCompanion", "door.companion"),
-            ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorLibrary", "door.library"),
+            ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorSocial", "door.social"), ("DoorLibrary", "door.library"),
             ("DoorSettings", "door.settings"),
             // Nav rework (2026-10-06): the door rows (BtnSettings ... BtnNavMediaLog, BtnNavJustDrop)
             // left the rail for the pages' pill strips, so their pin rows went with them. The

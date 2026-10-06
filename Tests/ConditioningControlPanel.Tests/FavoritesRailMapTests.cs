@@ -68,15 +68,13 @@ public class FavoritesRailMapTests
     [Fact]
     public void Every_rail_entry_button_is_pinnable()
     {
-        // Every section row in the rail should have a row. Nav rework (2026-10-06): the door rows
-        // left the rail; DoorSocial is exempt until the palette grows a door.social row (SEARCH).
+        // Every section row in the rail should have a row (nav rework 2026-10-06: Social included).
         var main = Read("MainWindow", "MainWindow.xaml");
         var names = Regex.Matches(main, @"<Button x:Name=""(\w+)""[^>]*Style=""\{StaticResource NavSectionButton\}""")
                          .Cast<Match>().Select(m => m.Groups[1].Value).ToList();
         Assert.True(names.Count >= 8, "rail buttons parsed as only " + names.Count);
         var mapped = new HashSet<string>(PinMap().Select(r => r.Element), StringComparer.Ordinal);
-        var exempt = new HashSet<string>(StringComparer.Ordinal) { "DoorSocial" };
-        var missing = names.Where(n => !mapped.Contains(n) && !exempt.Contains(n)).ToList();
+        var missing = names.Where(n => !mapped.Contains(n)).ToList();
         Assert.True(missing.Count == 0, "rail buttons with no pin entry: " + string.Join(", ", missing));
     }
 }
