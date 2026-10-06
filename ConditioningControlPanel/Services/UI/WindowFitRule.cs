@@ -20,9 +20,9 @@ namespace ConditioningControlPanel.Services.UI
     /// </summary>
     public static class WindowFitRule
     {
-        /// <summary>The panel's default size in DIP (MainWindow.xaml), x1.25 of the 1563 x 943 it opened at before.</summary>
-        public const double DefaultWidthDip = 1954;
-        public const double DefaultHeightDip = 1179;
+        /// <summary>The panel's default size in DIP (MainWindow.xaml): the 1563 x 943 it opened at before, x1.25 (owner: more room) then x0.85 (owner: too big).</summary>
+        public const double DefaultWidthDip = 1661;
+        public const double DefaultHeightDip = 1002;
 
         /// <summary>
         /// The largest size with the same aspect as <paramref name="width"/> x <paramref name="height"/>

@@ -51,17 +51,17 @@ public class WindowDefaultSizeTests
     }
 
     [Fact]
-    public void The_window_opens_25_percent_bigger()
+    public void The_window_opens_about_6_percent_bigger()
     {
         var w = WindowElement();
-        Assert.Equal(1954, Attr(w, "Width"));
-        Assert.Equal(1179, Attr(w, "Height"));
+        Assert.Equal(1661, Attr(w, "Width"));
+        Assert.Equal(1002, Attr(w, "Height"));
         Assert.Equal(WindowFitRule.DefaultWidthDip, Attr(w, "Width"));
         Assert.Equal(WindowFitRule.DefaultHeightDip, Attr(w, "Height"));
 
-        // x1.25 of the old default, to the pixel.
-        Assert.Equal(Math.Round(OldWidth * 1.25), Attr(w, "Width"));
-        Assert.Equal(Math.Round(OldHeight * 1.25), Attr(w, "Height"));
+        // Owner: 25% bigger was too big, so 15% off that: 1563 x 943 x 1.25 x 0.85, to the pixel.
+        Assert.Equal(Math.Round(OldWidth * 1.25 * 0.85), Attr(w, "Width"));
+        Assert.Equal(Math.Round(OldHeight * 1.25 * 0.85), Attr(w, "Height"));
     }
 
     [Fact]
@@ -70,9 +70,9 @@ public class WindowDefaultSizeTests
         var w = WindowElement();
         var aspect = Attr(w, "Width") / Attr(w, "Height");
         Assert.InRange(aspect, OldWidth / OldHeight - 0.002, OldWidth / OldHeight + 0.002);
-        // The design canvas is unchanged, so every DIP of it now draws about 1.23x bigger.
+        // The design canvas is unchanged, so every DIP of it now draws about 1.05x bigger.
         Assert.Contains($"x:Name=\"DesignCanvas\" Width=\"{CanvasWidth}\" Height=\"{CanvasHeight}\"", MainWindowXaml());
-        Assert.InRange(Attr(w, "Width") / CanvasWidth, 1.2, 1.25);
+        Assert.InRange(Attr(w, "Width") / CanvasWidth, 1.03, 1.07);
     }
 
     [Fact]

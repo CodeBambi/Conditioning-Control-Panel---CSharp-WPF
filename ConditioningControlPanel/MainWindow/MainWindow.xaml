@@ -12,7 +12,7 @@
         xmlns:friends="clr-namespace:ConditioningControlPanel.Controls.Friends"
         xmlns:poss="clr-namespace:ConditioningControlPanel.Services.Possession"
         Title="Conditioning Control Panel"
-        Height="1179" Width="1954"
+        Height="1002" Width="1661"
         MinHeight="620" MinWidth="1131"
         Background="{DynamicResource DarkerBgBrush}"
         WindowStartupLocation="Manual"
