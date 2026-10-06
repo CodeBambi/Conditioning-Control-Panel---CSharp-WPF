@@ -135,7 +135,7 @@ public class ModAwareDecodedArtTests
     }
 
     // =====================================================================================
-    //  the nav rail's medallions (eight since v6.8.0: seven tab doors + the Web App launcher)
+    //  the nav rail's medallions (eight: seven sections + the Settings gear)
     // =====================================================================================
 
     /// <summary>
@@ -150,8 +150,8 @@ public class ModAwareDecodedArtTests
         ("ImgDoorPlay",      "nav/door_play.png"),
         ("ImgDoorYou",       "nav/door_you.png"),
         ("ImgDoorLibrary",   "nav/door_library.png"),
-        // v6.8.0: the Web App launcher door - a full medallion, mod-reskinnable like the rest.
-        ("ImgDoorWebApp",    "nav/door_webapp.png"),
+        // Nav rework (2026-10-06): the Web App door left the rail. Social is new and has no
+        // embedded door art yet (placeholder picture), so it is pinned on its own below.
         ("ImgDoorSettings",  "nav/door_settings.png"),
     };
 
@@ -191,7 +191,7 @@ public class ModAwareDecodedArtTests
 
         var start = navRail.IndexOf("private void ApplyDoorArt()", StringComparison.Ordinal);
         Assert.True(start >= 0, "ApplyDoorArt is gone - the rail stopped following the active mod");
-        var end = navRail.IndexOf("private void CacheNavRailParts", start, StringComparison.Ordinal);
+        var end = navRail.IndexOf("private void ApplyModToNavRailLabels()", start, StringComparison.Ordinal);
         Assert.True(end > start, "ApplyDoorArt's neighbourhood moved - fix the scrape, then re-read the method");
         var body = navRail.Substring(start, end - start);
 
@@ -200,6 +200,9 @@ public class ModAwareDecodedArtTests
             Assert.True(body.Contains(name, StringComparison.Ordinal), $"ApplyDoorArt never touches {name}");
             Assert.True(body.Contains($"\"{path}\"", StringComparison.Ordinal), $"ApplyDoorArt never resolves {path}");
         }
+
+        // Social: a mod may ship nav/door_social.png; without one the authored placeholder stays.
+        Assert.Contains("(ImgDoorSocial,    \"nav/door_social.png\")", body, StringComparison.Ordinal);
 
         // The rail must degrade to its authored art, not to nothing.
         Assert.Contains("if (art != null)", body, StringComparison.Ordinal);

@@ -474,9 +474,13 @@ public class PlayDoorRenderTests
         Assert.Equal("play", (string?)m.Invoke(null, new object?[] { "lab" }));
 
         // And the other Play entries did not lose their door on the way past.
-        foreach (var key in new[] { "deeper", "exclusives", "gradedintake", "lockdown",
-                                    "blinktrainer", "remotecontrol", "availablesubjects" })
+        foreach (var key in new[] { "deeper", "gradedintake", "lockdown", "blinktrainer" })
             Assert.Equal("play", (string?)m.Invoke(null, new object?[] { key }));
+        // Nav rework (2026-10-06): the Lobby and Remote moved to Social, the old Exclusives shelf
+        // to Settings > Account & Plans (the gear's row Tag is "appsettings").
+        foreach (var key in new[] { "remotecontrol", "availablesubjects" })
+            Assert.Equal("social", (string?)m.Invoke(null, new object?[] { key }));
+        Assert.Equal("appsettings", (string?)m.Invoke(null, new object?[] { "exclusives" }));
     }
 
     [Fact]

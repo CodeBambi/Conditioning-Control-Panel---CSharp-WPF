@@ -37,7 +37,7 @@ public class FavoritesRailMapTests
         var block = src.Substring(start, end - start);
         var rows = Regex.Matches(block, @"\(""(\w+)"",\s*""([\w.]+)""\)")
                         .Cast<Match>().Select(m => (m.Groups[1].Value, m.Groups[2].Value)).ToList();
-        Assert.True(rows.Count >= 30, "FavoritePinMap parsed as only " + rows.Count + " rows - the regex has rotted");
+        Assert.True(rows.Count >= 10, "FavoritePinMap parsed as only " + rows.Count + " rows - the regex has rotted");
         return rows;
     }
 
@@ -68,14 +68,14 @@ public class FavoritesRailMapTests
     [Fact]
     public void Every_rail_entry_button_is_pinnable()
     {
-        // Every NavEntryButton / NavDoorButton in the rail should have a row, except the launcher
-        // doors (WebApp opens a browser, no palette row) and the search button.
+        // Every section row in the rail should have a row. Nav rework (2026-10-06): the door rows
+        // left the rail; DoorSocial is exempt until the palette grows a door.social row (SEARCH).
         var main = Read("MainWindow", "MainWindow.xaml");
-        var names = Regex.Matches(main, @"<Button x:Name=""(\w+)""[^>]*Style=""\{StaticResource Nav(?:Entry|Door)Button\}""")
+        var names = Regex.Matches(main, @"<Button x:Name=""(\w+)""[^>]*Style=""\{StaticResource NavSectionButton\}""")
                          .Cast<Match>().Select(m => m.Groups[1].Value).ToList();
-        Assert.True(names.Count >= 30, "rail buttons parsed as only " + names.Count);
+        Assert.True(names.Count >= 8, "rail buttons parsed as only " + names.Count);
         var mapped = new HashSet<string>(PinMap().Select(r => r.Element), StringComparer.Ordinal);
-        var exempt = new HashSet<string>(StringComparer.Ordinal) { "DoorWebApp" };
+        var exempt = new HashSet<string>(StringComparer.Ordinal) { "DoorSocial" };
         var missing = names.Where(n => !mapped.Contains(n) && !exempt.Contains(n)).ToList();
         Assert.True(missing.Count == 0, "rail buttons with no pin entry: " + string.Join(", ", missing));
     }

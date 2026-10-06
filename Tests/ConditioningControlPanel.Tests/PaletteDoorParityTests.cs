@@ -57,11 +57,13 @@ public class PaletteDoorParityTests
     /// <summary>(door, defaultTab) straight out of MainWindow.TabNavigation.cs's NavDoorMap.</summary>
     private static List<(string Door, string DefaultTab)> RailDoors()
     {
-        // Nav rework BASE (2026-10-06): NavDoorMap is derived from NavSections through
-        // NavLegacyDoors, so read the projection instead of scraping a literal.
-        Assert.Contains("NavLegacyDoors.Build()", TabNavigationSource());
-        var doors = ConditioningControlPanel.Services.UI.NavLegacyDoors.Build()
-            .Select(d => (d.Door, d.DefaultTab)).ToList();
+        // Nav rework (2026-10-06): the rail is the section table. A row opens its section's
+        // default tab (or the remembered last tab, which the palette does not model). Social is
+        // skipped until the palette grows a door.social row (SEARCH lane).
+        var doors = ConditioningControlPanel.Services.UI.NavSections.Order
+            .Where(s => s.Key != "social")
+            .Select(s => (ConditioningControlPanel.Controls.NavRail.NavRailRules.DoorTagForSection(s.Key), s.DefaultTab))
+            .ToList();
 
         Assert.True(doors.Count >= 6, "NavDoorMap parsed as only " + doors.Count + " doors — the regex has rotted");
         return doors;

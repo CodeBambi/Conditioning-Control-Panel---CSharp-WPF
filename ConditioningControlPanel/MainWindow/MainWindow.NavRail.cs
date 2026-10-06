@@ -131,6 +131,13 @@ namespace ConditioningControlPanel
                     };
                 }
                 HookNavPress(row);
+                // ChromeFx.NavButtons (the tab-strip lane's file) does not list the new Social row
+                // yet, so the hover nudge is wired here for that one row. Drop this once it does.
+                if (ReferenceEquals(btn, DoorSocial))
+                {
+                    btn.MouseEnter += NavButton_MouseEnter;
+                    btn.MouseLeave += NavButton_MouseLeave;
+                }
                 var captured = row;
                 btn.ToolTipOpening += (_, __) => btn.ToolTip = BuildNavRowToolTip(captured);
                 _navSectionRows.Add(row);
