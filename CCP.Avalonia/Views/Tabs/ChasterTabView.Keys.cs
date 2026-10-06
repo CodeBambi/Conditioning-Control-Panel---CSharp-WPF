@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Chaster;
 
@@ -52,6 +53,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Stakes(TxtStakesGentle, TabPresets.Gentle);
             Stakes(TxtStakesStrict, TabPresets.Strict);
             Stakes(TxtStakesCirce, TabPresets.Circe);
+            RefreshMood(ChasterHead.Service); // WPF :1123, the heat row may have just gone on or off
         }
 
         private static void Stakes(TextBlock line, string presetId)
