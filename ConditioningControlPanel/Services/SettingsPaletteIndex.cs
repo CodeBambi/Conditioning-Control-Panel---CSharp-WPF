@@ -643,9 +643,9 @@ namespace ConditioningControlPanel.Services
             // surface only the WEBCAM's calibration monitor, which moves nothing (ask-support
             // 2026-09-08 - the reporter found that row, changed it, and content still covered
             // every screen).
-            Setting("content_monitor", "setting_content_monitor", "🖥️", "general",
-                    new[] { "ContentMonitorPicker", "CmbContentMonitor", "DisplayGeneralCard" },
-                    "set2_section_general",
+            Setting("content_monitor", "setting_content_monitor", "🖥️", "monitors",
+                    new[] { "ContentMonitorPicker", "CmbContentMonitor" },
+                    "settings_section_monitors",
                     "monitor screen display multi monitor dual monitor second screen one screen "
                     + "single monitor primary only all monitors show content on");
             Setting("enable_deeper", "setting_deeper_enable", "🌊", "general",
@@ -713,18 +713,18 @@ namespace ConditioningControlPanel.Services
 
             // Account (landed)
             Setting("patreon_login", "set2_palette_patreon_login", "🅿️", "account",
-                    new[] { "BtnPatreonLogin", "PatreonLoginCard" }, "set2_section_account",
+                    new[] { "BtnPatreonLogin", "PatreonLoginCard" }, "settings_section_plans",
                     "patreon login connect subscription");
             Setting("discord_login", "set2_palette_discord_login", "💬", "account",
-                    new[] { "BtnDiscordLogin", "DiscordLoginCard" }, "set2_section_account", "discord login link");
+                    new[] { "BtnDiscordLogin", "DiscordLoginCard" }, "settings_section_plans", "discord login link");
             Setting("link_accounts", "label_link_accounts", "🔗", "account",
-                    new[] { "AccountLinkingSection", "BtnLinkPatreon" }, "set2_section_account",
+                    new[] { "AccountLinkingSection", "BtnLinkPatreon" }, "settings_section_plans",
                     "link accounts patreon discord");
             Setting("cloud_backup", "label_cloud_settings_backup", "☁️", "account",
-                    new[] { "BtnBackupSettingsNow", "CloudSettingsBackupSection" }, "set2_section_account",
+                    new[] { "BtnBackupSettingsNow", "CloudSettingsBackupSection" }, "settings_section_plans",
                     "cloud backup restore settings sync");
             Setting("data_privacy", "label_data_privacy", "🛡️", "account",
-                    new[] { "BtnExportData", "DataPrivacySection" }, "set2_section_account",
+                    new[] { "BtnExportData", "DataPrivacySection" }, "settings_section_plans",
                     "privacy export data policy gdpr");
 
             // Data

@@ -138,7 +138,7 @@
                                    FontSize="13" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
-                    <feat:MonitorTargetPicker x:Name="ContentMonitorPicker" x:FieldModifier="internal"/>
+                    <!-- Nav rework (2026-10-06): the monitor picker lives in Settings > Monitors only. -->
 
                     <!-- The START button's MM:SS while a session runs. It sits here because the
                          button is title-bar chrome on every tab, and this card is where the rest of
