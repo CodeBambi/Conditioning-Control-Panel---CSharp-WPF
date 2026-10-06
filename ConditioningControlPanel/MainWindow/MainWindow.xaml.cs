@@ -316,10 +316,10 @@ namespace ConditioningControlPanel
             var version = Services.UpdateService.GetCurrentVersion();
             // Phase 8: ProgressionTab.TxtVersion is gone. The two live version readouts seed
             // themselves - Settings · Updates (UpdatesSettingsSection.xaml.cs) and the System
-            // popup's AppInfoFeatureControl - alongside the three chrome labels below.
+            // popup's AppInfoFeatureControl - alongside the two chrome labels below. The header's
+            // own "vX.Y.Z" tag was cut in nav polish wave 4: the title bar already says it.
             Title = $"Conditioning Control Panel v{version}";
             TxtTitleBarVersion.Text = $"Conditioning Control Panel v{version}";
-            TxtHeaderVersion.Text = $"v{version}";
 
             // Center on primary monitor
             CenterOnPrimaryScreen();
@@ -2506,12 +2506,9 @@ namespace ConditioningControlPanel
                     if (TxtPlayerTitle.Effect is System.Windows.Media.Effects.DropShadowEffect glow)
                         glow.Color = accent;
                 }
-                if (TxtHeaderVersion != null)
-                    TxtHeaderVersion.Foreground = accentBrush;
-
                 // === XP/LEVEL DISPLAY ===
-                if (TxtLevelLabel != null)
-                    TxtLevelLabel.Foreground = accentBrush;
+                // The LVL chip is a filled pill with white text: the accent paints the pill.
+                PaintLevelChip(accent);
                 if (XPBar != null)
                 {
                     // Anchor 3: CCP Default gets BrandGradient, every other mod gets the solid accent it always had.
