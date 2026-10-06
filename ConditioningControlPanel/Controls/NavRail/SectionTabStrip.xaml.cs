@@ -150,6 +150,82 @@ namespace ConditioningControlPanel.Controls.NavRail
             MotionLevel.Reduced => 90,
             _ => 180,
         };
+
+        // ---- Pill paint (polish wave 2, lane PILLS): the strip wears its section's hue ----------
+
+        /// <summary>Dark ink for text on a light fill (the app's deepest plum).</summary>
+        public static readonly Color DarkInk = Color.FromRgb(0x15, 0x12, 0x1F);
+
+        /// <summary>Inactive pill text: the hue at 85%.</summary>
+        public const double RestTextAlpha = 0.85;
+        /// <summary>Inactive pill outline: the hue at 35%.</summary>
+        public const double RestOutlineAlpha = 0.35;
+        /// <summary>Hovered inactive pill: a fill in the hue at 18%.</summary>
+        public const double HoverFillAlpha = 0.18;
+        /// <summary>The pill track: the hue at 8%, its border at 25%.</summary>
+        public const double TrackFillAlpha = 0.08;
+        public const double TrackBorderAlpha = 0.25;
+        /// <summary>The "Moved" note's text: the hue at 90%.</summary>
+        public const double NoteTextAlpha = 0.90;
+
+        /// <summary>The hue at an alpha (0..1).</summary>
+        public static Color WithAlpha(Color c, double alpha) =>
+            Color.FromArgb((byte)Math.Round(Math.Clamp(alpha, 0, 1) * 255), c.R, c.G, c.B);
+
+        /// <summary>WCAG relative luminance of an opaque colour.</summary>
+        public static double Luminance(Color c)
+        {
+            static double Lin(byte v)
+            {
+                double s = v / 255.0;
+                return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+            }
+            return 0.2126 * Lin(c.R) + 0.7152 * Lin(c.G) + 0.0722 * Lin(c.B);
+        }
+
+        /// <summary>WCAG contrast ratio between two opaque colours (1..21).</summary>
+        public static double Contrast(Color a, Color b)
+        {
+            double la = Luminance(a), lb = Luminance(b);
+            return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+        }
+
+        /// <summary>The active pill's text on its solid hue fill: dark ink or white, whichever
+        /// reads better. SectionTabStripTests pins it at 4.5:1 or more for every section.</summary>
+        public static Color ActiveTextOn(Color fill) =>
+            Contrast(DarkInk, fill) >= Contrast(Colors.White, fill) ? DarkInk : Colors.White;
+
+        /// <summary>The app's dark page ground (the strip sits on it).</summary>
+        public static readonly Color PageGround = Color.FromRgb(0x1A, 0x12, 0x30);
+
+        /// <summary>Paints <paramref name="top"/> (with its alpha) over an opaque <paramref name="under"/>.</summary>
+        public static Color Over(Color top, Color under)
+        {
+            double a = top.A / 255.0;
+            byte Mix(byte t, byte u) => (byte)Math.Round(t * a + u * (1 - a));
+            return Color.FromRgb(Mix(top.R, under.R), Mix(top.G, under.G), Mix(top.B, under.B));
+        }
+
+        /// <summary>The worst ground a rest pill's text sits on: the page with the section wash
+        /// (lane CHROME, up to 14%) and the track (8%) both in the hue.</summary>
+        public static Color RestGround(Color hue) =>
+            Over(WithAlpha(hue, TrackFillAlpha), Over(WithAlpha(hue, 0.14), PageGround));
+
+        /// <summary>
+        /// A rest pill's text: the hue at 85%. A dark hue (Play's violet-blue) reads muddy at 85%
+        /// on the dark track, so it is lifted toward white in small steps until the text reads at
+        /// 4.5:1 on <see cref="RestGround"/>. Light hues come back unchanged.
+        /// </summary>
+        public static Color RestTextOn(Color hue)
+        {
+            var ground = RestGround(hue);
+            var c = hue;
+            for (int i = 0; i < 20 && Contrast(Over(WithAlpha(c, RestTextAlpha), ground), ground) < 4.5; i++)
+                c = Color.FromRgb((byte)Math.Round(c.R + (255 - c.R) * 0.08),
+                                  (byte)Math.Round(c.G + (255 - c.G) * 0.08),
+                                  (byte)Math.Round(c.B + (255 - c.B) * 0.08));
+            return WithAlpha(c, RestTextAlpha);
+        }
     }
 
     /// <summary>
@@ -158,9 +234,14 @@ namespace ConditioningControlPanel.Controls.NavRail
     /// </summary>
     public partial class SectionTabStrip : UserControl
     {
-        private static readonly SolidColorBrush ActiveText = Freeze(new SolidColorBrush(Color.FromRgb(0x1B, 0x10, 0x26)));
-        private static readonly SolidColorBrush HoverTint = Freeze(new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF)));
         private static readonly SolidColorBrush FocusRing = Freeze(new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)));
+        private static readonly SolidColorBrush BadgePlate = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(NavStripRules.DarkInk, 0.85)));
+
+        // The section's pill paint, rebuilt when the section changes (polish wave 2).
+        private Brush _activeText = Brushes.Black;
+        private Brush _restText = Brushes.Gainsboro;
+        private Brush _restOutline = Brushes.Transparent;
+        private Brush _hoverFill = Brushes.Transparent;
 
         private readonly List<(NavTab Tab, Button Pill, Border Face, TextBlock Label)> _pills = new();
         private string? _section;
@@ -215,6 +296,7 @@ namespace ConditioningControlPanel.Controls.NavRail
 
             if (sectionChanged)
             {
+                PaintFor(NavStripRules.Accent(section));
                 FixCrumbWidth(section!);
                 BuildPills(section!, accent);
                 AccentLine.Background = new LinearGradientBrush(
@@ -247,7 +329,9 @@ namespace ConditioningControlPanel.Controls.NavRail
         public void ShowMovedNote(string text)
         {
             MovedNoteText.Text = text;
-            MovedNote.BorderBrush = new SolidColorBrush(NavStripRules.Accent(_section));
+            var hue = NavStripRules.Accent(_section);
+            MovedNote.BorderBrush = new SolidColorBrush(hue);
+            MovedNoteText.Foreground = new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.NoteTextAlpha));
             MovedNote.Visibility = Visibility.Visible;
             var level = Level;
             if (level == MotionLevel.Off) MovedNote.Opacity = 1;
@@ -266,6 +350,32 @@ namespace ConditioningControlPanel.Controls.NavRail
             };
             _noteTimer.Start();
         }
+
+        /// <summary>The section's pill paint: track, rest text, outline, hover and active text, all
+        /// from the one hue table (NavStripRules.Accent).</summary>
+        private void PaintFor(Color hue)
+        {
+            _activeText = Freeze(new SolidColorBrush(NavStripRules.ActiveTextOn(hue)));
+            _restText = Freeze(new SolidColorBrush(NavStripRules.RestTextOn(hue)));
+            _restOutline = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.RestOutlineAlpha)));
+            _hoverFill = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.HoverFillAlpha)));
+            PillTrack.Background = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.TrackFillAlpha)));
+            PillTrack.BorderBrush = Freeze(new SolidColorBrush(NavStripRules.WithAlpha(hue, NavStripRules.TrackBorderAlpha)));
+        }
+
+        /// <summary>Test seam: the brushes a pill wears now (label, face outline).</summary>
+        internal (Brush Text, Brush Outline) PillPaint(string key)
+        {
+            var p = _pills.FirstOrDefault(x => x.Tab.Key == key);
+            return (p.Label?.Foreground ?? Brushes.Transparent, p.Face?.BorderBrush ?? Brushes.Transparent);
+        }
+
+        internal Brush TrackFill => PillTrack.Background;
+        internal Brush TrackBorder => PillTrack.BorderBrush;
+        internal Brush CrumbWordBrush => CrumbSectionText.Foreground;
+        internal Brush MovedNoteBrush => MovedNoteText.Foreground;
+        internal double PillHeight(string key) => PillFor(key)?.ActualHeight ?? 0;
+        internal double TrackHeightForTests => PillTrack.ActualHeight;
 
         private void HideNote()
         {
@@ -294,13 +404,13 @@ namespace ConditioningControlPanel.Controls.NavRail
                     FontSize = 13.5,
                     FontWeight = FontWeights.SemiBold,
                     VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = (Brush?)TryFindResource("TextSecondaryBrush") ?? Brushes.Gainsboro,
+                    Foreground = _restText,
                 };
                 // The active pill turns ExtraBold: reserve that width now, or lighting a pill
                 // would widen it and push every pill after it sideways.
                 label.MinWidth = BoldWidth(label);
                 label.TextAlignment = TextAlignment.Center;
-                var content = new StackPanel { Orientation = Orientation.Horizontal };
+                var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
                 content.Children.Add(label);
                 if (tab.Tier > 0)
                 {
@@ -314,24 +424,46 @@ namespace ConditioningControlPanel.Controls.NavRail
                         HorizontalAlignment = HorizontalAlignment.Center,
                         VerticalAlignment = VerticalAlignment.Center,
                     };
-                    content.Children.Add(new Grid
+                    // A dark plate under the sign, so a neon tier sign reads the same on the
+                    // solid hue of the active pill as on the dark track.
+                    content.Children.Add(new Border
                     {
-                        Width = 38,
-                        Height = 18,
-                        Margin = new Thickness(6, 0, -4, 0),
-                        ClipToBounds = false,
-                        Children = { badge },
+                        Width = 40,
+                        Height = 20,
+                        Margin = new Thickness(6, 0, -6, 0),
+                        CornerRadius = new CornerRadius(6),
+                        Background = BadgePlate,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Child = new Grid
+                        {
+                            Width = 38,
+                            Height = 18,
+                            ClipToBounds = false,
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Children = { badge },
+                        },
                     });
                 }
 
+                // The face: a 1 px outline in the hue at rest. Its 1 px outer ring is the focus
+                // ring, so border + ring add up to the 2 px wave 1 spent and no pill grows.
                 var face = new Border
                 {
                     CornerRadius = new CornerRadius(14),
-                    Padding = new Thickness(14, 6, 14, 6),
+                    Padding = new Thickness(14, 0, 14, 0),
+                    MinHeight = 32,   // + the 1 px ring = a 34 px pill; the row stays 50 px
                     Background = Brushes.Transparent,
-                    BorderThickness = new Thickness(2),
-                    BorderBrush = Brushes.Transparent,
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = _restOutline,
                     Child = content,
+                };
+                var ring = new Border
+                {
+                    CornerRadius = new CornerRadius(15),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = Brushes.Transparent,
+                    Child = face,
                     RenderTransformOrigin = new Point(0.5, 0.5),
                 };
                 // A real Button (UIA: a named, invokable control) wearing the pill face. The
@@ -342,7 +474,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                 var pill = new Button
                 {
                     Template = PillTemplate,
-                    Content = face,
+                    Content = ring,
                     Background = Brushes.Transparent,
                     BorderThickness = new Thickness(0),
                     Padding = new Thickness(0),
@@ -358,18 +490,18 @@ namespace ConditioningControlPanel.Controls.NavRail
                 System.Windows.Automation.AutomationProperties.SetHelpText(pill, CrumbFor(section, label.Text));
                 System.Windows.Automation.AutomationProperties.SetAutomationId(pill, "NavPill_" + tab.Key);
 
-                pill.MouseEnter += (_, _) => { if (!IsActive(tab.Key)) face.Background = HoverTint; };
-                pill.MouseLeave += (_, _) => { face.Background = Brushes.Transparent; if (!pill.IsPressed) MotionFx.PressSquish(face, false); };
-                pill.PreviewMouseLeftButtonDown += (_, _) => MotionFx.PressSquish(face, true);
-                pill.LostMouseCapture += (_, _) => MotionFx.PressSquish(face, false);
+                pill.MouseEnter += (_, _) => { if (!IsActive(tab.Key)) face.Background = _hoverFill; };
+                pill.MouseLeave += (_, _) => { face.Background = Brushes.Transparent; if (!pill.IsPressed) MotionFx.PressSquish(ring, false); };
+                pill.PreviewMouseLeftButtonDown += (_, _) => MotionFx.PressSquish(ring, true);
+                pill.LostMouseCapture += (_, _) => MotionFx.PressSquish(ring, false);
                 pill.Click += (_, e) =>
                 {
                     e.Handled = true;
-                    MotionFx.PressSquish(face, false);
+                    MotionFx.PressSquish(ring, false);
                     Choose(tab, focus: false);
                 };
-                pill.GotKeyboardFocus += (_, _) => face.BorderBrush = FocusRing;
-                pill.LostKeyboardFocus += (_, _) => face.BorderBrush = Brushes.Transparent;
+                pill.GotKeyboardFocus += (_, _) => ring.BorderBrush = FocusRing;
+                pill.LostKeyboardFocus += (_, _) => ring.BorderBrush = Brushes.Transparent;
 
                 PillRow.Children.Add(pill);
                 _pills.Add((tab, pill, face, label));
@@ -473,9 +605,12 @@ namespace ConditioningControlPanel.Controls.NavRail
             foreach (var (tab, pill, face, label) in _pills)
             {
                 bool on = IsActive(tab.Key);
-                label.Foreground = on ? ActiveText
-                    : (Brush?)TryFindResource("TextSecondaryBrush") ?? Brushes.Gainsboro;
-                label.FontWeight = on ? FontWeights.ExtraBold : FontWeights.SemiBold;
+                // Active: dark ink (or white) on the solid hue the ActiveFill slides under; the
+                // outline steps aside so the fill reads as one shape. Rest: the hue at 85% inside
+                // a 35% outline. The ExtraBold width stays reserved, so nothing moves either way.
+                label.Foreground = on ? _activeText : _restText;
+                label.FontWeight = FontWeights.SemiBold;
+                face.BorderBrush = on ? Brushes.Transparent : _restOutline;
                 if (on) face.Background = Brushes.Transparent;
                 KeyboardNavigation.SetIsTabStop(pill, on);
                 System.Windows.Automation.AutomationProperties.SetItemStatus(pill, on ? "selected" : string.Empty);

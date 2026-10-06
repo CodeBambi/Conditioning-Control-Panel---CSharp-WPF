@@ -49,10 +49,10 @@
             </StackPanel>
 
             <Border x:Name="PillTrack" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
-                    CornerRadius="17" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" Padding="3"
+                    CornerRadius="19" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" Padding="3"
                     MinHeight="42">
                 <Grid>
-                    <Border x:Name="ActiveFill" CornerRadius="14" HorizontalAlignment="Left" Width="0"
+                    <Border x:Name="ActiveFill" CornerRadius="15" HorizontalAlignment="Left" Width="0"
                             IsHitTestVisible="False">
                         <Border.RenderTransform>
                             <TranslateTransform x:Name="ActiveFillShift" />
