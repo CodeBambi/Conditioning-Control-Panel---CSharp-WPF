@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using ConditioningControlPanel.Controls.Depth;
 using ConditioningControlPanel.Controls.NavRail;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
@@ -50,9 +51,37 @@ namespace ConditioningControlPanel
             internal TextBlock? BadgeText;
             internal TextBlock? Label;
             internal SolidColorBrush? Hue;
-            internal ScaleTransform Press = new(1, 1);
+            /// <summary>The coin's own parts (polish wave 10): contact disc, dish, socket shade, lip.</summary>
+            internal NavCoinParts? Coin;
+            /// <summary>The row's content Grid (coin + label): the one element that travels and leans.</summary>
+            internal FrameworkElement? Face;
+            internal TranslateTransform Lift = new();
+            internal RotateTransform Tilt = new();
             internal bool Active;
             internal bool Painted;
+            internal bool Hovered;
+            internal bool Pressed;
+        }
+
+        /// <summary>
+        /// A rail medallion as a COIN (nav polish wave 10, depth; the law is DepthRules). Built once
+        /// per row by <see cref="BuildNavCoin"/> and inserted around the authored tile:
+        /// <list type="bullet">
+        /// <item>Disc: the contact shadow on the sheet, an Ellipse UNDER the tile, tinted by the
+        ///   row's hue (DepthRules.ShadowColor), pushed down by DepthRules.ShadowFor.</item>
+        /// <item>Dish: DepthCoinDish over the tile, under the art.</item>
+        /// <item>Socket: DepthPressedShade over the art, shown while the coin is lit or pressed.</item>
+        /// <item>Rim: the 1 px lip just inside the hue ring: DepthCoinRim raised, DepthPressedBevel
+        ///   seated. The wave 9 ring stays above it and keeps its job.</item>
+        /// </list>
+        /// </summary>
+        internal sealed class NavCoinParts
+        {
+            internal Ellipse Disc = null!;
+            internal TranslateTransform DiscShift = new();
+            internal Border Dish = null!;
+            internal Border Socket = null!;
+            internal Border Rim = null!;
         }
 
         private readonly List<NavSectionRow> _navSectionRows = new();
@@ -63,8 +92,6 @@ namespace ConditioningControlPanel
         private const string NavRingTag = "navring";
         private const string NavTintTag = "navtint";
         private const int NavGlowFadeMs = 160;
-        private const int NavPressMs = 80;
-        private const double NavPressScale = 0.97;
         private const string NavSectionLabelTag = "navsectionlabel";
         private const string NavBadgeTag = "navbadge";
 
@@ -89,6 +116,8 @@ namespace ConditioningControlPanel
                 NavBadges.Changed += OnNavBadgeChanged;
                 Closed += (_, __) => NavBadges.Changed -= OnNavBadgeChanged;
                 foreach (var row in _navSectionRows) PaintNavBadge(row, NavBadges.Get(row.Section));
+
+                if (NavRailShadow != null) NavRailShadow.Width = DepthRules.RailShadowPx;
 
                 _navRailReady = true;
                 RefreshSectionRail(_activeTabKey);
@@ -147,42 +176,260 @@ namespace ConditioningControlPanel
                 if (row.Tile != null)
                     row.Tile.Background = NavFrozen(NavRailRules.WithAlpha(hue, NavRailRules.TileTintAlpha));
                 PaintNavTint(row);
+                if (btn.Content is Panel face && row.Tile != null && row.Hue != null)
+                {
+                    row.Face = face;
+                    row.Coin = BuildNavCoin(face, row.Tile, row.Hue.Color);
+                    face.RenderTransformOrigin = new Point(0.5, 0.4);
+                    face.RenderTransform = new TransformGroup { Children = { row.Tilt, row.Lift } };
+                }
                 HookNavPress(row);
                 var captured = row;
-                btn.MouseEnter += (_, __) => PaintNavRing(captured, hover: true);
-                btn.MouseLeave += (_, __) => PaintNavRing(captured, hover: false);
+                btn.MouseEnter += (_, __) =>
+                {
+                    captured.Hovered = true;
+                    PaintNavRing(captured, hover: true);
+                    PaintNavCoin(captured);
+                };
+                btn.MouseLeave += (_, __) =>
+                {
+                    captured.Hovered = false;
+                    captured.Pressed = false;
+                    PaintNavRing(captured, hover: false);
+                    SettleNavTilt(captured);
+                    PaintNavCoin(captured);
+                };
+                btn.MouseMove += (_, e) => TiltNavCoin(captured, e);
                 PaintNavRing(row, hover: false);
+                PaintNavCoin(row);
                 btn.ToolTipOpening += (_, __) => btn.ToolTip = BuildNavRowToolTip(captured);
                 _navSectionRows.Add(row);
             }
         }
 
-        /// <summary>Pressed = scale 0.97 for 80ms (Reduced 40ms, Off instant). The transform sits
-        /// on the Button, never on the icon, so ChromeFx's hover nudge on the Viewbox keeps its
-        /// own RenderTransform.</summary>
+        /// <summary>Press (polish wave 10): the coin travels DepthRules.PressTravelPx down in PressMs
+        /// and drops its shadow; release springs it to wherever the state now puts it (lit = the
+        /// socket, else hover lift) over ReleaseMs, passing the target by ReleaseOvershootPx. The
+        /// release listens with handledEventsToo, AFTER the Button raised Click, so a press that
+        /// navigates springs straight into its socket.</summary>
         private static void HookNavPress(NavSectionRow row)
         {
             var btn = row.Button;
-            btn.RenderTransform = row.Press;
-            void To(double v)
+            btn.PreviewMouseLeftButtonDown += (_, __) =>
             {
-                int ms = NavRailRules.Ms(NavPressMs, MotionFx.Level);
-                if (ms <= 0)
+                row.Pressed = true;
+                SettleNavTilt(row);
+                PaintNavCoin(row);
+            };
+            btn.AddHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler((_, __) =>
+            {
+                if (!row.Pressed) return;
+                row.Pressed = false;
+                row.Hovered = btn.IsMouseOver;
+                PaintNavCoin(row, spring: true);
+            }), handledEventsToo: true);
+        }
+
+        // ============================== the coin (polish wave 10) ==============================
+
+        /// <summary>Builds the coin's parts around an authored row: the disc goes under the tile,
+        /// the dish right over it (under the art), the socket shade and the lip over the art and
+        /// the hue wash but under the ring. Brushes come from Resources/Theme/Depth.xaml by
+        /// resource reference; only the disc is painted here, from the row's hue.</summary>
+        internal static NavCoinParts BuildNavCoin(Panel face, Border tile, Color hue)
+        {
+            var coin = new NavCoinParts();
+            int row = Grid.GetRow(tile);
+
+            coin.Disc = new Ellipse
+            {
+                Width = NavRailRules.CoinDiscWidth,
+                Height = NavRailRules.CoinDiscHeight,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                // Centred on the tile's foot; the shift pushes it down by the shadow length.
+                Margin = new Thickness(0, 0, 0, -NavRailRules.CoinDiscHeight / 2),
+                Fill = BuildNavCoinDisc(hue),
+                RenderTransform = coin.DiscShift,
+                IsHitTestVisible = false,
+            };
+            coin.Dish = new Border
+            {
+                Width = tile.Width,
+                Height = tile.Height,
+                CornerRadius = tile.CornerRadius,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Dish.SetResourceReference(Border.BackgroundProperty, "DepthCoinDish");
+            coin.Socket = new Border
+            {
+                Width = NavRailRules.CoinRimSize,
+                Height = NavRailRules.CoinRimSize,
+                CornerRadius = new CornerRadius(NavRailRules.CoinRimRadius),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0,
+                IsHitTestVisible = false,
+            };
+            coin.Socket.SetResourceReference(Border.BackgroundProperty, "DepthPressedShade");
+            coin.Rim = new Border
+            {
+                Width = NavRailRules.CoinRimSize,
+                Height = NavRailRules.CoinRimSize,
+                CornerRadius = new CornerRadius(NavRailRules.CoinRimRadius),
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Rim.SetResourceReference(Border.BorderBrushProperty, "DepthCoinRim");
+            foreach (var part in new FrameworkElement[] { coin.Disc, coin.Dish, coin.Socket, coin.Rim })
+                Grid.SetRow(part, row);
+
+            var kids = face.Children;
+            kids.Insert(kids.IndexOf(tile), coin.Disc);
+            kids.Insert(kids.IndexOf(tile) + 1, coin.Dish);
+            // Over the art and its hue wash, under the ring (the art itself when a row has no wash).
+            int over = -1;
+            for (int i = 0; i < kids.Count; i++)
+                if (kids[i] is Border b && (b.Tag as string) == NavTintTag) over = i;
+            if (over < 0)
+                for (int i = 0; i < kids.Count; i++)
+                    if (kids[i] is Viewbox) over = i;
+            int at = over < 0 ? kids.IndexOf(coin.Dish) + 1 : over + 1;
+            kids.Insert(at, coin.Socket);
+            kids.Insert(at + 1, coin.Rim);
+            return coin;
+        }
+
+        /// <summary>The contact disc: the DepthDropDisc shape in the row's own shadow colour.</summary>
+        internal static Brush BuildNavCoinDisc(Color hue)
+        {
+            var b = new RadialGradientBrush
+            {
+                Center = new Point(0.5, 0.5), GradientOrigin = new Point(0.5, 0.5), RadiusX = 0.5, RadiusY = 0.5,
+            };
+            foreach (var (c, o) in NavRailRules.CoinDiscStops(hue)) b.GradientStops.Add(new GradientStop(c, o));
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>Paints a coin for its row's state, eased by DepthRules (Motion Off = instant).</summary>
+        private static void PaintNavCoin(NavSectionRow row, bool spring = false)
+        {
+            if (row.Coin == null) return;
+            try
+            {
+                int full = row.Pressed ? DepthRules.PressMs : spring ? DepthRules.ReleaseMs : DepthRules.HoverMs;
+                ApplyNavCoinState(row.Coin, row.Lift, row.Pressed, row.Active, row.Hovered,
+                    DepthRules.Ms(full, MotionFx.Level), spring);
+            }
+            catch (Exception ex) { App.Logger?.Debug("PaintNavCoin: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The coin law in one place. Light swaps at once (a lit coin wears the pressed lip and the
+        /// socket shade, an idle one the raised lip); motion eases: the face travels to
+        /// <see cref="NavRailRules.CoinTravel"/>, the disc to <see cref="NavRailRules.CoinShadow"/>
+        /// and fades out when the coin sits down. <paramref name="ms"/> 0 = set, no animation.
+        /// </summary>
+        internal static void ApplyNavCoinState(NavCoinParts coin, TranslateTransform lift,
+            bool pressed, bool active, bool hovered, int ms, bool spring)
+        {
+            bool seated = pressed || active;
+            coin.Rim.SetResourceReference(Border.BorderBrushProperty, seated ? "DepthPressedBevel" : "DepthCoinRim");
+            coin.Socket.Opacity = seated ? 1 : 0;
+
+            double travel = NavRailRules.CoinTravel(pressed, active, hovered);
+            double shadow = NavRailRules.CoinShadow(pressed, active, hovered);
+            double discTo = shadow > 0 ? 1 : 0;
+
+            if (ms <= 0)
+            {
+                lift.BeginAnimation(TranslateTransform.YProperty, null);
+                coin.DiscShift.BeginAnimation(TranslateTransform.YProperty, null);
+                coin.Disc.BeginAnimation(UIElement.OpacityProperty, null);
+                lift.Y = travel;
+                if (shadow > 0) coin.DiscShift.Y = shadow;
+                coin.Disc.Opacity = discTo;
+                return;
+            }
+
+            var span = TimeSpan.FromMilliseconds(ms);
+            var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+            double from = lift.Y;
+            if (spring && Math.Abs(from - travel) > 0.01)
+            {
+                var k = new DoubleAnimationUsingKeyFrames { Duration = span };
+                k.KeyFrames.Add(new EasingDoubleKeyFrame(NavRailRules.CoinOvershoot(from, travel),
+                    KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(ms * 0.6)), ease));
+                k.KeyFrames.Add(new EasingDoubleKeyFrame(travel, KeyTime.FromTimeSpan(span),
+                    new QuadraticEase { EasingMode = EasingMode.EaseInOut }));
+                lift.BeginAnimation(TranslateTransform.YProperty, k);
+            }
+            else
+            {
+                lift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(travel, span) { EasingFunction = ease });
+            }
+            if (shadow > 0)
+                coin.DiscShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(shadow, span) { EasingFunction = ease });
+            coin.Disc.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(discTo, span));
+        }
+
+        /// <summary>Hover lean toward the pointer (the launcher tile recipe), idle coins only and
+        /// only where DepthRules.TiltAllowed says so. A lit coin sits in its socket and stays level.</summary>
+        private static void TiltNavCoin(NavSectionRow row, MouseEventArgs e)
+        {
+            try
+            {
+                if (row.Face == null || row.Tile == null) return;
+                if (row.Pressed || !NavRailRules.CoinTilts(row.Active, MotionFx.Level, PerformanceProfile.CurrentTier))
                 {
-                    row.Press.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                    row.Press.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                    row.Press.ScaleX = v;
-                    row.Press.ScaleY = v;
+                    SettleNavTilt(row);
                     return;
                 }
-                var a = new DoubleAnimation(v, TimeSpan.FromMilliseconds(ms))
-                { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
-                row.Press.BeginAnimation(ScaleTransform.ScaleXProperty, a);
-                row.Press.BeginAnimation(ScaleTransform.ScaleYProperty, a);
+                double w = row.Tile.ActualWidth, h = row.Tile.ActualHeight;
+                if (w <= 0 || h <= 0) return;
+                var at = e.GetPosition(row.Tile);
+                double angle = NavRailRules.CoinTilt(at.X / w * 2 - 1, at.Y / h * 2 - 1);
+                int ms = DepthRules.Ms(NavRailRules.CoinTiltMs, MotionFx.Level);
+                if (ms <= 0) { row.Tilt.BeginAnimation(RotateTransform.AngleProperty, null); row.Tilt.Angle = angle; return; }
+                row.Tilt.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(angle, TimeSpan.FromMilliseconds(ms)));
             }
-            btn.PreviewMouseLeftButtonDown += (_, __) => To(NavPressScale);
-            btn.PreviewMouseLeftButtonUp += (_, __) => To(1);
-            btn.MouseLeave += (_, __) => To(1);
+            catch (Exception ex) { App.Logger?.Debug("TiltNavCoin: {E}", ex.Message); }
+        }
+
+        private static void SettleNavTilt(NavSectionRow row)
+        {
+            int ms = DepthRules.Ms(DepthRules.HoverMs, MotionFx.Level);
+            if (ms <= 0 || (row.Tilt.Angle == 0 && !row.Tilt.HasAnimatedProperties))
+            {
+                row.Tilt.BeginAnimation(RotateTransform.AngleProperty, null);
+                row.Tilt.Angle = 0;
+                return;
+            }
+            row.Tilt.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(ms))
+            { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+        }
+
+        /// <summary>
+        /// The rail's shadow on the page (NavRailShadow, DepthRules.RailShadowPx wide), tinted by
+        /// the section hue. The integrator calls this from PaintSectionWash; until then the
+        /// Rectangle wears the neutral DepthRailShadow theme brush.
+        /// </summary>
+        internal void PaintDepthRail(Color hue)
+        {
+            try
+            {
+                if (NavRailShadow == null) return;
+                var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+                foreach (var (c, o) in NavRailRules.RailShadowStops(hue)) g.GradientStops.Add(new GradientStop(c, o));
+                g.Freeze();
+                NavRailShadow.Fill = g;
+            }
+            catch (Exception ex) { App.Logger?.Debug("PaintDepthRail: {E}", ex.Message); }
         }
 
         /// <summary>The section name, the open count when a badge is up, and a greyed "Ctrl+2".
@@ -352,6 +599,9 @@ namespace ConditioningControlPanel
                             new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)));
                     }
                 }
+                // The lit coin sits down in its socket (polish wave 10); a press in flight wins.
+                if (row.Active) SettleNavTilt(row);
+                PaintNavCoin(row);
             }
             catch (Exception ex) { App.Logger?.Debug("PaintNavRowActive: {E}", ex.Message); }
         }
