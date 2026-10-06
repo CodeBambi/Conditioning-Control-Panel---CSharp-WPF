@@ -351,11 +351,31 @@ namespace ConditioningControlPanel
                     return;
                 }
 
+                // The CC Labs row: the launcher itself, the title-bar button's own verb.
+                if (entry.OpensLauncher)
+                {
+                    Services.Launcher.LauncherHost.BackToLauncher();
+                    return;
+                }
+
                 // A Library launcher: the dialog or window itself, as its strip pill opens it.
                 if (!string.IsNullOrWhiteSpace(entry.LauncherKey) && mw.OpenLibraryLauncher(entry.LauncherKey!))
                     return;
 
                 if (!string.IsNullOrWhiteSpace(entry.TabKey)) mw.ShowTab(entry.TabKey);
+
+                // The Games row lands on the Games zone even when the wall was scrolled down
+                // (ShowTab keeps a plain return's scroll). Background, after layout, the same
+                // priority the strip's zone pills use.
+                if (!string.IsNullOrWhiteSpace(entry.PlayZone))
+                {
+                    var zone = entry.PlayZone!;
+                    mw.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                    {
+                        try { mw.PlayTab?.ScrollToZone(zone); }
+                        catch (Exception ex) { App.Logger?.Debug("Palette PlayZone({Zone}): {E}", zone, ex.Message); }
+                    }));
+                }
 
                 if (!string.IsNullOrWhiteSpace(entry.SectionKey))
                 {
