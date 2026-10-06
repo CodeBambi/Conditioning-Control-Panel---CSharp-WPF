@@ -688,7 +688,9 @@
                 </StackPanel>
 
                 <!-- PINNED FOOT: Circe's tab, the fuse chip (Collapsed unless a ceremony is near),
-                     EMI's dock, Friends, then the Settings gear. Frozen order (WebNudgeTests). -->
+                     the Settings gear, EMI's dock, then Friends LAST (owner, 2026-10-06: the gear
+                     goes back where 7.0.5 had it, above EMI; the bottom of the rail is always
+                     the profile bubble). Frozen order (WebNudgeTests). -->
                 <StackPanel Grid.Row="2">
                     <!-- CIRCE'S TAB (2026-09-21): took the old spiral medallion's slot. See
                          Controls/ChasterRailChip.cs. -->
@@ -697,10 +699,6 @@
                     <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). Self-wiring, Collapsed by default.
                          See Controls/DescentFuseRailChip.cs. -->
                     <controls:DescentFuseRailChip x:Name="FuseRailChip"/>
-                    <!-- EMI's dock. See Controls/EmiDock.xaml. -->
-                    <controls:EmiDock x:Name="EmiDockChip"/>
-                    <!-- Friends (2026-09-23): the quick drawer; Social > Friends is the full page. -->
-                    <friends:FriendsRailChip x:Name="FriendsChip"/>
                     <!-- THE GEAR. Tag "appsettings" (the tab key "settings" is the dashboard). -->
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavSectionButton}"
                             poss:Possession.Role="TabHeader" poss:Possession.Name="the Settings door"
@@ -734,6 +732,10 @@
                             <TextBlock Grid.Row="1" Text="{loc:Str nav_door_settings}" Style="{StaticResource NavSectionLabel}"/>
                         </Grid>
                     </Button>
+                    <!-- EMI's dock. See Controls/EmiDock.xaml. -->
+                    <controls:EmiDock x:Name="EmiDockChip"/>
+                    <!-- Friends (2026-09-23): the quick drawer; Social > Friends is the full page. -->
+                    <friends:FriendsRailChip x:Name="FriendsChip"/>
                 </StackPanel>
             </Grid>
         </Border>

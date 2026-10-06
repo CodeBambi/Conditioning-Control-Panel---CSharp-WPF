@@ -179,9 +179,22 @@
                 <ColumnDefinition Width="22"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <!-- Home's lilac (NavStripRules.Lilac, #B79CFF) at rest, brighter on hover. The star
-                 sits at the top, the word runs up the bar, the chevron at the foot says which
-                 way a click goes (set in code). -->
+            <!-- THE MOD'S COLOUR (owner, 2026-10-06): the handle and the rail border wear the
+                 active mod's glow colour, not Home's lilac. The six keys below are defaults
+                 only; SettingsTabView.PaintFavoritesDrawer overwrites them from FxTheme at
+                 start and on every mod change, and every DynamicResource repaints. -->
+            <Grid.Resources>
+                <SolidColorBrush x:Key="FavHandleFill" Color="#1FB79CFF"/>
+                <SolidColorBrush x:Key="FavHandleBorder" Color="#66B79CFF"/>
+                <SolidColorBrush x:Key="FavHandleFillHover" Color="#40B79CFF"/>
+                <SolidColorBrush x:Key="FavHandleBorderHover" Color="#FFB79CFF"/>
+                <SolidColorBrush x:Key="FavHandleText" Color="#FFB79CFF"/>
+                <SolidColorBrush x:Key="FavHandleTextHover" Color="#FFE4DAFF"/>
+            </Grid.Resources>
+            <!-- The star sits at the top, the word runs up the bar, the chevron at the foot says
+                 which way a click goes (set in code). The juice (a breathing glow, the star's
+                 twinkle, the motes and the burst on a click) is all code: SettingsTabView.xaml.cs,
+                 "the favorites drawer" region, gated on MotionFx. -->
             <Button x:Name="FavoritesDrawerHandle" x:FieldModifier="internal" Grid.Column="0"
                     Margin="2,5,2,5" Cursor="Hand" Click="FavoritesDrawerHandle_Click"
                     AutomationProperties.Name="{loc:Str rail_favorites_drawer}"
@@ -190,22 +203,22 @@
                 <Button.Style>
                     <Style TargetType="Button">
                         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                        <Setter Property="Foreground" Value="#FFB79CFF"/>
+                        <Setter Property="Foreground" Value="{DynamicResource FavHandleText}"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="Button">
-                                    <Border x:Name="hb" CornerRadius="9" BorderThickness="1"
-                                            Background="#1FB79CFF" BorderBrush="#66B79CFF">
+                                    <Border x:Name="hb" CornerRadius="9" BorderThickness="1.5"
+                                            Background="{DynamicResource FavHandleFill}" BorderBrush="{DynamicResource FavHandleBorder}">
                                         <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="hb" Property="Background" Value="#40B79CFF"/>
-                                            <Setter TargetName="hb" Property="BorderBrush" Value="#FFB79CFF"/>
-                                            <Setter Property="Foreground" Value="#FFE4DAFF"/>
+                                            <Setter TargetName="hb" Property="Background" Value="{DynamicResource FavHandleFillHover}"/>
+                                            <Setter TargetName="hb" Property="BorderBrush" Value="{DynamicResource FavHandleBorderHover}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource FavHandleTextHover}"/>
                                         </Trigger>
                                         <Trigger Property="IsKeyboardFocused" Value="True">
-                                            <Setter TargetName="hb" Property="BorderBrush" Value="#FFB79CFF"/>
+                                            <Setter TargetName="hb" Property="BorderBrush" Value="{DynamicResource FavHandleBorderHover}"/>
                                         </Trigger>
                                         <Trigger Property="IsPressed" Value="True">
                                             <Setter TargetName="hb" Property="Opacity" Value="0.82"/>
@@ -222,8 +235,13 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Text="&#x2605;" FontSize="12" Margin="0,9,0,0"
-                               HorizontalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    <TextBlock x:Name="FavoritesDrawerStar" x:FieldModifier="internal" Grid.Row="0" Text="&#x2605;" FontSize="13" Margin="0,9,0,0"
+                               HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <TextBlock.RenderTransform>
+                            <ScaleTransform/>
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
                     <TextBlock Grid.Row="1" Text="{loc:Str rail_favorites_drawer}" FontSize="12" FontWeight="SemiBold"
                                HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
@@ -246,7 +264,7 @@
             <Grid x:Name="FavoritesDrawerBody" x:FieldModifier="internal" Grid.Column="1"
                   Width="0" ClipToBounds="True">
         <Border x:Name="FavoritesRail" x:FieldModifier="internal" Width="87" HorizontalAlignment="Right" Margin="0,5,5,5"
-                Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+                Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource FavHandleBorder}"
                 BorderThickness="1" CornerRadius="12">
             <Border.Resources>
                 <Style x:Key="RailSectionCaption" TargetType="TextBlock">
@@ -460,6 +478,13 @@
             </Grid>
         </Border>
             </Grid>
+            <!-- THE MOTES. Embers rising along the handle and a few dust sprites, in the mod's
+                 particle colour (AmbientFxCanvas reads FxTheme itself), plus the burst a click
+                 and a new pin fire at the handle. Drawn last so it sits over the handle, hit-test
+                 off, and 36 px wider to the left so a burst can spill over the page. Registered
+                 against the dashboard tab beside MosaicFx so ShowTab parks it. -->
+            <fx:AmbientFxCanvas x:Name="FavoritesDrawerFx" x:FieldModifier="internal" Grid.Column="0" Grid.ColumnSpan="2"
+                                Margin="-36,0,0,0" IsHitTestVisible="False"/>
         </Grid>
 
         <!-- ============================================================ -->

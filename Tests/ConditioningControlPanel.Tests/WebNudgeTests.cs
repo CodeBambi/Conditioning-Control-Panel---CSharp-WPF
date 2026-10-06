@@ -53,13 +53,14 @@ public class WebNudgeTests
         Assert.Contains("RetireWebBannerBeat()", open.Value);
     }
 
-    /// <summary>The rail foot's order is frozen: Circe's tab, the fuse chip, EMI's dock,
-    /// Friends, then the Settings gear last.</summary>
+    /// <summary>The rail foot's order is frozen: Circe's tab, the fuse chip, the Settings gear,
+    /// EMI's dock, then Friends last (the owner: the bottom of the rail is the profile bubble,
+    /// the gear sits where 7.0.5 had it).</summary>
     [Fact]
     public void ThePinnedFootOrderIsFrozen()
     {
         var xaml = ReadSource("MainWindow", "MainWindow.xaml");
-        var order = new[] { "ChasterRail", "FuseRailChip", "EmiDockChip", "FriendsChip", "DoorSettings" }
+        var order = new[] { "ChasterRail", "FuseRailChip", "DoorSettings", "EmiDockChip", "FriendsChip" }
             .Select(n => xaml.IndexOf("x:Name=\"" + n + "\"", StringComparison.Ordinal)).ToArray();
         Assert.All(order, i => Assert.True(i >= 0, "a pinned-foot landmark is gone"));
         for (int i = 1; i < order.Length; i++)

@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using ConditioningControlPanel.Controls;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -52,6 +53,12 @@ namespace ConditioningControlPanel.Views.Tabs
             FavoritesDrawer.MouseLeave += (_, _) => { if (_drawerPeeking && !_drawerPeekTimer.IsEnabled) EndFavoritesDrawerPeek(animate: true); };
             IsVisibleChanged += (_, _) => { if (!IsVisible && _drawerPeeking) EndFavoritesDrawerPeek(animate: false); };
             ApplyFavoritesDrawerSetting();
+            // The handle wears the mod's colour and its juice (owner, 2026-10-06).
+            PaintFavoritesDrawer();
+            Loaded += (_, _) => { HookFavoritesDrawerMod(); StartFavoritesDrawerFx(); };
+            Unloaded += (_, _) => { UnhookFavoritesDrawerMod(); StopFavoritesDrawerFx(); };
+            IsVisibleChanged += (_, _) => { if (IsVisible) StartFavoritesDrawerFx(); else StopFavoritesDrawerFx(); };
+            FavoritesDrawerHandle.MouseEnter += (_, _) => TwinkleFavoritesDrawerStar(1.3, 150);
         }
 
         // ------------------------------------------------------------ the favorites drawer
@@ -110,6 +117,8 @@ namespace ConditioningControlPanel.Views.Tabs
             _drawerPeeking = false;
             _drawerPeekTimer.Stop();
             bool open = !_drawerOpen;
+            BurstFavoritesDrawer(open ? 90 : 60);
+            TwinkleFavoritesDrawerStar(1.45, 220);
             SetFavoritesDrawer(open, animate: true);
             var s = App.Settings?.Current;
             if (s == null || s.FavoritesDrawerOpen == open) return;
@@ -134,6 +143,8 @@ namespace ConditioningControlPanel.Views.Tabs
                 SetFavoritesDrawer(true, animate: true);
                 glowAfter = Services.MotionFx.AllowTransitions ? FavoritesDrawerSlideMs + 40 : 0;
             }
+            BurstFavoritesDrawer(90);
+            TwinkleFavoritesDrawerStar(1.45, 220);
             if (_drawerPeeking)
             {
                 _drawerPeekTimer.Stop();
@@ -165,6 +176,153 @@ namespace ConditioningControlPanel.Views.Tabs
             _drawerPeeking = false;
             _drawerPeekTimer.Stop();
             SetFavoritesDrawer(App.Settings?.Current?.FavoritesDrawerOpen == true, animate);
+        }
+
+        // ---- the handle's colour and juice (owner, 2026-10-06: "the mod color and FX, add juice
+        // and make it more noticeable, maybe some particles")
+
+        /// <summary>Breathing glow on the handle: how far it swings and how long one breath takes.</summary>
+        internal const double FavoritesGlowLow = 0.30, FavoritesGlowHigh = 0.85;
+        internal const int FavoritesGlowBreathMs = 2600;
+        /// <summary>The star twinkles on its own this often while ambient loops are allowed.</summary>
+        internal const int FavoritesTwinkleEveryMs = 6500;
+
+        private EventHandler<Models.ModPackage>? _drawerModHook;
+        private System.Windows.Threading.DispatcherTimer? _drawerTwinkle;
+
+        /// <summary>The six FavHandle* brushes and the rail border, from the mod's glow colour
+        /// (FxTheme, the same source every ambient effect reads). Lilac only when no palette is up.</summary>
+        internal void PaintFavoritesDrawer()
+        {
+            try
+            {
+                var c = Services.FxTheme.GlowColor;
+                var res = FavoritesDrawer.Resources;
+                res["FavHandleFill"] = Frozen(c, 0x26);
+                res["FavHandleBorder"] = Frozen(c, 0x80);
+                res["FavHandleFillHover"] = Frozen(c, 0x4D);
+                res["FavHandleBorderHover"] = Frozen(c, 0xFF);
+                res["FavHandleText"] = Frozen(Lighten(c, 0.18), 0xFF);
+                res["FavHandleTextHover"] = Frozen(Lighten(c, 0.55), 0xFF);
+                ApplyFavoritesDrawerGlow(c);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Favorites drawer paint: {E}", ex.Message); }
+        }
+
+        /// <summary>A soft glow in the mod colour under the handle; it breathes while ambient
+        /// loops are allowed, holds still under Reduced, and is absent under Off.</summary>
+        private void ApplyFavoritesDrawerGlow(Color c)
+        {
+            if (!Services.MotionFx.AllowTransitions) { FavoritesDrawerHandle.Effect = null; return; }
+            var glow = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = c, BlurRadius = 18, ShadowDepth = 0, Opacity = (FavoritesGlowLow + FavoritesGlowHigh) / 2,
+            };
+            FavoritesDrawerHandle.Effect = glow;
+            if (!Services.MotionFx.AllowAmbientLoops) return;
+            var breath = new System.Windows.Media.Animation.DoubleAnimation(FavoritesGlowLow, FavoritesGlowHigh, TimeSpan.FromMilliseconds(FavoritesGlowBreathMs))
+            {
+                AutoReverse = true,
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut },
+            };
+            System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(breath, MainWindow.AmbientFrameRate);
+            glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, breath);
+        }
+
+        private void HookFavoritesDrawerMod()
+        {
+            if (_drawerModHook != null || App.Mods == null) return;
+            _drawerModHook = (_, _) => Dispatcher.BeginInvoke(new Action(() => { PaintFavoritesDrawer(); FavoritesDrawerFx?.StartLayers(FavoritesDrawerFxConfig()); }));
+            App.Mods.ModChanged += _drawerModHook;
+        }
+
+        private void UnhookFavoritesDrawerMod()
+        {
+            if (_drawerModHook == null || App.Mods == null) return;
+            App.Mods.ModChanged -= _drawerModHook;
+            _drawerModHook = null;
+        }
+
+        /// <summary>Motes rising along the handle, in the mod's particle colour, sparse: the
+        /// handle is 22 px wide and the canvas 58, so a handful reads as a glint, not weather.</summary>
+        private static AmbientFxConfig FavoritesDrawerFxConfig() => new()
+        {
+            Layers = AmbientFxLayers.Embers | AmbientFxLayers.DustField,
+            Intensity = 0.9,
+            DustDensity = 0.35,
+        };
+
+        private void StartFavoritesDrawerFx()
+        {
+            try
+            {
+                if (FavoritesDrawerFx == null) return;
+                if (FavoritesDrawerFx.IsRunning) FavoritesDrawerFx.Resume();
+                else FavoritesDrawerFx.StartLayers(FavoritesDrawerFxConfig());
+                if (Services.MotionFx.AllowAmbientLoops)
+                {
+                    _drawerTwinkle ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(FavoritesTwinkleEveryMs) };
+                    _drawerTwinkle.Tick -= FavoritesTwinkle_Tick;
+                    _drawerTwinkle.Tick += FavoritesTwinkle_Tick;
+                    _drawerTwinkle.Start();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("Favorites drawer fx: {E}", ex.Message); }
+        }
+
+        private void StopFavoritesDrawerFx()
+        {
+            try { FavoritesDrawerFx?.Pause(); } catch { }
+            _drawerTwinkle?.Stop();
+        }
+
+        private void FavoritesTwinkle_Tick(object? sender, EventArgs e)
+        {
+            if (!IsVisible || FavoritesDrawerHandle.IsMouseOver) return;
+            TwinkleFavoritesDrawerStar(1.3, 190);
+        }
+
+        /// <summary>The star swells to <paramref name="scale"/> and settles back, <paramref name="ms"/> each way. No-op under Off.</summary>
+        internal void TwinkleFavoritesDrawerStar(double scale, int ms)
+        {
+            if (!Services.MotionFx.AllowTransitions) return;
+            if (FavoritesDrawerStar.RenderTransform is not ScaleTransform st) return;
+            var up = new System.Windows.Media.Animation.DoubleAnimation(1.0, scale, TimeSpan.FromMilliseconds(ms))
+            {
+                AutoReverse = true,
+                EasingFunction = new System.Windows.Media.Animation.BackEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut, Amplitude = 0.6 },
+            };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, up);
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, up);
+        }
+
+        /// <summary>A spark burst at the handle's centre (mod particle colour). Nothing at the
+        /// Performance tier or under reduced motion: the canvas refuses it itself.</summary>
+        internal void BurstFavoritesDrawer(int count)
+        {
+            try
+            {
+                if (FavoritesDrawerFx == null || !FavoritesDrawerFx.IsRunning) return;
+                var p = FavoritesDrawerHandle.TranslatePoint(new Point(FavoritesDrawerHandle.ActualWidth / 2, FavoritesDrawerHandle.ActualHeight / 2), FavoritesDrawerFx);
+                FavoritesDrawerFx.Burst(p.X, p.Y, null, count);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Favorites drawer burst: {E}", ex.Message); }
+        }
+
+        private static SolidColorBrush Frozen(Color c, byte alpha)
+        {
+            var b = new SolidColorBrush(Color.FromArgb(alpha, c.R, c.G, c.B));
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>Mix toward white by <paramref name="t"/> (0..1) so the label reads on the dark page.</summary>
+        internal static Color Lighten(Color c, double t)
+        {
+            t = Math.Clamp(t, 0, 1);
+            byte L(byte v) => (byte)Math.Round(v + (255 - v) * t);
+            return Color.FromRgb(L(c.R), L(c.G), L(c.B));
         }
 
         private readonly System.Windows.Threading.DispatcherTimer _clickChoiceClose = new()
