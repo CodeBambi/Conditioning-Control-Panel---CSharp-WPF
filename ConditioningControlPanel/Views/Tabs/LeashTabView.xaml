@@ -6,7 +6,7 @@
          friends drawer pins on top: offers, your own card (with the cut, never priced) and one
          card per account you hold. The "?" explainer sits top right. The punishment gate is a
          panel overlay above every page (MainWindow.Leash.cs), so this page cannot route round it. -->
-    <Grid Margin="32,20,32,20">
+    <Grid Margin="32,20,32,20" MaxWidth="660">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -14,7 +14,7 @@
         <Border x:Name="HelpHost" x:FieldModifier="internal" Grid.Row="0" HorizontalAlignment="Right"
                 Margin="0,0,0,8"/>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel MaxWidth="620">
+            <StackPanel>
                 <StackPanel x:Name="SectionHost" x:FieldModifier="internal"/>
                 <StackPanel x:Name="EmptyPanel" x:FieldModifier="internal" HorizontalAlignment="Center"
                             Margin="18,40,18,28">
