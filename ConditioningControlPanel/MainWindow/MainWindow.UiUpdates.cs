@@ -2390,7 +2390,8 @@ namespace ConditioningControlPanel
             MessageBox.Show(Loc.Get("msg_assets_refreshed"), Loc.Get("title_success"));
         }
 
-        private void BtnViewLog_Click(object sender, RoutedEventArgs e)
+        // Settings > Data > Open logs folder (nav rework 2026-10-06); orphaned before that.
+        internal void BtnViewLog_Click(object sender, RoutedEventArgs e)
         {
             var logPath = Path.Combine(App.UserDataPath, "logs");
             if (Directory.Exists(logPath))

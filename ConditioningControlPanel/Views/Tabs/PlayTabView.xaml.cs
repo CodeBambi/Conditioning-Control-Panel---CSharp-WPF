@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using ConditioningControlPanel.Controls;
 
 namespace ConditioningControlPanel.Views.Tabs
@@ -37,6 +38,67 @@ namespace ConditioningControlPanel.Views.Tabs
 
             // Nothing composed here since the games left the wall (2026-09-18): the only
             // ambient canvas this view ever owned sat behind the Rabbit Hole hero.
+        }
+
+        /// <summary>Zone keys the Play section strip reaches (nav rework contract 2).</summary>
+        public static readonly string[] ZoneKeys = { "games", "sessions", "eyes" };
+
+        /// <summary>
+        /// Brings a zone header to the top of the wall: "games" | "sessions" | "eyes". An unknown
+        /// key does nothing. The header glows once for 2 s so the eye lands on it; the glow is
+        /// skipped under reduced or no motion (MotionFx), the scroll is not.
+        /// </summary>
+        public void ScrollToZone(string zone)
+        {
+            var header = ZoneHeader(zone);
+            if (header == null) return;
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    // Top-align, not just "into view": BringIntoView settles for the nearest edge.
+                    if (WallScroll.Content is Visual content && header.IsDescendantOf(content))
+                    {
+                        var y = header.TransformToAncestor(content).Transform(new Point(0, 0)).Y;
+                        WallScroll.ScrollToVerticalOffset(Math.Max(0, y - 8));
+                    }
+                    else header.BringIntoView();
+                    GlowZoneHeader(header);
+                }
+                catch (Exception ex) { App.Logger?.Debug("Play ScrollToZone({Zone}): {E}", zone, ex.Message); }
+            }), System.Windows.Threading.DispatcherPriority.Normal);
+        }
+
+        /// <summary>The header element a zone key names, or null.</summary>
+        internal FrameworkElement? ZoneHeader(string? zone) => (zone ?? "").Trim().ToLowerInvariant() switch
+        {
+            "games" => ZoneGames,
+            "sessions" => ZoneSessions,
+            "eyes" => ZoneEyes,
+            _ => null,
+        };
+
+        private static void GlowZoneHeader(FrameworkElement header)
+        {
+            if (!Services.MotionFx.AllowAmbientLoops) return;
+            var glow = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Color.FromRgb(0xFF, 0x69, 0xB4),
+                BlurRadius = 18,
+                ShadowDepth = 0,
+                Opacity = 0,
+            };
+            header.Effect = glow;
+            var anim = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(2) };
+            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0.9,
+                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(250))));
+            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0.9,
+                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400))));
+            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0,
+                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromSeconds(2))));
+            anim.Completed += (_, _) => { if (ReferenceEquals(header.Effect, glow)) header.Effect = null; };
+            glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, anim);
         }
     }
 }

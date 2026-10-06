@@ -113,6 +113,31 @@
             </Grid>
         </Border>
 
+        <!-- ====================== logs (nav rework 2026-10-06) ====================== -->
+        <!-- BtnViewLog_Click (MainWindow.UiUpdates.cs) had lost its button in an older
+             settings pass; support asks for these files, so it gets a row here. -->
+        <Border Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueDataBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDataBrush}"/>
+                <Grid Margin="15,12,15,12" MinHeight="34" ToolTip="{loc:Str settings_data_logs_tip}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Style="{StaticResource SettingLabel}"
+                               Text="{loc:Str settings_data_logs_label}"
+                               Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                    <Button Grid.Column="1" x:Name="BtnOpenLogsFolder" x:FieldModifier="internal"
+                            Content="{loc:Str settings_data_logs_open}"
+                            Style="{StaticResource OutlineButton}" Padding="12,5" VerticalAlignment="Center"
+                            Click="BtnOpenLogsFolder_Click"/>
+                </Grid>
+            </Grid>
+        </Border>
+
         <!-- ====================== cloud backup signpost ======================= -->
         <Border Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
                 BorderBrush="{StaticResource SectionHueDataBorderBrush}">
