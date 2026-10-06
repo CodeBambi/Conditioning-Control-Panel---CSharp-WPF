@@ -19,6 +19,18 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Background" Value="#40FFFFFF"/>
         </Style>
+        <!-- Polish wave 10 (depth): Home's raised things throw their shadow through these two keys.
+             They start as copies of the neutral DepthDropBand / DepthDropDisc ink; SettingsTabView.PaintDepthHome(hue) swaps in a
+             shadow pulled toward the section hue (DepthRules.ShadowColor). -->
+        <LinearGradientBrush x:Key="HomeDepthDropBand" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0.0" Color="#9E06020F"/>
+            <GradientStop Offset="1.0" Color="#0006020F"/>
+        </LinearGradientBrush>
+        <RadialGradientBrush x:Key="HomeDepthDropDisc" Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+            <GradientStop Offset="0.0" Color="#9E06020F"/>
+            <GradientStop Offset="0.6" Color="#5C06020F"/>
+            <GradientStop Offset="1.0" Color="#0006020F"/>
+        </RadialGradientBrush>
     </UserControl.Resources>
         <Grid>
         <Grid.ColumnDefinitions>
@@ -664,11 +676,21 @@
                          1.0 mid-animation. This border sits between them and is otherwise
                          untouched, so the three transforms compose instead of fighting. -->
                     <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True" Margin="24"
-                            RenderTransformOrigin="0.5,0.5">
+                            RenderTransformOrigin="0.5,0.5"
+                            Background="{DynamicResource DepthWellFloorBrush}"
+                            BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
                         <Border.RenderTransform>
                             <ScaleTransform x:Name="LogoDriftScale" ScaleX="1" ScaleY="1"/>
                         </Border.RenderTransform>
                         <Grid>
+                            <!-- The deepest WELL on the page (polish wave 10): the plate is sunk, its
+                                 top band runs half again as deep as any other well and the lit foot
+                                 catches the lamp. Hit-test off; the wordmark sits in it. -->
+                            <Rectangle x:Name="LogoWellTop" x:FieldModifier="internal" Fill="{DynamicResource DepthWellTop}"
+                                       Height="14" VerticalAlignment="Top" IsHitTestVisible="False"/>
+                            <Rectangle x:Name="LogoWellLeft" x:FieldModifier="internal" Fill="{DynamicResource DepthWellLeft}"
+                                       Width="9" HorizontalAlignment="Left" IsHitTestVisible="False"/>
+                            <Rectangle Fill="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
                             <fx:AnimatedLogoImage x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                    RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -1192,6 +1214,11 @@
                          own window, mute still mutes audio the hidden page is playing. Nothing here
                          is hidden on fold - the controls keep their own Visibility owners
                          (DeeperBrowserBadge, the webcam label) and a second writer would fight them. -->
+                    <!-- The bezel's LIP (polish wave 10): a raised strip behind the header row,
+                         lit top edge and shaded foot. Behind the controls, hit-test off. -->
+                    <Border x:Name="BrowserLip" x:FieldModifier="internal" Grid.Row="0" Margin="-4,-4,-4,1"
+                            CornerRadius="9" BorderThickness="1" IsHitTestVisible="False"
+                            BorderBrush="{DynamicResource DepthRaisedBevel}" Background="{DynamicResource DepthRaisedSheen}"/>
                     <Grid Grid.Row="0" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -1207,7 +1234,8 @@
                             <Button x:Name="HelpBtnBrowser" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="Browser"/>
                         </StackPanel>
                         <!-- Site Toggle - inline -->
-                        <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="2" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="1" Margin="10,0,0,0" VerticalAlignment="Center"
+                                BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
                             <StackPanel Orientation="Horizontal">
                                 <!-- #867: Click, not Checked. A RadioButton raises Checked only when
                                      it CHANGES, so clicking the site you are already on did nothing -
@@ -1220,15 +1248,33 @@
                                              Foreground="{DynamicResource TextLightBrush}" FontSize="10" Cursor="Hand" Margin="2,1">
                                     <RadioButton.Template>
                                         <ControlTemplate TargetType="RadioButton">
-                                            <Border x:Name="border" Background="Transparent" CornerRadius="8" Padding="8,3">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkBrush}"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                                </Trigger>
+                                    <!-- Polish wave 10: a raised pill (bevel + sheen) that sits PRESSED IN
+                                         (ActiveSinkPx, pressed bevel and shade) while it is the site. -->
+                                    <Border x:Name="border" Background="Transparent" CornerRadius="8"
+                                            BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1">
+                                        <Border.RenderTransform>
+                                            <TranslateTransform/>
+                                        </Border.RenderTransform>
+                                        <Border x:Name="face" CornerRadius="7" Padding="7,2" Background="{DynamicResource DepthRaisedSheen}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="-1"/></Setter.Value></Setter>
+                                        </Trigger>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+                                            <Setter TargetName="face" Property="Background" Value="{DynamicResource DepthPressedShade}"/>
+                                            <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="1"/></Setter.Value></Setter>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="2"/></Setter.Value></Setter>
+                                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+                                        </Trigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="border" Property="Background" Value="#353565"/>
                                             </Trigger>
@@ -1248,14 +1294,32 @@
                                          Foreground="{DynamicResource TextLightBrush}" FontSize="10" Cursor="Hand" Margin="2,1">
                                 <RadioButton.Template>
                                     <ControlTemplate TargetType="RadioButton">
-                                        <Border x:Name="border" Background="Transparent" CornerRadius="8" Padding="8,3">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <!-- Polish wave 10: a raised pill (bevel + sheen) that sits PRESSED IN
+                                             (ActiveSinkPx, pressed bevel and shade) while it is the site. -->
+                                        <Border x:Name="border" Background="Transparent" CornerRadius="8"
+                                                BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1">
+                                            <Border.RenderTransform>
+                                                <TranslateTransform/>
+                                            </Border.RenderTransform>
+                                            <Border x:Name="face" CornerRadius="7" Padding="7,2" Background="{DynamicResource DepthRaisedSheen}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
                                         </Border>
                                         <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="-1"/></Setter.Value></Setter>
+                                            </Trigger>
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+                                                <Setter TargetName="face" Property="Background" Value="{DynamicResource DepthPressedShade}"/>
+                                                <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="1"/></Setter.Value></Setter>
                                                 <Setter Property="Foreground" Value="White"/>
                                                 <Setter Property="FontWeight" Value="SemiBold"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="2"/></Setter.Value></Setter>
+                                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
                                             </Trigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="border" Property="Background" Value="#353565"/>
@@ -1478,7 +1542,22 @@
                          which hides the native window itself; the control is never re-parented and
                          never disposed, so the page, its audio pipeline and the pop-out flow all
                          survive a fold and re-expanding shows the same page with no reload. -->
-                    <Border x:Name="BrowserFoldBody" x:FieldModifier="internal"
+                    <!-- THE BEZEL (polish wave 10). The screen below is inset 5 px into a SUNKEN
+                         ring; the ring wears the well bands. Airspace: the bands are declared
+                         BEFORE the screen and live in the ring, so nothing is drawn over the
+                         WebView2 rect. Follows the fold, so a folded card stays header-only. -->
+                    <Border x:Name="BrowserBezel" x:FieldModifier="internal" Grid.Row="1"
+                            Visibility="{Binding Visibility, ElementName=BrowserFoldBody}"
+                            CornerRadius="9" ClipToBounds="True" IsHitTestVisible="False"
+                            Background="{DynamicResource DepthWellFloorBrush}"
+                            BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
+                        <Grid>
+                            <Rectangle Fill="{DynamicResource DepthWellTop}" Height="9" VerticalAlignment="Top"/>
+                            <Rectangle Fill="{DynamicResource DepthWellLeft}" Width="6" HorizontalAlignment="Left"/>
+                            <Rectangle Fill="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom"/>
+                        </Grid>
+                    </Border>
+                    <Border x:Name="BrowserFoldBody" x:FieldModifier="internal" Margin="5"
                             Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -1731,8 +1810,8 @@
             <Border x:Name="DashBillboard" x:FieldModifier="internal" Grid.Row="1"
                     Visibility="Collapsed" Margin="0,0,0,12"
                     CornerRadius="12" ClipToBounds="True"
-                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                    Background="{DynamicResource DepthWellFloorBrush}"
+                    BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
                 <Grid>
                     <Grid.Resources>
                         <Style x:Key="SlideControl" TargetType="Button">
@@ -1740,16 +1819,41 @@
                             <Setter Property="Height" Value="40"/>
                             <Setter Property="Foreground" Value="White"/>
                             <Setter Property="Background" Value="#D918182B"/>
-                            <Setter Property="BorderBrush" Value="#80FFFFFF"/>
+                            <Setter Property="BorderBrush" Value="Transparent"/>
                             <Setter Property="Cursor" Value="Hand"/>
                             <Setter Property="Opacity" Value="0"/>
                             <Setter Property="Template">
                                 <Setter.Value>
+                                    <!-- A raised COIN on the glass (polish wave 10): drop disc RaisedPx
+                                         under it, bevel + sheen on the face; pressed travels
+                                         PressTravelPx with the pressed bevel and no disc. -->
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}" CornerRadius="20"
-                                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
+                                        <Grid>
+                                            <Ellipse x:Name="drop" Fill="{DynamicResource HomeDepthDropDisc}" Margin="1,3,-1,-3" IsHitTestVisible="False"/>
+                                            <Border x:Name="coin" Background="{TemplateBinding Background}" CornerRadius="20"
+                                                    BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1">
+                                                <Border.RenderTransform>
+                                                    <TranslateTransform/>
+                                                </Border.RenderTransform>
+                                                <Grid>
+                                                    <Border x:Name="sheen" CornerRadius="19" Background="{DynamicResource DepthRaisedSheen}" IsHitTestVisible="False"/>
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                            <Border CornerRadius="20" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" IsHitTestVisible="False"/>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="coin" Property="RenderTransform"><Setter.Value><TranslateTransform Y="-2"/></Setter.Value></Setter>
+                                                <Setter TargetName="drop" Property="Margin" Value="1,5,-1,-5"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="coin" Property="RenderTransform"><Setter.Value><TranslateTransform Y="2"/></Setter.Value></Setter>
+                                                <Setter TargetName="drop" Property="Visibility" Value="Collapsed"/>
+                                                <Setter TargetName="coin" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+                                                <Setter TargetName="sheen" Property="Background" Value="{DynamicResource DepthPressedShade}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
@@ -1775,14 +1879,25 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="RadioButton">
+                                        <!-- A raised bead (polish wave 10); the current slide's
+                                             dot is pressed in: no drop, the pressed bevel, one px down. -->
                                         <Grid Background="Transparent">
-                                            <Ellipse x:Name="dot" Width="7" Height="7" Fill="#99FFFFFF"/>
+                                            <Ellipse x:Name="drop" Width="9" Height="9" Margin="1,3,-1,-3" Fill="{DynamicResource HomeDepthDropDisc}" IsHitTestVisible="False"/>
+                                            <Ellipse x:Name="dot" Width="7" Height="7" Fill="#99FFFFFF"
+                                                     Stroke="{DynamicResource DepthRaisedBevel}" StrokeThickness="1">
+                                                <Ellipse.RenderTransform>
+                                                    <TranslateTransform/>
+                                                </Ellipse.RenderTransform>
+                                            </Ellipse>
                                         </Grid>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="dot" Property="Fill" Value="{DynamicResource PinkBrush}"/>
                                                 <Setter TargetName="dot" Property="Width" Value="10"/>
                                                 <Setter TargetName="dot" Property="Height" Value="10"/>
+                                                <Setter TargetName="dot" Property="Stroke" Value="{DynamicResource DepthPressedBevel}"/>
+                                                <Setter TargetName="drop" Property="Visibility" Value="Collapsed"/>
+                                                <Setter TargetName="dot" Property="RenderTransform"><Setter.Value><TranslateTransform Y="1"/></Setter.Value></Setter>
                                             </Trigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="dot" Property="Fill" Value="White"/>
@@ -1893,6 +2008,12 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                    <!-- The billboard is the same kind of SUNKEN well as the browser bezel
+                         (polish wave 10): the bands lie over the poster's rim, under the coins. -->
+                    <Rectangle x:Name="BillboardWellTop" x:FieldModifier="internal" Fill="{DynamicResource DepthWellTop}"
+                               Height="9" VerticalAlignment="Top" IsHitTestVisible="False"/>
+                    <Rectangle Fill="{DynamicResource DepthWellLeft}" Width="6" HorizontalAlignment="Left" IsHitTestVisible="False"/>
+                    <Rectangle Fill="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
                     <Button x:Name="BillboardPrevious" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
                             HorizontalAlignment="Left" VerticalAlignment="Center" Margin="20,0,0,0"
                             ToolTip="{loc:Str btn_previous}" AutomationProperties.Name="{loc:Str btn_previous}">
@@ -1906,7 +2027,8 @@
                               StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                     </Button>
                     <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18"
-                            CornerRadius="16" Background="#D918182B" Padding="8,0">
+                            CornerRadius="16" Background="#D918182B" Padding="7,0"
+                            BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
                         <StackPanel x:Name="BillboardDots" x:FieldModifier="internal" Orientation="Horizontal"/>
                     </Border>
                     <Button x:Name="BillboardPause" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
@@ -1954,6 +2076,15 @@
             <!--   VelvetBtnCatalogue opens app.cclabs.app/catalogue.           -->
             <!-- The "?" popover still explains the strip.                      -->
             <!-- ============================================================ -->
+            <!-- THE LEDGE (polish wave 10): the strip throws LedgeUpPx of shadow up onto what
+                 sits above it (in the card's bottom margin, clear of the WebView2 rect) and a
+                 RaisedPx drop band onto the sheet below it. Both hit-test off. -->
+            <Rectangle x:Name="AccountLedgeUp" x:FieldModifier="internal" Grid.Row="2" Height="14"
+                       VerticalAlignment="Top" Margin="8,-14,8,0" IsHitTestVisible="False"
+                       Fill="{DynamicResource DepthLedgeUp}"/>
+            <Rectangle x:Name="AccountStripDrop" x:FieldModifier="internal" Grid.Row="2" Height="3"
+                       VerticalAlignment="Bottom" Margin="6,0,6,-3" IsHitTestVisible="False"
+                       RadiusX="3" RadiusY="3" Fill="{DynamicResource HomeDepthDropBand}"/>
             <Border x:Name="AccountStrip" x:FieldModifier="internal" Grid.Row="2" CornerRadius="12" Padding="9,6"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
@@ -1963,6 +2094,10 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+
+                    <!-- The ledge's lit top (polish wave 10): the raised sheen, under every control. -->
+                    <Border x:Name="AccountStripSheen" x:FieldModifier="internal" Grid.ColumnSpan="3" Margin="-9,-6"
+                            CornerRadius="11" IsHitTestVisible="False" Background="{DynamicResource DepthRaisedSheen}"/>
 
                     <!-- The logged-out and logged-in faces share ONE cell: MainWindow.Login.cs
                          flips exactly these two Visibilities against each other, so they must
