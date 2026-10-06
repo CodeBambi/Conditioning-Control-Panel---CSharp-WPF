@@ -29,7 +29,7 @@ public class ChromeFxNavTests
     [InlineData("presets", 2)]      // Studio
     [InlineData("haptics", 3)]      // Studio zone pill
     [InlineData("lab", 12)]         // Play, first pill (Games)
-    [InlineData("playsessions", 13)] // Play zone pill
+    [InlineData("playsessions", 14)] // Play zone pill (after Eyes: page order)
     [InlineData("availablesubjects", 19)] // Social, first pill (Lobby)
     [InlineData("assets", 30)]      // Library, first pill
     // No "justdrop" row: the shop became a window (JustDropHostService), so it left the rail and

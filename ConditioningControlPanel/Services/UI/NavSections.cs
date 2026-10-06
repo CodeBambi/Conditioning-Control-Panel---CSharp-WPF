@@ -79,8 +79,8 @@ namespace ConditioningControlPanel.Services.UI
             new NavSection(Play, "nav_door_play", "play", new[]
             {
                 T("play", "nav_tab_games"),
+                Z("playeyes", "nav_tab_eyes"),               // PlayTab scrolled to EYES (page order wins)
                 Z("playsessions", "nav_tab_sessions"),       // PlayTab scrolled to SESSIONS
-                Z("playeyes", "nav_tab_eyes"),               // PlayTab scrolled to EYES
                 T("deeper", "tab_deeper"),
                 // Pages of their own that live inside Play's zones: owned here, no pill.
                 T("gradedintake", "tab_gradedintake", hidden: true),
