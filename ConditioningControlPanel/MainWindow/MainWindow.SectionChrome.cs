@@ -201,6 +201,10 @@ namespace ConditioningControlPanel
         /// Off = nothing (NavGlow). Called by What moved's Show me and by the redirect note.
         /// Every silent return writes a Debug line.
         /// </summary>
+        /// <summary>Palette door: a Ctrl+K row that lands inside a page rings its target the
+        /// way Show me does (the partial itself is private to the window).</summary>
+        internal void GlowNavKey(string key) => GlowNavTarget(key);
+
         partial void GlowNavTarget(string tabKey)
         {
             try

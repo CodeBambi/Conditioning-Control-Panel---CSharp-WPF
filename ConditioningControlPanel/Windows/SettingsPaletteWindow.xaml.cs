@@ -164,7 +164,32 @@ namespace ConditioningControlPanel
             // Click-away dismiss. Deliberately NOT an Escape close: it must not arm the panic
             // hand-off, because no Escape press happened.
             ClosePalette(fromEscape: false);
+            // A click on the panel closed us: make sure the panel is the one left in front.
+            // Closing an owned window can hand activation to whatever was active before the
+            // palette opened (desk run 2 2026-10-06 saw the browser come forward). Only when
+            // the foreground window already belongs to this process: a click into another app
+            // keeps that app.
+            try
+            {
+                if (Owner is Window owner && ForegroundIsOurs())
+                    owner.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => { try { owner.Activate(); } catch { } }));
+            }
+            catch { }
         }
+
+        private static bool ForegroundIsOurs()
+        {
+            var fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return false;
+            GetWindowThreadProcessId(fg, out var pid);
+            return pid == (uint)Environment.ProcessId;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
         // =====================================================================================
         //  search
@@ -386,6 +411,11 @@ namespace ConditioningControlPanel
                 {
                     var view = mw.FindName("AppSettingsTab") as Views.Tabs.AppSettingsTabView;
                     view?.FocusSection(entry.SectionKey);
+                    // The section pill rings once, as Show me rings it: a palette hit that lands
+                    // inside Settings must read the same as a redirect landing there. Normal, after
+                    // the section swap has laid out (desk run 2 2026-10-06: pill selected, no ring).
+                    var sectionKey = entry.SectionKey!;
+                    mw.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => mw.GlowNavKey(sectionKey)));
                 }
 
                 if (entry.ElementNames.Length == 0) return;
