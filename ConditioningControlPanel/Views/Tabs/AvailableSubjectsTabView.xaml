@@ -274,8 +274,17 @@
                             </Border>
                         </StackPanel>
                         <Border x:Name="AvailableSubjectsEmptyPanel" x:FieldModifier="internal" DockPanel.Dock="Top" Visibility="Collapsed">
-                            <TextBlock x:Name="TxtLobbyEmpty" x:FieldModifier="internal" Text="{loc:Str lobby_empty_open}"
-                                       Style="{StaticResource LobbyColumnEmpty}"/>
+                            <!-- Empty state: one line, then the host doors right under it (nav rework). -->
+                            <StackPanel>
+                                <TextBlock x:Name="TxtLobbyEmpty" x:FieldModifier="internal" Text="{loc:Str lobby_empty_open}"
+                                           Style="{StaticResource LobbyColumnEmpty}"/>
+                                <WrapPanel x:Name="LobbyEmptyHostRow" x:FieldModifier="internal" HorizontalAlignment="Center" Margin="0,8,0,4">
+                                    <Button x:Name="BtnEmptyHostChess" x:FieldModifier="internal" Style="{StaticResource LobbyPill}"
+                                            Content="{loc:Str lobby_host_chess}" Click="BtnHostChess_Click"/>
+                                    <Button x:Name="BtnEmptyHostGoon" x:FieldModifier="internal" Style="{StaticResource LobbyPill}"
+                                            Content="{loc:Str lobby_host_goon}" Click="BtnHostGoon_Click"/>
+                                </WrapPanel>
+                            </StackPanel>
                         </Border>
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <ItemsControl x:Name="AvailableSubjectsList" x:FieldModifier="internal"

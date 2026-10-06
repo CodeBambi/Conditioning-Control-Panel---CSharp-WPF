@@ -33,6 +33,9 @@ public sealed partial class FriendsDrawer : Border
     public const double DrawerWidth = 300;
     public const double DrawerMaxHeight = 548;
 
+    /// <summary>The page body's widest: a list wider than this reads as a table, not a list.</summary>
+    public const double PageMaxWidth = 620;
+
     private IFriendsService? _svc;
     private readonly Func<IFriendsService?> _resolve;
 
@@ -82,10 +85,17 @@ public sealed partial class FriendsDrawer : Border
     /// <summary>Raised when the drawer wants to fold (Escape inside it, Settings).</summary>
     public event Action? CloseRequested;
 
+    /// <summary>True when this drawer is the body of the Social > Friends PAGE rather than the
+    /// rail chip's popup: it fills its column, has no shadow, leaves the leash to the Leash page,
+    /// and never claims Escape (on a page Escape belongs to the panic key, nothing to fold).</summary>
+    internal bool AsPage { get; }
+
     /// <summary>The drawer. <paramref name="service"/> is for the suite; the app passes nothing
-    /// and the drawer reads <c>App.Friends</c> each time it opens.</summary>
-    public FriendsDrawer(IFriendsService? service = null)
+    /// and the drawer reads <c>App.Friends</c> each time it opens. <paramref name="asPage"/> hosts
+    /// the same body as a page (Views/Tabs/FriendsTabView): one drawer class, two hosts.</summary>
+    public FriendsDrawer(IFriendsService? service = null, bool asPage = false)
     {
+        AsPage = asPage;
         _resolve = service != null ? () => service : () => App.Friends;
         _svc = _resolve();
 
@@ -151,8 +161,19 @@ public sealed partial class FriendsDrawer : Border
         Child = _root;
 
         // Esc in here closes a box, the picker or the drawer, not the panic key's press (TAB-8).
-        Services.Safety.EscapeClaim.Mark(this);
-        PreviewKeyDown += OnKey;
+        // A page has nothing to fold: it never claims Escape, so the panic key always gets it.
+        if (asPage)
+        {
+            Width = double.NaN;
+            MaxWidth = PageMaxWidth;
+            MaxHeight = double.PositiveInfinity;
+            Effect = null;
+        }
+        else
+        {
+            Services.Safety.EscapeClaim.Mark(this);
+            PreviewKeyDown += OnKey;
+        }
         BuildAddBox();
         Render();
     }
@@ -370,7 +391,8 @@ public sealed partial class FriendsDrawer : Border
             return;
         }
 
-        _list.Children.Add(_leash);
+        // The page leaves the leash to Social > Leash; the popup keeps it pinned on top.
+        if (!AsPage) _list.Children.Add(_leash);
         AddFeed();
         var (online, offline) = FriendsDrawerRules.Split(snap);
         (online, offline) = FriendsDrawerRules.HostingFirst(online, offline, f => TableFor(f) != null);
@@ -399,7 +421,7 @@ public sealed partial class FriendsDrawer : Border
         bool extras = false;
         ListExtrasShowing(ref extras);
         if (online.Count + offline.Count + req == 0 && !extras)
-            _list.Children.Add(EmptyLine(Loc.Get("friends_empty")));
+            _list.Children.Add(AsPage ? PageEmptyBlock() : EmptyLine(Loc.Get("friends_empty")));
         AddListExtras();
 
         StartAmbient();
@@ -422,6 +444,37 @@ public sealed partial class FriendsDrawer : Border
         _rows[id] = row;
         _rowOrder.Add(id);
         _list.Children.Add(row);
+    }
+
+    /// <summary>Opens (or folds) the add-by-code box under the list. The foot's Add friend and the
+    /// page's empty state both come here.</summary>
+    internal void ToggleAddBox(bool show)
+    {
+        _addBox.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show) return;
+        if (_addResult != null) _addResult.Text = "";
+        RefreshInviteLine();
+        _codeBox?.Focus();
+        MotionFx.StaggerIn(new FrameworkElement[] { _addBox });
+    }
+
+    internal bool AddBoxOpen => _addBox.Visibility == Visibility.Visible;
+
+    /// <summary>The page's empty state: one line and one button ("No friends yet. Add one").</summary>
+    private FrameworkElement PageEmptyBlock()
+    {
+        var box = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(18, 28, 18, 28), Tag = "friends-page-empty" };
+        var line = EmptyLine(Loc.Get("social_friends_empty"));
+        line.Margin = new Thickness(0, 0, 0, 12);
+        box.Children.Add(line);
+        var btn = FriendsLook.Pill(Loc.Get("social_friends_empty_add"), FriendsLook.MintBrush, FriendsLook.MintInkBrush,
+            FriendsLook.MintBrush, 10, new Thickness(16, 6, 16, 6), FriendsLook.MintBrush);
+        btn.FontSize = 13;
+        btn.HorizontalAlignment = HorizontalAlignment.Center;
+        btn.Tag = "friends-page-empty-add";
+        btn.Click += (_, _) => ToggleAddBox(true);
+        box.Children.Add(btn);
+        return box;
     }
 
     /// <summary>Signed out: one short line and a real button into the app's sign-in dialog.</summary>
@@ -838,18 +891,7 @@ public sealed partial class FriendsDrawer : Border
         add.Tag = "friends-add-open";
         add.HorizontalAlignment = HorizontalAlignment.Right;
         add.IsEnabled = _svc?.Available == true;
-        add.Click += (_, _) =>
-        {
-            bool show = _addBox.Visibility != Visibility.Visible;
-            _addBox.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            if (show)
-            {
-                if (_addResult != null) _addResult.Text = "";
-                RefreshInviteLine();
-                _codeBox?.Focus();
-                MotionFx.StaggerIn(new FrameworkElement[] { _addBox });
-            }
-        };
+        add.Click += (_, _) => ToggleAddBox(_addBox.Visibility != Visibility.Visible);
         Grid.SetColumn(add, 1);
         g.Children.Add(add);
 

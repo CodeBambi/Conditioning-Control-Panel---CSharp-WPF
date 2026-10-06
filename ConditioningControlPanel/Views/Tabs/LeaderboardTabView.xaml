@@ -716,7 +716,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- season name + live countdown -->
+                <!-- which board this is (seasons are retired: no season name, no countdown) -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" MinWidth="180" Margin="0,0,14,0">
                     <TextBlock x:Name="TxtLeaderboardSeason" x:FieldModifier="internal"
                                FontSize="13" FontWeight="Bold"
@@ -825,8 +825,12 @@
                             Content="&#x21BB;" ToolTip="{loc:Str btn_refresh}" Click="BtnRefreshLeaderboard_Click"/>
                     <Button x:Name="BtnJumpToMe" x:FieldModifier="internal" Style="{StaticResource LbIconButton}"
                             Content="&#x25CE;" ToolTip="{loc:Str btn_jump_to_me}" Click="BtnJumpToMe_Click"/>
-                    <Button x:Name="BtnViewSeasonRecap" x:FieldModifier="internal" Style="{StaticResource LbTextButton}"
-                            Content="{loc:Str recap_btn_view}" Visibility="Collapsed" Click="BtnViewSeasonRecap_Click"/>
+                    <!-- Seasons are retired (owner, 2026-09-24): the recap button stays in the tree for its
+                         callers but its host never shows, whatever they set on the button itself. -->
+                    <Border x:Name="SeasonRecapHost" x:FieldModifier="internal" Visibility="Collapsed">
+                        <Button x:Name="BtnViewSeasonRecap" x:FieldModifier="internal" Style="{StaticResource LbTextButton}"
+                                Content="{loc:Str recap_btn_view}" Visibility="Collapsed" Click="BtnViewSeasonRecap_Click"/>
+                    </Border>
                     <Button x:Name="HelpBtnLeaderboard" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}"
                             VerticalAlignment="Center" Margin="6,0,0,0" Tag="Leaderboard"/>
                 </StackPanel>
