@@ -88,6 +88,13 @@ namespace ConditioningControlPanel.Services
         /// dialog or window through MainWindow.OpenLibraryLauncher, the same verb as the strip pill.</summary>
         public string? LauncherKey { get; init; }
 
+        /// <summary>Play wall zone the row lands on after ShowTab ("games" for the Games row), so the
+        /// row means the same thing as the Games pill even when the wall was scrolled down.</summary>
+        public string? PlayZone { get; init; }
+
+        /// <summary>The row opens the CC Labs launcher itself (the title-bar button's verb).</summary>
+        public bool OpensLauncher { get; init; }
+
         /// <summary>The caption key carries its own leading emoji (rack form labels); the palette
         /// draws the glyph itself, so the label drops it.</summary>
         public bool StripLeadingGlyph { get; init; }
@@ -134,6 +141,10 @@ namespace ConditioningControlPanel.Services
         // Group captions (also used as the first breadcrumb crumb).
         private const string GroupNav = "set2_palette_group_go_to";
         private const string GroupDoors = "set2_palette_group_doors";
+        // Verbs for rows that do NOT navigate: a game row starts the game and a Library launcher
+        // opens a dialog, so their breadcrumb must not say "Go to" (desk run 2026-10-06).
+        private const string GroupLaunch = "launcher_panel_launch";
+        private const string GroupOpen = "btn_open";
         private const string GroupSettings = "nav_door_settings";
 
         private static readonly SettingsPaletteEntry[] _all = BuildEntries();
@@ -458,9 +469,20 @@ namespace ConditioningControlPanel.Services
             // thing that actually exists. The 🧪 flask is the Tier 2 lockband badge now, not a
             // room, so the rail's joystick is the honest glyph. Every card on the wall is listed
             // in the aliases so the palette finds a feature by name, not just by room.
-            Tab("play", "nav_door_play", "🕹️", "play",
-                "play lab experiments gaze focus blink trainer intake lockdown remote control loom tier 2 " +
-                "gaze minigame haptics vibration");
+            // Nav rework polish (2026-10-06): this row is the Games pill ("Go to > Play", caption
+            // Games) and lands on the Games zone, so it is the navigation twin of the game.* rows
+            // below, which LAUNCH. The Play door row above keeps the "Play" caption.
+            list.Add(new SettingsPaletteEntry
+            {
+                Id = "tab.play",
+                LabelKey = "nav_tab_games",
+                Glyph = "🕹️",
+                TabKey = "play",
+                PlayZone = "games",
+                ContextKeys = new[] { GroupNav, "nav_door_play" },
+                Aliases = "play games lab experiments gaze focus blink trainer intake lockdown remote control loom tier 2 " +
+                          "gaze minigame haptics vibration",
+            });
 
             // DECLARED AFTER Play on purpose, and the order is the whole point. Score() gives every
             // alias hit the same 40 and breaks ties by declaration order, so while this row sat
@@ -520,7 +542,7 @@ namespace ConditioningControlPanel.Services
                     Glyph = glyph,
                     TabKey = "assets",
                     LauncherKey = id,
-                    ContextKeys = new[] { GroupNav, "nav_door_library" },
+                    ContextKeys = new[] { GroupOpen, "nav_door_library" },
                     Aliases = aliases,
                 });
 
@@ -542,14 +564,21 @@ namespace ConditioningControlPanel.Services
             // ("where in the app is the bug report button?", answered with a screenshot), and the
             // games moved into the CC Labs launcher on 2026-09-18, which took the Arcademy's
             // palette row with them - so the honest answer is "through this button", not nothing.
-            void TitleBarButton(string id, string labelKey, string glyph, string element, string aliases) =>
+            // Breadcrumbs (desk run 2026-10-06): a bare "Go to" read as an empty path. The bug
+            // button is pulsed where it sits ("Go to > Title bar"); the CC Labs row opens the
+            // launcher itself, the same verb as the button, so it says Open.
+            void TitleBarButton(string id, string labelKey, string glyph, string element, string aliases,
+                                bool opensLauncher = false) =>
                 list.Add(new SettingsPaletteEntry
                 {
                     Id = "chrome." + id,
                     LabelKey = labelKey,
                     Glyph = glyph,
                     ElementNames = new[] { element },
-                    ContextKeys = new[] { GroupNav },
+                    ContextKeys = opensLauncher
+                        ? new[] { GroupOpen, "set2_palette_all_games" }
+                        : new[] { GroupNav, "set2_palette_title_bar" },
+                    OpensLauncher = opensLauncher,
                     Aliases = aliases,
                 });
 
@@ -557,7 +586,8 @@ namespace ConditioningControlPanel.Services
                            "bug report feedback crash log problem broken send report suggestion");
             TitleBarButton("cclabs", "launcher_window_title", "🕹", "BtnBackToLauncher",
                            "cc labs launcher games arcademy academy campus school back room casino "
-                           + "racing thoughts race goon game rabbit hole piece by piece");
+                           + "racing thoughts race goon game rabbit hole piece by piece",
+                           opensLauncher: true);
 
             // ---- the eight Settings sections -------------------------------------------
             void Section(string key, string labelKey, string glyph, string aliases) =>
@@ -761,6 +791,7 @@ namespace ConditioningControlPanel.Services
                     Id = e.Id, LabelKey = e.LabelKey, Glyph = e.Glyph, TabKey = e.TabKey,
                     SectionKey = e.SectionKey, ElementNames = e.ElementNames, ContextKeys = e.ContextKeys,
                     Aliases = e.Aliases, RackKey = e.RackKey, GameId = e.GameId,
+                    LauncherKey = e.LauncherKey, PlayZone = e.PlayZone, OpensLauncher = e.OpensLauncher,
                     StripLeadingGlyph = e.StripLeadingGlyph,
                     OldNames = old.Length > 0 ? old : e.OldNames,
                     IsAvailable = retired ? () => false : e.IsAvailable,
@@ -861,7 +892,9 @@ namespace ConditioningControlPanel.Services
                     LabelKey = "launcher_game_" + id + "_title",
                     Glyph = glyph,
                     GameId = id,
-                    ContextKeys = new[] { GroupNav, "nav_door_play", "nav_tab_games" },
+                    // "Launch > CC Labs", never "Go to": the row starts the game (desk run 2026-10-06,
+                    // shot 09f). The Games row (tab.play) is the navigation twin.
+                    ContextKeys = new[] { GroupLaunch, "launcher_window_title" },
                     Aliases = aliases,
                     IsAvailable = () => Launcher.LauncherCatalogue.Find(id)?.Available == true,
                 });

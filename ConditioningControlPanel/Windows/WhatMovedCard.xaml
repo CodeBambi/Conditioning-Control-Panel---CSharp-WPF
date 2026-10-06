@@ -44,6 +44,12 @@
                        Foreground="#CCFFFFFF" TextWrapping="Wrap"/>
 
             <ItemsControl x:Name="Rows">
+                <!-- Each row reads as its sentence in the UIA tree, never as the record. -->
+                <ItemsControl.ItemContainerStyle>
+                    <Style TargetType="ContentPresenter">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Text}"/>
+                    </Style>
+                </ItemsControl.ItemContainerStyle>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border Margin="0,0,0,8" Padding="12,9" CornerRadius="10"
@@ -65,6 +71,7 @@
                                            Foreground="White" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                 <Button Grid.Column="2" Margin="12,0,0,0" Padding="12,5" FontSize="12"
                                         Click="ShowMe_Click" Tag="{Binding}" Cursor="Hand"
+                                        AutomationProperties.Name="{Binding ShowMeName}"
                                         Style="{StaticResource PinkButton}"
                                         Content="{loc:Str whatmoved_show}"/>
                             </Grid>

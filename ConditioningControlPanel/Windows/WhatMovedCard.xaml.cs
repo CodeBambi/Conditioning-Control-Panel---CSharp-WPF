@@ -19,6 +19,14 @@ namespace ConditioningControlPanel
         /// <summary>The key the rail/strip glows after Show me: the Settings section when there is
         /// one, the tab key otherwise.</summary>
         public string GlowKey => SettingsSection ?? Tab;
+
+        /// <summary>Screen-reader name of the row's Show me button: the verb plus where it goes,
+        /// so five buttons do not all read "Show me".</summary>
+        public string ShowMeName => Loc.GetF("whatmoved_show_named", Text);
+
+        /// <summary>UI Automation names an ItemsControl item by ToString; a record's generated one
+        /// read "WhatMovedRow { Id = premium, ... }" to a screen reader (desk run 2026-10-06).</summary>
+        public override string ToString() => Text;
     }
 
     /// <summary>

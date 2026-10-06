@@ -207,6 +207,7 @@ namespace ConditioningControlPanel
 
         internal void ShowTab(string tab)
         {
+            EnsurePaletteShortcut();
             // Case is NOT significant here, and every key resolver downstream already agrees:
             // BarkTabAliases, NavDoorForTab and CanonicalTabKey all compare OrdinalIgnoreCase.
             // The dispatch did not - the two `==` redirects below and the `switch` on this
@@ -1061,6 +1062,64 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "RefreshBlinkTrainerTab failed");
             }
+        }
+
+        #endregion
+
+        #region Ctrl+K from every page
+
+        private bool _paletteShortcutHooked;
+
+        /// <summary>
+        /// Ctrl+K from every page (desk run 2026-10-06: it did nothing on Settings > Account &amp;
+        /// Plans while the rail's Search button worked). The window's KeyBinding only fires when
+        /// a key event is routed through the window, which needs a WPF element with keyboard
+        /// focus; after a page swap that drops focus (the focused control left the tree), or under
+        /// a control that marks the key handled, the chord went nowhere. This reads the raw
+        /// keystroke in the thread's message pre-process, before WPF routes it, so it cannot be
+        /// swallowed or lost. Installed once, lazily, from the first ShowTab.
+        /// </summary>
+        private void EnsurePaletteShortcut()
+        {
+            if (_paletteShortcutHooked) return;
+            _paletteShortcutHooked = true;
+            try { ComponentDispatcher.ThreadPreprocessMessage += OnPalettePreprocessMessage; }
+            catch (Exception ex) { App.Logger?.Debug("Palette shortcut hook: {E}", ex.Message); }
+        }
+
+        private const int WmKeyDown = 0x0100;
+        private const int VkK = 0x4B;
+
+        private void OnPalettePreprocessMessage(ref MSG msg, ref bool handled)
+        {
+            if (handled || msg.message != WmKeyDown || (int)msg.wParam != VkK) return;
+            // Only the first press of a held key, and only Ctrl alone (Ctrl+Alt+K is the camera).
+            if (((long)msg.lParam & (1L << 30)) != 0) return;
+            if (Keyboard.Modifiers != ModifierKeys.Control) return;
+            try
+            {
+                // Only keys aimed at THIS window: a dialog or the palette itself (which has its own
+                // Ctrl+K toggle) keeps its keys.
+                var hwnd = new WindowInteropHelper(this).Handle;
+                if (hwnd == IntPtr.Zero || msg.hwnd != hwnd || !IsActive) return;
+                // A user who rebound the camera shortcut to Ctrl+K keeps it: the window's own
+                // InputBinding order already gives the camera the chord, so leave it to WPF.
+                if (CameraOwnsPaletteChord()) return;
+                SettingsPaletteWindow.Toggle(this);
+                handled = true;
+            }
+            catch (Exception ex) { App.Logger?.Debug("Palette shortcut: {E}", ex.Message); }
+        }
+
+        private bool CameraOwnsPaletteChord()
+        {
+            foreach (var binding in InputBindings)
+            {
+                if (binding is KeyBinding kb && kb.Command != SettingsPaletteWindow.OpenPaletteCommand
+                    && kb.Gesture is KeyGesture g && g.Key == Key.K && g.Modifiers == ModifierKeys.Control)
+                    return true;
+            }
+            return false;
         }
 
         #endregion
