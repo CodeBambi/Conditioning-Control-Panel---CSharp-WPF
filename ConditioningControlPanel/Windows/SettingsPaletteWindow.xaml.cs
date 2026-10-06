@@ -590,6 +590,13 @@ namespace ConditioningControlPanel
             public string Context { get; }
             public Visibility ContextVisibility =>
                 string.IsNullOrEmpty(Context) ? Visibility.Collapsed : Visibility.Visible;
+
+            /// <summary>Caption, then its breadcrumb: what a screen reader announces for the row.
+            /// The default read "SettingsPaletteWindow+PaletteRow" (desk run 2026-10-06).</summary>
+            public string AutomationName =>
+                string.IsNullOrEmpty(Context) ? Label : Label + ", " + Context;
+
+            public override string ToString() => AutomationName;
         }
     }
 }

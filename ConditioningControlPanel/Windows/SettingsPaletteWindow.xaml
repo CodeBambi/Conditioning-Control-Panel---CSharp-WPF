@@ -30,6 +30,8 @@
             <Setter Property="Margin" Value="6,1"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <!-- Screen readers hear the row (caption, then where it goes), never the type name. -->
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}"/>
             <!-- Single click activates: a palette row is a destination, not a selection. -->
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="Item_Click"/>
             <Setter Property="Template">
