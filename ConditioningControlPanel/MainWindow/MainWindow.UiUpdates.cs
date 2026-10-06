@@ -2534,6 +2534,10 @@ namespace ConditioningControlPanel
             };
             App.Settings.Current.MotionLevel = level;
             App.Logger?.Information("Motion level set to {Level}", level);
+            // Polish wave 9: the window edge (travelling lift, ember strips) follows the level
+            // now, not at the next section change.
+            try { PaintSectionEdge(_edgeHue, 0); SectionEdgeParticles?.Refresh(); }
+            catch (Exception ex) { App.Logger?.Debug("Edge motion refresh failed: {E}", ex.Message); }
             // Loops read the gate when they start, so a switch to Reduced/Off needs the running ones
             // stopped now; a switch back to Full re-arms them on the next tab visit.
             if (!Services.MotionFx.AllowAmbientLoops)

@@ -22,8 +22,8 @@ namespace ConditioningControlPanel
         private bool _edgeReady;
         private AnimationClock? _edgeSpinClock;
 
-        /// <summary>Ember strips (the particles lane) hook in here; a no-op until they land.</summary>
-        partial void RetintEdgeParticles(Color hue);
+        /// <summary>The ember strips follow the edge's hue (EdgeParticles, the particles lane).</summary>
+        private void RetintEdgeParticles(Color hue) => SectionEdgeParticles?.Retint(hue);
 
         /// <summary>Collects the edge's brushes and wires the spin to the window's state. Called
         /// once after load, beside InitializeNavRail. Paints Home first: the authored Lilac.</summary>
@@ -53,6 +53,8 @@ namespace ConditioningControlPanel
 
                 _edgeReady = true;
                 PaintSectionEdge(_edgeHue, 0);
+                // Builds the four strips only under Full motion on a tier with a particle budget.
+                SectionEdgeParticles?.Mount(_edgeHue);
 
                 Activated += (_, _) => UpdateSectionEdgeMotion();
                 Deactivated += (_, _) => UpdateSectionEdgeMotion();

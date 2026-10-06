@@ -115,7 +115,9 @@ public class SectionEdgeRenderTests
         Assert.True(rail > 0 && rail < shell.IndexOf("InitializeSectionEdge();", StringComparison.Ordinal));
 
         var painter = AppFile("MainWindow", "MainWindow.SectionEdge.cs");
-        Assert.Contains("partial void RetintEdgeParticles(Color hue);", painter, StringComparison.Ordinal);
+        // The particles lane is wired in: the painter retints and mounts the ember strips.
+        Assert.Contains("SectionEdgeParticles?.Retint(hue)", painter, StringComparison.Ordinal);
+        Assert.Contains("SectionEdgeParticles?.Mount(_edgeHue)", painter, StringComparison.Ordinal);
         Assert.Contains("RetintEdgeParticles(hue);", painter, StringComparison.Ordinal);
         Assert.Contains("SetDesiredFrameRate", painter, StringComparison.Ordinal);
     }
@@ -129,7 +131,8 @@ public class SectionEdgeRenderTests
         Assert.True(start > 0 && stop > start, "the SectionEdgeHost block stopped parsing");
         var block = xaml.Substring(start, stop - start).TrimEnd();
         block = Regex.Replace(block, @"\s(Grid\.(Row|RowSpan|Column|ColumnSpan)|Panel\.ZIndex)=""\d+""", string.Empty);
-        var loose = "<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">"
+        var loose = "<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\""
+                    + " xmlns:navrail=\"clr-namespace:ConditioningControlPanel.Controls.NavRail;assembly=ConditioningControlPanel\">"
                     + block + "</Grid>";
 
         WpfRenderHarness.OnStaThread(() =>

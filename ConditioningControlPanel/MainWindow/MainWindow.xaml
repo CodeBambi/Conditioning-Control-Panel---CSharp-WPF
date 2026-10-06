@@ -2899,8 +2899,11 @@
             </Rectangle>
         </Grid>
 
-        <!-- EdgeParticles slot (polish wave 9, the embers lane): the four ember strips go here,
-             above the glow and under the line. -->
+        <!-- EdgeParticles slot (polish wave 9, the embers lane): four 30 px ember strips above
+             the glow and under the line. Nothing is allocated unless MotionFx.AllowParticles
+             (Full motion on a tier with a particle budget); MainWindow.SectionEdge.cs mounts and
+             retints them per section. -->
+        <navrail:EdgeParticles x:Name="SectionEdgeParticles"/>
 
         <Border x:Name="GlassWindowEdge" BorderThickness="3" CornerRadius="8" IsHitTestVisible="False">
             <Border.BorderBrush>
