@@ -791,8 +791,15 @@
              so the header and XP controls sit on it untouched; never hit-testable. -->
         <Border x:Name="HudBand" Grid.Row="1" Grid.RowSpan="3" Grid.Column="1"
                 Background="#33000000" IsHitTestVisible="False">
-            <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource TextMutedBrush}"
-                    Opacity="0.3"/>
+            <!-- Depth (nav polish wave 10, lane B): the band is a RECESS the HUD sits in. The lamp
+                 is above, so the top edge takes the well's inner shadow (DepthWellTop, WellPx
+                 tall); the 1px divider below is its foot line. -->
+            <Grid>
+                <Rectangle x:Name="HudBandWellTop" Height="9" VerticalAlignment="Top"
+                           Fill="{DynamicResource DepthWellTop}"/>
+                <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource TextMutedBrush}"
+                        Opacity="0.3"/>
+            </Grid>
         </Border>
 
         <!-- Header Bar - Row 1 -->
@@ -1730,8 +1737,14 @@
                          TextBlock to the pill so the whole chip pops. Height is pinned at 24 so the
                          XP row grows at most 1 px over the stat pills (HudBand). Mod
                          accent and Lockdown paint LevelChip's Background, not the text. -->
+                    <!-- Depth (wave 10, lane B): the chip is a RAISED coin. 1 px DepthRaisedBevel on
+                         its edge (Padding 10,2 became the label's 9,1 margin inside it, same
+                         spot), DepthRaisedSheen over whatever colour mod / Lockdown paint, and
+                         LevelChipDrop hanging RaisedPx under its foot (inside the chip so it rides
+                         the pop; its negative margin keeps the 24 px height). -->
                     <Border x:Name="LevelChip" Grid.Column="1" Background="{DynamicResource PinkBrush}"
-                            CornerRadius="12" Padding="10,2" Height="24" Margin="0,0,10,0"
+                            BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1"
+                            CornerRadius="12" Height="24" Margin="0,0,10,0"
                             VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                         <Border.Effect>
                             <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="12" ShadowDepth="0" Opacity="0.45"/>
@@ -1742,18 +1755,39 @@
                                 <RotateTransform x:Name="LevelChipRotate"/>
                             </TransformGroup>
                         </Border.RenderTransform>
-                        <TextBlock x:Name="TxtLevelLabel" Text="{loc:Str label_lvl_1_2}" Foreground="White"
-                                   poss:Possession.Role="Label" poss:Possession.Name="the level label"
-                                   FontWeight="ExtraBold" FontSize="14" VerticalAlignment="Center"/>
+                        <Grid>
+                            <Border x:Name="LevelChipDrop" VerticalAlignment="Bottom" Height="3" Margin="5,0,5,-4"
+                                    CornerRadius="0,0,8,8" Background="{DynamicResource DepthDropBand}"
+                                    IsHitTestVisible="False"/>
+                            <Border CornerRadius="11" Background="{DynamicResource DepthRaisedSheen}"
+                                    IsHitTestVisible="False"/>
+                            <TextBlock x:Name="TxtLevelLabel" Text="{loc:Str label_lvl_1_2}" Foreground="White"
+                                       poss:Possession.Role="Label" poss:Possession.Name="the level label"
+                                       FontWeight="ExtraBold" FontSize="14" VerticalAlignment="Center" Margin="9,1"/>
+                        </Grid>
                     </Border>
                     <!-- x:Name is for the PR-5 level-up burst: the TRACK is where the bar's cap
                          sits, and after a level-up the fill has already wrapped back to a sliver. -->
                     <!-- ToolTip is a live readout of the ambient-bubble daily XP budget (#1019/#1026);
                          the placeholder here only exists so ToolTipOpening fires, which rewrites it. -->
-                    <Border x:Name="XPBarTrack" Grid.Column="2" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0"
+                    <!-- Depth (wave 10, lane B): the track is a SUNKEN groove. DepthWellFloorBrush
+                         floor, the lamp's inner shade on its top and left edge, a lit foot line;
+                         drawn UNDER the fill, so they read only on the empty part. 10 px tall (was
+                         8) so the tube has a body; the row's height is still set by the chip. -->
+                    <Border x:Name="XPBarTrack" Grid.Column="2" Background="{DynamicResource DepthWellFloorBrush}" CornerRadius="5" Height="10" Margin="0,0,10,0"
                             ToolTip="{loc:Str label_ambient_bubble_xp_budget}" ToolTipOpening="XPBarTrack_ToolTipOpening">
                         <Grid>
-                            <Border x:Name="XPBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"
+                            <Border x:Name="XPGrooveTop" Height="5" VerticalAlignment="Top" CornerRadius="5,5,0,0"
+                                    Background="{DynamicResource DepthWellTop}" IsHitTestVisible="False"/>
+                            <Border x:Name="XPGrooveLeft" Width="6" HorizontalAlignment="Left" CornerRadius="5,0,0,5"
+                                    Background="{DynamicResource DepthWellLeft}" IsHitTestVisible="False"/>
+                            <Border x:Name="XPGrooveFoot" Height="1" VerticalAlignment="Bottom" Margin="5,0"
+                                    Background="{DynamicResource DepthWellFoot}" IsHitTestVisible="False"/>
+                            <!-- The TUBE: DepthTubeGloss over whatever colour the fill wears (pink,
+                                 the mod gradient, Lockdown crimson) and a DepthTubeBead riding the
+                                 leading edge. Both are children of the fill, so they follow its
+                                 width on the fill's own clock; the sheen sweep and level flash stay. -->
+                            <Border x:Name="XPBar" Background="{DynamicResource PinkBrush}" CornerRadius="5"
                                     HorizontalAlignment="Left" Width="100">
                                 <!-- Chrome FX (PR-1): a slow gloss travelling along the filled part of
                                      the bar. White on purpose - it reads as light catching the fill
@@ -1763,6 +1797,12 @@
                                 <!-- Inset past the pill's rounded caps: a Border does not clip its
                                      child to CornerRadius, so a full-bleed gloss would show square
                                      corners poking out of the 8px-tall bar at each end. -->
+                                <Grid>
+                                <Border x:Name="XPTubeGloss" CornerRadius="5" Background="{DynamicResource DepthTubeGloss}"
+                                        IsHitTestVisible="False"/>
+                                <Ellipse x:Name="XPTubeBead" Width="8" Height="8" HorizontalAlignment="Right"
+                                         VerticalAlignment="Center" Margin="0,0,1,0"
+                                         Fill="{DynamicResource DepthTubeBead}" IsHitTestVisible="False"/>
                                 <Border x:Name="XPBarSheen" Margin="4,0" IsHitTestVisible="False" Opacity="0">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -1772,8 +1812,9 @@
                                         </LinearGradientBrush>
                                     </Border.Background>
                                 </Border>
+                                </Grid>
                             </Border>
-                            <Border x:Name="XPBarFlashOverlay" Background="{DynamicResource PinkBrush}" CornerRadius="4"
+                            <Border x:Name="XPBarFlashOverlay" Background="{DynamicResource PinkBrush}" CornerRadius="5"
                                     HorizontalAlignment="Left"
                                     Width="{Binding Width, ElementName=XPBar}"
                                     Opacity="0" IsHitTestVisible="False">
@@ -1813,32 +1854,50 @@
                     <StackPanel x:Name="XPBarBonusList" Orientation="Horizontal"/>
 
                     <!-- Pink Hours Stat: Total Conditioning Time (Unlocks at 5 points) -->
-                    <Border x:Name="PillConditioningTime" Background="#2A2A4A" CornerRadius="10" Padding="10,4" Margin="0,0,8,0"
+                    <Border x:Name="PillConditioningTime" Background="#2A2A4A" CornerRadius="10" Margin="0,0,8,0"
+                            BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1"
                             Visibility="Collapsed" ToolTip="{loc:Str tooltip_total_conditioning_time_pink_hours_skill}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⏱️" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBlock x:Name="TxtPillConditioningTime" Text="{loc:Str label_0h_0m}" Foreground="#B0B0B0" FontSize="11" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid>
+                            <Border VerticalAlignment="Bottom" Height="3" Margin="5,0,5,-4" CornerRadius="0,0,7,7"
+                                    Background="{DynamicResource DepthDropBand}" IsHitTestVisible="False"/>
+                            <Border CornerRadius="9" Background="{DynamicResource DepthRaisedSheen}" IsHitTestVisible="False"/>
+                            <StackPanel Orientation="Horizontal" Margin="9,3">
+                                <TextBlock Text="⏱️" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBlock x:Name="TxtPillConditioningTime" Text="{loc:Str label_0h_0m}" Foreground="#B0B0B0" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- Hive Mind Stat: Online Users (Unlocks at 60 points total) -->
-                    <Border x:Name="PillOnlineUsers" Background="#2A2A4A" CornerRadius="10" Padding="10,4" Margin="0,0,8,0"
+                    <Border x:Name="PillOnlineUsers" Background="#2A2A4A" CornerRadius="10" Margin="0,0,8,0"
+                            BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1"
                             Visibility="Collapsed" ToolTip="{loc:Str tooltip_bimbos_online_now_hive_mind_skill}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,4,0"
-                                   Source="{Binding Source='👯‍♀️', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock x:Name="TxtPillOnlineUsers" Text="0" Foreground="#00FF88" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid>
+                            <Border VerticalAlignment="Bottom" Height="3" Margin="5,0,5,-4" CornerRadius="0,0,7,7"
+                                    Background="{DynamicResource DepthDropBand}" IsHitTestVisible="False"/>
+                            <Border CornerRadius="9" Background="{DynamicResource DepthRaisedSheen}" IsHitTestVisible="False"/>
+                            <StackPanel Orientation="Horizontal" Margin="9,3">
+                                <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,4,0"
+                                       Source="{Binding Source='👯‍♀️', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock x:Name="TxtPillOnlineUsers" Text="0" Foreground="#00FF88" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- Popular Girl Stat: Rank Percentile (Unlocks at 130 points total) -->
-                    <Border x:Name="PillRankPercentile" Background="#2A2A4A" CornerRadius="10" Padding="10,4"
+                    <Border x:Name="PillRankPercentile" Background="#2A2A4A" CornerRadius="10"
+                            BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1"
                             Visibility="Collapsed" ToolTip="{loc:Str tooltip_your_rank_percentile_popular_girl_skill}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,4,0"
-                                   Source="{Binding Source='👑', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock x:Name="TxtPillRankPercentile" Text="{loc:Str label_top_0}" Foreground="#FFD700" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid>
+                            <Border VerticalAlignment="Bottom" Height="3" Margin="5,0,5,-4" CornerRadius="0,0,7,7"
+                                    Background="{DynamicResource DepthDropBand}" IsHitTestVisible="False"/>
+                            <Border CornerRadius="9" Background="{DynamicResource DepthRaisedSheen}" IsHitTestVisible="False"/>
+                            <StackPanel Orientation="Horizontal" Margin="9,3">
+                                <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,4,0"
+                                       Source="{Binding Source='👑', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock x:Name="TxtPillRankPercentile" Text="{loc:Str label_top_0}" Foreground="#FFD700" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
                 </StackPanel>
             </Grid>
@@ -2103,7 +2162,7 @@
 
                 <!-- Remember: snapshot current setup / recall it. Right-click to re-save. -->
                 <Button x:Name="BtnRemember" Grid.Column="0" Width="68" Height="50" Margin="0,0,8,0"
-                        Style="{StaticResource PinkButton}" FontSize="20" Click="BtnRemember_Click"
+                        Style="{StaticResource PinkButton}" controls:HudPlank.Kind="Plank" FontSize="20" Click="BtnRemember_Click"
                         MouseRightButtonUp="BtnRemember_RightClick"
                         ToolTip="Remember my current setup">
                     <TextBlock x:Name="TxtRememberIcon" Text="☆" FontSize="24" VerticalAlignment="Center" TextAlignment="Center"/>
@@ -2159,7 +2218,10 @@
                 <!-- StartPressScale is the ignition dip (Velvet Kit 2). It is the button's only
                      RenderTransform and nothing else may claim it - HoverPop deliberately refuses
                      named transforms, so this stays a lane-B-only surface. -->
-                <Button x:Name="BtnStart" Grid.Column="1" Style="{StaticResource PinkButton}"
+                <!-- Depth (wave 10, lane B): START is the one CHUNKY plank (DepthPlankBevel,
+                     DepthPlankSheen, a StartPx drop), pressed through HudPlank.cs on an inner face
+                     so StartPressScale stays the ignition dip's alone. -->
+                <Button x:Name="BtnStart" Grid.Column="1" Style="{StaticResource PinkButton}" controls:HudPlank.Kind="Chunky"
                         poss:Possession.Role="Button" poss:Possession.Name="the Start button"
                         Background="{DynamicResource AccentGradientBrush}"
                         Height="50" FontSize="18" Click="BtnStart_Click"
@@ -2213,6 +2275,7 @@
                      sliver glued to it. -->
                 <Button x:Name="BtnStartMenu" Grid.Column="2" Width="68" Height="50" Margin="8,0,0,0"
                         Style="{StaticResource PinkButton}" Background="{DynamicResource AccentGradientBrush}"
+                        controls:HudPlank.Kind="Plank"
                         FontSize="22" Click="BtnStartMenu_Click"
                         ToolTip="{loc:Str tooltip_start_options}">
                     <TextBlock Text="▼" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"/>
@@ -2254,6 +2317,7 @@
                      right next to it, so the action bar had two primaries and no hierarchy. It is
                      the house SecondaryButton now; START is the only filled pink on the bar. -->
                 <Button x:Name="BtnSaveAll" Grid.Column="5" Content="{loc:Str btn_save_2}" Style="{StaticResource SecondaryButton}"
+                        controls:HudPlank.Kind="Plank"
                         Height="50" FontSize="16" Margin="0,0,10,0" Click="BtnSave_Click"
                         ToolTip="{loc:Str tooltip_save_all_settings_to_disk}"/>
                 <!-- Save "absorb" (Velvet Kit 2, FX lane B): one ripple ring off the button's edge and
@@ -2279,7 +2343,10 @@
                      rest of the app uses for destructive actions (PANIC STOP does use the real
                      red). Quiet outline at rest, fills on hover: still findable, no longer
                      competing with the primary action for the eye. -->
+                <!-- Depth (wave 10, lane B): Exit is a raised plank too. The red outline stays the
+                     signal; the lamp's bevel sits just inside it, the sheen over the face. -->
                 <Button Grid.Column="6" Content="{loc:Str btn_exit}" Height="50" FontSize="16" Click="BtnExit_Click"
+                        controls:HudPlank.Kind="Plank"
                         ToolTip="{loc:Str tooltip_exit_the_application_completely}">
                     <Button.Style>
                         <Style TargetType="Button">
@@ -2291,11 +2358,22 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="b" Background="{TemplateBinding Background}"
-                                                BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
-                                                CornerRadius="6" Padding="20,10">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
+                                        <Grid>
+                                            <Border x:Name="DepthDrop" VerticalAlignment="Bottom" Height="5" Margin="6,0,6,-5"
+                                                    CornerRadius="0,0,5,5" Background="{DynamicResource DepthDropBand}"
+                                                    IsHitTestVisible="False"/>
+                                            <Grid x:Name="DepthFace">
+                                                <Border x:Name="b" Background="{TemplateBinding Background}"
+                                                        BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
+                                                        CornerRadius="6" Padding="20,10">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <Border Margin="1" CornerRadius="5" Background="{DynamicResource DepthRaisedSheen}"
+                                                        IsHitTestVisible="False"/>
+                                                <Border Margin="1" CornerRadius="5" BorderThickness="1"
+                                                        BorderBrush="{DynamicResource DepthRaisedBevel}" IsHitTestVisible="False"/>
+                                            </Grid>
+                                        </Grid>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="b" Property="Background" Value="{DynamicResource DangerBrush}"/>
