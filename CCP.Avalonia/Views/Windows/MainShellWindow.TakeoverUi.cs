@@ -9,26 +9,8 @@
 // The caller is Core AutonomyScheduler.EnabledChanged, hooked in MainShellWindow.Autonomy.cs (as WPF's
 // AutonomyService.EnabledChanged), so start, stop, panic and startup resume all repaint it.
 //
-// THE LIVE VOICE PANEL IS NOT RESTORED, and the reason is a seam, not effort. Every one of its
-// painters is driven by an event that does not exist on this head:
-//   InitTakeoverVoiceUi(…)      App.Speech.PartialTranscript / LevelChanged and App.Autonomy's
-//                               EnabledChanged / VoicePromptStarted / VoicePromptFinished.
-//                               CoreSpeech (CCP.Core/CoreSpeech.cs) is a CAPABILITY seam only -
-//                               IsAvailable, HasCaptureDevice, ModelStatus, EnumerateInputDevices -
-//                               and carries no transcript, level or prompt event at all; the
-//                               services themselves are ConditioningControlPanel/Services/Speech/
-//                               SpeechService.cs and /Services/AutonomyService.Voice.cs.
-//   OnVoicePromptStarted(…)     phrase text + the LISTENING tint (Services/FxTheme.cs)
-//   OnSpeechPartial(…)          partial transcript
-//   OnSpeechLevel / SetVoiceLevel(…)   mic RMS -> the level bar's ScaleTransform + orb energy
-//   OnVoicePromptFinished(…)    PhraseResult (ConditioningControlPanel/Services/Speech/
-//                               SpeechService.cs): Matched / LoudEnough / Score / TimedOut /
-//                               Transcript
-//   _voicePanelHideTimer        the 2.6s verdict dwell, and RunOnUi, the marshalling those five
-//                               handlers needed. Both go with the handlers.
-// Painting that panel from anything else would be a Takeover UI that reports hearing when no mic is
-// open - the one thing this surface must never do. VoiceLivePanel stays IsVisible=False, which is
-// exactly where HideVoicePanel would put it.
+// The live voice panel opens only from Core SpokenMantra's PromptStarted (a real prompt about to
+// listen), shows SpeechEngine's partials and level while that prompt runs, and the verdict after.
 //
 // EnsurePr4aFx() is on this head (MainShellWindow.TabFxTakeoverLabStatus.cs) and is called from
 // SetTakeoverActiveUi for the same reason WPF calls it from InitTakeoverVoiceUi: the Takeover
@@ -86,8 +68,72 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Warning(ex, "SetTakeoverActiveUi failed"); }
         }
 
-        /// <summary>Puts the live voice panel away. Restored because turning Takeover OFF must
-        /// close it whatever left it open - see the header for why nothing opens it here.</summary>
+        private global::Avalonia.Threading.DispatcherTimer? _voicePanelHideTimer;
+
+        /// <summary>WPF OnVoicePromptStarted: a spoken mantra is about to listen - the phrase, a reset
+        /// readout and the LISTENING status in her accent. Raised only by SpokenMantra, i.e. a real prompt.</summary>
+        internal void ShowVoicePrompt(string phrase)
+        {
+            var tab = Named<Control>("BambiTakeoverTab");
+            if (tab == null) return;
+            _voicePanelHideTimer?.Stop();
+            if (tab.FindControl<TextBlock>("TxtVoicePromptPhrase") is { } p) p.Text = $"“ {phrase} ”";
+            ShowVoiceHeard("");
+            if (tab.FindControl<Border>("VoiceVerdictChip") is { } chip) chip.IsVisible = false;
+            SetVoiceLevel(0);
+            if (tab.FindControl<Border>("VoiceLivePanel") is { } panel) panel.IsVisible = true;
+            if (tab.FindControl<TextBlock>("TxtTakeoverStatus") is { } status)
+            {
+                status.Text = "● LISTENING";
+                if (Color.TryParse(CoreMods.AccentColorHex, out var accent)) status.Foreground = new SolidColorBrush(accent);
+            }
+        }
+
+        /// <summary>WPF OnSpeechPartial.</summary>
+        internal void ShowVoiceHeard(string? text)
+        {
+            if (Named<Control>("BambiTakeoverTab")?.FindControl<TextBlock>("TxtVoiceHeard") is { } t)
+                t.Text = string.IsNullOrWhiteSpace(text) ? "I heard: …" : $"I heard: {text}";
+        }
+
+        /// <summary>WPF SetVoiceLevel: speech RMS ~0..0.2 fills the bar; the orb brightens off it.</summary>
+        internal void SetVoiceLevel(double level)
+        {
+            var tab = Named<Control>("BambiTakeoverTab");
+            if (tab?.FindControl<Border>("VoiceLevelFill")?.RenderTransform is ScaleTransform st)
+                st.ScaleX = Math.Min(1.0, Math.Max(0.0, level / 0.2));
+            tab?.FindControl<TakeoverOrb>("TakeoverOrbFx")?.SetEnergy(level);
+        }
+
+        /// <summary>WPF OnVoicePromptFinished: the verdict chip, held 2.6 s, then the resting state.</summary>
+        internal void ShowVoiceVerdict(ConditioningControlPanel.Services.Speech.PhraseResult r)
+        {
+            var tab = Named<Control>("BambiTakeoverTab");
+            if (tab == null) return;
+            if (tab.FindControl<Border>("VoiceVerdictChip") is { } chip && tab.FindControl<TextBlock>("TxtVoiceVerdict") is { } txt)
+            {
+                string label; Color bg;
+                if (r.Matched) { label = "✓ MATCHED"; bg = Color.FromRgb(0x2E, 0x7D, 0x32); }
+                else if (!r.LoudEnough && r.Score >= 0.45) { label = "🔊 LOUDER"; bg = Color.FromRgb(0xB8, 0x86, 0x0B); }
+                else if (r.TimedOut && string.IsNullOrWhiteSpace(r.Transcript)) { label = "… NO REPLY"; bg = Color.FromRgb(0x5A, 0x5A, 0x70); }
+                else { label = "✗ MISS"; bg = Color.FromRgb(0xA0, 0x3A, 0x3A); }
+                txt.Text = label;
+                chip.Background = new SolidColorBrush(bg);
+                chip.IsVisible = true;
+            }
+            SetVoiceLevel(0);
+            _voicePanelHideTimer?.Stop();
+            _voicePanelHideTimer = new global::Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2.6) };
+            _voicePanelHideTimer.Tick += (_, _) =>
+            {
+                _voicePanelHideTimer?.Stop();
+                HideVoicePanel();
+                SetTakeoverActiveUi(Autonomy.IsEnabled);
+            };
+            _voicePanelHideTimer.Start();
+        }
+
+        /// <summary>Puts the live voice panel away (Takeover OFF, or the verdict's dwell ending).</summary>
         private void HideVoicePanel()
         {
             var panel = Named<Control>("BambiTakeoverTab")?.FindControl<Border>("VoiceLivePanel");
