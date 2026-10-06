@@ -420,9 +420,19 @@ namespace ConditioningControlPanel
                 EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
             };
 
-            // Apply animations
-            fadeOutTarget.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-            fadeInTarget.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+            // Apply animations. Motion Off (nav polish wave 6): nothing moves, the text just swaps.
+            if (MotionFx.AllowTransitions)
+            {
+                fadeOutTarget.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+                fadeInTarget.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+            }
+            else
+            {
+                fadeOutTarget.BeginAnimation(UIElement.OpacityProperty, null);
+                fadeInTarget.BeginAnimation(UIElement.OpacityProperty, null);
+                fadeOutTarget.Opacity = 0;
+                fadeInTarget.Opacity = 1;
+            }
 
             // Disable hit testing on faded-out banner so hyperlinks don't capture clicks
             // (hyperlinks can still receive clicks even at Opacity=0)
@@ -434,6 +444,10 @@ namespace ConditioningControlPanel
             // Chrome FX: a light sheen rides the crossfade. Throttled inside (the rotation is a
             // 4s timer; a pass every 4s would be an ambient strobe, not a change cue).
             SweepBannerSheen();
+
+            // Nav polish wave 6: the incoming beat pops, the pill flashes, and the support line
+            // gets its sparkle run (MainWindow.BannerFx.cs owns the gate and the motion).
+            OnBannerBeatChanged(fadeInTarget);
         }
 
         /// <summary>

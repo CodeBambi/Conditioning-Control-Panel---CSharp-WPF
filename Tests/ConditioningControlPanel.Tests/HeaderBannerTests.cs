@@ -201,12 +201,12 @@ public class HeaderBannerTests
                                 RegexOptions.Singleline);
         Assert.True(block.Success, "HeaderBannerHost is gone");
 
-        // 28 is what this row was authored against (the mod capsule that sat here until 0911). A
-        // banner taller than that grows the header and gives back the row this change reclaimed.
+        // The header row is Auto; its tallest residents are the 34px profile bubble and the scaled
+        // wallet. 26 until nav polish wave 6 grew the banner 20% to 31 (owner); past the bubble it grows the header.
         var height = Regex.Match(block.Value, "Height=\"(\\d+)\"");
         Assert.True(height.Success, "HeaderBannerHost lost its explicit Height - it now sizes to its text");
-        Assert.True(int.Parse(height.Groups[1].Value) <= 28,
-            "HeaderBannerHost is taller than the 28px capsule already in the header row");
+        Assert.True(int.Parse(height.Groups[1].Value) <= 34,
+            "HeaderBannerHost is taller than the 34px profile bubble already in the header row");
 
         // Capped and centred in a star column, so it takes leftover width and nothing else.
         Assert.Contains("MaxWidth=", block.Value);

@@ -170,6 +170,8 @@ namespace ConditioningControlPanel
             ApplyDashboardFxLoops();
             // Velvet Kit 2 (FX lane B): START charge / ring exhale / heartbeat + XP meniscus pulse.
             ApplyHeroFxLoops();
+            // Nav polish wave 6: the header banner's glow breath + 12 s sparkle repeat.
+            ApplyBannerFxLoops();
 
             try
             {
