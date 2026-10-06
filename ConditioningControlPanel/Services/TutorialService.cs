@@ -44,6 +44,8 @@ namespace ConditioningControlPanel.Services
 
         private static void Reveal(Window w, string? cellKey)
         {
+            // The window owns the cell-to-page map (Companion > Personality / Links under v2).
+            if (w is MainWindow mw) { try { mw.RevealCompanionWorkshopCell(cellKey); } catch { } return; }
             try { FindRoom(w)?.RevealWorkshop(cellKey); }
             catch { /* a tour never blocks on UI quirks */ }
         }

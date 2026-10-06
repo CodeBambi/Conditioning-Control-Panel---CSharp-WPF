@@ -104,6 +104,10 @@ public partial class ConversationPage : UserControl
     }
     internal void OpenSheet(string kind)
     {
+        // Personality, permissions and the video pool have their own pages now (Companion section);
+        // the sheets stay only as a fallback where the pages are not registered (preview harness).
+        var page = kind switch { "who" or "personality" => "personality", "permissions" => "permissions", "videos" => "companionlinks", _ => null };
+        if (page != null && Window.GetWindow(this) is MainWindow host && host.IsRegisteredNavTab(page)) { host.ShowTab(page); return; }
         CloseSheet();
         _returnFocus = Keyboard.FocusedElement;
         App.Brain?.EnsureCurrentAccount();
