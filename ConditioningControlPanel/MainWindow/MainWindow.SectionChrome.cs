@@ -2,6 +2,11 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Controls.NavRail;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.UI;
@@ -53,6 +58,11 @@ namespace ConditioningControlPanel
                         ? Loc.Get(SettingsSectionLabelKey(to.Tab) ?? string.Empty)
                         : Loc.Get(NavStripRules.PageLabelKey(to.Tab) ?? string.Empty);
                     SectionStrip?.ShowMovedNote(string.Format(Loc.Get("nav_moved_toast"), section, page));
+
+                    // The one-time "moved here" shimmer rides the same three hits as the note.
+                    var glowKey = to.Tab;
+                    Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal,
+                        new Action(() => GlowNavTarget(glowKey)));
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("Moved note failed: {E}", ex.Message); }
@@ -153,6 +163,73 @@ namespace ConditioningControlPanel
                 case "medialog": BtnNavMediaLog_Click(this, e); return true;
                 default: return false;
             }
+        }
+
+        /// <summary>Sheen length of the "moved here" glow (Full motion only).</summary>
+        internal const int NavGlowSheenMs = 600;
+
+        /// <summary>How long the glow holds before it fades.</summary>
+        internal const int NavGlowHoldMs = 2000;
+
+        /// <summary>
+        /// Glow the place something moved to: a Settings section key ("account", "monitors")
+        /// lights that section's pill; a tab key lights its strip pill and its rail row (which
+        /// RefreshSectionRail has already selected). Full = 600 ms sheen + 2 s glow, Reduced =
+        /// the glow alone, Off = nothing. Called by What moved's Show me and by the redirect note.
+        /// </summary>
+        partial void GlowNavTarget(string tabKey)
+        {
+            try
+            {
+                var level = MotionFx.Level;
+                if (level == MotionLevel.Off || string.IsNullOrEmpty(tabKey)) return;
+
+                if (SettingsSectionLabelKey(tabKey) != null && tabKey != "appsettings")
+                {
+                    var pillName = "SectionPill" + char.ToUpperInvariant(tabKey[0]) + tabKey.Substring(1);
+                    if (AppSettingsTab?.FindName(pillName) is FrameworkElement settingsPill)
+                        GlowOnce(settingsPill, NavStripRules.Accent(NavSections.Settings), level);
+                    return;
+                }
+
+                var section = NavSections.SectionForTab(tabKey);
+                var accent = NavStripRules.Accent(section);
+                if (SectionStrip?.PillFor(tabKey) is { } pill) GlowOnce(pill, accent, level);
+                if (NavAnchorForTab(tabKey) is { } row) GlowOnce(row, accent, level);
+            }
+            catch (Exception ex) { App.Logger?.Debug("GlowNavTarget({Key}) failed: {E}", tabKey, ex.Message); }
+        }
+
+        /// <summary>A soft outer glow in the section accent, then gone; the element's own effect
+        /// comes back afterwards. Never loops.</summary>
+        private static void GlowOnce(FrameworkElement target, Color accent, MotionLevel level)
+        {
+            var previous = target.Effect;
+            var glow = new DropShadowEffect { Color = accent, ShadowDepth = 0, BlurRadius = 18, Opacity = 0 };
+            target.Effect = glow;
+
+            var hold = TimeSpan.FromMilliseconds(NavGlowHoldMs);
+            var fadeOut = TimeSpan.FromMilliseconds(level == MotionLevel.Reduced ? 0 : 400);
+            var anim = new DoubleAnimationUsingKeyFrames();
+            if (level == MotionLevel.Full)
+            {
+                var sheen = TimeSpan.FromMilliseconds(NavGlowSheenMs);
+                anim.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(sheen / 2), new SineEase()));
+                anim.KeyFrames.Add(new EasingDoubleKeyFrame(0.75, KeyTime.FromTimeSpan(sheen), new SineEase()));
+                anim.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.75, KeyTime.FromTimeSpan(sheen + hold)));
+                anim.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(sheen + hold + fadeOut)));
+            }
+            else
+            {
+                anim.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.75, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                anim.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.75, KeyTime.FromTimeSpan(hold)));
+                anim.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(hold + TimeSpan.FromMilliseconds(1))));
+            }
+            anim.Completed += (_, _) =>
+            {
+                if (ReferenceEquals(target.Effect, glow)) target.Effect = previous;
+            };
+            glow.BeginAnimation(DropShadowEffect.OpacityProperty, anim);
         }
 
         private static string? SettingsSectionLabelKey(string sectionKey)

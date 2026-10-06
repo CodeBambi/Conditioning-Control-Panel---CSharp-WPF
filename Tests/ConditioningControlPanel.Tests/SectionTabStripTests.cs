@@ -37,6 +37,21 @@ public class SectionTabStripTests
     private static string TabNavigationSource() =>
         File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.TabNavigation.cs"));
 
+    [Fact]
+    public void TheMovedHereGlowIsImplementedAndRidesTheMovedNote()
+    {
+        // What moved's Show me and the redirect note both call GlowNavTarget. A declared-only
+        // partial compiles to nothing, so the glow would silently never show.
+        var chrome = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.SectionChrome.cs"));
+        Assert.Matches(@"partial void GlowNavTarget\(string tabKey\)\s*\{", chrome);
+        var redirect = System.Text.RegularExpressions.Regex.Match(chrome,
+            @"private bool TryRedirectMovedTab.*?return true;", System.Text.RegularExpressions.RegexOptions.Singleline);
+        Assert.True(redirect.Success);
+        Assert.Contains("GlowNavTarget(", redirect.Value);
+        Assert.Equal(600, MainWindow.NavGlowSheenMs);
+        Assert.Equal(2000, MainWindow.NavGlowHoldMs);
+    }
+
     private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
     {
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
