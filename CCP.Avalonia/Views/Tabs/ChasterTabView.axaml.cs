@@ -4,8 +4,8 @@
 // the link flow (:830-863) on the Core loopback OAuth, the lock pick (:962-1053) and the fact cap.
 // ponytail: Circe's mood is a line (WPF chaster_mood_peek wording), not the CircesMoodMeter heat
 // row, and CirceSays lines are not shown. The ground (spiral/glow/ambient), hero art, paper tag,
-// calendar, LockTitle letters, the numbers, the receipt, limits, menu,
-// presets, trailer and all Fx. The heads-up clock, raffle card and ladder scrap are ChasterTabView.Ladder.cs (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
+// LockTitle letters, limits, menu, trailer and most Fx. The numbers + receipt (Numbers.cs), calendar (Calendar.cs) and keys (Keys.cs) are partials.
+// The heads-up clock, raffle card and ladder scrap are ChasterTabView.Ladder.cs (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
 // bursts included) are later slices. Unlink, the switch + consent and pause are real (slice 2).
 using System;
 using System.Collections.Generic;
@@ -48,6 +48,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AttachedToVisualTree += (_, _) => Subscribe(true);
             DetachedFromVisualTree += (_, _) => Subscribe(false);
             LadderInit();
+            NumbersInit();
+            KeysInit();
             Refresh();
             LadderRenderSample();
         }
@@ -85,7 +87,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // All three arrive on whatever thread found out.
         private void OnLinkChanged() => Dispatcher.UIThread.Post(OnTabShown);
         private void OnLockChanged() => Dispatcher.UIThread.Post(RefreshHero);
-        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); });
+        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); RefreshNumbers(); });
 
         internal void Refresh()
         {
@@ -95,6 +97,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             FactRow.IsVisible = !linked;
             AccountStrip.IsVisible = linked;
             AddedRow.IsVisible = linked;
+            NumbersPanel.IsVisible = linked;
+            if (linked) { RefreshNumbers(); RefreshPresets(); }
             if (linked) RefreshAdded(); else HideLadder();
             SwitchPill.IsVisible = linked;
             PausePill.IsVisible = linked;
@@ -213,6 +217,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 HeroClockRow.IsVisible = false;
                 TxtHeroEnds.IsVisible = false;
                 HeroPills.IsVisible = false;
+                BuildCalendar(null);
                 return;
             }
             var key = TabPageText.SetupHint(true, chaster!.LockLookup, snapshot != null, CoreSettings.Current.ChasterTabEnabled);
@@ -223,6 +228,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtHeroEnds.Text = ends is { } when ? Loc.GetF("chaster_hero_ends", when.ToString("ddd d MMM HH:mm")) : "";
             TxtHeroEnds.IsVisible = ends != null;
             RefreshPills(chaster.LockLookup, snapshot, chaster.SafetyHoldRemaining);
+            BuildCalendar(snapshot);
         }
 
         /// <summary>WPF PaintHeroClock (:301), without the count-up on show: d h m s off the last snapshot.</summary>

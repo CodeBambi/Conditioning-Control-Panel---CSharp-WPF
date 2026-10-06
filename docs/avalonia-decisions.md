@@ -415,3 +415,11 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   `SampleMedia` (BuildMediaManifest's walk), `SubjectId` (GetSubjectId); GamificationBridge's quiz handlers became
   `AchievementEngine.TrackQuizCompleted/TrackQuizAbandoned` for this head (WPF's bridge unchanged).
 - Advisor: worker.
+
+## 2026-10-01: Chaster tab receipt, calendar and keys (avalonia-port/chaster-receipt)
+- The tab's receipt reuses `ChasterReceiptView`; the language re-render lives in the view (re-Show the last bill on
+  LanguageChanged while attached), so the exit bill gets it too. Opens/closes at once: FxBill's print-down not ported.
+- The 2x2 keys do not go through `ChasterImportConfirmDialog`: like WPF Preset_Click they only rewrite ChasterPrices and
+  request limits (Core `TabPresets`), never add time to the lock; that dialog's Summary is the awareness-preset import.
+- Calendar on Core `LockCalendar`; cross strokes straight, padlock a glyph, key on gold, no draw-in/tonight tag (ponytail noted).
+- Advisor: worker.
