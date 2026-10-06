@@ -143,6 +143,12 @@ namespace ConditioningControlPanel
                     Animate(SectionWashLineBrush, SolidColorBrush.ColorProperty,
                             NavRailRules.WithAlpha(hue, SectionWashLineAlpha));
                 PaintSectionEdge(hue, ms);
+                // Polish wave 10 (depth): the shadows follow the section hue. Each painter is
+                // its lane's one entry point; nothing else in the window knows the section changed.
+                PaintDepthRail(hue);
+                PaintDepthHud(hue);
+                SettingsTab?.PaintDepthHome(hue);
+                QuestsTab?.PaintDepthQuests(hue);
 
                 void Tint(GradientStop? stop, Color to)
                 {
