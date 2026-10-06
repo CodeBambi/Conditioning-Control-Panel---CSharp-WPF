@@ -102,10 +102,12 @@
                                 </Border.OpacityMask>
                             </Border>
                             <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
-                                <TextBlock Text="{loc:Str exclusives_vault_title}"
+                                <TextBlock x:Name="TxtVaultTitle" x:FieldModifier="internal"
+                                           Text="{loc:Str exclusives_vault_title}"
                                            FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="Bold"
                                            FontSize="17" Foreground="{StaticResource TextLightBrush}"/>
-                                <TextBlock Text="{loc:Str exclusives_vault_sub}"
+                                <TextBlock x:Name="TxtVaultSub" x:FieldModifier="internal"
+                                           Text="{loc:Str exclusives_vault_sub}"
                                            FontSize="11.5" Foreground="{StaticResource TextMutedBrush}"
                                            Margin="0,1,0,0" MaxWidth="620" HorizontalAlignment="Left"
                                            TextTrimming="CharacterEllipsis"/>
@@ -268,7 +270,8 @@
                                                 <GradientStop Color="#D9B478FF" Offset="1"/>
                                             </LinearGradientBrush>
                                         </Border.Background>
-                                        <TextBlock FontSize="11" FontWeight="Bold" Foreground="White"
+                                        <TextBlock x:Name="TxtSpotVeilChip" x:FieldModifier="internal"
+                                                   FontSize="11" FontWeight="Bold" Foreground="White"
                                                    Text="{loc:Str exclusives_chip_lab}"/>
                                     </Border>
                                 </StackPanel>

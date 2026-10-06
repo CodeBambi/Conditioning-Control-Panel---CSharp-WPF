@@ -17,6 +17,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Pages
         {
             _owner = owner;
             InitializeComponent();
+            // A bounded list inside the page ScrollViewer: pass unusable wheel notches up so the
+            // page scrolls over "No links yet" too. The video pool cell wires its own list.
+            CompanionWheelRelay.Attach(KnowledgeLinks.LstKnowledgeLinks);
         }
 
         /// <summary>Runs every time the page is shown: adopt the live cell, reload both lists.</summary>

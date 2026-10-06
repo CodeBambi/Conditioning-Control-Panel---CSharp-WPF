@@ -304,6 +304,11 @@ namespace ConditioningControlPanel
                 if (btn.Template?.FindName("NavActiveFill", btn) is FrameworkElement fill)
                     fill.Opacity = row.Active ? 1 : 0;
 
+                // A pale medallion carries a shade (x:Name "Shade" + door name) so it idles at its
+                // neighbours' weight; lit, it shows its art in full.
+                if (btn.FindName("Shade" + btn.Name) is UIElement shade)
+                    shade.Opacity = row.Active ? 0 : 1;
+
                 if (row.Tile != null)
                 {
                     row.Tile.Opacity = row.Active ? 1.0 : NavTileIdleOpacity;
@@ -406,6 +411,10 @@ namespace ConditioningControlPanel
                     if (img == null) continue;
                     var art = ModResourceResolver.ResolveImageDecoded(path, NavDoorArtDecodeWidth);
                     if (art != null) img.Source = art;
+                    // Social's shade only tones down the embedded placeholder; a mod's own art
+                    // is drawn the way its author made it.
+                    if (ReferenceEquals(img, ImgDoorSocial) && ShadeDoorSocial != null)
+                        ShadeDoorSocial.Visibility = art != null ? Visibility.Collapsed : Visibility.Visible;
                 }
 
                 var glow = FxTheme.GlowColor;
