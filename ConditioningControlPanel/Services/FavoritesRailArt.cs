@@ -159,6 +159,17 @@ namespace ConditioningControlPanel.Services
             ["launch.catalogue"] = Cover("achievements/curator.png"),  // a wall of cards under a glass
             ["launch.phrases"] = Cover("achievements/word_perfect.png"),
             ["launch.medialog"] = Cover("achievements/screen_time.png"),
+
+            // Nav rework (2026-10-06): the new pills. All reuse shipped feature art.
+            ["tab.personality"] = Cover("features/lab_aimemory_hero.png"),  // the AI memory hero: who she is
+            ["tab.permissions"] = Cover("features/Phrase_Lock.png"),        // the lock card, which most permissions gate
+            ["tab.companionlinks"] = Cover("features/mandatory_videos.png"),// videos she can play
+            ["tab.friends"] = Cover("features/lobby_remote.png"),
+            ["tab.leash"] = Cover("features/remote_control.png"),           // a holder's remote
+            ["tab.folders"] = Cover("features/mysterybox.png"),             // a box of your own things
+            ["tab.playsessions"] = Cover("features/deeper_editor.png"),
+            ["tab.playeyes"] = Cover("features/lab_gaze_hero.png"),
+            ["tab.ramp"] = Cover("features/loom.png"),
         };
 
         private static RailChipArt Cover(string path) => new(path, RailArtFit.Cover);

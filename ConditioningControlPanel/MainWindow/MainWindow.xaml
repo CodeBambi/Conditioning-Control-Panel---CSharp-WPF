@@ -3183,10 +3183,13 @@
                         <!-- Header -->
                         <Border Grid.Row="0" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10,10,0,0" Padding="20,15">
                             <Grid>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                 <Button Grid.Row="1" Content="{loc:Str first_show_replay}" Click="BtnFirstShowReplay_Click"
                                         Style="{StaticResource PinkButton}" FontSize="20" FontWeight="Bold"
                                         HorizontalAlignment="Stretch" Padding="22,16" Margin="0,18,0,0"/>
+                                <Button Grid.Row="2" Content="{loc:Str help_whatmoved}" Click="BtnWhatMovedReplay_Click"
+                                        Style="{StaticResource SecondaryButton}" FontSize="14"
+                                        HorizontalAlignment="Stretch" Padding="18,9" Margin="0,8,0,0"/>
                                 <TextBlock Text="{loc:Str label_how_to_use_the_app}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                            HorizontalAlignment="Center"/>
                                 <Button Content="✕" Click="MainTutorial_Close" HorizontalAlignment="Right" VerticalAlignment="Top"

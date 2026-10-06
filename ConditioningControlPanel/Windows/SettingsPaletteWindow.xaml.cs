@@ -170,7 +170,45 @@ namespace ConditioningControlPanel
             TxtPlaceholder.Visibility = string.IsNullOrEmpty(TxtQuery.Text)
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            // Typing again leaves the "every page" list: the box is a search box first.
+            _showAll = false;
             Refresh();
+        }
+
+        /// <summary>True while the "Show all pages" list is up (until the next keystroke).</summary>
+        private bool _showAll;
+
+        /// <summary>The nearest row offered by the empty state's "Try:" button.</summary>
+        private SettingsPaletteEntry? _tryEntry;
+
+        /// <summary>No hits: say what was typed, offer the nearest caption, offer every page.</summary>
+        private void ShowNoResults(string query)
+        {
+            var q = query.Trim();
+            TxtEmpty.Text = Localization.Loc.GetF("nav_search_none", q);
+            var nearest = SettingsPaletteIndex.Nearest(q);
+            _tryEntry = nearest?.Entry;
+            if (nearest != null)
+            {
+                TxtTry.Text = Localization.Loc.GetF("nav_search_try", nearest.Value.Entry.Label);
+                BtnTry.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                BtnTry.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void BtnTry_Click(object sender, RoutedEventArgs e)
+        {
+            if (_tryEntry != null) Activate(_tryEntry);
+        }
+
+        private void BtnAll_Click(object sender, RoutedEventArgs e)
+        {
+            _showAll = true;
+            Refresh();
+            TxtQuery.Focus();
         }
 
         private void Refresh()
@@ -179,15 +217,36 @@ namespace ConditioningControlPanel
             {
                 // Rows are rebuilt from loc keys on every keystroke, so a language change between
                 // two opens (or mid-typing) always shows current strings - there is no cache.
-                var rows = SettingsPaletteIndex.Search(TxtQuery.Text)
-                                               .Select(entry => new PaletteRow(entry))
+                var query = TxtQuery.Text ?? string.Empty;
+                List<PaletteRow> rows;
+                if (_showAll)
+                {
+                    rows = SettingsPaletteIndex.AllPages().Select(e => new PaletteRow(e, null)).ToList();
+                }
+                else if (query.Trim().Length == 0)
+                {
+                    // Empty box: the last few places first, then the authored opening list.
+                    var recents = SettingsPaletteIndex.Recents(App.Settings?.Current?.NavSearchRecents);
+                    var seen = new HashSet<string>(recents.Select(e => e.Id), StringComparer.Ordinal);
+                    rows = recents.Select(e => new PaletteRow(e, null))
+                                  .Concat(SettingsPaletteIndex.Search(query)
+                                                              .Where(e => !seen.Contains(e.Id))
+                                                              .Select(e => new PaletteRow(e, null)))
+                                  .ToList();
+                }
+                else
+                {
+                    rows = SettingsPaletteIndex.Search(query)
+                                               .Select(entry => new PaletteRow(entry, query))
                                                .ToList();
+                }
 
                 ListResults.ItemsSource = rows;
                 if (rows.Count > 0) ListResults.SelectedIndex = 0;
 
                 ListResults.Visibility = rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-                TxtEmpty.Visibility = rows.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+                PanelEmpty.Visibility = rows.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+                if (rows.Count == 0) ShowNoResults(query);
             }
             catch (Exception ex)
             {
@@ -209,7 +268,11 @@ namespace ConditioningControlPanel
                     break;
 
                 case Key.Enter:
-                    ActivateSelected();
+                    // Nothing listed but a nearest guess on screen: Enter takes the guess.
+                    if (ListResults.Items.Count == 0 && _tryEntry != null && BtnTry.Visibility == Visibility.Visible)
+                        Activate(_tryEntry);
+                    else
+                        ActivateSelected();
                     e.Handled = true;
                     break;
 
@@ -245,8 +308,13 @@ namespace ConditioningControlPanel
         private void ActivateSelected()
         {
             if (ListResults.SelectedItem is not PaletteRow row) return;
+            Activate(row.Entry);
+        }
+
+        private void Activate(SettingsPaletteEntry entry)
+        {
             var owner = Owner as MainWindow;
-            var entry = row.Entry;
+            RememberRecent(entry);
 
             // Close first: the highlight pulse should be visible against the real page, and the
             // owner needs focus back before anything navigates.
@@ -269,6 +337,20 @@ namespace ConditioningControlPanel
                 // ShowTab is the only navigation API: it opens the owning door (ExpandDoorForTab),
                 // fires the nav bark, parks per-tab FX and moves the active indicator. Palette
                 // navigation must be indistinguishable from a rail click.
+                // A Studio module: the rack's own door (selects the module, then shows the Studio).
+                if (!string.IsNullOrWhiteSpace(entry.RackKey))
+                {
+                    mw.OpenStudioModule(entry.RackKey!);
+                    return;
+                }
+
+                // A game: started the way the launcher tile starts it.
+                if (!string.IsNullOrWhiteSpace(entry.GameId))
+                {
+                    LaunchGame(mw, entry.GameId!);
+                    return;
+                }
+
                 if (!string.IsNullOrWhiteSpace(entry.TabKey)) mw.ShowTab(entry.TabKey);
 
                 if (!string.IsNullOrWhiteSpace(entry.SectionKey))
@@ -300,6 +382,33 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Palette navigation failed for {Id}", entry.Id);
             }
+        }
+
+        /// <summary>
+        /// Same rules as the launcher tile and the Play wall: an account-bound game opens the
+        /// sign-in dialog instead of refusing in silence, and a pending leash punishment stands
+        /// between any game and its window. Locked games go through TryLaunch, whose host paints
+        /// its own tier refusal.
+        /// </summary>
+        private static void LaunchGame(MainWindow mw, string id)
+        {
+            var game = Services.Launcher.LauncherCatalogue.Find(id);
+            if (game == null) return;
+            if (game.NeedsAccount) { mw.OpenUnifiedLoginDialog(); return; }
+            if (mw.LeashBlocksGames) { mw.PresentLeashGateFromLauncher(); return; }
+            Services.Launcher.LauncherCatalogue.TryLaunch(game);
+        }
+
+        private static void RememberRecent(SettingsPaletteEntry entry)
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+                s.NavSearchRecents = SettingsPaletteIndex.PushRecent(s.NavSearchRecents, entry.Id);
+                App.Settings?.Save();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Palette recents not saved: {E}", ex.Message); }
         }
 
         private static FrameworkElement? ResolveFirst(DependencyObject root, string[] names)
@@ -440,15 +549,18 @@ namespace ConditioningControlPanel
         /// </summary>
         public sealed class PaletteRow
         {
-            public PaletteRow(SettingsPaletteEntry entry)
+            public PaletteRow(SettingsPaletteEntry entry, string? query)
             {
                 Entry = entry;
                 Glyph = entry.Glyph;
                 Label = entry.Label;
                 Context = entry.Context;
+                var was = SettingsPaletteIndex.WasHint(entry, query);
+                WasHint = was == null ? string.Empty : "  " + Localization.Loc.GetF("nav_was_hint", was);
             }
 
             public SettingsPaletteEntry Entry { get; }
+            public string WasHint { get; }
             public string Glyph { get; }
             public string Label { get; }
             public string Context { get; }

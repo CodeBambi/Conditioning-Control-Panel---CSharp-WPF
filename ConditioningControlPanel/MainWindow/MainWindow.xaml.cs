@@ -560,6 +560,9 @@ namespace ConditioningControlPanel
                 // first launch and she does not get to talk over someone's first thirty seconds.
                 try { App.EmiDesk?.Fire("firstLaunchEver", null); } catch { }
 
+                // A fresh install never needs "What moved": the new layout is the only one it knows.
+                OfferWhatMovedIfNeeded(freshInstall: true);
+
                 // Priority 20 on the ladder. The three hand-rolled waits this replaces (30 s for
                 // the update dialog, 10 s for the window, then the open) all live in the presenter
                 // now, along with the give-up rule: five minutes without a free screen and the
@@ -609,6 +612,9 @@ namespace ConditioningControlPanel
             }
             else
             {
+                // Nav rework (2026-10-06): the one-time "What moved" card, upgrades only.
+                OfferWhatMovedIfNeeded(freshInstall: false);
+
                 // Not first launch - check if we need to show "What's New" after an update.
                 // Both of these now END in an EnqueueStartupModal (priorities 30 and 40); their
                 // own predicates still decide synchronously, right here, whether there is anything
