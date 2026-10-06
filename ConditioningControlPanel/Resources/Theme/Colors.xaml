@@ -68,7 +68,26 @@
     <Color x:Key="GlassBorder">#20FFFFFF</Color>
     <Color x:Key="GlassBorderHover">#30FFFFFF</Color>
     <!-- New: elevated card surface -->
-    <Color x:Key="ElevatedSurface">#FF222240</Color>
+    <!-- Readability pass (polish 8, 2026-10-06): lifted #222240 -> #28284C. A card sat at
+         1.08:1 over PanelBg and only its border told it apart from the page; 1.18:1 now, and
+         TextMuted still reads 5.5:1 on it. Do not go past #2A2A50: the inset step
+         (PanelAccent #2E2E4A, quote boxes and switch rows) stops reading as a step. -->
+    <Color x:Key="ElevatedSurface">#FF28284C</Color>
+
+    <!-- Readability pass (polish 8): the SECTION colours, painted at runtime from
+         NavStripRules.Accent(section) by MainWindow.PaintSectionWash (the Lilac of Home is
+         the static default). Body text stays neutral (TextLight / TextSecondary / TextMuted);
+         the section hue carries the eyebrows, the rule under them, links and card outlines.
+           SectionInk     = hue mixed with 35% TextLight. Eyebrow / label / link ink.
+                            Every section clears 6.3:1 on its washed page (raw hues do not:
+                            VioletBlue is 4.3:1).
+           SectionTint    = TextLight mixed with 15% hue. Optional title tint, >= 10:1.
+           SectionRule    = hue at 35% alpha, the 1 px rule under an eyebrow.
+           SectionOutline = hue at 25% alpha, the card outline (SectionHueXBorder convention). -->
+    <Color x:Key="SectionInk">#FFCBB9FC</Color>
+    <Color x:Key="SectionTint">#FFE7E3F6</Color>
+    <Color x:Key="SectionRule">#59B79CFF</Color>
+    <Color x:Key="SectionOutline">#40B79CFF</Color>
     <!-- New: quaternary text. Velvet Kit: lifted #505068 → #7A7A94 (was 1.8:1 —
          invisible). Still decorative-only: never carry information in TextDim. -->
     <Color x:Key="TextDim">#FF7A7A94</Color>

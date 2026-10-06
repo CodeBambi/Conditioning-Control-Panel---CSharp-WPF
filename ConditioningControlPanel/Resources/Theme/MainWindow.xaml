@@ -538,6 +538,68 @@
              this one. Its glow recipe is now the implicit TextBox chrome, so the style is
              a thin alias. -->
 
+        <!-- ============================================================
+             Readability pass (polish 8, 2026-10-06): THE TYPE SCALE. Six levels, one shared
+             style each; every heading, label and line of copy in the panel picks one of these
+             instead of its own FontSize + Foreground. Sizes 26 / 18 / 13.5 / 13 / 11.5 / 11,
+             weights Bold / SemiBold / Regular, inks Light / Secondary / Muted / SectionInk.
+             Rule: two of the three (size, weight, ink) differ between adjacent elements.
+             They live in THIS dictionary so SectionHeader & co can BasedOn them (BasedOn is a
+             StaticResource lookup; see the FocusGlowTextBox note above). Brushes are
+             DynamicResource: mods retheme the colours and the section ink is painted per page.
+             ============================================================ -->
+        <!-- One per page. The Companion page title keeps its glow BasedOn this. -->
+        <Style x:Key="Type.PageTitle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="26"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <!-- The one line under a page title. -->
+        <Style x:Key="Type.PageSubtitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <!-- Eyebrows, zone tags, card group headers, chip group headers. UPPERCASE comes from
+             the loc string. Always followed by a 1 px SectionRuleBrush rule. -->
+        <Style x:Key="Type.SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource SectionInkBrush}"/>
+            <Setter Property="Typography.Kerning" Value="True"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <!-- Card names: "Breakout Demo", "BimboDoll". -->
+        <Style x:Key="Type.CardTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <!-- Blurbs, helper lines, quotes, perk text, switch-row titles: anything that carries
+             meaning. TextSecondary (10:1 on the page), never TextMuted. -->
+        <Style x:Key="Type.Body" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <!-- Field labels ("Look", "Personality"), "Perk", the "Active:" prefix, pill text. -->
+        <Style x:Key="Type.Label" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+        <!-- Counts, timestamps, the small line under a switch row. -->
+        <Style x:Key="Type.Caption" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
         <!-- Section Header Style -->
         <Style x:Key="SectionHeader" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
