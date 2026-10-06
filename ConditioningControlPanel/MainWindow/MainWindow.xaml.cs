@@ -304,6 +304,7 @@ namespace ConditioningControlPanel
                 // Nav rail collapse/hover-expand. After the FX inits on purpose: it caches a
                 // visual-tree walk of the rail, so every templated row has to be real first.
                 InitializeNavRail();
+                InitializeSectionEdge();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.UnregisterAll();
             // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
