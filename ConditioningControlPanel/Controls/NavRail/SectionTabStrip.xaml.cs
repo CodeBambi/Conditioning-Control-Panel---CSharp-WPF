@@ -166,6 +166,9 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>The breadcrumb's section word was clicked.</summary>
         public event Action<string>? SectionRequested;
 
+        /// <summary>A pill was built (the host attaches its pin menu here).</summary>
+        public event Action<NavTab, Border>? PillCreated;
+
         /// <summary>Test seam: forces a motion level instead of asking MotionFx.</summary>
         internal MotionLevel? MotionOverride { get; set; }
 
@@ -339,6 +342,7 @@ namespace ConditioningControlPanel.Controls.NavRail
 
                 PillRow.Children.Add(pill);
                 _pills.Add((tab, pill, label));
+                PillCreated?.Invoke(tab, pill);
             }
 
             // One tab stop for the whole strip (ARIA tabs): the active pill, else the first.

@@ -112,6 +112,13 @@ namespace ConditioningControlPanel
             _sectionStripWired = true;
 
             SectionStrip.TabRequested += OnSectionPillChosen;
+            // Right-click on a pill pins or unpins it to the Home Favourites column, as the rail
+            // rows always did. Only pills with a Ctrl+K row are pinnable (a chip opens a row).
+            SectionStrip.PillCreated += (tab, pill) =>
+            {
+                var id = PinIdForPill(tab);
+                if (id != null) AttachPinMenu(pill, id, holdRail: false);
+            };
             SectionStrip.SectionRequested += section =>
             {
                 if (section == NavSections.Settings) ShowTab("appsettings");
@@ -163,6 +170,16 @@ namespace ConditioningControlPanel
                 case "medialog": BtnNavMediaLog_Click(this, e); return true;
                 default: return false;
             }
+        }
+
+        /// <summary>The Favourites destination a strip pill pins as, or null when it has no
+        /// Ctrl+K row (zone pills without a row, hidden pills).</summary>
+        internal static string? PinIdForPill(NavTab tab)
+        {
+            var id = tab.Kind == NavTabKind.Launcher ? "launch." + tab.Key
+                   : tab.Key == "justdrop" ? "door.justdrop"
+                   : "tab." + tab.Key;
+            return FavoritesRailRule.IsDestination(id) && SettingsPaletteIndex.ById(id) != null ? id : null;
         }
 
         /// <summary>Sheen length of the "moved here" glow (Full motion only).</summary>

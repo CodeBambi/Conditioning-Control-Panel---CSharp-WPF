@@ -38,6 +38,20 @@ public class SectionTabStripTests
         File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.TabNavigation.cs"));
 
     [Fact]
+    public void EveryVisiblePillCanBePinnedToFavourites()
+    {
+        // Right-click on a pill pins its Ctrl+K row, as the old rail rows did. A pill with no
+        // row would simply show no menu, which reads as a dead right-click.
+        var missing = NavSections.Order
+            .Where(s => s.Key != NavSections.Home && s.Key != NavSections.Settings) // no strip on either
+            .SelectMany(s => s.Tabs.Where(t => !t.Hidden).Select(t => (s.Key, t)))
+            .Where(x => MainWindow.PinIdForPill(x.t) == null)
+            .Select(x => x.Key + "/" + x.t.Key)
+            .ToList();
+        Assert.True(missing.Count == 0, "pills with no pinnable row: " + string.Join(", ", missing));
+    }
+
+    [Fact]
     public void TheMovedHereGlowIsImplementedAndRidesTheMovedNote()
     {
         // What moved's Show me and the redirect note both call GlowNavTarget. A declared-only
