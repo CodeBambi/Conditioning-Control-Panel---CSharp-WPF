@@ -61,6 +61,7 @@ public sealed class ChasterLadderTests
         s.ChasterLockId = "l1";
         s.OfflineMode = false;
         s.UnifiedId = "u1";
+        var oldToken = s.AuthToken;   // the secret store is process-global: restore it for later tests
         s.AuthToken = "t1";
         s.ChasterRafflePostDays = false;
         s.ChasterLadderShowName = false;
@@ -74,6 +75,7 @@ public sealed class ChasterLadderTests
             ChasterHead.Service = null;
             chaster.Dispose();
             new SecretChasterTokenStore().Clear();
+            s.AuthToken = oldToken;
             CoreSettings.ServiceProvider = null;
         }
     }
