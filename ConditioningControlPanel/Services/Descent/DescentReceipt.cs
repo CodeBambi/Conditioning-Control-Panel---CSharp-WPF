@@ -58,8 +58,7 @@ namespace ConditioningControlPanel.Services.Descent
         /// <para>It tracks the applied number so the chip cannot ever advertise a bonus the ledger
         /// is not paying — <see cref="DescentMigration.CycleXpBonus"/> is explicitly tunable, and a
         /// settings file that lost its bonus should read "+0%" (which is a support signal) rather
-        /// than a comfortable lie. Same "0.#" shape as
-        /// <see cref="DescentCeremonyCopy.CycleBonusLine"/> so the ceremony and the card agree.</para>
+        /// than a comfortable lie. </para>
         /// </summary>
         public static string BonusPercentText(double multiplier)
         {

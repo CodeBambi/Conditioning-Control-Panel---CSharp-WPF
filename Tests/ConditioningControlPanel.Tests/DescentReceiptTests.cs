@@ -135,46 +135,6 @@ public class DescentReceiptTests
         Assert.False(DescentReceipt.ShowsXpMultiplier(DescentReceiptKind.Cycle, double.NaN));
     }
 
-    // ------------------------------------------------------ the ceremony's close
-
-    /// <summary>
-    /// THE SENTENCE THE WHOLE FIX HANGS ON. The close has to state the bonus and then say where
-    /// it lives, because "it is on your card" is only useful if the card actually wears it.
-    /// </summary>
-    [Fact]
-    public void TheCycleCloseStatesTheBonusAndNamesTheCard()
-    {
-        var body = DescentCeremonyCopy.DoneBody(DescentMigrationChoices.Cycle, 1);
-
-        Assert.Contains("+10% XP", body, StringComparison.Ordinal);
-        Assert.Contains("permanently", body, StringComparison.Ordinal);
-        Assert.Contains("Profile card", body, StringComparison.Ordinal);
-    }
-
-    /// <summary>Restore has no bonus, so its close points at the record without inventing one.</summary>
-    [Fact]
-    public void TheRestoreCloseNamesTheCardAndPromisesNoBonus()
-    {
-        var body = DescentCeremonyCopy.DoneBody(DescentMigrationChoices.Restore, 117);
-
-        Assert.Contains("Profile card", body, StringComparison.Ordinal);
-        Assert.DoesNotContain("% XP", body, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The close's percent is derived, not typed. Same guard as
-    /// <see cref="TheBlessedConstant_PrintsAsTen"/>, one layer up: the ceremony and the chip have
-    /// to agree, and they can only agree by both reading the constant.
-    /// </summary>
-    [Fact]
-    public void TheCloseAndTheChipQuoteTheSameNumber()
-    {
-        Assert.Contains(
-            "+" + DescentReceipt.BonusPercentText(DescentMigration.CycleXpBonus) + "%",
-            DescentCeremonyCopy.DoneReceiptLine(DescentMigrationChoices.Cycle),
-            StringComparison.Ordinal);
-    }
-
     // ------------------------------------------------------ the surface
 
     private static string RepoRoot()

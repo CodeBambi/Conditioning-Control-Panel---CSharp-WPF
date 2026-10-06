@@ -439,7 +439,7 @@ namespace ConditioningControlPanel.Services.Descent
                     // playSound:false and aiGenerated:false — scripted copy, no AI badge, no
                     // chat-suppression window.
                     App.AvatarWindow?.GigglePriority(
-                        $"Stage {DescentCeremonyCopy.RomanNumeral(stage)}. You walked this once already. Walk it again with me.",
+                        $"Stage {DescentStageCopy.RomanNumeral(stage)}. You walked this once already. Walk it again with me.",
                         playSound: false, aiGenerated: false);
                 }
                 catch (Exception ex)
