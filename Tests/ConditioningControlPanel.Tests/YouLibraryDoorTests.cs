@@ -145,10 +145,12 @@ public class YouLibraryDoorTests
     {
         // A rail row that claims a key the app has no view for leaves the active indicator
         // pointing at nothing. These four open a dialog, a website, a dialog and a window.
-        // Nav rework BASE (2026-10-06): NavDoorMap is derived (NavLegacyDoors.Build()).
-        var row = ConditioningControlPanel.Services.UI.NavLegacyDoors.Build().Single(d => d.Door == "library");
-        Assert.Equal("assets", row.DefaultTab);
-        Assert.Equal(new[] { "assets" }, row.Tabs);
+        // Nav rework (2026-10-06): NavSections is the map; the four are Launcher tabs, which
+        // the strip opens through OpenLibraryLauncher and ShowTab never sees.
+        var lib = ConditioningControlPanel.Services.UI.NavSections.Find("library")!;
+        Assert.Equal("assets", lib.DefaultTab);
+        foreach (var key in new[] { "mods", "catalogue", "phrases", "medialog" })
+            Assert.Equal(ConditioningControlPanel.Services.UI.NavTabKind.Launcher, lib.Tabs.Single(t => t.Key == key).Kind);
     }
 
     [Fact]

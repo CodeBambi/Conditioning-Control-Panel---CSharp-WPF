@@ -135,14 +135,10 @@ public class Phase8RedirectContractTests
     {
         // Three separate maps have to agree or code-driven navigation lands with the active
         // indicator inside a door nobody opened.
-        Assert.Contains("\"progression\"", StripComments(ReadSource("MainWindow", "MainWindow.ChromeFx.cs")),
-                        StringComparison.Ordinal);
         Assert.Contains("\"progression\"", StripComments(ReadSource("Services", "ChromeFxNav.cs")),
                         StringComparison.Ordinal);
-        // The door map: the Home door owns both "settings" and "progression" (nav rework: the
-        // map is derived from NavSections through NavLegacyDoors; "progression" redirects Home).
-        Assert.Contains(ConditioningControlPanel.Services.UI.NavLegacyDoors.Build(),
-            d => d.Door == "home" && d.Tabs.Contains("settings") && d.Tabs.Contains("progression"));
+        // Nav rework (2026-10-06): the section table is the one map; ChromeFx paints the section
+        // row through RefreshSectionRail, so its own tab map is gone.
         Assert.Equal("home", ConditioningControlPanel.Services.UI.NavSections.SectionForTab("progression"));
     }
 

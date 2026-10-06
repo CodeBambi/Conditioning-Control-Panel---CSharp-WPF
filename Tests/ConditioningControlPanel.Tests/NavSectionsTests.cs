@@ -160,30 +160,6 @@ public class NavSectionsTests
     }
 
     [Fact]
-    public void TheLegacyDoorBridgeKeepsTheOldRail()
-    {
-        // Pinned to the hand-written NavDoorMap this replaced (origin/main 4629b1f4a), so the
-        // BASE commit changes no behaviour. The RAIL lane deletes this test with the bridge.
-        var built = NavLegacyDoors.Build();
-        Assert.Equal(new[] { "home", "studio", "companion", "play", "you", "library", "appsettings" },
-            built.Select(d => d.Door).ToArray());
-        var map = built.ToDictionary(d => d.Door);
-
-        void Is(string door, string def, params string[] tabs)
-        {
-            Assert.Equal(def, map[door].DefaultTab);
-            Assert.Equal(tabs.OrderBy(t => t), map[door].Tabs.OrderBy(t => t));
-        }
-        Is("home", "settings", "settings", "progression");
-        Is("studio", "studio", "studio", "presets", "haptics", "justdrop");
-        Is("companion", "companion", "companion", "bambitakeover", "shelistening", "awareness");
-        Is("play", "play", "play", "deeper", "exclusives", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects");
-        Is("you", "discord", "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard");
-        Is("library", "assets", "assets");
-        Is("appsettings", "appsettings", "appsettings");
-    }
-
-    [Fact]
     public void EveryLabelKeyExistsInEveryLanguage()
     {
         var files = LanguageFiles();

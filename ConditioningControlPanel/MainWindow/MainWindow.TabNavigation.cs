@@ -759,10 +759,9 @@ namespace ConditioningControlPanel
             // indicator lands inside a collapsed panel where nobody can see it.
             ExpandDoorForTab(tab);
 
-            // Chrome FX: move the active indicator onto whichever rail entry owns this tab,
-            // and light its door header. Last, so it runs whatever the switch above did - and
-            // it never throws.
-            ApplyNavActiveGlow(NavButtonForTab(tab));
+            // Chrome FX: the section row that owns this tab stays lit. Last, so it runs whatever
+            // the switch above did - and it never throws.
+            ApplyNavActiveGlow(tab);
         }
 
         // ============================== nav rail: sections ==============================

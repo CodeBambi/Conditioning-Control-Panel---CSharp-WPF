@@ -160,10 +160,6 @@ namespace ConditioningControlPanel
             if (BambiTakeoverTab.TxtAutoBouncing != null) BambiTakeoverTab.TxtAutoBouncing.Text = ML("Bouncing", "label_bouncing_text");
             if (BambiTakeoverTab.TxtAutoMindwipe != null) BambiTakeoverTab.TxtAutoMindwipe.Text = ML("Mindwipe", "label_mind_wipe");
 
-            // Enhancement tab tooltip
-            if (BtnEnhancements != null)
-                BtnEnhancements.ToolTip = App.Mods?.GetTabTooltip() ?? Loc.Get("tooltip_enhancement_tree");
-
             // Stat pill tooltips
             if (PillConditioningTime != null)
                 PillConditioningTime.ToolTip = App.Mods?.GetStatPillTooltip("pink_hours")
