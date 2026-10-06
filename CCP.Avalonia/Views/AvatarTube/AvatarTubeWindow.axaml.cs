@@ -1106,10 +1106,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// </summary>
         public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true,
                                    string? phraseAudioPath = null, bool barkVoice = false,
-                                   string? mood = null)
+                                   string? mood = null, Action? onSpoken = null)
         {
-            if (_isPlayingUninterruptibleClip) return;
-            RunOnAvatar(() => ShowSpeech(text, playSound, aiGenerated, phraseAudioPath, barkVoice, preset: false));
+            // onSpoken: fires once her voiced clip has finished (at once when nothing plays) - the
+            // spoken mantra holds the mic shut on it so the recognizer never hears her (SpokenMantra).
+            if (_isPlayingUninterruptibleClip) { onSpoken?.Invoke(); return; }
+            RunOnAvatar(() => ShowSpeech(text, playSound, aiGenerated, phraseAudioPath, barkVoice, preset: false, onSpoken));
         }
 
         private int _presetGiggleCounter;
@@ -1132,8 +1134,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         internal bool NextPresetGiggleSound() => ++_presetGiggleCounter % 5 == 0;
 
         private void ShowSpeech(string text, bool playSound, bool aiGenerated, string? phraseAudioPath,
-                                bool barkVoice, bool preset)
+                                bool barkVoice, bool preset, Action? onSpoken = null)
         {
+                var spokenHandled = false;
                 try
                 {
                     // Only a GENUINE AI reply anchors the bark system's chat-suppression window;
@@ -1160,7 +1163,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
                     // Mute silences her VOICE and keeps the text (#445) - a muted companion that
                     // also stopped showing bubbles read as completely broken.
-                    if (!IsMuted) PlaySpeechAudio(playSound, phraseAudioPath, barkVoice);
+                    if (!IsMuted) { PlaySpeechAudio(playSound, phraseAudioPath, barkVoice, onSpoken); spokenHandled = true; }
 
                     SyncAskButtonsFor(text);
                     _txtSpeech.Text = text;
@@ -1174,6 +1177,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     Log.Debug("Companion says ({Chars} chars, ai={Ai})", text.Length, aiGenerated);   // never the text
                 }
                 catch (Exception ex) { Log.Warning(ex, "AvatarTube GigglePriority failed"); }
+                finally { if (!spokenHandled) onSpoken?.Invoke(); }
         }
 
         private DispatcherTimer? _listeningDotsTimer;
@@ -1282,8 +1286,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// through on WPF. The cue is the giggle; WPF's PlayFallbackBubbleSound picks between the
         /// giggles and the "um" set, and that coin flip lives in Reactions.cs.</para>
         /// </summary>
-        private void PlaySpeechAudio(bool playSound, string? phraseAudioPath, bool barkVoice)
+        private void PlaySpeechAudio(bool playSound, string? phraseAudioPath, bool barkVoice, Action? onSpoken = null)
         {
+            var handedOff = false;
             try
             {
                 var master = CoreSettings.Current.MasterVolume / 100f;
@@ -1298,14 +1303,16 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                         return;
                     }
                     if (!File.Exists(phraseAudioPath)) return;
+                    handedOff = true;
                     CoreAudio.PlayOneShot(phraseAudioPath!, curved * (barkVoice ? 0.85f : 0.56f),
-                                          barkVoice ? "bark-voice" : "phrase-audio");
+                                          barkVoice ? "bark-voice" : "phrase-audio", onFinished: onSpoken);
                     return;
                 }
 
                 if (playSound) PlayGiggleSound(curved);
             }
             catch (Exception ex) { Log.Debug("AvatarTube speech audio failed: {Error}", ex.Message); }
+            finally { if (!handedOff) onSpoken?.Invoke(); }
         }
 
         /// <summary>
@@ -1550,7 +1557,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         }
 
         /// <summary>WPF ShowModerationRefusalBubble (Speech.cs:368): the localized refusal with the POLICY badge.</summary>
-        private void ShowModerationRefusalBubble(ConditioningControlPanel.Services.Moderation.ModerationSource source)
+        internal void ShowModerationRefusalBubble(ConditioningControlPanel.Services.Moderation.ModerationSource source)
         {
             var text = Loc.Get(source == ConditioningControlPanel.Services.Moderation.ModerationSource.Input
                 ? "moderation_input_refusal" : "moderation_output_refusal");

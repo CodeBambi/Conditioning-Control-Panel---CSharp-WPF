@@ -19,6 +19,12 @@ namespace ConditioningControlPanel.Tests;
 /// These tests drive the decode pipeline directly (no screen capture) against a synthetic bitmap.
 /// They skip gracefully when the machine has no OCR language pack (CI / minimal Windows images).
 /// </summary>
+[CollectionDefinition("ScreenOcrLeak", DisableParallelization = true)]
+public sealed class ScreenOcrLeakCollection { }
+
+// GC.GetTotalMemory is process-wide: run alone, or a parallel test class's allocations land in
+// the measured growth (CI: "grew 266 MB" from a 215 MB baseline while the suite ran around it).
+[Collection("ScreenOcrLeak")]
 public class ScreenOcrLeakTests
 {
     private const int Width = 1920;
