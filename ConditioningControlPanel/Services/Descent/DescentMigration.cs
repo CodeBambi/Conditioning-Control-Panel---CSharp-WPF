@@ -147,10 +147,14 @@ namespace ConditioningControlPanel.Services.Descent
         public static double ActiveCycleXpBonus => XpBonusFor(App.Settings?.Current);
 
         /// <summary>
-        /// ONE RULE: migrated = bonus. Migrated means curve v2 is this account's curve
-        /// (<c>DescentEpoch</c>), or the server has acked the migration, or a valid choice is on
-        /// disk waiting to land (the relevel is already applied by then). Restore, Cycle and the
-        /// silent auto-restore all qualify alike.
+        /// ONE RULE: migrated = bonus. Migrated means the server has acked the migration, or a
+        /// valid choice is on disk waiting to land (the relevel is already applied by then).
+        /// Restore, Cycle and the silent auto-restore all qualify alike.
+        ///
+        /// <para>NOT <c>DescentEpoch</c> alone. The server stamps curve_epoch 1 on every record born
+        /// after the Descent too, and a fresh signup never "came back" from anything: the bonus is
+        /// for migrated legacy accounts (owner, 2026-10-06: "anyone that comes back"). An account
+        /// migrated on another device is covered by the ack, which rides every sync.</para>
         ///
         /// <para>The persisted <c>DescentCycleXpBonus</c> is no longer an input: a hand-edited
         /// settings file can never buy more than the constant, and an account that lost the field
@@ -159,8 +163,7 @@ namespace ConditioningControlPanel.Services.Descent
         public static double XpBonusFor(Models.AppSettings? settings)
         {
             if (settings is null) return 1.0;
-            var migrated = settings.DescentEpoch == DescentEpochs.AccountDescent
-                           || settings.DescentMigrationCompleted
+            var migrated = settings.DescentMigrationCompleted
                            || DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice);
             return migrated ? CycleXpBonus : 1.0;
         }

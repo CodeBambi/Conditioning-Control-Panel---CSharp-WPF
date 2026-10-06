@@ -114,6 +114,8 @@ public class DescentAutoRestoreTests
         Assert.Equal(1.0, DescentMigration.XpBonusFor(new AppSettings()));
         Assert.Equal(1.0, DescentMigration.XpBonusFor(new AppSettings { DescentCycleXpBonus = 50 }));
         Assert.Equal(1.0, DescentMigration.XpBonusFor(new AppSettings { PendingDescentMigrationChoice = "maybe" }));
+        // A fresh post-Descent signup carries curve_epoch 1 and never came back from anything.
+        Assert.Equal(1.0, DescentMigration.XpBonusFor(new AppSettings { DescentEpoch = DescentEpochs.AccountDescent }));
     }
 
     [Fact]
