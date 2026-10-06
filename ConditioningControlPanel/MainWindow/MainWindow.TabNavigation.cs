@@ -765,127 +765,48 @@ namespace ConditioningControlPanel
             ApplyNavActiveGlow(NavButtonForTab(tab));
         }
 
-        // ============================== nav rail: doors ==============================
+        // ============================== nav rail: sections ==============================
+        // Nav rework (2026-10-06): the six doors + accordion are gone; the rail is seven labelled
+        // sections + the Settings gear (MainWindow.NavRail.cs), and Services.UI.NavSections is the
+        // one table. These helpers keep the names other files call (ChromeFx, EventFx, BankFx,
+        // the first-visit pulses, the tutorial overlay, feature intros), answering with the
+        // SECTION ROW now. A row's Tag is its section key; the gear's is "appsettings".
 
-        /// <summary>
-        /// The Phase 1 information architecture: six doors over the existing tab keys, plus the
-        /// pinned Settings door. Order matches the rail top to bottom, and each door's FIRST tab
-        /// is the one its header navigates to.
-        /// Every reachable ShowTab key lives in exactly one door; the two ghosts are excluded
-        /// ("patreon" redirects to the Settings door's Account section, "fyp" opens a window -
-        /// both return before the switch). "progression" rides with Home (Dashboard redirect).
-        ///
-        /// The pinned Settings door is keyed "appsettings", NOT "settings": the tab key of that
-        /// name is the dashboard (Home), and DoorSettings has carried Tag="appsettings" since
-        /// Phase 1 - NavDoor_Click matches this door name against that Tag, so the two must stay
-        /// identical. The door has a header and no entry list, so NavDoorParts hands back a null
-        /// panel and the accordion simply has nothing to open for it.
-        /// </summary>
-        private static readonly (string Door, string DefaultTab, string[] Tabs)[] NavDoorMap =
-            Services.UI.NavLegacyDoors.Build();
-
-        // Nav rework BASE bridge (2026-10-06): derived from Services.UI.NavSections and projected
-        // back onto the old six doors + Settings, membership unchanged. See NavLegacyDoors; the
-        // RAIL lane replaces this when the labelled rail lands.
-
-        /// <summary>
-        /// v6.8.0: rail doors that LAUNCH instead of navigating - full medallion treatment, no
-        /// tab, no NavDoorMap row (a map row drags in a default tab, a ShowTab case and a
-        /// palette door row, none of which a browser link has). CacheNavDoorRows walks
-        /// NavDoorMap + this list so the tile growth, label rise and fx animate for them too;
-        /// the "you are here" ring never lights because ChromeFx never targets them.
-        /// Each needs its own Click handler - NavDoor_Click on an unmapped Tag is a logged no-op.
-        /// </summary>
-        internal static readonly string[] NavLauncherDoors = { "webapp" };
-
-        /// <summary>Where the Web App door (and every other web nudge) points. The dashboard
-        /// root, not the link-device page: sign-in and device linking are both discoverable from
-        /// there, and the safe-room rule applies on arrival.</summary>
+        /// <summary>Where the web app (and every other web nudge) points. The dashboard root,
+        /// not the link-device page: sign-in and device linking are both discoverable from there.</summary>
         internal const string WebAppUrl = "https://app.cclabs.app";
 
         /// <summary>Where a public profile is created, edited, rotated and switched off. Web-only
-        /// on purpose: that page is the one surface that shows a profile's slug, and keeping it
-        /// behind the dashboard's login means no slug ever renders in the desktop app - not in a
-        /// settings row, not in a tooltip, not in anything a screenshot could catch.</summary>
+        /// on purpose: no slug ever renders in the desktop app.</summary>
         internal const string ProfileSharingUrl = WebAppUrl + "/dashboard/profile-sharing";
 
-        /// <summary>Row pitch of a rail entry: Height 30 + Margin 0,1 in the NavRailButton style.
-        /// The accordion computes its open height from this instead of forcing a measure pass,
-        /// so the two MUST stay in step.</summary>
-        private const double NavEntryRowHeight = 32;
-
-        private const int NavDoorExpandMs = 160;
-
-        /// <summary>Which door is open. Home ships open, which is why DoorPanelHome is the one
-        /// panel authored without an explicit Height.</summary>
-        private string _expandedDoor = "home";
-
-        private (Button? Header, Border? Panel, StackPanel? Entries) NavDoorParts(string door) => door switch
-        {
-            "home" => (DoorHome, DoorPanelHome, DoorEntriesHome),
-            "studio" => (DoorStudio, DoorPanelStudio, DoorEntriesStudio),
-            "companion" => (DoorCompanion, DoorPanelCompanion, DoorEntriesCompanion),
-            "play" => (DoorPlay, DoorPanelPlay, DoorEntriesPlay),
-            "you" => (DoorYou, DoorPanelYou, DoorEntriesYou),
-            "library" => (DoorLibrary, DoorPanelLibrary, DoorEntriesLibrary),
-            // Pinned, entry-less: a header to light, nothing to expand.
-            "appsettings" => (DoorSettings, null, null),
-            // Launcher door (NavLauncherDoors): a header to animate, nothing to expand and no
-            // tab to light - it opens the web app in the browser.
-            "webapp" => (DoorWebApp, null, null),
-            _ => (null, null, null),
-        };
-
+        /// <summary>The rail row Tag that owns a tab key ("appsettings" for Settings), or null.
+        /// Legacy aliases resolve through CanonicalTabKey first. Feature intros use this as their
+        /// per-door budget key, so it stays a string.</summary>
         private static string? NavDoorForTab(string? tabKey)
         {
             if (string.IsNullOrEmpty(tabKey)) return null;
-            // Legacy aliases, same idiom as ChromeFxNav.IndexOf: a key that no longer has a rail
-            // row of its own still has to resolve to the door that swallowed it, or code-driven
-            // navigation (tutorial spotlights, notifications, the Ctrl+K palette) lands with the
-            // active indicator inside a door nobody opened.
-            tabKey = CanonicalTabKey(tabKey!);
-            foreach (var door in NavDoorMap)
-                foreach (var t in door.Tabs)
-                    if (string.Equals(t, tabKey, StringComparison.OrdinalIgnoreCase))
-                        return door.Door;
-            return null;
+            var section = Services.UI.NavSections.SectionForTab(CanonicalTabKey(tabKey!));
+            return section == null ? null : Controls.NavRail.NavRailRules.DoorTagForSection(section);
         }
 
-        /// <summary>The door header that owns a tab key, for the active-door indicator.</summary>
+        /// <summary>The rail row that owns a tab key (null for a key no section owns).</summary>
         private Button? NavDoorHeaderForTab(string? tabKey)
         {
             var door = NavDoorForTab(tabKey);
-            return door == null ? null : NavDoorParts(door).Header;
-        }
-
-        /// <summary>True when the door owning <paramref name="tabKey"/> is the open one, i.e. when
-        /// that tab's entry row is actually painted rather than clipped to Height 0.</summary>
-        private bool IsDoorExpandedForTab(string? tabKey)
-        {
-            var door = NavDoorForTab(tabKey);
-            return door != null && string.Equals(door, _expandedDoor, StringComparison.Ordinal);
+            if (door == null) return null;
+            foreach (var btn in NavSectionButtons)
+                if (btn.Tag is string tag && string.Equals(tag, door, StringComparison.Ordinal)) return btn;
+            return null;
         }
 
         /// <summary>
-        /// The rail element that visibly STANDS FOR <paramref name="tabKey"/> right now: its entry
-        /// row when the owning door is open, the door header when the door is closed.
-        ///
-        /// A closed door keeps Visibility=Visible at Height 0 (see SetDoorPanelExpanded), so its
-        /// entries still pass FireBurstAt's IsVisible/ActualSize guard and still map through
-        /// TransformToVisual - but they all map onto the same zero-height strip at the top of the
-        /// clipped panel, which paints as some unrelated rail row. Anything that draws AT a rail row
-        /// (celebration bursts, first-launch pulses) must ask for this instead of naming an entry
-        /// button directly, or it lands on the wrong row whenever that door happens to be shut.
+        /// Where a burst or a pulse aimed at a tab should land on the rail: its section row (the
+        /// rows that tabs used to have are pills on the page now). Never throws.
         /// </summary>
         internal Button? NavAnchorForTab(string? tabKey)
         {
-            try
-            {
-                var entry = NavButtonForTab(tabKey);
-                var header = NavDoorHeaderForTab(tabKey);
-                if (header == null) return entry;
-                return IsDoorExpandedForTab(tabKey) ? (entry ?? header) : header;
-            }
+            try { return NavDoorHeaderForTab(tabKey); }
             catch (Exception ex)
             {
                 App.Logger?.Debug("NavAnchorForTab({Tab}): {E}", tabKey, ex.Message);
@@ -893,46 +814,33 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>Door headers currently carrying a first-visit attention pulse, keyed by the tab
-        /// key that asked for it - so the matching Stop can release the animation's hold on Opacity
-        /// and two announcements (Programs in "you", Deeper in "play") can run side by side.</summary>
         private readonly Dictionary<string, Button> _navHeaderPulses = new(StringComparer.Ordinal);
 
         /// <summary>
-        /// First-visit attention pulse for a rail entry whose door is SHUT. The entry is clipped to
-        /// Height 0 there, so the scale pulse it carries plays inside a zero-height ClipToBounds
-        /// panel and nobody ever sees it - and the rail opens on Home, so that is every launch. The
-        /// door header is always painted and is the row the user has to click first, so the
-        /// announcement escalates one level instead of being lost.
-        ///
-        /// Opacity rather than scale: a door header stretches the full rail width, so growing it
-        /// 1.12x would spill over the sidebar's edge onto the page.
-        ///
-        /// Returns false when the door is already open or has no header - the caller then runs its
-        /// own entry-level pulse, which is visible in that case.
+        /// The Deeper / Programs first-visit announcement, on the owning section row. Returns
+        /// false when that section is already the lit one (the caller then pulses its own page
+        /// control), true when the row took the announcement or the quiet window swallowed it.
+        /// Four soft opacity dips, then done; Motion Off shows nothing and still answers true.
         /// </summary>
         private bool StartNavDoorHeaderPulse(string tabKey)
         {
             try
             {
-                // Nothing on the rail flashes for attention while the quiet window is on. Returns
-                // TRUE so the caller stands down too: false means "I could not announce it, do your
-                // own entry-level pulse", and an entry pulse is exactly as much of an interruption
-                // as the header one. The announcement is not lost - the door still opens on the
-                // first visit and the card behind it is still owed.
                 if (App.StartupLadder?.IsQuiet == true) return true;
 
-                if (IsDoorExpandedForTab(tabKey)) return false;
                 var header = NavDoorHeaderForTab(tabKey);
                 if (header == null) return false;
-                if (_navHeaderPulses.ContainsKey(tabKey)) return true;   // already announcing
+                if (string.Equals(NavDoorForTab(_activeTabKey), NavDoorForTab(tabKey), StringComparison.Ordinal))
+                    return false;
+                if (_navHeaderPulses.ContainsKey(tabKey)) return true;
+                if (!MotionFx.AllowTransitions) return true;
 
                 _navHeaderPulses[tabKey] = header;
                 var anim = new DoubleAnimation
                 {
                     From = 1.0,
                     To = 0.35,
-                    Duration = TimeSpan.FromMilliseconds(700),
+                    Duration = TimeSpan.FromMilliseconds(MotionFx.Level == MotionLevel.Reduced ? 350 : 700),
                     AutoReverse = true,
                     RepeatBehavior = new RepeatBehavior(4),
                     EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
@@ -948,9 +856,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>Releases a door-header pulse. Passing null to BeginAnimation is what drops the
-        /// animation's hold on Opacity - without it the last animated value sticks and the header
-        /// stays half-faded for the rest of the session.</summary>
         private void StopNavDoorHeaderPulse(string tabKey)
         {
             try
@@ -964,240 +869,47 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Opens the door that contains <paramref name="tabKey"/>'s entry, closing whichever
-        /// door was open. Public surface for TutorialOverlay (a spotlight can only measure an
-        /// entry once its door is open) and for the future Ctrl+K palette; ShowTab calls it on
-        /// every navigation.
+        /// Called by ShowTab on every navigation (and by the tutorial overlay): lights the section
+        /// row that owns the tab. The name is kept for its callers; nothing expands any more.
         /// </summary>
         internal void ExpandDoorForTab(string tabKey)
         {
-            try
-            {
-                var door = NavDoorForTab(tabKey);
-                if (door != null) SetExpandedDoor(door);
-            }
+            try { RefreshSectionRail(tabKey); }
             catch (Exception ex) { App.Logger?.Debug("ExpandDoorForTab({Tab}): {E}", tabKey, ex.Message); }
         }
 
         /// <summary>
-        /// Moves the accordion to <paramref name="door"/>.
-        ///
-        /// <para><b>A SHUT rail opens nothing.</b> Every panel this touches is gated on
-        /// <c>_navRailExpanded</c> as well as on the door key, exactly the way
-        /// <see cref="ApplyNavRailDoorState"/> gates it. ShowTab calls
-        /// <see cref="ExpandDoorForTab"/> on every navigation, and the rail is shut for most of
-        /// them - a door press whose Click lands after the pointer has already whipped off the
-        /// rail (MouseLeave collapses on the spot since 2026-08-13, so with a quick enough hand
-        /// the collapse beats the Click), a notification, the Ctrl+K palette, a tutorial step.
-        /// Without the gate each of those re-opened a panel underneath a 56px rail and left it
-        /// there: the entries paint as a run of unlabelled child icons wedged between the
-        /// medallions, which is the exact noise collapsing the rail exists to remove (see the
-        /// class remarks on MainWindow.NavRail.cs). Reported on Discord against v6.8.6 as the
-        /// submenu staying open after the menu collapsed, "mainly with rapid mouse movement".</para>
-        ///
-        /// <para><c>_expandedDoor</c> is still written whatever the rail is doing - it is the
-        /// user's choice of door, not a piece of the flyout's state, and the next hover restores
-        /// it through ApplyNavRailDoorState.</para>
+        /// Opens the CC Labs web app in the default browser through BrowserLauncher (the
+        /// 4-strategy opener with the clipboard fallback) and retires the One Account banner beat.
+        /// The rail door is gone; Play > Games carries the tile that calls this.
         /// </summary>
-        private void SetExpandedDoor(string door)
-        {
-            if (string.Equals(_expandedDoor, door, StringComparison.Ordinal)) return;
-            var previous = _expandedDoor;
-            _expandedDoor = door;
-
-            bool animate = MotionFx.AllowTransitions;
-            foreach (var d in NavDoorMap)
-            {
-                // Only the two doors that actually change state get touched; the rest are
-                // already parked at Height 0 and re-animating them would be four idle clocks.
-                if (!string.Equals(d.Door, door, StringComparison.Ordinal) &&
-                    !string.Equals(d.Door, previous, StringComparison.Ordinal)) continue;
-
-                var parts = NavDoorParts(d.Door);
-                if (parts.Panel == null) continue;
-                SetDoorPanelExpanded(d.Door, parts.Panel, parts.Entries,
-                                     IsDoorPanelOpenFor(d.Door), animate);
-            }
-        }
-
-        /// <summary>
-        /// The one answer to "should this door's panel be open right now": the rail has to be out
-        /// AND the door has to be the chosen one. Both callers - <see cref="SetExpandedDoor"/> and
-        /// the tween completion in <see cref="SetDoorPanelExpanded"/> - ask this rather than
-        /// carrying their own half of it, because the two halves disagreeing is the bug.
-        /// </summary>
-        private bool IsDoorPanelOpenFor(string door)
-            => _navRailExpanded && string.Equals(_expandedDoor, door, StringComparison.Ordinal);
-
-        /// <summary>
-        /// The accordion itself: a 160ms Height tween on the door's panel, nothing else. No
-        /// loop, so there is nothing for the motion kill-switch to stop - at MotionLevel Off
-        /// (AllowTransitions false) the panel simply snaps.
-        ///
-        /// A closed door keeps Visibility=Visible at Height 0 rather than collapsing, so an entry
-        /// in a shut door still measures and still maps through TransformToVisual (a Collapsed
-        /// element maps nowhere). It does NOT map anywhere USEFUL, though - every entry of a shut
-        /// door lands on the same zero-height strip - so anything that draws at a rail row asks
-        /// NavAnchorForTab for the row to use and gets the door header while the door is shut.
-        /// </summary>
-        private void SetDoorPanelExpanded(string door, Border panel, StackPanel? entries, bool expand, bool animate)
-        {
-            panel.IsHitTestVisible = expand;
-
-            if (!animate)
-            {
-                panel.BeginAnimation(FrameworkElement.HeightProperty, null);
-                panel.Height = expand ? double.NaN : 0;
-                return;
-            }
-
-            double from = panel.ActualHeight;
-            double to = expand ? MeasureDoorPanel(entries) : 0;
-            if (Math.Abs(from - to) < 0.5)
-            {
-                panel.BeginAnimation(FrameworkElement.HeightProperty, null);
-                panel.Height = expand ? double.NaN : 0;
-                return;
-            }
-
-            var anim = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(NavDoorExpandMs))
-            {
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-            };
-            anim.Completed += (_, __) =>
-            {
-                try
-                {
-                    // A faster click - or a faster POINTER - already moved on: whoever owns the
-                    // panel now finishes it. This asks the same question SetExpandedDoor asks, rail
-                    // state included: a 160ms open tween that started on a rail the pointer has
-                    // since left would otherwise land here and write Height=NaN, handing an open
-                    // panel back to layout underneath a rail that is already 56px wide.
-                    if (IsDoorPanelOpenFor(door) != expand) return;
-                    panel.BeginAnimation(FrameworkElement.HeightProperty, null);
-                    // Hand an open panel back to layout so a later Visibility change on one of
-                    // its entries (BtnDeeper follows EnableDeeper) still resizes the door.
-                    panel.Height = expand ? double.NaN : 0;
-                }
-                catch (Exception ex) { App.Logger?.Debug("Door tween completion: {E}", ex.Message); }
-            };
-            panel.BeginAnimation(FrameworkElement.HeightProperty, anim);
-        }
-
-        private static double MeasureDoorPanel(StackPanel? entries)
-        {
-            if (entries == null) return 0;
-            double h = 0;
-            foreach (var child in entries.Children.OfType<FrameworkElement>())
-                if (child.Visibility == Visibility.Visible) h += NavEntryRowHeight;
-            return h;
-        }
-
-        /// <summary>A door header navigates to its default tab; ShowTab then expands it.</summary>
-        private void NavDoor_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button btn || btn.Tag is not string door) return;
-            foreach (var d in NavDoorMap)
-            {
-                if (!string.Equals(d.Door, door, StringComparison.Ordinal)) continue;
-                ShowTab(d.DefaultTab);
-                return;
-            }
-            // Every door in the rail is in NavDoorMap, Settings included since Phase 2. A Tag
-            // that matches nothing is an authoring mistake, not a navigation - say so and stay
-            // put rather than teleporting the user to the Dashboard. (Launcher doors like
-            // DoorWebApp never route here - they carry their own Click.)
-            App.Logger?.Warning("NavDoor_Click: no NavDoorMap entry for door {Door}", door);
-        }
-
-        /// <summary>
-        /// The Web App door (v6.8.0, One Account). A launcher, not a navigation: it opens the
-        /// web dashboard in the default browser through BrowserLauncher - the 4-strategy opener
-        /// with the clipboard fallback, because this door exists for people who have never been
-        /// to the web side and "nothing happened" is the one first impression it must not make.
-        /// Visiting the web also retires the One Account banner beat: the nudge worked.
-        /// </summary>
-        private void DoorWebApp_Click(object sender, RoutedEventArgs e)
+        internal void OpenWebAppFromNav()
         {
             try
             {
                 Helpers.BrowserLauncher.OpenUrlOrPrompt(WebAppUrl, "open the CC Labs web app");
                 RetireWebBannerBeat();
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "DoorWebApp_Click failed"); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "OpenWebAppFromNav failed"); }
         }
+
+        private void DoorWebApp_Click(object sender, RoutedEventArgs e) => OpenWebAppFromNav();
 
         /// <summary>
         /// Phase 4: the Haptics page is a module of the Studio rack rather than a top-level tab,
-        /// so the x:Name MainWindow.xaml used to declare is a passthrough now.
-        ///
-        /// This one property is why the move cost nothing: all ~71 <c>HapticsTab.&lt;x:Name&gt;</c>
-        /// dereferences across MainWindow.Haptics.cs, .Patreon.cs, .Presets.cs,
-        /// .Remember.cs, .SessionFeatureLock.cs, .TabFxTakeoverLabStatus.cs and .xaml.cs (incl.
-        /// both <c>features/vibe.png</c> repaint rows and the IsVisibleChanged live-status hook)
-        /// resolve through it unchanged. Never rename it.
+        /// so the x:Name MainWindow.xaml used to declare is a passthrough now. ~71
+        /// <c>HapticsTab.&lt;x:Name&gt;</c> dereferences resolve through it. Never rename it.
         /// </summary>
-        /// <remarks>Null-conditional on StudioTab so the several <c>if (HapticsTab != null)</c>
-        /// guards that already exist keep meaning something if this is ever read before
-        /// InitializeComponent has connected the rack.</remarks>
         internal Views.Tabs.HapticsTabView HapticsTab => StudioTab?.HapticsPanel!;
 
-        // Direct entries for the tabs that used to be reachable only through the Exclusives
-        // shelf. Awareness is deliberately absent: BtnNavAwareness binds the existing
-        // BtnAwareness_Click (MainWindow.AccountShell.cs), which was an orphan until now.
-        private void BtnNavStudio_Click(object sender, RoutedEventArgs e) => ShowTab("studio");
-
-        private void BtnNavHaptics_Click(object sender, RoutedEventArgs e) => ShowTab("haptics");
-
         /// <summary>
-        /// The Play door's first rail entry (the button still x:Named BtnLab — that name is API for
-        /// NavButtonForTab, the NavButtons list and TutorialService.NavEntryDoorKeys, all of which
-        /// are keyed by the x:Names the nav has always used). Phase 6: it navigates to the card
-        /// wall's own key. The old <c>BtnLab_Click</c> — a bare <c>ShowTab("lab")</c> — was deleted
-        /// with the Lab view; the alias it relied on lives on in the <c>case "lab"</c> label.
+        /// Library > Media Log. Re-fires the Assets tab's own <c>BtnMediaLog</c> instead of newing
+        /// a second <see cref="MediaHistoryWindow"/>, because that button's Click has a second
+        /// subscriber (<c>MediaLogButton_Clicked</c>, MainWindow.AssetsFx.cs) that banks the
+        /// "new media since you last looked" count. <see cref="InitializeAssetsFx"/> first: that
+        /// subscription is wired lazily. Kept for the Library strip's Media Log launcher pill.
         /// </summary>
-        private void BtnNavPlay_Click(object sender, RoutedEventArgs e) => ShowTab("play");
-
-        private void BtnNavBambiTakeover_Click(object sender, RoutedEventArgs e) => ShowTab("bambitakeover");
-
-        private void BtnNavSheListening_Click(object sender, RoutedEventArgs e) => ShowTab("shelistening");
-
-        private void BtnNavGradedIntake_Click(object sender, RoutedEventArgs e) => ShowTab("gradedintake");
-
-        private void BtnNavLockdown_Click(object sender, RoutedEventArgs e) => ShowTab("lockdown");
-
-        private void BtnNavBlinkTrainer_Click(object sender, RoutedEventArgs e) => ShowTab("blinktrainer");
-
-        private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
-
-        // ShowTab("justdrop"), never JustDropHostService.LaunchShop(): ShowTab owns the withheld
-        // refusal and is the path the Exclusives shelf, the tease tile and the palette row take.
-        private void BtnNavJustDrop_Click(object sender, RoutedEventArgs e) => ShowTab("justdrop");
-
-
-        /// <summary>
-        /// Phase 7 · the Library door's Media Log row. The only one of that door's four new rows
-        /// that needed a handler at all: Mods, Catalogue and Phrase Manager each bind the exact
-        /// existing launcher (<c>BtnManageMods_Click</c>, <c>BtnCatalogue_Click</c>,
-        /// <c>BtnManagePhrases_Click</c>) straight from XAML.
-        ///
-        /// <para>This one re-fires the Assets tab's own <c>BtnMediaLog</c> instead of newing a
-        /// second <see cref="MediaHistoryWindow"/>, because that button's Click has a SECOND
-        /// subscriber: <c>MediaLogButton_Clicked</c> in MainWindow.AssetsFx.cs, which banks
-        /// <c>_mediaLogSeenCount</c> so the three-beat "new media since you last looked" pulse goes
-        /// quiet once the log has been read. A parallel launcher would open the same window and
-        /// leave that badge armed - the failure being a nag nobody can dismiss, from the one entry
-        /// point that never touches the Assets tab.</para>
-        ///
-        /// <para><see cref="InitializeAssetsFx"/> first because that subscription is wired lazily,
-        /// on the first show of the Assets tab, and this row is reachable by someone who has never
-        /// opened it. The call is idempotent (<c>_assetsFxInitialized</c>).</para>
-        ///
-        /// <para>Deliberately no <c>ShowTab("assets")</c>: the Media Log is a window, and it is
-        /// worth having from wherever you are. Navigating first would also fire
-        /// <c>PulseMediaLogIfUnseen</c> one beat before the click that spends it.</para>
-        /// </summary>
-        private void BtnNavMediaLog_Click(object sender, RoutedEventArgs e)
+        internal void BtnNavMediaLog_Click(object sender, RoutedEventArgs e)
         {
             try
             {

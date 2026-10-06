@@ -143,8 +143,9 @@ public class HeaderBannerTests
         Assert.Contains("RetireWebBannerBeat()", link.Value);
 
         var tabNav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
-        var door = Regex.Match(tabNav, @"void DoorWebApp_Click\(.*?\n        \}", RegexOptions.Singleline);
-        Assert.True(door.Success, "DoorWebApp_Click has moved or changed shape");
+        // Nav rework (2026-10-06): the rail door left; its launcher is OpenWebAppFromNav.
+        var door = Regex.Match(tabNav, @"void OpenWebAppFromNav\(.*?\n        \}", RegexOptions.Singleline);
+        Assert.True(door.Success, "OpenWebAppFromNav has moved or changed shape");
         Assert.Contains("BrowserLauncher", door.Value);
         Assert.Contains("RetireWebBannerBeat()", door.Value);
 

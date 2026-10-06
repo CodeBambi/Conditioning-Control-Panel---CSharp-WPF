@@ -596,7 +596,8 @@ public class SpiralRoomTests
         var xaml = AppFile("MainWindow", "MainWindow.xaml");
         Assert.Contains("<views:SpiralTabView x:Name=\"SpiralTab\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<controls:DescentFuseRailChip x:Name=\"FuseRailChip\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"BtnNavSpiral\"", xaml, StringComparison.Ordinal);
+        // Nav rework (2026-10-06): the You door's Spiral row left the rail; the tab strip draws
+        // the (fog-era-only) pill from the section table, and the fuse chip stays on the rail.
 
         var nav = AppFile("MainWindow", "MainWindow.TabNavigation.cs");
         Assert.Contains("SpiralTab.Visibility = Visibility.Collapsed", nav, StringComparison.Ordinal);

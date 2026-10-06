@@ -851,7 +851,9 @@ namespace ConditioningControlPanel.Services
                     // "BtnOpenAssets" only ever existed in the Gaze minigame window - in MainWindow
                     // the assets nav entry has always been BtnOpenAssetsTop, so this step silently
                     // degraded to a centered card. It lives in the Library door (see NavEntryDoorKeys).
-                    TargetElementName = "BtnOpenAssetsTop",
+                    // Nav rework (2026-10-06): the Assets row left the rail; the Library section
+                    // row is the rail's way to the folder now.
+                    TargetElementName = "DoorLibrary",
                     RequiresTab = "settings",
                     TextPosition = TutorialStepPosition.Right
                 },
@@ -902,7 +904,7 @@ namespace ConditioningControlPanel.Services
                     // uses, and the only one in the rail that opens the folder itself. It is in
                     // NavEntryDoorKeys, so DoorTabKeyFor opens the Library door for it while
                     // RequiresTab keeps the page on Home.
-                    TargetElementName = "BtnOpenAssetsTop",
+                    TargetElementName = "DoorLibrary",
                     RequiresTab = "settings",
                     TextPosition = TutorialStepPosition.Right
                 },

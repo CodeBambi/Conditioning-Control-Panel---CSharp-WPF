@@ -65,21 +65,9 @@ namespace ConditioningControlPanel
             ("DoorHome", "door.home"), ("DoorStudio", "door.studio"), ("DoorCompanion", "door.companion"),
             ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorLibrary", "door.library"),
             ("DoorSettings", "door.settings"),
-            ("BtnSettings", "tab.settings"), ("BtnNavStudio", "tab.studio"), ("BtnPresets", "tab.presets"),
-            ("BtnNavHaptics", "tab.haptics"), ("BtnCompanion", "tab.companion"),
-            ("BtnNavBambiTakeover", "tab.bambitakeover"), ("BtnNavSheListening", "tab.shelistening"),
-            ("BtnNavAwareness", "tab.awareness"), ("BtnLab", "tab.play"), ("BtnDeeper", "tab.deeper"),
-            ("BtnPatreonExclusives", "tab.exclusives"), ("BtnNavGradedIntake", "tab.gradedintake"),
-            ("BtnNavLockdown", "tab.lockdown"), ("BtnNavBlinkTrainer", "tab.blinktrainer"),
-            ("BtnNavRemoteControl", "tab.remotecontrol"), ("BtnAvailableSubjects", "tab.availablesubjects"),
-            ("BtnDiscordTab", "tab.discord"), ("BtnNavSpiral", "tab.spiral"), ("BtnQuests", "tab.quests"),
-            ("BtnAchievements", "tab.achievements"), ("BtnEnhancements", "tab.enhancements"),
-            ("BtnPrograms", "tab.programs"), ("BtnLeaderboard", "tab.leaderboard"),
-            ("BtnOpenAssetsTop", "tab.assets"), ("BtnNavMods", "launch.mods"),
-            ("BtnNavCatalogue", "launch.catalogue"), ("BtnNavPhrases", "launch.phrases"),
-            ("BtnNavMediaLog", "launch.medialog"),
-            // Just Drop (owner call 2026-09-11): a creator tool, so its row is under Studio.
-            ("BtnNavJustDrop", "door.justdrop"),
+            // Nav rework (2026-10-06): the door rows (BtnSettings ... BtnNavMediaLog, BtnNavJustDrop)
+            // left the rail for the pages' pill strips, so their pin rows went with them. The
+            // section rows above stay pinnable; door.social needs a palette row first (SEARCH).
             // Play wall cards (PlayTabView.xaml) - resolved through PlayTab.FindName.
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
