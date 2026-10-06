@@ -458,10 +458,11 @@ public class PlayDoorRenderTests
         // of them by number. Phase 6 renamed index 8 rather than inserting; the legacy alias has
         // to score the same index or every caller still passing "lab" gets the fallback "rise"
         // entrance instead of its neighbours' horizontal slide.
-        Assert.Equal("play", ChromeFxNav.NavOrder[8]);
+        // Nav rework 2026-10-06: NavOrder is derived from NavSections; Play's first pill is 12.
+        Assert.Equal("play", ChromeFxNav.NavOrder[12]);
         Assert.DoesNotContain("lab", ChromeFxNav.NavOrder);
-        Assert.Equal(8, ChromeFxNav.IndexOf("lab"));
-        Assert.Equal(8, ChromeFxNav.IndexOf("play"));
+        Assert.Equal(12, ChromeFxNav.IndexOf("lab"));
+        Assert.Equal(12, ChromeFxNav.IndexOf("play"));
     }
 
     [Fact]

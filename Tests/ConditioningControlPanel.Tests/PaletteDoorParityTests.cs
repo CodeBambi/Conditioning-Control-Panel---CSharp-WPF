@@ -52,7 +52,13 @@ public class PaletteDoorParityTests
     /// "lab" lands on the Play wall; "progression" rides with the Dashboard.
     /// </summary>
     private static readonly HashSet<string> AliasTabKeys =
-        new(StringComparer.Ordinal) { "lab", "progression" };
+        new(StringComparer.Ordinal)
+        {
+            "lab", "progression",
+            // Nav rework zone pills: places on pages that have their own rows (Play, Studio).
+            // The SEARCH lane may still give them rows of their own.
+            "playsessions", "playeyes", "ramp",
+        };
 
     /// <summary>(door, defaultTab) straight out of MainWindow.TabNavigation.cs's NavDoorMap.</summary>
     private static List<(string Door, string DefaultTab)> RailDoors()

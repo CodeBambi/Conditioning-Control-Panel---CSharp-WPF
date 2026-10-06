@@ -536,7 +536,7 @@ namespace ConditioningControlPanel
         private Button? NavButtonForTab(string? tab) => (tab ?? string.Empty).ToLowerInvariant() switch
         {
             "settings" or "progression" => BtnSettings,
-            "studio" => BtnNavStudio,
+            "studio" or "ramp" => BtnNavStudio,
             "presets" => BtnPresets,
             // Phase 4: haptics is a Studio rack module, but it keeps its own rail entry and its
             // own tab key, so it keeps lighting its own row - not the rack's.
@@ -548,7 +548,8 @@ namespace ConditioningControlPanel
             // Phase 6: one rail row, two keys. "play" is the live key; "lab" is the permanent
             // alias that ShowTab still answers to, and it has to light the same row or a legacy
             // caller leaves the indicator wherever it was.
-            "play" or "lab" => BtnLab,
+            // Nav rework zone pills land on the same wall, so they light the same row.
+            "play" or "lab" or "playsessions" or "playeyes" => BtnLab,
             "deeper" => BtnDeeper,
             "exclusives" => BtnPatreonExclusives,
             "gradedintake" => BtnNavGradedIntake,

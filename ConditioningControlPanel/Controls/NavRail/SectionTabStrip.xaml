@@ -1,0 +1,70 @@
+<UserControl x:Class="ConditioningControlPanel.Controls.NavRail.SectionTabStrip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False">
+    <!-- Nav rework 2026-10-06: the section page header. Breadcrumb "Section > Page" (the
+         section word returns to that section's last tab), the section's pills (filled = the tab
+         on screen), a one-line "Moved" note, and the 2 px accent line in the section hue.
+         Pills are built in code from NavSections; nothing here scrolls horizontally. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="2" />
+        </Grid.RowDefinitions>
+        <Grid Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel x:Name="CrumbPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,18,0">
+                <Button x:Name="CrumbSection" Cursor="Hand" Focusable="True" Padding="0"
+                        Background="Transparent" BorderThickness="0" Click="CrumbSection_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="Transparent" CornerRadius="6" Padding="4,1"
+                                    BorderThickness="2" BorderBrush="Transparent">
+                                <ContentPresenter VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#14FFFFFF" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#CCFFFFFF" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <TextBlock x:Name="CrumbSectionText" FontSize="15" FontWeight="ExtraBold" />
+                </Button>
+                <TextBlock x:Name="CrumbSep" FontSize="15" Margin="4,0" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextMutedBrush}" />
+                <TextBlock x:Name="CrumbPage" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextLightBrush}" />
+            </StackPanel>
+
+            <Border x:Name="PillTrack" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    CornerRadius="17" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1" Padding="3">
+                <Grid>
+                    <Border x:Name="ActiveFill" CornerRadius="14" HorizontalAlignment="Left" Width="0"
+                            IsHitTestVisible="False">
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="ActiveFillShift" />
+                        </Border.RenderTransform>
+                    </Border>
+                    <StackPanel x:Name="PillRow" Orientation="Horizontal" />
+                </Grid>
+            </Border>
+
+            <Border x:Name="MovedNote" Grid.Column="2" VerticalAlignment="Center" CornerRadius="12"
+                    Padding="12,4" Background="#E61B1026" BorderThickness="1" Visibility="Collapsed"
+                    Opacity="0" IsHitTestVisible="False">
+                <TextBlock x:Name="MovedNoteText" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextLightBrush}" />
+            </Border>
+        </Grid>
+        <Border x:Name="AccentLine" Grid.Row="1" CornerRadius="1" Opacity="0.85" />
+    </Grid>
+</UserControl>
