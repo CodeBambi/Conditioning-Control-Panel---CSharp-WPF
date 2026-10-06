@@ -6698,6 +6698,8 @@
   "inbox_discord_share_summary": "把你的成就发到社区 Discord 吗？",
   "dash_toggle_hint": "右键点击卡片可开关 · 左键点击打开",
   "rail_favorites_caption": "收藏",
+  "rail_favorites_drawer": "Favorites",
+  "tooltip_rail_favorites_drawer": "Favorites and recent pages",
   "rail_recent_caption": "最近",
   "rail_favorites_empty": "右键点击任意项即可固定到这里",
   "rail_recent_empty": "还没有打开过任何内容",

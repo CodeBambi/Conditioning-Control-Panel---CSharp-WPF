@@ -6186,6 +6186,8 @@
   "inbox_discord_share_summary": "¿Publicar tus logros en el Discord de la comunidad?",
   "dash_toggle_hint": "clic derecho en una tarjeta la enciende o apaga · clic izquierdo la abre",
   "rail_favorites_caption": "FAVORITOS",
+  "rail_favorites_drawer": "Favorites",
+  "tooltip_rail_favorites_drawer": "Favorites and recent pages",
   "rail_recent_caption": "RECIENTES",
   "rail_favorites_empty": "Clic derecho en algo para fijarlo aquí",
   "rail_recent_empty": "Nada abierto todavía",

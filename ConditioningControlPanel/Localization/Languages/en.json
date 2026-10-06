@@ -291,6 +291,8 @@
   "inbox_discord_share_summary": "Post your achievements to the community Discord?",
   "dash_toggle_hint": "right-click a tile to switch it on or off · left-click opens it",
   "rail_favorites_caption": "FAVORITES",
+  "rail_favorites_drawer": "Favorites",
+  "tooltip_rail_favorites_drawer": "Favorites and recent pages",
   "rail_recent_caption": "RECENT",
   "rail_favorites_empty": "Right-click anything to pin it here",
   "rail_recent_empty": "Nothing opened yet",

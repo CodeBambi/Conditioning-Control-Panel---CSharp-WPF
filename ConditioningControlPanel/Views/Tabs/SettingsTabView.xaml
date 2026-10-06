@@ -11,20 +11,19 @@
              d:DesignHeight="450" d:DesignWidth="800">
         <Grid>
         <Grid.ColumnDefinitions>
-            <!-- #860: 84 of rail + 8 reserved for the rail's scrollbar. The chips used to be
-                 laid out against the full 84 and then squeezed the moment the ScrollViewer
-                 decided it needed a bar (short windows, or the Programs "Today" card taking a
-                 bite out of row 1), cropping the chip art and wrapping the captions. The gutter
-                 is reserved here and the chip stack is pinned to its old width, so a scrollbar
-                 costs the chips nothing.
-                 8, not the 17 of an OS scrollbar: Resources/Theme/MainWindow.xaml restyles
-                 every ScrollBar and sets Width=8 on the vertical one, so 17 over-reserved the
-                 gutter by 9 and pushed the whole settings grid right.
-                 Keep in sync with the FavoritesRail stack: 92 - 5 rail margin - 2 border
-                 - 8 scrollbar - 8 stack margin = 69. -->
-            <ColumnDefinition Width="92"/>
+            <!-- Nav polish wave 3 (owner, 2026-10-06: "move the favourite rail on the other side,
+                 and make it collapsable ... we click to open it and to close as a drawer, same
+                 layout"). Column 0 held the FAVORITES + RECENT column at 92 px, right beside the
+                 section rail; it is 0 now and kept only so every Grid.Column index below stays
+                 put. The column lives in the FAVORITES DRAWER at the right edge (column 3, Auto):
+                 a 22 px handle that is always there plus a body that opens to the same 92 px
+                 (the arithmetic is written on FavoritesDrawerBody). The drawer PUSHES column 2
+                 rather than floating over the browser, and column 1 is a fixed 640, so the
+                 mosaic never moves when it opens or closes. -->
+            <ColumnDefinition Width="0"/>
             <ColumnDefinition Width="640"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>   <!-- Training Programs "Today" card -->
@@ -40,7 +39,7 @@
         <!-- it opens the Programs tab.                                    -->
         <!-- ============================================================ -->
         <Button x:Name="ProgramTodayCard" x:FieldModifier="internal"
-                Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"
                 Margin="5,5,5,0" Visibility="Collapsed" Cursor="Hand"
                 HorizontalContentAlignment="Stretch"
                 BorderBrush="{DynamicResource PinkBrush}"
@@ -148,7 +147,7 @@
         </Button>
 
         <!-- ============================================================ -->
-        <!-- FAVORITES + RECENT RAIL (col 0). Owner call, Discord "New UI  -->
+        <!-- FAVORITES + RECENT RAIL (drawer body, col 3). Owner call, Discord "New UI  -->
         <!-- Feedback", 2026-09-11: the premium quick-toggle rail that sat  -->
         <!-- here is gone. The column remembers where the user goes instead -->
         <!-- - pinned destinations on top, the last seven opened below. The -->
@@ -166,7 +165,87 @@
              gesture line, so the card owns the column and the line is docked at its foot: the
              lists scroll inside the row above it, and the line stays put however many chips are
              pinned. Nothing is hidden by count. -->
-        <Border x:Name="FavoritesRail" x:FieldModifier="internal" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
+        <!-- THE FAVORITES DRAWER (nav polish wave 3). Column 3 is Auto and holds two things:
+             the HANDLE (22 px, always visible, a real Button) and the BODY, whose Width is the
+             only thing that moves: 0 closed, 92 open, animated over 200 ms by
+             SettingsTabView.SetFavoritesDrawer (instant under Motion Off). Closed by default;
+             the state is AppSettings.FavoritesDrawerOpen and only the handle writes it. A pin
+             while it is closed opens it for 2.5 s with the glow ring on the new chip
+             (MainWindow.TogglePinned -> PeekFavoritesDrawer) and writes nothing.
+             The body PUSHES column 2 (the browser column gives up 92 px), it never floats over
+             it, and the mosaic in column 1 does not move. -->
+        <Grid x:Name="FavoritesDrawer" x:FieldModifier="internal" Grid.Column="3" Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="22"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <!-- Home's lilac (NavStripRules.Lilac, #B79CFF) at rest, brighter on hover. The star
+                 sits at the top, the word runs up the bar, the chevron at the foot says which
+                 way a click goes (set in code). -->
+            <Button x:Name="FavoritesDrawerHandle" x:FieldModifier="internal" Grid.Column="0"
+                    Margin="2,5,2,5" Cursor="Hand" Click="FavoritesDrawerHandle_Click"
+                    AutomationProperties.Name="{loc:Str rail_favorites_drawer}"
+                    AutomationProperties.HelpText="{loc:Str tooltip_rail_favorites_drawer}"
+                    ToolTip="{loc:Str tooltip_rail_favorites_drawer}">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="Foreground" Value="#FFB79CFF"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="hb" CornerRadius="9" BorderThickness="1"
+                                            Background="#1FB79CFF" BorderBrush="#66B79CFF">
+                                        <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="hb" Property="Background" Value="#40B79CFF"/>
+                                            <Setter TargetName="hb" Property="BorderBrush" Value="#FFB79CFF"/>
+                                            <Setter Property="Foreground" Value="#FFE4DAFF"/>
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="hb" Property="BorderBrush" Value="#FFB79CFF"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="hb" Property="Opacity" Value="0.82"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="&#x2605;" FontSize="12" Margin="0,9,0,0"
+                               HorizontalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    <TextBlock Grid.Row="1" Text="{loc:Str rail_favorites_drawer}" FontSize="12" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <TextBlock.LayoutTransform>
+                            <RotateTransform Angle="-90"/>
+                        </TextBlock.LayoutTransform>
+                    </TextBlock>
+                    <TextBlock x:Name="FavoritesDrawerChevron" x:FieldModifier="internal" Grid.Row="2"
+                               Text="&#x2039;" FontSize="16" FontWeight="Bold" Margin="0,0,0,7"
+                               HorizontalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                </Grid>
+            </Button>
+            <!-- THE BODY. Width 92 open = the old column 0, so the chip arithmetic is unchanged:
+                 92 - 5 rail margin - 2 border - 8 scrollbar - 8 stack margin = 69, the chip
+                 stack's Width below (#860: 8 of scrollbar gutter, not the 17 of an OS bar,
+                 because Resources/Theme/MainWindow.xaml restyles every vertical ScrollBar to
+                 Width 8). The rail is pinned at 92 - 5 = 87 and right-aligned, so while the body
+                 is narrower it slides in from the edge instead of squeezing the chips.
+                 FavoritesRailArtTests re-does this sum from this file. -->
+            <Grid x:Name="FavoritesDrawerBody" x:FieldModifier="internal" Grid.Column="1"
+                  Width="0" ClipToBounds="True">
+        <Border x:Name="FavoritesRail" x:FieldModifier="internal" Width="87" HorizontalAlignment="Right" Margin="0,5,5,5"
                 Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="12">
             <Border.Resources>
@@ -357,7 +436,7 @@
                             <TextBlock Text="{loc:Str dash_click_choice}" TextWrapping="Wrap" TextAlignment="Center"/>
                         </Button>
                         <Popup x:Name="ClickChoicePopup" PlacementTarget="{Binding ElementName=ClickChoiceAnchor}"
-                               Placement="Right" HorizontalOffset="6" StaysOpen="True" Closed="ClickChoiceClosed"
+                               Placement="Left" HorizontalOffset="-6" StaysOpen="True" Closed="ClickChoiceClosed"
                                AllowsTransparency="True" PopupAnimation="None">
                             <Border x:Name="ClickChoiceBody" Width="290" Padding="18" CornerRadius="12"
                                     Background="#FF1B1B30" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
@@ -380,6 +459,8 @@
                 </Border>
             </Grid>
         </Border>
+            </Grid>
+        </Grid>
 
         <!-- ============================================================ -->
         <!-- VELVET MOSAIC DASHBOARD - 4x4 hybrid wall (col 1)             -->
@@ -2031,7 +2112,7 @@
         <!-- the fixed 1489x901 canvas, and every unit it grows comes off  -->
         <!-- the mosaic's star row (WPF clips silently - #860).            -->
         <!-- ============================================================ -->
-        <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
+        <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" x:Name="VelvetHelperButtonRow"
               Height="30" Margin="5,10,5,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -2203,7 +2284,7 @@
         </Grid>
 
         <!-- Scrolling Marquee Banner - row 3, spans all columns -->
-        <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+        <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4"
                 Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
                 CornerRadius="8" Height="48" Margin="5,10,5,0" ClipToBounds="True">
             <Border.Effect>
