@@ -570,9 +570,19 @@ public sealed partial class FriendsDrawer : Border
         while (cur != null && !ReferenceEquals(cur, row))
         {
             if (cur is FrameworkElement fe && fe.Tag is string s && s == "friends-card") return true;
-            cur = VisualTreeHelper.GetParent(cur) ?? LogicalTreeHelper.GetParent(cur);
+            cur = ParentOf(cur);
         }
         return false;
+    }
+
+    /// <summary>One step up from anything a click can land on. A press on a word lands on a
+    /// <c>Run</c>, a ContentElement, and VisualTreeHelper throws on it (ccp-bugs #1369: the drawer
+    /// crashed when a friend's card was clicked), so only a Visual takes the visual walk.</summary>
+    internal static DependencyObject? ParentOf(DependencyObject d)
+    {
+        if (d is Visual || d is System.Windows.Media.Media3D.Visual3D)
+            return VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d);
+        return LogicalTreeHelper.GetParent(d);
     }
 
     private TextBlock ActivityLine(Friend f)
