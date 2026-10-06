@@ -34,8 +34,9 @@
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel Margin="24,16,24,24" MaxWidth="1100" HorizontalAlignment="Stretch">
-            <TextBlock Text="{loc:Str nav_tab_personality}" FontSize="22" FontWeight="Bold" Foreground="White"/>
-            <TextBlock Text="{loc:Str companion_page_personality_intro}" FontSize="13" Foreground="#B8B8C8" TextWrapping="Wrap" Margin="0,4,0,16"/>
+            <!-- Readability pass (polish 8): the shared type scale, one page title, one subtitle. -->
+            <TextBlock Text="{loc:Str nav_tab_personality}" Style="{StaticResource Type.PageTitle}"/>
+            <TextBlock Text="{loc:Str companion_page_personality_intro}" Style="{StaticResource Type.PageSubtitle}" Margin="0,4,0,16"/>
 
             <!-- Who: the same picker Customise and the chat's "who" entry use -->
             <Border Background="#14FFFFFF" CornerRadius="10" Padding="16" Margin="0,0,0,16">
@@ -53,8 +54,8 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str companion_page_personality_advanced}" FontSize="15" FontWeight="SemiBold" Foreground="#FF69B4"/>
-                        <TextBlock Text="{loc:Str companion_page_personality_advanced_note}" FontSize="12" Foreground="#B8B8C8" TextWrapping="Wrap" Margin="0,2,12,0"/>
+                        <TextBlock Text="{loc:Str companion_page_personality_advanced}" Style="{StaticResource Type.CardTitle}"/>
+                        <TextBlock Text="{loc:Str companion_page_personality_advanced_note}" Style="{StaticResource Type.Body}" Margin="0,2,12,0"/>
                     </StackPanel>
                     <Button x:Name="BtnOpenPromptEditor" Grid.Column="1" Style="{StaticResource PageButton}" VerticalAlignment="Center"
                             Content="{loc:Str companion_page_personality_open_editor}" Click="OpenPromptEditor_Click"/>
@@ -64,7 +65,7 @@
             <!-- Community prompts: browse / import / export / refresh -->
             <Border Background="#14FFFFFF" CornerRadius="10" Padding="16" Margin="0,0,0,16">
                 <StackPanel>
-                    <TextBlock Text="{loc:Str companion_page_personality_community}" FontSize="15" FontWeight="SemiBold" Foreground="#FF69B4" Margin="0,0,0,8"/>
+                    <TextBlock Text="{loc:Str companion_page_personality_community}" Style="{StaticResource Type.CardTitle}" Margin="0,0,0,8"/>
                     <ContentControl x:Name="CommunityHost" Focusable="False"/>
                 </StackPanel>
             </Border>
@@ -72,8 +73,8 @@
             <!-- Behaviour: power knobs, folded; opens itself when one is off its default -->
             <Border Background="#14FFFFFF" CornerRadius="10" Padding="16">
                 <StackPanel>
-                    <TextBlock Text="{loc:Str companion_page_personality_behaviour}" FontSize="15" FontWeight="SemiBold" Foreground="#FF69B4"/>
-                    <TextBlock Text="{loc:Str companion_page_personality_behaviour_note}" FontSize="12" Foreground="#B8B8C8" TextWrapping="Wrap" Margin="0,2,0,4"/>
+                    <TextBlock Text="{loc:Str companion_page_personality_behaviour}" Style="{StaticResource Type.CardTitle}"/>
+                    <TextBlock Text="{loc:Str companion_page_personality_behaviour_note}" Style="{StaticResource Type.Body}" Margin="0,2,0,4"/>
                     <feat:MoreFold x:Name="BehaviourFold">
                         <ContentControl x:Name="BehaviorHost" Focusable="False" Margin="0,4,0,12"/>
                         <ContentControl x:Name="TriggersHost" Focusable="False"/>
