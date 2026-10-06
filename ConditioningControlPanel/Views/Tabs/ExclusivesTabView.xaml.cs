@@ -1,6 +1,8 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using ConditioningControlPanel.Localization;
 using System.Windows.Media;
 using ConditioningControlPanel.Services;
 
@@ -111,6 +113,12 @@ namespace ConditioningControlPanel.Views.Tabs
                 var v = value ? Visibility.Collapsed : Visibility.Visible;
                 CollectionLabel.Visibility = v;
                 ExclusivesShelf.Visibility = v;
+                // Settings > Account & Plans wears its own header (nav polish 2026-10-06): no Vault
+                // or Exclusives names, no Lab chip. Rebound, never assigned, so a language switch
+                // still repaints them (a plain Text write would drop the live loc binding).
+                BindLoc(TxtVaultTitle, value ? "plans_header_title" : "exclusives_vault_title");
+                BindLoc(TxtVaultSub, value ? "plans_header_sub" : "exclusives_vault_sub");
+                BindLoc(TxtSpotVeilChip, value ? "plans_chip_unlock" : "exclusives_chip_lab");
                 ContentScroll.VerticalScrollBarVisibility =
                     value ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
                 if (value && ContentScroll.Content is UIElement content && ContentScroll.Parent is Panel host)
@@ -125,6 +133,13 @@ namespace ConditioningControlPanel.Views.Tabs
             }
         }
         private bool _plansMode;
+
+        private static void BindLoc(TextBlock? target, string key)
+        {
+            if (target == null) return;
+            BindingOperations.SetBinding(target, TextBlock.TextProperty,
+                new Binding($"[{key}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+        }
 
         private void Spotlight_Click(object sender, RoutedEventArgs e) => OpenSpotlight();
 
