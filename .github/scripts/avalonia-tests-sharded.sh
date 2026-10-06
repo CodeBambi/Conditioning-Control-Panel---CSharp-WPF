@@ -26,16 +26,19 @@ filters+=("$rest")
 
 expected=$(dotnet test "$project" -c Release --no-build --list-tests | grep -cE "^\s+$prefix")
 ran=0
+worst=0
 for f in "${filters[@]}"; do
   out=$(mktemp)
   if dotnet test "$project" -c Release --no-build --filter "$f" 2>&1 | tee "$out"; then status=0; else status=$?; fi
   total=$(grep -oE 'Total: +[0-9]+' "$out" | grep -oE '[0-9]+' | tail -1 || true)
   rm -f "$out"
-  [ "$status" -eq 0 ] || exit "$status"
+  # Keep going so one run reports every failing shard; exit with the worst status at the end.
+  [ "$status" -eq 0 ] || worst=$status
   ran=$((ran + ${total:-0}))
 done
 
 echo "avalonia shards ran $ran of $expected tests"
+[ "$worst" -eq 0 ] || exit "$worst"
 if [ "$ran" -ne "$expected" ]; then
   echo "::error::Avalonia test shards ran $ran tests but the suite lists $expected"
   exit 1
