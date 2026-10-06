@@ -16,7 +16,7 @@ namespace ConditioningControlPanel.Tests;
 public class VaultOfferTests
 {
     private static readonly DateTime Now = new(2026, 10, 2, 12, 0, 0, DateTimeKind.Utc);
-    private static readonly string[] Languages = { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" };
+    private static readonly string[] Languages = { "en", "de", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" };
 
     [Theory]
     [InlineData(1, PriceCurrency.Eur, "€6", "€0.20", "€60", "€5")]

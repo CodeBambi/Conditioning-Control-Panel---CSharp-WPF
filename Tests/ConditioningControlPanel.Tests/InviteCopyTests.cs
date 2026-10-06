@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class InviteCopyTests
 {
-    private static readonly string[] Languages = { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" };
+    private static readonly string[] Languages = { "en", "de", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" };
 
     private static string AppDir()
     {

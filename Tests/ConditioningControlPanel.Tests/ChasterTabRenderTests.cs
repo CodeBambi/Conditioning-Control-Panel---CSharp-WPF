@@ -421,7 +421,7 @@ public class ChasterTabRenderTests
     [Fact]
     public void The_paper_tag_stamp_never_covers_the_tags_own_line()
     {
-        var langs = new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" }
+        var langs = new[] { "en", "de", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" }
             .Select(lang => Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(System.IO.Path.Combine(
                 RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", lang + ".json"))))
             .ToList();

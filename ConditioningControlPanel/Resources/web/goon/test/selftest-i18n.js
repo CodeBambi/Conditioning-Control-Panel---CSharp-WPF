@@ -95,9 +95,9 @@ for (const lang of LANGS.filter((l) => l !== 'en')) {
   ok(normalizeLang('de-AT') === 'de', 'de-AT -> de');
   ok(normalizeLang('pt') === 'pt-BR' && normalizeLang('pt_PT') === 'pt-BR' && normalizeLang('PT-br') === 'pt-BR', 'pt, pt_PT, PT-br -> pt-BR');
   ok(normalizeLang('zh-TW') === 'zh-CN' && normalizeLang('zh') === 'zh-CN', 'any Chinese -> zh-CN');
-  ok(normalizeLang('it-IT') === 'en' && normalizeLang('') === 'en' && normalizeLang(null) === 'en', 'unknown, empty, null -> en');
+  ok(normalizeLang('nl-NL') === 'en' && normalizeLang('') === 'en' && normalizeLang(null) === 'en', 'unknown, empty, null -> en');
   ok(normalizeLang('ja') === 'ja' && normalizeLang('ko-KR') === 'ko' && normalizeLang('ru-RU') === 'ru', 'ja, ko-KR, ru-RU');
-  ok(browserLang({ languages: ['it-IT', 'fr-CA', 'en'] }) === 'fr', 'browserLang takes the first language we speak');
+  ok(browserLang({ languages: ['nl-NL', 'fr-CA', 'en'] }) === 'fr', 'browserLang takes the first language we speak');
   ok(browserLang({ languages: ['en-GB', 'de'] }) === 'en', 'browserLang keeps an English first choice');
   ok(browserLang({ language: 'es-MX' }) === 'es', 'browserLang falls back to navigator.language');
   ok(browserLang({ languages: [] , language: 'xx' }) === 'en', 'browserLang with nothing we speak is en');
@@ -109,7 +109,7 @@ for (const lang of LANGS.filter((l) => l !== 'en')) {
   ok(t('gg_title_host') === EN.gg_title_host, 'a key the table lacks falls back to English');
   registerTable('de', tables.de);
   ok(t('gg_title_host') === tables.de.gg_title_host, 'the German line reads German');
-  ok(setLang('it') === 'en', 'setLang to a language we do not speak is English');
+  ok(setLang('nl') === 'en', 'setLang to a language we do not speak is English');
 
   for (const lang of LANGS) {
     const got = await loadLang(lang);

@@ -636,7 +636,7 @@ public class SpiralRoomTests
     {
         var dir = Path.Combine(ProductDir, "Localization", "Languages");
         var files = Directory.GetFiles(dir, "*.json");
-        Assert.Equal(9, files.Length);
+        Assert.Equal(10, files.Length);
 
         foreach (var f in files)
         {

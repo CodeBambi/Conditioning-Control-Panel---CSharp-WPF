@@ -88,7 +88,7 @@ public class CompanionOnSwitchTests
     [InlineData("voice_test_companion_off_body")]
     public void Every_language_carries_the_switch_copy(string key)
     {
-        foreach (var lang in new[] { "de", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
+        foreach (var lang in new[] { "de", "en", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
             using var doc = JsonDocument.Parse(ReadSource("Localization", "Languages", lang + ".json"));
             Assert.True(doc.RootElement.TryGetProperty(key, out var value) && value.GetString()?.Trim().Length > 0,

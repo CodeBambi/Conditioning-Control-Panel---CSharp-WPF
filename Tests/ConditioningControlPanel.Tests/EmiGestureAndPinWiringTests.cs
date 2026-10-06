@@ -129,7 +129,7 @@ public class EmiGestureAndPinWiringTests
     {
         // EMI's absolute fence: "door" is an Arcademy story spoiler and VOICE.md hard-errors on it.
         // The hover glyph is her CARDS everywhere a user can read it.
-        foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
+        foreach (var lang in new[] { "en", "de", "es", "fr", "it", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
             var json = Read("Localization", "Languages", lang + ".json");
             foreach (var line in json.Split('\n'))
