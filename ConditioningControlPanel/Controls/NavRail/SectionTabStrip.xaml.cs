@@ -561,6 +561,11 @@ namespace ConditioningControlPanel.Controls.NavRail
             public Brush Plate = Brushes.Transparent;
             public Brush Hover = Brushes.Transparent;
             public Thickness RestPadding;
+            // Polish wave 10 (depth): the face's travel, the drop band under it, and the state.
+            public TranslateTransform? FaceShift;
+            public System.Windows.Shapes.Rectangle? Drop;
+            public bool Pressed;
+            public bool Hovered;
         }
 
         private readonly List<PillParts> _pills = new();
@@ -628,6 +633,7 @@ namespace ConditioningControlPanel.Controls.NavRail
             // Hidden, not Collapsed: the track keeps the row's height, so Settings (no pills) has the
             // same header height as every other section.
             PillTrack.Visibility = _pills.Count > 0 ? Visibility.Visible : Visibility.Hidden;
+            TrayHost.Visibility = PillTrack.Visibility;
 
             // Breadcrumb: two levels only; the section word is a link back to its last tab.
             var sectionLabel = SafeLoc(NavSections.Find(section)?.LabelKey, section ?? string.Empty);
@@ -681,6 +687,7 @@ namespace ConditioningControlPanel.Controls.NavRail
             // The tray: darker than the page wash, its top edge shaded so the pills sit IN it.
             PillTrack.Background = Freeze(new SolidColorBrush(NavStripRules.TrackFill(hue)));
             PillTrack.BorderBrush = NavStripRules.TrackBorderBrush(hue);
+            PaintDepthPages(hue);
         }
 
         /// <summary>Test seam: the brushes a pill wears now (label, face outline).</summary>
@@ -833,6 +840,9 @@ namespace ConditioningControlPanel.Controls.NavRail
                     BorderThickness = new Thickness(NavStripRules.RestFaceThickness),
                     BorderBrush = parts.Outline,
                     Child = content,
+                    // Polish wave 10: the face travels (lit = sunk, pressed = down); the ring
+                    // around it keeps the hover lift and the squish.
+                    RenderTransform = parts.FaceShift = new TranslateTransform(),
                 };
                 var ring = new Border
                 {
@@ -867,14 +877,15 @@ namespace ConditioningControlPanel.Controls.NavRail
                 System.Windows.Automation.AutomationProperties.SetHelpText(pill, CrumbFor(section, label.Text));
                 System.Windows.Automation.AutomationProperties.SetAutomationId(pill, "NavPill_" + tab.Key);
 
-                pill.MouseEnter += (_, _) => { if (!IsActive(tab.Key)) face.Background = parts.Hover; };
-                pill.MouseLeave += (_, _) => { face.Background = IsActive(tab.Key) ? Brushes.Transparent : parts.Plate; if (!pill.IsPressed) MotionFx.PressSquish(ring, false); };
-                pill.PreviewMouseLeftButtonDown += (_, _) => MotionFx.PressSquish(ring, true);
-                pill.LostMouseCapture += (_, _) => MotionFx.PressSquish(ring, false);
+                pill.MouseEnter += (_, _) => { if (!IsActive(tab.Key)) face.Background = parts.Hover; DepthHover(parts, true); };
+                pill.MouseLeave += (_, _) => { face.Background = IsActive(tab.Key) ? Brushes.Transparent : parts.Plate; if (!pill.IsPressed) MotionFx.PressSquish(ring, false); DepthHover(parts, false); };
+                pill.PreviewMouseLeftButtonDown += (_, _) => { MotionFx.PressSquish(ring, true); DepthPress(parts, true); };
+                pill.LostMouseCapture += (_, _) => { MotionFx.PressSquish(ring, false); DepthPress(parts, false); };
                 pill.Click += (_, e) =>
                 {
                     e.Handled = true;
                     MotionFx.PressSquish(ring, false);
+                    parts.Pressed = false;
                     Choose(tab, focus: false);
                 };
                 pill.GotKeyboardFocus += (_, _) => ring.BorderBrush = FocusRing;
@@ -886,7 +897,9 @@ namespace ConditioningControlPanel.Controls.NavRail
                 parts.RestPadding = face.Padding;
                 parts.Label = label;
                 parts.Glyph = glyph;
+                parts.Drop = DropOf(pill);
                 _pills.Add(parts);
+                DepthSettle(parts, animate: false);
                 PillCreated?.Invoke(tab, pill);
             }
 
@@ -924,6 +937,16 @@ namespace ConditioningControlPanel.Controls.NavRail
         {
             var grid = new FrameworkElementFactory(typeof(Grid));
             grid.SetValue(Panel.BackgroundProperty, Brushes.Transparent);
+            // Polish wave 10: the raised pill's drop band, under the face, on the sheet (it does
+            // not travel with the face). Length and paint are set per state in DepthSettle; the
+            // negative foot margin keeps the pill 38 px tall.
+            var drop = new FrameworkElementFactory(typeof(System.Windows.Shapes.Rectangle), "DepthDrop");
+            drop.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Bottom);
+            drop.SetValue(UIElement.IsHitTestVisibleProperty, false);
+            drop.SetValue(System.Windows.Shapes.Rectangle.RadiusXProperty, 4.0);
+            drop.SetValue(System.Windows.Shapes.Rectangle.RadiusYProperty, 4.0);
+            drop.SetValue(FrameworkElement.HeightProperty, 0.0);
+            grid.AppendChild(drop);
             var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
             grid.AppendChild(presenter);
             var t = new ControlTemplate(typeof(Button)) { VisualTree = grid };
@@ -1029,6 +1052,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                 p.Face.Background = on ? Brushes.Transparent : (p.Pill.IsMouseOver ? p.Hover : p.Plate);
                 KeyboardNavigation.SetIsTabStop(p.Pill, on);
                 System.Windows.Automation.AutomationProperties.SetItemStatus(p.Pill, on ? "selected" : string.Empty);
+                DepthSettle(p, animate);
             }
             if (key == null && _pills.Count > 0) KeyboardNavigation.SetIsTabStop(_pills[0].Pill, true);
             PositionFill(animate);

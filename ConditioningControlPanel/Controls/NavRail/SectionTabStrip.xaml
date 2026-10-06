@@ -51,7 +51,16 @@
             <!-- Polish wave 3: the track is a real tab bar, so the pills read as THE page tabs at
                  one glance. Polish wave 7: a tray darker than the page wash (paint in PaintFor),
                  38 px pills + 2 x 4 padding + 2 x 1.5 border = 49. -->
-            <Border x:Name="PillTrack" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
+            <!-- Polish wave 10 (depth): the tray is SUNKEN. A well floor under the wave 7 track
+                 fill, then the inner top / left bands and the lit foot line, all hit-test off and
+                 all clipped by the tray's own CornerRadius (the bands are absolute-mapped brushes
+                 set in PaintDepthPages, so a 9 px band stays 9 px on a 49 px tray). -->
+            <Grid x:Name="TrayHost" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center">
+            <Border x:Name="TrayFloor" CornerRadius="21" IsHitTestVisible="False" />
+            <Border x:Name="TrayWellTop" CornerRadius="21" IsHitTestVisible="False" />
+            <Border x:Name="TrayWellLeft" CornerRadius="21" IsHitTestVisible="False" />
+            <Border x:Name="TrayWellFoot" CornerRadius="21" IsHitTestVisible="False" BorderThickness="0,0,0,1" />
+            <Border x:Name="PillTrack" HorizontalAlignment="Left" VerticalAlignment="Center"
                     CornerRadius="21" Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1.5" Padding="4"
                     MinHeight="49">
                 <Grid>
@@ -64,6 +73,7 @@
                     <StackPanel x:Name="PillRow" Orientation="Horizontal" />
                 </Grid>
             </Border>
+            </Grid>
 
             <Border x:Name="MovedNote" Grid.Column="2" VerticalAlignment="Center" CornerRadius="12"
                     Padding="12,4" Background="#E61B1026" BorderThickness="1" Visibility="Collapsed"

@@ -21,7 +21,8 @@ namespace ConditioningControlPanel.Controls.NavRail
     /// </summary>
     internal static class NavStripFxRules
     {
-        public const double HoverLiftPx = 1.5;
+        // Polish wave 10: the shared lamp's hover lift (DepthRules.HoverLiftPx, was 1.5).
+        public const double HoverLiftPx = ConditioningControlPanel.Controls.Depth.DepthRules.HoverLiftPx;
         public const double HoverScale = 1.035;
         public const int HoverInMs = 120;
         public const int HoverOutMs = 160;
