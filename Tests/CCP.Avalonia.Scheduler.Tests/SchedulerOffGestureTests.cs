@@ -185,16 +185,23 @@ public sealed class SchedulerOffGestureTests
     // for the expected write instead, bounded; the Assert.Contains after it reports a miss.
     private static async Task WaitForSettingsFile(string settingsPath, string expected)
     {
+        // Open the file only when its write time moved. An open on every 50 ms poll held the file
+        // whenever the writer's 50 ms publish retries woke on the same Windows timer tick, so all
+        // of its bounded retries could collide with the reader and the save was dropped (CI #1964).
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var seen = DateTime.MinValue;
         do
         {
             await Task.Delay(50);
             Dispatcher.UIThread.RunJobs();
+            var written = File.GetLastWriteTimeUtc(settingsPath);   // metadata only, no handle
+            if (written == seen) continue;
+            seen = written;
             try
             {
                 if (File.ReadAllText(settingsPath).Contains(expected, StringComparison.Ordinal)) return;
             }
-            catch (IOException) { }
+            catch (IOException) { seen = DateTime.MinValue; }   // landed mid-publish: read it again
         } while (DateTime.UtcNow < deadline);
     }
 
