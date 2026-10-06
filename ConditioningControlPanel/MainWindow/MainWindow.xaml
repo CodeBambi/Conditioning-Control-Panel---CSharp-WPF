@@ -381,8 +381,9 @@
 
                 <StackPanel Grid.Row="0">
                 <!-- BACK: returns to the tab shown before this one (MainWindow.TabHistory.cs).
-                     Collapsed until there is somewhere to go back to. -->
-                <Button x:Name="BtnNavBack" Height="24" Margin="6,0,7,4" Visibility="Collapsed"
+                     Hidden (never Collapsed) until there is somewhere to go back to, so the
+                     rail keeps its height and the section rows never jump between Home and the rest. -->
+                <Button x:Name="BtnNavBack" Height="24" Margin="6,0,7,4" Visibility="Hidden"
                         Cursor="Hand" Click="BtnNavBack_Click"
                         ToolTipService.InitialShowDelay="500"
                         ToolTip="{loc:Str tooltip_nav_back}">
