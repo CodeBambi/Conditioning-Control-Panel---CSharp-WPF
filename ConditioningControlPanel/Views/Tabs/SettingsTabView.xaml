@@ -1134,7 +1134,6 @@
                 <RowDefinition x:Name="BrowserCardRow" x:FieldModifier="internal" Height="*"/>
                 <RowDefinition x:Name="BrowserFoldRow" x:FieldModifier="internal" Height="0"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Browser Section -->
@@ -1187,7 +1186,6 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -1301,6 +1299,54 @@
                             </Button.Style>
                             <helpers:EmojiTextBlock Text="🔄"/>
                         </Button>
+                        <!-- The fold arrow (owner, 2026-10-06: "put an unmissable dropdown arrow here on
+                             top of the browser, the little grey icon we got is basically invisible").
+                             It lives in the header's empty middle, the star column the reload button
+                             only uses the left edge of; the left margin keeps it clear of that button.
+                             Down arrow + "Show browser" = the card is shut and this opens it, up arrow +
+                             "Hide browser" = it is open and this shuts it. The hue, the label, the
+                             tooltip and the breathing glow while folded are all painted by
+                             SettingsTabView.PaintFoldArrow from MainWindow.DashboardFold.cs, because the
+                             setting (AppSettings.DashboardBrowserCollapsed), not this button, is the
+                             truth. The values below are only the first paint: Home's lilac at 24% fill,
+                             a 70% border, 40% fill on hover (Tag carries the hover brush). -->
+                        <Button Grid.Column="2" x:Name="BtnFoldBrowser" x:FieldModifier="internal"
+                                Click="BtnFoldBrowser_Click" Cursor="Hand"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                MinWidth="120" Height="26" Padding="12,0" Margin="48,0,8,0"
+                                Background="#3DB79CFF" BorderBrush="#B3B79CFF" BorderThickness="1.5"
+                                ToolTip="{loc:Str tooltip_browser_unfold}"
+                                AutomationProperties.Name="{loc:Str btn_browser_fold_show}">
+                            <Button.Tag>
+                                <SolidColorBrush Color="#66B79CFF"/>
+                            </Button.Tag>
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="FoldPlate" Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="13" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="FoldPlate" Property="Background"
+                                                    Value="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="TxtFoldBrowser" x:FieldModifier="internal"
+                                           Text="&#xE70D;" FontSize="16"
+                                           FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
+                                           Foreground="White" VerticalAlignment="Center" Margin="0,1,8,0"/>
+                                <TextBlock x:Name="TxtFoldBrowserLabel" x:FieldModifier="internal"
+                                           Text="{loc:Str btn_browser_fold_show}"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           Foreground="White" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                         <!-- Status indicator -->
                         <TextBlock Grid.Column="3" x:Name="TxtBrowserStatus" x:FieldModifier="internal" Text="{loc:Str label_loading}"
                                    Foreground="{DynamicResource PinkBrush}" FontSize="10"
@@ -1406,30 +1452,6 @@
                                     </Setter>
                                 </Style>
                             </Button.Style>
-                        </Button>
-                        <!-- The fold chevron. Down arrow = the card is shut and this opens it, up
-                             arrow = it is open and this shuts it; the glyph, the tooltip and the
-                             animation all live in MainWindow.DashboardFold.cs, because the setting
-                             (AppSettings.DashboardBrowserCollapsed), not this button, is the truth. -->
-                        <Button Grid.Column="7" x:Name="BtnFoldBrowser" x:FieldModifier="internal"
-                                Click="BtnFoldBrowser_Click" Cursor="Hand"
-                                Background="Transparent" BorderThickness="0" Padding="6,2" Margin="6,0,0,0"
-                                VerticalAlignment="Center">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                            <TextBlock x:Name="TxtFoldBrowser" x:FieldModifier="internal"
-                                       Text="&#x25B4;" FontSize="13"
-                                       Foreground="{DynamicResource TextMutedBrush}"/>
                         </Button>
                     </Grid>
 
@@ -1884,52 +1906,6 @@
             </Border>
 
             <!-- ============================================================ -->
-            <!-- COMPANION STRIP (Phase 3, new).                              -->
-            <!--                                                              -->
-            <!-- The Companion door owns her portrait, her status dots and    -->
-            <!-- her breathe loop (CompanionHeroCard), and CompanionTheme.xaml -->
-            <!-- budgets exactly ONE Forever storyboard for the companion     -->
-            <!-- app-wide. A second breathing portrait here would spend that   -->
-            <!-- budget twice and would need Start/Stop/RefreshAmbientState    -->
-            <!-- wiring from the shell. So this is deliberately a QUIET strip: -->
-            <!-- a standing affordance into her door, no art, no clock,        -->
-            <!-- nothing for the motion kill-switch or the ShowTab teardown to -->
-            <!-- have to reach. Give it a portrait later, with the loop.       -->
-            <!-- ============================================================ -->
-            <Border x:Name="CompanionStrip" x:FieldModifier="internal" Grid.Row="2"
-                    CornerRadius="12" Padding="10,9" Margin="0,0,0,12"
-                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
-                    Cursor="Hand" MouseLeftButtonDown="CompanionStrip_Click"
-                    ToolTip="{loc:Str tooltip_companion_settings}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <!-- WPF cannot draw COLR/CPAL colour-emoji fonts, so every emoji in this app
-                         is an Image routed through EmojiToImageSource. Same glyph as the sidebar's
-                         Companion door, so the two read as one place. -->
-                    <Image Grid.Column="0" Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,9,0"
-                           RenderOptions.BitmapScalingMode="HighQuality"
-                           Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str nav_door_companion}"
-                                   Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="12" FontWeight="Bold"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{loc:Str hm3_companion_strip_sub}"
-                                   Foreground="{DynamicResource TextMutedBrush}"
-                                   FontSize="11" Margin="0,1,0,0"
-                                   TextTrimming="CharacterEllipsis"/>
-                    </StackPanel>
-                    <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
-                </Grid>
-            </Border>
-
-            <!-- ============================================================ -->
             <!-- ACCOUNT STRIP (Phase 3) - the old "Quick Links" card,         -->
             <!-- compressed from a four-row tile into one line.                -->
             <!--                                                               -->
@@ -1949,7 +1925,7 @@
             <!-- The card's old section_quick_links caption is gone with the    -->
             <!-- header row; the "?" popover still explains the strip.          -->
             <!-- ============================================================ -->
-            <Border Grid.Row="3" CornerRadius="12" Padding="9,7"
+            <Border Grid.Row="2" CornerRadius="12" Padding="9,7"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                 <Grid>

@@ -3,7 +3,16 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Automation;
+using System.Windows.Data;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using ConditioningControlPanel.Controls;
+using ConditioningControlPanel.Controls.NavRail;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.UI;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -527,12 +536,79 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnReloadBrowser_Click(sender, e);
         }
-        // The browser card's fold chevron. MainWindow.DashboardFold.cs owns the setting, the row
-        // arithmetic and the height ease; this view only carries the button.
+        // The browser card's fold arrow. MainWindow.DashboardFold.cs owns the setting, the row
+        // arithmetic and the height ease; this view only carries the button and paints it.
         private void BtnFoldBrowser_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnFoldBrowser_Click(sender, e);
+        }
+
+        /// <summary>
+        /// Paints the fold arrow for the state the fold's one bool says (owner, 2026-10-06: the
+        /// arrow must be unmissable). Home's hue from the one hue table, the glyph and the label
+        /// for what a click will do, and while FOLDED a breathing glow so a shut browser is
+        /// obviously openable: a loop only under <see cref="MotionFx.AllowAmbientLoops"/>, a static
+        /// glow under Reduced (or a tier that refuses loops), nothing at Motion Off. Open, no glow.
+        /// Idempotent: the settle calls it every time it runs.
+        /// </summary>
+        internal void PaintFoldArrow(bool collapsed)
+        {
+            var btn = BtnFoldBrowser;
+            if (btn == null) return;
+            var hue = NavStripRules.Accent(NavSections.Home);
+            btn.Background = Tint(hue, BrowserFoldRule.ArrowFill);
+            btn.Tag = Tint(hue, BrowserFoldRule.ArrowHoverFill);
+            btn.BorderBrush = Tint(hue, BrowserFoldRule.ArrowBorder);
+            if (TxtFoldBrowser != null) TxtFoldBrowser.Text = BrowserFoldRule.Chevron(collapsed);
+            var labelKey = BrowserFoldRule.LabelKey(collapsed);
+            // Rebind rather than assign, so a language switch re-reads the label live.
+            if (TxtFoldBrowserLabel != null)
+                BindingOperations.SetBinding(TxtFoldBrowserLabel, TextBlock.TextProperty,
+                    new Binding($"[{labelKey}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+            BindingOperations.SetBinding(btn, AutomationProperties.NameProperty,
+                new Binding($"[{labelKey}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+            BindingOperations.SetBinding(btn, FrameworkElement.ToolTipProperty,
+                new Binding($"[{BrowserFoldRule.TooltipKey(collapsed)}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+
+            var glow = btn.Effect as DropShadowEffect;
+            glow?.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+            if (!collapsed || MotionFx.Level == MotionLevel.Off)
+            {
+                btn.Effect = null;
+                return;
+            }
+            if (glow == null)
+            {
+                glow = new DropShadowEffect { ShadowDepth = 0, BlurRadius = 16 };
+                btn.Effect = glow;
+            }
+            glow.Color = hue;
+            if (MotionFx.AllowAmbientLoops)
+            {
+                glow.Opacity = BrowserFoldRule.GlowLow;
+                var breath = new DoubleAnimation(BrowserFoldRule.GlowLow, BrowserFoldRule.GlowHigh,
+                    TimeSpan.FromMilliseconds(BrowserFoldRule.GlowBreathMs / 2))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+                // An ambient loop: 24 fps is plenty for a breath and keeps the cost down.
+                Timeline.SetDesiredFrameRate(breath, 24);
+                glow.BeginAnimation(DropShadowEffect.OpacityProperty, breath);
+            }
+            else
+            {
+                glow.Opacity = BrowserFoldRule.GlowStatic;
+            }
+        }
+
+        private static SolidColorBrush Tint(Color hue, double alpha)
+        {
+            var b = new SolidColorBrush(Color.FromArgb((byte)Math.Round(255 * alpha), hue.R, hue.G, hue.B));
+            b.Freeze();
+            return b;
         }
         // The billboard card in the row the folded browser gives back.
         private void BillboardCard_Click(object sender, RoutedEventArgs e)
@@ -736,18 +812,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.CardSystem_Click(sender, e);
         }
-        /// <summary>
-        /// Home's companion strip. Pure navigation into the Companion door - the strip owns no
-        /// portrait and no clock, so there is nothing to start or stop here (see the XAML note:
-        /// CompanionTheme.xaml budgets ONE Forever storyboard for the companion app-wide, and
-        /// CompanionHeroCard already spends it).
-        /// </summary>
-        private void CompanionStrip_Click(object sender, MouseButtonEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ShowTab("companion");
-        }
-
         // Home audio card. Pure forwarding, like every re-parented cell: the shell owns the
         // canonical Settings/Audio controls and mirrors both ways. See MainWindow.HomeAudio.cs.
         private void HomeSliderMaster_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
