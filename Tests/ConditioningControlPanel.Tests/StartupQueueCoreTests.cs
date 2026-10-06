@@ -483,4 +483,22 @@ public class StartupQueueCoreTests
         Assert.False(q.Contains("whats-new"));
         Assert.True(q.Enqueue("whats-new", 30));
     }
+
+    [Fact]
+    public void A_passive_surface_waits_while_another_is_up_or_on_its_way()
+    {
+        var now = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        Assert.False(StartupQueueCore.PassiveWaits(null, now, passiveWindowUp: false));
+        Assert.True(StartupQueueCore.PassiveWaits(null, now, passiveWindowUp: true));
+        // a feature card opens on the next dispatcher turn: the one right behind it still waits
+        Assert.True(StartupQueueCore.PassiveWaits(now.AddSeconds(-1), now, passiveWindowUp: false));
+        Assert.False(StartupQueueCore.PassiveWaits(now - StartupQueueCore.PassiveSettle, now, passiveWindowUp: false));
+    }
+
+    [Fact]
+    public void The_launcher_holding_files_a_passive_surface_and_never_presents_it()
+    {
+        var w = new QuietInputs { LauncherHolding = true, NowUtc = DateTime.UtcNow };
+        Assert.Equal(StartupRouting.Inbox, StartupQueueCore.Route(StartupSurfaceKind.Passive, w));
+    }
 }

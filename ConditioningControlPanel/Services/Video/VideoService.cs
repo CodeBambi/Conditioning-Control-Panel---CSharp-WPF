@@ -179,6 +179,10 @@ namespace ConditioningControlPanel.Services
         // The "no videos found" guidance dialog is a per-LAUNCH one-off (#1124). Every trigger used
         // to raise its own modal, so a long session stacked dozens of them on the dispatcher.
         private static int _noVideosDialogShown;
+        // The last refill funnel's counts (#1352), so the dialog can tell "no files" from "the length
+        // filter kept none". -1 until the first refill runs.
+        private volatile int _lastFunnelEnabled = -1;
+        private volatile int _lastFunnelDuration = -1;
 
 #if DEBUG
         // Fault injection for the wedge cluster (#765/#766/#767). Set CCP_FAULT_WEDGE_STOP=1 and the
@@ -2469,17 +2473,29 @@ namespace ConditioningControlPanel.Services
                 var installedPackCount = App.ContentPacks?.InstalledPacks?.Count ?? 0;
                 var message = Loc.GetF("video_no_videos_found", _videosPath) + "\n\n";
 
-                if (installedPackCount > 0 && activePackCount == 0)
+                // #1352: files exist, the user's length filter kept none of them. "Add files" is the
+                // wrong advice there; name the filter and where it lives instead.
+                var lengthFilterEmptied = NoVideosReason.LengthFilterEmptied(_lastFunnelEnabled, _lastFunnelDuration);
+                if (lengthFilterEmptied)
                 {
-                    message += Loc.GetF("video_packs_installed_none_active", installedPackCount) + "\n";
-                    message += Loc.Get("video_enable_packs_hint") + "\n\n";
+                    message = Loc.GetF("video_length_filter_emptied", _lastFunnelEnabled,
+                        NoVideosReason.FormatRange(App.Settings?.Current?.VideoMinDurationSeconds ?? 0,
+                            App.Settings?.Current?.VideoMaxDurationSeconds ?? 0));
                 }
-                else if (activePackCount > 0)
+                else
                 {
-                    message += Loc.GetF("video_active_packs_no_videos", activePackCount) + "\n\n";
-                }
+                    if (installedPackCount > 0 && activePackCount == 0)
+                    {
+                        message += Loc.GetF("video_packs_installed_none_active", installedPackCount) + "\n";
+                        message += Loc.Get("video_enable_packs_hint") + "\n\n";
+                    }
+                    else if (activePackCount > 0)
+                    {
+                        message += Loc.GetF("video_active_packs_no_videos", activePackCount) + "\n\n";
+                    }
 
-                message += Loc.Get("video_add_files_hint");
+                    message += Loc.Get("video_add_files_hint");
+                }
 
                 // Posted, not called: MessageBox.Show blocks its caller and pumps a nested message
                 // loop, and this caller is the trigger path. It returns immediately now and the box
@@ -2496,7 +2512,8 @@ namespace ConditioningControlPanel.Services
                         // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
                         // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
                         // budget, shared with the flash/wallpaper/first-run dead ends.
-                        App.OfferRemoteMediaSource("videos");
+                        // The filter case has files; offering another source would be the wrong fix.
+                        if (!lengthFilterEmptied) App.OfferRemoteMediaSource("videos");
                     }
                     catch (Exception ex) { App.Logger?.Debug("VideoService: no-videos dialog failed: {Error}", ex.Message); }
                 }));
@@ -2723,7 +2740,7 @@ namespace ConditioningControlPanel.Services
 
                 // Global "Show content on" picker, not every screen: with one monitor picked
                 // this list has exactly one entry and no secondary window is ever created.
-                var allScreens = App.GetGlobalScreens().ToList();
+                var allScreens = VideoScreens().ToList();
                 if (allScreens.Count == 0) return;
 
                 var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
@@ -2761,7 +2778,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static bool ShouldFillSecondaryMonitors(int screenCount)
         {
-            // screenCount is the TARGETED screen count (App.GetGlobalScreens), so the
+            // screenCount is the TARGETED screen count (VideoScreens), so the
             // DualMonitorEnabled test this used to open with is already applied: one targeted
             // screen means there is no secondary to fill.
             return MandatoryVideoScheduler.ShouldFillSecondaryMonitors(screenCount, App.Settings.Current.FillAllMonitorsWithVideo);
@@ -3250,7 +3267,7 @@ namespace ConditioningControlPanel.Services
                     try
                     {
                         // Global "Show content on" picker, not every screen (see GetGlobalScreens).
-                        var allScreens = App.GetGlobalScreens().ToList();
+                        var allScreens = VideoScreens().ToList();
                         VideoDiag.Log("VIDEO", $"screens enumerated ({allScreens.Count}) +{showSw.ElapsedMilliseconds}ms");
                         if (allScreens.Count == 0)
                         {
@@ -5682,7 +5699,7 @@ namespace ConditioningControlPanel.Services
                 var pool = settings.AttentionPool.Where(p => p.Value).Select(p => p.Key).ToList();
                 var text = pool.Count > 0 ? pool[_random.Next(pool.Count)] : "CLICK ME";
 
-                var screens = App.GetGlobalScreens();
+                var screens = VideoScreens();
                 // Safety check: ensure we have at least one screen
                 if (screens == null || screens.Length == 0 || screens[0] == null)
                 {
@@ -5958,7 +5975,7 @@ namespace ConditioningControlPanel.Services
             if (loop && !string.IsNullOrEmpty(_retryPath))
             {
                 _penalties++;
-                if (_penalties >= 3 && settings.MercySystemEnabled)
+                if (_penalties >= settings.MercyAfterFails && settings.MercySystemEnabled)
                     ShowMessage(App.Mods?.GetAttentionCheckMercyMessage() ?? "BAMBI GETS MERCY", 2500, Cleanup);
                 else
                 {
@@ -6085,7 +6102,7 @@ namespace ConditioningControlPanel.Services
             _maxLenCapTimer = null;
             CloseAll(reason: "attention-check message");
 
-            var screens = App.GetGlobalScreens();
+            var screens = VideoScreens();
             // Safety check: ensure we have at least one screen
             if (screens == null || screens.Length == 0 || screens[0] == null)
             {
@@ -6537,6 +6554,15 @@ namespace ConditioningControlPanel.Services
             }
             _graceOverlays.Clear();
         }
+
+        /// <summary>
+        /// Where mandatory videos, their attention targets and their messages go: the Video panel's
+        /// own monitor pick (ccp-bugs #1154). -1 (default) follows the global "Show content on"
+        /// picker exactly as before; -2 = every monitor; 0..N = that monitor (an unplugged index
+        /// falls back to -1 inside App.ResolveScreens).
+        /// </summary>
+        private static Screen[] VideoScreens() =>
+            App.ResolveScreens(App.Settings?.Current?.VideoTargetMonitor ?? App.MonitorTargetFollowGlobal);
 
         private static Screen ScreenForWindow(Window win)
         {
@@ -8413,6 +8439,8 @@ namespace ConditioningControlPanel.Services
                     beforeDur, files.Count, minSec, maxSec);
             }
             int keptDuration = files.Count;
+            _lastFunnelEnabled = keptEnabled;
+            _lastFunnelDuration = keptDuration;
 
             // The #1124 funnel line. Information, not Debug: the report that needs it is a Release
             // log from a user whose folder "has videos" and whose app says it has none, and until

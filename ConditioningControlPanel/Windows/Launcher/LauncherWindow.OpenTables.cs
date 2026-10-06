@@ -65,6 +65,7 @@ public partial class LauncherWindow
             _openTablesTimer.Tick -= OnOpenTablesTick;
             _openTablesTimer.Tick += OnOpenTablesTick;
             _openTablesTimer.Start();
+            StartLobbyChip();
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] open tables start failed"); }
     }
@@ -72,10 +73,15 @@ public partial class LauncherWindow
     private void StopOpenTables()
     {
         _openTablesTimer?.Stop();
+        StopLobbyChip();
         if (_openTablesHooked) { GoonOpenTables.Changed -= OnOpenTablesChanged; _openTablesHooked = false; }
     }
 
-    private void OnOpenTablesTick(object? sender, EventArgs e) => _ = GoonOpenTables.RefreshAsync();
+    private void OnOpenTablesTick(object? sender, EventArgs e)
+    {
+        _ = GoonOpenTables.RefreshAsync();
+        _ = App.Lobby?.RefreshAsync();
+    }
 
     private void OnOpenTablesChanged(OpenTablesReply reply)
     {

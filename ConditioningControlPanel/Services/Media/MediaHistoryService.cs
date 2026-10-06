@@ -129,6 +129,16 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Logs an audio clip that started playing (Brain Drain, ccp-bugs #1098). Thread-safe like
+        /// every other entry; the window marshals EntryAdded onto its own dispatcher.
+        /// </summary>
+        public void RecordAudio(string? path)
+        {
+            try { Add(MediaType.Audio, path); }
+            catch (Exception ex) { App.Logger?.Debug("MediaHistoryService.RecordAudio failed: {Error}", ex.Message); }
+        }
+
         private void Add(MediaType type, string? path)
         {
             if (string.IsNullOrEmpty(path)) return;

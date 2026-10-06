@@ -2482,7 +2482,7 @@ namespace ConditioningControlPanel
                 // Stop keyboard hook when panic key is disabled (privacy improvement)
                 // But keep it running if keyword triggers need it
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
                 App.Settings.Current.PanicKeyEnabled = false;
                 App.Settings?.Save();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");

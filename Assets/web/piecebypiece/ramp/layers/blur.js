@@ -4,16 +4,16 @@
  * A CSS blur on #stage, contributed through the shared stage-filter composer
  * so it stacks with the melt instead of overwriting it.
  *
- * THE HARD CAP IS THE POINT. RAMP_TUNING.blurMaxPx is 3px and this layer
- * re-clamps to it even if a caller hands it something larger: at 3px a piece is
- * still findable and a legal move is still physically possible. The ramp is
- * meant to make you play badly, not to make the game unplayable. Anything that
- * wants to actually hide the board (the spiral veil, the gif overlay, the video
- * card) is a separate layer the player can see past by waiting.
+ * THE HARD CAP IS THE POINT. RAMP_TUNING.blurMaxPx is 0.8px (was 3px until the
+ * owner's 2026-10-02 call: "keep the pieces and the grid always visible") and
+ * this layer re-clamps to it even if a caller hands it something larger: under
+ * a pixel the board goes soft but a piece and a square edge stay crisp. The ramp
+ * is meant to make you play badly, not to make the game unplayable. The other
+ * layers distract around the board; none of them may hide it.
  * ==========================================================================*/
 
 export function createBlur(ctx) {
-  const cap = Number.isFinite(ctx.tuning && ctx.tuning.blurMaxPx) ? ctx.tuning.blurMaxPx : 3;
+  const cap = Number.isFinite(ctx.tuning && ctx.tuning.blurMaxPx) ? ctx.tuning.blurMaxPx : 0.8;
   let disposed = false;
   let px = 0;
 

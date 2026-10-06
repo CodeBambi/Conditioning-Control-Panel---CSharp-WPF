@@ -292,6 +292,111 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Debug("Deferred DPI work-area fit failed: {Error}", ex.Message);
             }
+            finally
+            {
+                QueueLayoutDriftCheck("dpi-changed");
+            }
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // LAYOUT DRIFT: the window frame outgrew WPF's layout (owner report, 6.11.5, 2026-09-29).
+        // A mixed-DPI move that also minimised the panel and let the tube's make-room move it
+        // (SWP_ASYNCWINDOWPOS from the tube's thread) left the HWND 1825x1161 px while WPF kept the
+        // root laid out ~125 px narrower and ~59 px shorter. WPF paints nothing past its layout, so
+        // that strip showed as bare black inside the Windows border until the user resized by hand.
+        // After any size/move/DPI/restore settles, compare the client area with the root's laid-out
+        // size and, when they disagree, resize the window by a pixel and back so WPF re-lays out.
+        // ---------------------------------------------------------------------------------------
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetClientRect(IntPtr hWnd, out FitRect lpRect);
+
+        private const uint SWP_NOMOVE = 0x0002;
+
+        private bool _layoutDriftQueued;
+        private int _layoutDriftNudges;
+        private long _layoutDriftBurstTick;
+
+        /// <summary>Coalesced: a burst of size messages queues one check.</summary>
+        internal void QueueLayoutDriftCheck(string reason)
+        {
+            if (_layoutDriftQueued) return;
+            _layoutDriftQueued = true;
+            try
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    _layoutDriftQueued = false;
+                    CheckLayoutDrift(reason);
+                }));
+            }
+            catch (Exception ex)
+            {
+                _layoutDriftQueued = false;
+                App.Logger?.Debug("Could not queue layout drift check: {Error}", ex.Message);
+            }
+        }
+
+        private void CheckLayoutDrift(string reason)
+        {
+            try
+            {
+                if (Dispatcher.HasShutdownStarted || !IsLoaded || !IsVisible) return;
+                if (WindowState == WindowState.Minimized || BuildingHiddenForBoot) return;
+                // Mid-drag the frame legitimately runs ahead of layout; WM_EXITSIZEMOVE checks again.
+                if (Services.UI.DisplayChangeCoordinator.InteractiveMoveActive) return;
+                if (_workAreaFitInProgress) return;
+
+                var hwnd = new WindowInteropHelper(this).Handle;
+                if (hwnd == IntPtr.Zero) return;
+                if (Content is not FrameworkElement root) return;
+
+                // Flush pending layout first, so a size WPF has already heard about is not taken
+                // for one it missed.
+                UpdateLayout();
+
+                if (!GetClientRect(hwnd, out var c)) return;
+                var m = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice;
+                if (m == null) return;
+
+                int cw = c.Right - c.Left, ch = c.Bottom - c.Top;
+                if (!Services.UI.LayoutDrift.Drifted(cw, ch, root.ActualWidth, root.ActualHeight, m.Value.M11, m.Value.M22))
+                    return;
+
+                var now = Environment.TickCount64;
+                if (now - _layoutDriftBurstTick > Services.UI.LayoutDrift.BurstWindowMs)
+                {
+                    _layoutDriftBurstTick = now;
+                    _layoutDriftNudges = 0;
+                }
+                if (_layoutDriftNudges >= Services.UI.LayoutDrift.MaxNudgesPerBurst) return;
+                _layoutDriftNudges++;
+
+                if (!GetWindowRect(hwnd, out var r)) return;
+                int w = r.Right - r.Left, h = r.Bottom - r.Top;
+                App.Logger?.Information(
+                    "MainWindow layout drift ({Reason}): client {CW}x{CH} px but layout {LW:0}x{LH:0} DIP at {S:0.##}x; resizing to re-sync",
+                    reason, cw, ch, root.ActualWidth, root.ActualHeight, m.Value.M11);
+
+                const uint flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE;
+                _workAreaFitInProgress = true;
+                try
+                {
+                    SetWindowPos(hwnd, IntPtr.Zero, 0, 0, w, Math.Max(1, h - 1), flags);
+                    SetWindowPos(hwnd, IntPtr.Zero, 0, 0, w, h, flags);
+                }
+                finally
+                {
+                    _workAreaFitInProgress = false;
+                }
+                root.InvalidateMeasure();
+                QueueLayoutDriftCheck(reason + "/verify");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "MainWindow layout drift check failed ({Reason})", reason);
+            }
         }
     }
 }

@@ -64,6 +64,10 @@ namespace ConditioningControlPanel.Services
         /// <summary>The canonical premium (tier 1) gate: see <see cref="ProviderSubscription.HasPremiumAccess"/>.</summary>
         public bool HasPremiumAccess => ProviderSubscription.HasPremiumAccess(_core, App.SubscribeStar?.Core, App.Settings?.Current);
 
+        /// <summary>Premium that comes ONLY from an invite week (Services/Invites): a free trial, not a
+        /// purchase. See <see cref="ProviderSubscription.IsInviteWeekOnly"/>.</summary>
+        public bool IsInviteWeekOnly => ProviderSubscription.IsInviteWeekOnly(_core, App.SubscribeStar?.Core, App.Settings?.Current);
+
         /// <summary>
         /// The goon-game HOST bar (tier 2+ or whitelisted, either provider, or the Lab's own 14-day
         /// grace). Advisory: the server refuses on its own. See <see cref="ProviderSubscription.HasLabAccess"/>.

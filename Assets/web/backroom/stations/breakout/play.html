@@ -35,6 +35,12 @@
 <script type="module">
 import { mount } from './station.js';
 import { bridge, isHosted, mintId, announceReady, markInitialized } from '../../bridge.js';
+import { createHostEscape, HOST_ESCAPE } from '../../shared/host-escape.js';
+
+/* The desktop panel keeps a first Escape as the game's pause and hands it over as kept-escape: with this page
+   out of keyboard focus the real key never lands here. Made before the station, so its capture listener hears
+   every real Escape first and one press is handled once (shared/host-escape.js). The web never sends it. */
+const hostEscape = createHostEscape();
 
 const q = new URLSearchParams(location.search);
 const settingsFns = new Set();
@@ -43,6 +49,8 @@ let station;
 function applyHost(m) {
   hostInit = { ...hostInit, ...m };
   if (m.breakout) ctx.breakout = m.breakout;
+  // The desktop's own Breakout window: its panel keeps the first Escape, so Escape on the pause card leaves.
+  if (m.breakoutStandalone) ctx.hostKeepsEscape = true;
   if (m.gates) ctx.gates = m.gates;
   if (m.audio) ctx.audio = m.audio;
   if (m.media) {
@@ -118,6 +126,7 @@ if (isHosted) {
   });
   bridge.on('settings', applyHost);
   bridge.on('suspend', m => station?.suspend(!!m.on));
+  bridge.on(HOST_ESCAPE, () => hostEscape.kept());
   bridge.on('media-warm', () => window.dispatchEvent(new Event('br-media-changed')));
   markInitialized();
 }

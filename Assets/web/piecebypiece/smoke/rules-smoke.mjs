@@ -12,6 +12,7 @@ import { createClock, formatClock, DEFAULT_MS } from '../game/clock.js';
 import { createHotseat } from '../game/hotseat.js';
 import { createBus } from '../game/events.js';
 import { createSolo } from '../game/solo.js';
+import { chooseMove, thinkSeconds, LEVELS, LEVEL_ORDER, levelOf } from '../game/search.js';
 import { createTurnHandoff, handoffSeconds } from '../ui/turn-handoff.js';
 import { turnOpacity, turnRecipe, readTurn } from '../game/turn-loom.js';
 
@@ -314,7 +315,7 @@ eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000),
   let busy = true, request = null, terminated = 0;
   const worker = { postMessage(value) { request = value; }, terminate() { terminated++; } };
   board.anim = { busy: () => busy, skip: () => { busy = false; } };
-  const game = createSolo({ bus, board, options: { side: 'w', clockMs: 0 }, workerFactory: () => worker });
+  const game = createSolo({ bus, board, options: { side: 'w', clockMs: 0 }, thinkTime: () => 0, workerFactory: () => worker });
   const handoff = board.turnHandoff = createTurnHandoff({ bus, game, board });
   const tick = dt => { handoff.update(dt); game.update(dt); };
   game.start();
@@ -414,6 +415,46 @@ function stubBoard() {
       remove(sq) { moves.push(['x', sq]); },
     },
   };
+}
+
+// The computer's strengths and its pause at the board (owner, 2026-09-30).
+{
+  eq('five levels, weakest first', LEVEL_ORDER, ['beginner', 'relaxed', 'club', 'sharp', 'master']);
+  ok('every level has a label and a blurb', LEVEL_ORDER.every(id => LEVELS[id].label && LEVELS[id].blurb));
+  eq('an unknown level plays Club', levelOf('grandmaster'), 'club');
+  // Qxd5 wins a pawn and loses the queen to exd5: past the horizon for a one-ply look.
+  const hanging = '4k3/8/4p3/3p4/8/8/8/3QK3 w - - 0 1';
+  const relaxed = chooseMove({ fen: hanging, level: 'relaxed' }, undefined, () => .99);
+  ok(`relaxed reads the recapture and keeps its queen (played ${relaxed?.to})`, relaxed && relaxed.to !== 'd5');
+  const mate = '6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1';
+  for (const level of ['club', 'sharp', 'master']) eq(`${level} finds the mate in one`, chooseMove({ fen: mate, level }, undefined, () => .5)?.to, 'a8');
+  eq('a forced move is quick', thinkSeconds({ level: 'master', legal: 1 }), .45);
+  ok('club thinks a middling while', Math.abs(thinkSeconds({ level: 'club', legal: 20, random: () => .5 }) - 1.8) < 1e-9);
+  ok('master sits longer than beginner', thinkSeconds({ level: 'master', random: () => .5 }) > thinkSeconds({ level: 'beginner', random: () => .5 }));
+  ok('few choices, a shorter think', thinkSeconds({ level: 'club', legal: 3, random: () => .5 }) < 1.8);
+  const low = { snapshot: () => ({ untimed: false, total: 300000, w: 20000, b: 200000 }) };
+  eq('under thirty seconds on any clock, no pause', thinkSeconds({ level: 'master', clock: low, side: 'b' }), 0);
+  const tight = { snapshot: () => ({ untimed: false, total: 300000, w: 200000, b: 60000 }) };
+  ok('a running clock caps the pause at 1.5% of what is left', Math.abs(thinkSeconds({ level: 'master', clock: tight, side: 'b', random: () => 1 }) - .9) < 1e-9);
+}
+{
+  const bus = createBus(), board = stubBoard();
+  let busy = true, request = null;
+  const worker = { postMessage(value) { request = value; }, terminate() {} };
+  board.anim = { busy: () => busy, skip: () => { busy = false; } };
+  const game = createSolo({ bus, board, options: { side: 'w', clockMs: 0, level: 'sharp' }, thinkTime: () => 1.5, workerFactory: () => worker });
+  const handoff = board.turnHandoff = createTurnHandoff({ bus, game, board });
+  const tick = dt => { handoff.update(dt); game.update(dt); };
+  game.start(); game.tryMove('e2', 'e4');
+  eq('the chosen level reaches the worker', request?.level, 'sharp');
+  worker.onmessage({ data: { id: request.id, move: { from: 'e7', to: 'e5' } } });
+  busy = false; tick(.4); tick(.5); tick(.2); tick(.66);
+  eq('after the card the computer still sits over the board', game.plies(), 1);
+  tick(1.4);
+  eq('it is still thinking just short of its pause', game.plies(), 1);
+  tick(.2);
+  eq('the reply lands once the pause is spent', game.plies(), 2);
+  game.dispose(); handoff.dispose();
 }
 
 console.log(`${passed} checks passed`);

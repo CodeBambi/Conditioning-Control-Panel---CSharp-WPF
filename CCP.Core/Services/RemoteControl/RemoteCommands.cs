@@ -33,7 +33,9 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Verbs too frequent to log or announce (WPF MainWindow.xaml.cs SuppressedCommands).</summary>
         public static readonly System.Collections.Generic.HashSet<string> Quiet = new()
-        { "trigger_flash", "trigger_subliminal", "set_pink_opacity", "set_spiral_opacity", "duck_audio", "unduck_audio" };
+        { "trigger_flash", "trigger_subliminal", "set_pink_opacity", "set_spiral_opacity", "duck_audio", "unduck_audio",
+          // v2: hold-to-buzz sends one every second while held (main 719ed9ca5)
+          "haptic_level", "haptic_stop" };
 
         public static string? Execute(string action, JObject? p)
         {

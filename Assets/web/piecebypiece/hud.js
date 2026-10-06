@@ -47,6 +47,7 @@ export const TUNING = Object.freeze({
   unlocks: Object.freeze([0.25, 0.40, 0.55, 0.70]),   // the debug dot row
   askMs: 6000,         // "resign?" withdraws itself if nobody answers it
   noteMs: 2600,        // how long a passing note ("draw declined") stays
+  iqPopMs: 1100,       // the "-N" that rises off the IQ readout when a move costs points
 });
 
 const T = TUNING;
@@ -135,6 +136,23 @@ export function createHud(opts = {}) {
       decline: pick('hud-draw-decline'),
     },
   };
+
+  // The IQ readout (game/iq.js), beside the name on a LOCAL seat's card only. The opponent's card
+  // never gets one, online or not. Built here so the page markup stays as it was.
+  const iqEl = { w: null, b: null };
+  for (const s of ['w', 'b']) {
+    const head = el.chip[s] && el.chip[s].querySelector('.player-head');
+    if (!head) continue;
+    const wrap = document.createElement('span');
+    wrap.className = 'iq';
+    wrap.id = 'iq-' + s;
+    wrap.hidden = true;
+    wrap.appendChild(document.createElement('span')).className = 'iq-n';
+    const who = head.querySelector('.who');
+    head.insertBefore(wrap, who ? who.nextSibling : null);
+    iqEl[s] = wrap;
+  }
+  const shownIq = { w: null, b: null };
 
   if (el.status) el.status.dataset.hudOwned = 'true';
   let deal = null;
@@ -264,6 +282,38 @@ export function createHud(opts = {}) {
     }
   }
 
+  /* ---- the IQ readout ----------------------------------------------------- */
+
+  /** What window.PBP.iq says for each seat; a seat it does not grade shows nothing. */
+  function paintIq() {
+    const iq = typeof window !== 'undefined' ? window.PBP?.iq : null;
+    for (const s of ['w', 'b']) {
+      const node = iqEl[s];
+      if (!node) continue;
+      let v = null;
+      try { v = iq ? iq.value(s) : null; } catch { v = null; }
+      shownIq[s] = v;
+      node.hidden = v == null;
+      if (v != null) node.firstChild.textContent = 'IQ ' + v;
+    }
+  }
+
+  /** A graded move: the number changes, and what it cost rises off it (not under reduced motion). */
+  function iqLanded(g) {
+    const s = g && (g.side === 'w' || g.side === 'b') ? g.side : null;
+    const before = s ? shownIq[s] : null;
+    paintIq();
+    const node = s && iqEl[s];
+    const drop = before != null && shownIq[s] != null ? before - shownIq[s] : 0;
+    if (!node || !(drop > 0) || reducedMotion()) return;
+    const pop = document.createElement('span');
+    pop.className = 'iq-pop';
+    pop.setAttribute('aria-hidden', 'true');
+    pop.textContent = '-' + drop;
+    node.appendChild(pop);
+    later(() => pop.remove(), T.iqPopMs);
+  }
+
   /* ---- copy --------------------------------------------------------------- */
 
   /**
@@ -390,10 +440,45 @@ export function createHud(opts = {}) {
     if (!panel) return;
     panel.hidden = !panel.hidden;
     options.setAttribute('aria-expanded', String(!panel.hidden));
+    stopSurrender();
   });
   for (const button of root.querySelectorAll('[data-experience]')) click(button, () => setPresentation({ experience: button.dataset.experience }));
+  // SURRENDER (owner, 2026-10-02): in Options for every mode, asked once.
+  // Solo gives the game to the computer, hotseat gives it to the side not on
+  // the move, online is the server's resign. A local loss is THE FALL.
+  const surrenderBox = pick('game-surrender-box');
+  const surrenderBtn = pick('game-surrender');
+  const surrenderAsk = pick('game-surrender-ask');
+  let surrendering = null;   // the "give up this game?" question, while it stands
+  function stopSurrender(repaint = true) {
+    if (surrendering) { clearTimeout(surrendering); timers.delete(surrendering); surrendering = null; }
+    if (repaint) paintSurrender();
+  }
+  function paintSurrender() {
+    let live = !!deal && !over;
+    try { if (window.PBP?.door?.isUp?.() || game?.isOver?.()) live = false; } catch { /* no referee yet */ }
+    if (!live) stopSurrender(false);
+    if (surrenderBox) surrenderBox.hidden = !live;
+    if (surrenderBtn) surrenderBtn.hidden = !!surrendering;
+    if (surrenderAsk) surrenderAsk.hidden = !surrendering;
+  }
+  click(surrenderBtn, () => {
+    stopSurrender(false);
+    surrendering = later(() => { surrendering = null; paintSurrender(); }, T.askMs);
+    paintSurrender();
+  });
+  click(pick('game-surrender-no'), () => stopSurrender());
+  click(pick('game-surrender-yes'), () => {
+    stopSurrender(false);
+    closeOptions();
+    if (online) verb('resign');
+    else if (game?.isSolo) verb('resign');
+    else if (game && typeof game.resign === 'function') { try { game.resign(game.turn()); } catch { /* already over */ } }
+    paintSurrender();
+  });
   const menuButton = pick('game-menu');
   function paintMenu() {
+    paintSurrender();
     if (menuButton) { menuButton.textContent = deal?.mode === 'solo' ? 'Save and menu' : 'Menu'; menuButton.disabled = online && !over; }
     const note = pick('game-menu-note');
     if (note) note.hidden = !online || !!over;
@@ -408,7 +493,24 @@ export function createHud(opts = {}) {
   follow?.addEventListener('change', followChange);
   replays?.addEventListener('change', replaysChange);
   undom.push(() => { follow?.removeEventListener('change', followChange); replays?.removeEventListener('change', replaysChange); });
+  const invertX = pick('game-invert-x');
+  const invertY = pick('game-invert-y');
+  const invertXChange = () => setPresentation({ invertX: invertX.checked });
+  const invertYChange = () => setPresentation({ invertY: invertY.checked });
+  invertX?.addEventListener('change', invertXChange);
+  invertY?.addEventListener('change', invertYChange);
+  undom.push(() => { invertX?.removeEventListener('change', invertXChange); invertY?.removeEventListener('change', invertYChange); });
   for (const button of root.querySelectorAll('[data-turncard]')) click(button, () => setPresentation({ turnCard: button.dataset.turncard }));
+  for (const button of root.querySelectorAll('[data-amount]')) click(button, () => setPresentation({ amount: button.dataset.amount }));
+  for (const button of root.querySelectorAll('[data-ramp]')) click(button, () => setPresentation({ rampSpeed: button.dataset.ramp }));
+  const strength = pick('game-strength');
+  const strengthOut = pick('game-strength-out');
+  const strengthInput = () => {
+    if (strengthOut) strengthOut.textContent = strength.value + '%';
+    setPresentation({ strength: Number(strength.value) / 100 });
+  };
+  strength?.addEventListener('input', strengthInput);
+  undom.push(() => strength?.removeEventListener('input', strengthInput));
   sound?.addEventListener('change', soundChange);
   motion?.addEventListener('change', motionChange);
   undom.push(() => { sound?.removeEventListener('change', soundChange); motion?.removeEventListener('change', motionChange); });
@@ -430,13 +532,21 @@ export function createHud(opts = {}) {
     pictures?.setVisible?.(p.experience === 'distraction');
     for (const button of root.querySelectorAll('[data-experience]')) button.setAttribute('aria-pressed', String(button.dataset.experience === p.experience));
     const copy = pick('experience-description');
-    if (copy) copy.textContent = p.experience === 'classic' ? 'The board, animated captures and sound.' : 'Media and effects build as the match progresses.';
+    if (copy) copy.textContent = p.experience === 'classic' ? 'The board, animated captures and sound.' : 'Effects build while you think and let go when you move.';
     if (sound) { sound.checked = p.volume > 0; sound.disabled = p.soundLocked; }
     if (motion) { motion.checked = p.reducedMotion; motion.disabled = p.motionLocked; }
     // Reduced motion keeps the camera at the seat and drops the replay; the boxes say so.
     if (follow) { follow.checked = p.followCam && !p.reducedMotion; follow.disabled = p.reducedMotion; }
     if (replays) { replays.checked = p.replays && !p.reducedMotion; replays.disabled = p.reducedMotion; }
+    if (invertX) invertX.checked = p.invertX;
+    if (invertY) invertY.checked = p.invertY;
     for (const button of root.querySelectorAll('[data-turncard]')) button.setAttribute('aria-pressed', String(button.dataset.turncard === p.turnCard));
+    const dials = pick('game-dials');
+    if (dials) dials.hidden = p.experience !== 'distraction';
+    for (const button of root.querySelectorAll('[data-amount]')) button.setAttribute('aria-pressed', String(button.dataset.amount === p.amount));
+    for (const button of root.querySelectorAll('[data-ramp]')) button.setAttribute('aria-pressed', String(button.dataset.ramp === p.rampSpeed));
+    if (strength && document.activeElement !== strength) strength.value = String(Math.round(p.strength * 100));
+    if (strengthOut) strengthOut.textContent = Math.round(p.strength * 100) + '%';
     const note = pick('game-preference-note');
     if (note) { note.hidden = !p.motionLocked && !p.soundLocked; note.textContent = 'App and system preferences stay in effect.'; }
     setMeter(p.experience === 'classic' ? 0 : meter);
@@ -467,7 +577,12 @@ export function createHud(opts = {}) {
   });
   on('check', () => paintCheck());
   on('capture', () => paintTally());
-  on('local', (p) => { newDeal(p); paintTally(); place(true); });
+  on('local', (p) => { newDeal(p); paintTally(); place(true); paintIq(); });
+  on('iq', iqLanded);
+  on('newgame', paintIq);
+  on('takeback', paintIq);
+  // the server corrected a guessed online seat; the grader (subscribed first, at boot) has moved over already
+  on('seat', paintIq);
   on('draw-offer', () => { stopAsking(); paintOnline(); });
   on('draw-decline', (p) => {
     const by = p && (p.by === 'w' || p.by === 'b') ? p.by : null;
@@ -526,6 +641,7 @@ export function createHud(opts = {}) {
   paintTally();
   paintCheck();
   setMeter(0);
+  paintIq();
   // The HUD may be built mid-game (it is loaded late), so the block starts
   // from whatever is in the chair rather than waiting for the next deal.
   newDeal(null);
@@ -559,6 +675,7 @@ export function createHud(opts = {}) {
         hint: !!(el.hint && el.hint.classList.contains('on')),
         chips: { w: cls(el.chip.w), b: cls(el.chip.b) },
         tally: { w: el.tally.w ? el.tally.w.textContent : null, b: el.tally.b ? el.tally.b.textContent : null },
+        iq: { w: iqEl.w && !iqEl.w.hidden ? iqEl.w.firstChild.textContent : null, b: iqEl.b && !iqEl.b.hidden ? iqEl.b.firstChild.textContent : null },
         line: el.line ? el.line.style.transform : null,
         reducedMotion: reducedMotion(),
         moves: moves ? moves.debug() : null,

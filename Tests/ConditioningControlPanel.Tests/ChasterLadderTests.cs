@@ -361,6 +361,43 @@ public class ChasterLadderTests : IDisposable
     }
 
     [Fact]
+    public void A_credit_on_a_day_that_pushed_nothing_counts_on_the_day_the_rest_lands()
+    {
+        // TAB-12: +5:00 at 23:59:40 UTC, -1:40 at 23:59:50, the 3:20 lands after midnight.
+        var d1 = new DateTime(2026, 10, 7, 23, 59, 40, DateTimeKind.Utc);
+        var s = new TabState();
+        BookAt(s, 300, d1);
+        BookAt(s, -100, d1.AddSeconds(10));
+        Assert.Equal(200, PushAt(s, d1.AddSeconds(40)));
+
+        var claims = ChasterLadder.Claims(s, d1.AddMinutes(5));
+        Assert.Equal(new[] { "2026-10-08" }, claims.Keys);
+        Assert.Equal(new LadderClaim(300, 200), claims["2026-10-08"]);
+    }
+
+    [Fact]
+    public void The_cancelled_part_waits_through_empty_days_and_is_dropped_when_nothing_is_owed()
+    {
+        var s = new TabState();
+        // Oct 5: +10:00, -4:00, 6:00 owed (no lock picked). Oct 6: +1:00, nothing lands. Oct 8: 7:00 lands.
+        BookAt(s, 600, Oct5);
+        BookAt(s, -240, Oct5.AddMinutes(1));
+        BookAt(s, 60, Oct5.AddDays(1));
+        Assert.Equal(420, PushAt(s, Oct5.AddDays(3)));
+        var claims = ChasterLadder.Claims(s, Oct5.AddDays(3));
+        Assert.Equal(new[] { "2026-10-08" }, claims.Keys);
+        Assert.Equal(new LadderClaim(660, 420), claims["2026-10-08"]);
+
+        // Everything cancelled the same day: nothing reached a lock, nothing moves to the next push.
+        var t = new TabState();
+        BookAt(t, 300, Oct5);
+        BookAt(t, -300, Oct5.AddMinutes(1));
+        BookAt(t, 60, Oct5.AddDays(1));
+        PushAt(t, Oct5.AddDays(1).AddMinutes(1));
+        Assert.Equal(new LadderClaim(60, 60), ChasterLadder.Claims(t, Oct5.AddDays(1))["2026-10-06"]);
+    }
+
+    [Fact]
     public void An_unanswered_push_counted_as_landed_is_pushed_in_the_ledger()
     {
         var s = new TabState();

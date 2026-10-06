@@ -361,7 +361,7 @@ namespace ConditioningControlPanel.Views.Tabs
 
             if (ChasterRaffle.TicketDue(card) is { } due)
             {
-                TxtRaffleTicketOn.Text = string.Format(Loc.Get("chaster_raffle_ticket_on"), due.ToString("MMM d", CultureInfo.CurrentUICulture));
+                TxtRaffleTicketOn.Text = string.Format(Loc.Get("chaster_raffle_ticket_on"), ChasterRaffle.FormatDueDay(due, CultureInfo.CurrentUICulture));
                 TxtRaffleTicketOn.Visibility = Visibility.Visible;
             }
             else TxtRaffleTicketOn.Visibility = Visibility.Collapsed;

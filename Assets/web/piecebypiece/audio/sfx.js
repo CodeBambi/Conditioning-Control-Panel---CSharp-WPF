@@ -73,6 +73,10 @@ export const TUNING = Object.freeze({
   clock: { hz: 1200, sharpHz: 1900, sec: 0.015, gain: 0.07, sharpGain: 0.11, underMs: 30000, sharpMs: 10000 },
   promote: { hz: [523, 659, 784, 1047], step: 0.06, sec: 0.28, gain: 0.12 },
   whoosh: { lowHz: 200, highHz: 4000, sec: 0.26, gain: 0.1 },
+  // The turn card (ui/turn-handoff.js): a quick swish under two notes, a fifth up for
+  // your turn, a third down for theirs. Quiet: it lands on every move.
+  turnCard: { mine: [523, 784], theirs: [392, 330], step: .07, noteSec: .14, gain: .055,
+    swishSec: .16, swishGain: .045, swishFrom: 900, swishTo: 3200 },
   whisper: { from: 1100, to: 380, sec: 0.6, gain: 0.05, attack: 0.18 },
   room: {
     delaySec: 0.21, feedback: 0.32,      // the echo and how much of it comes back
@@ -289,6 +293,18 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     crowdApplause() { audience('crowdApplause'); },
     crowdCheer() { audience('crowdCheer'); },
     crowdBoo() { audience('crowdBoo'); },
+    crowdOoh() { audience('crowdOoh'); },
+    crowdClap() { audience('crowdClap'); },
+    crowdAww() { audience('crowdAww'); },
+    // The turn card's own cue: a short swish and two notes, up for you, down for them.
+    turnCard(p = {}) {
+      const T = TUNING.turnCard;
+      if (p.short) { tone('triangle', T.mine[1], T.noteSec, T.gain * .6); return; }
+      hiss(T.swishSec, T.swishGain, { from: T.swishFrom, to: T.swishTo, attack: .02 });
+      const [a, b] = p.mine ? T.mine : T.theirs;
+      tone('triangle', a, T.noteSec, T.gain, { at: .03 });
+      tone('triangle', b, T.noteSec * 1.4, T.gain, { at: .03 + T.step });
+    },
     hooves() {
       for (const at of [0, .085, .21, .295]) {
         tone('triangle', at < .2 ? 680 : 510, .045, .12, { at, slideTo: 290 });
@@ -583,7 +599,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   on('replay-panel-hit', p => { if (!yielded) play('replayHit', { i: p?.i | 0, layout: p?.layout, hit: p?.hit || null }); });
   on('replay-exit', p => { if (!yielded) play(p?.skipped ? 'replayStop' : 'replayOut', { layout: p?.layout }); });
   on('replay-done', () => duck(false));
-  on('turn-card', yieldReplay);
+  on('turn-card', p => { yieldReplay(); play('turnCard', { mine: !!p?.mine, short: !!p?.short }); });
   for (const type of ['local', 'newgame', 'menu', 'takeback', 'gameover']) on(type, () => { if (ducked) { fadeReplay(.05); duck(false); } });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {

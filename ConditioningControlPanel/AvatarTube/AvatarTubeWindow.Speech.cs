@@ -1006,7 +1006,9 @@ namespace ConditioningControlPanel
         {
             if (_bubbleWindow == null) return;
             var g = _parentGeom;
-            bool want = AvatarTubeLayout.SpeechBubbleVisibility.ShouldShow(
+            // No bubble over a game window: the attached tube sits above its sibling game window in the
+            // shared owner group, so its bubble drew over Just Drop, chess and the rest (ccp-bugs #1345).
+            bool want = !ChaosWebViewHost.AnyGameActive && AvatarTubeLayout.SpeechBubbleVisibility.ShouldShow(
                 SpeechBubble.Visibility == Visibility.Visible, IsVisible, WindowState == WindowState.Minimized,
                 _isAttached, g?.Visible ?? true, g?.Minimized ?? false);
             if (want == _bubbleWindow.IsVisible) return;
@@ -1058,11 +1060,49 @@ namespace ConditioningControlPanel
             int ex = GetWindowLong(_bubbleHandle, GWL_EXSTYLE_BUBBLE);
             SetWindowLong(_bubbleHandle, GWL_EXSTYLE_BUBBLE, ex | WS_EX_NOACTIVATE_BUBBLE | WS_EX_TOOLWINDOW_BUBBLE);
             SetWindowLongPtr(_bubbleHandle, GWL_HWNDPARENT, _tubeHandle);
+            HwndSource.FromHwnd(_bubbleHandle)?.AddHook(BubbleWndProc);
             _bubbleWindow.SizeChanged += (_, __) =>
             {
                 if (SpeechBubble.Visibility == Visibility.Visible) ApplySpeechBubblePlacement();
             };
             Closed += (_, __) => { try { _bubbleWindow?.Close(); } catch { } };
+        }
+
+        private const int WM_WINDOWPOSCHANGING_BUBBLE = 0x0046;
+        private const uint SWP_SHOWWINDOW_BUBBLE = 0x0040;
+        private const uint SWP_NOZORDER_BUBBLE = 0x0004;
+        private const uint SWP_NOACTIVATE_BUBBLE = 0x0010;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BubbleWindowPos
+        {
+            public IntPtr hwnd, hwndInsertAfter;
+            public int x, y, cx, cy;
+            public uint flags;
+        }
+
+        /// <summary>
+        /// Showing the bubble must never bring the app forward (owner, 2026-10-02: "when she speaks
+        /// it brings the UI in front"). A plain show puts the bubble on top of the z-order and, with
+        /// it, its whole native owner chain: the tube and, while attached, MainWindow, all jumping
+        /// over whatever app the player is in. Here the show slots the bubble directly above the
+        /// tube, alone, wherever the tube happens to sit.
+        /// </summary>
+        private IntPtr BubbleWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg != WM_WINDOWPOSCHANGING_BUBBLE || lParam == IntPtr.Zero || _tubeHandle == IntPtr.Zero) return IntPtr.Zero;
+            try
+            {
+                var wp = Marshal.PtrToStructure<BubbleWindowPos>(lParam);
+                if ((wp.flags & SWP_SHOWWINDOW_BUBBLE) == 0 || (wp.flags & SWP_NOZORDER_BUBBLE) != 0) return IntPtr.Zero;
+                var above = GetWindow(_tubeHandle, GW_HWNDPREV);
+                if (above == _bubbleHandle) wp.flags |= SWP_NOZORDER_BUBBLE;   // already right above the tube
+                else wp.hwndInsertAfter = above;   // Zero is HWND_TOP: the tube is the top window anyway
+                wp.flags |= SWP_NOOWNERZORDER | SWP_NOACTIVATE_BUBBLE;
+                Marshal.StructureToPtr(wp, lParam, false);
+            }
+            catch { /* a bubble that pops the app forward beats a bubble that never shows */ }
+            return IntPtr.Zero;
         }
 
         private bool _placingSpeechBubble;
@@ -1099,6 +1139,15 @@ namespace ConditioningControlPanel
             };
             StateChanged += (_, __) => SyncSpeechPopupOpen();
             Closed += (_, __) => RestoreMadeRoom();
+            // A game opening or closing re-decides the bubble too: a line already up when Just Drop
+            // or chess opens hides at once, and a line still running when the game closes returns.
+            Action onGameChanged = () =>
+            {
+                if (Dispatcher.HasShutdownStarted) return;
+                Dispatcher.BeginInvoke(new Action(SyncSpeechPopupOpen));
+            };
+            ChaosWebViewHost.GameActiveChanged += onGameChanged;
+            Closed += (_, __) => ChaosWebViewHost.GameActiveChanged -= onGameChanged;
 
             SpeechBubble.SizeChanged += (_, __) =>
             {

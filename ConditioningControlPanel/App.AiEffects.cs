@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Services.Commands;
 
@@ -72,6 +73,37 @@ namespace ConditioningControlPanel
             });
             MediaCommand.AudioSurface = path =>
                 Task.FromResult(Current.Dispatcher.Invoke(() => Audio?.PlaySound(path, 100) ?? 0) > 0);
+
+            MediaCommand.HypnoTubeSurface = url => Current.Dispatcher.Invoke(() =>
+            {
+                if (RemoteControl?.ControllerConnected == true)
+                {
+                    Logger?.Information("MediaCommand: AI HypnoTube video skipped, a remote controller is connected");
+                    return false;
+                }
+                if (Video?.IsPlaying == true || BrowserMedia?.ShouldDeferNewVideo == true)
+                {
+                    Logger?.Information("MediaCommand: AI HypnoTube video skipped, a video is already playing");
+                    return false;
+                }
+
+                var mainWindow = MainWindowRef ?? Current.Windows.OfType<MainWindow>().FirstOrDefault();
+                if (mainWindow == null) return false;
+
+                if (BrowserMedia?.BeginTakeover(Services.Browser.BrowserMediaService.MediaOwner.Autonomy) == false)
+                    return false;
+
+                // userInitiated: false - the AI decided this, so an offline block stays silent.
+                if (mainWindow.NavigateToUrlInBrowser(url, autoPlayFullscreen: true, userInitiated: false))
+                {
+                    Logger?.Information("MediaCommand: AI HypnoTube video opened on {Host}", Services.Logging.UrlLog.Host(url));
+                    return true;
+                }
+
+                BrowserMedia?.OnMediaStopped("navigation-failed");
+                Logger?.Warning("MediaCommand: AI HypnoTube video not opened, browser not available");
+                return false;
+            });
 
             GetBackToMeCommand.AiProvider = () => Ai;
             GetBackToMeCommand.SaySurface = (text, aiGenerated) =>

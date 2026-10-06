@@ -301,6 +301,8 @@ namespace ConditioningControlPanel
 
                 _avatarTubeWindow.Giggle("Good morning~!");
             }
+
+            CompanionRoom?.SyncHero();
         }
 
         public void SetAvatarPose(int poseNumber)

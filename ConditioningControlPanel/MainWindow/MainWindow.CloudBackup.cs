@@ -153,6 +153,7 @@ namespace ConditioningControlPanel
                     restored.PatreonPremiumValidUntil = current.PatreonPremiumValidUntil;
                     // Tier-2 twin of the line above: a local entitlement window, never the backup's.
                     restored.PatreonLabValidUntil = current.PatreonLabValidUntil;
+                    restored.InviteGrantUntil = current.InviteGrantUntil;
                     restored.LastPatreonVerification = current.LastPatreonVerification;
                     restored.OpenRouterApiKey = current.OpenRouterApiKey;
                     // Same machine-local set the startup restore keeps: the content folder above all.

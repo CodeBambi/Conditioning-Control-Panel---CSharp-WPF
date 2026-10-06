@@ -34,6 +34,8 @@ namespace ConditioningControlPanel.Services
         private MMDeviceEnumerator? _deviceEnumerator;
         private int _duckCount; // Reference count — unduck only when all duckers release
         private bool _isDucked;
+        /// <summary>Other apps are ducked right now (Remote Control v2 preview reads it).</summary>
+        public bool IsDucked => _isDucked;
         private float _duckAmount = 0.8f; // Default: reduce to 20%
         private long _duckGeneration; // Incremented on ForceUnduck to invalidate stale Unduck callbacks
 

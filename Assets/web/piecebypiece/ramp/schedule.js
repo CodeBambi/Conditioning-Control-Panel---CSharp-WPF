@@ -26,12 +26,16 @@ export function makeRng(seed) {
   };
 }
 
-/** ms between spawns of `kind` at this heat (Infinity when the kind is idle). */
-export function cadenceMs(kind, heat, tuning = RAMP_TUNING) {
+/** ms between spawns of `kind` at this heat (Infinity when the kind is idle).
+ *  `amount` is the player's Amount pick as a rate: 2 is twice as often. */
+export function cadenceMs(kind, heat, tuning = RAMP_TUNING, amount = 1) {
   const band = tuning[kind];
   if (!band) return Infinity;
-  return lerp(band.slowMs, band.fastMs, clamp01(heat));
+  return lerp(band.slowMs, band.fastMs, clamp01(heat)) / Math.max(0.1, amount);
 }
+
+/** The player's Strength pick, kept in a range that cannot blank the board. */
+export const clampStrength = (v) => (Number.isFinite(v) ? Math.min(2, Math.max(0.1, v)) : 1);
 
 /**
  * The sustained stack for a meter value: which layers are on, and how hard.
@@ -39,9 +43,14 @@ export function cadenceMs(kind, heat, tuning = RAMP_TUNING) {
  * `opts.cardLive` says a video card is currently over the board. The veils step
  * back while it is, so the card is the thing you cannot see past, rather than
  * the last straw on top of two other walls.
+ *
+ * `opts.strength` is the player's Strength pick (0.1..2): every wash, the veil
+ * budget with them. The blur only ever goes DOWN with it: the sub-pixel cap is
+ * what keeps a piece from smearing (owner, 2026-10-02).
  */
 export function sustainedFor(meter, tuning = RAMP_TUNING, opts = {}) {
   const m = clamp01(meter);
+  const k = clampStrength(opts.strength);
   const u = tuning.unlock;
   // each layer's own 0..1 progress from its unlock point up to a full meter
   const ramp = (from) => (m <= from ? 0 : clamp01((m - from) / Math.max(0.01, 1 - from)));
@@ -53,13 +62,14 @@ export function sustainedFor(meter, tuning = RAMP_TUNING, opts = {}) {
   // the two full-screen veils share one budget: they are the only layers that
   // can hide the board outright, and at a full meter they would otherwise sum
   // past opaque. Damped further while a card is up.
-  const damp = opts.cardLive ? tuning.cardVeilDamp : 1;
+  const damp = (opts.cardLive ? tuning.cardVeilDamp : 1) * k;
   let spiralA = (m >= u.spiral ? lerp(tuning.spiral.minAlpha, tuning.spiral.maxAlpha, spiralR) : 0) * damp;
   let overA = (m >= u.overlay ? lerp(tuning.overlay.minAlpha, tuning.overlay.maxAlpha, overR) : 0) * damp;
   const veil = spiralA + overA;
-  if (veil > tuning.veilBudget) {
-    const k = tuning.veilBudget / veil;
-    spiralA *= k; overA *= k;
+  const budget = tuning.veilBudget * k;
+  if (veil > budget) {
+    const cut = budget / veil;
+    spiralA *= cut; overA *= cut;
   }
   return {
     melt: {
@@ -71,7 +81,7 @@ export function sustainedFor(meter, tuning = RAMP_TUNING, opts = {}) {
     blur: {
       on: m >= u.blur,
       // HARD CAP: never past blurMaxPx, whatever the meter says
-      px: m >= u.blur ? Math.min(tuning.blurMaxPx, tuning.blurMaxPx * blurR) : 0,
+      px: m >= u.blur ? Math.min(tuning.blurMaxPx, tuning.blurMaxPx * blurR) * Math.min(1, k) : 0,
     },
     spiral: {
       on: m >= u.spiral,
@@ -103,7 +113,10 @@ export function videoHoldMs(meter, tuning = RAMP_TUNING, baseSec = null) {
 /**
  * createSchedule({ tuning, seed })
  *
- * tick(now, heat, meter) -> { fire: ['flash', ...], sustained: {...} }
+ * tick(now, heat, meter, opts) -> { fire: ['flash', ...], sustained: {...} }
+ *   opts.quiet    nothing pops (the breath after a move, a pause, not our move)
+ *   opts.amount   the player's Amount pick as a rate (AMOUNTS in meter.js)
+ *   opts.strength the player's Strength pick, passed on to sustainedFor
  *
  * Cadence is accumulated per kind (never a setInterval), so a paused tab or a
  * long frame catches up by at most one spawn instead of dumping a backlog.
@@ -119,16 +132,18 @@ export function createSchedule({ tuning = RAMP_TUNING, seed = 'pbp' } = {}) {
     for (const k of kinds) nextAt[k] = now;
   }
 
-  function tick(now, heat, meter, opts) {
+  function tick(now, heat, meter, opts = {}) {
     const h = clamp01(heat);
+    const amount = Number.isFinite(opts.amount) && opts.amount > 0 ? opts.amount : 1;
     const fire = [];
-    if (!started) { started = true; for (const k of kinds) nextAt[k] = now + cadenceMs(k, h, tuning); }
+    if (!started) { started = true; for (const k of kinds) nextAt[k] = now + cadenceMs(k, h, tuning, amount); }
     for (const k of kinds) {
-      const gap = cadenceMs(k, h, tuning);
+      const gap = cadenceMs(k, h, tuning, amount);
       if (!Number.isFinite(gap)) { nextAt[k] = now + 1000; continue; }
+      if (opts.quiet) { nextAt[k] = Math.max(nextAt[k], now + gap); continue; }   // the first pop after a breath waits a full gap
       if (now >= nextAt[k]) {
-        // plainShare: the busier it gets, the fewer beats stay empty
-        if (rng() >= plainShare(h, tuning)) fire.push(k);
+        // plainShare: the busier it gets, the fewer beats stay empty; More fills more of them
+        if (rng() >= 1 - (1 - plainShare(h, tuning)) * Math.min(1.5, Math.max(1, amount))) fire.push(k);
         nextAt[k] = now + gap;
       }
       // a heat drop should pull the next spawn in, not strand it in the future

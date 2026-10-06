@@ -95,6 +95,30 @@ internal static class CaucusHostService
     /// (PanicPolicy.GameClaimsEscapeAsPause).</summary>
     public static bool IsInFront => _host?.IsForeground == true;
 
+    /// <summary>True once the race page has said <c>ready</c> and is not on its way out.</summary>
+    public static bool IsReady => _host?.IsReady == true && !_exiting;
+
+    /// <summary>The frame that hands the race an Escape the panel kept as its pause. The page
+    /// listens for this exact name (race/hostEscape.js).</summary>
+    internal const string KeptEscapeType = "kept-escape";
+
+    /// <summary>
+    /// Hand the race an Escape the panel kept as its pause. The race pauses (its Brake) on its own
+    /// keydown, which never comes while its WebView2 is out of keyboard focus (the title bar
+    /// clicked); the page plays this once as its own Escape unless the real key reached it too.
+    /// MainWindow asks PanicPolicy.KeptEscapeGoesTo first. The page gets the keyboard back as well,
+    /// so Enter works on the pause card without a click.
+    /// </summary>
+    public static void PostKeptEscape()
+    {
+        try
+        {
+            _host?.Post(new { type = KeptEscapeType });
+            _host?.FocusWeb();
+        }
+        catch (Exception ex) { App.Logger?.Debug("Caucus: kept Escape post failed: {E}", ex.Message); }
+    }
+
     /// <summary>Open the race window (idempotent - refocuses if already open).</summary>
     /// <param name="devTrackPath">The `--race-track` dev arg's file, or null in a normal launch.</param>
     /// <param name="openCloud">The `--race-cloud` dev arg: open the BambiCloud window on its own.</param>

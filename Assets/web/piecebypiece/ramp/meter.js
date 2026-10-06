@@ -4,7 +4,18 @@
  * One number per side, 0..1, built from three inputs: how little clock is left,
  * how many pieces that side has TAKEN, and how many it has LOST. Taking ramps
  * you harder than losing (captureWeight 1.5 vs lossWeight 1.0) - the player who
- * is winning on the board gets the worse screen. Both sides end up melted.
+ * is winning on the board gets the worse screen. That number is the PRESSURE.
+ *
+ * THINKING MAKES IT WORSE (owner, 2026-10-01): on your own move the screen
+ * climbs toward full the longer you sit on it. To play well you have to think,
+ * and thinking pulls you under.
+ *
+ * NO FLOOR, AND A BREATH (owner, 2026-10-02, supersedes the floor): the moment
+ * you move, everything for you stops (pictures, wash, heartbeat, whispers) and
+ * stays stopped through the other side's turn, until your own turn card. Then
+ * the climb starts again from nothing. The pressure no longer holds the screen
+ * up between moves; it makes the climb FASTER (thinkRate). The climb is slower
+ * than before and the player picks its pace (thinkFullMs).
  *
  * Pure and deterministic: every function takes the clock/counters it needs and
  * `now` is passed in, so smoke tests replay the same numbers without a timer.
@@ -39,17 +50,23 @@ export const RAMP_TUNING = Object.freeze({
   // --- sustained layer envelopes -------------------------------------------
   // Mort (2026-09-28): the early stages were right, full tilt was unreadable.
   // The top of every full-screen layer came down; the bottom barely moved.
-  melt: Object.freeze({ minAlpha: 0.10, maxAlpha: 0.30 }),
-  blurMaxPx: 3,
+  // Owner (2026-10-02): "keep the pieces and the grid always visible or we
+  // can't play". The pink wash and the full-screen pictures came down by about
+  // half again (melt .30 -> .14, spiral .32 -> .16, overlay .22 -> .11, veil
+  // budget .40 -> .22), and the blur on the board is capped under a pixel
+  // (3 -> 0.8): the board softens, a piece never smears. The board mask
+  // (layers/boardmask.js) thins what is left over the board's footprint.
+  melt: Object.freeze({ minAlpha: 0.06, maxAlpha: 0.14 }),
+  blurMaxPx: 0.8,
   // THE VEIL BUDGET. The two full-screen gif veils (spiral, overlay) may cover
   // this much between them and no more, and they step back to `cardVeilDamp` of
   // that while a video card is over the board. Without it the top of the ramp
   // is three walls at once and the board stops existing, which is a different
   // game to the one being played.
-  veilBudget: 0.40,
+  veilBudget: 0.22,
   cardVeilDamp: 0.45,          // HARD CAP: a move must always stay physically possible
-  spiral: Object.freeze({ minAlpha: 0.14, maxAlpha: 0.32, minHoldMs: 1400, maxHoldMs: 5200, gapMs: 9000 }),
-  overlay: Object.freeze({ minAlpha: 0.08, maxAlpha: 0.22 }),
+  spiral: Object.freeze({ minAlpha: 0.08, maxAlpha: 0.16, minHoldMs: 1400, maxHoldMs: 5200, gapMs: 9000 }),
+  overlay: Object.freeze({ minAlpha: 0.05, maxAlpha: 0.11 }),
 
   // --- the video card + the drag glitch ------------------------------------
   videoCard: Object.freeze({ minHoldSec: 4, maxHoldSec: 13, riseMs: 620, startJitter: 0.7 }),
@@ -65,7 +82,69 @@ export const RAMP_TUNING = Object.freeze({
 
   // --- the effect-free share, ported from the Arcademy plainShare ramp ------
   plain: Object.freeze({ early: 0.80, floor: 0.30 }),
+
+  // --- the think ramp -------------------------------------------------------
+  // curve > 1 eases in: a quick move stays clean, a long think piles on at the
+  // end. fullMs is the Normal pace; the player's Ramp pick swaps it (SPEEDS).
+  // Owner 2026-10-02: 20 s was too fast, Normal is 40 s now and Fast is about
+  // the old pace. The wash rises once a think passes cardAt of the full climb.
+  // pressureRate: a full pressure meter (clock + captures) climbs this much
+  // faster. wakeAfterMs: no turn card came (the clock is under 10 s, or the
+  // card never shows) so the breath ends after this much of the player's own
+  // live turn. maxStepMs: one beat never adds more than this, so a hidden tab
+  // cannot bank a full ramp.
+  think: Object.freeze({ fullMs: 40000, curve: 1.5, cardAt: 0.6, cardGapMs: 900, snapMs: 600, maxStepMs: 250,
+    pressureRate: 0.6, wakeAfterMs: 3000 }),
+
+  // --- the fall: a local loss brings everything up at once, then drains -------
+  surge: Object.freeze({ holdMs: 1200, drainMs: 1400 }),
 });
+
+/** The player's Ramp pick -> how long the climb takes to full, in ms. */
+export const SPEEDS = Object.freeze({ slow: 70000, normal: 40000, fast: 22000 });
+export const thinkFullMs = (speed, tuning = RAMP_TUNING) => SPEEDS[speed] || tuning.think.fullMs;
+
+/** The player's Amount pick -> how many pictures pop, as a rate on the one-shots. */
+export const AMOUNTS = Object.freeze({ less: 0.5, normal: 1, more: 1.6 });
+export const amountRate = (amount) => AMOUNTS[amount] || 1;
+
+/** How far a think of `ms` lifts the screen toward full, 0..1. */
+export function thinkLift(ms, tuning = RAMP_TUNING, fullMs = tuning.think.fullMs) {
+  return Math.pow(clamp01(ms / fullMs), tuning.think.curve);
+}
+
+/** How much faster the climb runs under this much match pressure. */
+export const thinkRate = (pressure, tuning = RAMP_TUNING) => 1 + tuning.think.pressureRate * clamp01(pressure);
+
+/** The loss surge at `ms` after game over: full for holdMs, then a straight drain to nothing. */
+export function surgeLevel(ms, tuning = RAMP_TUNING) {
+  const { holdMs, drainMs } = tuning.surge;
+  if (!(ms >= 0)) return 0;
+  if (ms <= holdMs) return 1;
+  return clamp01(1 - (ms - holdMs) / drainMs);
+}
+
+/**
+ * createThinkClock({ tuning, fullMs }) - how far into this move's climb we are.
+ *
+ * The ramp advances it once a beat, and only counts a beat when the mover is
+ * looking at a live board (their move, no pause card, no full-screen replay)
+ * and is not taking the breath after their last move. reset() is the move.
+ */
+export function createThinkClock({ tuning = RAMP_TUNING, fullMs = () => tuning.think.fullMs } = {}) {
+  let ms = 0;
+  return {
+    get ms() { return ms; },
+    get fullMs() { return fullMs(); },
+    lift: () => thinkLift(ms, tuning, fullMs()),
+    /** `rate` > 1 is match pressure: the same seconds climb further. */
+    advance(dtMs, counting, rate = 1) {
+      if (counting && dtMs > 0) ms += Math.min(dtMs, tuning.think.maxStepMs) * Math.max(1, rate);
+      return ms;
+    },
+    reset() { ms = 0; },
+  };
+}
 
 /** Share of beats that must stay effect-free, so effects read as a spill and
  *  not as a metronome. Ported from arcademy/engine/curves.js plainShare(). */

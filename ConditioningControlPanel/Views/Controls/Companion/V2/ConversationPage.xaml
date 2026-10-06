@@ -160,11 +160,15 @@
         <Button Content="{loc:Str companion_v2_who}" Tag="who" Click="Sheet_Click"/>
         <Button Content="{loc:Str companion_v2_memory}" Tag="memory" Click="Sheet_Click"/>
         <Button Content="{loc:Str companion_v2_allowed}" Tag="permissions" Click="Sheet_Click"/>
+        <Button Content="{loc:Str companion_v2_videos}" Tag="videos" Click="Sheet_Click"/>
         <Button Content="{loc:Str companion_v2_connection}" Tag="connection" Click="Sheet_Click"/>
        </WrapPanel>
        <WrapPanel Margin="0,4,0,10">
+        <!-- The companion's on switch. Off, it leads the row and looks like the thing to press. -->
+        <Button Content="{loc:Str companion_v2_show}" Command="{Binding Room.Hero.ToggleShownCommand}" Style="{StaticResource PrimaryButton}" Visibility="{Binding CompanionHidden, Converter={StaticResource Visible}}"/>
         <Button Content="{loc:Str companion_v2_popout}" Command="{Binding Room.Hero.DetachCommand}" Style="{StaticResource QuietButton}"/>
         <Button Content="{Binding VoiceLabel}" Command="{Binding Room.Hero.ToggleMuteCommand}" Style="{StaticResource QuietButton}"/>
+        <Button Content="{loc:Str companion_v2_hide}" Command="{Binding Room.Hero.ToggleShownCommand}" Style="{StaticResource QuietButton}" Visibility="{Binding CompanionShown, Converter={StaticResource Visible}}"/>
        </WrapPanel>
        <CheckBox IsChecked="{Binding AsksEnabled}" Foreground="#FFF8FF" Margin="0,0,0,10" ToolTip="{loc:Str companion_asks_toggle_hint}">
         <TextBlock Text="{loc:Str companion_asks_toggle}" Foreground="#FFF8FF"/>

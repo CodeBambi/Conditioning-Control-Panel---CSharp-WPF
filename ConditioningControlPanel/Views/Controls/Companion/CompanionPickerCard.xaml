@@ -78,6 +78,10 @@
                 </Grid>
                 <TextBlock x:Name="TxtAvatarHint" FontSize="11" TextWrapping="Wrap" Visibility="Collapsed"
                            Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0"/>
+                <!-- the switch the "switched off" hint asks for, right where it asks -->
+                <Button x:Name="BtnTurnOn" Content="{loc:Str modmgr_avatar_turn_on}" Click="BtnTurnOn_Click"
+                        Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,3,0,0" Cursor="Hand"
+                        Foreground="#B084DC" FontSize="11" Template="{StaticResource PickerLinkTemplate}"/>
 
                 <!-- how the personality talks: one or two lines in its own voice -->
                 <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="14,10" Margin="0,10,0,0">

@@ -13,12 +13,24 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 /// <para>CONSENT. Remote pictures are fetched only when the player's own switch
 /// (<c>PbpMediaOnline</c>) is on AND either the app-wide online source is consented
 /// (<c>MediaSource</c> not local and <c>HasRemoteMediaConsent</c>) or the player picked a flavour
-/// inside the game this session. The in-game pick is this game's own opt-in, for this window
-/// only; it is never written back as app-wide consent. Everything else is the player's own
-/// library, as before.</para>
+/// inside the game. Since 2026-09-30 (owner: "record this choice and don't make them pick
+/// again") the pick is SAVED and stands as this game's own opt-in in every later window too
+/// (<see cref="SavedOptIn"/>); it is still never written back as app-wide consent, and "no
+/// online pictures" is saved the same way. Everything else is the player's own library.</para>
 /// </summary>
 internal static class PbpMediaRules
 {
+    /// <summary>Has the player made the one-time picture choice: an explicit pick from the page,
+    /// or (saved before the flag existed) a stored flavour or "own pictures only". The page asks
+    /// at the first start while this is false, and never again once it is true.</summary>
+    public static bool HasSavedChoice(bool chosen, bool pbpMediaOnline, string? flavour)
+        => chosen || !pbpMediaOnline || GoonOnlineMediaRules.CleanFlavour(flavour) != "";
+
+    /// <summary>The saved pick is the chess game's opt-in at boot: the switch on and a real
+    /// flavour stored. Chess only; never app-wide consent.</summary>
+    public static bool SavedOptIn(bool pbpMediaOnline, string? flavour)
+        => GoonOnlineMediaRules.IsSessionOptIn(pbpMediaOnline, GoonOnlineMediaRules.CleanFlavour(flavour));
+
     /// <summary>Share of a deal the online pictures take when the player picked a flavour in the
     /// game (and the app-wide source is not "online", which is all online).</summary>
     public const int PickedSharePct = 70;

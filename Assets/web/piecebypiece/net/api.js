@@ -37,6 +37,7 @@ export const ROUTES = Object.freeze({
   lobbyEnter: () => `${BASE}/lobby/enter`,
   lobbyLeave: () => `${BASE}/lobby/leave`,
   lobby: () => `${BASE}/lobby`,
+  join: () => `${BASE}/join`,
   quick: () => `${BASE}/quick`,
   challenge: () => `${BASE}/challenge`,
   challengeAccept: (id) => `${BASE}/challenge/${encodeURIComponent(id)}/accept`,
@@ -193,6 +194,16 @@ export function lobbyLeave() {
 /** Who else is sitting there. `data.players` is an array; it may be empty. */
 export function lobbyList() {
   return call('GET', withUid(ROUTES.lobby()), undefined);
+}
+
+/**
+ * Sit at one open table. `target` is the `p_...` id off a lobby row; the listing
+ * is the host's consent, so this pairs at once with the TABLE's time control:
+ * `{ match_id, color }`, or 409 `table_gone`, 400 `self`, 403 `blocked` (the
+ * server's word rides on `serverError`).
+ */
+export function join(target) {
+  return call('POST', ROUTES.join(), withIdentity({ target }));
 }
 
 /**

@@ -16,7 +16,7 @@ namespace ConditioningControlPanel;
 /// <summary>
 /// Popup window for server-triggered announcements with optional image, link, and theme support.
 /// </summary>
-public partial class AnnouncementPopup : Window
+public partial class AnnouncementPopup : Window, Services.Startup.IPassiveStartupSurface
 {
     /// <summary>Window width once the card-art rail is showing. The default 440 is sized for the
     /// stacked, text-only server announcement; the rail eats 210 of it, so the copy column would

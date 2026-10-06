@@ -212,6 +212,11 @@ namespace ConditioningControlPanel.Services
             // through EntitlementTierRule.ParseTier so a malformed value is "no signal", never a throw.
             [JsonProperty("effective_tier")]
             public JToken? EffectiveTierRaw { get; set; }
+
+            // The end of an invite week (Services/Invites), or absent. Raw token for the same reason
+            // as effective_tier: read through InviteRules.ParseUtc, never a throw.
+            [JsonProperty("invite_grant_until")]
+            public JToken? InviteGrantUntilRaw { get; set; }
         }
 
         public class Unlocks

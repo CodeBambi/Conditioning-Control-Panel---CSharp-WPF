@@ -139,6 +139,23 @@ namespace ConditioningControlPanel.Services
         ///
         /// Never throws: a gate that crashes the handler is worse than one that only logs.
         /// </summary>
+        /// <summary>
+        /// True when a refused click belongs to a patron whose Patreon grant died on this PC: the
+        /// fix is Reconnect, not a sales pitch. The ONE live read of PatreonReconnectRule for gates
+        /// (this toast and the padlock card). Tokens on disk are not a working grant: the proxy
+        /// refusing to refresh leaves the .dat in place (#585), hence GrantLooksDead, exactly as
+        /// the Account section's row reads it.
+        /// </summary>
+        public static bool ReconnectIsTheAnswer()
+        {
+            try { return ReconnectIsTheAnswerProvider?.Invoke() == true; }
+            catch (Exception ex) { Log.Debug("TierGate: reconnect probe failed: {E}", ex.Message); return false; }
+        }
+
+        /// <summary>Head seam for <see cref="ReconnectIsTheAnswer"/>: PatreonReconnectRule fed from the
+        /// head's live Patreon state (WPF App.xaml.cs). Unseeded: false, the sales card.</summary>
+        public static volatile Func<bool>? ReconnectIsTheAnswerProvider;
+
         public static void ShowDenied(in TierVerdict verdict)
         {
             Log.Information("TierGate: blocked {Feature} (needs {Required})", verdict.Feature, verdict.Required);

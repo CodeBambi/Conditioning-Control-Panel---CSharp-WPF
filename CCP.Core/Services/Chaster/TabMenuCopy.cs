@@ -68,12 +68,11 @@ public static class TabMenuCopy
         ["program_skipped"] = "program",
         ["remote_video"] = "remote_media",
         ["natasha"] = "bubbles",
-        [NatashasFavourite.HeldEventId] = "bubbles",
         ["leash"] = "detention",
         ["leash_credit"] = "pardon",
         [Stakes.StakeRules.LossRowId] = "goon",
-        [TabDayEnd.IdleEventId] = "session",
-        [TabDayEnd.DailiesEventId] = "quest",
+        // idle_day and dailies_left COST time, so they play their own scenes: the session and
+        // quest scenes end on time OFF and showed the opposite sign (ticket 2026-09-30).
         [TabDayEnd.StreakEventId] = "session",
     };
 

@@ -212,6 +212,36 @@ public static partial class LauncherHost
     }
 
     /// <summary>
+    /// Files dropped on the launcher (a catalogue preset, an enhancement, a mod...). The
+    /// importers live on the panel and report there, so the panel comes up first and the
+    /// drop goes through its own drop path (ccp-bugs #1331).
+    /// </summary>
+    public static void OpenPanelWithDrop(string[] files)
+    {
+        if (files == null || files.Length == 0) return;
+        OpenPanel(null, async () =>
+        {
+            try
+            {
+                var mw = App.MainWindowRef;
+                if (mw != null) await mw.ImportDroppedFilesAsync(files);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] dropped files failed to import"); }
+        });
+    }
+
+    /// <summary>The friends drawer's "Invite them" link: the panel comes up on the Premium tab's
+    /// invites card, wherever the drawer was opened from.</summary>
+    public static void OpenPanelInvites()
+    {
+        OpenPanel(null, () =>
+        {
+            try { App.MainWindowRef?.OpenInvitesCard(); }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] invites card failed"); }
+        });
+    }
+
+    /// <summary>
     /// A tile that lives in the panel (the Graded Intake). Hides the launcher through
     /// <see cref="OpenPanel"/>, so an armed exit beat still plays, and puts the panel on
     /// <paramref name="tab"/>. Catalogue lambdas have no window in hand, hence static.
