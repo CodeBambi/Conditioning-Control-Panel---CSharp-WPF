@@ -104,6 +104,36 @@ namespace ConditioningControlPanel.Controls.NavRail
             _ => Lilac,   // Home, Settings
         };
 
+        // ---- Section ink (polish wave 8, readability pass) ----------------------------------
+        // Saturation goes into the headers, not the body: the eyebrow, its rule, the card
+        // outline and links wear the section, body text stays neutral. PaintSectionWash writes
+        // these four into the SectionInk / SectionTint / SectionRule / SectionOutline Color
+        // resources; TypeScaleContrastTests pins Ink at 4.5:1 and Tint at 9:1 or more.
+
+        /// <summary>The app's lightest text token (Colors.xaml TextLight).</summary>
+        public static readonly Color TextLight = Color.FromRgb(0xF0, 0xF0, 0xF5);
+
+        /// <summary>How far the ink moves from the hue toward TextLight.</summary>
+        public const double InkLift = 0.35;
+        /// <summary>How far the optional title tint moves from TextLight toward the hue.</summary>
+        public const double TintPull = 0.15;
+        /// <summary>The rule under an eyebrow (35%) and a card outline (25%), as bytes.</summary>
+        public const byte RuleAlpha = 0x59, OutlineAlpha = 0x40;
+
+        /// <summary>Eyebrow / label / link ink: the hue mixed 35% toward TextLight.</summary>
+        public static Color Ink(string? section) => Mix(Accent(section), TextLight, InkLift);
+
+        /// <summary>Optional title tint: TextLight mixed 15% toward the hue.</summary>
+        public static Color Tint(string? section) => Mix(TextLight, Accent(section), TintPull);
+
+        /// <summary>The 1 px rule under an eyebrow: the hue at 35% alpha.</summary>
+        public static Color Rule(string? section) => WithAlphaByte(Accent(section), RuleAlpha);
+
+        /// <summary>A card outline: the hue at 25% alpha (the SectionHueXBorder convention).</summary>
+        public static Color Outline(string? section) => WithAlphaByte(Accent(section), OutlineAlpha);
+
+        private static Color WithAlphaByte(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
+
         /// <summary>Last-tab memory: section -> tab, stored as JSON in AppSettings.NavLastTabBySection.</summary>
         public static Dictionary<string, string> ParseLastTabs(string? json)
         {
