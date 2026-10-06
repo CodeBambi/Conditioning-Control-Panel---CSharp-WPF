@@ -17,8 +17,75 @@ namespace ConditioningControlPanel.Views.Tabs
 
         private void AssetsTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
+            if (IsVisible) PaintAssetsFolder();
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.OnAssetsTabVisibilityChanged(IsVisible);
+        }
+
+        // ---- LIBRARY > FOLDERS (nav rework 2026-10-06) --------------------------------------
+
+        /// <summary>Zone keys the Library section strip reaches (nav rework).</summary>
+        public static readonly string[] ZoneKeys = { "folders" };
+
+        /// <summary>
+        /// "folders": the page does not scroll (fixed rows), so this paints the current folder,
+        /// brings the chip into view and glows it and the preset picker once for 2 s (skipped
+        /// under reduced or no motion). Any other key does nothing.
+        /// </summary>
+        public void ScrollToZone(string zone)
+        {
+            if (!string.Equals((zone ?? "").Trim(), "folders", StringComparison.OrdinalIgnoreCase)) return;
+            PaintAssetsFolder();
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    ZoneFolders.BringIntoView();
+                    GlowOnce(ZoneFolders);
+                    GlowOnce(CmbAssetPresets);
+                }
+                catch (Exception ex) { App.Logger?.Debug("Assets ScrollToZone: {E}", ex.Message); }
+            }), System.Windows.Threading.DispatcherPriority.Normal);
+        }
+
+        /// <summary>The folder the app reads today, as one line; the full path is the tooltip.</summary>
+        internal void PaintAssetsFolder()
+        {
+            try
+            {
+                var path = App.EffectiveAssetsPath ?? "";
+                TxtAssetsFolderPath.Text = path;
+                TxtAssetsFolderPath.ToolTip = string.IsNullOrEmpty(path) ? null : path;
+            }
+            catch (Exception ex) { App.Logger?.Debug("PaintAssetsFolder: {E}", ex.Message); }
+        }
+
+        private void BtnPickAssetsFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.RequestPickAssetsFolder();
+            PaintAssetsFolder();
+        }
+
+        private static void GlowOnce(FrameworkElement target)
+        {
+            if (!Services.MotionFx.AllowAmbientLoops) return;
+            var glow = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4),
+                BlurRadius = 16,
+                ShadowDepth = 0,
+                Opacity = 0,
+            };
+            target.Effect = glow;
+            var anim = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromSeconds(2) };
+            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0.9,
+                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(250))));
+            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0.9,
+                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1400))));
+            anim.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(0,
+                System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromSeconds(2))));
+            anim.Completed += (_, _) => { if (ReferenceEquals(target.Effect, glow)) target.Effect = null; };
+            glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, anim);
         }
 
         private void PackCard_MouseEnter(object sender, MouseEventArgs e)

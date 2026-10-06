@@ -88,6 +88,29 @@
                 <TextBlock Text="{loc:Str section_assets_content_packs}" Style="{StaticResource SectionHeader}"
                            FontSize="18" VerticalAlignment="Center"/>
                 <Button x:Name="HelpBtnAssets" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Assets"/>
+                <!-- LIBRARY > FOLDERS (nav rework 2026-10-06): the assets folder picker that used to
+                     hide in the Home System pill popup. The page is a fixed-height grid, so the zone
+                     is this chip in the header row rather than a new row that would cost the
+                     browser its floor; the presets it goes with sit in the browser bar
+                     (CmbAssetPresets). ScrollToZone("folders") glows both. -->
+                <Border x:Name="ZoneFolders" x:FieldModifier="internal" Margin="14,0,0,0" Padding="10,3,4,3"
+                        CornerRadius="99" VerticalAlignment="Center"
+                        Background="{DynamicResource DarkerBgBrush}" BorderThickness="1"
+                        BorderBrush="{DynamicResource GlassBorderBrush}"
+                        ToolTip="{loc:Str library_folders_tip}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str nav_tab_folders}" Foreground="{StaticResource TextMutedBrush}"
+                                   FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="TxtAssetsFolderPath" x:FieldModifier="internal" MaxWidth="280"
+                                   Foreground="{StaticResource TextLightBrush}" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnPickAssetsFolder" x:FieldModifier="internal"
+                                Content="{loc:Str library_folders_pick}"
+                                Style="{StaticResource OutlineButton}" Padding="10,3" FontSize="11" Margin="8,0,0,0"
+                                Click="BtnPickAssetsFolder_Click"
+                                ToolTip="{loc:Str tooltip_set_custom_assets_folder}"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="BtnRefreshPacks" Content="{loc:Str btn_refresh_2}"

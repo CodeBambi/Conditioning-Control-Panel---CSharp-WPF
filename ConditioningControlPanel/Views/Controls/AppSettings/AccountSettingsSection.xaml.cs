@@ -55,6 +55,10 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             // visible is enough to catch a login that happened on another door, and costs nothing
             // when it does not.
             IsVisibleChanged += (_, __) => { if (IsVisible) { RefreshTierBadge(); RefreshChaster(); RefreshFriendsPresence(); } };
+            // Account & Plans: the vault header, spotlight and invites (MainWindow.Exclusives.cs) build
+            // lazily on the first show and park their motion while Settings is off screen.
+            PlansView.IsVisibleChanged += (_, __) =>
+                (App.MainWindowRef ?? Window.GetWindow(this) as MainWindow)?.OnPlansVisibilityChanged(PlansView.IsVisible);
         }
 
         /// <summary>

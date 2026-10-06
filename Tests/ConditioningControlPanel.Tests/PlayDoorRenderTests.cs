@@ -184,6 +184,8 @@ public class PlayDoorRenderTests
         "SlotRemoteControl", "SlotWebcamChip",
         "SlotGaze", "SlotFocusGaze", "SlotBlinkTrainer",
         "SlotGradedIntake", "SlotFyp", "SlotLockdown", "SlotLoom",
+        // nav rework 2026-10-06: the five games whose only panel door was the Premium page
+        "SlotBackRoom", "SlotDtrh", "SlotArcademy", "SlotRacingThoughts", "SlotWebApp",
     };
 
     [Fact]
@@ -214,6 +216,7 @@ public class PlayDoorRenderTests
             "BtnPlayRemoteControl",
             "BtnPlayGazeMinigame", "BtnPlayGradedIntake", "BtnPlayBlinkTrainer",
             "BtnPlayFyp", "BtnPlayLockdown", "BtnPlayLoom",
+            "BtnPlayBackRoom", "BtnPlayDtrh", "BtnPlayArcademy", "BtnPlayRacingThoughts", "BtnPlayWebApp",
         };
 
         OnStaThread(() =>
@@ -248,6 +251,7 @@ public class PlayDoorRenderTests
     {
         "PlayLockGaze", "PlayLockFocusGaze", "PlayLockRemote",
         "PlayLockLockdown", "PlayLockBlink", "PlayLockFyp", "PlayLockIntake",
+        "PlayLockDtrh", "PlayLockArcademy",
     };
 
     [Fact]
@@ -607,6 +611,9 @@ public class PlayDoorRenderTests
             // the wrong price. (The diamond Rabbit Hole hero left for the launcher, 2026-09-18.)
             Assert.Equal(1, page.PlayBadgeFyp.Tier);
             Assert.Equal(1, page.PlayBadgeRemote.Tier);
+            // Diamond on the two Lab games rehomed from the Premium page (nav rework 2026-10-06).
+            Assert.Equal(2, page.PlayBadgeDtrh.Tier);
+            Assert.Equal(2, page.PlayBadgeArcademy.Tier);
         });
     }
 
