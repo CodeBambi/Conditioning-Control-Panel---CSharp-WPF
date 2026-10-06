@@ -444,3 +444,18 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Follow-up branch: find what a closed `MainShellWindow` keeps alive (static event subscriptions, Skia/WebView natives);
   a real app builds one shell, so it matters for tests and for any head that rebuilds the shell.
 - Advisor: worker.
+## 2026-10-01: Her Room chat and memory diary over the brain (avalonia-port/her-room-chat)
+- Question: how to put Z2 (ChatThresholdRuntimeVm) and Z3 (MemoryDiaryRuntimeVm) on the Avalonia brain without a second copy of their logic.
+- Choice: `CompanionMemoryViewModel` is a pure git mv into `CCP.Core/ViewModels/` (dry-run: 0 errors). The runtime VMs read `App.*`
+  and WPF dispatchers, so only their pure statics (state ladder, thread pick, echo unwrap, relative time, kind key, meta line) plus
+  the `CompanionZoneState` enum moved, into `CCP.Core/Views/Controls/Companion/CompanionRoomLogic.cs` (same namespace); WPF delegates.
+  The Avalonia view-models gain `CreateLive()` (CompanionRoomView uses it) and keep the artboard for standalone renders.
+- Privacy: diary forget/edit/pin/wipe go through Core `CompanionMemoryViewModel` exactly as WPF; the chat-memory switch OFF calls
+  `CompanionBrain.ForgetConversation` (WPF MainWindow.Patreon.cs). The earlier "refused" snap-back is removed now that the brain exists.
+- Not taken: History (transcript window), link chips (CompanionLinkLauncher needs the embedded browser), local-provider history clear (slice 7).
+- Tests: `Tests/CCP.Avalonia.Tests/HerRoomChatMemoryTests.cs` (loopback fake model; fail-proven on send, forget and the switch).
+- Advisor: supervisor.
+- Follow-up (review): `MemoryStore.Wipe` also deletes temp/backup siblings (`<store>.*`, e.g. memory.json.tmp) of every file it
+  wipes - shared Core, so WPF gains it (`Tests/CCP.Core.Tests/MemoryWipeSiblingsTests.cs`, fail-proven). Avalonia chat VMs
+  `Detach` from `TurnsChanged` when the view's VM is replaced; the diary clears the tube bubble log through the
+  `MemoryDiaryViewModel.TubeBubbleLog` seam (headless tests have no desktop lifetime for `AvatarTubeWindow.Live`). Both fail-proven.
