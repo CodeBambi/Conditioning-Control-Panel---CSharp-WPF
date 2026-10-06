@@ -9202,6 +9202,10 @@ namespace ConditioningControlPanel.Models
         /// shows for the first three hits, then retires itself.</summary>
         public int NavMovedToastHits { get; set; }
 
+        /// <summary>The Ctrl+K palette's last five destinations (row ids, newest first), as a JSON
+        /// string array. Shown when the search box is empty; a stale id is skipped.</summary>
+        public string NavSearchRecents { get; set; } = "";
+
         /// <summary>Swap open and toggle gestures on Home feature tiles only.</summary>
         public bool DashboardInvertClicks { get; set; }
 
