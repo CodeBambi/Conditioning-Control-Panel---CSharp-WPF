@@ -77,7 +77,7 @@ public class InviteRewardsTests
         Assert.True(a.IsPremiumFeature);
         Assert.Equal($"{id}.png", a.ImageName);
         Assert.Contains(rung.Converted.ToString(), a.Requirement);
-        Assert.True(File.Exists(Path.Combine(AppDir(), "Resources", "achievements", a.ImageName)), $"no badge art for {id}");
+        Assert.True(File.Exists(Path.Combine(SourceRoots.RepoRoot, "Assets", "achievements", a.ImageName)), $"no badge art for {id}");
     }
 
     [Theory]
@@ -85,13 +85,13 @@ public class InviteRewardsTests
     public void EveryRungGatesOneWardrobeItemWithArt(string id)
     {
         var rung = InviteRewards.Ladder.Single(r => r.AchievementId == id);
-        var registry = JObject.Parse(File.ReadAllText(Path.Combine(AppDir(), "Resources", "cosmetics", "registry.json")));
+        var registry = JObject.Parse(File.ReadAllText(Path.Combine(SourceRoots.RepoRoot, "Assets", "cosmetics", "registry.json")));
         var item = ((JArray)registry["items"]!).OfType<JObject>().SingleOrDefault(i => i.Value<string>("id") == rung.WardrobeItemId);
         Assert.True(item != null, $"registry has no '{rung.WardrobeItemId}'");
         Assert.Equal("invites", item!.Value<string>("mod"));
         Assert.Equal($"achievement:{id}", item.Value<string>("unlock"));
         var file = item.Value<string>("file")!;
-        Assert.True(File.Exists(Path.Combine(AppDir(), "Resources", "cosmetics", file)), $"no wardrobe art at {file}");
+        Assert.True(File.Exists(Path.Combine(SourceRoots.RepoRoot, "Assets", "cosmetics", file)), $"no wardrobe art at {file}");
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class InviteRewardsTests
     {
         foreach (var lang in Languages)
         {
-            var json = JObject.Parse(File.ReadAllText(Path.Combine(AppDir(), "Localization", "Languages", lang + ".json")));
+            var json = JObject.Parse(File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json")));
             foreach (var rung in InviteRewards.Ladder)
                 foreach (var part in new[] { "name", "req", "flavor" })
                 {

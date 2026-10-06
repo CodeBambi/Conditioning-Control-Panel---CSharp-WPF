@@ -641,7 +641,7 @@ public class ChasterTabRenderTests
         // time ON, tells the player the opposite of its stamp. Tester ticket 2026-09-30:
         // "Resisted the red" (-1:00) played the pop scene and flashed a red +figure; idle_day and
         // dailies_left (costs) played the session and quest scenes, which end in mint.
-        var html = File.ReadAllText(System.IO.Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "web", "chaster", "trailers.html"));
+        var html = File.ReadAllText(System.IO.Path.Combine(RepoRoot(), "Assets", "web", "chaster", "trailers.html"));
         foreach (var price in TabPrices.All)
         {
             if (!TabMenuCopy.HasFixedFigure(price.Id) || price.Seconds == 0) continue;

@@ -219,11 +219,11 @@ public sealed class AchievementEngineTests : IDisposable
         Assert.Equal(1, engine.Progress.TotalBubbleCountFailed);
     }
 
-    // Literal catalogue numbers (Achievement.All): 69 ids = 56 free (2 parked, 4 premium-program) + 13 exclusive.
+    // Literal catalogue numbers (Achievement.All): 73 ids = 60 free (2 parked, 4 premium-program, 4 invite-reward) + 13 exclusive.
     // A catalogue change must update these on purpose.
     [Theory]
     [InlineData(false, 50, 13, 50)]
-    [InlineData(true, 54, 13, 67)]
+    [InlineData(true, 58, 13, 71)]
     public void FreeAndPatronCountsAreSeparateAndFollowPremium(bool premium, int freeTotal, int patronTotal, int reachableTotal)
     {
         var previous = CoreEntitlement.HasPremiumProvider;

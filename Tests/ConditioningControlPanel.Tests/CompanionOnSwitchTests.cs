@@ -29,7 +29,7 @@ public class CompanionOnSwitchTests
     }
 
     private static string ReadSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { AppDir() }.Concat(parts).ToArray()));
+        SourceRoots.ReadProductFile(parts);
 
     /// <summary>Whitespace-insensitive contains, so a reflow of the source never fails a tripwire.</summary>
     private static bool Mentions(string haystack, string needle)

@@ -29,7 +29,7 @@ public class ChasterRaffleCardLayoutTests
         while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
             dir = dir.Parent;
         Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        var path = Path.Combine(dir!.FullName, "ConditioningControlPanel", "Localization", "Languages", lang + ".json");
+        var path = Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json");
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         return doc.RootElement.GetProperty(key).GetString()!;
     }
