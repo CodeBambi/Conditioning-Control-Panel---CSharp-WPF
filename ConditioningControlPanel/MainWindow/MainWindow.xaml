@@ -53,7 +53,7 @@
              cyan (T2), red (Circe) and mint (credit). -->
         <Style x:Key="NavSectionButton" TargetType="Button">
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
-            <Setter Property="Height" Value="76"/>
+            <Setter Property="Height" Value="72"/>
             <Setter Property="Margin" Value="0"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -111,7 +111,7 @@
             <Setter Property="Visibility" Value="Collapsed"/>
             <Setter Property="HorizontalAlignment" Value="Right"/>
             <Setter Property="VerticalAlignment" Value="Top"/>
-            <Setter Property="Margin" Value="0,0,16,0"/>
+            <Setter Property="Margin" Value="0,0,18,0"/>
             <Setter Property="MinWidth" Value="16"/>
             <Setter Property="Height" Value="16"/>
             <Setter Property="Padding" Value="4,0"/>
@@ -449,7 +449,7 @@
                 </Button>
                 </StackPanel>
 
-                <!-- Seven section rows, top-packed, no ScrollViewer: 7 x 66 = 462px, the foot and the
+                <!-- Seven section rows, top-packed, no ScrollViewer: 7 x 72 = 504px, the foot and the
                      two pills above take the rest of the 885px column (rendered check in
                      NavSectionRailTests). Order frozen by NavSectionsTests and NavSectionRailTests. -->
                 <StackPanel x:Name="NavSectionRows" Grid.Row="1" VerticalAlignment="Top">
@@ -459,16 +459,16 @@
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_home}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="60"/>
+                                <RowDefinition Height="56"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="65" Height="65" Margin="0,-4.5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
+                            <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1.5" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="56" Height="56"
+                            <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorHome"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -491,16 +491,16 @@
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_studio}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="60"/>
+                                <RowDefinition Height="56"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="65" Height="65" Margin="0,-4.5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
+                            <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1.5" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="56" Height="56"
+                            <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorStudio"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -523,16 +523,16 @@
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_companion}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="60"/>
+                                <RowDefinition Height="56"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="65" Height="65" Margin="0,-4.5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
+                            <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1.5" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="56" Height="56"
+                            <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorCompanion"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -555,16 +555,16 @@
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="60"/>
+                                <RowDefinition Height="56"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="65" Height="65" Margin="0,-4.5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
+                            <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1.5" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="56" Height="56"
+                            <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorPlay"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -587,16 +587,16 @@
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_section_social}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="60"/>
+                                <RowDefinition Height="56"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="65" Height="65" Margin="0,-4.5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
+                            <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1.5" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="56" Height="56"
+                            <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Grid Width="64" Height="64">
                                     <Image x:Name="ImgDoorSocial"
@@ -627,16 +627,16 @@
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_you}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="60"/>
+                                <RowDefinition Height="56"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="65" Height="65" Margin="0,-4.5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
+                            <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1.5" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="56" Height="56"
+                            <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorYou"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -659,16 +659,16 @@
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_library}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="60"/>
+                                <RowDefinition Height="56"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="65" Height="65" Margin="0,-4.5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
+                            <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1.5" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="56" Height="56"
+                            <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorLibrary"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"
@@ -706,16 +706,16 @@
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
                         <Grid>
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="60"/>
+                                <RowDefinition Height="56"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <Ellipse Grid.Row="0" Width="70" Height="70" Margin="0,-5" Opacity="0" IsHitTestVisible="False"
+                            <Ellipse Grid.Row="0" Width="65" Height="65" Margin="0,-4.5" Opacity="0" IsHitTestVisible="False"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Border Grid.Row="0" Width="60" Height="60" CornerRadius="16"
+                            <Border Grid.Row="0" Width="56" Height="56" CornerRadius="15"
                                     HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Background="{DynamicResource PanelAccentBrush}"
                                     BorderThickness="1.5" BorderBrush="Transparent"/>
-                            <Viewbox Grid.Row="0" Width="56" Height="56"
+                            <Viewbox Grid.Row="0" Width="52" Height="52"
                                      HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image x:Name="ImgDoorSettings"
                                        Width="64" Height="64" RenderOptions.BitmapScalingMode="HighQuality"

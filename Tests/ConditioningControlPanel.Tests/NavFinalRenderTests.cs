@@ -136,6 +136,63 @@ public class NavFinalRenderTests
         });
     }
 
+    /// <summary>
+    /// Nav polish wave 6 (owner, 2026-10-06): "EMI" sits UNDER her face like every door's label,
+    /// and the chip keeps one height whether she is out (muted pill shown) or not. Realised in the
+    /// real rail so the foot is measured with the pill on, which is the tallest it ever gets.
+    /// </summary>
+    [Fact]
+    public void EmisLabelSitsUnderHerFaceAndTheFootStillFitsWithThePillOn()
+    {
+        var dir = OutDir();
+        WpfRenderHarness.OnStaThread(() =>
+        {
+            var host = BuildRail();
+            Layout(host, 96, RailColumnHeight);
+            var dock = (FrameworkElement)host.FindName("EmiDockChip");
+            var face = (FrameworkElement)dock.FindName("BtnChip");
+            var name = (FrameworkElement)dock.FindName("TxtName");
+            var muted = (TextBlock)dock.FindName("TxtMuted");
+            double restHeight = dock.ActualHeight;
+
+            muted.Visibility = Visibility.Visible;
+            Layout(host, 96, RailColumnHeight);
+
+            var faceBox = face.TransformToAncestor(host).TransformBounds(new Rect(0, 0, face.ActualWidth, face.ActualHeight));
+            var nameBox = name.TransformToAncestor(host).TransformBounds(new Rect(0, 0, name.ActualWidth, name.ActualHeight));
+            var mutedBox = muted.TransformToAncestor(host).TransformBounds(new Rect(0, 0, muted.ActualWidth, muted.ActualHeight));
+            var gear = (FrameworkElement)host.FindName("DoorSettings");
+            var foot = (FrameworkElement)VisualTreeHelper.GetParent(gear);
+            var footBottom = foot.TranslatePoint(new Point(0, foot.ActualHeight), host).Y;
+            var report = $"face={faceBox} name={nameBox} muted={mutedBox} rest={restHeight:F0} out={dock.ActualHeight:F0} footBottom={footBottom:F0}";
+
+            if (dir != null)
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "final-emi-dock.txt"), report);
+                // The foot at 3x so the label and the pill can be read.
+                var footTop = foot.TranslatePoint(new Point(0, 0), host).Y;
+                var shot = new RenderTargetBitmap(96 * 3, (int)Math.Ceiling((RailColumnHeight - footTop) * 3), 288, 288, PixelFormats.Pbgra32);
+                var visual = new DrawingVisual();
+                using (var dc = visual.RenderOpen())
+                    dc.DrawRectangle(new VisualBrush(host) { Viewbox = new Rect(0, footTop, 96, RailColumnHeight - footTop), ViewboxUnits = BrushMappingMode.Absolute },
+                        null, new Rect(0, 0, 96, RailColumnHeight - footTop));
+                shot.Render(visual);
+                var enc = new PngBitmapEncoder();
+                enc.Frames.Add(BitmapFrame.Create(shot));
+                using var fs = File.Create(Path.Combine(dir, "final-emi-dock.png"));
+                enc.Save(fs);
+            }
+
+            Assert.True(nameBox.Top >= faceBox.Bottom - 0.5, "EMI's label is not under her face: " + report);
+            Assert.True(Math.Abs((nameBox.Left + nameBox.Right) / 2 - (faceBox.Left + faceBox.Right) / 2) <= 1, "EMI's label is off centre: " + report);
+            Assert.True(mutedBox.Top >= nameBox.Bottom - 0.5, "the muted pill is not under the label: " + report);
+            Assert.True(mutedBox.Bottom <= faceBox.Top + dock.ActualHeight + 0.5, "the muted pill spills out of the chip: " + report);
+            Assert.Equal(restHeight, dock.ActualHeight, 1);
+            Assert.True(footBottom <= RailColumnHeight, "the rail's foot is clipped with EMI out: " + report);
+        });
+    }
+
     [Fact]
     public void EveryStripRendersAndAComposite()
     {
