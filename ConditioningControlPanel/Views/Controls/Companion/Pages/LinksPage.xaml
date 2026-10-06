@@ -7,13 +7,13 @@
          global knowledge base links (every personality knows them). Both are the live controls. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel Margin="24,16,24,24" MaxWidth="980" HorizontalAlignment="Stretch">
-            <TextBlock Text="{loc:Str nav_tab_companionlinks}" FontSize="22" FontWeight="Bold" Foreground="White"/>
-            <TextBlock Text="{loc:Str companion_page_links_intro}" FontSize="13" Foreground="#B8B8C8" TextWrapping="Wrap" Margin="0,4,0,16"/>
+            <TextBlock Style="{StaticResource Type.PageTitle}" Text="{loc:Str nav_tab_companionlinks}"/>
+            <TextBlock Style="{StaticResource Type.PageSubtitle}" Text="{loc:Str companion_page_links_intro}" TextWrapping="Wrap" Margin="0,4,0,16"/>
 
             <Border Background="#14FFFFFF" CornerRadius="10" Padding="16" Margin="0,0,0,16">
                 <StackPanel>
                     <TextBlock Text="{loc:Str companion_page_links_videos}" FontSize="15" FontWeight="SemiBold" Foreground="#FF69B4"/>
-                    <TextBlock x:Name="TxtVideosNote" Text="{loc:Str companion_page_links_videos_note}" FontSize="12" Foreground="#B8B8C8" TextWrapping="Wrap" Margin="0,2,0,10"/>
+                    <TextBlock x:Name="TxtVideosNote" Text="{loc:Str companion_page_links_videos_note}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,2,0,10"/>
                     <ContentControl x:Name="VideosHost" Focusable="False"/>
                 </StackPanel>
             </Border>
@@ -21,7 +21,7 @@
             <Border Background="#14FFFFFF" CornerRadius="10" Padding="16">
                 <StackPanel>
                     <TextBlock Text="{loc:Str companion_page_links_known}" FontSize="15" FontWeight="SemiBold" Foreground="#FF69B4"/>
-                    <TextBlock x:Name="TxtKnownNote" Text="{loc:Str companion_page_links_known_note}" FontSize="12" Foreground="#B8B8C8" TextWrapping="Wrap" Margin="0,2,0,10"/>
+                    <TextBlock x:Name="TxtKnownNote" Text="{loc:Str companion_page_links_known_note}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,2,0,10"/>
                     <companion:KnowledgeLinksEditor x:Name="KnowledgeLinks" SaveImmediately="True"/>
                 </StackPanel>
             </Border>

@@ -61,10 +61,9 @@
                             </Border.OpacityMask>
                         </Border>
                         <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
-                            <TextBlock x:Name="TxtBambiTakeoverHeader" x:FieldModifier="internal" Text="{loc:Str tab_takeover}"
-                                       Foreground="{StaticResource TextLightBrush}" FontSize="17" FontWeight="Bold"/>
+                            <TextBlock Style="{StaticResource Type.CardTitle}" x:Name="TxtBambiTakeoverHeader" x:FieldModifier="internal" Text="{loc:Str tab_takeover}"/>
                             <TextBlock Text="{loc:Str exclusives_tag_bambitakeover}" FontSize="11.5"
-                                       Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"/>
                         </StackPanel>
                         <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" CornerRadius="99"
                                 Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" Padding="6,4">

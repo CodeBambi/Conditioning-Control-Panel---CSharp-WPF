@@ -701,7 +701,7 @@
                             <TextBlock x:Name="DashToggleHint" x:FieldModifier="internal"
                                        Text="{loc:Str dash_toggle_hint}"
                                        VerticalAlignment="Bottom" HorizontalAlignment="Center"
-                                       Margin="12,0,12,8" FontSize="10" Opacity="0.85"
+                                       Margin="12,0,12,8" FontSize="10"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        TextAlignment="Center" TextWrapping="Wrap"
                                        IsHitTestVisible="False"/>
@@ -822,7 +822,7 @@
 
                                 <TextBlock Text="{loc:Str intake_pass_card_footnote}"
                                            Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="9" Opacity="0.75"
+                                           FontSize="9"
                                            TextAlignment="Center" TextWrapping="Wrap"
                                            Margin="0,6,0,0"/>
                             </StackPanel>

@@ -94,10 +94,8 @@
             <Image Grid.Column="0" Width="34" Height="34" Margin="0,0,14,0" VerticalAlignment="Center"
                    Source="{Binding Source='⚙️', Converter={StaticResource EmojiToImageSource}}"/>
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtAppSettingsTitle" Text="{loc:Str set2_settings_title}"
-                           Foreground="White" FontSize="22" FontWeight="Bold"/>
-                <TextBlock Text="{loc:Str set2_settings_subtitle}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="13"/>
+                <TextBlock Style="{StaticResource Type.PageTitle}" x:Name="TxtAppSettingsTitle" Text="{loc:Str set2_settings_title}"/>
+                <TextBlock Style="{StaticResource Type.PageSubtitle}" Text="{loc:Str set2_settings_subtitle}"/>
             </StackPanel>
         </Grid>
 
@@ -115,7 +113,7 @@
                 <StackPanel>
                     <TextBlock Text="{loc:Str set2_rail_hint}" Margin="14,0,10,8"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                               FontWeight="Bold" Opacity="0.85"/>
+                               FontWeight="Bold"/>
 
                     <RadioButton x:Name="SectionPillGeneral" Tag="general" IsChecked="True"
                                  Style="{StaticResource SectionPill}" Click="SectionPill_Click">

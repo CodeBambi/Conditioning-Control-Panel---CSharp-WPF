@@ -102,13 +102,12 @@
                                 </Border.OpacityMask>
                             </Border>
                             <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
-                                <TextBlock x:Name="TxtVaultTitle" x:FieldModifier="internal"
+                                <TextBlock Style="{StaticResource Type.CardTitle}" x:Name="TxtVaultTitle" x:FieldModifier="internal"
                                            Text="{loc:Str exclusives_vault_title}"
-                                           FontFamily="/Fonts/#Fredoka, Segoe UI" FontWeight="Bold"
-                                           FontSize="17" Foreground="{StaticResource TextLightBrush}"/>
+                                           FontFamily="/Fonts/#Fredoka, Segoe UI"/>
                                 <TextBlock x:Name="TxtVaultSub" x:FieldModifier="internal"
                                            Text="{loc:Str exclusives_vault_sub}"
-                                           FontSize="11.5" Foreground="{StaticResource TextMutedBrush}"
+                                           FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}"
                                            Margin="0,1,0,0" MaxWidth="620" HorizontalAlignment="Left"
                                            TextTrimming="CharacterEllipsis"/>
                             </StackPanel>

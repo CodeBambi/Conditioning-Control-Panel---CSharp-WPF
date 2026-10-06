@@ -7,10 +7,10 @@
          points here; this page points back to it. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <StackPanel Margin="24,16,24,24" MaxWidth="1240" HorizontalAlignment="Stretch">
-            <TextBlock Text="{loc:Str nav_tab_permissions}" FontSize="22" FontWeight="Bold" Foreground="White"/>
-            <TextBlock Text="{loc:Str companion_page_permissions_intro}" FontSize="13" Foreground="#B8B8C8" TextWrapping="Wrap" Margin="0,4,0,16"/>
+            <TextBlock Style="{StaticResource Type.PageTitle}" Text="{loc:Str nav_tab_permissions}"/>
+            <TextBlock Style="{StaticResource Type.PageSubtitle}" Text="{loc:Str companion_page_permissions_intro}" TextWrapping="Wrap" Margin="0,4,0,16"/>
             <ContentControl x:Name="PermissionsHost" Focusable="False"/>
-            <TextBlock FontSize="12" Foreground="#B8B8C8" TextWrapping="Wrap" Margin="0,14,0,0">
+            <TextBlock FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,14,0,0">
                 <Run Text="{loc:Str companion_page_permissions_takeover}"/>
                 <Hyperlink x:Name="LinkOpenTakeover" Click="OpenTakeover_Click" Foreground="#FF69B4" TextDecorations="{x:Null}"><Run Text="{loc:Str companion_page_open_takeover}"/></Hyperlink>
             </TextBlock>

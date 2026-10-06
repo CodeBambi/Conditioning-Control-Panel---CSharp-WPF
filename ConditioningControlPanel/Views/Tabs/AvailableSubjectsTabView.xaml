@@ -220,8 +220,7 @@
 
             <!-- Header: the title and the live count -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-                <TextBlock Text="{loc:Str tab_available_subjects}" Foreground="{DynamicResource TextLightBrush}"
-                           FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="32" FontWeight="SemiBold"/>
+                <TextBlock Style="{StaticResource Type.PageTitle}" Text="{loc:Str tab_available_subjects}"/>
                 <TextBlock x:Name="TxtLobbyCount" x:FieldModifier="internal" Text="{loc:Str desc_available_subjects}"
                            Foreground="{DynamicResource PinkSoftBrush}" FontFamily="/Fonts/#Fredoka, Segoe UI"
                            FontSize="16" Margin="14,0,0,5" VerticalAlignment="Bottom"/>

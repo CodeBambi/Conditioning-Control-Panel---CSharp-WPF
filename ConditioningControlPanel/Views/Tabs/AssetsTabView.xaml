@@ -85,8 +85,7 @@
         <!-- Header with title and actions -->
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="{loc:Str section_assets_content_packs}" Style="{StaticResource SectionHeader}"
-                           FontSize="18" VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Str section_assets_content_packs}" Style="{StaticResource SectionHeader}" VerticalAlignment="Center"/>
                 <Button x:Name="HelpBtnAssets" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Assets"/>
                 <!-- LIBRARY > FOLDERS (nav rework 2026-10-06): the assets folder picker that used to
                      hide in the Home System pill popup. The page is a fixed-height grid, so the zone

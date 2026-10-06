@@ -60,8 +60,7 @@
                         <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
                                Source="{Binding Source='📴', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_offline_title}"
-                                   Foreground="{StaticResource SectionHueDataBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueDataBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
                     <Grid MinHeight="34" ToolTip="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}">
@@ -92,8 +91,7 @@
                         <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
                                Source="{Binding Source='📤', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_phrase_backup_title}"
-                                   Foreground="{StaticResource SectionHueDataBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueDataBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
                     <TextBlock Text="{loc:Str set2_data_phrase_backup_hint}" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,8"/>
@@ -178,8 +176,7 @@
                         <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
                                Source="{Binding Source='☠️', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_danger_title}"
-                                   Foreground="{DynamicResource DangerBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{DynamicResource DangerBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
                     <TextBlock Text="{loc:Str set2_data_factory_reset_body}" TextWrapping="Wrap"

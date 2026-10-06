@@ -125,10 +125,9 @@
                                 <Image Width="30" Height="30" VerticalAlignment="Center" Margin="0,0,12,0"
                                        Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str tab_lockdown_mode}" FontSize="17" FontWeight="Bold"
-                                               Foreground="{StaticResource TextLightBrush}"/>
+                                    <TextBlock Style="{StaticResource Type.CardTitle}" Text="{loc:Str tab_lockdown_mode}"/>
                                     <TextBlock Text="{loc:Str label_lock_yourself_into_a_timed_conditioning_sessi}"
-                                               Foreground="{StaticResource TextMutedBrush}" FontSize="11.5"
+                                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5"
                                                Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </StackPanel>
@@ -391,8 +390,7 @@
                                             </Grid>
 
                                             <TextBlock Text="{loc:Str lockdown_poss_safeties_note}" FontSize="10.5"
-                                                       Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"
-                                                       Opacity="0.85" Margin="0,2,0,0"/>
+                                                       Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,2,0,0"/>
 
                                             <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 

@@ -95,8 +95,7 @@
                         <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
                                Source="{Binding Source='🌍', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_general_language_title}"
-                                   Foreground="{StaticResource SectionHueGeneralBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueGeneralBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
                     <Grid MinHeight="34" ToolTip="{loc:Str set2_general_language_hint}">
@@ -134,8 +133,7 @@
                         <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
                                Source="{Binding Source='🖥', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_general_display_title}"
-                                   Foreground="{StaticResource SectionHueGeneralBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueGeneralBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
                     <!-- Nav rework (2026-10-06): the monitor picker lives in Settings > Monitors only. -->
@@ -176,8 +174,7 @@
                         <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
                                Source="{Binding Source='🚀', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_general_startup_title}"
-                                   Foreground="{StaticResource SectionHueStartupBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueStartupBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
                     <!-- Four related switches = one 2-column chip grid (contract). Every
@@ -314,8 +311,7 @@
                         <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
                                Source="{Binding Source='🪟', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_general_tray_title}"
-                                   Foreground="{StaticResource SectionHueGeneralBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueGeneralBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
                     <TextBlock Text="{loc:Str set2_general_tray_body}" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
@@ -336,8 +332,7 @@
                         <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
                                Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_deeper}"
-                                   Foreground="{DynamicResource DeeperAccentBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{DynamicResource DeeperAccentBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
                     <Grid MinHeight="34" ToolTip="{loc:Str tooltip_deeper_enable}">
                         <Grid.ColumnDefinitions>
