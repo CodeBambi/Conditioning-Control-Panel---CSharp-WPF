@@ -11,11 +11,16 @@
     <Color x:Key="TextLight">#FFF0F0F5</Color>
     <!-- Velvet Kit (UI polish 2, 2026-08-12): TextMuted lifted #6E6E88 → #A0A0BC.
          The old value measured ~3.0:1 on ElevatedSurface — below WCAG AA — and was
-         the description line of every settings row. 5.6:1 now. Do not darken again. -->
-    <Color x:Key="TextMuted">#FFA0A0BC</Color>
+         the description line of every settings row. 5.6:1 now. Do not darken again.
+         Polish 8 (2026-10-06): #A0A0BC -> #A7A7C1. The section wash of the light hues (Sage,
+         Coral) took the old value to 4.7:1 on the page; 5.1:1 on every washed page now, 6.0:1
+         on the card, 4.55:1 on the Bambi / Sissy panel (#252542) washed. TypeScaleContrastTests
+         pins all three. -->
+    <Color x:Key="TextMuted">#FFA7A7C1</Color>
     <!-- Velvet Kit: secondary text tier between TextLight and TextMuted (8.7:1).
-         For values, body copy and list text that used to grab ad-hoc greys. -->
-    <Color x:Key="TextSecondary">#FFC9C9DE</Color>
+         For values, body copy and list text that used to grab ad-hoc greys.
+         Polish 8: #C9C9DE -> #CCCCE0 so it holds 7.5:1 under the Sage wash (was 7.3). -->
+    <Color x:Key="TextSecondary">#FFCCCCE0</Color>
     <Color x:Key="PanelAccent">#FF2E2E4A</Color>
     <Color x:Key="PanelAccentHover">#FF3A3A5C</Color>
     <Color x:Key="PreviewBg">#FF0D0D18</Color>

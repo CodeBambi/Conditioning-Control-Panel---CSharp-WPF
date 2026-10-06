@@ -600,18 +600,17 @@
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
-        <!-- Section Header Style -->
-        <Style x:Key="SectionHeader" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+        <!-- Section Header Style. Polish 8: the eyebrow of the type scale (11 Bold Consolas in
+             the section ink, was 14 SemiBold PinkSoft); every SectionHeader user follows. -->
+        <Style x:Key="SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Type.SectionHeader}">
             <Setter Property="Margin" Value="0,0,0,8"/>
         </Style>
 
-        <!-- Label Style -->
-        <Style x:Key="SettingLabel" TargetType="TextBlock">
+        <!-- Label Style. Polish 8: Type.Body's size, but the row title stays TextLight (it is
+             the actionable line) and keeps NoWrap so no settings row changes height. -->
+        <Style x:Key="SettingLabel" TargetType="TextBlock" BasedOn="{StaticResource Type.Body}">
             <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="TextWrapping" Value="NoWrap"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 

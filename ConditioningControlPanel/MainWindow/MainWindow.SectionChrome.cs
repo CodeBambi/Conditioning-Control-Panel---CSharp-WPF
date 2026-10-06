@@ -123,6 +123,7 @@ namespace ConditioningControlPanel
                 if (section == null || section == _washSection) return;
                 _washSection = section;
                 var hue = NavStripRules.Accent(section);
+                PaintSectionInk(section);
                 int ms = NavRailRules.Ms(SectionWashMs, MotionFx.Level);
                 Tint(SectionWashTop, NavRailRules.WithAlpha(hue, SectionWashAlpha));
                 Tint(SectionWashEnd, NavRailRules.WithAlpha(hue, 0));
@@ -147,6 +148,33 @@ namespace ConditioningControlPanel
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("PaintSectionWash failed: {E}", ex.Message); }
+        }
+
+        /// <summary>The four section Color resources (Colors.xaml SectionInk and friends) that
+        /// the SectionInkBrush family binds with DynamicResource. Swapped at once, the way mod
+        /// theming swaps its Color keys, so eyebrows, rules and outlines follow the page. Nothing
+        /// animates here: Motion Off looks the same as Full.</summary>
+        internal static void PaintSectionInk(string? section)
+        {
+            var res = Application.Current?.Resources;
+            if (res == null) return;
+            res["SectionInk"] = NavStripRules.Ink(section);
+            res["SectionTint"] = NavStripRules.Tint(section);
+            res["SectionRule"] = NavStripRules.Rule(section);
+            res["SectionOutline"] = NavStripRules.Outline(section);
+            // The brushes too, as the mod theming does: a DynamicResource Color inside a
+            // dictionary brush does not always re-resolve, a replaced brush key always does.
+            res["SectionInkBrush"] = Frozen(NavStripRules.Ink(section));
+            res["SectionTintBrush"] = Frozen(NavStripRules.Tint(section));
+            res["SectionRuleBrush"] = Frozen(NavStripRules.Rule(section));
+            res["SectionOutlineBrush"] = Frozen(NavStripRules.Outline(section));
+
+            static SolidColorBrush Frozen(Color c)
+            {
+                var brush = new SolidColorBrush(c);
+                brush.Freeze();
+                return brush;
+            }
         }
 
         private void WireSectionStrip()
