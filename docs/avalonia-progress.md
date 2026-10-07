@@ -1238,3 +1238,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/flake-tubechat: +12
 - TubeChatBrain flake: HerRoom test leaked ChatMemoryEnabled=false through the shared settings.json; restored at the source.
+
+## avalonia-port/main-20261005 (main sync #4): +23400
+- Imports WPF main 4629b1f4a (7.0.3–7.0.5). Delta ledger docs/avalonia-main-sync-20261005.md: 137 commits = 47 ported-by-merge, 79 needs-port (31 lanes), 11 n/a.
