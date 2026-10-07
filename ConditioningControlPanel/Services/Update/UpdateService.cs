@@ -20,13 +20,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.1.1";
+        public const string AppVersion = "7.1.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.1.1 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.1.2 - Stay Tuned
+
+NEW IN 7.1.2
+
+FIXES
+- the companion's AI settings are back: Companion > AI holds the connection (cloud, local or your own model) and its memory. 7.1.1 left them with no way in.
 
 NEW IN 7.1.1
 
