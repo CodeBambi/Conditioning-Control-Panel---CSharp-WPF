@@ -1251,3 +1251,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/local-providers: +774
 - Local AI providers (Ollama / OpenAI-compatible) moved to Core as brain transports; Avalonia Engine Room drawer chooses a provider, tests the connection and clears the conversation (confirmed); App.Ai disposed on exit; logged URLs redacted.
+
+## avalonia-port/port-fx: +576
+- Flash picks walk the whole folder before repeating (ShuffleBag in Core); Random image count + Fewest slider.
+- Video card: monitor picker and Mercy "after N fails" in a keyboard-reachable More options fold; both Core schedulers use MercyAfterFails.
+- Folded: drift speed, no-videos reason, spiral opacity curve, gaze camera at boot, Lock Card and Brain Drain folds.
