@@ -20,13 +20,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.1.0";
+        public const string AppVersion = "7.1.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.1.0 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.1.1 - Stay Tuned
+
+NEW IN 7.1.1
+
+FIXES
+- the Companion page has Show, Hide, Pop out and Voice right in its header again. 7.1.0 tucked them out of reach.
 
 NEW IN 7.1.0
 
