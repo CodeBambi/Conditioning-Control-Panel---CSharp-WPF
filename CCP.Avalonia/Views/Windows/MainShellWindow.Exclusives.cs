@@ -76,15 +76,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// head never get here (ExclusivesTabView.IsOnThisBuild).</summary>
         internal void OpenExclusiveFeature(string key)
         {
+            if (LockdownActive) return;   // PLAYBOOK P05, like OpenInvitesCard
             switch (key)
             {
                 case "gazeminigame": Named<Tabs.PlayTabView>("PlayTab")?.OpenGazeMinigame(); break;
-                case "focusgaze":
-                    // A switch on the Play wall, not a window: go there and show it.
-                    ShowTab("play");
-                    if (Named<Tabs.PlayTabView>("PlayTab")?.FindControl<Control>("SlotFocusGaze") is { } slot)
-                        global::Avalonia.Threading.Dispatcher.UIThread.Post(() => slot.BringIntoView());
-                    break;
                 default: ShowTab(key); break;
             }
         }

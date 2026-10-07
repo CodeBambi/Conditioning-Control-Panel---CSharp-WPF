@@ -470,6 +470,19 @@ public sealed class VaultGateDialog : Window
             })),
             new Setter(InputElement.CursorProperty, new Cursor(StandardCursorType.Hand)),
         },
+        // Keyboard focus outline (WPF's FocusVisualStyle on the hand-cursor links), keyboard focus only.
+        Children =
+        {
+            new Style(x => x.Nesting().Class(":focus-visible").Template().OfType<ContentPresenter>())
+            {
+                Setters =
+                {
+                    new Setter(ContentPresenter.BorderBrushProperty, Pink),
+                    new Setter(ContentPresenter.BorderThicknessProperty, new Thickness(1)),
+                    new Setter(ContentPresenter.CornerRadiusProperty, new CornerRadius(4)),
+                },
+            },
+        },
     };
 
     private static Button Bare(Control content) => new() { Theme = BareTheme, Content = content };

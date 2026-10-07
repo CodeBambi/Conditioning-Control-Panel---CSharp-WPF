@@ -640,17 +640,16 @@ namespace ConditioningControlPanel.Avalonia
                     Notifications.Show(message,
                         Enum.TryParse<Helpers.NotificationType>(kind, out var t) ? t : Helpers.NotificationType.Info,
                         duration));
-                // ponytail: WPF's Reconnect-Patreon branch (PatreonReconnectRule, head-only) is absent -
-                // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
-                // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
+                // WPF App.xaml.cs:505: the Reconnect answer for gates (Core PatreonReconnectRule).
+                TierGate.ReconnectIsTheAnswerProvider = Views.Windows.MainShellWindow.ReconnectIsTheAnswerNow;
+                // Dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
                 Sessions.Ticked += shell.OnSessionTick;
                 Sessions.SessionLog.LogReady += shell.OnSessionLogReady;
                 // WPF App.xaml.cs:529 (main fbe161de2): "See tiers" opens the vault gate card at the tier this door needs.
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
-                        Loc.Get("tiergate_see_tiers"), () => shell.ShowVaultGate(null, verdict.Required >= Models.PatreonTier.Level2 ? 2 : 1)));
+                    shell.ShowTierDenied(verdict, Notifications));
                 // WPF App.xaml.cs:509-511 (main 2e9080399). No Arcademy host here: unseeded, so its card stays hidden.
                 Models.ExclusiveFeature.JustDropDoorProvider = SettingsPaletteIndex.JustDropDoorAvailable;
                 Models.ExclusiveFeature.BreakoutFullProvider = () => TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
