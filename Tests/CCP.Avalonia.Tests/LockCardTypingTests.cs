@@ -103,6 +103,34 @@ public sealed class LockCardTypingTests
         return Task.CompletedTask;
     });
 
+    /// <summary>WPF LockCardFeatureControl.xaml.cs:71: the fold never hides a changed setting, so it
+    /// opens on load when Reset on typo is on and stays shut when it is off.</summary>
+    [Fact]
+    public Task ResetOnTypoOpensTheFoldOnLoad() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var s = global::ConditioningControlPanel.CoreSettings.Current;
+        var was = s.LockCardResetOnTypo;
+        try
+        {
+            foreach (var on in new[] { false, true })
+            {
+                s.LockCardResetOnTypo = on;
+                var feature = new global::ConditioningControlPanel.Avalonia.Views.Features.LockCardFeatureControl();
+                var host = new Window { Content = feature };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(on, feature.FindControl<global::ConditioningControlPanel.Avalonia.Views.Features.MoreFold>("FoldMore")!.IsOpen);
+                host.Close();
+            }
+        }
+        finally { s.LockCardResetOnTypo = was; }
+        return Task.CompletedTask;
+    });
+
     /// <summary>WPF dda21a45a (ccp-bugs #1163): the feature card's "Reset on typo" switch makes a
     /// mistake wipe the line, so the repeat starts over; the next correct repeat still counts.</summary>
     [Fact]

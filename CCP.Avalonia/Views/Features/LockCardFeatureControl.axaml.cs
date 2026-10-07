@@ -88,6 +88,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 ChkStrict.IsChecked = s.LockCardStrict;
                 ChkVoiceMode.IsChecked = s.LockCardVoiceMode && s.MicConsentGiven;
                 ChkResetOnTypo.IsChecked = s.LockCardResetOnTypo;
+                if (s.LockCardResetOnTypo) FoldMore.IsOpen = true; // never hide a changed setting (WPF :71)
                 UpdateVoiceHint();
             }
             finally { _isLoading = false; }

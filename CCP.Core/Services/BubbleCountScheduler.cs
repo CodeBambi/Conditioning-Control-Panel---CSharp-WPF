@@ -37,7 +37,6 @@ namespace ConditioningControlPanel.Services
 
         public static readonly TimeSpan XpCooldown = TimeSpan.FromMinutes(3);
         public const double FullXpVideoDurationSeconds = 60.0;
-        public const int MercyAfterRetries = 3;
         /// <summary>WPF's Task.Delay(800) that lets the Bambi Freeze land before the game.</summary>
         public static readonly TimeSpan LeadIn = TimeSpan.FromMilliseconds(800);
 
@@ -197,13 +196,13 @@ namespace ConditioningControlPanel.Services
                 return;
             }
             _retryCount++;
-            if (_retryCount >= MercyAfterRetries && s.MercySystemEnabled)
+            if (_retryCount >= s.MercyAfterFails && s.MercySystemEnabled)   // #1145: 2..10, default 3
             {
                 Log.Information("Bubble count mercy after {Retries} retries", _retryCount);
                 _host.ShowMessage(CoreMods.AttentionCheckMercyMessage ?? "BAMBI GETS MERCY", 2500, () => { _retryCount = 0; Idle(); });
                 return;
             }
-            Log.Information("Bubble count retry {Count} (mercy at 3)", _retryCount);
+            Log.Information("Bubble count retry {Count} (mercy at {Mercy})", _retryCount, s.MercyAfterFails);
             _host.ShowMessage(CoreMods.BubbleCountRetryMessage ?? "WRONG!\nWATCH AGAIN", 2000, () =>
             {
                 if (!IsBusy) return;   // panic during the message

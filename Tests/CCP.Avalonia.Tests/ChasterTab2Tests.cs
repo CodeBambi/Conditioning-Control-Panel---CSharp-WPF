@@ -43,6 +43,33 @@ public sealed class ChasterTab2Tests
         }
     }
 
+    /// <summary>WPF 2b7d742d0: a pick on the page while the demo service runs never reaches the
+    /// real settings (the demo picks its fake lock for itself); a real service saves it.</summary>
+    [Fact]
+    public Task DemoPickNeverSavesTheLockId() => AvaloniaTestDispatcher.RunAsync(() => Run((real, fake, s) =>
+    {
+        var dir = Directory.CreateTempSubdirectory("ccp-chaster-demo-").FullName;
+        var demo = new ChasterService(new ChasterClient(fake), new SecretChasterTokenStore(), Path.Combine(dir, "chaster_tab.json"),
+            () => ChasterOptions.Off) { IsDemo = true };
+        var tab = new ChasterTabView();
+        try
+        {
+            ChasterHead.Service = demo;
+            tab.PickLock("demo1");
+            Assert.Equal("l1", s.ChasterLockId);
+            ChasterHead.Service = real;
+            tab.PickLock("l2");
+            Assert.Equal("l2", s.ChasterLockId);
+        }
+        finally
+        {
+            ChasterHead.Service = real;
+            demo.Dispose();
+            try { Directory.Delete(dir, true); } catch { }
+        }
+        return Task.CompletedTask;
+    }));
+
     /// <summary>WPF RefreshSetupHint/RefreshPills after 61a331c1d and c8dead5b3: a tab that is on
     /// with no row switched on says nothing can count; once a row is on, a lock whose keyholder
     /// switched adding off says so on the line and with an "adds off" pill.</summary>

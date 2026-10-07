@@ -186,6 +186,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (_attention) DispatcherTimer.RunOnce(SetupAttention, TimeSpan.FromSeconds(2));   // WPF: Task.Delay(2000)
         }
 
+        /// <summary>WPF VideoService.VideoScreens -> App.ResolveScreens (ccp-bugs #1154): the Video
+        /// card's own pick (All, or a connected monitor), else the global "Show content on" pick -
+        /// Default and an unplugged index both follow it, without rewriting the setting.</summary>
+        internal static int VideoTarget(int video, int global, int screenCount) =>
+            video == Services.UI.MonitorTarget.All || (video >= 0 && video < screenCount) ? video : global;
+
         private static List<global::Avalonia.Platform.Screen?> Targets(Window? host, bool fillAll)
         {
             var s = CoreSettings.Current;
@@ -193,7 +199,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var targets = new List<global::Avalonia.Platform.Screen?>();
             if (screens.Count == 0) { targets.Add(null); return targets; }   // headless: one window where the platform puts it
             var primaryIdx = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
-            var idx = PinkFilterOverlay.ResolveScreenIndices(s.GlobalTargetMonitor, s.DualMonitorEnabled, screens.Count, primaryIdx);
+            var idx = PinkFilterOverlay.ResolveScreenIndices(VideoTarget(s.VideoTargetMonitor, s.GlobalTargetMonitor, screens.Count),
+                s.DualMonitorEnabled, screens.Count, primaryIdx);
             var first = idx.Contains(primaryIdx) ? primaryIdx : idx[0];
             targets.Add(screens[first]);
             if (MandatoryVideoScheduler.ShouldFillSecondaryMonitors(idx.Length, fillAll))

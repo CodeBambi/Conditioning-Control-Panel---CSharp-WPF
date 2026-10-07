@@ -206,6 +206,31 @@ public sealed class MandatoryVideoSchedulerTests
         }
     });
 
+    /// <summary>#1145: the Mercy picker moves the threshold (here 2 misses).</summary>
+    [Fact]
+    public void Mercy_comes_after_the_picked_number_of_misses() => With(60, true, () =>
+    {
+        var s = CoreSettings.Current;
+        var (a, m, n) = (s.AttentionChecksEnabled, s.MercySystemEnabled, s.MercyAfterFails);
+        (s.AttentionChecksEnabled, s.MercySystemEnabled, s.MercyAfterFails) = (true, true, 2);
+        try
+        {
+            var clock = new FakeClock(); var host = new Host();
+            var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+            v.Trigger(); clock.Advance(MandatoryVideoScheduler.PreRoll);
+            v.NoteSpawn(); v.Ended();
+            Assert.Equal(AttentionVerdict.Fail, host.Messages[^1]);
+            host.Then!(); clock.Advance(MandatoryVideoScheduler.PreRoll);
+            v.NoteSpawn(); v.Ended();                        // second miss: mercy
+            Assert.Equal(AttentionVerdict.Mercy, host.Messages[^1]);
+        }
+        finally
+        {
+            (s.AttentionChecksEnabled, s.MercySystemEnabled, s.MercyAfterFails) = (a, m, n);
+            CoreBubbles.PauseAction = CoreBubbles.ResumeAction = null;
+        }
+    });
+
     [Fact]
     public void A_new_clip_during_the_verdict_message_cancels_the_pending_replay() => With(60, false, () =>
     {

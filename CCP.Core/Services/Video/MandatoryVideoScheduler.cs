@@ -349,7 +349,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>WPF EndCurrentVideo: the clip played to its end. Scores the attention checks
         /// (pass XP and achievements); a fail or a troll closes the clip, shows the verdict and plays
-        /// a fresh clip with the same strictness, until the third replay earns mercy
+        /// a fresh clip with the same strictness, until the MercyAfterFails-th replay earns mercy
         /// (MercySystemEnabled), which ends the run like <see cref="End"/>.
         /// Pass/fail reach achievements (and the head's Chaster "attention" note) through
         /// <see cref="CoreProgression.TrackAttentionCheck"/> (the head's provider also takes the
@@ -370,7 +370,7 @@ namespace ConditioningControlPanel.Services
             if (verdict is not (AttentionVerdict.Troll or AttentionVerdict.Fail)) { End(); return; }
 
             Penalties++;
-            var mercy = Penalties >= 3 && s.MercySystemEnabled;
+            var mercy = Penalties >= s.MercyAfterFails && s.MercySystemEnabled;   // #1145: 2..10, default 3
             var strict = IsStrict;
             var gen = ++_retryGeneration;
             Finish();
