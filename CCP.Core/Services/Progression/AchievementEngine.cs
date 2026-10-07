@@ -168,6 +168,15 @@ internal sealed class AchievementEngine
         _isDirty = true;
     }
 
+    /// <summary>WPF AchievementService.TrackCornerHit: the first bouncing-text corner hit unlocks corner_hit.</summary>
+    public void TrackCornerHit()
+    {
+        if (Progress.HasHitCorner) return;
+        Progress.HasHitCorner = true;
+        _isDirty = true;
+        TryUnlock("corner_hit");
+    }
+
     /// <summary>WPF TrackAttentionCheckPassed: totals and eyes_front.</summary>
     public void TrackAttentionCheckPassed(bool isVideo = false)
     {

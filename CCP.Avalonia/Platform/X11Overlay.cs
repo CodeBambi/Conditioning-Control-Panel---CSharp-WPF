@@ -73,6 +73,7 @@ internal static class X11Overlay
     [DllImport(LibX11)] private static extern int XChangeProperty(IntPtr display, IntPtr window, IntPtr property, IntPtr type, int format, int mode, IntPtr[] data, int count);
     [DllImport(LibX11)] private static extern IntPtr XGetSelectionOwner(IntPtr display, IntPtr selection);
     [DllImport(LibX11)] private static extern int XDefaultScreen(IntPtr display);
+    [DllImport(LibX11)] private static extern int XRaiseWindow(IntPtr display, IntPtr window);
     [DllImport(LibX11)] private static extern int XSendEvent(IntPtr display, IntPtr window, bool propagate, long mask, IntPtr sendEvent);
 
     [DllImport(LibXfixes)] private static extern int XFixesQueryExtension(IntPtr display, out int eventBase, out int errorBase);
@@ -267,6 +268,21 @@ internal static class X11Overlay
                 return !_xErrored; // e.g. BadWindow: the server refused the request
             }
             finally { Marshal.FreeHGlobal(attrs); }
+        }
+    }
+
+    /// <summary>Back on top of everything (WPF ReassertTopmost: SetWindowPos HWND_TOPMOST). An
+    /// override-redirect window is outside the WM, so the plain XRaiseWindow is the one that holds.</summary>
+    internal static bool Raise(TopLevel window)
+    {
+        if (TryGet(window, OverlayBackend.Win32, out var hwnd)) return Win32Overlay.SetOverrideRedirect(window, hwnd);
+        if (!TryGetXid(window, out var xid)) return false;
+        lock (Gate)
+        {
+            if (!EnsureDisplay()) return false;
+            XRaiseWindow(_display, xid);
+            XFlush(_display);
+            return true;
         }
     }
 
