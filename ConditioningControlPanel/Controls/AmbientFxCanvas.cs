@@ -37,6 +37,14 @@ namespace ConditioningControlPanel.Controls
         /// <see cref="EdgeDriftMath"/>. Additive like the rest: no other surface pays for it.
         /// </summary>
         EdgeDrift = 1 << 6,
+        /// <summary>
+        /// Soft section-hued puffs drifting and breathing along a window-edge strip (nav polish 11):
+        /// the section edge's fog. Side from <see cref="AmbientFxConfig.EdgeSide"/>, maths in
+        /// <see cref="EdgeFogMath"/>, sim and paint in AmbientFxCanvas.EdgeFog.cs. The one layer that
+        /// may also run at Reduced motion, and only when <see cref="AmbientFxConfig.EdgeFogReduced"/>
+        /// asks for it (half the puffs at half the speed).
+        /// </summary>
+        EdgeFog = 1 << 7,
     }
 
     /// <summary>Which window edge an <see cref="AmbientFxLayers.EdgeDrift"/> strip lines.</summary>
@@ -156,6 +164,20 @@ namespace ConditioningControlPanel.Controls
 
         /// <summary>The window edge an <see cref="AmbientFxLayers.EdgeDrift"/> strip lines.</summary>
         public EdgeSide EdgeSide { get; set; } = EdgeSide.Top;
+
+        /// <summary>
+        /// The depth, in DIPs, the <see cref="AmbientFxLayers.EdgeDrift"/> motes keep to on a strip
+        /// thicker than their band (the fog's strip). 0, the default, spreads them over the whole
+        /// strip exactly as before.
+        /// </summary>
+        public double EdgeDriftBandPx { get; set; }
+
+        /// <summary><see cref="AmbientFxLayers.EdgeFog"/> at Reduced: half the puffs at half the
+        /// speed, and the canvas may tick at Reduced motion for this layer.</summary>
+        public bool EdgeFogReduced { get; set; }
+
+        /// <summary>Alpha gain on the fog (the section edge balances light and dark hues), 0-1.5.</summary>
+        public double EdgeFogGain { get; set; } = 1.0;
     }
 
     /// <summary>
@@ -178,7 +200,7 @@ namespace ConditioningControlPanel.Controls
     /// Viewbox-agnostic, while the two one-shot entry points (<see cref="Burst"/> and
     /// <see cref="BankTokens"/>) take plain element-local coordinates.
     /// </summary>
-    public class AmbientFxCanvas : Decorator
+    public partial class AmbientFxCanvas : Decorator
     {
         private const int MaxBurstParticles = 150;
         private const int FaultLimit = 5;
@@ -413,6 +435,7 @@ namespace ConditioningControlPanel.Controls
             _dustN = 0;
             _emberN = 0;
             _edgeN = 0;
+            _fogN = 0;
             _sk.InvalidateVisual();
         }
 
@@ -698,6 +721,7 @@ namespace ConditioningControlPanel.Controls
                 : Array.Empty<EdgeMote>();
             _edgeN = 0;
             _edgeT = 0f;
+            ReseedFog();
             _fogT = _dustT = _sheenT = _breathT = _auroraT = 0f;
             _sheenDone = false;
             _burstN = 0;
@@ -794,7 +818,7 @@ namespace ConditioningControlPanel.Controls
             if (!oneShotLive)
             {
                 if (_targetFps <= 0) return false;
-                if (!MotionFx.AllowAmbientLoops) return false;
+                if (!MotionFx.AllowAmbientLoops && !ReducedFogMayRun()) return false;
             }
             var w = _window;
             if (w != null)
@@ -840,6 +864,7 @@ namespace ConditioningControlPanel.Controls
                 StepDust(dt);
                 StepEmbers(dt);
                 StepEdge(dt);
+                StepFog(dt);
                 StepBurst(dt);
                 StepTokens(dt);
 
@@ -1148,6 +1173,7 @@ namespace ConditioningControlPanel.Controls
                 if (!_fogOnly && (layers & AmbientFxLayers.GlowBreath) != 0) DrawGlowBreath(canvas, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.DustField) != 0) DrawDust(canvas, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.Embers) != 0) DrawEmbers(canvas, w, h, min, intensity);
+                if ((layers & AmbientFxLayers.EdgeFog) != 0) DrawEdgeFog(canvas, w, h);
                 if (!_fogOnly && (layers & AmbientFxLayers.EdgeDrift) != 0) DrawEdge(canvas, w, h, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.SheenSweep) != 0) DrawSheen(canvas, w, h, intensity);
                 DrawBurst(canvas, w, h, min);
@@ -1255,13 +1281,18 @@ namespace ConditioningControlPanel.Controls
             double aw = ActualWidth;
             float px = aw > 1 ? (float)(w / aw) : 1f;
             var side = _config.EdgeSide;
+            // A band narrower than the strip (the fog's 56 px strip) keeps the motes in their
+            // authored 30 px; the default 0 spreads them over the whole strip as before.
+            double thick = side is EdgeSide.Top or EdgeSide.Bottom ? ActualHeight : aw;
+            float band = _config.EdgeDriftBandPx > 0 && thick > _config.EdgeDriftBandPx
+                ? (float)(_config.EdgeDriftBandPx / thick) : 1f;
             _paint.ColorFilter = _particleTint;
             for (int i = 0; i < _edgeN; i++)
             {
                 var m = _edge[i];
                 float a = (float)EdgeDriftMath.Alpha(m.Along, m.Life, m.Max, m.Phase, intensity);
                 if (a <= 0.004f) continue;
-                var (x, y) = EdgeDriftMath.Position(side, m.Along, m.Depth);
+                var (x, y) = EdgeDriftMath.Position(side, m.Along, m.Depth * band);
                 float size = m.SizePx * px;
                 _paint.Color = SKColors.White.WithAlpha(Alpha(a));
                 DrawSprite(canvas, Dot, (float)x * w, (float)y * h, size, size);

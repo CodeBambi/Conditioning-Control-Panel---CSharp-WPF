@@ -29,7 +29,7 @@ public class EdgeParticlesTests
     }
 
     [Fact]
-    public void FullMotionMountsFourStripsThirtyPixelsThin()
+    public void FullMotionMountsFourFogStripsWithTheEmbers()
     {
         WpfRenderHarness.OnStaThread(() =>
         {
@@ -43,30 +43,30 @@ public class EdgeParticlesTests
             foreach (var s in edge.Strips)
             {
                 Assert.False(s.IsHitTestVisible);
-                Assert.Equal(AmbientFxLayers.EdgeDrift, s.Layers);
+                Assert.Equal(AmbientFxLayers.EdgeFog | AmbientFxLayers.EdgeDrift, s.Layers);
                 Assert.Equal(Lilac, s.Tint);
             }
 
             var top = edge.Strips[0];
-            Assert.Equal(30, top.Height);
+            Assert.Equal(56, top.Height);
             Assert.Equal(VerticalAlignment.Top, top.VerticalAlignment);
-            Assert.Equal(30, top.ActualHeight);
+            Assert.Equal(56, top.ActualHeight);
             Assert.Equal(1661, top.ActualWidth);
 
             var right = edge.Strips[1];
-            Assert.Equal(30, right.Width);
+            Assert.Equal(56, right.Width);
             Assert.Equal(HorizontalAlignment.Right, right.HorizontalAlignment);
             Assert.Equal(1002, right.ActualHeight);
 
             Assert.Equal(VerticalAlignment.Bottom, edge.Strips[2].VerticalAlignment);
-            Assert.Equal(30, edge.Strips[2].Height);
+            Assert.Equal(56, edge.Strips[2].Height);
             Assert.Equal(HorizontalAlignment.Left, edge.Strips[3].HorizontalAlignment);
-            Assert.Equal(30, edge.Strips[3].Width);
+            Assert.Equal(56, edge.Strips[3].Width);
         });
     }
 
     [Theory]
-    [InlineData(MotionLevel.Reduced, true)]
+    [InlineData(MotionLevel.Reduced, false)]
     [InlineData(MotionLevel.Off, true)]
     [InlineData(MotionLevel.Full, false)]
     public void NothingIsAllocatedWithoutParticles(MotionLevel level, bool tierAllows)
@@ -121,7 +121,7 @@ public class EdgeParticlesTests
             edge.Retint(Sky);
             Assert.Equal(Sky, edge.Hue);
             Assert.All(edge.Strips, s => Assert.Equal(Sky, s.Tint));
-            Assert.All(edge.Strips, s => Assert.Equal(AmbientFxLayers.EdgeDrift, s.Layers));
+            Assert.All(edge.Strips, s => Assert.Equal(AmbientFxLayers.EdgeFog | AmbientFxLayers.EdgeDrift, s.Layers));
 
             // Mounting again with a new hue retints in place rather than rebuilding.
             var first = edge.Strips[0];
