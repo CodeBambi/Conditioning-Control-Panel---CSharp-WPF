@@ -165,6 +165,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     if (fill) x.Fill.InvalidateVisual();
                 }
             });
+            var live = _player;
+            // Teardown runs on the UI thread, so checking _player there never touches a disposed player.
+            _player.Playing += (_, _) => Dispatcher.UIThread.Post(() => { if (_player == live) LibVlcAudio.ApplyPreferredDevice(live); });
             _player.TimeChanged += (_, e) => Interlocked.Exchange(ref _watchedMs, e.Time);
             _player.EndReached += (_, _) =>
             {
@@ -184,6 +187,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _guard.Tick += (_, _) => GuardTick();
             _guard.Start();
             if (_attention) DispatcherTimer.RunOnce(SetupAttention, TimeSpan.FromSeconds(2));   // WPF: Task.Delay(2000)
+        }
+
+        /// <summary>WPF VideoService.UpdateMasterVolume / UpdateVideoVolume: a playing clip follows
+        /// Settings · Audio live. UI thread (teardown runs there too).</summary>
+        internal void UpdateVolume()
+        {
+            var s = CoreSettings.Current;
+            if (_player is { } p) p.Volume = MandatoryVideoScheduler.EffectiveVolume(s.MasterVolume, s.VideoVolume);
         }
 
         /// <summary>WPF VideoService.VideoScreens -> App.ResolveScreens (ccp-bugs #1154): the Video

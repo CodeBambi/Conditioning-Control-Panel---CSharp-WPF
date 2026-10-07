@@ -149,7 +149,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // handler NAMES are kept verbatim, because they are the behaviour-parity contract and
         // the wiring is a rename away once those partials reach Core.
         //
-        // ponytail: needs MainWindow (PremiumRail, DashboardFx, Browser, Login, HomeAudio,
+        // ponytail: needs MainWindow (PremiumRail, DashboardFx, Browser, Login,
         // ProgramsTab, TeaseCard, TabNavigation) and PremiumFeature - both WPF-head. TierGate is NOT
         // among them any more: CCP.Core/Services/TierGate.cs, over the CoreEntitlement seam.
         //
@@ -226,16 +226,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ToggleEnhanceIfPossible.IsCheckedChanged += ToggleEnhanceIfPossible_Changed;
             ChkForceShowBambiCloud.IsCheckedChanged += ChkForceShowBambiCloud_Changed;
 
-            // Home audio card. Pure forwarding, like every re-parented cell: the shell owns the
-            // canonical Settings/Audio controls and mirrors both ways.
-            HomeSliderMaster.ValueChanged += HomeSliderMaster_Changed;
-            HomeChkAudioDuck.IsCheckedChanged += HomeChkAudioDuck_Changed;
-            HomeSliderVideoVolume.ValueChanged += HomeSliderVideoVolume_Changed;
-            HomeSliderDuck.ValueChanged += HomeSliderDuck_Changed;
-            HomeChkExcludeBambiCloudDucking.IsCheckedChanged += HomeChkExcludeBambiCloudDucking_Changed;
-            HomeCmbAudioOutputDevice.SelectionChanged += HomeCmbAudioOutputDevice_SelectionChanged;
-            HomeBtnAudioOutputRefresh.Click += HomeBtnAudioOutputRefresh_Click;
-            HomeBtnTestAudio.Click += HomeBtnTestAudio_Click;
+            // Home audio card: the same binder as Settings · Audio, so both surfaces write through
+            // one path and repaint each other (WPF MainWindow.HomeAudio.cs mirrors instead).
+            _ = new Controls.AppSettings.AudioSettingsBinder(this, HomeSliderMaster, HomeTxtMaster, HomeSliderVideoVolume,
+                HomeTxtVideoVolume, HomeChkAudioDuck, HomeSliderDuck, HomeTxtDuck, HomeChkExcludeBambiCloudDucking,
+                HomeCmbAudioOutputDevice, HomeBtnAudioOutputRefresh, HomeBtnTestAudio);
             HomeBtnAudioLayers.Click += HomeBtnAudioLayers_Click;
 
             // Companion + account strips.
@@ -383,14 +378,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void ChkForceShowBambiCloud_Changed(object? sender, RoutedEventArgs e) { }   // mw.ChkForceShowBambiCloud_Changed(...)
 
         // -- home audio card ------------------------------------------------------------
-        private void HomeSliderMaster_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }      // mw.HomeSliderMaster_Changed(...)
-        private void HomeChkAudioDuck_Changed(object? sender, RoutedEventArgs e) { }                     // mw.HomeChkAudioDuck_Changed(...)
-        private void HomeSliderVideoVolume_Changed(object? sender, RangeBaseValueChangedEventArgs e) { } // mw.HomeSliderVideoVolume_Changed(...)
-        private void HomeSliderDuck_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }        // mw.HomeSliderDuck_Changed(...)
-        private void HomeChkExcludeBambiCloudDucking_Changed(object? sender, RoutedEventArgs e) { }      // mw.HomeChkExcludeBambiCloudDucking_Changed(...)
-        private void HomeCmbAudioOutputDevice_SelectionChanged(object? sender, SelectionChangedEventArgs e) { } // mw.HomeCmbAudioOutputDevice_SelectionChanged(...)
-        private void HomeBtnAudioOutputRefresh_Click(object? sender, RoutedEventArgs e) { }  // mw.BtnAudioOutputRefresh_Click(...)
-        private void HomeBtnTestAudio_Click(object? sender, RoutedEventArgs e) { }           // mw.BtnTestAudio_Click(...)
         /// <summary>Self-contained on the old dashboard too - it only opens a window.</summary>
         private void HomeBtnAudioLayers_Click(object? sender, RoutedEventArgs e)
             => Windows.LayeredAudioWindow.Open(this);
