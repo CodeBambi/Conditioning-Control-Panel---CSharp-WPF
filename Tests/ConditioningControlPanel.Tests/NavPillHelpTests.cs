@@ -96,7 +96,7 @@ public class NavPillHelpTests
         {
             foreach (var s in NavSections.Order.Where(x => NavStripRules.ShowsPills(x.Key)))
             {
-                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key));
+                var strip = Laid(s.Key, s.DefaultTab);
                 foreach (var key in strip.PillKeys)
                 {
                     var pill = strip.PillFor(key)!;

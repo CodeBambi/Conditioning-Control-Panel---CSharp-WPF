@@ -42,6 +42,21 @@ namespace ConditioningControlPanel.Controls.NavRail
             var ring = new GlowAdorner(target, accent) { IsHitTestVisible = false, Opacity = 0 };
             layer.Add(ring);
 
+            // An adorner layer keeps drawing an adorner after its element is collapsed, at the
+            // element's last laid-out spot. That is what left a lilac ring over the dashboard
+            // tiles after choosing Dashboard on Home > Premium (polish 12 round 2, owner desk
+            // pass): the strip collapsed, its pill's glow did not. The glow leaves with its target.
+            DependencyPropertyChangedEventHandler? gone = null;
+            void Drop()
+            {
+                if (gone != null) target.IsVisibleChanged -= gone;
+                ring.BeginAnimation(UIElement.OpacityProperty, null);
+                try { layer.Remove(ring); } catch { }
+            }
+            gone = (_, e) => { if (e.NewValue is false) Drop(); };
+            target.IsVisibleChanged += gone;
+            if (!target.IsVisible && target.IsLoaded) { Drop(); return false; }
+
             var anim = new DoubleAnimationUsingKeyFrames();
             if (level == MotionLevel.Full)
             {
@@ -58,7 +73,7 @@ namespace ConditioningControlPanel.Controls.NavRail
                 anim.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.85, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(HoldMs))));
                 anim.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(HoldMs + 1))));
             }
-            anim.Completed += (_, _) => { try { layer.Remove(ring); } catch { } };
+            anim.Completed += (_, _) => Drop();
             ring.BeginAnimation(UIElement.OpacityProperty, anim);
             App.Logger?.Debug("NavGlow({Why}): on {T} {W}x{H}", why, target.Name, target.ActualWidth, target.ActualHeight);
             return true;

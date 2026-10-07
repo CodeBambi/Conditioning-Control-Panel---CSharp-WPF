@@ -57,8 +57,9 @@ namespace ConditioningControlPanel.Services.UI
             new NavSection(Home, "nav_door_home", "settings", new[]
             {
                 T("settings", "tab_dashboard"),
-                // Polish 12 (owner, 2026-10-07): the full vault is back as its own page.
-                T("premium", "nav_tab_premium"),
+                // Polish 12 (owner, 2026-10-07): the full vault is back as its own page. Hidden
+                // (round 2, owner): Home draws no pills, the rail's Home row is the way back.
+                T("premium", "nav_tab_premium", hidden: true),
             }),
             new NavSection(Studio, "nav_door_studio", "studio", new[]
             {

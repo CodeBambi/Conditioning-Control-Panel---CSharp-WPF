@@ -36,7 +36,7 @@ public class NavStripPolishTests
         {
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
-                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key));
+                var strip = Laid(s.Key, s.DefaultTab);
                 var before = PillXs(strip);
                 foreach (var t in s.Tabs)
                 {
@@ -104,7 +104,7 @@ public class NavStripPolishTests
         {
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
-                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key));
+                var strip = Laid(s.Key, s.DefaultTab);
                 foreach (var key in strip.PillKeys)
                 {
                     double want = key == strip.ActivePillKey ? NavStripRules.ActiveFaceThickness : NavStripRules.RestFaceThickness;

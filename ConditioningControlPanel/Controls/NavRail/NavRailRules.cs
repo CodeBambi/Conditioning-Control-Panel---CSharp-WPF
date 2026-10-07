@@ -190,6 +190,9 @@ namespace ConditioningControlPanel.Controls.NavRail
                 {
                     if (!string.Equals(t.Key, last, StringComparison.OrdinalIgnoreCase)) continue;
                     if (t.Kind is NavTabKind.Window or NavTabKind.Launcher) break;
+                    // Home's rail row is the way back from Premium (polish 12 round 2): it always
+                    // opens the dashboard, never the hidden page it was last on.
+                    if (t.Hidden && s.Key == NavSections.Home) break;
                     return t.Key;
                 }
             }
