@@ -6,7 +6,9 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.UI;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
@@ -31,6 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     public partial class VideoFeatureControl : UserControl
     {
         private bool _isLoading = true;
+        private bool _monitorPopulating; // guards the monitor combo while it is rebuilt
 
         public VideoFeatureControl()
         {
@@ -39,6 +42,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             InitializeComponent();
 
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
+            CmbMonitor.DropDownOpened += (_, _) => PopulateMonitors();
+            CmbMonitor.SelectionChanged += CmbMonitor_Changed;
+            for (var n = AppSettings.MercyAfterFailsMin; n <= AppSettings.MercyAfterFailsMax; n++)
+                CmbMercyAfter.Items.Add(new ComboBoxItem { Content = Loc.GetF("setting_mercy_after_n", n), Tag = n });
+            ChkMercy.IsCheckedChanged += ChkMercy_Changed;
+            CmbMercyAfter.SelectionChanged += CmbMercyAfter_Changed;
             SliderPerHour.ValueChanged += SliderPerHour_Changed;
             ChkStrict.IsCheckedChanged += ChkStrict_Changed;
             SliderVideoMinDur.ValueChanged += SliderVideoMinDur_Changed;
@@ -119,6 +128,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 SliderTargetSize.Value = s.AttentionSize;
                 TxtTargetSize.Text = s.AttentionSize.ToString();
                 ChkVideoGazeClick.IsChecked = s.VideoGazeClickEnabled;
+                PopulateMonitors();
+                ChkMercy.IsChecked = s.MercySystemEnabled;
+                CmbMercyAfter.IsVisible = s.MercySystemEnabled;
+                foreach (var obj in CmbMercyAfter.Items)
+                    if (obj is ComboBoxItem { Tag: int n } it && n == s.MercyAfterFails) { CmbMercyAfter.SelectedItem = it; break; }
+                // WPF: never hide a changed setting - open the fold when a row inside is off its default.
+                if (s.VideoTargetMonitor != MonitorTarget.FollowGlobal || !s.MercySystemEnabled
+                    || s.MercyAfterFails != AppSettings.MercyAfterFailsDefault)
+                    FoldMore.IsOpen = true;
             }
             finally { _isLoading = false; }
         }
@@ -144,10 +162,76 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 e.PropertyName == nameof(AppSettings.RandomizeAttentionTargets) ||
                 e.PropertyName == nameof(AppSettings.AttentionLifespan) ||
                 e.PropertyName == nameof(AppSettings.AttentionSize) ||
-                e.PropertyName == nameof(AppSettings.VideoGazeClickEnabled))
+                e.PropertyName == nameof(AppSettings.VideoGazeClickEnabled) ||
+                e.PropertyName == nameof(AppSettings.VideoTargetMonitor) ||
+                e.PropertyName == nameof(AppSettings.MercySystemEnabled) ||
+                e.PropertyName == nameof(AppSettings.MercyAfterFails))
             {
                 Dispatcher.UIThread.Post(LoadFromSettings);
             }
+        }
+
+        // -- Display monitor picker (ccp-bugs #1154; WPF VideoFeatureControl.xaml.cs, Pink filter recipe) --
+
+        /// <summary>Rebuild the dropdown and select the saved <see cref="AppSettings.VideoTargetMonitor"/>.
+        /// A saved index that no longer exists shows "Default" WITHOUT writing back, so the pick
+        /// survives a reconnect.</summary>
+        private void PopulateMonitors()
+        {
+            int saved = CoreSettings.Current.VideoTargetMonitor;
+            _monitorPopulating = true;
+            try
+            {
+                CmbMonitor.Items.Clear();
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_default"), Tag = MonitorTarget.FollowGlobal });
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_all"), Tag = MonitorTarget.All });
+
+                var screens = ScreenList.Enumerate(this);
+                string monitorLabel = Loc.Get("monitor_label");
+                string primaryMarker = Loc.Get("monitor_primary_marker");
+                for (int i = 0; i < screens.Count; i++)
+                {
+                    var b = screens[i].Bounds;
+                    string prefix = screens[i].IsPrimary ? primaryMarker + ", " : "";
+                    CmbMonitor.Items.Add(new ComboBoxItem { Content = $"{monitorLabel} {i + 1} ({prefix}{b.Width}x{b.Height})", Tag = i });
+                }
+
+                ComboBoxItem? match = null;
+                foreach (var obj in CmbMonitor.Items)
+                    if (obj is ComboBoxItem it && it.Tag is int t && t == saved) { match = it; break; }
+                CmbMonitor.SelectedItem = match ?? (CmbMonitor.Items.Count > 0 ? CmbMonitor.Items[0] : null);
+            }
+            finally { _monitorPopulating = false; }
+        }
+
+        // -- Mercy (ccp-bugs #1145; WPF Features/MercyRow.xaml.cs) --
+
+        private void ChkMercy_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            s.MercySystemEnabled = ChkMercy.IsChecked ?? false;
+            CmbMercyAfter.IsVisible = s.MercySystemEnabled;
+            CoreSettings.Save();
+        }
+
+        private void CmbMercyAfter_Changed(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (CmbMercyAfter.SelectedItem is not ComboBoxItem { Tag: int n }) return;
+            CoreSettings.Current.MercyAfterFails = n;
+            CoreSettings.Save();
+        }
+
+        private void CmbMonitor_Changed(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_monitorPopulating || _isLoading) return;
+            if (CmbMonitor.SelectedItem is not ComboBoxItem item || item.Tag is not int target) return;
+            var s = CoreSettings.Current;
+            if (s.VideoTargetMonitor == target) return;
+            // Read at the next video's start; a video already playing stays where it is.
+            s.VideoTargetMonitor = target;
+            CoreSettings.Save();
         }
 
         private void ChkVideoGazeClick_Changed(object? sender, RoutedEventArgs e)
