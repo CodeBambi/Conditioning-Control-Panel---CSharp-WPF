@@ -400,6 +400,10 @@ namespace ConditioningControlPanel
             MantraService.ChasterNote = reps => Chaster?.Note("mantra", reps);
             // QuestService moved to Core; these are the head services it still reads. Lazy, like
             // the App.X?. reads they replace (SkillTree, Programs and Haptics are built later).
+            // The Chaos run model moved to Core; these are the head pieces it still reads.
+            Services.Chaos.ChaosRunState.SkillMultProvider = () => SkillTree?.GetTotalXpMultiplier() ?? 1.0;
+            Services.Chaos.ChaosRunState.IconResolver = (cat, id) => Services.Chaos.ChaosArt.Resolve(cat, id);
+            Services.Chaos.ChaosRunConfig.AllVariantIds = Services.Chaos.ChaosBubbleVariants.AllIds;
             CoreQuests.PatreonVerifyingProvider = () => Patreon?.IsVerifying;
             CoreQuests.SubscribeStarVerifyingProvider = () => SubscribeStar?.IsVerifying == true;
             CoreQuests.UseStreakShieldProvider = () => SkillTree?.UseStreakShield() == true;

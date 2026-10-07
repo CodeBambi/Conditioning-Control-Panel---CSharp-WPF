@@ -18,6 +18,8 @@ using Avalonia.Media.Immutable;
 using Avalonia.Threading;
 using Serilog;
 
+using ConditioningControlPanel.Services.Chaos;
+
 namespace ConditioningControlPanel.Avalonia.Views.Chaos
 {
     /// <summary>
@@ -29,14 +31,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///
     /// PORTED from ConditioningControlPanel/Chaos/ChaosHudWindow.xaml.cs. What changed and why:
     ///
-    ///  - <c>ChaosRunState</c> and <c>ChaosModeService</c> are WPF-head services, so the window
-    ///    binds to <see cref="ChaosHudState"/> at the bottom of this file instead - the same
-    ///    property names and the same computed text, filled with sample values that hit every
-    ///    visual branch (a hot streak, a low-focus warning, filled toy AND accessory groups,
-    ///    run picks, modifiers, a feed). ponytail: needs <c>ChaosRunState</c> (and
-    ///    <c>ChaosSidebarBoon</c>) from ConditioningControlPanel/Services/Chaos/ChaosModels.cs and
-    ///    <c>ChaosModeService</c> from ConditioningControlPanel/Services/Chaos/ChaosModeService.cs.
-    ///    Those paths are where every "needs ChaosX" note below points; they are not repeated.
+    ///  - The window binds the real Core <see cref="ChaosRunState"/> (CCP.Core/Services/Chaos/
+    ///    ChaosModels.cs) exactly as WPF does; the render proof feeds it <see cref="ChaosHudSample"/>.
+    ///    Tile brushes come from ChaosBoonColors.AccentOf/BackOf (the Visibility/Brush members
+    ///    left the shared model). ponytail: <c>ChaosModeService</c> (the effectful run loop:
+    ///    overlays, bubbles, drafts) is still WPF-only at
+    ///    ConditioningControlPanel/Services/Chaos/ChaosModeService.cs, so no run starts on this
+    ///    head yet; every "needs ChaosModeService" note below points there.
     ///  - <b>Win32.</b> The WPF window P/Invoked <c>GetWindowLong</c>/<c>SetWindowLong</c> to add
     ///    <c>WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE</c>, and <c>SetWindowPos(HWND_TOPMOST)</c> via
     ///    <c>ChaosWindowZ</c>. Both map without a shim: the ex-styles are
@@ -74,7 +75,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// </summary>
     public partial class ChaosHudWindow : Window
     {
-        private readonly ChaosHudState _state;
+        private readonly ChaosRunState _state;
         private bool _expanded;
         private bool _closed;
 
@@ -104,7 +105,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// <summary>Render/discovery constructor: sample state, panel pinned open. The collapsed
         /// strip is only 116px of a 300px window, so the expanded panel is what a headless render
         /// has to prove - every templated control this view owns lives inside it.</summary>
-        internal ChaosHudWindow() : this(ChaosHudState.Sample())
+        internal ChaosHudWindow() : this(ChaosHudSample.Build())
         {
             SetPreRunExpanded(true);
             // A headless render is two layout passes with no timer ticks, so the 180ms open would
@@ -113,7 +114,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _panelSlide.X = 0;
         }
 
-        public ChaosHudWindow(ChaosHudState state)
+        public ChaosHudWindow(ChaosRunState state)
         {
             AvaloniaXamlLoader.Load(this);
 
@@ -186,37 +187,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _lastShields = state.Shields;
             state.PropertyChanged += (_, args) =>
             {
-                if (args.PropertyName == nameof(ChaosHudState.FocusLow))
+                if (args.PropertyName == nameof(ChaosRunState.FocusLow))
                 {
                     SetFocusLowVisual(state.FocusLow);
                     return;
                 }
-                if (args.PropertyName == nameof(ChaosHudState.Combo))
+                if (args.PropertyName == nameof(ChaosRunState.Combo))
                 {
                     OnComboChanged(state.Combo);
                     return;
                 }
-                if (args.PropertyName == nameof(ChaosHudState.ScoreText))
+                if (args.PropertyName == nameof(ChaosRunState.ScoreText))
                 {
                     PulseScore();
                     return;
                 }
-                if (args.PropertyName == nameof(ChaosHudState.TotalMultText))
+                if (args.PropertyName == nameof(ChaosRunState.TotalMultText))
                 {
                     OnMultiplierChanged();
                     return;
                 }
-                if (args.PropertyName == nameof(ChaosHudState.RippleReady))
+                if (args.PropertyName == nameof(ChaosRunState.RippleReady))
                 {
                     SetRippleReadyVisual(state.RippleReady);
                     return;
                 }
-                if (args.PropertyName == nameof(ChaosHudState.ClockText))
+                if (args.PropertyName == nameof(ChaosRunState.ClockText))
                 {
                     UpdateClockEndRush();
                     return;
                 }
-                if (args.PropertyName != nameof(ChaosHudState.Shields)) return;
+                if (args.PropertyName != nameof(ChaosRunState.Shields)) return;
                 int now = state.Shields;
                 bool grew = now > _lastShields;
                 _lastShields = now;
@@ -1306,227 +1307,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         }
     }
 
-    /// <summary>
-    /// What the HUD binds to. The WPF window binds <c>ChaosRunState</c> (a WPF-head service);
-    /// this carries the same property NAMES and the same computed text so the two XAMLs diff
-    /// cleanly, and the sample values below hit every visual branch the view has - a hot streak
-    /// (tier 3), a low-focus warning, both loadout groups filled, run picks, modifiers and a feed.
-    ///
-    /// The three WPF <c>Visibility</c> properties on the boon model become bools, because
-    /// Avalonia binds <c>IsVisible</c> to a bool directly (CLAUDE.md).
-    /// ponytail: needs ChaosRunState, wired when the Chaos services move to Core.
-    /// </summary>
-    public sealed class ChaosHudState : INotifyPropertyChanged
+    /// <summary>The render proof's run: a real Core <see cref="ChaosRunState"/> mid-descent,
+    /// with values that hit every visual branch (hot streak, low focus, both loadout groups,
+    /// a real mantra and sin drafted through <see cref="ChaosRunState.ApplyBoon"/>, modifiers,
+    /// a feed). Tile ids are real catalogue ids, so the family-colour lookup shows.</summary>
+    internal static class ChaosHudSample
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnChanged([CallerMemberName] string? name = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name ?? ""));
-
-        private double _elapsedSec;
-        public double ElapsedSec
+        public static ChaosRunState Build()
         {
-            get => _elapsedSec;
-            set { _elapsedSec = value; OnChanged(); OnChanged(nameof(RunTimeText)); OnChanged(nameof(ClockText)); OnChanged(nameof(RunProgress)); }
-        }
-        public int RunDurationSec { get; set; } = 900;
-        public double RunProgress => RunDurationSec <= 0 ? 0 : Math.Clamp(ElapsedSec / RunDurationSec, 0, 1);
-        public string RunTimeText => $"{(int)ElapsedSec / 60:00}:{(int)ElapsedSec % 60:00} / {RunDurationSec / 60:00}:{RunDurationSec % 60:00}";
-        public string ClockText => $"{(int)ElapsedSec / 60:00}:{(int)ElapsedSec % 60:00}";
-
-        public int ActIndex { get; set; } = 2;
-        public int WaveIndex { get; set; } = 3;
-        public int WaveCount { get; set; } = 5;
-        public string ActWaveText => $"DEPTH {ToRoman(ActIndex)} · LOOP {WaveIndex}/{WaveCount}";
-
-        private double _score = 18420;
-        /// <summary>Notifies, unlike the auto-property it replaces: the strip and panel readouts
-        /// bind ScoreText, and the window's score pop hangs off that same notification - so a
-        /// silent setter left the number frozen and the pop unreachable.</summary>
-        public double Score
-        {
-            get => _score;
-            set { _score = value; OnChanged(); OnChanged(nameof(ScoreText)); }
-        }
-        public string ScoreText => $"{(int)Score:N0}";
-
-        private int _combo = 12;
-        public int Combo
-        {
-            get => _combo;
-            set { _combo = Math.Max(0, value); OnChanged(); OnChanged(nameof(ComboMult)); OnChanged(nameof(TotalMult)); OnChanged(nameof(TotalMultText)); }
-        }
-
-        private double _heat = 0.35;
-        public double Heat
-        {
-            get => _heat;
-            set { _heat = Math.Clamp(value, 0, 1); OnChanged(); OnChanged(nameof(HeatMult)); OnChanged(nameof(TotalMult)); OnChanged(nameof(TotalMultText)); }
-        }
-
-        private int _shields = 2;
-        public int Shields
-        {
-            get => _shields;
-            set { _shields = Math.Max(0, value); OnChanged(); OnChanged(nameof(ShieldText)); }
-        }
-        public int StartingShields { get; set; } = 3;
-        public string ShieldText => string.Concat(Enumerable.Repeat("♥", Shields))
-                                  + string.Concat(Enumerable.Repeat("♡", Math.Max(0, StartingShields - Shields)));
-
-        public double FocusMax => 100;
-        private double _focus = 22;
-        public double Focus
-        {
-            get => _focus;
-            set { _focus = Math.Clamp(value, 0, FocusMax); OnChanged(); OnChanged(nameof(FocusText)); OnChanged(nameof(FocusLow)); }
-        }
-        public string FocusText => $"{(int)Focus}";
-        /// <summary>Below a defuse's price (30). The sample sits here on purpose: the low-focus
-        /// visual is a state the render has to show.</summary>
-        public bool FocusLow => Focus < 30;
-
-        private double _rippleCooldown;
-        public double RippleCooldown
-        {
-            get => _rippleCooldown;
-            set { _rippleCooldown = value; OnChanged(); OnChanged(nameof(RippleReady)); OnChanged(nameof(RippleText)); }
-        }
-        public bool RippleReady => RippleCooldown <= 0;
-        public string RippleText => RippleReady ? "READY" : $"{Math.Ceiling(RippleCooldown):0}s";
-
-        public double ComboMult => Math.Min(1.0 + Combo * 0.08, 6.0);
-        public double DifficultyMult { get; set; } = 1.3;
-        public double HeatMult => 1.0 + Heat * 1.0;   // up to x2 at full heat
-        private double _boonMult = 1.2;
-        public double BoonMult
-        {
-            get => _boonMult;
-            set { _boonMult = value; OnChanged(); OnChanged(nameof(TotalMult)); OnChanged(nameof(TotalMultText)); }
-        }
-        public double TotalMult => ComboMult * DifficultyMult * HeatMult * BoonMult;
-        public string TotalMultText => $"x{TotalMult:0.0}";
-
-        public ObservableCollection<string> RecentEvents { get; } = new();
-        public ObservableCollection<ChaosHudBoon> ActiveSidebarToys { get; } = new();
-        public ObservableCollection<ChaosHudBoon> ActiveSidebarAccessories { get; } = new();
-        public ObservableCollection<ChaosHudBoon> RunPickTiles { get; } = new();
-        public ObservableCollection<ChaosHudBoon> RunModifiers { get; } = new();
-
-        // The three WPF Style.Triggers that asked a collection's Count, as bools the XAML binds
-        // IsVisible to directly.
-        public bool HasToys => ActiveSidebarToys.Count > 0;
-        public bool HasAccessories => ActiveSidebarAccessories.Count > 0;
-        public bool ShowGroupSeam => HasToys && HasAccessories;
-
-        private static string ToRoman(int n) => n switch
-        {
-            1 => "I", 2 => "II", 3 => "III", 4 => "IV", 5 => "V",
-            _ => n.ToString(),
-        };
-
-        /// <summary>Sample data for the render proof and the design-time view.</summary>
-        public static ChaosHudState Sample()
-        {
-            var s = new ChaosHudState { ElapsedSec = 372 };
-            s.ActiveSidebarToys.Add(new ChaosHudBoon
+            var s = new ChaosRunState(new ChaosRunConfig { Difficulty = ChaosDifficulty.Hard, DurationSec = 900, WaveCount = 15 })
             {
-                // ponytail: "toy_wand" / "acc_collar" are invented sample ids, not real boon ids
-                // (those are e_stim, the_spanker, tail_plug, gold_digger ... - see
-                // ChaosBoonColors.cs). So neither tile is in the family-colour table and both
-                // render on the category fallback, which means the render CANNOT prove
-                // AccentBrush's lookup. Swap in real ids when ChaosSidebarBoon lands and the
-                // sample can be built from the real catalogue instead of guessed at.
-                Id = "toy_wand", Glyph = "🪄", Name = "Wand", Level = 3,
-                Desc = "a long press winds it up; let go and the nearest treat pops paid.",
-                Flavor = "it hums when you hold it too long.",
-                Extra = "capstone: pops two at once above streak x20.",
-            });
-            s.ActiveSidebarAccessories.Add(new ChaosHudBoon
+                ElapsedSec = 372, Score = 18420, Combo = 12, Heat = 0.35, Shields = 2, Focus = 22,
+                WaveIndex = 7, ActIndex = ChaosRunEngine.ActFor(7),
+            };
+            foreach (var (id, group) in new[] { ("the_wand", s.ActiveSidebarToys), ("collar", s.ActiveSidebarAccessories) })
             {
-                Id = "acc_collar", Glyph = "⛓", Name = "Collar", Level = 2,
-                Desc = "start each descent with one extra ♥.",
-                Flavor = "snug.",
-            });
-            s.RunPickTiles.Add(new ChaosHudBoon
-            {
-                Glyph = "✦", Name = "good girls count", Desc = "x1.2 to the whole stack.",
-            });
-            s.RunPickTiles.Add(new ChaosHudBoon
-            {
-                Glyph = "☠", Name = "the sink", IsCurse = true,
-                Desc = "loadout locks the moment you fall in.",
-                Flavor = "no take-backs.",
-            });
-            s.RunModifiers.Add(new ChaosHudBoon { Glyph = "◈", Name = "steady hands", IsModifier = true, Desc = "focus refills 10% faster." });
-            s.RunModifiers.Add(new ChaosHudBoon { Glyph = "❂", Name = "deep breath", IsModifier = true, Desc = "the first trigger of a loop is free." });
+                var b = ChaosLifetimeBoons.ById(id)!;
+                group.Add(new ChaosSidebarBoon
+                {
+                    Id = b.Id, Glyph = b.Glyph, Name = b.Name, Level = b.MaxLevel, Desc = b.Desc, Flavor = b.Flavor,
+                    Extra = string.IsNullOrEmpty(b.CapstoneDesc) ? "" : "max: " + b.CapstoneDesc,
+                });
+            }
+            s.ApplyBoon(ChaosBoonPool.All.First(b => !b.IsCurse));
+            s.ApplyBoon(ChaosBoonPool.All.First(b => b.IsCurse));
+            s.RunModifiers.Add(new ChaosSidebarBoon { Glyph = "◈", Name = "steady hands", IsModifier = true, Desc = "focus refills 10% faster." });
             s.RecentEvents.Add("treat popped · +240");
-            s.RecentEvents.Add("streak x12");
-            s.RecentEvents.Add("rabbit flung");
-            s.RecentEvents.Add("tease denied · focus +10");
             return s;
         }
-    }
-
-    /// <summary>One tile in the HUD: a pocket toy, an accessory, a run pick or a modifier.
-    /// The port of <c>ChaosSidebarBoon</c>, minus the WPF Visibility properties (bools here) and
-    /// with Avalonia brushes. The payload-family colour lookup is real now: the head's
-    /// <c>AccentBrush</c> calls <c>ChaosBoonColors.BrushForOrDefault</c> over the category
-    /// fallback - not visible from ChaosHudWindow.xaml.cs, which is why the old note said the
-    /// fallback palette WAS the lookup - and that table is copied into ChaosBoonColors.cs beside
-    /// this file. ponytail: still needs <c>ChaosSidebarBoon</c> itself
-    /// (ConditioningControlPanel/Services/Chaos/ChaosModels.cs) to carry real run data into these
-    /// tiles; every value below is sample.</summary>
-    public sealed class ChaosHudBoon
-    {
-        public string Id { get; init; } = "";
-        public IImage? Icon { get; init; }
-        public string Glyph { get; init; } = "◈";
-        public string Name { get; init; } = "";
-        public int Level { get; init; }
-        public string Desc { get; init; } = "";
-        public string Flavor { get; init; } = "";
-        /// <summary>Capstone line for the hover card (gold). Empty = hidden.</summary>
-        public string Extra { get; init; } = "";
-        public bool IsCurse { get; init; }
-        /// <summary>Owned always-on upgrade (the MODIFIERS list) — purple tile.</summary>
-        public bool IsModifier { get; init; }
-        /// <summary>An unfilled pocket slot (dim "+" tile shown during the pre-run loadout glance).</summary>
-        public bool IsEmptySlot { get; init; }
-        public string LevelText => $"L{Level}";
-
-        // ---- hover card + tile accents ----
-        public string TipTitle => Level > 0 ? $"{Name} · L{Level}" : Name;
-        public bool HasLevelBadge => Level > 0;
-        public bool HasDesc => !string.IsNullOrEmpty(Desc);
-        public bool HasFlavor => !string.IsNullOrEmpty(Flavor);
-        public bool HasExtra => !string.IsNullOrEmpty(Extra);
-
-        /// <summary>The category fallback, then the payload-based colour language over it -
-        /// <c>ChaosSidebarBoon.AccentBrush</c>'s exact shape, including its "an empty slot keeps
-        /// the fallback" branch. The lookup used to be missing, so every tile drew its category
-        /// colour and a mapped boon never showed its family.</summary>
-        public IBrush AccentBrush
-        {
-            get
-            {
-                var fallback = IsEmptySlot ? EmptyAccent : IsModifier ? ModAccent
-                             : IsCurse ? CurseAccent : Level > 0 ? PocketAccent : BoonAccent;
-                return IsEmptySlot ? fallback : ChaosBoonColors.BrushForOrDefault(Id, fallback);
-            }
-        }
-        public IBrush TileBackBrush =>
-            IsEmptySlot ? Brushes.Transparent : IsModifier ? ModBack : IsCurse ? CurseBack : Level > 0 ? PocketBack : BoonBack;
-        public double TileOpacity => IsEmptySlot ? 0.55 : 1.0;
-
-        private static IBrush Frozen(Color c) => new ImmutableSolidColorBrush(c);
-        private static readonly IBrush EmptyAccent = Frozen(Color.FromArgb(0x60, 0xB8, 0xB8, 0xD0));
-        private static readonly IBrush PocketAccent = Frozen(Color.FromRgb(0xFF, 0x69, 0xB4));
-        private static readonly IBrush BoonAccent = Frozen(Color.FromRgb(0x9C, 0xE8, 0xA0));
-        private static readonly IBrush CurseAccent = Frozen(Color.FromRgb(0xFF, 0x8A, 0x8A));
-        private static readonly IBrush ModAccent = Frozen(Color.FromRgb(0x8B, 0x5C, 0xF6));
-        private static readonly IBrush PocketBack = Frozen(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4));
-        private static readonly IBrush BoonBack = Frozen(Color.FromArgb(0x2E, 0x9C, 0xE8, 0xA0));
-        private static readonly IBrush CurseBack = Frozen(Color.FromArgb(0x2E, 0xFF, 0x8A, 0x8A));
-        private static readonly IBrush ModBack = Frozen(Color.FromArgb(0x2E, 0x8B, 0x5C, 0xF6));
     }
 }

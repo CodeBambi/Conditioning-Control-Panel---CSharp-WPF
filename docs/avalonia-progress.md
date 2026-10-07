@@ -1228,3 +1228,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/chaster-receipt: +652
 - Chaster tab: own receipt panel with language re-render, calendar sheet, 2x2 preset keys (mood + limits refresh), 30 s hero tick; ticks only while visible.
+
+## avalonia-port/chaos-waves: +448
+- Chaos run engine (clock, end/Relapse, waves/acts, payout scalars) in Core as ChaosRunEngine; ChaosModels/ChaosRunEffects moved to Core; WPF RunTick delegates, behaviour unchanged.
+- Avalonia ChaosHudWindow binds the Core ChaosRunState; runs still cannot start on Avalonia (no bubble field/draft/overlays); chaos-hud-window stays stub.
