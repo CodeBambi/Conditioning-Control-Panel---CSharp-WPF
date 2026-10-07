@@ -84,7 +84,11 @@
 //   internal void BtnImportPrompt_Click(…)
 //   internal async void BtnExportPrompt_Click(…)
 
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -169,9 +173,101 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             g.IsVisible = !(CoreEntitlement.HasPremium || (dailyKey != null && CoreEntitlement.IsFreeToday(dailyKey)));
         }
 
-        /// <summary>WPF MainWindow.Patreon.cs:46 -> ShowAppInfoPopup -> ShowAccountSettings.</summary>
+        /// <summary>WPF MainWindow.Patreon.cs:48 (main fbe161de2): every padlock opens the vault gate card for the
+        /// feature behind it, found from the tab view the button sits in. Graded Intake keeps Account; a patron
+        /// whose grant died here is sent to reconnect (ReconnectFromGate) instead.</summary>
         internal void BtnGateUnlock_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
-            => OpenAppSettingsSection("account");
+        {
+            if (LockdownActive) return;   // PLAYBOOK P05: no veil on this head, so the door refuses itself
+            if (TierGate.ReconnectIsTheAnswer()) { _ = ReconnectFromGate(); return; }
+            var view = (sender as global::Avalonia.LogicalTree.ILogical)?.FindLogicalAncestorOfType<UserControl>(includeSelf: true)?.GetType().Name;
+            if (Services.Vault.VaultOffer.KeepsAccountRoute(view)) { OpenAppSettingsSection("account"); return; }
+            ShowVaultGate(Services.Vault.VaultOffer.FeatureKeyForView(view), 1);
+        }
+
+        /// <summary>WPF App.xaml.cs:505, seeded into TierGate.ReconnectIsTheAnswerProvider: a patron linked server-side
+        /// whose grant on this PC is gone (or dead) and who has no premium now is told to reconnect, not sold a tier.</summary>
+        internal static bool ReconnectIsTheAnswerNow()
+        {
+            var s = CoreSettings.Current;
+            var p = Platform.AccountSeed.Patreon;
+            return PatreonReconnectRule.Decide(
+                hasUnifiedId: !string.IsNullOrEmpty(s.UnifiedId),
+                linkedServerSide: s.HasLinkedPatreon,
+                desktopAuthenticated: p?.IsAuthenticated == true && !p.GrantLooksDead,
+                hasPremiumNow: CoreAccount.HasPremiumAccess,
+                whitelisted: p?.IsWhitelisted == true).Prominent;
+        }
+
+        /// <summary>WPF StartPatreonReconnectFromGate. This head's Account Patreon button is empty, so the repair is
+        /// the unified sign-in (which re-links Patreon). A seam so tests do not open the real dialog.</summary>
+        internal System.Func<System.Threading.Tasks.Task>? ReconnectFromGateOverride;
+        private System.Threading.Tasks.Task ReconnectFromGate() => ReconnectFromGateOverride?.Invoke() ?? OpenUnifiedLoginDialog();
+
+        /// <summary>WPF App.xaml.cs:512 ShowDeniedHandler: the Reconnect toast for a patron whose grant died here,
+        /// otherwise the refusal with "See tiers" opening the vault card at the tier this door needs.</summary>
+        internal void ShowTierDenied(TierVerdict verdict, Helpers.NotificationService toasts)
+        {
+            if (TierGate.ReconnectIsTheAnswer())
+                toasts.Show(Loc.Get("tiergate_denied_reconnect"), Helpers.NotificationType.Warning, System.TimeSpan.FromSeconds(10),
+                    Loc.Get("tiergate_reconnect_action"), () => { if (!LockdownActive) _ = ReconnectFromGate(); });
+            else
+                toasts.Show(verdict.Reason, Helpers.NotificationType.Warning, System.TimeSpan.FromSeconds(8),
+                    Loc.Get("tiergate_see_tiers"), () => ShowVaultGate(null, verdict.Required >= Models.PatreonTier.Level2 ? 2 : 1));
+        }
+
+        /// <summary>WPF ShowVaultGate. Null feature = the tier as a whole (the TierGate toast's "See tiers").</summary>
+        internal void ShowVaultGate(string? featureKey, int tier)
+        {
+            if (LockdownActive) return;   // P05: the toast's "See tiers" is a door too
+            try { Dialogs.VaultGateDialog.ShowOffer(this, featureKey, tier, () => OpenAppSettingsSection("account")); }
+            catch (System.Exception ex)
+            {
+                Serilog.Log.Warning(ex, "[VaultGate] card failed; falling back to Account");
+                OpenAppSettingsSection("account");
+            }
+        }
+
+        /// <summary>WPF MainWindow.xaml.cs:3590 + Patreon.cs:1209: the invite week's last-day card, at launch and on focus.</summary>
+        private void InitializeInviteEnding()
+        {
+            Opened += (_, _) => MaybeShowInviteEnding();
+            Activated += (_, _) => MaybeShowInviteEnding();
+        }
+
+        private string? _inviteEndingPosted;
+
+        /// <summary>WPF MaybeShowInviteEnding: once per week, through the presenter (an Inbox row when quiet).</summary>
+        internal void MaybeShowInviteEnding()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                var key = Services.Vault.VaultOffer.InviteEndingOwed(s.InviteGrantUntil, System.DateTime.UtcNow,
+                    ProviderSubscription.IsInviteWeekOnly(Platform.AccountSeed.Patreon, Platform.AccountSeed.SubscribeStar, s), s.SeenFeatureIntros);
+                if (key == null || _inviteEndingPosted == key) return;
+                _inviteEndingPosted = key;
+                var until = s.InviteGrantUntil!.Value;
+                Platform.StartupLadder.PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:" + key,
+                    Glyph = "⏳",
+                    Title = Loc.Get("vaultgate_ending_inbox"),
+                    Summary = Loc.GetF("vaultgate_ending_until", until.ToLocalTime().ToString("ddd d MMM, HH:mm")),
+                    Open = () => { MarkIntroSeen(key); Dialogs.VaultGateDialog.ShowEnding(this, until, () => OpenAppSettingsSection("account")); },
+                    Dismiss = () => MarkIntroSeen(key),
+                });
+            }
+            catch (System.Exception ex) { Serilog.Log.Warning(ex, "[VaultGate] invite-ending check failed"); }
+        }
+
+        private static void MarkIntroSeen(string key)
+        {
+            var s = CoreSettings.Current;
+            if (s.SeenFeatureIntros.Contains(key)) return;
+            s.SeenFeatureIntros.Add(key);
+            CoreSettings.Save();
+        }
 
     }
 }

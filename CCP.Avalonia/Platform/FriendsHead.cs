@@ -27,6 +27,14 @@ internal static class FriendsHead
         LoopbackUrl.IsHonoured(overrideUrl, out var u) ? u.ToString().TrimEnd('/')
         : string.IsNullOrEmpty(userDataDir) ? "https://codebambi-proxy.vercel.app" : null;
 
+    /// <summary>The invites wire rides the same proxy and door; a sandbox without a loopback url gets none.</summary>
+    internal static void SeedInvites(string? userDataDir, string? overrideUrl)
+    {
+        var url = BaseUrl(userDataDir, overrideUrl);
+        Services.Invites.InviteApi.DefaultIdentity = Identity;
+        Services.Invites.InviteApi.DefaultBaseUrl = () => url;
+    }
+
     internal static FriendsService? Create(string? userDataDir, string? overrideUrl)
     {
         if (BaseUrl(userDataDir, overrideUrl) is not { } url) return null;
