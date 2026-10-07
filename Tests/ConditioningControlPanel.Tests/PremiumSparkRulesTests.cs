@@ -41,22 +41,24 @@ public class PremiumSparkRulesTests
         Assert.Equal(0.40, PremiumSparkRules.Opacity(SparkTier.Free), 3);
         Assert.False(PremiumSparkRules.Sheen(SparkTier.Free, motion));
         Assert.False(PremiumSparkRules.Breath(SparkTier.Free, motion));
-        Assert.False(PremiumSparkRules.Glints(SparkTier.Free, motion));
+        Assert.Equal(0, PremiumSparkRules.AmbientCap(SparkTier.Free, motion, true));
+        Assert.False(PremiumSparkRules.Clock(SparkTier.Free, motion));
         Assert.False(PremiumSparkRules.Halo(SparkTier.Free));
-        Assert.False(PremiumSparkRules.Motes(SparkTier.Free, motion, true));
         Assert.False(PremiumSparkRules.Wobble(SparkTier.Free, motion));
         Assert.Equal(0, PremiumSparkRules.BurstCount(SparkTier.Free, motion));
     }
 
     [Fact]
-    public void BasicShimmersBreathesAndGlintsAtFull()
+    public void BasicShimmersBreathesAndSpillsGlitterAtFull()
     {
         Assert.Equal(1.0, PremiumSparkRules.Opacity(SparkTier.Basic));
         Assert.True(PremiumSparkRules.Sheen(SparkTier.Basic, SparkMotion.Full));
         Assert.True(PremiumSparkRules.Breath(SparkTier.Basic, SparkMotion.Full));
-        Assert.True(PremiumSparkRules.Glints(SparkTier.Basic, SparkMotion.Full));
+        Assert.True(PremiumSparkRules.Orbits(SparkTier.Basic, SparkMotion.Full));
+        Assert.False(PremiumSparkRules.Flares(SparkTier.Basic, SparkMotion.Full));
         Assert.False(PremiumSparkRules.Halo(SparkTier.Basic));
-        Assert.False(PremiumSparkRules.Motes(SparkTier.Basic, SparkMotion.Full, true));
+        // Round 2 (owner: "there aren't enough particles"): a steady trickle, 18-24 alive.
+        Assert.InRange(PremiumSparkRules.AmbientCap(SparkTier.Basic, SparkMotion.Full, true), 18, 24);
         Assert.True(PremiumSparkRules.BurstCount(SparkTier.Basic, SparkMotion.Full) > 0);
     }
 
@@ -66,8 +68,12 @@ public class PremiumSparkRulesTests
         Assert.True(PremiumSparkRules.Sheen(SparkTier.Prime, SparkMotion.Full));
         Assert.True(PremiumSparkRules.Halo(SparkTier.Prime));
         Assert.True(PremiumSparkRules.HaloPulse(SparkTier.Prime, SparkMotion.Full));
-        Assert.True(PremiumSparkRules.Motes(SparkTier.Prime, SparkMotion.Full, particlesAllowed: true));
-        Assert.False(PremiumSparkRules.Motes(SparkTier.Prime, SparkMotion.Full, particlesAllowed: false));
+        Assert.True(PremiumSparkRules.Flares(SparkTier.Prime, SparkMotion.Full));
+        Assert.InRange(PremiumSparkRules.AmbientCap(SparkTier.Prime, SparkMotion.Full, particlesAllowed: true), 18, 24);
+        Assert.True(PremiumSparkRules.AmbientCap(SparkTier.Prime, SparkMotion.Full, true)
+                    > PremiumSparkRules.AmbientCap(SparkTier.Basic, SparkMotion.Full, true));
+        // A performance tier with no particle budget keeps only the few.
+        Assert.Equal(PremiumSparkRules.FewCap, PremiumSparkRules.AmbientCap(SparkTier.Prime, SparkMotion.Full, particlesAllowed: false));
         Assert.True(PremiumSparkRules.BurstCount(SparkTier.Prime, SparkMotion.Full)
                     > PremiumSparkRules.BurstCount(SparkTier.Basic, SparkMotion.Full));
     }
@@ -75,16 +81,19 @@ public class PremiumSparkRulesTests
     [Theory]
     [InlineData(SparkTier.Basic)]
     [InlineData(SparkTier.Prime)]
-    public void ReducedKeepsOnlyASlowerSheen(SparkTier tier)
+    public void ReducedKeepsASlowerSheenAndAFewParticles(SparkTier tier)
     {
         Assert.True(PremiumSparkRules.Sheen(tier, SparkMotion.Reduced));
         Assert.True(PremiumSparkRules.SheenCycleSec(tier, SparkMotion.Reduced)
                     > PremiumSparkRules.SheenCycleSec(tier, SparkMotion.Full));
         Assert.True(PremiumSparkRules.SheenPassFor(SparkMotion.Reduced) > PremiumSparkRules.SheenPassFor(SparkMotion.Full));
         Assert.False(PremiumSparkRules.Breath(tier, SparkMotion.Reduced));
-        Assert.False(PremiumSparkRules.Glints(tier, SparkMotion.Reduced));
         Assert.False(PremiumSparkRules.HaloPulse(tier, SparkMotion.Reduced));
-        Assert.False(PremiumSparkRules.Motes(tier, SparkMotion.Reduced, true));
+        Assert.False(PremiumSparkRules.Orbits(tier, SparkMotion.Reduced));
+        Assert.False(PremiumSparkRules.Flares(tier, SparkMotion.Reduced));
+        Assert.InRange(PremiumSparkRules.AmbientCap(tier, SparkMotion.Reduced, true), 1, 5);
+        Assert.InRange(PremiumSparkRules.AmbientCap(tier, SparkMotion.Reduced, false), 1, 5);
+        Assert.True(PremiumSparkRules.ReducedPace < 1);
     }
 
     [Theory]
@@ -97,6 +106,8 @@ public class PremiumSparkRulesTests
         Assert.False(PremiumSparkRules.Breath(tier, SparkMotion.Off));
         Assert.False(PremiumSparkRules.Wobble(tier, SparkMotion.Off));
         Assert.Equal(0, PremiumSparkRules.BurstCount(tier, SparkMotion.Off));
+        Assert.Equal(0, PremiumSparkRules.AmbientCap(tier, SparkMotion.Off, true));
+        Assert.False(PremiumSparkRules.Clock(tier, SparkMotion.Off));
         // Prime keeps its (still) halo: the cyan reads even with motion off.
         Assert.Equal(tier == SparkTier.Prime, PremiumSparkRules.Halo(tier));
     }
@@ -134,9 +145,61 @@ public class PremiumSparkRulesTests
         var rng = new Random(7);
         for (int i = 0; i < 200; i++)
         {
-            var v = PremiumSparkRules.Between(rng, PremiumSparkRules.GlintMinSec, PremiumSparkRules.GlintMaxSec);
-            Assert.InRange(v, PremiumSparkRules.GlintMinSec, PremiumSparkRules.GlintMaxSec);
+            var v = PremiumSparkRules.Between(rng, PremiumSparkRules.FlareGapMin, PremiumSparkRules.FlareGapMax);
+            Assert.InRange(v, PremiumSparkRules.FlareGapMin, PremiumSparkRules.FlareGapMax);
         }
+    }
+
+    // ---- the star: slim, folded, lit from the top-left lamp -------------------------------
+
+    [Fact]
+    public void TheArmsAreSlim()
+    {
+        // The waist of each flank (its midpoint) sits close to the heart: slim concave arms.
+        foreach (var flank in PremiumSparkRules.Flanks)
+        {
+            var mid = PremiumSparkRules.Split(flank, 0.5).a.Item4;
+            var d = Math.Sqrt(Math.Pow(mid.X - 15, 2) + Math.Pow(mid.Y - 15, 2));
+            Assert.InRange(d, 3.5, 5.5);
+        }
+        // Long vertical points, shorter horizontal ones, all inside the StarSize box.
+        Assert.Equal(0, PremiumSparkRules.Flanks[0].p0.Y);
+        Assert.Equal(30, PremiumSparkRules.Flanks[2].p0.Y);
+        Assert.True(PremiumSparkRules.Flanks[1].p0.X - 15 < 15);
+    }
+
+    [Fact]
+    public void TheFoldsAreLitFromTheTopLeft()
+    {
+        double Shade(int flank, bool firstHalf)
+        {
+            var f = PremiumSparkRules.Flanks[flank];
+            var (a, b) = PremiumSparkRules.Split(f, 0.5);
+            return firstHalf ? PremiumSparkRules.FacetShade(f.p0, a.Item4) : PremiumSparkRules.FacetShade(a.Item4, f.p3);
+        }
+        // Flank 3 runs left tip -> top tip: its second half is the top arm's left face, the lit one.
+        var lit = Shade(3, firstHalf: false);
+        // Flank 1 runs right tip -> bottom tip: its second half is the bottom arm's right face.
+        var dark = Shade(1, firstHalf: false);
+        Assert.True(lit > 0.2, $"lit face {lit}");
+        Assert.True(dark < -0.2, $"dark face {dark}");
+        // Each arm reads folded: its two faces differ.
+        Assert.True(Math.Abs(Shade(0, true) - Shade(3, false)) > 0.2);
+    }
+
+    [Fact]
+    public void TheClockValuesStayInRange()
+    {
+        for (double t = 0; t < 12; t += 0.07)
+        {
+            Assert.InRange(PremiumSparkRules.SheenAt(t, SparkTier.Prime, SparkMotion.Full), -20, 42);
+            Assert.InRange(PremiumSparkRules.BreathAt(t, SparkTier.Basic, SparkMotion.Full), 1.0, PremiumSparkRules.BreathScale);
+            Assert.InRange(PremiumSparkRules.HaloAt(t, SparkTier.Prime, SparkMotion.Full, 1.0), PremiumSparkRules.HaloLow, 1.0);
+        }
+        Assert.Equal(-20, PremiumSparkRules.SheenAt(3, SparkTier.Free, SparkMotion.Full));
+        Assert.Equal(1.0, PremiumSparkRules.BreathAt(3, SparkTier.Basic, SparkMotion.Reduced));
+        Assert.Equal(PremiumSparkRules.HaloStill, PremiumSparkRules.HaloAt(3, SparkTier.Prime, SparkMotion.Off, 1));
+        Assert.Equal(0, PremiumSparkRules.HaloAt(3, SparkTier.Basic, SparkMotion.Full, 1));
     }
 
     // ---- source pins: where it sits and that it never grows the header ---------------------
@@ -166,6 +229,9 @@ public class PremiumSparkRulesTests
         Assert.DoesNotContain("Effect>", xaml);
         Assert.DoesNotContain("DropShadowEffect", cs);
         Assert.DoesNotContain("BlurEffect", cs);
+        Assert.DoesNotContain(".Effect =", cs);
+        // The particle overlay never takes clicks.
+        Assert.Contains("x:Name=\"FxLayer\" IsHitTestVisible=\"False\"", xaml);
     }
 
     [Fact]

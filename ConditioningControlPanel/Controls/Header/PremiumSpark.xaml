@@ -32,7 +32,9 @@
                 </TransformGroup>
             </Canvas.RenderTransform>
         </Canvas>
-        <!-- Glints, motes and click bursts. Unclipped and never hit-testable. -->
+        <!-- The particle overlay: a fixed pool of small shapes the 30 fps clock fills from
+             PremiumSparkField (glitter, orbits, glints, diamonds, flares, click bursts). It takes
+             no layout space, is never clipped (motes spill past the card) and never hit-tests. -->
         <Canvas x:Name="FxLayer" IsHitTestVisible="False" ClipToBounds="False"/>
     </Grid>
 </Button>
