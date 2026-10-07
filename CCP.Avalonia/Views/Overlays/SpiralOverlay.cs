@@ -1,0 +1,245 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Avalonia.Views.Features;   // ScreenList
+using ConditioningControlPanel.Services;                  // SpiralFrames
+using Serilog;
+using SkiaSharp;
+
+namespace ConditioningControlPanel.Avalonia.Views.Overlays
+{
+    /// <summary>
+    /// The Spiral overlay: one click-through, topmost <see cref="SpiralOverlayWindow"/> per targeted
+    /// monitor, all showing the same pre-decoded GIF frames. The Avalonia counterpart of
+    /// <c>OverlayService</c>'s spiral region (ConditioningControlPanel/Services/Notifications/OverlayService.cs:
+    /// StartSpiral, CreateSpiralGifWindow, GifFrameTimer_Tick, StopSpiral), shaped like
+    /// <see cref="PinkFilterOverlay"/> (static, idempotent <see cref="Refresh"/>) and opening its windows
+    /// the way <see cref="SubliminalOverlay"/> does (click-through + override-redirect before Show).
+    ///
+    /// <para>Frames decode once per path off the UI thread (WPF's compositor path; the legacy path
+    /// hitched ~1s) through the shared <see cref="SpiralFrames.Plan"/> budget, and are cached across
+    /// stop/start. A frame tick only swaps <c>Image.Source</c> on each window: no decode, no bitmap
+    /// allocation. The timer exists only while windows are up, so nothing ticks while stopped.</para>
+    /// </summary>
+    internal static class SpiralOverlay
+    {
+        /// <summary>Headless tests have no X11 window to make click-through; this lets them drive the
+        /// real show/animate/close path. Never set outside tests.</summary>
+        internal static bool SkipPlatformChecksForTests;
+
+        private static readonly List<SpiralOverlayWindow> Windows = new();
+        private static int[] _shownOn = Array.Empty<int>();
+        private static List<Bitmap> _frames = new();
+        private static string _framesKey = "";
+        private static TimeSpan _delay = TimeSpan.FromMilliseconds(50);
+        private static DispatcherTimer? _timer;
+        private static int _index;
+        private static bool _refused;
+
+        /// <summary>The off-thread decode in flight, if any (tests await it).</summary>
+        internal static Task? Decoding { get; private set; }
+
+        internal static bool IsShowing => Windows.Count > 0;
+        internal static bool IsAnimating => _timer is { IsEnabled: true };
+        internal static int FrameIndex => _index;
+        internal static TimeSpan FrameDelay => _delay;
+        internal static IReadOnlyList<SpiralOverlayWindow> Shown => Windows;
+
+        /// <summary>WPF GetSpiralPath: the configured file if it exists, else the active mod's spiral,
+        /// else the shipped one. ponytail: SpiralRandomize needs WPF's personal-folder refusal
+        /// (SecurityHelper.IsPersonalFolderRoot, #1053), still head-only, so it is not honoured here
+        /// rather than honoured unsafely; video spirals (.mp4 etc., WPF MediaElement) decode to no
+        /// frames and show nothing.</summary>
+        internal static string SourcePath()
+        {
+            var p = CoreSettings.Current.SpiralPath;
+            if (!string.IsNullOrEmpty(p) && File.Exists(p)) return p;
+            return CoreModArt.SpiralOverridePath() ?? Path.Combine(AppContext.BaseDirectory, "Resources", "spiral.gif");
+        }
+
+        /// <summary>The painted alpha: the slider through WPF's #722 curve.</summary>
+        internal static double PaintedOpacity => SpiralFrames.Paint(CoreSettings.Current.SpiralOpacity / 100.0);
+
+        /// <summary>WPF RefreshOverlays' spiral half: show, hide, move or repaint to match the settings.</summary>
+        public static void Refresh(Visual host)
+        {
+            var s = CoreSettings.Current;
+            if (!s.SpiralEnabled || !ShouldShow()) { CloseAll(); return; }
+
+            var path = SourcePath();
+            if (_framesKey != path)
+            {
+                CloseAll();
+                BeginDecode(TopLevel.GetTopLevel(host) ?? host, path);
+                return;
+            }
+            if (_frames.Count == 0) { CloseAll(); return; }   // undecodable: logged once by the decode
+
+            var screens = ScreenList.Enumerate(host);
+            var primary = -1;
+            for (var i = 0; i < screens.Count; i++) if (screens[i].IsPrimary) { primary = i; break; }
+            var want = PinkFilterOverlay.ResolveScreenIndices(s.SpiralTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
+            var opacity = PaintedOpacity;
+
+            if (Windows.Count > 0 && want.SequenceEqual(_shownOn))
+            {
+                foreach (var w in Windows) w.Spiral.Opacity = opacity;   // WPF UpdateSpiralOpacity
+                return;
+            }
+
+            CloseAll();
+            // No compositor = no per-pixel alpha: the spiral would be an opaque screen-sized block.
+            if (!SkipPlatformChecksForTests && (_refused || !X11Overlay.IsAvailable || !X11Overlay.IsCompositing))
+            {
+                Log.Debug("Spiral: no composited click-through overlay on this platform, so no spiral");
+                return;
+            }
+
+            foreach (var i in want)
+            {
+                var w = new SpiralOverlayWindow();
+                w.Spiral.Source = _frames[_index % _frames.Count];
+                w.Spiral.Opacity = opacity;
+                // Click-through and override-redirect (with the geometry) before Show, the order
+                // FlashOverlay/SubliminalOverlay use: a stale WM replay cannot mis-size it, and a
+                // topmost screen-sized window that ate clicks would lock the desktop.
+                if (!X11Overlay.SetClickThrough(w, true) | !X11Overlay.SetOverrideRedirect(w, screens[i].Bounds)
+                    && !SkipPlatformChecksForTests)
+                {
+                    Log.Warning("Spiral: the platform refused a click-through topmost overlay window, so the spiral is not shown");
+                    _refused = true;
+                    w.Close();
+                    CloseAll();
+                    return;
+                }
+                w.Show();
+                Windows.Add(w);
+            }
+            _shownOn = want;
+            if (_frames.Count > 1 && Windows.Count > 0)
+            {
+                _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = _delay };
+                _timer.Tick += (_, _) => Tick();
+                _timer.Start();
+            }
+            Log.Debug("Spiral showing on {Count} screen(s) at {Opacity}%", Windows.Count, s.SpiralOpacity);
+        }
+
+        /// <summary>WPF GifFrameTimer_Tick: next frame on every window. Allocation-free.</summary>
+        internal static void Tick()
+        {
+            if (_frames.Count == 0 || Windows.Count == 0) return;
+            _index = (_index + 1) % _frames.Count;
+            var frame = _frames[_index];
+            for (var i = 0; i < Windows.Count; i++) Windows[i].Spiral.Source = frame;
+        }
+
+        /// <summary>WPF StopSpiral: the windows and the clock go; the decoded frames stay cached.</summary>
+        public static void CloseAll()
+        {
+            _timer?.Stop();
+            _timer = null;
+            foreach (var w in Windows)
+            {
+                try { w.Close(); }
+                catch (Exception ex) { Log.Debug("Spiral: failed to close a window: {E}", ex.Message); }
+            }
+            Windows.Clear();
+            _shownOn = Array.Empty<int>();
+        }
+
+        /// <summary>Same gate as the pink tint (WPF RefreshOverlays returns early unless the engine runs):
+        /// a running engine or session, not paused. Unseeded (renders, tests) means the card owns it.</summary>
+        private static bool ShouldShow()
+            => App.Sessions?.IsPaused != true
+               && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true);
+
+        private static void BeginDecode(Visual host, string path)
+        {
+            if (Decoding is { IsCompleted: false }) return;   // the landing Refresh picks up any newer path
+            Decoding = DecodeThenRefresh(host, path);
+        }
+
+        private static async Task DecodeThenRefresh(Visual host, string path)
+        {
+            var (frames, delay) = await Task.Run(() => Decode(path));
+            if (frames.Count == 0) Log.Warning("Spiral: no frames decoded from {Path}; spiral not shown", path);
+            foreach (var old in _frames) old.Dispose();
+            (_frames, _framesKey, _delay, _index) = (frames, path, delay, 0);
+            Refresh(host);   // the user may have stopped the engine or unticked it mid-decode
+        }
+
+        /// <summary>WPF DecodeGifFrames on SkiaSharp: every frame composited in order (so partial GIF
+        /// frames are correct), the kept ones scaled to the <see cref="SpiralFrames.Plan"/> size.</summary>
+        internal static (List<Bitmap> Frames, TimeSpan Delay) Decode(string path)
+        {
+            var frames = new List<Bitmap>();
+            try
+            {
+                using var codec = SKCodec.Create(path);
+                if (codec is null) return (frames, TimeSpan.FromMilliseconds(50));
+                var count = Math.Max(1, codec.FrameCount);
+                var plan = SpiralFrames.Plan(codec.Info.Width, codec.Info.Height, count,
+                    codec.FrameCount > 0 ? codec.FrameInfo[0].Duration : 50);
+                var full = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                using var canvas = new SKBitmap(full);
+                using var scaled = new SKBitmap(new SKImageInfo(plan.Width, plan.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+                for (var i = 0; i < count && frames.Count < plan.Frames; i++)
+                {
+                    var r = codec.GetPixels(full, canvas.GetPixels(), new SKCodecOptions(i, i - 1));
+                    if (r != SKCodecResult.Success && r != SKCodecResult.IncompleteInput) break;
+                    if (i % plan.Step != 0) continue;
+                    canvas.ScalePixels(scaled, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
+                    frames.Add(new Bitmap(PixelFormat.Bgra8888, AlphaFormat.Premul, scaled.GetPixels(),
+                        new PixelSize(plan.Width, plan.Height), new Vector(96, 96), scaled.RowBytes));
+                }
+                Log.Information("Spiral: decoded {Count} frames ({W}x{H}) from {Path}", frames.Count, plan.Width, plan.Height, path);
+                return (frames, TimeSpan.FromMilliseconds(plan.DelayMs));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("Spiral: failed to decode {Path}: {E}", path, ex.Message);
+                return (frames, TimeSpan.FromMilliseconds(50));
+            }
+        }
+    }
+
+    /// <summary>One screen of spiral: WPF CreateSpiralGifWindow's borderless, transparent, topmost,
+    /// no-taskbar, no-activate window holding a centred UniformToFill Image in a clipping Grid. The
+    /// Win32 style mapping is <see cref="TintOverlayWindow"/>'s.</summary>
+    internal sealed class SpiralOverlayWindow : Window
+    {
+        internal readonly Image Spiral = new()
+        {
+            Stretch = Stretch.UniformToFill,
+            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+        };
+
+        public SpiralOverlayWindow()
+        {
+            SystemDecorations = WindowDecorations.None;
+            TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
+            Background = Brushes.Transparent;
+            Topmost = true;
+            ShowInTaskbar = false;
+            ShowActivated = false;
+            CanResize = false;
+            Focusable = false;
+            IsHitTestVisible = false;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Width = 640;
+            Height = 400;
+            Content = new Panel { ClipToBounds = true, Children = { Spiral } };
+        }
+    }
+}

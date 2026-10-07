@@ -157,9 +157,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (s.SpiralEnabled == want) return;   // an echo of the seed must not save
             s.SpiralEnabled = want;
             CoreSettings.Save();
-            // ponytail: WPF then calls App.Overlay.RefreshOverlays()
-            // (ConditioningControlPanel/Services/Notifications/OverlayService.cs), still in the WPF
-            // head - the spiral overlays are Win32 layered windows with no port yet.
+            Overlays.SpiralOverlay.Refresh(this);   // WPF App.Overlay.RefreshOverlays()
         }
 
         /// <summary>Takes effect on the next spiral overlay/session start, never mid-run: the
@@ -197,7 +195,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             TxtOpacity.Text = $"{value}%";
             CoreSettings.Current.SpiralOpacity = value;
             CoreSettings.Save();
-            // ponytail: WPF then calls App.Overlay.RefreshOverlays() - see ChkEnable_Changed.
+            Overlays.SpiralOverlay.Refresh(this);   // WPF App.Overlay.RefreshOverlays()
         }
 
         // ── Display monitor picker (#639) ─────────────────────────────────
@@ -248,7 +246,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
             s.SpiralTargetMonitor = target;
             CoreSettings.Save();
-            // ponytail: WPF then calls App.Overlay.RefreshOverlays() - see ChkEnable_Changed.
+            Overlays.SpiralOverlay.Refresh(this);   // WPF App.Overlay.RefreshOverlays()
         }
 
         // ── Spiral library ────────────────────────────────────────────────
@@ -271,10 +269,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // Built-in spiral (active when SpiralPath is empty / missing). The MOD half of WPF's
             // ResolveSpiralUri() is portable and lives in CoreModArt; a null falls through to the
             // glyph, which is exactly the "no mod override" answer.
-            // ponytail: the OTHER half - the head's own shipped spiral - has no thumbnail here:
-            // Assets/spiral.gif is not <AvaloniaResource Include= Link=>-linked in
-            // CCP.Avalonia/CCP.Avalonia.csproj, so there is no avares:// URI to decode yet.
-            SpiralLibraryPanel.Children.Add(BuildSpiralCard("", "Default", CoreModArt.SpiralOverridePath()));
+            // The other half is the shipped Resources/spiral.gif, linked as content like WPF's resource.
+            var builtIn = CoreModArt.SpiralOverridePath() ?? Path.Combine(AppContext.BaseDirectory, "Resources", "spiral.gif");
+            SpiralLibraryPanel.Children.Add(BuildSpiralCard("", "Default", File.Exists(builtIn) ? builtIn : null));
 
             int fileCount = 0;
             try
@@ -400,7 +397,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Save();
 
             UpdateSelectionHighlight();
-            // ponytail: WPF then calls App.Overlay.RefreshOverlays() - see ChkEnable_Changed.
+            Overlays.SpiralOverlay.Refresh(this);   // WPF App.Overlay.RefreshOverlays()
         }
 
         private void UpdateSelectionHighlight()
@@ -500,7 +497,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 // Reflect the new choice in the gallery (highlights it if it lives in the Spirals
                 // folder, otherwise just clears the Default highlight).
                 RefreshLibrary();
-                // ponytail: WPF then calls App.Overlay.RefreshOverlays() - see ChkEnable_Changed.
+                Overlays.SpiralOverlay.Refresh(this);   // WPF App.Overlay.RefreshOverlays()
             }
             catch (Exception ex)
             {

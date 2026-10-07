@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (gen != _engineGen || CoreEngine.IsRunning) return;
                 CoreEngine.Start();
                 PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Start()
+                SpiralOverlay.Refresh(this);
                 UpdateStartButton();
             });
         }
