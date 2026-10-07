@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Overlays;
 using Xunit;
@@ -20,6 +21,7 @@ public sealed class SubliminalWhisperShowTests
         var (en, mu, d, lvl) = (s.SubAudioEnabled, s.SubAudioMuted, s.AudioDuckingEnabled, s.DuckingLevel);
         var (draw, after, rollFn) = (SubliminalWhisperShow.Draw, SubliminalWhisperShow.After, SubliminalWhisperShow.Roll);
         var (play, duck, unduck) = (CoreAudio.PlayOneShotProvider, CoreAudio.DuckProvider, CoreAudio.UnduckProvider);
+        var stoppable = CoreAudio.PlayStoppableProvider;
         var freeze = CoreSubliminal.BambiFreezeProvider;
         CoreSubliminal.BambiFreezeProvider = SubliminalWhisperShow.Freeze;   // as App.axaml.cs seeds it
         var run = new Run(new(), new());
@@ -37,6 +39,7 @@ public sealed class SubliminalWhisperShowTests
             (SubliminalWhisperShow.Draw, SubliminalWhisperShow.After, SubliminalWhisperShow.Roll) = (draw, after, rollFn);
             (CoreAudio.PlayOneShotProvider, CoreAudio.DuckProvider, CoreAudio.UnduckProvider) = (play, duck, unduck);
             CoreSubliminal.BambiFreezeProvider = freeze;
+            CoreAudio.PlayStoppableProvider = stoppable;
         }
     }
 
@@ -106,4 +109,31 @@ public sealed class SubliminalWhisperShowTests
             Assert.Empty(run.Timers);                                           // the 10% skip
         });
     }
+
+    /// <summary>WPF PlayWhisperAudio's StopAudio + TearDownSurfaces: a new whisper cuts the previous one,
+    /// and the tray's Stop everything silences the playing one and drops the card and Reset behind it.</summary>
+    [Fact]
+    public async Task New_whisper_cuts_the_last_and_stop_everything_silences_it() => await CCP.Avalonia.Testing.AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        With(audible: true, roll: 0.5, run =>
+        {
+            CoreAudio.PlayStoppableProvider = (p, v, tag, _, done) =>
+            {
+                var name = Path.GetFileName(p);
+                run.Log.Add("play " + name);
+                return () => { run.Log.Add("stop " + name); done?.Invoke(); };
+            };
+            CoreSubliminal.TriggerBambiFreeze();
+            SubliminalWhisperShow.Phrase("reset");
+            Assert.Equal(new[] { "duck 70", "play freeze.mp3", "duck 70", "stop freeze.mp3", "play reset.mp3" }, run.Log);
+
+            run.Log.Clear();
+            ConditioningControlPanel.Avalonia.App.StopDesktopOverlays(final: false);   // tray: Stop everything
+            Assert.Equal(new[] { "stop reset.mp3" }, run.Log);
+            foreach (var t in run.Timers.ToArray()) t.Then();                     // every pending delay elapses
+            foreach (var t in run.Timers.ToArray()) t.Then();
+            Assert.DoesNotContain(run.Log, l => l.StartsWith("card") || l.StartsWith("play"));
+        });
+        return Task.CompletedTask;
+    });
 }

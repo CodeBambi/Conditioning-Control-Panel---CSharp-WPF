@@ -363,7 +363,9 @@ namespace ConditioningControlPanel.Avalonia
                 CoreSubliminal.BambiFreezeProvider = Views.Overlays.SubliminalWhisperShow.Freeze;
                 CoreSubliminal.RunStateChanged = running =>
                 {
-                    if (!running) global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Overlays.SubliminalOverlay.CloseAll);
+                    if (running) return;
+                    Views.Overlays.SubliminalWhisperShow.StopAll();
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Overlays.SubliminalOverlay.CloseAll);
                 };
                 CoreBouncingText.StartAction = () =>
                 {
@@ -758,6 +760,7 @@ namespace ConditioningControlPanel.Avalonia
             CoreFlash.Stop();
             CoreSubliminal.Stop();
             Views.Overlays.FlashOverlay.CloseAll(final);
+            Views.Overlays.SubliminalWhisperShow.StopAll();
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
         }
