@@ -1283,3 +1283,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/package-verify: +71
 - Tarball, AUR (host makepkg + bwrap) and GNOME 50 runtime smoke-verified for 7.0.5; stale PKGBUILD version fixed and enforced in smoke-tarball.sh; Flatpak build still blocked.
+
+## avalonia-port/window-memory: +181
+- Shell and views release their handlers on close/unload so MainShellWindow instances are collectable (user fix; ShellMemoryTests).

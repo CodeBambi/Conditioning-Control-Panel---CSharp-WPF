@@ -345,6 +345,12 @@ namespace ConditioningControlPanel.Services
 
         public void SetOpener(Func<string, bool> opener) => _opener = opener;
 
+        /// <summary>Release a closed host without clearing a newer host's registration.</summary>
+        public void ClearOpener(Func<string, bool> opener)
+        {
+            if (_opener == opener) _opener = null;
+        }
+
         // ---- Filename helpers -------------------------------------------------
 
         private static readonly Regex InvalidFsChars = new(@"[<>:""/\\|?*\x00-\x1f]", RegexOptions.Compiled);

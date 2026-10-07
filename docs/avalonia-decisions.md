@@ -526,3 +526,22 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   with WPF's "no escape" tooltip, given back on exit), Takeover Start/Stop button, and the shell's CC Labs button
   (greyed as well as refused, like WPF `MainWindow.Lab.cs:611-612`).
 - Advisor: supervisor.
+
+## 2026-10-07: release closed-shell lifetime roots (fix/avalonia-window-memory)
+- A six-window headless reproduction retained all six after forced GC (595 -> 1733 MiB RSS,
+  managed heap 57 -> 243 MiB). `dotnet-dump gcroot` identified managed lifetime roots retaining
+  visual trees and their native images, not just an independently leaking native allocator.
+- Five never-loaded feature controls subscribed to settings in their constructors; they now
+  subscribe only while loaded and still repaint on every load/rebind. Badge motion likewise
+  waits for loading. Relay and language subscriptions now pair attachment with detachment.
+- Closing the shell stops banner/monitor-settle timers, unsubscribes screen changes, and releases
+  its catalogue/hotkey callbacks without removing a newer window's registration.
+- `ShellMemoryTests` repeatedly opens/closes real shells and requires all weak references to die
+  after draining rendering, dispatcher and finalizer work (no sleeps or RSS thresholds). It
+  failed against the original code. Focused validation plateaus around 17-21 MiB managed heap
+  with no retained test shells. The full suite passes 461 tests, skips 3; Core catalogue tests 7/7.
+- This is not a claim that every allocation in the app is fixed: the full unsharded suite still
+  peaked at 10.3 GiB child RSS. Keep coverage-checked sharding and bounded/serialized local gates.
+- Full local gate validation was blocked by the shared queue; `--nav-check` reports the identical
+  rail-selection failure on this fix and clean base a8304e6d0. WPF runtime validation not run.
+- Local investigation evidence: `~/ccp-port/evidence/memory-fix/`.
