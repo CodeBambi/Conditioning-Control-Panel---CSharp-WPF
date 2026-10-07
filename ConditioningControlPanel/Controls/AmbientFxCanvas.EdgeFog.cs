@@ -76,21 +76,24 @@ namespace ConditioningControlPanel.Controls
         /// twinkling as it lives. Diameter, along speed (px/s), peak alpha, life (s).</summary>
         public const double DustSizeMinPx = 1.2, DustSizeMaxPx = 3.0;
         public const double DustSpeedMinPx = 5, DustSpeedMaxPx = 16;
-        public const double DustAlphaMin = 0.45, DustAlphaMax = 0.95;
+        public const double DustAlphaMin = 0.55, DustAlphaMax = 1.0;
         public const double DustLifeMin = 2.5, DustLifeMax = 6.5;
         /// <summary>Sideways wander across the strip: amplitude (px) and rate (radians per second).</summary>
-        public const double DustWanderPxMin = 2, DustWanderPxMax = 7;
+        public const double DustWanderPxMin = 1.5, DustWanderPxMax = 5;
         public const double DustWanderRateMin = 0.6, DustWanderRateMax = 1.8;
         /// <summary>Twinkle: the alpha swings this share around its envelope, at this rate (rad/s).</summary>
         public const double DustTwinkleShare = 0.45, DustTwinkleRateMin = 2.0, DustTwinkleRateMax = 6.0;
         /// <summary>Depth bias toward the frame: depth = strip x u^power (higher = more by the edge).</summary>
-        public const double DustDepthPower = 1.7;
-        /// <summary>How far the speck colour is lifted toward white, so dust glints over the fog.</summary>
-        public const double DustLift = 0.55;
-        /// <summary>Full dust counts per strip (long side, short side): 2 x 44 + 2 x 28 = 144 specks.</summary>
-        public const int DustLong = 44, DustShort = 28;
+        public const double DustDepthPower = 2.6;
+        /// <summary>The deepest band dust rests in (px from the frame): the owner wants it hugging the edge.</summary>
+        public const double DustDepthSpanPx = 22;
+        /// <summary>Specks wear the rail ring's vivid section colour (NavRailRules.Vivid), lifted only
+        /// this far toward white so they still glint over the fog.</summary>
+        public const double DustLift = 0.12;
+        /// <summary>Full dust counts per strip (long side, short side): 2 x 90 + 2 x 56 = 292 specks.</summary>
+        public const int DustLong = 90, DustShort = 56;
         /// <summary>Seconds between dust spawns while under target.</summary>
-        public const double DustSpawnEverySeconds = 0.08;
+        public const double DustSpawnEverySeconds = 0.04;
 
         /// <summary>Dust alpha: peak x envelope x twinkle x gain, capped at 0.95.</summary>
         public static double DustAlpha(double peak, double age, double life, double twinkle, double gain)
@@ -101,7 +104,7 @@ namespace ConditioningControlPanel.Controls
 
         /// <summary>A speck's resting depth: biased toward the frame, always inside the strip.</summary>
         public static double DustDepth(double u, double wanderPx) =>
-            1 + wanderPx + Math.Pow(Math.Clamp(u, 0, 1), DustDepthPower) * Math.Max(0, StripPx - 2 - 2 * wanderPx - 1);
+            1 + wanderPx + Math.Pow(Math.Clamp(u, 0, 1), DustDepthPower) * Math.Min(DustDepthSpanPx, Math.Max(0, StripPx - 2 - 2 * wanderPx - 1));
 
         /// <summary>Puffs one layer may hold. Zero budget = zero puffs; under 60 the lean share;
         /// Reduced halves it (never below one while anything is allowed).</summary>
@@ -252,11 +255,12 @@ namespace ConditioningControlPanel.Controls
         {
             _fogTint?.Dispose();
             _fogTint = SKColorFilter.CreateBlendMode(_fogNow, SKBlendMode.Modulate);
+            var vivid = NavRail.NavRailRules.Vivid(System.Windows.Media.Color.FromRgb(_fogNow.Red, _fogNow.Green, _fogNow.Blue));
             float k = (float)EdgeFogMath.DustLift;
             var lifted = new SKColor(
-                (byte)(_fogNow.Red + (255 - _fogNow.Red) * k),
-                (byte)(_fogNow.Green + (255 - _fogNow.Green) * k),
-                (byte)(_fogNow.Blue + (255 - _fogNow.Blue) * k));
+                (byte)(vivid.R + (255 - vivid.R) * k),
+                (byte)(vivid.G + (255 - vivid.G) * k),
+                (byte)(vivid.B + (255 - vivid.B) * k));
             _grainTint?.Dispose();
             _grainTint = SKColorFilter.CreateBlendMode(lifted, SKBlendMode.Modulate);
         }

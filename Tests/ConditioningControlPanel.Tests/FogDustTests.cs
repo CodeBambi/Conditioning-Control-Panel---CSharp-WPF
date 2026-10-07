@@ -31,6 +31,14 @@ namespace ConditioningControlPanel.Tests
         }
 
         [Fact]
+        public void Dust_hugs_the_frame()
+        {
+            double deepest = EdgeFogMath.DustDepth(1.0, EdgeFogMath.DustWanderPxMax) + EdgeFogMath.DustWanderPxMax;
+            Assert.True(deepest <= 35, $"deepest speck {deepest} px from the frame");
+            Assert.True(EdgeFogMath.DustDepth(0.5, 3) < 10, "most specks rest near the frame");
+        }
+
+        [Fact]
         public void A_speck_fades_in_and_out_and_stays_under_its_cap()
         {
             Assert.Equal(0, EdgeFogMath.DustAlpha(0.85, 0, 4, 0, 1));
