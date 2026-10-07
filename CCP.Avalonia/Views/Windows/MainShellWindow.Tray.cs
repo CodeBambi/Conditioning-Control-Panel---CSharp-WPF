@@ -88,6 +88,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try { CoreHaptics.Service?.PanicStop(); } catch (System.Exception ex) { Serilog.Log.Warning(ex, "Tray stop: haptics stop failed"); }
             Current?.StopAutonomyForPanic();
             StopEngine();
+            Views.Chaos.ChaosRunHost.ForceShutdown();   // P06: a chaos run stops with everything else
             StopCameraForPanic();   // decision C: the only panic control on Windows, so it closes the camera too
         }
 

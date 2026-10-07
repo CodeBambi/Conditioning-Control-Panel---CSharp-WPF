@@ -77,6 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             bool wasRunning = CoreEngine.IsRunning;
             // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
             Views.Overlays.BlinkTrainerSession.Stop();
+            Views.Chaos.ChaosRunHost.ForceShutdown();   // WPF GameSurfaces "chaos" -> App.Chaos.ForceShutdown
             // WPF RunPanicStopTail: StopEngine while running, StopAdHocEffects otherwise - both are
             // CoreEngine.Stop here (it stops everything either way) and neither unticks a flag.
             // WPF PanicStopEverySurface (MainWindow.xaml.cs:1992): the toys go to zero first, bypassing
