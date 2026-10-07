@@ -24,12 +24,12 @@ namespace ConditioningControlPanel.Controls.Billboard
         /// <summary>Registers every built-in key. Idempotent.</summary>
         public static void Register()
         {
-            BillboardArt.Register(BuiltInArtKeys.Poster, d => new PosterArtView(d as string));
+            BillboardArt.Register(BuiltInArtKeys.Poster, d => HouseScenes.Create(d as string));
             BillboardArt.Register(BuiltInArtKeys.Tables, d => new TablesArtView(Names(d), Count(d)));
             BillboardArt.Register(BuiltInArtKeys.Wheel, d => new WheelArtView(WheelData(d)));
             BillboardArt.Register(BuiltInArtKeys.Spiral, d => new SpiralArtView(d as string));
             BillboardArt.Register(BuiltInArtKeys.Calendar, d => new CalendarArtView(CalendarData(d)));
-            BillboardArt.Register(BuiltInArtKeys.Tip, _ => new TipArtView());
+            BillboardArt.Register(BuiltInArtKeys.Tip, d => TipScenes.Create(d as string));
             BillboardArt.Register(BuiltInArtKeys.Invite, _ => new InviteArtView());
         }
 
