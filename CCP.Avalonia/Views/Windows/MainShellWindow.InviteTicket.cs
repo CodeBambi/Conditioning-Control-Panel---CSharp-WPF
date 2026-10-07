@@ -47,6 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 CoreAccount.UnifiedIdentityChanged -= OnInviteTicketIdentityChanged;
                 _inviteTicketFirst?.Stop(); _inviteTicketRefresh?.Stop(); _inviteTicketWobble?.Stop();
+                InvitePanel.CancelExpiry(); // no end-of-week one-shot outlives the shell
             };
         }
 

@@ -674,7 +674,6 @@ namespace ConditioningControlPanel.Avalonia
                     CoreEngine.Stop();
                     StopDesktopOverlays();
                     Views.Windows.LockCardWindow.ForceCloseAll();
-                    Views.Controls.Invites.InvitePanel.CancelExpiry(); // no end-of-week one-shot outlives the shell
                 };
                 // Boot surface (WPF App.xaml.cs:3403-3419): the launcher, a game or the panel. A boot
                 // into the launcher shows the panel unactivated and off the taskbar only so its Opened

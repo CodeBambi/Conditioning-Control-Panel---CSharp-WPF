@@ -223,4 +223,24 @@ public sealed class InvitePanelTests
         }
         finally { (InviteApi.DefaultIdentity, InviteApi.DefaultBaseUrl) = (oldId, oldUrl); }
     }
+
+    [Fact]
+    public Task ClosingTheShellCancelsTheEndOfWeekTimer() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsurePlatform();
+        var s = CoreSettings.Current;
+        var until = s.InviteGrantUntil;
+        var shell = new MainShellWindow();
+        try
+        {
+            s.InviteGrantUntil = DateTime.UtcNow.AddDays(3);
+            InvitePanel.ArmExpiry();
+            Assert.True(InvitePanel.ExpiryArmed);
+            shell.Show();
+            shell.Close();
+            Assert.False(InvitePanel.ExpiryArmed);
+        }
+        finally { s.InviteGrantUntil = until; InvitePanel.CancelExpiry(); shell.Close(); }
+        return Task.CompletedTask;
+    });
 }
