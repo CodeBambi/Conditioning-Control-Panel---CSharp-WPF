@@ -53,8 +53,46 @@ namespace ConditioningControlPanel
                 if (HudBandWellTop != null) HudBandWellTop.Fill = HudFade(top, new Point(0, 0), new Point(0, 1));
                 if (XPGrooveTop != null) XPGrooveTop.Background = HudFade(top, new Point(0, 0), new Point(0, 1));
                 if (XPGrooveLeft != null) XPGrooveLeft.Background = HudFade(left, new Point(0, 0), new Point(1, 0));
+                PaintBannerDepth(hue);
             }
             catch (Exception ex) { App.Logger?.Debug("PaintDepthHud: {E}", ex.Message); }
+        }
+
+        /// <summary>Polish wave 13: the marquee drum's shade in the section hue. Dark at the top
+        /// (WellTopAlpha, the lamp is above), clear across the middle where the text reads, and a
+        /// weaker turn at the foot (WellLeftAlpha) so the face reads as a cylinder.</summary>
+        internal static LinearGradientBrush BannerDrumBrush(Color hue)
+        {
+            var top = DepthRules.ShadowColor(hue, DepthRules.WellTopAlpha);
+            var foot = DepthRules.ShadowColor(hue, DepthRules.WellLeftAlpha);
+            var b = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+            b.GradientStops.Add(new GradientStop(top, 0));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0, top.R, top.G, top.B), 0.34));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0, foot.R, foot.G, foot.B), 0.70));
+            b.GradientStops.Add(new GradientStop(foot, 1));
+            b.Freeze();
+            return b;
+        }
+
+        private void PaintBannerDepth(Color hue)
+        {
+            if (BannerDrumShade != null) BannerDrumShade.Background = BannerDrumBrush(hue);
+            if (BannerDrumLip != null) BannerDrumLip.Background = LipBrush(DepthRules.ShadowColor(hue, DepthRules.WellLeftAlpha));
+        }
+
+        /// <summary>The well's left band, 10 px wide whatever the banner's width (absolute mapping).</summary>
+        private static LinearGradientBrush LipBrush(Color shadow)
+        {
+            var b = new LinearGradientBrush
+            {
+                StartPoint = new Point(0, 0),
+                EndPoint = new Point(10, 0),
+                MappingMode = BrushMappingMode.Absolute,
+            };
+            b.GradientStops.Add(new GradientStop(shadow, 0));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0, shadow.R, shadow.G, shadow.B), 1));
+            b.Freeze();
+            return b;
         }
 
         // ============================== the tube's bead (polish wave 11) ==============================
