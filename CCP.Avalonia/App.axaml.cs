@@ -563,6 +563,12 @@ namespace ConditioningControlPanel.Avalonia
                 Achievements.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
+                // WPF App.xaml.cs: the invite ladder's badges and the invites wire (friends' proxy and
+                // door; a sandbox reaches only a loopback CCP_FRIENDS_API_URL, else nothing is sent).
+                Services.Invites.InviteRewards.UnlockedProvider = () => Achievements?.Progress?.UnlockedAchievements;
+                Services.Invites.InviteRewards.TryUnlockProvider = id => Achievements?.TryUnlock(id) == true;
+                Platform.FriendsHead.SeedInvites(
+                    Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 CoreProgression.TrackBubbleCountGameStartedProvider = () => Achievements?.TrackBubbleCountGameStarted();
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
@@ -663,6 +669,7 @@ namespace ConditioningControlPanel.Avalonia
                 });
                 if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
+                Views.Controls.Invites.InvitePanel.ArmExpiry(); // WPF MainWindow.Patreon.cs: a running invite week's end repaints
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
                 // WPF RequestExit (MainWindow.Launcher.cs:126) stops the engine first: the lock-card
