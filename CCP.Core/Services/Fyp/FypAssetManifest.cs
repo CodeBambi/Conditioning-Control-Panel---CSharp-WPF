@@ -18,6 +18,9 @@ namespace ConditioningControlPanel.Services.Fyp;
 /// </summary>
 internal static class FypAssetManifest
 {
+    /// <summary>Head seam: video duration in seconds (WPF App.Video.MetadataCache).</summary>
+    internal static Func<string, double?>? DurationProvider;
+
     private static readonly string[] VideoExts = { ".mp4", ".webm", ".m4v" };
     private const long MaxGifBytes = 50L * 1024 * 1024;      // mirrors DtrhAssetManifest caps
     private const long MaxVideoBytes = 500L * 1024 * 1024;
@@ -61,7 +64,7 @@ internal static class FypAssetManifest
         {
             var root = CorePaths.EffectiveAssets;
             var disabled = new HashSet<string>(
-                (App.Settings?.Current?.DisabledAssetPaths ?? new()).Select(p => p.Replace('\\', '/')),
+                (CoreSettings.Current.DisabledAssetPaths ?? new()).Select(p => p.Replace('\\', '/')),
                 StringComparer.OrdinalIgnoreCase);
 
             Collect(Path.Combine(root, "videos"), root, isVideo: true, entries, disabled);
@@ -72,7 +75,7 @@ internal static class FypAssetManifest
             // Logged so a "my feed is missing clips" report explains itself.
             int failedOut = entries.RemoveAll(e => (meta.Get(e.Id)?.FailStrikes ?? 0) >= FypMetaStore.FailStrikeLimit);
             if (failedOut > 0)
-                App.Logger?.Information(
+                Serilog.Log.Information(
                     "FypAssetManifest: excluded {N} asset(s) that repeatedly failed to load/decode (fyp_meta.json FailStrikes)",
                     failedOut);
 
@@ -101,18 +104,18 @@ internal static class FypAssetManifest
                 if (e.DurationMs == null && e.Type == "video")
                 {
                     var path = Path.Combine(root, e.Id.Replace('/', Path.DirectorySeparatorChar));
-                    var sec = App.Video?.MetadataCache?.TryGetDuration(path);
+                    var sec = DurationProvider?.Invoke(path);
                     if (sec is > 0) e.DurationMs = (long)(sec.Value * 1000);
                 }
             }
 
-            App.Logger?.Information("FypAssetManifest: {V} videos, {G} gifs ({D} with duration)",
+            Serilog.Log.Information("FypAssetManifest: {V} videos, {G} gifs ({D} with duration)",
                 entries.Count(e => e.Type == "video"), entries.Count(e => e.Type == "gif"),
                 entries.Count(e => e.DurationMs != null));
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("FypAssetManifest.Build failed: {E}", ex.Message);
+            Serilog.Log.Warning("FypAssetManifest.Build failed: {E}", ex.Message);
         }
         return entries;
     }

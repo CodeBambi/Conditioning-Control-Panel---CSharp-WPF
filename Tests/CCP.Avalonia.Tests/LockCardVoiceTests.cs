@@ -122,7 +122,7 @@ public sealed class LockCardVoiceTests
             }
         });
 
-    private static async Task Until(Func<bool> cond, int seconds)
+    internal static async Task Until(Func<bool> cond, int seconds)
     {
         var end = DateTime.UtcNow.AddSeconds(seconds);
         while (!cond())

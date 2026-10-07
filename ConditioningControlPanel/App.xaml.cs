@@ -2536,6 +2536,7 @@ namespace ConditioningControlPanel
 
             splash?.SetProgress(0.5, "Initializing video service...");
             Video = new VideoService();
+            Services.Fyp.FypAssetManifest.DurationProvider = p => Video?.MetadataCache?.TryGetDuration(p);   // the manifest moved to Core
             Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
             // Same idea for the hybrid browser engine: building the shared WebView2 environment can
