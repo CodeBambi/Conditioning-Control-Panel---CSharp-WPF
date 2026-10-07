@@ -44,8 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
             CmbMonitor.DropDownOpened += (_, _) => PopulateMonitors();
             CmbMonitor.SelectionChanged += CmbMonitor_Changed;
-            for (var n = AppSettings.MercyAfterFailsMin; n <= AppSettings.MercyAfterFailsMax; n++)
-                CmbMercyAfter.Items.Add(new ComboBoxItem { Content = Loc.GetF("setting_mercy_after_n", n), Tag = n });
+            BuildMercyItems();
             ChkMercy.IsCheckedChanged += ChkMercy_Changed;
             CmbMercyAfter.SelectionChanged += CmbMercyAfter_Changed;
             SliderPerHour.ValueChanged += SliderPerHour_Changed;
@@ -79,12 +78,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             RebindToCurrentSettings();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             Unhook();
             base.OnDetachedFromVisualTree(e);
         }
@@ -96,7 +97,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             Unhook();
             _hooked = CoreSettings.Current;
             _hooked.PropertyChanged += OnSettingsPropertyChanged;
+            BuildMercyItems();   // WPF MercyRow.Rebind -> BuildItems: the "after N fails" text follows the language
             LoadFromSettings();
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(RebindToCurrentSettings);
+
+        private void BuildMercyItems()
+        {
+            var was = _isLoading;
+            _isLoading = true;
+            try
+            {
+                CmbMercyAfter.Items.Clear();
+                for (var n = AppSettings.MercyAfterFailsMin; n <= AppSettings.MercyAfterFailsMax; n++)
+                    CmbMercyAfter.Items.Add(new ComboBoxItem { Content = Loc.GetF("setting_mercy_after_n", n), Tag = n });
+            }
+            finally { _isLoading = was; }
         }
 
         private void Unhook()

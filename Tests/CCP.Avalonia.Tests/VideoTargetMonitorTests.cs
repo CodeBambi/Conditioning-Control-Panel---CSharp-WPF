@@ -73,4 +73,58 @@ public sealed class VideoTargetMonitorTests
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>WPF MercyRow.Rebind rebuilds "after N fails" on a language switch.</summary>
+    [Fact]
+    public async Task Mercy_picker_follows_a_language_switch()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+            var lm = ConditioningControlPanel.Localization.LocalizationManager.Instance;
+            lm.SetLanguage("en");
+            var card = new VideoFeatureControl();
+            var host = new Window { Content = card };
+            host.Show();
+            try
+            {
+                var cmb = card.FindControl<ComboBox>("CmbMercyAfter")!;
+                Assert.Equal("after 2 fails", ((ComboBoxItem)cmb.Items[0]!).Content);
+                lm.SetLanguage("es");
+                global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                Assert.Equal("tras 2 fallos", ((ComboBoxItem)cmb.Items[0]!).Content);
+            }
+            finally { lm.SetLanguage("en"); host.Close(); }
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>The More options toggle is keyboard-reachable: focusable, Enter and Space toggle.</summary>
+    [Fact]
+    public async Task More_options_toggles_from_the_keyboard()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+            var fold = new MoreFold();
+            fold.Children.Add(new TextBlock { Text = "row" });
+            var host = new Window { Content = fold };
+            host.Show();
+            try
+            {
+                Assert.True(fold.Toggle.Focus());
+                host.KeyPress(global::Avalonia.Input.Key.Enter, global::Avalonia.Input.RawInputModifiers.None, global::Avalonia.Input.PhysicalKey.Enter, "");
+                Assert.True(fold.IsOpen);
+                Assert.True(fold.Children[1].IsVisible);
+                host.KeyPress(global::Avalonia.Input.Key.Space, global::Avalonia.Input.RawInputModifiers.None, global::Avalonia.Input.PhysicalKey.Space, " ");
+                Assert.False(fold.IsOpen);
+            }
+            finally { host.Close(); }
+            return Task.CompletedTask;
+        });
+    }
 }

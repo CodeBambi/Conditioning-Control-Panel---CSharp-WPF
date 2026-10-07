@@ -39,6 +39,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             };
             Toggle.Bind(TextBlock.ForegroundProperty, Toggle.GetResourceObservable("TextMutedBrush"));
             Toggle.PointerPressed += (_, e) => { IsOpen = !IsOpen; e.Handled = true; };
+            // Keyboard-reachable like WPF's Hyperlink: Tab lands on it, Enter or Space toggles.
+            Toggle.Focusable = true;
+            Toggle.IsTabStop = true;
+            Toggle.KeyDown += (_, e) =>
+            {
+                if (e.Key is not (Key.Enter or Key.Space)) return;
+                IsOpen = !IsOpen;
+                e.Handled = true;
+            };
+            Toggle.GotFocus += (_, _) => Toggle.TextDecorations = TextDecorations.Underline;
+            Toggle.LostFocus += (_, _) => Toggle.TextDecorations = null;
             Toggle.PointerEntered += (_, _) => Toggle.TextDecorations = TextDecorations.Underline;
             Toggle.PointerExited += (_, _) => Toggle.TextDecorations = null;
             Children.Add(Toggle);

@@ -80,8 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var primary = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
                 var targets = PinkFilterOverlay.ResolveScreenIndices(s.GlobalTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
                 var occupied = Active.Select(a => a.Rect).ToList();
-                var flashes = await Task.Run(() => LoadPictures(amount ?? AppSettings.RollFlashImageCount(s.SimultaneousImagesRandom,
-                    s.SimultaneousImagesMin, s.SimultaneousImages, Rng), screens, targets, s, occupied, size));
+                var flashes = await Task.Run(() => LoadPictures(BurstCount(amount, s, Rng), screens, targets, s, occupied, size));
                 if (flashes.Count == 0)
                 {
                     if (!_warnedEmpty) Log.Warning("Flash: no images found in {Path}", ImagesPath());
@@ -185,6 +184,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _closed |= final;
             foreach (var (w, _) in Active.ToList()) w.Close();
         }
+
+        /// <summary>Images in one burst (WPF TriggerFlashOnce, #658): the caller's override, else
+        /// the flat count or a roll between Fewest and Images, rolled once per burst.</summary>
+        internal static int BurstCount(int? amount, AppSettings s, Random rng) =>
+            amount ?? AppSettings.RollFlashImageCount(s.SimultaneousImagesRandom, s.SimultaneousImagesMin, s.SimultaneousImages, rng);
 
         /// <summary>The next file of the shuffled walk; the caller re-lists the folder per burst.</summary>
         internal static string? NextPath(IReadOnlyList<string> files)
