@@ -45,6 +45,7 @@
              xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
+             xmlns:inv="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Invites"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.ExclusivesTabView"
              mc:Ignorable="d"
              d:DesignHeight="620" d:DesignWidth="1460">
@@ -458,6 +459,10 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Invites (WPF Controls/Invites/InvitePanel, InvitesHost). Hidden until the
+                         server answers /v2/invites/mine; read on every show of the tab. -->
+                    <inv:InvitePanel x:Name="InvitesHost" Margin="0,18,0,0"/>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

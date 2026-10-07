@@ -288,6 +288,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AchievementCategory.Hardcore => "■",
             AchievementCategory.Deeper => "▼",
             AchievementCategory.Creator => "★",
+            AchievementCategory.Community => "♥", // the invite ladder (main ecb8ace7e)
             _ => "◆",
         };
 

@@ -2041,6 +2041,46 @@
                               Fill="#FFE0B052" IsHitTestVisible="False"
                               Data="M 8,0 L 9.5,6.5 L 16,8 L 9.5,9.5 L 8,16 L 6.5,9.5 L 0,8 L 6.5,6.5 Z"/>
                     </Grid>
+                    <!-- Invite ticket (WPF BtnInviteTicket): shown only while this account has an unused
+                         invite code this month; wobbles now and then; a click opens the invites card.
+                         MainShellWindow.InviteTicket.cs. -->
+                    <Button x:Name="BtnInviteTicket" Width="30" Height="26" Margin="10,0,0,0"
+                            VerticalAlignment="Center" IsVisible="False" Cursor="Hand"
+                            Click="BtnInviteTicket_Click" ToolTip.Tip="{loc:Str invites_ticket_tooltip}">
+                        <Button.Styles>
+                            <Style Selector="Button:pointerover"><Setter Property="Opacity" Value="0.85"/></Style>
+                        </Button.Styles>
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="Transparent">
+                                    <ContentPresenter Content="{TemplateBinding Content}"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Grid Width="26" Height="18" RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform/>
+                                    <RotateTransform Angle="-8"/>
+                                </TransformGroup>
+                            </Grid.RenderTransform>
+                            <Path Stretch="Fill" Stroke="#FFE5C76B" StrokeThickness="1.2" IsHitTestVisible="False"
+                                  Data="M 2,0 H 22 A 2,2 0 0 1 24,2 V 5 A 3,3 0 0 0 24,11 V 14 A 2,2 0 0 1 22,16 H 2 A 2,2 0 0 1 0,14 V 11 A 3,3 0 0 0 0,5 V 2 A 2,2 0 0 1 2,0 Z">
+                                <Path.Fill>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#FFFF69B4" Offset="0"/>
+                                        <GradientStop Color="#FFFF8FC8" Offset="0.6"/>
+                                        <GradientStop Color="#FFE5C76B" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Path.Fill>
+                            </Path>
+                            <Line StartPoint="18,3" EndPoint="18,15" Stroke="#CCFFFFFF" StrokeThickness="1"
+                                  StrokeDashArray="1.5,1.5" IsHitTestVisible="False"/>
+                            <Path Width="8" Height="8" Margin="5,0,0,0" HorizontalAlignment="Left"
+                                  VerticalAlignment="Center" Stretch="Uniform" Fill="White" IsHitTestVisible="False"
+                                  Data="M 8,0 L 9.5,6.5 L 16,8 L 9.5,9.5 L 8,16 L 6.5,9.5 L 0,8 L 6.5,6.5 Z"/>
+                        </Grid>
+                    </Button>
 
                     <!-- Profile bubble: the user's avatar (Discord photo / preset bust / initials).
                          Hover opens the account menu below; a direct click jumps to the Profile
