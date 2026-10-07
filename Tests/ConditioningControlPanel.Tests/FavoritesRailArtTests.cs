@@ -68,12 +68,13 @@ public class FavoritesRailArtTests
     [Fact]
     public void Most_chips_are_cover_art()
     {
-        // Plate is for square icon art only. If it ever outgrows the fourteen door rows, the
+        // Plate is for square icon art only. If it ever outgrows the sixteen door rows (fourteen
+        // until polish wave 11 gave Social and its Lobby tab their own medallion), the
         // rail has quietly gone back to icons-beside-captions, which is the thing the desk
         // pass rejected.
         var plates = FavoritesRailArt.Map.Values.Count(a => a is { Fit: RailArtFit.Plate });
         var covers = FavoritesRailArt.Map.Values.Count(a => a is { Fit: RailArtFit.Cover });
-        Assert.Equal(14, plates);
+        Assert.Equal(16, plates);
         Assert.True(covers > plates, "cover art should be the rule and the plate the exception");
     }
 
