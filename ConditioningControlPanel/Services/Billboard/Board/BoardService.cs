@@ -14,13 +14,17 @@ namespace ConditioningControlPanel.Services.Billboard.Board
     /// folder, so a restart or a second poll costs no download. A cleared post drops the picture
     /// and its file; an expiring post raises <see cref="Changed"/> at its time so the deck lets go.
     /// </summary>
-    public sealed class BoardService
+    public sealed partial class BoardService
     {
         public const string ServerBase = "https://codebambi-proxy.vercel.app";
         public const int MaxPngBytes = 256 * 1024;
 
         private static readonly Lazy<BoardService> SharedLazy = new(() => new BoardService(
-            Path.Combine(App.UserDataPath, "board"), HttpFetchAsync, PostToUi));
+            Path.Combine(App.UserDataPath, "board"),
+#if DEBUG
+            DemoPath != null ? DemoFetchAsync :
+#endif
+            HttpFetchAsync, PostToUi));
 
         /// <summary>The app's board. The marquee hook and <see cref="BoardProvider"/> both use it.</summary>
         public static BoardService Shared => SharedLazy.Value;
@@ -58,7 +62,13 @@ namespace ConditioningControlPanel.Services.Billboard.Board
         /// <summary>Hands over a raw <c>GET /config/marquee</c> body. Never throws.</summary>
         public void OnMarquee(string? marqueeJson)
         {
-            try { _ = Apply(BoardWire.Parse(marqueeJson)); }
+            try
+            {
+#if DEBUG
+                if (DemoPost() is { } demo) { _ = Apply(demo); return; }
+#endif
+                _ = Apply(BoardWire.Parse(marqueeJson));
+            }
             catch (Exception ex) { App.Logger?.Warning("Board: marquee hand-off failed: {Error}", ex.Message); }
         }
 
