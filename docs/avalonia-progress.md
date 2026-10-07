@@ -1280,3 +1280,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/lockdown-veil: +509
 - Launcher Lockdown veil (WPF look, keys too, breath only while visible); shell door table test (19 rows) closed 5 gaps; shell has no veil by WPF design.
+
+## avalonia-port/package-verify: +71
+- Tarball, AUR (host makepkg + bwrap) and GNOME 50 runtime smoke-verified for 7.0.5; stale PKGBUILD version fixed and enforced in smoke-tarball.sh; Flatpak build still blocked.
