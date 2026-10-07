@@ -73,6 +73,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 else _statusTimer.Stop();
             };
             BuildTiles();
+            HookVeil();
         }
 
         /// <summary>WPF OnShown, minus the FX (launcher-fx slice).</summary>
