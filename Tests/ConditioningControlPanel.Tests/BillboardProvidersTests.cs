@@ -201,6 +201,7 @@ public class BillboardProvidersTests
         Assert.Equal(WaitingCards.CardInvite, card.Id);
         Assert.Equal(BillboardActionKind.Callback, card.Action.Kind);
         Assert.Equal(WaitingCards.InviteCallback, card.Action.Target);
+        Assert.Equal(CardArt.Invite, card.ArtKey);
     }
 
     [Fact]

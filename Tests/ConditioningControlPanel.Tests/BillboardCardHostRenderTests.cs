@@ -93,6 +93,7 @@ public class BillboardCardHostRenderTests
         new object?[] { BuiltInArtKeys.Calendar, new Dictionary<string, int> { ["counted"] = 6, ["need"] = 25, ["days"] = 31, ["today"] = 7 } },
         new object?[] { BuiltInArtKeys.Calendar, new Dictionary<string, int> { ["day"] = 3, ["days"] = 14 } },
         new object?[] { BuiltInArtKeys.Tip, "tip.rightclick" },
+        new object?[] { BuiltInArtKeys.Invite, null },
     };
 
     [Theory]
@@ -115,5 +116,65 @@ public class BillboardCardHostRenderTests
         }
         life.Release();
         life.Release();
+    });
+
+    [Fact]
+    public void Every_vector_art_paints_through_its_whole_loop() => WpfRenderHarness.OnStaThread(() =>
+    {
+        BuiltInArt.Register();
+        foreach (var c in ArtCases())
+        {
+            if (BillboardArt.Create((string)c[0]!, c[1]) is not BillboardVectorArt view) continue;
+            view.Accent = Color.FromRgb(0xff, 0xc9, 0x4a);
+            Realize(view, 640, 360);
+            for (double t = 0; t <= 8; t += 0.37)
+            {
+                view.SecondsForTests = t;
+                view.Redraw();
+            }
+            view.Release();
+        }
+    });
+
+    /// <summary>
+    /// Look check, not a judge: with CCP_BOARD_ART_SHOTS set to a folder, every vector art is
+    /// written there as PNGs at a few moments, in its real card hue. Does nothing otherwise.
+    /// </summary>
+    [Fact]
+    public void Art_shots_when_asked() => WpfRenderHarness.OnStaThread(() =>
+    {
+        var dir = Environment.GetEnvironmentVariable("CCP_BOARD_ART_SHOTS");
+        if (string.IsNullOrWhiteSpace(dir)) return;
+        System.IO.Directory.CreateDirectory(dir);
+        BuiltInArt.Register();
+        var cases = new (string Name, string Key, object? Data, string Hue)[]
+        {
+            ("invite", BuiltInArtKeys.Invite, null, "#ffc94a"),
+            ("tables", BuiltInArtKeys.Tables, new[] { "Velvet", "mort5366", "Pika" }, "#5fe3ff"),
+            ("wheel", BuiltInArtKeys.Wheel, new Dictionary<string, int> { ["done"] = 2, ["total"] = 5 }, "#ffc94a"),
+            ("spiral", BuiltInArtKeys.Spiral, null, "#ff4fa8"),
+            ("calendar", BuiltInArtKeys.Calendar, new Dictionary<string, int> { ["counted"] = 6, ["need"] = 25, ["days"] = 31, ["today"] = 7 }, "#ff4fa8"),
+            ("program", BuiltInArtKeys.Calendar, new Dictionary<string, int> { ["day"] = 3, ["days"] = 14 }, "#ffc94a"),
+            ("tip", BuiltInArtKeys.Tip, "tip.rightclick", "#9b7bff"),
+        };
+        foreach (var c in cases)
+        {
+            if (BillboardArt.Create(c.Key, c.Data) is not BillboardVectorArt view) continue;
+            view.Accent = BillboardVectorArt.ParseHue(c.Hue, Colors.HotPink);
+            var host = Realize(view, 1000, 420);
+            foreach (var t in new[] { 0.35, 1.6, 2.3, 3.1 })
+            {
+                view.SecondsForTests = t;
+                view.Redraw();
+                host.UpdateLayout();
+                var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(1000, 420, 96, 96, PixelFormats.Pbgra32);
+                bmp.Render(host);
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                using var f = System.IO.File.Create(System.IO.Path.Combine(dir, $"{c.Name}-{t.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}.png"));
+                enc.Save(f);
+            }
+            view.Release();
+        }
     });
 }

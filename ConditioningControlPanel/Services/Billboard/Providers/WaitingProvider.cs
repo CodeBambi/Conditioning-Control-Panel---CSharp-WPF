@@ -57,7 +57,7 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
             if (!InviteTicketRule.ShouldShow(mine)) return null;
             return Card(CardInvite, 2, loc, loc("billboard_card_invite_title"), loc("billboard_card_invite_line"),
                 new BillboardAction(BillboardActionKind.Callback, InviteCallback, loc("billboard_card_invite_button")),
-                CardArt.Tip, null);
+                CardArt.Invite, null);
         }
 
         private static BillboardCardSpec Card(string id, int priority, Func<string, string> loc, string title, string line,
