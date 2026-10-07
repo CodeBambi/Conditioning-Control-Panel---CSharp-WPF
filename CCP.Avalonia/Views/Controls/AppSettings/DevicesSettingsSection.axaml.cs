@@ -519,6 +519,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
             var isNoPanic = ChkNoPanic.IsChecked ?? false;
 
+            // WPF MainWindow.Lab.cs:658 greys this box while a Lockdown holds the panic key off.
+            if (!isNoPanic && Windows.MainShellWindow.LockdownActive && CoreSettings.Current.LockdownDisablePanicKey)
+            {
+                Dispatcher.UIThread.Post(() => { _loading = true; ChkNoPanic.IsChecked = true; _loading = false; });
+                return;
+            }
+
             if (isNoPanic)
             {
                 // No window to parent the warning to: the gate cannot be shown, so the answer is

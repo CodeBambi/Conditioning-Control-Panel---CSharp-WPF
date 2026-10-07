@@ -164,7 +164,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         // MainWindow.Settings.cs's BtnExit_Click: the real exit, not the X-to-tray close.
-        private void BtnExit_Click(object? sender, RoutedEventArgs e) => RequestExit();
+        internal void BtnExit_Click(object? sender, RoutedEventArgs e)
+        {
+            if (LockdownActive)   // WPF MainWindow.Settings.cs:451: say so, then refuse
+            {
+                _ = Dialogs.MessageDialog.ShowAsync(this, ConditioningControlPanel.Localization.Loc.Get("title_lockdown"),
+                    ConditioningControlPanel.Localization.Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"));
+                return;
+            }
+            RequestExit();
+        }
     }
 }
 
