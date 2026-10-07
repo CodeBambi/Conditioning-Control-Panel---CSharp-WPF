@@ -34,8 +34,8 @@
     "_comment": "Per-clip extra scale multiplier on top of layout.scale. Empty since the cel set (2026-10-07): every clip shares one crop box."
   },
   "layout": {
-    "_comment": "Delta on top of the mod's avatar layout. scale = multiplier (0.8 since the cel set of 2026-10-07: she fills more of her frame than the pixel sprite did); offsetX += right (negative = left); offsetY += DOWN. Applies to BambiSleep, Sissy and CCP Default (the avatar0 set).",
-    "scale": 0.8,
+    "_comment": "Delta on top of the mod's avatar layout. scale = multiplier (0.79 since the cel set of 2026-10-07: she fills more of her frame than the pixel sprite did); offsetX += right (negative = left); offsetY += DOWN. Applies to BambiSleep, Sissy and CCP Default (the avatar0 set).",
+    "scale": 0.79,
     "offsetX": 10,
     "offsetY": -30,
     "detachedX": 10,

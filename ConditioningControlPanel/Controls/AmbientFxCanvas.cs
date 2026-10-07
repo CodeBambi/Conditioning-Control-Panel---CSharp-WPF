@@ -185,6 +185,15 @@ namespace ConditioningControlPanel.Controls
 
         /// <summary>Alpha gain on the fog (the section edge balances light and dark hues), 0-1.5.</summary>
         public double EdgeFogGain { get; set; } = 1.0;
+
+        /// <summary>
+        /// Keep ticking while the host window is NOT the active window (polish wave 13). Only for a
+        /// host that already repaints every frame on its own, so the clock adds no wake-ups: the
+        /// companion tube, whose breathing / bob timer redraws the layered window at 60 fps
+        /// whether or not it has focus. Minimised, hidden, Motion below Full and the tier budget
+        /// still stop it. Never set it on a surface inside MainWindow (#550 idle parking).
+        /// </summary>
+        public bool RunWhileInactive { get; set; }
     }
 
     /// <summary>
@@ -842,7 +851,8 @@ namespace ConditioningControlPanel.Controls
             if (w != null)
             {
                 if (w.WindowState == WindowState.Minimized) return false;
-                if (!w.IsActive && !oneShotLive && !Services.Diagnostics.FxBisect.Off("forceactive")) return false;
+                if (!w.IsActive && !oneShotLive && !_config.RunWhileInactive
+                    && !Services.Diagnostics.FxBisect.Off("forceactive")) return false;
             }
             return true;
         }
