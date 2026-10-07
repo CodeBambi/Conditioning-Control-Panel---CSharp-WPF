@@ -1271,3 +1271,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/port-vault: +971
 - Vault gate card on every padlock and the "See tiers" toast; Reconnect via Core PatreonReconnectRule; doors refuse under Lockdown; VaultOffer/VaultSale to Core.
 - Exclusives: Prime-first shelf (Core ShelfOrder), IsShown hides Arcademy/Just Drop, width-fit columns.
+
+## avalonia-port/port-brain7: +251
+- Companion/awareness 7.0.3: pages widen, pop-out wakes the companion, listening bubble while the mic is open, chat stays open, cooldowns to an hour (Core AwarenessCooldownScale), Brain Drain in the preset editor.

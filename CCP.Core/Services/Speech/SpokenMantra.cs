@@ -20,6 +20,9 @@ namespace ConditioningControlPanel.Services.Speech
         public Action Credit = () => { };
         public Action<string> PromptStarted = _ => { };
         public Action<PhraseResult> PromptFinished = _ => { };
+        /// <summary>The tube's "listening" dots while the mic is open (WPF ShowListeningBubble, ccp-bugs #841).</summary>
+        public Action<string> ShowListening = _ => { };
+        public Action HideListening = () => { };
         public Func<TimeSpan, CancellationToken, Task> Delay = Task.Delay;
         /// <summary>Completes when the clip of the last <see cref="Say"/> has finished playing. Awaited
         /// (capped) before every listen so the recognizer never hears her. Null (WPF) = timings only.</summary>
@@ -66,7 +69,7 @@ namespace ConditioningControlPanel.Services.Speech
                 var listenWindow = TimeSpan.FromSeconds(10);
 
                 await WaitSpokenAsync().ConfigureAwait(false);
-                var result = await host.Recognize(phrase, new RecognizeOptions { Timeout = listenWindow }).ConfigureAwait(false);
+                var result = await ListenAsync(phrase, listenWindow).ConfigureAwait(false);
 
                 // One gentle retry on ANY non-match — too quiet, misheard, or nothing said — as long as
                 // the engine is still available. The prompt fits the reason.
@@ -82,7 +85,7 @@ namespace ConditioningControlPanel.Services.Speech
                     for (int i = 0; i < 40 && host.IsSpeaking(); i++)
                         await host.Delay(TimeSpan.FromMilliseconds(75), ct).ConfigureAwait(false);
                     await WaitSpokenAsync().ConfigureAwait(false);
-                    result = await host.Recognize(phrase, new RecognizeOptions { Timeout = listenWindow }).ConfigureAwait(false);
+                    result = await ListenAsync(phrase, listenWindow).ConfigureAwait(false);
                 }
 
                 if (result.Unavailable || ct.IsCancellationRequested)
@@ -122,6 +125,15 @@ namespace ConditioningControlPanel.Services.Speech
             catch (Exception ex)
             {
                 Log.Warning("AutonomyService: SpokenMantra failed: {Error}", ex.Message);
+            }
+
+            // Show the "listening" cue while the mic is open (ccp-bugs #841): without it the player
+            // cannot tell when to start saying the phrase. Hide no-ops once a real bubble took over.
+            async Task<PhraseResult> ListenAsync(string phrase, TimeSpan window)
+            {
+                try { host.ShowListening(phrase); } catch { }
+                try { return await host.Recognize(phrase, new RecognizeOptions { Timeout = window }).ConfigureAwait(false); }
+                finally { try { host.HideListening(); } catch { } }
             }
 
             // Hold the mic shut until her clip ended; 30 s caps a lost finished callback.
