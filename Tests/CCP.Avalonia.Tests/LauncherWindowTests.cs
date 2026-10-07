@@ -78,11 +78,35 @@ public sealed class LauncherWindowTests
         Assert.Contains(Loc.Get("launcher_game_intake_title"), Texts(tile));
         Assert.Contains(Loc.Get("launcher_play"), Texts(tile));
 
-        launcher.Play(ConditioningControlPanel.Services.Launcher.LauncherCards.Find("intake")!);
+        ClickPlay(tile);
         Dispatcher.UIThread.RunJobs();
         Assert.False(launcher.IsVisible);
         Assert.True(shell.IsVisible);
         Assert.Equal("gradedintake", shell.CurrentTab);
+    });
+
+    private static void ClickPlay(Control tile) =>
+        tile.GetVisualDescendants().OfType<Button>().Single()
+            .RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+    [Fact]
+    public void Lockdown_TilePlayRefuses_LauncherStaysAndPanelStaysTucked() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreEntitlement.HasLabProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var launcher = LauncherWindow.Instance!;
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            ld.Activate(TimeSpan.FromMinutes(30));
+            ClickPlay(launcher.FindControl<UniformGrid>("GamesGrid")!.Children[0]);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(launcher.IsVisible);
+            Assert.False(shell.IsVisible);
+        }
+        finally { ld.Deactivate(); }
     });
 
     [Fact]
