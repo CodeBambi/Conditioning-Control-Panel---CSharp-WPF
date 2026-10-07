@@ -26,7 +26,10 @@ namespace ConditioningControlPanel.Services.Billboard
         /// <summary>Four tiles, one switching on and off under a click ring. ArtData = the tip id (unused).</summary>
         public const string Tip = "tip";
 
-        public static readonly IReadOnlyList<string> All = new[] { Poster, Tables, Wheel, Spiral, Calendar, Tip };
+        /// <summary>A paper invite pass: a code row with one glyph flipping up, seven day pips on the stub. ArtData unused.</summary>
+        public const string Invite = "invite";
+
+        public static readonly IReadOnlyList<string> All = new[] { Poster, Tables, Wheel, Spiral, Calendar, Tip, Invite };
     }
 
     /// <summary>
