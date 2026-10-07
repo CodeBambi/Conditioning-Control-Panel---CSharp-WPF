@@ -65,7 +65,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>App.Logger</c> is Serilog's static <c>Log</c> here; the warning templates are
     ///    unchanged. The bare catches in ApplyContent / AccentBrush / GlowBrush are bare in WPF too.
     /// </summary>
-    public partial class FeatureIntroPopup : Window
+    public partial class FeatureIntroPopup : Window, Services.Startup.IPassiveStartupSurface
     {
         private Action? _onAction;
 
@@ -148,59 +148,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// For the ONE card whose surface the app lands on by itself: the Dashboard is visible
         /// from XAML before anything navigates, so its card has no ShowTab case to ride and would
-        /// otherwise open in the middle of the startup ladder.
-        ///
-        /// <para>So it waits. A 1s clock re-tests the startup conditions, calls
-        /// <see cref="ShowCore"/> once they are clear, and keeps ticking until the card is
-        /// actually spent - which also lets it outlast the 10-minute pacing cooldown if another
-        /// card got in first. Gives up after five minutes leaving the seen-flag UNSPENT, so the
-        /// next launch simply tries again.</para>
+        /// otherwise open in the middle of startup. Same route as WPF
+        /// (FeatureIntroPopup.xaml.cs:155): handed to <see cref="Platform.StartupLadder.PresentOrInbox"/>,
+        /// which opens it now, holds it behind another passive card, or makes it an Inbox row in a
+        /// quiet window. The seen-flag is spent by <see cref="ShowCore"/> at OPEN time, so a row never
+        /// clicked leaves the card owed. Pacing and the door budget apply only on the immediate path.
         /// </summary>
         internal static void ShowWhenStartupSettles(string key, Window? owner, string? doorKey)
         {
             try
             {
-                if (!FeatureIntros.All.ContainsKey(key)) return;
+                if (!FeatureIntros.All.TryGetValue(key, out var content)) return;
                 if (CoreSettings.Current.SeenFeatureIntros.Contains(key)) return;
                 if (!_settling.Add(key)) return;
 
-                int ticks = 0;
-                var timer = new DispatcherTimer(DispatcherPriority.Background)
+                // Read once, before handing over: it decides which route the item takes.
+                var quiet = Platform.StartupLadder.IsQuiet;
+                Platform.StartupLadder.PresentOrInbox(new Services.Startup.InboxItem
                 {
-                    Interval = TimeSpan.FromSeconds(1),
-                };
-                timer.Tick += (_, _) =>
-                {
-                    try
+                    Key = "intro:" + key,
+                    Glyph = string.IsNullOrEmpty(content.Glyph) ? "✨" : content.Glyph,
+                    Title = string.IsNullOrEmpty(content.RailTitle) ? content.Title : content.RailTitle,
+                    Summary = content.Tagline,
+                    Open = () =>
                     {
-                        var live = CoreSettings.Current;
-                        if (live.SeenFeatureIntros.Contains(key) || ++ticks > 300)
-                        {
-                            timer.Stop();
-                            _settling.Remove(key);
-                            return;
-                        }
-
-                        // Two of WPF's three gates. The tutorial one is the CoreTutorial seam,
-                        // which answers false unseeded, so a head with no tour is unaffected;
-                        // returning without Stop() keeps the clock ticking, which is what WPF did
-                        // so a long tour does not burn a try.
-                        // ponytail: still needs App.IsUpdateDialogActive and
-                        // MainWindow.IsStartupDialogShowing. Both are static flags on the WPF head
-                        // (ConditioningControlPanel/App.xaml.cs, MainWindow/MainWindow.xaml.cs) with
-                        // no seam in Core, so a card can still stack on a startup modal here.
-                        if (CoreTutorial.IsActive) return;
-
-                        ShowCore(key, owner, paced: true, doorKey: doorKey);
-                    }
-                    catch (Exception ex)
-                    {
-                        timer.Stop();
-                        _settling.Remove(key);
-                        Log.Warning(ex, "Feature intro settle tick failed for {Key}", key);
-                    }
-                };
-                timer.Start();
+                        try { ShowCore(key, owner, paced: !quiet, doorKey: quiet ? null : doorKey); }
+                        finally { _settling.Remove(key); }
+                    },
+                    Dismiss = () => _settling.Remove(key),
+                });
             }
             catch (Exception ex)
             {

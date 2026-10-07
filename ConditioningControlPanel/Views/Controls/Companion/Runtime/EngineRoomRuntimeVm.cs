@@ -227,25 +227,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// Settings pair (enabled + provider) → the segmented row's one value. Static so the mapping
         /// is testable and so "AI off" cannot drift from "the Off segment".
         /// </summary>
-        internal static CompanionProviderMode ModeFor(bool aiEnabled, AiProviderType provider)
-        {
-            if (!aiEnabled) return CompanionProviderMode.Off;
-            return provider switch
-            {
-                AiProviderType.Local => CompanionProviderMode.LocalOllama,
-                AiProviderType.OpenAiCompatible => CompanionProviderMode.Custom,
-                _ => CompanionProviderMode.Cloud
-            };
-        }
+        internal static CompanionProviderMode ModeFor(bool aiEnabled, AiProviderType provider) =>
+            EngineRoomProviders.ModeFor(aiEnabled, provider);
 
         /// <summary>The inverse, for the write path. Off maps to Cloud + disabled.</summary>
-        internal static (bool Enabled, AiProviderType Provider) SettingsFor(CompanionProviderMode mode) => mode switch
-        {
-            CompanionProviderMode.Off => (false, AiProviderType.Cloud),
-            CompanionProviderMode.LocalOllama => (true, AiProviderType.Local),
-            CompanionProviderMode.Custom => (true, AiProviderType.OpenAiCompatible),
-            _ => (true, AiProviderType.Cloud)
-        };
+        internal static (bool Enabled, AiProviderType Provider) SettingsFor(CompanionProviderMode mode) =>
+            EngineRoomProviders.SettingsFor(mode);
 
         /// <summary>
         /// Whether switching TO <paramref name="mode"/> drops the Live Actions feed.
@@ -258,7 +245,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// used it and lost the Cloud half.</para>
         /// </summary>
         internal static bool ClearsLiveActions(CompanionProviderMode mode) =>
-            mode is CompanionProviderMode.Off or CompanionProviderMode.Cloud;
+            EngineRoomProviders.ClearsLiveActions(mode);
 
         /// <summary>
         /// The live "is she thinking?" readout. Absorbs the old <c>TxtAiStatus</c> line and the two

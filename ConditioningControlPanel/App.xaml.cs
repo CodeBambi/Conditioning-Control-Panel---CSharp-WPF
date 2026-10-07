@@ -400,6 +400,10 @@ namespace ConditioningControlPanel
             MantraService.ChasterNote = reps => Chaster?.Note("mantra", reps);
             // QuestService moved to Core; these are the head services it still reads. Lazy, like
             // the App.X?. reads they replace (SkillTree, Programs and Haptics are built later).
+            // The Chaos run model moved to Core; these are the head pieces it still reads.
+            Services.Chaos.ChaosRunState.SkillMultProvider = () => SkillTree?.GetTotalXpMultiplier() ?? 1.0;
+            Services.Chaos.ChaosRunState.IconResolver = (cat, id) => Services.Chaos.ChaosArt.Resolve(cat, id);
+            Services.Chaos.ChaosRunConfig.AllVariantIds = Services.Chaos.ChaosBubbleVariants.AllIds;
             CoreQuests.PatreonVerifyingProvider = () => Patreon?.IsVerifying;
             CoreQuests.SubscribeStarVerifyingProvider = () => SubscribeStar?.IsVerifying == true;
             CoreQuests.UseStreakShieldProvider = () => SkillTree?.UseStreakShield() == true;
@@ -558,6 +562,10 @@ namespace ConditioningControlPanel
             // AiService moved to Core; these two are the App-bound bits it used to reach directly.
             CoreAccount.PatreonAccessTokenProvider = () => Patreon?.GetAccessToken();
             AiService.MergedAccountHook = r => MergedAccountRecovery.TryHandleAsync(r);
+            // The local providers and their router moved to Core too; same App-bound bits, same answers.
+            Services.AIService.AiServiceStrategy.BrainProvider = () => Brain;
+            Services.AIService.LocalAiService.EnsureServerRunning = host => Services.AIService.OllamaSetupService.EnsureServerRunningAsync(host);
+            Services.AIService.OpenAiCompatibleService.ApiKeyUnprotect = Services.SecureStringHelper.Unprotect;
             // Webcam capability + the consent revoke. The tracking engine stays here (capture
             // device, ONNX sessions, OpenCvSharp loop); only "is there one" and "undo consent"
             // cross. Read lazily: Webcam is constructed in OnStartup, long after this ctor, and is
