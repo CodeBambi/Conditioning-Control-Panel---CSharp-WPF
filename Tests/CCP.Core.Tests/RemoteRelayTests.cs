@@ -297,7 +297,8 @@ public sealed class RemoteRelayTests
             using var r = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", RemoteCommands.Execute, _ => { }, f) { AutoPoll = false };
             r.StartAsync("full").Wait();
             Poll(f, "{\"controller_connected\":true}"); r.PollOnceAsync().Wait();
-            // The UI thread is busy: the first dispatch times out and runs later; the rest run at once.
+            // The UI thread is busy: the first dispatch times out. Avalonia cancels it then; here it is parked and
+            // run by hand, to prove the generation check refuses it even if it did land late. The rest run at once.
             CoreDispatch.InvokeProvider = (fn, _) => { if (parked == null) { parked = fn; return (false, null); } return (true, fn()); };
 
             Poll(f, Cmd("1", "haptic_level", "{\"level\":60,\"ms\":3000}")); r.PollOnceAsync().Wait();
@@ -320,6 +321,38 @@ public sealed class RemoteRelayTests
             Assert.False(s.StrictLockEnabled);
         }
         finally { (s.StrictLockEnabled, s.PanicKeyEnabled, CoreDispatch.InvokeProvider) = saved; }
+    });
+
+    // Safety review P2: Avalonia cancels an Invoke that times out, so after a UI stall the leave cleanup is
+    // posted instead: the loop stops, the controller's strict lock goes, the panic key comes back.
+    [Fact]
+    public void A_leave_during_a_ui_stall_still_releases_everything() => WithSteppedHaptics((clock, sent) =>
+    {
+        var s = CoreSettings.Current;
+        var saved = (s.StrictLockEnabled, s.PanicKeyEnabled, CoreDispatch.InvokeProvider, CoreDispatch.PostProvider);
+        try
+        {
+            (s.StrictLockEnabled, s.PanicKeyEnabled) = (false, true);
+            var f = new FakeRelay();
+            using var r = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", RemoteCommands.Execute, _ => { }, f) { AutoPoll = false };
+            r.StartAsync("full").Wait();
+            Poll(f, "{\"controller_connected\":true}"); r.PollOnceAsync().Wait();
+            Poll(f, Cmd("1", "enable_strict_lock")); r.PollOnceAsync().Wait();
+            Poll(f, Cmd("2", "haptic_pattern", Loop)); r.PollOnceAsync().Wait();
+            s.PanicKeyEnabled = false;
+            Assert.True(s.StrictLockEnabled && RemoteCommands.RemoteHaptics.IsPlaying);
+
+            var posted = new List<Action>();
+            CoreDispatch.InvokeProvider = (_, _) => (false, null);   // the UI is stalled: Avalonia cancels the call
+            CoreDispatch.PostProvider = posted.Add;
+            Poll(f, "{\"controller_connected\":false}"); r.PollOnceAsync().Wait();
+            Assert.True(RemoteCommands.RemoteHaptics.IsPlaying);       // nothing ran on the stalled UI yet
+            foreach (var a in posted.ToArray()) a();                  // the UI drains
+            Assert.False(RemoteCommands.RemoteHaptics.IsPlaying);
+            Assert.False(s.StrictLockEnabled);
+            Assert.True(s.PanicKeyEnabled);
+        }
+        finally { (s.StrictLockEnabled, s.PanicKeyEnabled, CoreDispatch.InvokeProvider, CoreDispatch.PostProvider) = saved; }
     });
 
     // main d39969827: 1 s polls while a connected controller is busy; a 429 still backs off from 5 s.

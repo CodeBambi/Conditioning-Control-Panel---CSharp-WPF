@@ -273,7 +273,10 @@ namespace ConditioningControlPanel.Services
         private void ControllerLeft()
         {
             Interlocked.Increment(ref _leaveGeneration);
-            CoreDispatch.Invoke(() => { ReleaseOnLeave(); return 0; }, TimeSpan.FromSeconds(10));
+            // Avalonia cancels a timed-out Invoke (AvaloniaCoreDispatch): after a UI stall the release is posted
+            // instead, so it still runs. Running it twice is harmless (every step is idempotent).
+            var (done, _) = CoreDispatch.Invoke(() => { ReleaseOnLeave(); return 0; }, TimeSpan.FromSeconds(10));
+            if (!done) CoreDispatch.Post(ReleaseOnLeave);
         }
 
         private void ReleaseOnLeave()
