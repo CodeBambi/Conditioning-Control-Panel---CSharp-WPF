@@ -2087,11 +2087,73 @@ namespace ConditioningControlPanel
                 // New art, new painted bounds: re-dock once layout has the new image.
                 if (_isAttached) Dispatcher.BeginInvoke(new Action(UpdatePosition), DispatcherPriority.Normal);
                 App.Logger?.Information("Tube style changed to: {Style}", tubeName);
+                ApplyTubeMotes(useAlternative, tubeName.Contains("_midnight"));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to change tube style");
             }
+        }
+
+        // ============================ the motes in the glass (polish wave 13) ============================
+
+        /// <summary>The chamber's inside on the 2048 px tube art, attached (tube.png) and detached
+        /// (tube2.png), measured off the art. The cel tube (2026-10-07) keeps the old boxes.</summary>
+        internal static readonly Rect TubeChamberArt = new(717, 1057, 1047 - 717, 1764 - 1057);
+        internal static readonly Rect Tube2ChamberArt = new(320, 1025, 657 - 320, 1734 - 1025);
+
+        /// <summary>A chamber box on the art, in the 780x1080 design canvas: the art is a square
+        /// drawn Uniform (780 px) and centred, so it sits 150 px down.</summary>
+        internal static Rect TubeMotesBox(bool detached)
+        {
+            const double s = 780.0 / 2048.0, top = (1080 - 780) / 2.0;
+            var r = detached ? Tube2ChamberArt : TubeChamberArt;
+            return new Rect(r.X * s, top + r.Y * s, r.Width * s, r.Height * s);
+        }
+
+        /// <summary>The motes' colour: the house pink, or the midnight glass's indigo.</summary>
+        internal static Color TubeMotesTint(bool midnight) =>
+            midnight ? Color.FromRgb(0x9A, 0x8C, 0xFF) : Color.FromRgb(0xFF, 0x86, 0xCC);
+
+        private bool _tubeMotesStarted;
+
+        /// <summary>
+        /// Motes rising inside the glass, over OUR tube art only: a mod that paints its own tube has
+        /// its own chamber, so the layer stops there. Embers at a light intensity; the canvas keeps
+        /// the tier budget and the motion gate, and RunWhileInactive because the tube is almost
+        /// never the active window yet already repaints every frame (breathing / bob).
+        /// </summary>
+        private void ApplyTubeMotes(bool detached, bool midnight)
+        {
+            try
+            {
+                if (TubeMotes == null) return;
+                bool ours = !Services.ModResourceResolver.HasModOverride("tube.png")
+                         && !Services.ModResourceResolver.HasModOverride("tube2.png");
+                if (!ours)
+                {
+                    TubeMotes.Stop();
+                    TubeMotes.Visibility = Visibility.Collapsed;
+                    _tubeMotesStarted = false;
+                    return;
+                }
+                var box = TubeMotesBox(detached);
+                TubeMotes.Margin = new Thickness(box.X, box.Y, 0, 0);
+                TubeMotes.Width = box.Width;
+                TubeMotes.Height = box.Height;
+                TubeMotes.Visibility = Visibility.Visible;
+                var tint = TubeMotesTint(midnight);
+                if (_tubeMotesStarted) { TubeMotes.Retint(tint); return; }
+                TubeMotes.StartLayers(new Controls.AmbientFxConfig
+                {
+                    Layers = Controls.AmbientFxLayers.Embers,
+                    Intensity = 0.85,
+                    Tint = tint,
+                    RunWhileInactive = true,
+                });
+                _tubeMotesStarted = true;
+            }
+            catch (Exception ex) { App.Logger?.Debug("ApplyTubeMotes: {E}", ex.Message); }
         }
 
         /// <summary>

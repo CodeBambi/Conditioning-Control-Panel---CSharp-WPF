@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:local="clr-namespace:ConditioningControlPanel"
+        xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
         xmlns:gif="https://github.com/XamlAnimatedGif/XamlAnimatedGif"
         Title="{loc:Str dialog_avatar_tube}"
 
@@ -291,6 +292,15 @@
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
                    IsHitTestVisible="False"/>
+
+            <!-- Polish wave 13 (owner, 2026-10-07: "remove the smoke, we can have our own animated
+                 particles in there"): motes rising inside the glass, over the chamber and behind
+                 her. Sized and placed on the chamber's interior box by ApplyTubeMotes (attached and
+                 detached boxes differ), and only shown over OUR tube art, never a mod's. -->
+            <fx:AmbientFxCanvas x:Name="TubeMotes"
+                                HorizontalAlignment="Left" VerticalAlignment="Top"
+                                Margin="273,553,0,0" Width="126" Height="269"
+                                ClipToBounds="True" IsHitTestVisible="False"/>
 
 
             <!-- Text Input Panel (hidden by default) - Z-Index 3, positioned near avatar -->
