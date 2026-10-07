@@ -50,9 +50,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         }
 
         /// <summary><see cref="After"/>, dropped when a Stop lands in between.</summary>
-        private static void Later(int ms, Action then)
+        private static void Later(int ms, Action then, int? since = null)
         {
-            var gen = Volatile.Read(ref _gen);
+            var gen = since ?? Volatile.Read(ref _gen);
             After(ms, () => { if (Volatile.Read(ref _gen) == gen) then(); });
         }
 
@@ -113,17 +113,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 SubAudioDir, App.Mods?.ActiveModId);
             if (path == null || !s.SubAudioAudible) return false;
 
+            var entry = Volatile.Read(ref _gen);   // a Stop after this drops this whisper and its card
             if (s.AudioDuckingEnabled) CoreAudio.Duck(s.DuckingLevel);
             var gen = CoreAudio.DuckGeneration;
             Interlocked.Exchange(ref _stopWhisper, null)?.Invoke();   // WPF PlayWhisperAudio: StopAudio first
             _stopWhisper = CoreAudio.PlayStoppable(path, SubliminalWhisper.Volume(s.MasterVolume, s.SubAudioVolume), "whisper",
                 onFinished: () => After(SubliminalWhisper.UnduckDelayMs, () => CoreAudio.Unduck(gen)));
+            if (Volatile.Read(ref _gen) != entry) Interlocked.Exchange(ref _stopWhisper, null)?.Invoke();   // Stop raced the start
             Log.Debug("Playing subliminal audio: {Path}", Path.GetFileName(path));
             Later(SubliminalWhisper.HapticLeadMs, () =>
             {
                 _ = CoreHaptics.Service?.TriggerSubliminalPatternAsync(text);
-                Later(SubliminalWhisper.VisualAfterHapticMs, () => Draw(text));
-            });
+                Later(SubliminalWhisper.VisualAfterHapticMs, () => Draw(text), entry);
+            }, entry);
             return true;
         }
 

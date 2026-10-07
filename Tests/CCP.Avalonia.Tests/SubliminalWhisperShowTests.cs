@@ -136,4 +136,22 @@ public sealed class SubliminalWhisperShowTests
         });
         return Task.CompletedTask;
     });
+
+    /// <summary>A Stop that lands while the whisper is starting still silences it and drops its card.</summary>
+    [Fact]
+    public void Stop_racing_the_whisper_start_still_silences_it() => With(audible: true, roll: 0.5, run =>
+    {
+        CoreAudio.PlayStoppableProvider = (p, v, tag, _, done) =>
+        {
+            var name = Path.GetFileName(p);
+            run.Log.Add("play " + name);
+            SubliminalWhisperShow.StopAll();                                      // Stop lands mid-start
+            return () => { run.Log.Add("stop " + name); done?.Invoke(); };
+        };
+        SubliminalWhisperShow.Phrase("reset");
+        foreach (var t in run.Timers.ToArray()) t.Then();
+        foreach (var t in run.Timers.ToArray()) t.Then();
+        Assert.Contains("stop reset.mp3", run.Log);
+        Assert.DoesNotContain(run.Log, l => l.StartsWith("card"));
+    });
 }
