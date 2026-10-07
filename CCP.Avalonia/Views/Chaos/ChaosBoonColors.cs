@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Avalonia.Media;
+using Avalonia.Data.Converters;
 using Avalonia.Media.Immutable;
+using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel.Avalonia.Views.Chaos
 {
@@ -73,5 +75,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             if (!BrushCache.TryGetValue(c, out var b)) { b = new ImmutableSolidColorBrush(c); BrushCache[c] = b; }
             return b;
         }
+
+        // ---- sidebar/ribbon tile accents: WPF ChaosBoonColors.SidebarAccent/SidebarBack, same
+        //      palette and branch order, over the Core ChaosSidebarBoon ----
+        public static IBrush SidebarAccent(ChaosSidebarBoon b)
+        {
+            var fallback = b.IsEmptySlot ? EmptyAccent : b.IsModifier ? ModAccent
+                         : b.IsCurse ? CurseAccent : b.Level > 0 ? PocketAccent : BoonAccent;
+            return b.IsEmptySlot ? fallback : BrushForOrDefault(b.Id, fallback);
+        }
+        public static IBrush SidebarBack(ChaosSidebarBoon b) =>
+            b.IsEmptySlot ? Brushes.Transparent : b.IsModifier ? ModBack : b.IsCurse ? CurseBack : b.Level > 0 ? PocketBack : BoonBack;
+
+        /// <summary>XAML bridges: <c>{Binding Converter={x:Static local:ChaosBoonColors.AccentOf}}</c>
+        /// on a tile's (immutable) <see cref="ChaosSidebarBoon"/>.</summary>
+        public static readonly IValueConverter AccentOf = new FuncValueConverter<ChaosSidebarBoon?, IBrush?>(b => b == null ? null : SidebarAccent(b));
+        public static readonly IValueConverter BackOf = new FuncValueConverter<ChaosSidebarBoon?, IBrush?>(b => b == null ? null : SidebarBack(b));
+
+        private static IBrush Frozen(Color c) => new ImmutableSolidColorBrush(c);
+        private static readonly IBrush EmptyAccent = Frozen(Color.FromArgb(0x60, 0xB8, 0xB8, 0xD0));
+        private static readonly IBrush PocketAccent = Frozen(Color.FromRgb(0xFF, 0x69, 0xB4));
+        private static readonly IBrush BoonAccent = Frozen(Color.FromRgb(0x9C, 0xE8, 0xA0));
+        private static readonly IBrush CurseAccent = Frozen(Color.FromRgb(0xFF, 0x8A, 0x8A));
+        private static readonly IBrush ModAccent = Frozen(Color.FromRgb(0x8B, 0x5C, 0xF6));
+        private static readonly IBrush PocketBack = Frozen(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4));
+        private static readonly IBrush BoonBack = Frozen(Color.FromArgb(0x2E, 0x9C, 0xE8, 0xA0));
+        private static readonly IBrush CurseBack = Frozen(Color.FromArgb(0x2E, 0xFF, 0x8A, 0x8A));
+        private static readonly IBrush ModBack = Frozen(Color.FromArgb(0x2E, 0x8B, 0x5C, 0xF6));
     }
 }

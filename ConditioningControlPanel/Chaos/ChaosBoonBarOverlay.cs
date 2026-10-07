@@ -182,16 +182,16 @@ public sealed class ChaosBoonBarOverlay : Window
             {
                 Text = b.Glyph,
                 FontSize = 19,
-                Foreground = b.AccentBrush,
+                Foreground = ChaosBoonColors.SidebarAccent(b),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             });
         else
-            inner.Children.Add(new Image { Source = b.Icon, Stretch = Stretch.UniformToFill });
+            inner.Children.Add(new Image { Source = (ImageSource)b.Icon, Stretch = Stretch.UniformToFill });
         inner.Children.Add(new Border
         {
             CornerRadius = new CornerRadius(10),
-            BorderBrush = b.AccentBrush,
+            BorderBrush = ChaosBoonColors.SidebarAccent(b),
             BorderThickness = new Thickness(3),
             IsHitTestVisible = false,
         });
@@ -201,7 +201,7 @@ public sealed class ChaosBoonBarOverlay : Window
             Width = TILE,
             Height = TILE,
             CornerRadius = new CornerRadius(10),
-            Background = b.TileBackBrush,
+            Background = ChaosBoonColors.SidebarBack(b),
             Margin = new Thickness(0, 0, 6, 0),
             Child = inner,
         };
@@ -216,7 +216,7 @@ public sealed class ChaosBoonBarOverlay : Window
         var panel = new StackPanel { MaxWidth = 240 };
         panel.Children.Add(new TextBlock
         {
-            Text = b.Name, FontWeight = FontWeights.Bold, FontSize = 13, Foreground = b.AccentBrush,
+            Text = b.Name, FontWeight = FontWeights.Bold, FontSize = 13, Foreground = ChaosBoonColors.SidebarAccent(b),
         });
         if (!string.IsNullOrEmpty(b.Desc))
             panel.Children.Add(new TextBlock
