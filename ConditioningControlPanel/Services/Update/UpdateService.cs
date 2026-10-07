@@ -20,17 +20,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.1.3";
+        public const string AppVersion = "7.1.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.1.3 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.1.4 - Stay Tuned
 
 FIXES SINCE 7.1.0
 - new Companion > AI page: the connection (cloud, local or your own model), how often your companion talks (idle chatter, bubble time, voice lines, triggers, tube look) and its memory, all in one place and never folded away. 7.1.0 and 7.1.1 left some of them with no way in.
 - the Companion page has Show, Hide, Pop out and Voice right in its header again.
+- the Home slideshow is quiet: no more notes when a card changes.
 
 NEW IN 7.1.0
 
