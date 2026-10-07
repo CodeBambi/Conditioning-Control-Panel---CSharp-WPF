@@ -42,10 +42,73 @@
             <Setter Property="Padding" Value="14,12"/>
             <Setter Property="Margin" Value="0,0,10,0"/>
         </ControlTheme>
+        <!-- WPF ChasterTabView.xaml:134-188: a key, tinted by the tile's colour (WPF Fx Tint), a tick when on. -->
+        <ControlTheme x:Key="CirceKey" TargetType="ToggleButton">
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,12,12"/>
+            <Setter Property="MinHeight" Value="76"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <Border Name="Fill" Background="{TemplateBinding Background}" CornerRadius="16" Opacity="0"/>
+                        <Border Name="Rim" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="16" Opacity="0.55"/>
+                        <Grid Margin="16,12" ColumnDefinitions="Auto,*">
+                            <Path Name="Key" Width="42" Height="18" Stretch="Uniform" Opacity="0.7" Fill="{TemplateBinding BorderBrush}"
+                                  VerticalAlignment="Center" Margin="0,0,12,0"
+                                  Data="M 8,0 A 8,8 0 1 0 8,16 A 8,8 0 1 0 8,0 Z M 8,4.5 A 3.5,3.5 0 1 0 8,11.5 A 3.5,3.5 0 1 0 8,4.5 Z M 15,5.5 H 42 V 11 H 38.5 V 8.5 H 34.5 V 12.5 H 30.5 V 8.5 H 15 Z"/>
+                            <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                        </Grid>
+                        <Border Name="Tick" Width="20" Height="20" CornerRadius="10" Opacity="0" Background="{TemplateBinding BorderBrush}"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0">
+                            <TextBlock Text="&#x2713;" FontSize="11" FontWeight="Bold" Foreground="#FF14101E" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Rim"><Setter Property="Opacity" Value="1"/></Style>
+            <Style Selector="^:pointerover /template/ Path#Key"><Setter Property="Opacity" Value="1"/></Style>
+            <Style Selector="^:checked /template/ Border#Rim">
+                <Setter Property="Opacity" Value="1"/>
+                <Setter Property="Background" Value="Transparent"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#Fill"><Setter Property="Opacity" Value="0.22"/></Style>
+            <Style Selector="^:checked /template/ Path#Key"><Setter Property="Opacity" Value="1"/></Style>
+            <Style Selector="^:checked /template/ Border#Tick"><Setter Property="Opacity" Value="1"/></Style>
+        </ControlTheme>
+        <!-- WPF ChasterTabView.xaml:34-72 -->
+        <ControlTheme x:Key="CirceCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="Padding" Value="20,16"/>
+        </ControlTheme>
+        <ControlTheme x:Key="CirceEyebrow" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </ControlTheme>
+        <ControlTheme x:Key="CirceSub" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Opacity" Value="0.8"/>
+            <Setter Property="Margin" Value="1,4,0,0"/>
+        </ControlTheme>
+        <ControlTheme x:Key="CirceFigure" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="38"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+        </ControlTheme>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <Grid Margin="26,22,26,20" MaxWidth="1080" RowDefinitions="Auto,Auto,Auto,Auto">
+        <Grid Margin="26,22,26,20" MaxWidth="1080" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
             <!-- header: the name, and the account -->
             <Grid Grid.Row="0" Margin="4,0,4,14">
                 <TextBlock Text="{loc:Str chaster_title}" FontFamily="Fredoka, Segoe UI" FontSize="28"
@@ -121,6 +184,25 @@
                 <StackPanel Margin="26,14,26,14" VerticalAlignment="Center">
                     <TextBlock x:Name="HeroTitle" Text="{loc:Str chaster_hero_title}" FontFamily="Fredoka, Segoe UI" FontSize="88"
                                FontWeight="Bold" Foreground="#FF7AC0" HorizontalAlignment="Center" IsVisible="False"/>
+                    <!-- under it: the calendar, one square a day, and the countdown beside it (WPF :505-560) -->
+                    <Grid x:Name="HeroLower" ColumnDefinitions="Auto,*">
+                    <Panel x:Name="CalendarRow" IsVisible="False" VerticalAlignment="Top" Margin="0,2,18,0">
+                        <!-- a torn-off wall-calendar sheet, pinned a little crooked -->
+                        <StackPanel x:Name="Sheet" Margin="0,0,0,6" RenderTransform="rotate(-1.5deg)">
+                            <Path Fill="#FFF3EAD9" Stretch="Fill" Height="9" Margin="0,0,0,-1"
+                                  Data="M 0,9 L 0,5 L 6,2 L 12,6 L 18,1 L 25,5 L 31,2 L 38,6 L 44,0 L 51,5 L 57,2 L 64,6 L 70,1 L 77,5 L 83,3 L 90,6 L 96,1 L 100,4 L 100,9 Z"/>
+                            <Border Background="#FFF3EAD9" Padding="10,12,10,10">
+                                <Border BorderBrush="#38241A2E" BorderThickness="1,1,0,0" HorizontalAlignment="Left">
+                                    <UniformGrid x:Name="Calendar" Columns="8" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                </Border>
+                            </Border>
+                        </StackPanel>
+                        <Ellipse Width="9" Height="9" Fill="#FF1A1230" Stroke="#66241A2E" StrokeThickness="1"
+                                 HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0"/>
+                        <Ellipse Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="2,3,0,0"
+                                 Stroke="#FF8A1830" StrokeThickness="1" Fill="#FFC8244A"/>
+                    </Panel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Top">
                     <StackPanel x:Name="HeroClockRow" Orientation="Horizontal" IsVisible="False">
                         <StackPanel x:Name="HeroClock" Orientation="Horizontal"/>
                         <TextBlock Text="{loc:Str chaster_lock_lead}" FontSize="13" VerticalAlignment="Bottom"
@@ -138,6 +220,8 @@
                             <TextBlock x:Name="TxtUseLock" FontSize="16" FontWeight="Bold" Foreground="#21152E"/>
                         </Button>
                     </StackPanel>
+                    </StackPanel>
+                    </Grid>
 
                     <!-- NOT LINKED: the same hero, one ask. -->
                     <StackPanel x:Name="UnlinkedPanel" IsVisible="False">
@@ -224,9 +308,52 @@
                 </Border>
             </UniformGrid>
 
+            <!-- 3. THREE NUMBERS and the receipt under them (WPF ChasterTabView.xaml:641-687, linked only). Code in ChasterTabView.Numbers.cs. -->
+            <StackPanel x:Name="NumbersPanel" Grid.Row="3" Margin="0,14,0,0" IsVisible="False">
+                <UniformGrid Columns="3" Margin="0,0,-12,14">
+                    <Border x:Name="StatTab" Theme="{StaticResource CirceCard}" Margin="0,0,12,0">
+                        <StackPanel>
+                            <TextBlock x:Name="TxtBalance" Text="0:00" Theme="{StaticResource CirceFigure}"/>
+                            <TextBlock x:Name="TxtBalanceCaption" Theme="{StaticResource CirceEyebrow}" Margin="1,2,0,0"/>
+                            <TextBlock Text="{loc:Str chaster_stat_tab_sub}" Theme="{StaticResource CirceSub}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="StatToday" Theme="{StaticResource CirceCard}" Margin="0,0,12,0" ToolTip.Tip="{loc:Str chaster_settle_line}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="TxtToday" Text="0:00" Theme="{StaticResource CirceFigure}"/>
+                                <TextBlock x:Name="TxtTodayCap" Text="/ 60:00" FontFamily="Fredoka, Segoe UI" FontSize="15"
+                                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Bottom" Margin="8,0,0,8"/>
+                            </StackPanel>
+                            <TextBlock Text="{loc:Str chaster_stat_today}" Theme="{StaticResource CirceEyebrow}" Margin="1,2,0,0"/>
+                            <TextBlock x:Name="TxtTodaySub" Theme="{StaticResource CirceSub}"/>
+                            <Panel x:Name="CapTrack" Height="6" Margin="0,10,0,0">
+                                <Border Background="#22FFFFFF" CornerRadius="3"/>
+                                <Border x:Name="CapFill" Width="0" HorizontalAlignment="Left" CornerRadius="3" Background="#FF6B8A"/>
+                            </Panel>
+                        </StackPanel>
+                    </Border>
+                    <!-- Click: the bill on paper. -->
+                    <Border x:Name="StatRun" Theme="{StaticResource CirceCard}" Margin="0,0,12,0" Cursor="Hand" Background="{DynamicResource SurfaceBgBrush}">
+                        <Panel>
+                            <StackPanel>
+                                <TextBlock x:Name="TxtRun" Text="0:00" Theme="{StaticResource CirceFigure}"/>
+                                <TextBlock Text="{loc:Str chaster_stat_run}" Theme="{StaticResource CirceEyebrow}" Margin="1,2,0,0"/>
+                                <TextBlock Text="{loc:Str chaster_stat_run_sub}" Theme="{StaticResource CirceSub}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtRunChevron" Text="&#x25BE;" FontSize="14" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                        </Panel>
+                    </Border>
+                </UniformGrid>
+                <Border x:Name="ReceiptHost" IsVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True">
+                    <fx:ChasterReceiptView x:Name="Receipt" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                </Border>
+            </StackPanel>
+
             <!-- THE HEADS-UP CLOCK and the pinned ladder scrap (WPF ChasterTabView.xaml:689-806, linked only).
                  Hover the clock (click to pin) and the raffle card unrolls under it. Code in ChasterTabView.Ladder.cs. -->
-            <Grid x:Name="AddedRow" Grid.Row="3" ColumnDefinitions="*,Auto" Margin="0,14,0,14" IsVisible="False">
+            <Grid x:Name="AddedRow" Grid.Row="4" ColumnDefinitions="*,Auto" Margin="0,14,0,14" IsVisible="False">
                 <!-- the scrap: the calendar's paper, torn top, a red pin through a punched hole, tilted -->
                 <Panel x:Name="LadderScrap" Grid.Column="1" Width="236" Margin="18,2,6,4" VerticalAlignment="Top"
                        RenderTransformOrigin="50%,0%" PointerEntered="LadderScrap_PointerEntered">
@@ -259,7 +386,7 @@
                     </Ellipse>
                 </Panel>
                 <!-- WPF :747: column 0 stacks the clock card and, under it beside the scrap, 4. THE KEYS (2x2 presets).
-                     ponytail: the keys (PresetRow, Preset_Click) are not ported; the presets slice fills KeysSlot. -->
+                     The keys' code is ChasterTabView.Keys.cs. -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Top">
                 <Border x:Name="AddedCard" VerticalAlignment="Top" Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="18" Padding="20,16">
@@ -298,7 +425,39 @@
                         </Grid>
                     </Grid>
                 </Border>
-                <StackPanel x:Name="KeysSlot"/>
+                <StackPanel x:Name="KeysSlot">
+                    <TextBlock Text="{loc:Str chaster_keys_eyebrow}" Theme="{StaticResource CirceEyebrow}" Margin="4,14,0,2"/>
+                    <TextBlock Text="{loc:Str chaster_keys_explain}" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="4,0,0,8"/>
+                    <UniformGrid x:Name="PresetRow" Columns="2" Rows="2" Margin="0,0,-12,-12">
+                        <ToggleButton x:Name="BtnPresetGentle" Theme="{StaticResource CirceKey}" Tag="gentle" Background="#5FFFD0" BorderBrush="#5FFFD0"
+                                      ToolTip.Tip="{loc:Str chaster_preset_gentle_hint}">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="{loc:Str chaster_preset_gentle}" FontFamily="Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtStakesGentle" FontFamily="Fredoka, Segoe UI" FontSize="12" Opacity="0.7" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="BtnPresetStrict" Theme="{StaticResource CirceKey}" Tag="strict" Background="#FF6B8A" BorderBrush="#FF6B8A"
+                                      ToolTip.Tip="{loc:Str chaster_preset_strict_hint}">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="{loc:Str chaster_preset_strict}" FontFamily="Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtStakesStrict" FontFamily="Fredoka, Segoe UI" FontSize="12" Opacity="0.7" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="BtnPresetCirce" Theme="{StaticResource CirceKey}" Tag="circe" Background="#E0B052" BorderBrush="#E0B052"
+                                      ToolTip.Tip="{loc:Str chaster_preset_circe_hint}">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="{loc:Str chaster_preset_circe}" FontFamily="Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtStakesCirce" FontFamily="Fredoka, Segoe UI" FontSize="12" Opacity="0.7" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </ToggleButton>
+                        <!-- The fourth key is the player's own mix: it lights whenever the boards match no preset, and pressing it changes nothing. -->
+                        <ToggleButton x:Name="BtnPresetCustom" Theme="{StaticResource CirceKey}" Tag="custom" Background="#C9A6FF" BorderBrush="#C9A6FF"
+                                      ToolTip.Tip="{loc:Str chaster_key_custom_hint}">
+                            <TextBlock Text="{loc:Str chaster_preset_custom}" FontFamily="Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold"/>
+                        </ToggleButton>
+                    </UniformGrid>
+                </StackPanel>
                 </StackPanel>
 
                 <!-- The player's own raffle card (WPF :1107-1150). Hover opens, click pins, outside click / deactivate closes. -->

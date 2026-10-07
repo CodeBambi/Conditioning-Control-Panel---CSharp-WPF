@@ -82,6 +82,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtAddedMonth.Text = Loc.GetF("chaster_added_month", ChasterLadder.FormatClock(3 * 3600));
             PaintScrap(new LadderBoard("2026-10", new[] { new LadderRow(1, "Alpha", true, 9000, false), new LadderRow(2, "Locked 1A", false, 5000, false) },
                 new LadderRow(23, "Me", true, 100, true), false));
+            // the numbers, the open receipt and the calendar sheet, so --render-view draws them
+            NumbersPanel.IsVisible = ReceiptHost.IsVisible = true;
+            TxtRun.Text = CircesTab.Format(240);
+            TxtBalanceCaption.Text = Loc.Get("chaster_balance_caption");
+            Receipt.Show(new TabBill(new[] { new TabBillLine("attention", 2, 300), new TabBillLine("typo", 1, -60) }, 300, -60, 0));
+            BuildCalendar((DateTime.Today.AddDays(-3), DateTime.Today.AddDays(4)), DateTime.Today);
         }
 
         /// <summary>WPF LadderOnShown + ScrapOnShown: a page open re-reads the card and the board.</summary>
