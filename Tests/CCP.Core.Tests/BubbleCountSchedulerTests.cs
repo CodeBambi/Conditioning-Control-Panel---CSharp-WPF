@@ -113,6 +113,29 @@ public sealed class BubbleCountSchedulerTests
         Assert.Equal(3, host.Shown.Count);
     });
 
+    /// <summary>#1145: the Mercy picker moves the threshold (here 2 wrong tries).</summary>
+    [Fact]
+    public void Mercy_comes_after_the_picked_number_of_fails() => With(true, true, true, () =>
+    {
+        var s = CoreSettings.Current;
+        var saved = s.MercyAfterFails;
+        s.MercyAfterFails = 2;
+        try
+        {
+            var clock = new FakeClock(); var host = new Host();
+            var b = new BubbleCountScheduler(host, clock, () => Clips);
+            b.Trigger(forceTest: true);
+            clock.Advance(TimeSpan.FromSeconds(1));
+            host.Shown[^1].Done(false);
+            Assert.Equal("WRONG!\nWATCH AGAIN", host.Messages[^1].Text);
+            host.Messages[^1].Then();
+            host.Shown[^1].Done(false);
+            Assert.Equal("BAMBI GETS MERCY", host.Messages[^1].Text);
+            Assert.Equal(2, host.Shown.Count);
+        }
+        finally { s.MercyAfterFails = saved; }
+    });
+
     [Fact]
     public void Non_strict_failure_ends_and_disabled_drops_scheduled_games() => With(false, false, true, () =>
     {
