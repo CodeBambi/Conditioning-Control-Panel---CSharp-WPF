@@ -483,3 +483,19 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   the existing drawer; "Clear conversation" (ForgetThread + legacy local transcript + tube log) is restored on this head.
 - Not ported: OllamaSetupService (detect/install/auto-offer), the Live actions feed, the login deep link.
 - Advisor: worker.
+## 2026-10-02: Chaos run engine in Core, runs stay WPF-only (avalonia-port/chaos-waves)
+- `ChaosModels.cs` (run config/state, boon pool, toy state, sidebar tile) and `ChaosRunEffects.cs` are git mvs into Core.
+  `ChaosSidebarBoon` lost its WPF `Visibility`/`Brush` members: `Has*` bools stay, the accent/back brushes are each head's
+  `ChaosBoonColors.SidebarAccent/SidebarBack` (same palette and branch order), WPF binds them through a converter and
+  `BoolToVisibility`. `Icon` is `object?`. Three head hooks replace `App.SkillTree`, `ChaosArt.Resolve` and
+  `ChaosBubbleVariants.AllIds` (set in WPF `App`); `App.Settings?.Current` became `CoreSettings` with the same null case.
+  `ChaosMotion` moved beside them (an enum only).
+- New `ChaosRunEngine` is the pure tail of WPF `RunTick`: tick advance + lust decay, T-10 s, end/Relapse, wave index and
+  progress, act number, and the gold/drop/base-point scalars. WPF calls it in the same order; every effect stays in WPF.
+  Not moved: spawning, pops/defuses/detonations, drafts, toys, slow-mo/freeze — each reads bubbles, overlays, audio or
+  Win32 input, and splitting them under the line cap would leave half-moved methods.
+- Can a run start on Avalonia? No. A run's surfaces are the bubble field, the draft table, the overlays and the WebView
+  host, none of which exist on this head; starting one would show a clock over an empty desktop with nothing to pop and no
+  panic-stop path to test. So no entry point starts a run; the HUD only binds `ChaosRunState` (sample in the render
+  proof, a stepped run in its test). Panic and mid-run saves are untouched (WPF `OnPanicKeyDuringRun` → stop; saves only
+  where WPF writes them).

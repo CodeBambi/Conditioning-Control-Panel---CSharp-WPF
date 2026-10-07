@@ -70,6 +70,9 @@ public enum SettleOutcome
     /// <summary>The chosen lock's timer has run out and <see cref="LockRelock"/> says to leave it
     /// ready to unlock. Nothing went out; the balance waits.</summary>
     LockRanOut,
+    /// <summary>The chosen lock does not let the wearer add time (the keyholder turned it off,
+    /// or Chaster answered 403 to the add). Nothing went out; the balance waits on the tab.</summary>
+    AddsBlocked,
 }
 
 /// <summary>
@@ -86,6 +89,11 @@ public enum SettleOutcome
 /// </summary>
 public sealed partial class ChasterService : IDisposable
 {
+    /// <summary>The DEBUG demo service (fake Chaster). Its lock lives only in memory: a pick on
+    /// the page must never reach the real settings, or a desk demo run strands the real install
+    /// on the fake lock's id. Set by the head's demo factory (WPF ChasterServiceApp).</summary>
+    public bool IsDemo { get; internal init; }
+
     /// <summary>After a panic press or an emergency exit, nothing adds for this long. Long
     /// enough that leaving is never priced, short enough that one press is not a free day.</summary>
     public static readonly TimeSpan SafetyHold = TimeSpan.FromMinutes(10);
@@ -131,6 +139,11 @@ public sealed partial class ChasterService : IDisposable
     /// popped bubble, the flash that showed. Null for everything else (the pop then lands at the
     /// cursor). A separate event so the older listeners keep their signature.</summary>
     public event Action<string, TabBooking, ScreenPoint?>? BookedAt;
+
+    /// <summary>A pop the player caused had a price the tab had no room for (the day's limit or
+    /// the backlog limit). Only what <see cref="CapNoticeRule.Shows"/> allows, with the same screen
+    /// point <see cref="BookedAt"/> would have used: the main window floats "day is full" there.</summary>
+    public event Action<string, TabRefusal, ScreenPoint?>? CapRefused;
 
     /// <summary>Linked, unlinked, or the link died. Raised on whatever thread found out.</summary>
     public event Action? LinkChanged;
@@ -187,11 +200,11 @@ public sealed partial class ChasterService : IDisposable
     /// <summary>Seconds on the tab and not on the lock yet. Negative is credit.</summary>
     public int BalanceSeconds { get { lock (_gate) return _tab.BalanceSeconds; } }
 
-    /// <summary>Gross adds booked today, for "Today 12:30 of 60:00". A day nothing was booked
-    /// on yet reads 0, whatever yesterday left behind.</summary>
+    /// <summary>What counts against today's limit (adds minus credits, never below 0), for
+    /// "Today 12:30 of 60:00". A day nothing was booked on yet reads 0, whatever yesterday left behind.</summary>
     public int TodayAddedSeconds
     {
-        get { lock (_gate) return _tab.Day == CircesTab.DayKey(_localNow()) ? _tab.DayAddedSeconds : 0; }
+        get { lock (_gate) return _tab.Day == CircesTab.DayKey(_localNow()) ? Math.Max(0, CircesTab.DayUsed(_tab)) : 0; }
     }
 
     /// <summary>Would a Note for this row book right now: tab on, account linked, row switched
@@ -244,6 +257,7 @@ public sealed partial class ChasterService : IDisposable
         if (options.Prices.Contains(TabDayEnd.HeatId) && TabDayEnd.HeatApplies(eventId))
             seconds = TabDayEnd.Heated(seconds, HeatCount(eventId));
         var booking = BookSeconds(eventId, seconds, originPx, unprompted: unprompted);
+        if (CapNoticeRule.Shows(eventId, seconds, booking, unprompted)) CapRefused?.Invoke(eventId, booking.Refusal, originPx);
         if (eventId == "session") NoteStreak(options);
         return booking;
     }
@@ -271,13 +285,13 @@ public sealed partial class ChasterService : IDisposable
                 for (var i = 0; i < charges.Count; i++)
                 {
                     var on = lastDay.AddDays(i + 1).AddHours(12);
-                    var keep = (_tab.Day, _tab.DayAddedSeconds);
+                    var keep = (_tab.Day, _tab.DayAddedSeconds, _tab.DayCreditSeconds);
                     // Inside the safety hold nothing adds, the days away included.
                     booked += CircesTab.Book(_tab, CircesMisses.EventId, charges[i], _utcNow(),
                         on, _runStartUtc, safetyExit: _utcNow() < _safetyUntilUtc, options.Caps).AppliedSeconds;
                     // A charge dated on a past day must not roll the day counter back to that day:
                     // it would zero what today already booked and hand today's cap out again.
-                    if (CircesTab.DayKey(on) != keep.Day) (_tab.Day, _tab.DayAddedSeconds) = keep;
+                    if (CircesTab.DayKey(on) != keep.Day) (_tab.Day, _tab.DayAddedSeconds, _tab.DayCreditSeconds) = keep;
                 }
                 if (booked > 0) _tab.ForgivableSeconds = CircesMisses.Forgivable(booked);
             }
@@ -461,7 +475,10 @@ public sealed partial class ChasterService : IDisposable
             // Only ever the lock the player picked (security pass 2): not even the only one there
             // is. With none picked the balance waits on the tab and the page asks.
             var lockId = options.LockId;
-            if (string.IsNullOrEmpty(lockId)) return SettleOutcome.NoLockChosen;
+            // An id the client would refuse is no lock at all. Checked here, before the pending
+            // mark: AddTimeAsync throws on it before sending, and a mark left behind by a throw
+            // was counted as landed at the next settle, so the tab booked time Chaster never got.
+            if (!ChasterClient.IsLockId(lockId)) return SettleOutcome.NoLockChosen;
 
             // A push onto a lock whose timer has run out locks it again from now (LockRelock).
             if (await LockRanOutAsync(lockId!, options.RelockPastEnd, ct).ConfigureAwait(false))
@@ -469,6 +486,10 @@ public sealed partial class ChasterService : IDisposable
                 Serilog.Log.Information("[Chaster] the chosen lock's timer has run out; the tab waits");
                 return SettleOutcome.LockRanOut;
             }
+
+            // The keyholder turned adding off (the fresh read above says so, or the last add was
+            // refused with 403 and no read has said otherwise since). Asking again changes nothing.
+            if (AddsBlockedFor(lockId!)) return SettleOutcome.AddsBlocked;
 
             lock (_gate)
             {
@@ -496,6 +517,12 @@ public sealed partial class ChasterService : IDisposable
                 }
                 SaveTab();
             }
+            if (added.Status == ChasterStatus.Refused)
+            {
+                // update-time answers 403 only for a missing lock.time.add: the wearer may not add.
+                NoteAddPermission(lockId!, false);
+                return SettleOutcome.AddsBlocked;
+            }
             if (!added.Ok) return Failed(added.Status);
             Serilog.Log.Information("[Chaster] settled {Seconds}s to the lock", plan.Seconds);
             LadderPushLanded();
@@ -513,6 +540,7 @@ public sealed partial class ChasterService : IDisposable
         var locks = await CallWithAccessAsync(a => _client.GetLocksAsync(a, ct), ct).ConfigureAwait(false);
         if (locks is not { Ok: true } ok) return false;
         var pick = ok.Value!.FirstOrDefault(l => l.Id == lockId);
+        if (pick != null) NoteAddPermission(lockId, pick.WearerMayAddTime);
         if (pick == null || pick.IsFrozen) return false;
         var end = pick.EndDate is { } e ? (e.Kind == DateTimeKind.Utc ? e : e.ToUniversalTime()) : (DateTime?)null;
         return !LockRelock.MayPush(end, _utcNow(), relockOptIn);
@@ -569,6 +597,7 @@ public sealed partial class ChasterService : IDisposable
         {
             if (generation is { } g && g != _linkGeneration) return null;
             _linkGeneration++;
+            _addsRefusedLockId = null;
             var old = _tokens.Read();
             _tokens.Clear();
             return old;
@@ -582,6 +611,7 @@ public sealed partial class ChasterService : IDisposable
         lock (_linkGate)
         {
             _linkGeneration++;
+            _addsRefusedLockId = null;
             var old = _tokens.Read();
             _tokens.Write(new ChasterStoredTokens(fresh.AccessToken, fresh.RefreshToken ?? "", _utcNow().AddSeconds(Math.Max(0, fresh.ExpiresIn))));
             return old;

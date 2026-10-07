@@ -32,6 +32,19 @@ test('power-up continues on its exit velocity and can be caught exactly once',()
  d.x=g.paddle.x;d.y=g.paddle.y-g.paddle.h/2-10;d.vx=0;d.vy=190;advance(10);
  assert.equal(events.filter(e=>e.name==='powerCatch').length,1);assert.equal(g.power.charges,1);
 });
+test('a power-up a portal throws upward arcs back down and never leaves the top (tester report 2026-09-28)',()=>{
+ // Two mouths facing the same way turn a falling drop round: it leaves the exit climbing.
+ for(const [inAngle,outAngle,outY] of [[0,0,150],[0,Math.PI/2,150],[0,0,40]]) {
+  const {g,events,advance}=rig();
+  g.portals=[{id:'in',pair:'p',x:400,y:300,angle:inAngle,halfLength:65},{id:'out',pair:'p',x:900,y:outY,angle:outAngle,halfLength:65}];
+  const d={kind:'shield',x:400,y:240,x0:400,age:.5,vy:190,ph:0};g.power.drops=[d];
+  let top=Infinity,fell=false;
+  for(let i=0;i<240;i++){advance(1);if(!g.power.drops.includes(d))break;top=Math.min(top,d.y);if(d.portalMotion&&d.vy>0)fell=true;}
+  assert.equal(events.filter(e=>e.name==='portalTransit'&&e.kind==='powerup').length>=1,true);
+  assert.ok(top>=0,`drop climbed to ${top.toFixed(0)}`);
+  assert.ok(fell,'the drop comes back down inside two seconds');
+ }
+});
 test('picture and spiral seeds transit before an expired seed blooms near the exit',()=>{
  for(const spiral of [null,'whirl']) {
   const {g,events,advance}=rig();g.portals=mouths(-Math.PI/2);

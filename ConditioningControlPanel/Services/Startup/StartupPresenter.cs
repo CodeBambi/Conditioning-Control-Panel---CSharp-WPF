@@ -68,6 +68,8 @@ namespace ConditioningControlPanel.Services.Startup
         private bool _lastQuiet;
         private DateTime? _firstLaunchUntilUtc;
         private DispatcherTimer? _quietTimer;
+        private DateTime? _lastPassiveUtc;
+        private DispatcherTimer? _passiveTimer;
 
         public StartupPresenter(Dispatcher dispatcher)
         {
@@ -213,6 +215,15 @@ namespace ConditioningControlPanel.Services.Startup
 
             if (routing == StartupRouting.Present)
             {
+                // One passive surface on screen at a time: the next one waits for it to close.
+                if (StartupQueueCore.PassiveWaits(_lastPassiveUtc, DateTime.UtcNow, PassiveWindowUp()))
+                {
+                    if (!IsHeld(item.Key)) _deferred.Add(item);
+                    App.Logger?.Debug("[Startup] '{Key}' waits for the passive surface already up", item.Key);
+                    EnsurePassiveWatch();
+                    return;
+                }
+                _lastPassiveUtc = DateTime.UtcNow;
                 App.Logger?.Debug("[Startup] '{Key}' presented immediately - nothing is quiet", item.Key);
                 RunSafely(item.Open, item.Key, "open");
                 return;
@@ -502,6 +513,42 @@ namespace ConditioningControlPanel.Services.Startup
         /// legitimately put an item straight back into it - a Drained-time enqueue makes the ladder
         /// busy again - and re-holding into a list we are iterating would either be lost or loop.</para>
         /// </summary>
+        private bool IsHeld(string key)
+        {
+            foreach (var held in _deferred)
+                if (string.Equals(held.Key, key, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>A feature card or an announcement is on screen.</summary>
+        private static bool PassiveWindowUp()
+        {
+            try
+            {
+                var app = Application.Current;
+                if (app == null) return false;
+                foreach (Window w in app.Windows)
+                    if (w is IPassiveStartupSurface && w.IsVisible) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>Re-asks the held surfaces once the passive one on screen has closed.</summary>
+        private void EnsurePassiveWatch()
+        {
+            if (_passiveTimer != null) return;
+            _passiveTimer = new DispatcherTimer(DispatcherPriority.Normal, _dispatcher) { Interval = TimeSpan.FromSeconds(1) };
+            _passiveTimer.Tick += (_, _) =>
+            {
+                if (StartupQueueCore.PassiveWaits(_lastPassiveUtc, DateTime.UtcNow, PassiveWindowUp())) return;
+                _passiveTimer?.Stop();
+                _passiveTimer = null;
+                FlushDeferred();
+            };
+            _passiveTimer.Start();
+        }
+
         private void FlushDeferred()
         {
             if (_deferred.Count == 0) return;

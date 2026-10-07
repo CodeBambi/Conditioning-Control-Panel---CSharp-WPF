@@ -26,7 +26,7 @@
         <!-- Root Grid, not a StackPanel: the premium gate is the LAST sibling here so the bar
              covers the whole page (hero + both columns + the cheat-sheet) instead of only the
              controls column it used to sit over. -->
-        <Grid Margin="36,24,36,28" MaxWidth="1180" HorizontalAlignment="Center">
+        <Grid Margin="36,24,36,28" MaxWidth="1180" HorizontalAlignment="Stretch">
             <StackPanel>
 
                 <!-- ══ HERO ═══════════════════════════════════════════════════════════════════

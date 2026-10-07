@@ -129,7 +129,8 @@ public class NatashaHoldTests
     public void The_menu_dresses_the_held_row_like_the_red_one()
     {
         Assert.Equal(TabMenuCopy.ArtFor("natasha"), TabMenuCopy.ArtFor("natasha_held"));
-        Assert.Equal("bubbles", TabMenuCopy.VignetteFor("natasha_held"));
+        // Its own scene since 2026-10-02: the pop scene ends on a +figure, the held row earns time back.
+        Assert.Equal("natasha_held", TabMenuCopy.VignetteFor("natasha_held"));
 
         var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");

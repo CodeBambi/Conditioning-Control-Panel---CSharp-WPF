@@ -93,7 +93,7 @@ public sealed class ChaosModeService
     /// <summary>Countdown length (ms) used on RunAgain (full-start countdown is unchanged at 3s).</summary>
     public const int ChaosRestartCountdownMs = 1000;
     /// <summary>Seconds an untouched boon draft waits before auto-skipping (+1 shield). 0 disables.</summary>
-    public const int DraftAutoResumeSecDefault = 15;
+    public const int DraftAutoResumeSecDefault = ChaosTuning.DRAFT_AUTO_RESUME_SEC_DEFAULT;
 
     // ---- benign-pop juice ----
     private static readonly Color BENIGN_POP_COLOR = Color.FromRgb(255, 200, 235);  // soft pink/white
@@ -951,10 +951,8 @@ public sealed class ChaosModeService
             if (App.Video?.IsPlaying == true) RaiseGameLayerAboveVideo();
         }
 
-        double dt = 0.25;
-        double elapsed = _state.ElapsedSec + dt;
-        _state.ElapsedSec = elapsed;
-        _state.Heat = Math.Max(0, _state.Heat - 0.0015);
+        double dt = ChaosRunEngine.TICK_SEC;
+        double elapsed = ChaosRunEngine.Advance(_state, dt);
         UpdateHeatTint();
 
         // Crash telemetry + sentinel refresh: ~every 15s (RunTick fires 4x/s → 60 ticks).
@@ -1067,7 +1065,7 @@ public sealed class ChaosModeService
         // T-10s: the hole is closing — one varied voiced bark + a quiet announce, so the run
         // gets an ending instead of an interruption. Once per run; a Relapse extension that
         // pushes the clock back out doesn't re-arm it (Relapse announces itself).
-        if (!_endingSoonFired && _state.RunDurationSec - elapsed <= 10)
+        if (!_endingSoonFired && ChaosRunEngine.IsEndingSoon(_state, elapsed))
         {
             _endingSoonFired = true;
             ChaosAnnouncerOverlay.Announce("the hole is closing…", ChaosAnnounceKind.Depth,
@@ -1076,12 +1074,12 @@ public sealed class ChaosModeService
             App.Bark?.NotifyChaosEndingSoon();
         }
 
-        if (elapsed >= _state.RunDurationSec)
+        var end = ChaosRunEngine.CheckEnd(_state, elapsed);
+        if (end != ChaosRunEngine.EndCheck.Running)
         {
             // Relapse sin: the hole isn't done with you — one more loop, paying double drops + gold.
-            if (_state.RelapseLoopArmed && !_state.RelapseLoopActive)
+            if (end == ChaosRunEngine.EndCheck.Relapse)
             {
-                _state.ExtendOneLoop();
                 ChaosAnnouncerOverlay.Announce("☠ RELAPSE — one more loop", ChaosAnnounceKind.Temptation,
                     artKey: "relapse", subText: "one more loop");
                 ChaosSfx.Play("sin_accept", 0.6f);
@@ -1091,9 +1089,7 @@ public sealed class ChaosModeService
             else { EndRun(); return; }
         }
 
-        double waveLen = (double)_state.RunDurationSec / _state.WaveCount;
-        int newWave = Math.Min(_state.WaveCount, 1 + (int)(elapsed / waveLen));
-        _state.WaveProgress = (elapsed % waveLen) / waveLen;
+        var (newWave, waveLen) = ChaosRunEngine.WaveAt(_state, elapsed);
 
         // Pocket Watch: the wave countdown at the top of the screen (+ a live score line).
         if (_state.ShowWaveTimer)
@@ -1454,7 +1450,7 @@ public sealed class ChaosModeService
         {
             _state.AllLiveNextWave = false;
             _state.WaveIndex = newWave;
-            _state.ActIndex = 1 + (newWave - 1) / 5;
+            _state.ActIndex = ChaosRunEngine.ActFor(newWave);
             App.Bark?.NotifyChaosWaveEscalated(newWave);
             FireActChangedIfCrossed();
             AnnounceFinalLoopIfEntering();
@@ -1589,7 +1585,7 @@ public sealed class ChaosModeService
         }
 
         _state.WaveIndex = _pendingWave;
-        _state.ActIndex = 1 + (_state.WaveIndex - 1) / 5;
+        _state.ActIndex = ChaosRunEngine.ActFor(_state.WaveIndex);
         FireActChangedIfCrossed();
 
         // A brief "Ready? :3" → "GO!" beat (same flashing display as run start) before the next
@@ -1668,7 +1664,7 @@ public sealed class ChaosModeService
 
     // ============================ bubble callbacks ============================
 
-    private double BasePoints(int strength) => 40 + strength * 1.6; // 40..200
+    private static double BasePoints(int strength) => ChaosRunEngine.BasePoints(strength);
 
     /// <summary>Lifetime-boon payout layer on bubble pops: Blindfold's pay multiplier (1.0 unworn).</summary>
     private double BoonPayMult => _state?.BlindfoldPayMult ?? 1.0;
@@ -1703,7 +1699,7 @@ public sealed class ChaosModeService
         _pendulumSlowActive && _state?.PendulumPayMult > 1 ? _state.PendulumPayMult : 1.0;
 
     /// <summary>Relapse's bonus loop pays double gold — every gold bank routes through here.</summary>
-    private int GoldScaled(int gold) => _state?.RelapseLoopActive == true ? gold * 2 : gold;
+    private int GoldScaled(int gold) => ChaosRunEngine.GoldScaled(_state, gold);
 
     /// <summary>
     /// Bank an instant in-run payout as GOLD (ChaosGlyphs.Gold, her bench's coin; never drops/✦).
@@ -1728,7 +1724,7 @@ public sealed class ChaosModeService
     }
 
     /// <summary>Drip Feed drops per pop, doubled during the Relapse bonus loop.</summary>
-    private int DropsPerPopNow() => (_state?.DropPerPop ?? 0) * (_state?.RelapseLoopActive == true ? 2 : 1);
+    private int DropsPerPopNow() => ChaosRunEngine.DropsPerPop(_state);
 
     /// <summary>Drip Feed: bank the per-pop trickle, doubled during the Relapse bonus loop,
     /// clamped to the level's per-descent ceiling (the cap bounds the doubling too).</summary>

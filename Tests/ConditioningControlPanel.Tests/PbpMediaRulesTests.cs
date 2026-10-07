@@ -107,4 +107,40 @@ public class PbpMediaRulesTests
         s.PbpMediaFlavour = null!;
         Assert.Equal("", s.PbpMediaFlavour);
     }
+
+    [Theory]
+    // a fresh install: nothing saved, the first start asks
+    [InlineData(false, true, "", false)]
+    // the page's pick set the flag
+    [InlineData(true, true, "", true)]
+    // saved before the flag existed: a stored flavour, or "own pictures only"
+    [InlineData(false, true, "pink", true)]
+    [InlineData(false, false, "", true)]
+    // junk in the flavour field is not a choice
+    [InlineData(false, true, "nope", false)]
+    public void TheOneTimeChoiceIsSavedOnce(bool chosen, bool online, string flavour, bool expected)
+        => Assert.Equal(expected, PbpMediaRules.HasSavedChoice(chosen, online, flavour));
+
+    [Theory]
+    [InlineData(true, "frills", true)]      // a saved flavour is the chess opt-in at boot
+    [InlineData(false, "frills", false)]    // "no online pictures" wins
+    [InlineData(true, "", false)]           // nothing picked: only the app-wide consent could open it
+    [InlineData(true, "nope", false)]
+    public void ASavedPickIsTheOptInAtBoot(bool online, string flavour, bool expected)
+        => Assert.Equal(expected, PbpMediaRules.SavedOptIn(online, flavour));
+
+    [Fact]
+    public void ASavedPickFetchesAtBootWithoutAppWideConsent()
+    {
+        var optIn = PbpMediaRules.SavedOptIn(true, "pink");
+        Assert.Equal(Pink, PbpMediaRules.ChannelsFor(true, optIn, "local", false, "pink", Pink, App));
+    }
+
+    [Fact]
+    public void TheChosenFlagRoundTripsAndDefaultsOff()
+    {
+        Assert.False(new AppSettings().PbpMediaChosen);
+        var back = JsonConvert.DeserializeObject<AppSettings>(JsonConvert.SerializeObject(new AppSettings { PbpMediaChosen = true }))!;
+        Assert.True(back.PbpMediaChosen);
+    }
 }

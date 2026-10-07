@@ -422,6 +422,7 @@ namespace ConditioningControlPanel
 
                 var settings = App.Settings?.Current;
                 if (settings == null || !settings.MandatoryVideosEnabled) return;
+                if (settings.SkipMandatoryVideoEnhanceNudge) return; // "Don't ask again" (#644)
 
                 // Don't interrupt remote-controlled or locked-down sessions.
                 if (App.RemoteControl?.ControllerConnected == true) return;
@@ -488,7 +489,17 @@ namespace ConditioningControlPanel
                     // Re-read at open time. The nudge can have waited minutes on the ladder, and
                     // the session it is about may be over by the time its turn comes.
                     if (!_isRunning) return;
-                    if (!ShowStyledDialog("✨ Enhanced videos detected", body, yes, "Not now")) return;
+                    var accepted = ShowStyledDialog("✨ Enhanced videos detected", body, yes, "Not now",
+                        Loc.Get("chk_dont_ask_again"), out var dontAskAgain);
+                    // #644: the box stops the question on either button. It never opens the
+                    // camera or flips a setting by itself; "Yes" still goes through the normal
+                    // consent and calibration flow below.
+                    if (dontAskAgain)
+                    {
+                        settings.SkipMandatoryVideoEnhanceNudge = true;
+                        App.Settings?.Save();
+                    }
+                    if (!accepted) return;
 
                     if (enhanceOff)
                     {

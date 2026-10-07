@@ -28,14 +28,26 @@ public static class TabPageText
                 all.Where(p => p.Seconds < 0).OrderBy(p => p.Seconds).ToList());
     }
 
-    /// <summary>The next setup step stays visible until the tab can run.</summary>
-    internal static string? SetupHint(bool linked, LockLookup lookup, bool hasLock, bool enabled) =>
+    /// <summary>The next setup step stays visible until the tab can run. A tab that is on with no
+    /// row switched on books nothing, ever, and sits at 0:00 looking broken (Haruka, 7.0.1): that
+    /// state gets its own line, and the page lights the keys while it lasts. It comes before the
+    /// keyholder block, which only matters once something can book.</summary>
+    internal static string? SetupHint(bool linked, LockLookup lookup, bool hasLock, bool enabled,
+        bool addsBlocked = false, bool anyRowOn = true) =>
         !linked ? null
         : lookup == LockLookup.Away ? "chaster_state_away"
         : lookup == LockLookup.None ? "chaster_setup_none"
         : !hasLock ? "chaster_setup_pick"
         : !enabled ? "chaster_setup_run"
+        : !anyRowOn ? "chaster_setup_nothing"
+        : addsBlocked && lookup == LockLookup.Chosen ? "chaster_state_keyholder_blocked"
         : null;
+
+    /// <summary>True when at least one switched-on id is a row that can book: a priced row from
+    /// <see cref="TabPrices.All"/>, never a way-out id. A modifier alone (heat) prices nothing.</summary>
+    public static bool AnyRowOn(IEnumerable<string>? enabledIds) =>
+        enabledIds != null && enabledIds.Any(id =>
+            !string.IsNullOrEmpty(id) && !TabPrices.NeverPriced.Contains(id) && TabPrices.Find(id) != null);
 
     // ============================== the hero: the lock, in words ==============================
 
@@ -99,12 +111,13 @@ public static class TabPageText
     /// for tomorrow; paused or with no lock picked, all of it waits.</summary>
     public readonly record struct TagLine(string Key, string? Today = null, string? Later = null);
 
-    public static TagLine Tag(int balanceSeconds, int pushableTodaySeconds, bool paused, bool lockPicked)
+    public static TagLine Tag(int balanceSeconds, int pushableTodaySeconds, bool paused, bool lockPicked, bool addsBlocked = false)
     {
         if (balanceSeconds < 0) return new("chaster_tag_credit_lands");
         if (balanceSeconds == 0) return new("chaster_tag_lands");
         if (paused) return new("chaster_tag_paused");
         if (!lockPicked) return new("chaster_tag_nolock");
+        if (addsBlocked) return new("chaster_tag_blocked");
         var today = Math.Clamp(pushableTodaySeconds, 0, balanceSeconds);
         var later = balanceSeconds - today;
         if (later == 0) return new("chaster_tag_lands");

@@ -132,7 +132,7 @@ namespace ConditioningControlPanel.Services
         }
 
         internal static void CreateShortcut(string shortcutPath, string targetPath, string workingDirectory,
-            string description, string arguments = "")
+            string description, string arguments = "", string? iconPath = null)
         {
             // Use COM interop to create a proper Windows shortcut
             var shellLink = (IShellLink)new ShellLink();
@@ -144,6 +144,11 @@ namespace ConditioningControlPanel.Services
             if (!string.IsNullOrEmpty(arguments))
             {
                 shellLink.SetArguments(arguments);
+            }
+
+            if (!string.IsNullOrEmpty(iconPath))
+            {
+                shellLink.SetIconLocation(iconPath, 0);
             }
 
             // Save the shortcut

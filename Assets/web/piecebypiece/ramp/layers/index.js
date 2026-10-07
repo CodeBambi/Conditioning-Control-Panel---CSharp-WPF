@@ -19,6 +19,7 @@ import { createSpiral } from './spiral.js';
 import { createOverlay } from './overlay.js';
 import { createVideoCard } from './videocard.js';
 import { createGlitchGrab } from './glitchgrab.js';
+import { createBoardMask } from './boardmask.js';
 
 /** A layer that has not been built yet: every call is a safe no-op. */
 const NOOP = Object.freeze({ set() {}, fire() {}, show() {}, grab() {}, move() {}, drop() {}, clear() {}, dispose() {} });
@@ -131,6 +132,8 @@ export function createLayerStack(ctx = {}) {
   };
   const card = safe(() => createVideoCard(base));
   const drag = safe(() => createGlitchGrab(base));
+  // the board's footprint thins every layer on both planes (owner, 2026-10-02)
+  const mask = (() => { try { return createBoardMask({ board: ctx.board, planes: [ctx.root, ctx.front] }); } catch { return null; } })();
 
   const counts = { flash: 0, gifRain: 0, burst: 0, videoCard: 0, grab: 0, drop: 0 };
   let disposed = false;
@@ -168,6 +171,20 @@ export function createLayerStack(ctx = {}) {
       counts.videoCard += 1;
       try { card.show(opts || {}); } catch { /* no card is fine */ }
     },
+    /** Take the wash down now; `{ fast: true }` is the snap when a move is made. */
+    clearCard(opts) {
+      if (disposed) return;
+      try { card.clear(opts || {}); } catch { /* no card is fine */ }
+    },
+    /** The breath after a move: every picture still popping or falling fades out now. */
+    rest(ms) {
+      if (disposed) return;
+      for (const l of Object.values(oneshot)) {
+        try { if (typeof l.fade === 'function') l.fade(ms); else l.clear(); } catch { /* best effort */ }
+      }
+    },
+    /** Re-measure the board on screen; cheap when it has not moved. */
+    boardMask() { if (!disposed && mask) { try { return mask.update(); } catch { return false; } } return false; },
     grab(p) { if (!disposed) { counts.grab += 1; try { drag.grab(p); } catch { /* ignore */ } } },
     dragmove(p) { if (!disposed) { try { drag.move(p); } catch { /* per-frame, stay quiet */ } } },
     drop(p) { if (!disposed) { counts.drop += 1; try { drag.drop(p); } catch { /* ignore */ } } },
@@ -184,6 +201,7 @@ export function createLayerStack(ctx = {}) {
         try { l.dispose(); } catch { /* best effort */ }
       }
       base.stageFilter.dispose();
+      if (mask) mask.dispose();
     },
     /** True while a tape is over the board; the veils read this and step back. */
     get cardLive() { return !!card.live; },

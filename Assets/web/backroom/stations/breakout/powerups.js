@@ -14,6 +14,13 @@ const WEIGHT_SUM=POWER_KINDS.reduce((n,k)=>n+POWER_WEIGHT[k],0);
 export function pickPower(roll){let r=Math.max(0,Math.min(.999999,roll))*WEIGHT_SUM;for(const k of POWER_KINDS){r-=POWER_WEIGHT[k];if(r<0)return k;}return POWER_KINDS[POWER_KINDS.length-1];}
 /** Seconds left when a timed power warns, the drop's fall (px/s, px/s2, cap) and its catch reach past the paddle edge. */
 export const WARN_AT=2, DROP_V0=118, DROP_ACCEL=20, DROP_VMAX=190, DROP_REACH=14, MUZZLE_S=.11;
+/**
+ * A drop a portal throws UPWARD (tester report 2026-09-28: "a power up went through a portal and fell off the top").
+ * The fall's own pull (DROP_ACCEL, 20 px/s2) turned a 190 px/s rise into nine seconds of climbing, so it left the
+ * screen and aged out. A rising drop now bleeds its climb at DROP_LIFT_DECEL (a full-speed exit peaks about 50 px
+ * above the mouth), a portal exit is held to DROP_VMAX, and the top of the field is a ceiling (DROP_CEILING).
+ */
+export const DROP_LIFT_DECEL=360, DROP_CEILING=14;
 /** Eighth notes fire the laser; the shot leaves this much of an eighth early so its quantised pluck lands ON the eighth. */
 export const LASER_LEAD=.16, FALLBACK_SPB=60/96;
 /** Sim seconds a handed beat clock may stand still before the laser's grid runs on the sim clock instead (one beat at 96 bpm). */
@@ -109,12 +116,17 @@ export function createPowerups(s,{rng,emit,newBall,damage,maxBalls=8,beatTime=nu
     if(!p.fireball)for(const b of s.balls)b.fireContacts?.clear();
     const top=s.paddle.y-s.paddle.h/2;
     p.drops=p.drops.filter(d=>{
-      const previous={x:d.x,y:d.y},old=d.y;d.vy=Math.min(DROP_VMAX,(d.vy??DROP_V0)+DROP_ACCEL*dt);d.y+=d.vy*dt;d.age+=dt;
+      const previous={x:d.x,y:d.y},old=d.y,vy=d.vy??DROP_V0;
+      d.vy=Math.min(DROP_VMAX,vy+(vy<0?DROP_LIFT_DECEL:DROP_ACCEL)*dt);d.y+=d.vy*dt;d.age+=dt;
       if(d.portalMotion)d.x+=(d.vx||0)*dt;
       else {d.x=Math.min(s.w-14,Math.max(14,swayX(d)));d.vx=dt>0?(d.x-previous.x)/dt:0;}
       const transported=transitPortal(d,previous,s.portals,{radius:14,kind:'powerup',emit});
-      if(transported)d.portalMotion=true;
+      if(transported){
+        d.portalMotion=true;
+        const sp=Math.hypot(d.vx||0,d.vy);if(sp>DROP_VMAX){d.vx=(d.vx||0)*DROP_VMAX/sp;d.vy=d.vy*DROP_VMAX/sp;}
+      }
       if(d.portalMotion && (d.x<14 || d.x>s.w-14)){d.x=Math.max(14,Math.min(s.w-14,d.x));d.vx*=-1;}
+      if(d.y<DROP_CEILING&&d.vy<0){d.y=DROP_CEILING;d.vy=-d.vy*.3;}
       // The reach grew with the sway (11 -> 14), so a drop that would have been caught on a straight fall still is.
       if(!transported&&d.vy>0&&old-11<=top&&d.y+11>=top&&Math.abs(d.x-s.paddle.x)<=s.paddle.w/2+DROP_REACH){activate(d.kind);return false;}
       if(!d.missed&&d.y-11>top){d.missed=true;emit('powerMiss',{kind:d.kind,x:d.x});}

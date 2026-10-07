@@ -76,7 +76,9 @@
                     <Button x:Name="BtnFilterImages" Content="{loc:Str filter_images}" Style="{StaticResource MlChip}"
                             Click="Filter_Click" Tag="image" Margin="0,0,6,0"/>
                     <Button x:Name="BtnFilterVideos" Content="{loc:Str filter_videos}" Style="{StaticResource MlChip}"
-                            Click="Filter_Click" Tag="video"/>
+                            Click="Filter_Click" Tag="video" Margin="0,0,6,0"/>
+                    <Button x:Name="BtnFilterAudio" Content="{loc:Str filter_audio}" Style="{StaticResource MlChip}"
+                            Click="Filter_Click" Tag="audio"/>
                 </StackPanel>
                 <Border HorizontalAlignment="Right" Width="240" Background="#1C1C30"
                         BorderBrush="#3A3A58" BorderThickness="1" CornerRadius="6" Padding="8,4">

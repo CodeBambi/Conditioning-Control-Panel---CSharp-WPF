@@ -316,7 +316,7 @@ namespace ConditioningControlPanel.Services
             Tab("lockdown", "tab_lockdown_mode", "🔒", "lockdown", "lockdown lock kiosk");
             Tab("blinktrainer", "tab_blink_trainer", "👀", "blinktrainer", "blink trainer eyes");
             Tab("remotecontrol", "tab_remote_control", "📱", "remotecontrol", "remote control phone");
-            Tab("availablesubjects", "tab_available_subjects", "🛰️", "availablesubjects", "subjects online users");
+            Tab("availablesubjects", "tab_available_subjects", "🛰️", "availablesubjects", "lobby tables open join host chess goon remote subjects online users");
             Tab("discord", "tab_profile", "👤", "discord", "profile trainer card wardrobe");
             // The Spiral Room (CONTRACT-FUSE-0816 2.4), which replaced the map window. Listed like
             // every other live ShowTab key and deliberately NOT gated on the block: the palette has

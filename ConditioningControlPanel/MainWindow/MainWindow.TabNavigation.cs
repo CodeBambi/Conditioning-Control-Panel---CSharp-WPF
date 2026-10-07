@@ -217,6 +217,7 @@ namespace ConditioningControlPanel
             // SP5L3: stop polling whenever we leave the Available Subjects
             // tab. Idempotent — safe to call even if not currently polling.
             App.AvailableSubjects?.StopPolling();
+            LeaveLobbyTab();
             if (StudioTab != null) StudioTab.Visibility = Visibility.Collapsed;
             // Phase 4: HapticsTab is a module INSIDE StudioTab now (see the passthrough below),
             // so collapsing StudioTab already hides it. Kept because it is also the rack's
@@ -468,8 +469,7 @@ namespace ConditioningControlPanel
                         AvailableSubjectsTab.Visibility = Visibility.Visible;
                         AnimateTabIn(AvailableSubjectsTab);
                     }
-                    EnsureAvailableSubjectsBound();
-                    App.AvailableSubjects?.StartPolling();
+                    EnterLobbyTab();
                     break;
 
                 case "bambitakeover":

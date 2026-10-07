@@ -341,7 +341,7 @@ function makeActor(wall, cam, idx, students) {
       g.classList.remove('an-out');
       g.classList.add('an-walk');
       if (a.route.in === 'door') g.classList.add('an-in');
-      requestAnimationFrame(() => g.classList.remove('an-in'));
+      wall.later(() => g.classList.remove('an-in'), 0);
       a.state = 'walk';
       return;
     }
@@ -455,7 +455,14 @@ export function createCamWall(opts) {
   const clockEls = [];
   const cuts = [];
 
-  const wall = { routes: {}, lastLook: -1e9, roll: (id) => fireRoll(id) };
+  const timers = new Set();
+  let dead = false;
+  function later(fn, ms) {
+    const id = setTimeout(() => { timers.delete(id); if (!dead) fn(); }, ms);
+    timers.add(id);
+    return id;
+  }
+  const wall = { routes: {}, lastLook: -1e9, roll: (id) => fireRoll(id), later };
 
   CAM_DEFS.forEach((cam, i) => {
     const tile = el('div', 'cam-tile');
@@ -516,20 +523,42 @@ export function createCamWall(opts) {
   tiles.laptop = laptop;
 
   /* ---- driver: one rAF for the whole wall ---- */
-  let raf = 0, last = 0, sim = 0, lastSecond = -1, running = false;
+  let raf = 0, clockTimer = 0, last = null, sim = 0, lastSecond = -1, running = false;
   const reduced = (typeof matchMedia === 'function'
     && matchMedia('(prefers-reduced-motion: reduce)').matches)
     || document.documentElement.classList.contains('arc-reduced');
   const still = reduced || !!o.lite;
+  // Tiles are reparented into the painted monitor wall by lab.js.
+  for (const tile of Object.values(tiles)) tile.classList.toggle('an-lite', still);
+
+  function schedule() {
+    if (!running || document.hidden || dead || raf || clockTimer) return;
+    if (still) clockTimer = setTimeout(() => { clockTimer = 0; frame(performance.now()); }, 1000);
+    else raf = requestAnimationFrame(frame);
+  }
+  function pause() {
+    if (raf) cancelAnimationFrame(raf);
+    if (clockTimer) clearTimeout(clockTimer);
+    raf = 0; clockTimer = 0; last = null;
+    for (const id of timers) clearTimeout(id);
+    timers.clear();
+    for (const tile of Object.values(tiles)) {
+      tile.classList.add('an-paused');
+      tile.classList.remove('cam-boot', 'cam-cut');
+    }
+  }
 
   function frame(ts) {
-    if (!running) return;
-    if (!last) last = ts;
+    raf = 0;
+    if (!running || dead || document.hidden) return;
+    if (last === null) last = ts;
+    // CCTV needs at most 30 updates per second, including on high-refresh displays.
+    if (!still && ts - last < 1000 / 30) { schedule(); return; }
     let dt = (ts - last) / 1000;
     last = ts;
-    if (dt > 0.25) dt = 0.25;  // a background tab does not teleport students
+    if (dt > (still ? 1.25 : 0.25)) dt = still ? 1.25 : 0.25;  // a background tab does not teleport students
     sim += dt;
-    for (const a of actors) a.tick(sim, dt);
+    if (!still) for (const a of actors) a.tick(sim, dt);
     const secs = Math.floor(sim);
     if (secs !== lastSecond) {
       lastSecond = secs;
@@ -545,11 +574,11 @@ export function createCamWall(opts) {
         if (sim >= c.next) {
           c.next = sim + CUT_MIN_S + c.rng() * (CUT_MAX_S - CUT_MIN_S);
           c.tile.classList.add('cam-cut');
-          setTimeout(() => c.tile.classList.remove('cam-cut'), 280);
+          later(() => c.tile.classList.remove('cam-cut'), 280);
         }
       }
     }
-    raf = requestAnimationFrame(frame);
+    schedule();
   }
 
   function fireRoll(id) {
@@ -562,38 +591,47 @@ export function createCamWall(opts) {
   }
 
   function onVis() {
-    if (document.hidden) { if (raf) cancelAnimationFrame(raf); raf = 0; last = 0; }
-    else if (running && !raf) raf = requestAnimationFrame(frame);
+    if (document.hidden) pause();
+    else if (running) {
+      for (const tile of Object.values(tiles)) tile.classList.remove('an-paused');
+      schedule();
+    }
   }
   document.addEventListener('visibilitychange', onVis);
 
   function start() {
-    if (running) return;
-    running = true; last = 0;
+    if (running || dead) return;
+    running = true; last = null;
+    for (const tile of Object.values(tiles)) tile.classList.toggle('an-paused', document.hidden);
+    if (still && lastSecond < 0) {
+      // One static cast, with no walking or decorative frame loop.
+      for (const a of actors) a.tick(30, 0);
+    }
     /* W3 P1-22: nine CRTs and not one sound. `cam_bed` is a HOLD - it loops
      * until somebody lets go of it - and stop() below is its owner, which
      * destroy() reaches too. SAMPLE-ONLY: no mp3, no bed, no fallback, and a
      * silent wall is the honest answer rather than a synthesised hum. */
     sfx('cam_bed', 0.25, { bus: 'music', hold: true });
-    if (!still) {
+    if (!still && !document.hidden) {
       // power-on, one stagger down the grid - the emi field-trip 200ms beat
       Object.keys(tiles).forEach((id, i) => {
         const tl = tiles[id];
-        setTimeout(() => {
+        later(() => {
           tl.classList.add('cam-boot');
-          setTimeout(() => tl.classList.remove('cam-boot'), 600);
+          later(() => tl.classList.remove('cam-boot'), 600);
         }, i * 90);
       });
     }
-    raf = requestAnimationFrame(frame);
+    frame(performance.now());
   }
   function stop() {
     running = false;
     sfx('cam_bed', 0.25, { bus: 'music', stop: true });   // W3 P1-22: the bed's owner
-    if (raf) cancelAnimationFrame(raf);
-    raf = 0; last = 0;
+    pause();
   }
   function destroy() {
+    if (dead) return;
+    dead = true;
     stop();
     document.removeEventListener('visibilitychange', onVis);
     try { root.remove(); } catch (e) { /* noop */ }

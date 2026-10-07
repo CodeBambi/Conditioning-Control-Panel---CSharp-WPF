@@ -240,6 +240,34 @@ internal static class BackRoomHostService
     internal static bool IsBreakoutDemoActive => IsBreakoutActive && _breakoutDemo;
     internal static bool IsBreakoutFullActive => IsBreakoutActive && !_breakoutDemo;
 
+    /// <summary>A Breakout window is up AND in front: the panic key's Escape is its pause then
+    /// (PanicPolicy.GameClaimsEscapeAsPause), as it is for the race and the chess board.</summary>
+    internal static bool IsBreakoutInFront => IsBreakoutActive && !_racePage && _host?.IsForeground == true;
+
+    /// <summary>True once the Breakout page has said <c>ready</c>; frames posted before that are queued.</summary>
+    internal static bool IsBreakoutReady => IsBreakoutActive && _host?.IsReady == true;
+
+    /// <summary>The frame that hands Breakout an Escape the panel kept as its pause. The page
+    /// listens for this exact name (shared/host-escape.js via play.html).</summary>
+    internal const string KeptEscapeType = "kept-escape";
+
+    /// <summary>
+    /// Hand Breakout an Escape the panel kept as its pause. The game pauses on its own keydown,
+    /// which never comes while its WebView2 is out of keyboard focus; the page plays this once as
+    /// its own Escape unless the real key reached it too. MainWindow asks
+    /// PanicPolicy.KeptEscapeGoesTo first. The page gets the keyboard back as well, so Enter on
+    /// Resume works without a click.
+    /// </summary>
+    internal static void PostKeptEscape()
+    {
+        try
+        {
+            _host?.Post(new { type = KeptEscapeType });
+            _host?.FocusWeb();
+        }
+        catch (Exception ex) { App.Logger?.Debug("BackRoom: kept Escape post failed: {E}", ex.Message); }
+    }
+
     /// <summary>
     /// What a signed-out Launch does instead of opening the room: the account sign-in. Settable so
     /// a test can see the refusal without a MainWindow.

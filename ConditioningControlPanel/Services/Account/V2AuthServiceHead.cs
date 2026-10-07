@@ -17,6 +17,8 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return;
             ProfileAdopt.ApplyUserData(settings, user, authToken, DateTime.UtcNow);
+            // An invite week rides its own exact end date, never the 14-day grace (main 6f5e76610).
+            Invites.InviteRules.ApplyGrant(settings, Invites.InviteRules.ParseUtc(user.InviteGrantUntilRaw), DateTime.UtcNow);
             App.Settings?.Save();
         }
     }

@@ -78,6 +78,14 @@ namespace ConditioningControlPanel.Services
         /// <summary>The canonical premium (tier 1) gate: either provider's tier 1+ or whitelist, or
         /// the 14-day offline grace. Any null reads as not entitled.</summary>
         public static bool HasPremiumAccess(ProviderSubscription? patreon, ProviderSubscription? substar, AppSettings? settings) =>
+            HasPaidPremium(patreon, substar, settings) || settings?.HasInviteGrant == true;
+
+        /// <summary>Premium that comes ONLY from an invite week (WPF Services/Invites, main 6f5e76610): a free
+        /// trial, not a purchase. The celebration card and anything else that means "they paid" checks this.</summary>
+        public static bool IsInviteWeekOnly(ProviderSubscription? patreon, ProviderSubscription? substar, AppSettings? settings) =>
+            settings?.HasInviteGrant == true && !HasPaidPremium(patreon, substar, settings);
+
+        private static bool HasPaidPremium(ProviderSubscription? patreon, ProviderSubscription? substar, AppSettings? settings) =>
             patreon?.CurrentTier >= PatreonTier.Level1 || patreon?.IsWhitelisted == true
             || settings?.HasCachedPremiumAccess == true
             || substar?.CurrentTier >= PatreonTier.Level1 || substar?.IsWhitelisted == true;
@@ -176,6 +184,7 @@ namespace ConditioningControlPanel.Services
                 {
                     s.PatreonPremiumValidUntil = s.PatreonLabValidUntil = null;
                     s.PatreonTier = 0;
+                    s.InviteGrantUntil = null; // the week belongs to the account, not the machine
                     CoreSettings.Save();
                 }
             }

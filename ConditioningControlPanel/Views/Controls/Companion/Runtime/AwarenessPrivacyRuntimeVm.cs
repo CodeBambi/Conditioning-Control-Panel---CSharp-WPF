@@ -458,28 +458,60 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         //  chips
         // =====================================================================================
 
+        // The keys each row was last filled with. Sync runs every 1.5 s while the card is on screen,
+        // and clearing and refilling a row regenerates every chip and re-lays out the whole page
+        // (ccp-bugs #1323: seconds-long UI stalls on the Awareness tab). A row is refilled only when
+        // what it shows actually changed.
+        private readonly List<string> _denyKeys = new();
+        private readonly List<string> _allowKeys = new();
+        private readonly List<string> _seenKeys = new();
+        private readonly List<string> _knownKeys = new();
+
+        /// <summary>
+        /// Replaces <paramref name="target"/>'s contents with <paramref name="next"/> only when the
+        /// key sequence differs from the one it was last filled with. Returns whether it refilled.
+        /// </summary>
+        internal static bool RefillIfChanged<T>(ObservableCollection<T> target, List<string> lastKeys,
+            List<(string Key, Func<T> Make)> next)
+        {
+            if (lastKeys.Count == next.Count && target.Count == next.Count
+                && lastKeys.SequenceEqual(next.Select(n => n.Key), StringComparer.Ordinal))
+                return false;
+
+            lastKeys.Clear();
+            target.Clear();
+            foreach (var (key, make) in next)
+            {
+                lastKeys.Add(key);
+                target.Add(make());
+            }
+            return true;
+        }
+
         private void RebuildDeny(Models.AppSettings? settings)
         {
-            _deny.Clear();
+            var next = new List<(string, Func<IDenyChipVm>)>();
             foreach (var entry in AwarenessPrivacyRules.EffectiveDenyList(settings))
             {
                 var raw = entry;
                 var labelKey = AwarenessPrivacyRules.ChipLabelKey(raw);
                 var label = labelKey.Length > 0 ? Loc.Get(labelKey) : raw;
-                _deny.Add(new CompanionDenyChip(label, AwarenessPrivacyRules.IsGroupToken(raw),
-                    new CompanionRelayCommand(() => RemoveFromDeny(raw))));
+                next.Add((raw + "\u0001" + label, () => new CompanionDenyChip(label, AwarenessPrivacyRules.IsGroupToken(raw),
+                    new CompanionRelayCommand(() => RemoveFromDeny(raw)))));
             }
+            RefillIfChanged(_deny, _denyKeys, next);
         }
 
         private void RebuildAllow(Models.AppSettings? settings)
         {
-            _allow.Clear();
+            var next = new List<(string, Func<IDenyChipVm>)>();
             foreach (var entry in settings?.AwarenessTitleAllowList ?? new List<string>())
             {
                 var raw = entry;
-                _allow.Add(new CompanionDenyChip(raw, false,
-                    new CompanionRelayCommand(() => RemoveFromAllow(raw))));
+                next.Add((raw, () => new CompanionDenyChip(raw, false,
+                    new CompanionRelayCommand(() => RemoveFromAllow(raw)))));
             }
+            RefillIfChanged(_allow, _allowKeys, next);
         }
 
         /// <summary>
@@ -492,7 +524,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// </summary>
         private void RebuildSeen(Models.AppSettings? settings)
         {
-            _seen.Clear();
+            var next = new List<(string, Func<IAwarenessAppChipVm>)>();
 
             var deny = AwarenessPrivacyRules.EffectiveDenyList(settings);
             var seen = new List<string>();
@@ -512,14 +544,17 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
             foreach (var app in seen.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (_seen.Count >= MaxAppChips) break;
+                if (next.Count >= MaxAppChips) break;
                 if (string.IsNullOrWhiteSpace(app)) continue;
                 if (AwarenessText.SanitizeRuleEntry(app) is not { } clean) continue;
                 if (deny.Any(d => string.Equals(d, clean, StringComparison.OrdinalIgnoreCase))) continue;
 
-                _seen.Add(new AwarenessAppChip(app, Loc.Get("companion_awareness_seen_tip"),
-                    () => AddToDeny(clean)));
+                var label = app;
+                var tip = Loc.Get("companion_awareness_seen_tip");
+                next.Add((label + "\u0001" + clean + "\u0001" + tip, () => new AwarenessAppChip(label, tip,
+                    () => AddToDeny(clean))));
             }
+            RefillIfChanged(_seen, _seenKeys, next);
         }
 
         /// <summary>
@@ -534,10 +569,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// </summary>
         private void RebuildKnown()
         {
-            _known.Clear();
+            var next = new List<(string, Func<IAwarenessAppChipVm>)>();
 
             var ledger = AwarenessLive.Ledger;
-            if (ledger == null) return;
+            if (ledger == null) { RefillIfChanged(_known, _knownKeys, next); return; }
 
             var ids = new List<string>(ledger.KnownAppIds);
             ids.AddRange(ledger.RecentTransitions.Select(t => t.AppId));
@@ -546,11 +581,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                          .Where(id => !string.IsNullOrWhiteSpace(id))
                          .Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                if (_known.Count >= MaxAppChips) break;
+                if (next.Count >= MaxAppChips) break;
                 var appId = id;
-                _known.Add(new AwarenessAppChip(appId, Loc.Get("companion_awareness_forget_tip"),
-                    () => ForgetApp(appId)));
+                var tip = Loc.Get("companion_awareness_forget_tip");
+                next.Add((appId + "\u0001" + tip, () => new AwarenessAppChip(appId, tip,
+                    () => ForgetApp(appId))));
             }
+            RefillIfChanged(_known, _knownKeys, next);
         }
 
         // =====================================================================================

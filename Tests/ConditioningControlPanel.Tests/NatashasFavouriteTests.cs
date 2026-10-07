@@ -97,6 +97,30 @@ public class NatashasFavouriteTests
     }
 
     [Fact]
+    public void A_running_tab_with_no_row_on_says_nothing_counts_yet()
+    {
+        Assert.Equal("chaster_setup_nothing",
+            TabPageText.SetupHint(true, LockLookup.Chosen, true, true, anyRowOn: false));
+        Assert.Null(TabPageText.SetupHint(true, LockLookup.Chosen, true, true, anyRowOn: true));
+        // Off, the earlier step still wins: it already asks for a preset.
+        Assert.Equal("chaster_setup_run",
+            TabPageText.SetupHint(true, LockLookup.Chosen, true, false, anyRowOn: false));
+    }
+
+    [Fact]
+    public void Only_a_priced_row_counts_as_on()
+    {
+        Assert.False(TabPageText.AnyRowOn(null));
+        Assert.False(TabPageText.AnyRowOn(new string[0]));
+        Assert.False(TabPageText.AnyRowOn(new[] { TabDayEnd.HeatId }));
+        Assert.False(TabPageText.AnyRowOn(new[] { "panic", "nonsense", "" }));
+        Assert.True(TabPageText.AnyRowOn(new[] { TabDayEnd.HeatId, "typo" }));
+        Assert.True(TabPageText.AnyRowOn(new[] { "session" }));
+        foreach (var preset in new[] { TabPresets.Gentle, TabPresets.Strict, TabPresets.Circe })
+            Assert.True(TabPageText.AnyRowOn(TabPresets.Apply(preset)));
+    }
+
+    [Fact]
     public void The_blink_never_lines_up_with_the_other_pulses()
     {
         // The drain breathes and the magnet pulses on their own periods; a field of all three

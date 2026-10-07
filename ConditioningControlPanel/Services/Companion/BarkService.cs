@@ -924,6 +924,11 @@ namespace ConditioningControlPanel.Services
                 Wire<EventHandler<PatreonTier>>(h => App.Patreon.TierChanged += h, h => App.Patreon.TierChanged -= h,
                     (_, tier) =>
                     {
+                        // An invite week (and its end) is a free trial, not a purchase or a lapse:
+                        // no "you gave me money" egg, and _lastTier stays put so the friend's real
+                        // subscription later still reads as the tier-up it is.
+                        if (App.Patreon?.IsInviteWeekOnly == true) return;
+                        if (tier == PatreonTier.None && _lastTier == PatreonTier.None) return;
                         bool up = tier > _lastTier; // enum is ordinal (None < Level1 < …)
                         _lastTier = tier;
                         Raise("PatreonTierChanged", c => c.Set("tier", tier.ToString()).Set("tier_up", up));

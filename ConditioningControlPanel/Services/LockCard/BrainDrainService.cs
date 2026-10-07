@@ -402,15 +402,43 @@ namespace ConditioningControlPanel.Services
                 }
 
                 DisposePair(displacedOut, displacedReader);
-                if (started) App.Audio?.NoteOutputSuccess();
+                if (started)
+                {
+                    App.Audio?.NoteOutputSuccess();
+                    // Logged once it actually plays, so a muted endpoint or a lost race never
+                    // leaves a Media Log row for a clip nobody heard (ccp-bugs #1098).
+                    App.MediaHistory?.RecordAudio(filePath);
+                }
                 else DisposePair(waveOut, reader);
             });
         }
 
         private static float CurrentMasterVolume()
         {
-            try { return Math.Clamp(App.Settings.Current.MasterVolume, 0, 100) / 100f; }
+            try
+            {
+                var s = App.Settings.Current;
+                return EffectiveVolume(s.MasterVolume, s.BrainDrainVolume);
+            }
             catch { return 1f; }
+        }
+
+        /// <summary>
+        /// Master volume times Brain Drain's own clip volume, both 0-100, as a 0-1 gain
+        /// (ccp-bugs #1104).
+        /// </summary>
+        public static float EffectiveVolume(int masterVolume, int brainDrainVolume)
+            => Math.Clamp(masterVolume, 0, 100) / 100f * (Math.Clamp(brainDrainVolume, 0, 100) / 100f);
+
+        /// <summary>Re-applies the current master x Brain Drain volume to a playing clip.</summary>
+        public void RefreshVolume()
+        {
+            try
+            {
+                var reader = _audioReader;
+                if (reader != null) reader.Volume = CurrentMasterVolume();
+            }
+            catch { }
         }
 
         /// <summary>
@@ -450,9 +478,11 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                if (_audioReader != null)
+                var reader = _audioReader;
+                if (reader != null)
                 {
-                    _audioReader.Volume = Math.Clamp(volume, 0, 100) / 100.0f;
+                    var own = App.Settings?.Current?.BrainDrainVolume ?? 100;
+                    reader.Volume = EffectiveVolume(volume, own);
                 }
             }
             catch { }

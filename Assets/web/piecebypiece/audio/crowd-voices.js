@@ -19,13 +19,27 @@ export function createCrowdVoices({ ctx, master, noise, random = Math.random }) 
     sources.add(source); source.onended = () => sources.delete(source);
     source.start(start); source.stop(start + sec + .03);
   }
-  function play(kind) {
-    const positive = kind !== 'crowdBoo';
-    if (positive) for (let i = 0; i < (kind === 'crowdCheer' ? 24 : 13); i++) {
-      const at = .04 + i * .047 + random() * .075, pan = random() * 1.6 - .8;
-      voice({ at, sec: .045 + random() * .055, gain: .030 + random() * .025, hz: 850 + random() * 2100, noiseVoice: true, pan, attack: .003 });
-      if (i % 3 === 0) voice({ at, sec: .05, gain: .015, hz: 175 + random() * 90, end: 100, pan });
+  /** One crowd sigh: five throats sliding together plus a breath of noise. */
+  function murmur({ hz, spread = 95, bend, sec = .7, gain = .014, breathHz, breathGain = .045 }) {
+    for (let i = 0; i < 5; i++) {
+      const f = hz + random() * spread;
+      voice({ at: i * .05, sec: sec + random() * .25, gain, hz: f, end: f * bend, pan: (i - 2) * .3, attack: .14 });
     }
+    voice({ sec: sec + .25, gain: breathGain, hz: breathHz, noiseVoice: true, attack: .18 });
+  }
+  function play(kind) {
+    // check: a rising "ooh"; a draw: a falling "aww". Neither claps.
+    if (kind === 'crowdOoh') { murmur({ hz: 300, bend: 1.28, breathHz: 1300 }); return; }
+    if (kind === 'crowdAww') { murmur({ hz: 360, bend: .74, sec: .85, breathHz: 900, breathGain: .04 }); return; }
+    const positive = kind !== 'crowdBoo';
+    const claps = kind === 'crowdCheer' ? 24 : kind === 'crowdClap' ? 7 : 13;
+    const clapGain = kind === 'crowdClap' ? .7 : 1;   // castling: a polite few, a touch softer
+    if (positive) for (let i = 0; i < claps; i++) {
+      const at = .04 + i * .047 + random() * .075, pan = random() * 1.6 - .8;
+      voice({ at, sec: .045 + random() * .055, gain: (.030 + random() * .025) * clapGain, hz: 850 + random() * 2100, noiseVoice: true, pan, attack: .003 });
+      if (i % 3 === 0) voice({ at, sec: .05, gain: .015 * clapGain, hz: 175 + random() * 90, end: 100, pan });
+    }
+    if (kind === 'crowdClap') return;
     if (kind !== 'crowdApplause') {
       for (let i = 0; i < 5; i++) {
         const hz = (positive ? 270 : 150) + random() * 95;

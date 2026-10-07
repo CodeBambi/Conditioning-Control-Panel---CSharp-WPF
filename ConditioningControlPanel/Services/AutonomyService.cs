@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Services
 {
@@ -227,11 +228,21 @@ namespace ConditioningControlPanel.Services
                     "Voice Test — Not Available");
                 return;
             }
+            // Usually the companion was switched off (Dismiss sticks across restarts), and 7.0.1
+            // had no switch in the app to turn it back on. Offer it right here, then carry on.
+            if (App.AvatarWindow == null && App.Settings?.Current?.AvatarEnabled != true
+                && System.Windows.MessageBox.Show(
+                       Loc.Get("voice_test_companion_off_body"),
+                       Loc.Get("voice_test_companion_off_title"),
+                       System.Windows.MessageBoxButton.YesNo) == System.Windows.MessageBoxResult.Yes)
+                App.MainWindowRef?.SetAvatarEnabled(true);
             if (App.AvatarWindow == null)
             {
-                System.Windows.MessageBox.Show(
-                    "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.",
-                    "Voice Test — No Avatar");
+                // Declined: nothing to say. Switched on and still no tube: the old note.
+                if (App.Settings?.Current?.AvatarEnabled == true)
+                    System.Windows.MessageBox.Show(
+                        "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.",
+                        "Voice Test — No Avatar");
                 return;
             }
             if (App.MantraVoice?.HasMantras() != true)
@@ -1628,6 +1639,20 @@ namespace ConditioningControlPanel.Services
             RequestVoiceCommand();
         }
 
+        private static void ShowListeningCue(string text)
+        {
+            if (Application.Current?.Dispatcher != null)
+                _ = Application.Current.Dispatcher.InvokeAsync(() =>
+                    { try { App.AvatarWindow?.ShowListeningBubble(text); } catch { } });
+        }
+
+        private static void HideListeningCue()
+        {
+            if (Application.Current?.Dispatcher != null)
+                _ = Application.Current.Dispatcher.InvokeAsync(() =>
+                    { try { App.AvatarWindow?.HideListeningBubble(); } catch { } });
+        }
+
         // The flow is Core SpokenMantra (shared with the Avalonia head); this is the WPF host.
         private Task RunSpokenMantraAsync()
         {
@@ -1635,7 +1660,15 @@ namespace ConditioningControlPanel.Services
             if (voice == null) { App.Logger?.Information("AutonomyService: SpokenMantra — no mantra to ask"); return Task.CompletedTask; }
             return Services.Speech.SpokenMantra.RunAsync(voice, new Services.Speech.SpokenMantraHost
             {
-                Recognize = (phrase, opts) => App.Speech!.RecognizePhraseAsync(phrase, opts),
+                // Show the "listening" cue while the mic is open (ccp-bugs #841, main 209659be8): without
+                // it the player cannot tell when to start saying the phrase. The tube's dots bubble;
+                // Hide no-ops once a real bubble (the retry or praise line) has taken over.
+                Recognize = async (phrase, opts) =>
+                {
+                    ShowListeningCue(phrase);
+                    try { return await App.Speech!.RecognizePhraseAsync(phrase, opts).ConfigureAwait(false); }
+                    finally { HideListeningCue(); }
+                },
                 // Marshaled to the UI thread since the funnel may invoke us off-thread (wake-word / PTT).
                 // Voiced when a clip resolved (bark voice path); text-only otherwise.
                 Say = (text, audioPath) =>

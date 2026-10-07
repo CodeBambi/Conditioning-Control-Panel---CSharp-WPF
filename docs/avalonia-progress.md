@@ -1228,3 +1228,19 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/chaster-receipt: +652
 - Chaster tab: own receipt panel with language re-render, calendar sheet, 2x2 preset keys (mood + limits refresh), 30 s hero tick; ticks only while visible.
+
+## avalonia-port/chaos-waves: +448
+- Chaos run engine (clock, end/Relapse, waves/acts, payout scalars) in Core as ChaosRunEngine; ChaosModels/ChaosRunEffects moved to Core; WPF RunTick delegates, behaviour unchanged.
+- Avalonia ChaosHudWindow binds the Core ChaosRunState; runs still cannot start on Avalonia (no bubble field/draft/overlays); chaos-hud-window stays stub.
+
+## avalonia-port/test-isolation: +214
+- Assembly-wide per-test snapshot/restore of process-wide statics, CoreSettings and test-profile json (order leaks impossible by construction); optional seeded test order.
+
+## avalonia-port/flake-tubechat: +12
+- TubeChatBrain flake: HerRoom test leaked ChatMemoryEnabled=false through the shared settings.json; restored at the source.
+
+## avalonia-port/main-20261005 (main sync #4): +23400
+- Imports WPF main 4629b1f4a (7.0.3–7.0.5). Delta ledger docs/avalonia-main-sync-20261005.md: 137 commits = 47 ported-by-merge, 79 needs-port (31 lanes), 11 n/a.
+
+## avalonia-port/main-20261005-compat: +32
+- Test paths through SourceRoots, release button key 7.0.5, two tests updated to main's new catalogue.

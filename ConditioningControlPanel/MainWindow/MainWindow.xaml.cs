@@ -405,6 +405,10 @@ namespace ConditioningControlPanel
             // without a cached ceremony timestamp, so this is inert on every install today.
             InitializeDescentFuse();
 
+            // Header invite ticket: shown while this account has an unused invite code this month.
+            // MainWindow.InviteTicket.cs. One delayed read, then every 30 min and on account change.
+            InitializeInviteTicket();
+
             // Circe's tab: the flashing "+0:30" over the rail padlock when a price lands.
             // MainWindow.Chaster.cs. One event subscription on an install that never linked a
             // Chaster account, because the service raises nothing until it is linked and on.
@@ -857,9 +861,13 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Lockdown mode: block all key handling (panic key, etc.)
+            // Lockdown mode: block all key handling (panic key, etc.), except the leash's own way
+            // out: panic always works on a leash, Lockdown or not.
             if (App.Lockdown?.IsActive == true)
+            {
+                if (Controls.Leash.LeashSurfaces.IsLeashed && !LeashHoldSwallows(key)) LeashPanicKeyWhilePanicOff(key);
                 return;
+            }
 
             // Track Alt+Tab for achievement (Player 2 Disconnected)
             if (key == Key.Tab && (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt)))
@@ -942,6 +950,7 @@ namespace ConditioningControlPanel
                     return;
                 }
             }
+            else if (LeashPanicKeyWhilePanicOff(key)) return;
 
             // Optional Pause key (v6.8.5). PanicOverridesAll took the #735 "someone walked in"
             // grace pause off the panic key; this is where it lives now, for the people who liked
@@ -1477,6 +1486,9 @@ namespace ConditioningControlPanel
         /// <para>Piece by Piece rides the same rule (owner, 2026-09-29): without it the first Escape of a
         /// chess game closed the board, so its own pause card could never be reached. The board's pause
         /// goes quiet at once (ui/pause-hush.js) and an Escape on the pause card leaves.</para>
+        ///
+        /// <para>Breakout rides it too (tester report, 2026-09-30: Escape closed the whole game window).
+        /// The first Escape pauses it; an Escape on its pause card leaves.</para>
         /// </summary>
         private bool TryRacePauseOnEscape()
         {
@@ -1485,22 +1497,32 @@ namespace ConditioningControlPanel
                 var now = DateTime.UtcNow;
                 bool raceInFront = Services.Chaos.CaucusHostService.IsInFront;
                 bool boardInFront = Services.PieceByPiece.PieceByPieceHostService.IsInFront;
+                bool breakoutInFront = Services.BackRoom.BackRoomHostService.IsBreakoutInFront;
                 bool claim = Services.Safety.PanicPolicy.GameClaimsEscapeAsPause(
                     App.Settings?.Current?.PanicKey,
-                    gameInFront: raceInFront || boardInFront,
+                    gameInFront: raceInFront || boardInFront || breakoutInFront,
                     engineRunning: _isRunning,
                     lockCardOpen: LockCardWindow.IsAnyOpen(),
                     lastClaimUtc: _lastRaceEscapeClaimUtc,
                     nowUtc: now);
                 if (!claim) { _lastRaceEscapeClaimUtc = null; return false; }
                 _lastRaceEscapeClaimUtc = now;
-                VideoDiag.Log("PANIC", $"Escape kept by {(raceInFront ? "Racing Thoughts" : "Piece by Piece")} as its pause (again within 2 s = full panic)");
-                // The board pauses on its own keydown, which never comes while its WebView2 is out of
-                // keyboard focus, so it is handed the kept press too; the page drops it when the real
-                // key reached it as well (ui/host-escape.js).
-                if (Services.Safety.PanicPolicy.BoardGetsKeptEscape(claim, raceInFront, boardInFront,
-                        boardReady: Services.PieceByPiece.PieceByPieceHostService.IsReady))
-                    Services.PieceByPiece.PieceByPieceHostService.PostKeptEscape();
+                VideoDiag.Log("PANIC", $"Escape kept by {(raceInFront ? "Racing Thoughts" : boardInFront ? "Piece by Piece" : "Breakout")} as its pause (again within 2 s = full panic)");
+                // Each game pauses on its own keydown, which never comes while its WebView2 is out of
+                // keyboard focus, so the game in front is handed the kept press too; the page drops it
+                // when the real key reached it as well (host-escape.js).
+                switch (Services.Safety.PanicPolicy.KeptEscapeGoesTo(claim,
+                            raceInFront, raceReady: Services.Chaos.CaucusHostService.IsReady,
+                            boardInFront, boardReady: Services.PieceByPiece.PieceByPieceHostService.IsReady,
+                            breakoutInFront, breakoutReady: Services.BackRoom.BackRoomHostService.IsBreakoutReady))
+                {
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Race:
+                        Services.Chaos.CaucusHostService.PostKeptEscape(); break;
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Board:
+                        Services.PieceByPiece.PieceByPieceHostService.PostKeptEscape(); break;
+                    case Services.Safety.PanicPolicy.KeptEscapePage.Breakout:
+                        Services.BackRoom.BackRoomHostService.PostKeptEscape(); break;
+                }
                 return true;
             }
             catch (Exception ex)
@@ -2087,7 +2109,7 @@ namespace ConditioningControlPanel
                 if (!confirmed) return false;
 
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
                 App.Settings.Current.PanicKeyEnabled = false;
                 App.Settings?.Save();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");
@@ -2174,7 +2196,7 @@ namespace ConditioningControlPanel
             else
             {
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
-                    _keyboardHook?.Stop();
+                    StopKeyboardHookUnlessLeashed();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");
             }
 
@@ -3137,6 +3159,9 @@ namespace ConditioningControlPanel
         // Live name+URL rows in the mod-aware video link pool editor.
         private readonly List<(TextBox NameBox, TextBox UrlBox)> _videoLinkRows = new();
 
+        /// <summary>Rebuilds the link pool rows in whichever library cell is mounted.</summary>
+        internal void RefreshVideoLinkPool() => RefreshHypnotubeLinksUI();
+
         private void RefreshHypnotubeLinksUI()
         {
             if (CompanionTab.TxtHypnotubeModeLabel != null)
@@ -3562,6 +3587,7 @@ namespace ConditioningControlPanel
             // TierChanged handlers cover the loud grant paths; this covers the quiet ones
             // on the next launch.
             MaybeShowPremiumCelebration();
+            MaybeShowInviteEnding();
 
             // Catalogue submission feedback: poll for any pending Deeper
             // submissions that have been accepted/published since last launch and
@@ -4006,6 +4032,7 @@ namespace ConditioningControlPanel
         private const int WM_ENTERSIZEMOVE = 0x0231;
         private const int WM_EXITSIZEMOVE = 0x0232;
         private const int WM_DPICHANGED_MAIN = 0x02E0;
+        private const int WM_SIZE_MAIN = 0x0005;
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct POINT { public int X; public int Y; }
@@ -4046,7 +4073,17 @@ namespace ConditioningControlPanel
                     Services.UI.DisplayChangeCoordinator.EndInteractiveMove();
                     App.AvatarWindow?.NotifyParentInteractiveMove(false);
                     RunWorkAreaFitDeferredByMove();
+                    QueueLayoutDriftCheck("move-end");
                 }
+                catch { /* never let a hook throw */ }
+                return IntPtr.Zero;
+            }
+            if (msg == WM_SIZE_MAIN)
+            {
+                // Any resize, from any source (the tube's make-room posts SWP_ASYNCWINDOWPOS from its
+                // own thread): check afterwards that WPF's layout still covers the window. Coalesced
+                // and skipped mid-drag - see MainWindow.WorkAreaFit.cs, LAYOUT DRIFT.
+                try { QueueLayoutDriftCheck("size"); }
                 catch { /* never let a hook throw */ }
                 return IntPtr.Zero;
             }

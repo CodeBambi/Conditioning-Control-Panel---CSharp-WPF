@@ -177,6 +177,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             CmbAvatar.Items.Clear();
             var tube = App.AvatarWindow;
+            BtnTurnOn.Visibility = tube == null ? Visibility.Visible : Visibility.Collapsed;
             if (tube == null)
             {
                 CmbAvatar.IsEnabled = false;
@@ -206,6 +207,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             TxtAvatarHint.Text = text;
             TxtAvatarHint.Visibility = Visibility.Visible;
+        }
+
+        /// <summary>
+        /// The one on switch the Companion settings use too. A dismissed companion stays off
+        /// across restarts, and in 7.0.1 this card said so with nothing to press.
+        /// </summary>
+        private void BtnTurnOn_Click(object sender, RoutedEventArgs e)
+        {
+            App.MainWindowRef?.SetAvatarEnabled(true);
+            Refresh();
         }
 
         private void CmbAvatar_SelectionChanged(object sender, SelectionChangedEventArgs e)

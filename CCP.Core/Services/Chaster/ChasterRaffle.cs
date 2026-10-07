@@ -126,6 +126,11 @@ public static class ChasterRaffle
     public static DateTime? TicketDue(RaffleCard card) =>
         Status(card) == RaffleStatus.InTheDraw && MonthStart(card.Month) is { } start ? start.AddMonths(1) : null;
 
+    /// <summary>The ticket day as the culture writes a month and a day ("November 1", "1 de noviembre",
+    /// "1. November", "11月1日"). A fixed "MMM d" read "nov. 1" in Spanish.</summary>
+    public static string FormatDueDay(DateTime due, System.Globalization.CultureInfo culture) =>
+        due.ToString(culture.DateTimeFormat.MonthDayPattern, culture);
+
     /// <summary>"2026-10" -> 1 October 2026 (UTC date), or null.</summary>
     public static DateTime? MonthStart(string month) =>
         DateTime.TryParseExact(month + "-01", "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,

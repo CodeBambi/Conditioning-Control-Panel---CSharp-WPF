@@ -33,6 +33,10 @@ public interface ILeashTaskRunner
     /// same punishment (a panic press). Nothing it drives comes back by itself.</summary>
     void Park() => Cancel();
 
+    /// <summary>A panic press with the panic switched off: park, and stop the session only when the
+    /// runner started it (owner, 2026-09-30).</summary>
+    void ParkAndStopItsSession() => Park();
+
     /// <summary>The open video assignment being watched, or null.</summary>
     string? RunningAid => null;
 

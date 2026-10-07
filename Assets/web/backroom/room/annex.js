@@ -20,8 +20,10 @@ import { ANNEX_PORTALS } from './walk.js';
 const PALETTE = { pink: 0xff65bf, lavender: 0xb18aff, mint: 0x67ffe0, gold: 0xffcb73 };
 const DOOR_W = 1.1, DOOR_H = 2.1;
 
-/** One canvas plaque; the text is drawn once, the mesh is a lit sign (toneMapped off, like the venue bulbs). */
-function makeSign(text, { width = 1.2, height = 0.32, ink = '#ffd6ef', glow = '#ff65bf', dim = false } = {}) {
+/** One canvas plaque; the text is drawn once, the mesh is a lit sign (toneMapped off, like the venue bulbs).
+ *  `twoFaced` is for a sign seen from both sides: a DoubleSide plane shows its back as a mirror image, so
+ *  the sign is one-sided and carries a second face turned half round, sharing its geometry and material. */
+export function makeSign(text, { width = 1.2, height = 0.32, ink = '#ffd6ef', glow = '#ff65bf', dim = false, twoFaced = false } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = 512; canvas.height = Math.round(512 * height / width);
   const g = canvas.getContext('2d');
@@ -32,7 +34,13 @@ function makeSign(text, { width = 1.2, height = 0.32, ink = '#ffd6ef', glow = '#
   g.shadowColor = glow; g.shadowBlur = dim ? 4 : 18;
   g.fillStyle = ink; g.fillText(text, canvas.width / 2, canvas.height / 2 + 2, canvas.width - 40);
   const texture = new T.CanvasTexture(canvas); texture.colorSpace = T.SRGBColorSpace;
-  const mesh = new T.Mesh(new T.PlaneGeometry(width, height), new T.MeshBasicMaterial({ map: texture, toneMapped: false, side: T.DoubleSide }));
+  const mesh = new T.Mesh(new T.PlaneGeometry(width, height),
+    new T.MeshBasicMaterial({ map: texture, toneMapped: false, side: twoFaced ? T.FrontSide : T.DoubleSide }));
+  if (twoFaced) {
+    const back = new T.Mesh(mesh.geometry, mesh.material);
+    back.rotation.y = Math.PI; back.name = 'sign_back';
+    mesh.add(back);
+  }
   return mesh;
 }
 
@@ -81,7 +89,7 @@ export function createAnnex({ scene, room, renderer, lex = (k, f) => f } = {}) {
   lamp(PALETTE.lavender, 9, [CX, 2.9, CZ], 7);
   const doorLamp = lamp(PALETTE.pink, 7, [-11.9, 2.4, CZ], 4.5);
   // The header sign: a blade sign in the casino beside the doorway, on a brass bracket, readable from both sides.
-  const header = makeSign(lex('br_annex_sign', 'The Annex'), { width: 1.4, height: 0.38 });
+  const header = makeSign(lex('br_annex_sign', 'The Annex'), { width: 1.4, height: 0.38, twoFaced: true });
   header.position.set(-6.15, 2.65, CZ); header.name = 'annex_header_sign'; group.add(header);
   own.geometries.add(header.geometry); own.materials.add(header.material); own.textures.add(header.material.map);
   box(0.75, 0.04, 0.04, brass, -6.52, 2.9, CZ);

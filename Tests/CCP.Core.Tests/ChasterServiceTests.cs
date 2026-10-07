@@ -128,12 +128,16 @@ public class ChasterServiceTests : IDisposable
     }
 
     [Fact]
-    public void Today_reads_the_gross_adds_of_the_local_day_and_zero_on_a_new_one()
+    public void Today_reads_adds_minus_credits_of_the_local_day_and_zero_on_a_new_one()
     {
         using var service = Make();
         service.Note("typo");
-        service.Note("session");
+        Assert.Equal(30, service.TodayAddedSeconds);
 
+        // The credit hands its room back (it can only take back the 30 on the tab: nothing pushed yet).
+        service.Note("session");
+        Assert.Equal(0, service.TodayAddedSeconds);
+        service.Note("typo");
         Assert.Equal(30, service.TodayAddedSeconds);
         _utc = _utc.AddDays(1);
         Assert.Equal(0, service.TodayAddedSeconds);
@@ -433,6 +437,23 @@ public class ChasterServiceTests : IDisposable
 
         Assert.Equal(SettleOutcome.Nothing, await service.SettleAsync());
         Assert.Empty(_http.Seen);
+    }
+
+    [Fact]
+    public async Task A_lock_id_the_client_refuses_waits_and_is_never_counted_as_landed()
+    {
+        // The owner's install held "demo-lock" from a DEBUG demo run (2026-10-01): AddTimeAsync
+        // threw before sending, the pending mark stayed, and the next settle booked 15 min as
+        // landed that Chaster never got.
+        _options = _options with { LockId = "demo-lock" };
+        _http.Answer = p => p == "/locks" ? Json(200, "[{\"_id\":\"solo9\",\"role\":\"wearer\"}]") : new HttpResponseMessage(HttpStatusCode.NoContent);
+        using var service = Make();
+        service.NoteSeconds("watcher", 300);
+
+        Assert.Equal(SettleOutcome.NoLockChosen, await service.SettleAsync());
+        Assert.Equal(SettleOutcome.NoLockChosen, await service.SettleAsync());
+        Assert.DoesNotContain(_http.Seen, s => s.Path.EndsWith("update-time"));
+        Assert.Equal(300, service.BalanceSeconds);
     }
 
     [Fact]

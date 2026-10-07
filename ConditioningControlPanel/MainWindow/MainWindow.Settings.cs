@@ -87,6 +87,7 @@ namespace ConditioningControlPanel
             if (AppSettingsTab?.ChkIntakeNudge != null) AppSettingsTab.ChkIntakeNudge.IsChecked = s.IntakeNudgeEnabled;
             RemoteControlTab.ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
             if (RemoteControlTab.ChkRemoteShareAvatar != null) RemoteControlTab.ChkRemoteShareAvatar.IsChecked = s.RemoteShareAvatar;
+            if (RemoteControlTab.ChkRemoteShareMediaSources != null) RemoteControlTab.ChkRemoteShareMediaSources.IsChecked = s.RemoteShareMediaSources;
 
             // Emote picker preset list (bound here so OnDeserialized normalization
             // has already run and the ItemsControl always sees exactly 5 entries).
