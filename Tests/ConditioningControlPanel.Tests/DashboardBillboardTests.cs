@@ -5,6 +5,7 @@ using System.Linq;
 using ConditioningControlPanel.Controls.Billboard;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Billboard;
+using ConditioningControlPanel.Services.Billboard.Providers;
 using Xunit;
 
 namespace ConditioningControlPanel.Tests;
@@ -78,20 +79,46 @@ public class DashboardBillboardTests
     }
 
     [Fact]
-    public void Prime_never_sees_a_showcase_and_gets_the_first_tip()
+    public void Prime_never_sees_a_showcase_and_starts_on_the_first_tip()
     {
-        var deck = DashboardBillboard.Build(Mixed, BillboardTier.Prime, null, Now, cycle: 3);
+        var deck = DashboardBillboard.Build(Mixed, BillboardTier.Prime, null, Now, cycle: 0);
         Assert.DoesNotContain(deck, c => c.Kind == BillboardCardKind.Showcase);
-        Assert.Contains(deck, c => c.Id == "tip.a");
+        Assert.Equal(new[] { "tip.a" }, Ids(deck.Where(c => c.Kind == BillboardCardKind.Tip)));
     }
 
     [Fact]
-    public void The_tip_slot_takes_the_first_tip_that_is_not_snoozed_never_all_of_them()
+    public void The_tip_slot_shows_the_next_tip_every_cycle_and_wraps()
     {
-        // The tip provider hands over all nine with today's lead first; the deck takes one.
-        var snoozes = new Dictionary<string, DateTime> { ["tip.a"] = Now.AddDays(3) };
-        var deck = DashboardBillboard.Build(Mixed, BillboardTier.Prime, snoozes, Now, cycle: 0);
-        Assert.Equal(new[] { "tip.b" }, Ids(deck.Where(c => c.Kind == BillboardCardKind.Tip)));
+        // Owner, 2026-10-07: every time the deck comes round, the next tip. No wall clock.
+        var seen = Enumerable.Range(0, 7)
+            .Select(cycle => DashboardBillboard.Build(Mixed, BillboardTier.Prime, null, Now, cycle).Single(c => c.Kind == BillboardCardKind.Tip).Id)
+            .ToList();
+        Assert.Equal(new[] { "tip.a", "tip.b", "tip.c", "tip.a", "tip.b", "tip.c", "tip.a" }, seen);
+        // The same cycle always picks the same tip, whatever the time.
+        Assert.Equal("tip.b", DashboardBillboard.Build(Mixed, BillboardTier.Prime, null, Now.AddHours(9), 1).Single(c => c.Kind == BillboardCardKind.Tip).Id);
+    }
+
+    [Fact]
+    public void The_tip_slot_skips_snoozed_tips_and_never_shows_them_all()
+    {
+        var snoozes = new Dictionary<string, DateTime> { ["tip.b"] = Now.AddDays(3) };
+        var seen = Enumerable.Range(0, 4)
+            .Select(cycle => Ids(DashboardBillboard.Build(Mixed, BillboardTier.Prime, snoozes, Now, cycle).Where(c => c.Kind == BillboardCardKind.Tip)))
+            .ToList();
+        Assert.All(seen, ids => Assert.Single(ids));
+        Assert.Equal(new[] { "tip.a", "tip.c", "tip.a", "tip.c" }, seen.Select(ids => ids[0]));
+        // Every tip snoozed: the slot stays empty rather than showing one anyway.
+        var all = Mixed.Where(c => c.Kind == BillboardCardKind.Tip).ToDictionary(c => c.Id, _ => Now.AddDays(1));
+        Assert.DoesNotContain(DashboardBillboard.Build(Mixed, BillboardTier.Prime, all, Now, 2), c => c.Kind == BillboardCardKind.Tip);
+    }
+
+    [Fact]
+    public void A_free_player_with_no_showcase_turns_the_tips_too()
+    {
+        var noShow = Mixed.Where(c => c.Kind != BillboardCardKind.Showcase).ToList();
+        Assert.Equal("tip.a", DashboardBillboard.PickShowcaseOrTip(Array.Empty<BillboardCardSpec>(), noShow.Where(c => c.Kind == BillboardCardKind.Tip).ToList(), BillboardTier.Free, 0)!.Id);
+        Assert.Equal("tip.c", DashboardBillboard.Build(noShow, BillboardTier.Free, null, Now, 2).Single(c => c.Kind == BillboardCardKind.Tip).Id);
+        Assert.Null(DashboardBillboard.PickTip(Array.Empty<BillboardCardSpec>(), 4));
     }
 
     [Fact]
@@ -277,8 +304,12 @@ public class DashboardBillboardTests
         var normal = DashboardBillboard.Build(cards, BillboardTier.Free, snoozes, Now, cycle: 0);
         var all = DashboardBillboard.Build(cards, BillboardTier.Free, snoozes, Now, cycle: 0, everyCard: true);
         Assert.True(normal.Count < cards.Length);
-        Assert.Equal(cards.Length, all.Count);
-        Assert.Equal(cards.Select(c => c.Id).OrderBy(x => x), all.Select(c => c.Id).OrderBy(x => x));
+        // Every card, snoozed or not, except that the tips collapse to one turning slot.
+        var notTips = cards.Where(c => c.Kind != BillboardCardKind.Tip).Select(c => c.Id).ToList();
+        Assert.Equal(notTips.Concat(new[] { "tip.a" }).OrderBy(x => x), all.Select(c => c.Id).OrderBy(x => x));
+        var next = DashboardBillboard.Build(cards, BillboardTier.Free, snoozes, Now, cycle: 1, everyCard: true);
+        Assert.Equal(new[] { "tip.b" }, Ids(next.Where(c => c.Kind == BillboardCardKind.Tip)));
+        Assert.Equal(all.Count, next.Count);
         // Without the env switch the deck is the normal one.
         if (Environment.GetEnvironmentVariable("CCP_BOARD_DECK_ALL") != "1")
             Assert.False(BillboardDeck.DeckAllRequested());
@@ -391,6 +422,40 @@ public class DashboardBillboardTests
         Assert.Equal(0, deck.Cycle);
         Assert.Equal("live", deck.Next()!.Spec.Id);
         Assert.Equal(1, deck.Cycle);
+    }
+
+    [Fact]
+    public void A_prime_deck_shows_one_tip_and_the_next_one_each_time_round()
+    {
+        var tips = new FakeProvider { Id = "tip" };
+        foreach (var tip in TipCards.Table)
+            tips.Cards.Add(Card(TipCards.IdPrefix + tip.Id, BillboardCardKind.Tip, tips.Cards.Count));
+        var live = new FakeProvider { Cards = { Card("live", BillboardCardKind.Live) } };
+        var deck = Deck(BillboardTier.Prime, null, null, live, tips);
+        deck.Start();
+        var shown = new List<string>();
+        for (int cycle = 0; cycle < 3; cycle++)
+        {
+            Assert.Single(deck.Cards, c => c.Spec.Kind == BillboardCardKind.Tip);
+            shown.Add(deck.Cards.Single(c => c.Spec.Kind == BillboardCardKind.Tip).Spec.Id);
+            int was = deck.Cycle;
+            while (deck.Cycle == was) deck.Next();
+        }
+        Assert.Equal(TipCards.Table.Take(3).Select(t => TipCards.IdPrefix + t.Id), shown);
+    }
+
+    [Fact]
+    public void Review_mode_deck_keeps_one_tip_slot_that_turns()
+    {
+        var tips = new FakeProvider { Id = "tip", Cards = { Card("tip.a", BillboardCardKind.Tip, 0), Card("tip.b", BillboardCardKind.Tip, 1), Card("tip.c", BillboardCardKind.Tip, 2) } };
+        var show = new FakeProvider { Id = "showcase", Cards = { Card("show.x", BillboardCardKind.Showcase, badge: BillboardBadge.Basic) } };
+        var deck = Deck(BillboardTier.Free, null, null, tips, show);
+        deck.EveryCard = true;
+        deck.Start();
+        Assert.Equal(new[] { "tip.a" }, deck.Cards.Where(c => c.Spec.Kind == BillboardCardKind.Tip).Select(c => c.Spec.Id));
+        Assert.Contains(deck.Cards, c => c.Spec.Id == "show.x");
+        while (deck.Cycle == 0) deck.Next();
+        Assert.Equal(new[] { "tip.b" }, deck.Cards.Where(c => c.Spec.Kind == BillboardCardKind.Tip).Select(c => c.Spec.Id));
     }
 
     [Fact]

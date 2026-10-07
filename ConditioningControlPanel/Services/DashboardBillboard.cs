@@ -143,11 +143,19 @@ namespace ConditioningControlPanel.Services
                 clean.Add(c);
             }
 
-            // Review mode (DEBUG, CCP_BOARD_DECK_ALL=1): every card, snoozed or not, no slot or house cut.
-            if (everyCard) return Rank(clean, newShown);
+            var tips = Ordered(clean.Where(c => c.Kind == BillboardCardKind.Tip));
+
+            // Review mode (DEBUG, CCP_BOARD_DECK_ALL=1): every card, snoozed or not, no slot or house
+            // cut, except the tips: they share ONE slot that turns with the cycle, as in play.
+            if (everyCard)
+            {
+                var review = clean.Where(c => c.Kind != BillboardCardKind.Tip).ToList();
+                var tip = PickTip(tips, cycle);
+                if (tip != null) review.Add(tip);
+                return Rank(review, newShown);
+            }
 
             var showcases = Ordered(clean.Where(c => c.Kind == BillboardCardKind.Showcase));
-            var tips = Ordered(clean.Where(c => c.Kind == BillboardCardKind.Tip));
             var houses = Ordered(clean.Where(c => c.Kind == BillboardCardKind.House));
 
             var deck = clean.Where(c => c.Kind is not (BillboardCardKind.Showcase or BillboardCardKind.Tip or BillboardCardKind.House)).ToList();
@@ -159,19 +167,26 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// The one showcase-or-tip card of a cycle, or null: the FIRST card of the pool (lowest
-        /// priority) that survived the snooze filter. The providers own the rotation (the tip
-        /// provider hands over all its tips with today's lead first, the showcase provider one clip
-        /// per cycle), so the deck never turns the pool itself; a second turn would skip cards.
+        /// The one showcase-or-tip card of a cycle, or null. A showcase is the FIRST of its pool
+        /// (lowest priority) that survived the snooze filter: the showcase provider already hands
+        /// over one clip per cycle, so a second turn here would skip clips. A tip is the next one
+        /// each time the deck comes round (<see cref="PickTip"/>).
         /// </summary>
         public static BillboardCardSpec? PickShowcaseOrTip(
             IReadOnlyList<BillboardCardSpec> showcases, IReadOnlyList<BillboardCardSpec> tips, BillboardTier tier, int cycle)
         {
-            IReadOnlyList<BillboardCardSpec> pool = tier == BillboardTier.Prime
-                ? tips
-                : (showcases.Count > 0 ? showcases : tips);
-            return pool.Count == 0 ? null : pool[0];
+            if (tier != BillboardTier.Prime && showcases.Count > 0) return showcases[0];
+            return PickTip(tips, cycle);
         }
+
+        /// <summary>
+        /// The tip of a cycle: the tip provider hands over the whole table in order, snoozed tips
+        /// are already gone, and the deck turns what is left one step per cycle, so every time the
+        /// deck comes round the slot shows the NEXT tip (owner, 2026-10-07: never a chip per tip,
+        /// never the wall clock).
+        /// </summary>
+        public static BillboardCardSpec? PickTip(IReadOnlyList<BillboardCardSpec> tips, int cycle) =>
+            tips.Count == 0 ? null : tips[Turn(cycle, tips.Count)];
 
         /// <summary>The house filler: the pinned card (lowest priority) and one rotating card.</summary>
         public static IReadOnlyList<BillboardCardSpec> PickHouse(IReadOnlyList<BillboardCardSpec> houses, int cycle)
@@ -387,7 +402,8 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Review mode: the deck holds every card any provider returns (asked as Free and as Prime
         /// too, so tips, showcases and the Support card all come), snoozed ones included, with no
-        /// one-per-cycle cut. Only a DEBUG build turns it on, from <c>CCP_BOARD_DECK_ALL=1</c>.
+        /// one-per-cycle cut, except that the tips still share one slot that turns each cycle.
+        /// Only a DEBUG build turns it on, from <c>CCP_BOARD_DECK_ALL=1</c>.
         /// </summary>
         public bool EveryCard { get; set; }
 
@@ -408,7 +424,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>The card on screen.</summary>
         public int Index { get; private set; }
 
-        /// <summary>Cycles completed since the deck started. Turns the showcase, tip and house filler.</summary>
+        /// <summary>Cycles completed since the deck started. Turns the tip and the house filler.</summary>
         public int Cycle { get; private set; }
 
         public DeckCard? Current => Index >= 0 && Index < _cards.Count ? _cards[Index] : null;
