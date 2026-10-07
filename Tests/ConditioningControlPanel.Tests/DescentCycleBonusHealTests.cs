@@ -28,13 +28,16 @@ public class DescentCycleBonusHealTests
         Assert.False(ProfileSyncService.EnsureCycleBonus(s, DescentMigrationChoices.Cycle));
     }
 
+    /// <summary>Migrated = bonus (owner, 2026-10-06): an acked Restore, or an ack with no echoed
+    /// choice, heals the bonus too, but never writes Cycle I.</summary>
     [Theory]
     [InlineData("restore")]
     [InlineData(null)]
-    public void RestoreOrNoChoice_NeverGrants(string? choice)
+    public void RestoreOrNoChoice_GrantsTheBonusButNotCycleOne(string? choice)
     {
         var s = new AppSettings { DescentCycle = 0, DescentCycleXpBonus = 1.0 };
-        Assert.False(ProfileSyncService.EnsureCycleBonus(s, choice));
-        Assert.Equal(1.0, s.DescentCycleXpBonus);
+        Assert.True(ProfileSyncService.EnsureCycleBonus(s, choice));
+        Assert.Equal(DescentMigration.CycleXpBonus, s.DescentCycleXpBonus);
+        Assert.Equal(0, s.DescentCycle);
     }
 }
