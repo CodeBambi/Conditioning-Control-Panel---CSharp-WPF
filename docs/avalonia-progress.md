@@ -1248,3 +1248,48 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/port-shellcopy: +435
 - Rail Back arrow + mouse/Alt+arrow tab history (TabHistory in Core; refused under Lockdown/tutorial); bug report on top; startup cards one at a time (stepped clock); "Monthly Recap".
 - shell-layout n/a (Win32-only); side-art folded into the shared feat-adaptive-side-art row.
+
+## avalonia-port/local-providers: +774
+- Local AI providers (Ollama / OpenAI-compatible) moved to Core as brain transports; Avalonia Engine Room drawer chooses a provider, tests the connection and clears the conversation (confirmed); App.Ai disposed on exit; logged URLs redacted.
+
+## avalonia-port/port-fx: +576
+- Flash picks walk the whole folder before repeating (ShuffleBag in Core); Random image count + Fewest slider.
+- Video card: monitor picker and Mercy "after N fails" in a keyboard-reachable More options fold; both Core schedulers use MercyAfterFails.
+- Folded: drift speed, no-videos reason, spiral opacity curve, gaze camera at boot, Lock Card and Brain Drain folds.
+
+## avalonia-port/port-chaster7: +352
+- Circe's tab: setup line covers "adds off"/"nothing can count", raffle rows in a SplitRowPanel, ladder note; demo picks never save.
+- Lock Card: Reset on typo inside More options. Leash, booked-pop tag and keys glow folded into their parity rows.
+
+## avalonia-port/port-social: +1023
+- Invites: rules, wire and reward ladder in Core; Exclusives invites card, header ticket (wired at startup), drawer link; EveryShellInitializerIsCalled scan test.
+- Lobby folded into views-tab-available-subjects and win-launcher.
+
+## avalonia-port/launcher-account: +567
+- Launcher slice 3: account chip, tier badge, SP, mod pill (Core LauncherModMenu), panel card status/Stop/stats; Lockdown refusals stand in for the missing veil.
+
+## avalonia-port/port-vault: +971
+- Vault gate card on every padlock and the "See tiers" toast; Reconnect via Core PatreonReconnectRule; doors refuse under Lockdown; VaultOffer/VaultSale to Core.
+- Exclusives: Prime-first shelf (Core ShelfOrder), IsShown hides Arcademy/Just Drop, width-fit columns.
+
+## avalonia-port/port-brain7: +251
+- Companion/awareness 7.0.3: pages widen, pop-out wakes the companion, listening bubble while the mic is open, chat stays open, cooldowns to an hour (Core AwarenessCooldownScale), Brain Drain in the preset editor.
+
+## avalonia-port/launcher-games: +109
+- Launcher slice 4: no game host on Avalonia yet, so tiles/mystery/return-poll wait for the first host; every launcher door refuses under Lockdown.
+
+## avalonia-port/lockdown-veil: +509
+- Launcher Lockdown veil (WPF look, keys too, breath only while visible); shell door table test (19 rows) closed 5 gaps; shell has no veil by WPF design.
+
+## avalonia-port/package-verify: +71
+- Tarball, AUR (host makepkg + bwrap) and GNOME 50 runtime smoke-verified for 7.0.5; stale PKGBUILD version fixed and enforced in smoke-tarball.sh; Flatpak build still blocked.
+
+## avalonia-port/window-memory: +181
+- Shell and views release their handlers on close/unload so MainShellWindow instances are collectable (user fix; ShellMemoryTests).
+
+## avalonia-port/chaos-overlays: +422
+- ChaosOverlayWindow on Core run types; ChaosRunHost runs HUD + countdown -> 4 Hz clock -> recap (no payout); panic/tray/exit end it without arming double-press exit. FALL IN not wired; rows stay stub.
+
+## avalonia-port/port-misc: +425
+- Quests: Takeover time credited while minimised; cards and streak header quote what the completion pays (Core StreakPaidOn, shield-aware).
+- Presets drop sniffing, programs active-mod-first, Deeper opacity % labels; 7 rows folded.

@@ -15,6 +15,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.Overlays;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Possession;
 using ConditioningControlPanel.Services.Speech;
@@ -209,9 +210,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                             ? "The speech model on disk would not load. If you added your own model under Resources/Models/vosk, remove it so the bundled one is used, then restart."
                             : "No speech model was found under Resources/Models/vosk (see the README there).");
                 }
-                else if (_avatarTubeWindow == null)
-                    (title, why) = ("Voice Test \u2014 No Avatar", "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.");
-                else if (!App.MantraVoice.HasMantras())
+                if (why != null) { await Dialogs.MessageDialog.ShowAsync(this, title!, why); return; }
+                // Usually the companion was switched off (Dismiss sticks across restarts). Offer to
+                // turn it on right here, then carry on (WPF AutonomyService.TestVoiceCommand, 9dfccda39).
+                if (_avatarTubeWindow == null && !CoreSettings.Current.AvatarEnabled
+                    && await Dialogs.MessageDialog.ConfirmAsync(this, Loc.Get("voice_test_companion_off_title"),
+                                                               Loc.Get("voice_test_companion_off_body")))
+                    SetAvatarEnabled(true);
+                if (_avatarTubeWindow == null)
+                {
+                    // Declined: nothing to say. Switched on and still no tube: the old note.
+                    if (CoreSettings.Current.AvatarEnabled)
+                        await Dialogs.MessageDialog.ShowAsync(this, "Voice Test \u2014 No Avatar",
+                            "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.");
+                    return;
+                }
+                if (!App.MantraVoice.HasMantras())
                     (title, why) = ("Voice Test \u2014 No Mantras", "No spoken mantras are available for the active mod.\n\nAdd a mantras.json under the mod's companion_audio folder, then try again.");
                 if (why != null) { await Dialogs.MessageDialog.ShowAsync(this, title!, why); return; }
                 // Privacy gate: the mic never opens until the consent dialog was accepted.
@@ -254,6 +268,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Credit = () => { if (!App.Mantra.TryCompleteMantra()) App.Mantra.CreditExternalMantra(); },
                 PromptStarted = phrase => Dispatcher.UIThread.Post(() => ShowVoicePrompt(phrase)),
                 PromptFinished = r => Dispatcher.UIThread.Post(() => ShowVoiceVerdict(r)),
+                ShowListening = phrase => _avatarTubeWindow?.ShowListeningBubble(phrase),   // RunOnAvatar marshals
+                HideListening = () => _avatarTubeWindow?.HideListeningBubble(),
             };
         }
 

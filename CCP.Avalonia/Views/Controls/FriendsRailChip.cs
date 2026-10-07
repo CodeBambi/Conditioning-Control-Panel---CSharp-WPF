@@ -49,6 +49,7 @@ public sealed class FriendsRailChip : Grid
         Drawer.CloseRequested += () => _popup.IsOpen = false;
         Drawer.SettingsRequested += () => (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab("appsettings");
         Drawer.SignInRequested += () => { _popup.IsOpen = false; _ = (TopLevel.GetTopLevel(this) as MainShellWindow)?.OpenUnifiedLoginDialog(); };
+        Drawer.InvitesRequested += () => { _popup.IsOpen = false; (TopLevel.GetTopLevel(this) as MainShellWindow)?.OpenInvitesCard(); };
         PointerReleased += (_, e) => { if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(); e.Handled = true; } };
         AttachedToVisualTree += (_, _) => Rebind();
         DetachedFromVisualTree += (_, _) => { _popup.IsOpen = false; Unwire(); Drawer.Unsubscribe(); };

@@ -3,10 +3,10 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using ConditioningControlPanel.Services.BackRoom;
 using ConditioningControlPanel.Services.Friends;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Invites;
 
@@ -35,13 +35,18 @@ public sealed class InviteApi : IInviteApi
 
     private readonly HttpClient _http;
     private readonly Func<(string UnifiedId, string Token)?> _identity;
-    private readonly string _baseUrl;
+    private readonly string? _baseUrl;
+
+    /// <summary>The head's account door and proxy (WPF: BackRoomApi.AppIdentity / BaseUrl). Unseeded:
+    /// signed out and no url, so every call reads as unreachable and nothing is sent.</summary>
+    public static Func<(string UnifiedId, string Token)?> DefaultIdentity { get; set; } = () => null;
+    public static Func<string?> DefaultBaseUrl { get; set; } = () => null;
 
     public InviteApi(HttpClient? http = null, Func<(string UnifiedId, string Token)?>? identity = null, string? baseUrl = null)
     {
         _http = http ?? SharedHttp;
-        _identity = identity ?? BackRoomApi.AppIdentity;
-        _baseUrl = baseUrl ?? BackRoomApi.BaseUrl;
+        _identity = identity ?? DefaultIdentity;
+        _baseUrl = baseUrl ?? DefaultBaseUrl();
     }
 
     public async Task<InviteMine> MineAsync(CancellationToken ct = default)
@@ -64,7 +69,7 @@ public sealed class InviteApi : IInviteApi
         (string UnifiedId, string Token)? id;
         try { id = _identity(); }
         catch (Exception ex) { Diag.Swallowed(ex, "no identity to send"); id = null; }
-        if (id == null) return null;
+        if (id == null || _baseUrl == null) return null;
         body["unified_id"] = id.Value.UnifiedId;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
         budget.CancelAfter(Timeout);
@@ -78,13 +83,13 @@ public sealed class InviteApi : IInviteApi
             using var res = await _http.SendAsync(req, budget.Token).ConfigureAwait(false);
             var text = await res.Content.ReadAsStringAsync(budget.Token).ConfigureAwait(false);
             if ((int)res.StatusCode != 200)
-                App.Logger?.Debug("[Invites] {Op} answered {Status}", op, (int)res.StatusCode);
+                Log.Debug("[Invites] {Op} answered {Status}", op, (int)res.StatusCode);
             return FriendsApi.Read((int)res.StatusCode, text);
         }
         catch (OperationCanceledException) { return null; } // swallow: the 8s budget ran out or the caller cancelled; null is "offline"
         catch (Exception ex)
         {
-            App.Logger?.Debug("[Invites] {Op} failed: {E}", op, ex.GetType().Name);
+            Log.Debug("[Invites] {Op} failed: {E}", op, ex.GetType().Name);
             return null;
         }
     }

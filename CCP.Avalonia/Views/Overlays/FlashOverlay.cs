@@ -43,6 +43,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         private static readonly List<(FlashOverlayWindow Window, PixelRect Rect)> Active = new();
         private static readonly Random Rng = new();
+        // #627: one shuffled walk of the folder (WPF FlashService DiskBag), so every image comes up
+        // before any repeats. Not thread-safe: LoadPictures draws under the bag's own lock.
+        internal static readonly ShuffleBag<string> DiskBag = new(p => p, Rng);
         private static bool _busy, _warnedUnavailable, _warnedEmpty, _closed;
         private static int _generation;
 
@@ -77,7 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var primary = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
                 var targets = PinkFilterOverlay.ResolveScreenIndices(s.GlobalTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
                 var occupied = Active.Select(a => a.Rect).ToList();
-                var flashes = await Task.Run(() => LoadPictures(amount ?? s.SimultaneousImages, screens, targets, s, occupied, size));
+                var flashes = await Task.Run(() => LoadPictures(BurstCount(amount, s, Rng), screens, targets, s, occupied, size));
                 if (flashes.Count == 0)
                 {
                     if (!_warnedEmpty) Log.Warning("Flash: no images found in {Path}", ImagesPath());
@@ -182,10 +185,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             foreach (var (w, _) in Active.ToList()) w.Close();
         }
 
+        /// <summary>Images in one burst (WPF TriggerFlashOnce, #658): the caller's override, else
+        /// the flat count or a roll between Fewest and Images, rolled once per burst.</summary>
+        internal static int BurstCount(int? amount, AppSettings s, Random rng) =>
+            amount ?? AppSettings.RollFlashImageCount(s.SimultaneousImagesRandom, s.SimultaneousImagesMin, s.SimultaneousImages, rng);
+
+        /// <summary>The next file of the shuffled walk; the caller re-lists the folder per burst.</summary>
+        internal static string? NextPath(IReadOnlyList<string> files)
+        {
+            lock (DiskBag) return DiskBag.TryNext(files, out var p) ? p : null;
+        }
+
         private static string ImagesPath() => Path.Combine(CorePaths.EffectiveAssets, "images");
 
         /// <summary>
-        /// Up to <paramref name="count"/> placed pictures, drawn with replacement from the enabled
+        /// Up to <paramref name="count"/> placed pictures, dealt from <see cref="DiskBag"/> over the enabled
         /// images (FlashService.GetNextImages / GetMediaFiles), re-drawing past unreadable files the
         /// way LoadImagesUntilAsync does (at most max(count*5, 20) tries). Placement happens first,
         /// from the header size alone, so each picture is decoded AT its display size like WPF's
@@ -207,7 +221,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
             for (var tries = Math.Max(count * 5, 20); result.Count < count && tries > 0; tries--)
             {
-                var path = files[Rng.Next(files.Count)];
+                if (NextPath(files) is not { } path) break;
                 try
                 {
                     SkiaSharp.SKImageInfo info;

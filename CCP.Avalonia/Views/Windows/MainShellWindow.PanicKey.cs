@@ -77,6 +77,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             bool wasRunning = CoreEngine.IsRunning;
             // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
             Views.Overlays.BlinkTrainerSession.Stop();
+            // WPF MainWindow.xaml.cs:1621: sampled BEFORE the stop pass - a press that ends a descent
+            // must not also arm the double-press exit (PanicPolicy.AdvancesExitLadder(Rung, bool)).
+            bool chaosOwnedTheScreen = Views.Chaos.ChaosRunHost.IsDescending;
+            Views.Chaos.ChaosRunHost.ForceShutdown();   // WPF GameSurfaces "chaos" -> App.Chaos.ForceShutdown
             // WPF RunPanicStopTail: StopEngine while running, StopAdHocEffects otherwise - both are
             // CoreEngine.Stop here (it stops everything either way) and neither unticks a flag.
             // WPF PanicStopEverySurface (MainWindow.xaml.cs:1992): the toys go to zero first, bypassing
@@ -90,7 +94,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop
 
             if ((now - _lastPanicTime).TotalMilliseconds > 2000) _panicPressCount = 0;
-            if (PanicPolicy.AdvancesExitLadder(rung)) { _panicPressCount++; _lastPanicTime = now; }
+            if (PanicPolicy.AdvancesExitLadder(rung, chaosOwnedTheScreen)) { _panicPressCount++; _lastPanicTime = now; }
             if (_panicPressCount >= 2)
             {
                 Serilog.Log.Information("Double panic! Exiting application...");

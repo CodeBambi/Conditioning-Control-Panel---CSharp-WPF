@@ -89,6 +89,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ConditioningControlPanel.Services.RemoteCommands.StopHaptics();   // the remote haptic loop too (decisions 2026-10-08)
             Current?.StopAutonomyForPanic();
             StopEngine();
+            Views.Chaos.ChaosRunHost.ForceShutdown();   // P06: a chaos run stops with everything else
             StopCameraForPanic();   // decision C: the only panic control on Windows, so it closes the camera too
         }
 
@@ -132,6 +133,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 base.OnClosing(e);
                 return;
             }
+            // WPF WindowChrome.cs:140: closing (real exit OR minimize-to-tray) always ends a Chaos run.
+            try { Views.Chaos.ChaosRunHost.ForceShutdown(); } catch { }
             if (Tray is not null && !_exitRequested && e.CloseReason == WindowCloseReason.WindowClosing
                 && TrayHostPresent())
             {

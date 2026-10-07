@@ -110,6 +110,40 @@
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
 
+                            <!-- Power-user rows, folded (WPF MoreFold, house rule: progressive disclosure). -->
+                            <sessionLock:MoreFold x:Name="FoldMore">
+                                <StackPanel>
+                                <!-- Which monitor the videos play on (ccp-bugs #1154). Default follows the
+                                     global "Show content on" pick, exactly as before. -->
+                                <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_effect_monitor}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_effect_monitor}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" x:Name="CmbMonitor"
+                                              Width="180" VerticalAlignment="Center"
+                                              Theme="{DynamicResource DarkComboBoxStyle}"/>
+                                </Grid>
+                                    <!-- Mercy (ccp-bugs #1145) for strict videos AND strict Bubble Count, shown once
+                                         here (WPF MercyRow). The picker only shows while Mercy is on. -->
+                                    <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_mercy}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_mercy}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="1" x:Name="CmbMercyAfter" Width="130" Margin="0,0,10,0"
+                                                  VerticalAlignment="Center" Theme="{DynamicResource DarkComboBoxStyle}"/>
+                                        <CheckBox Grid.Column="2" x:Name="ChkMercy"
+                                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </StackPanel>
+                            </sessionLock:MoreFold>
+
                             <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 
                             <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_strict_mode_videos_cannot_be_skipped_must_wat}">
