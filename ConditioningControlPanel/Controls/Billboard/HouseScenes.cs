@@ -19,7 +19,15 @@ namespace ConditioningControlPanel.Controls.Billboard
                 "remix" => new RemixHouseArt(),
                 "loom" => new LoomHouseArt(),
                 "support" => new SupportHouseArt(),
+                "backroom" => new WheelArtView(),
                 _ => new PosterArtView(posterPath),
             };
+
+        /// <summary>
+        /// Stems that only ever existed as a drawn scene: their poster path is a scene key with no
+        /// file behind it (the Daily Daze wheel, 2026-10-07).
+        /// </summary>
+        public static bool DrawnOnly(string? posterPath) =>
+            posterPath != null && Path.GetFileNameWithoutExtension(posterPath) == "backroom";
     }
 }
