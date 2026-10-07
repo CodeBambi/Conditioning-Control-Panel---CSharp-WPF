@@ -48,6 +48,7 @@ namespace ConditioningControlPanel.Controls.Billboard
         private readonly Border _ctaDrop = new();
         private readonly TextBlock _ctaText = new();
         private readonly TranslateTransform _ctaPress = new();
+        private Grid? _ctaRoot, _ctaFaceGrid;
         private readonly Border _badge = new();
         private readonly TextBlock _badgeText = new();
         private readonly Button _snooze;
@@ -105,6 +106,7 @@ namespace ConditioningControlPanel.Controls.Billboard
             foreach (var t in new[] { _eyebrow, _title, _line }) t.IsHitTestVisible = false;
 
             _cta = BuildCta();
+            BuildCtaFx(_ctaRoot!, _ctaFaceGrid!);
             _meta.Children.Add(_eyebrow);
             _meta.Children.Add(_title);
             _meta.Children.Add(_line);
@@ -456,6 +458,8 @@ namespace ConditioningControlPanel.Controls.Billboard
             button.MouseEnter += (_, _) => Lift(true);
             button.MouseLeave += (_, _) => Lift(false);
             button.IsKeyboardFocusedChanged += (_, _) => ring.Visibility = button.IsKeyboardFocused ? Visibility.Visible : Visibility.Collapsed;
+            _ctaRoot = root;
+            _ctaFaceGrid = faceGrid;
             return button;
         }
 
