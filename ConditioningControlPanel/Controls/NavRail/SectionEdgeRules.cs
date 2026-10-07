@@ -60,6 +60,33 @@ namespace ConditioningControlPanel.Controls.NavRail
             NavRailRules.WithAlpha(hue, 0),
         };
 
+        /// <summary>The static band's depth while the fog runs over it (polish 11): thinner, so the
+        /// puffs carry the hue and the band only keeps the frame tied to the page.</summary>
+        internal const double FogBand = 16;
+        /// <summary>The static band's alpha under the fog, as a share of its own (no fog) alpha.</summary>
+        internal const double FogBandShare = 0.7;
+
+        /// <summary>The band's depth: the full 28 px with no fog (Off, low tiers), 16 under it.</summary>
+        internal static double BandDepth(bool fogLive) => fogLive ? FogBand : GlowBand;
+
+        /// <summary>The band's stops with or without the fog over it: the same shape, the edge
+        /// alpha at <see cref="FogBandShare"/> when the fog runs.</summary>
+        internal static Color[] GlowStops(Color hue, bool fogLive)
+        {
+            if (!fogLive) return GlowStops(hue);
+            byte edge = (byte)Math.Round(GlowAlpha(hue) * FogBandShare);
+            return new[]
+            {
+                NavRailRules.WithAlpha(hue, edge),
+                NavRailRules.WithAlpha(hue, (byte)Math.Round(edge * GlowMidShare)),
+                NavRailRules.WithAlpha(hue, 0),
+            };
+        }
+
+        /// <summary>The fog's alpha gain for a hue: the band's balance (light hues take less,
+        /// VioletBlue the most) relative to its 0.20 centre, so Sage and Sky read alike.</summary>
+        internal static double FogGain(Color hue) => GlowAlpha(hue) / (0.20 * 255);
+
         /// <summary>The glow stops' offsets (pinned beside <see cref="GlowStops"/>).</summary>
         internal static readonly double[] GlowOffsets = { 0, GlowMidOffset, 1 };
 

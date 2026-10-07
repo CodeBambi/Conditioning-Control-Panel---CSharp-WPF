@@ -19,10 +19,18 @@ namespace ConditioningControlPanel
     // full-window line Border (that dirtied the whole window every tick). It is four 3 px lift
     // strips (SectionEdgeLift), each sliding its band along one edge in turn, so a tick repaints
     // a strip and nothing else.
+    //
+    // Nav polish wave 11 (2026-10-07): the band becomes a drifting fog of light. EdgeParticles
+    // runs soft puffs in the hue along every side (Full: the whole fog plus the embers; Reduced:
+    // half the puffs at half the speed); while they run, the flat band underneath thins to
+    // SectionEdgeRules.FogBand at FogBandShare of its alpha. Off and low tiers keep the full band.
     public partial class MainWindow
     {
         /// <summary>The glow band's stops (four brushes x three stops) and the line's three.</summary>
         private readonly List<GradientStop> _edgeGlowStops = new();
+        /// <summary>The four band rectangles (their depth thins while the fog runs).</summary>
+        private readonly List<Rectangle> _edgeGlowBands = new();
+        private bool _edgeFogLive;
         private readonly List<GradientStop> _edgeLineStops = new();
         /// <summary>The four lift strips' stops (three each) and their transforms, by side.</summary>
         private readonly List<GradientStop> _edgeLiftStops = new();
@@ -31,8 +39,10 @@ namespace ConditioningControlPanel
         private Color _edgeHue = NavStripRules.Lilac;
         private bool _edgeReady;
 
-        /// <summary>The ember strips follow the edge's hue (EdgeParticles, the particles lane).</summary>
-        private void RetintEdgeParticles(Color hue) => SectionEdgeParticles?.Retint(hue);
+        /// <summary>The fog and ember strips follow the edge's hue and crossfade with it. Mount
+        /// re-checks the motion gate too, so a motion change lands here before the band reads
+        /// <see cref="EdgeParticles.FogLive"/>.</summary>
+        private void RetintEdgeParticles(Color hue, int ms) => SectionEdgeParticles?.Mount(hue, ms);
 
         /// <summary>Collects the edge's brushes and wires the lift to the window's state. Called
         /// once after load, beside InitializeNavRail. Paints Home first: the authored Lilac.</summary>
@@ -42,6 +52,7 @@ namespace ConditioningControlPanel
             try
             {
                 _edgeGlowStops.Clear();
+                _edgeGlowBands.Clear();
                 _edgeLineStops.Clear();
                 _edgeLiftStops.Clear();
                 _edgeLiftMoves.Clear();
@@ -52,6 +63,7 @@ namespace ConditioningControlPanel
                         if (child is not Rectangle r || r.Fill is not LinearGradientBrush brush) continue;
                         if (brush.IsFrozen) { brush = brush.Clone(); r.Fill = brush; }
                         _edgeGlowStops.AddRange(brush.GradientStops);
+                        _edgeGlowBands.Add(r);
                     }
                 }
 
@@ -77,9 +89,8 @@ namespace ConditioningControlPanel
                 }
 
                 _edgeReady = true;
+                // Also mounts the fog strips (EdgeParticles decides by motion level and tier).
                 PaintSectionEdge(_edgeHue, 0);
-                // Builds the four strips only under Full motion on a tier with a particle budget.
-                SectionEdgeParticles?.Mount(_edgeHue);
 
                 Activated += (_, _) => UpdateSectionEdgeMotion();
                 Deactivated += (_, _) => UpdateSectionEdgeMotion();
@@ -101,7 +112,13 @@ namespace ConditioningControlPanel
             {
                 var level = MotionFx.Level;
 
-                var glow = SectionEdgeRules.GlowStops(hue);
+                // The strips first: whether the fog runs decides how strong the band is.
+                RetintEdgeParticles(hue, ms);
+                bool fogLive = SectionEdgeParticles?.FogLive == true;
+                if (fogLive != _edgeFogLive || ms <= 0) SetEdgeBandDepth(SectionEdgeRules.BandDepth(fogLive));
+                _edgeFogLive = fogLive;
+
+                var glow = SectionEdgeRules.GlowStops(hue, fogLive);
                 for (int i = 0; i < _edgeGlowStops.Count; i++)
                     AnimateEdgeStop(_edgeGlowStops[i], glow[i % glow.Length], ms);
 
@@ -113,10 +130,23 @@ namespace ConditioningControlPanel
                 for (int i = 0; i < _edgeLiftStops.Count; i++)
                     AnimateEdgeStop(_edgeLiftStops[i], lift[i % lift.Length], ms);
 
-                RetintEdgeParticles(hue);
                 UpdateSectionEdgeMotion();
             }
             catch (Exception ex) { App.Logger?.Debug("PaintSectionEdge failed: {E}", ex.Message); }
+        }
+
+        /// <summary>Sets the four bands' depth into the window (top and bottom take a height,
+        /// the sides a width).</summary>
+        private void SetEdgeBandDepth(double depth)
+        {
+            foreach (var band in _edgeGlowBands)
+            {
+                if (band.VerticalAlignment is VerticalAlignment.Top or VerticalAlignment.Bottom
+                    && band.HorizontalAlignment == HorizontalAlignment.Stretch)
+                    band.Height = depth;
+                else
+                    band.Width = depth;
+            }
         }
 
         private static void AnimateEdgeStop(GradientStop stop, Color to, int ms)

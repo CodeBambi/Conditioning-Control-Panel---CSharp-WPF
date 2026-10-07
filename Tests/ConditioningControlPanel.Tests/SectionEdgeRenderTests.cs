@@ -133,10 +133,12 @@ public class SectionEdgeRenderTests
         Assert.True(rail > 0 && rail < shell.IndexOf("InitializeSectionEdge();", StringComparison.Ordinal));
 
         var painter = AppFile("MainWindow", "MainWindow.SectionEdge.cs");
-        // The particles lane is wired in: the painter retints and mounts the ember strips.
-        Assert.Contains("SectionEdgeParticles?.Retint(hue)", painter, StringComparison.Ordinal);
-        Assert.Contains("SectionEdgeParticles?.Mount(_edgeHue)", painter, StringComparison.Ordinal);
-        Assert.Contains("RetintEdgeParticles(hue);", painter, StringComparison.Ordinal);
+        // The particles lane is wired in: the painter mounts (and so retints, with the wash's
+        // crossfade) the fog and ember strips before it reads whether the fog runs (polish 11).
+        Assert.Contains("SectionEdgeParticles?.Mount(hue, ms)", painter, StringComparison.Ordinal);
+        Assert.Contains("RetintEdgeParticles(hue, ms);", painter, StringComparison.Ordinal);
+        Assert.True(painter.IndexOf("RetintEdgeParticles(hue, ms);", StringComparison.Ordinal)
+                    < painter.IndexOf("SectionEdgeRules.GlowStops(hue, fogLive)", StringComparison.Ordinal));
         Assert.Contains("SetDesiredFrameRate", painter, StringComparison.Ordinal);
     }
 
