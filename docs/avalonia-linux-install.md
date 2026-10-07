@@ -46,7 +46,7 @@ The first branch after this note that touches docs must commit this file as `doc
 
 ## Package verification (avalonia-port/package-verify, 2026-10-07, 7.0.5)
 Evidence: ~/ccp-port/evidence/package-verify/.
-- **Tarball:** `packaging/linux/build-tarball.sh` (474 MB, 3,311 entries incl. 2,002 under Resources/web, libvosk,
+- **Tarball:** `packaging/linux/build-tarball.sh` (contents not listed in the evidence; includes Resources/web, libvosk,
   libOpenCvSharpExtern, onnxruntime) then `smoke-tarball.sh`: extracted, sandboxed (`CCP_USERDATA_DIR`), `--smoke` exit 0
   with LibVLC and the bundled Vosk model passing (`build-tarball.log`, `smoke-tarball.log`). `smoke-tarball.sh` now also
   fails when `packaging/aur/PKGBUILD` pkgver differs from the tarball version (it was 6.11.3 under 7.0.5; fixed;

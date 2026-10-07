@@ -15,7 +15,7 @@ trap 'rm -rf "$tmp"' EXIT
 mkdir "$tmp/build" "$tmp/root"
 cp "$here/PKGBUILD" "$tmp/build/"
 ln "$1" "$tmp/build/" 2>/dev/null || cp "$1" "$tmp/build/"
-(cd "$tmp/build" && PKGDEST="$tmp/build" makepkg -f --skipchecksums --nodeps >&2)
+(cd "$tmp/build" && PKGDEST="$tmp/build" BUILDDIR="$tmp/build" SRCDEST="$tmp/build" LOGDEST="$tmp/build" SRCPKGDEST="$tmp/build" makepkg -f --skipchecksums --nodeps >&2)
 pkg=$(ls "$tmp/build"/conditioning-control-panel-bin-"$ver"-*.pkg.tar.*)
 tar -xf "$pkg" -C "$tmp/root"
 id=io.github.CodeBambi.ConditioningControlPanel
