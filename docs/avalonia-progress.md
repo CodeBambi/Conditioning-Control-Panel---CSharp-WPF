@@ -1211,3 +1211,17 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/calib-flake: +46
 - Calibration window timing behind a TimeProvider; the test steps a manual clock (no sleeps). Full suite 3x green under load.
+
+## avalonia-port/spoken-mantras: +577
+- Spoken mantras: Core SpokenMantra + MantraVoiceService (WPF delegates); Takeover Spoken Mantra and the wake/PTT fallback; the mic opens only
+  after her clip ends; panic/revoke close it. WAV + fake-mic tests, fail-proven.
+
+## avalonia-port/ci-sweep: +126
+- CI: Avalonia tests sharded (5 processes, completeness guard) to stay under the runner's memory; root-cause fixes for the Windows/Linux CI test failures on #1962–#1990. Native leak logged for follow-up.
+
+## avalonia-port/her-room-chat: +716
+- Her Room chat and memory diary live over the brain (Core CompanionRoomLogic + CompanionMemoryViewModel, WPF delegates); forget/wipe/switch-off
+  really delete, incl. temp/backup siblings. Fail-proven tests.
+
+## avalonia-port/flake-minepoll: +17
+- Test-order flakes fixed at the source: a leaked auth token (MinePoll) and a shared awareness cooldown (AWindowChange). OpensPlays unconfirmed.

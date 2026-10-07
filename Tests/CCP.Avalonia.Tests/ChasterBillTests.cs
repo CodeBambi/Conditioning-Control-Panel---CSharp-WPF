@@ -106,6 +106,7 @@ public sealed class ChasterBillTests
         shell.Closed += (_, _) => closed = true;
 
         shell.RequestExit();                           // the tray's Exit and Settings' Exit both land here
+        shell.ExitBillTimer!.Stop();                   // a slow runner must not tick the bill shut before the click
         Dispatcher.UIThread.RunJobs();
         var root = shell.Named<Grid>("RootGrid")!;
         var overlay = root.Children.OfType<Grid>().Single(g => g.Name == "ExitBillOverlay");
@@ -127,6 +128,7 @@ public sealed class ChasterBillTests
         var closed = false;
         shell.Closed += (_, _) => closed = true;
         shell.RequestExit();
+        shell.ExitBillTimer!.Stop();                   // only the driven ticks below count
         var countdown = shell.Named<Grid>("RootGrid")!.Children.OfType<Grid>().Single(g => g.Name == "ExitBillOverlay")
             .GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == Loc.GetF("chaster_bill_closing", MainShellWindow.ExitBillSeconds));
         for (var i = 1; i < MainShellWindow.ExitBillSeconds; i++) shell.ExitBillTick!();   // the timer's seconds, driven, no sleeps

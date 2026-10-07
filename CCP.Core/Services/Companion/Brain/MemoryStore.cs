@@ -707,6 +707,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 try
                 {
                     if (File.Exists(file)) File.Delete(file);
+                    // Temp/backup siblings (memory.json.tmp from an interrupted atomic save, *.bak)
+                    // hold the same text; a wipe that leaves them has not wiped.
+                    var parent = Path.GetDirectoryName(file);
+                    if (parent != null && Directory.Exists(parent))
+                        foreach (var sibling in Directory.GetFiles(parent, Path.GetFileName(file) + ".*"))
+                            File.Delete(sibling);
                 }
                 catch (Exception ex)
                 {

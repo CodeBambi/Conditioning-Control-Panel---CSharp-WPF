@@ -96,20 +96,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         Train4
     }
 
-    /// <summary>Whether an LLM surface is usable, teased, or merely sleeping until a train lands.</summary>
-    public enum CompanionZoneState
-    {
-        /// <summary>Fully functional.</summary>
-        Live,
-        /// <summary>Shipped but the feature is not built yet — shimmer + in-character promise.</summary>
-        Dormant,
-        /// <summary>Entitlement gate — Velvet-Vault veil with a personal sell line and a CTA chip.</summary>
-        Locked,
-        /// <summary>Works, but there is nothing in it yet.</summary>
-        Empty,
-        /// <summary>Provider is Off / the companion is disabled.</summary>
-        Disabled
-    }
+    // CompanionZoneState lives in CCP.Core (Views/Controls/Companion/CompanionRoomLogic.cs), same namespace.
 
     /// <summary>Which way a chat bubble leans, and whether it was spoken rather than typed.</summary>
     public enum CompanionBubbleKind

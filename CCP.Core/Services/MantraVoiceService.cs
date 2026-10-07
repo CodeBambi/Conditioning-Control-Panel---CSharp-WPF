@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
+using Serilog;
+using static ConditioningControlPanel.Services.Companion.CompanionContentResolver;
 
 namespace ConditioningControlPanel.Services
 {
@@ -99,48 +101,25 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrWhiteSpace(file)) return null;
 
             // 1) packaged mod (InstalledPath)
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
+            var modPath = CoreMods.ActiveModPackage?.InstalledPath;
             if (!string.IsNullOrEmpty(modPath))
             {
                 var p = Path.Combine(modPath, "resources", "sounds", "companion_audio", file);
                 if (File.Exists(p)) return p;
             }
             // 2) embedded per-mod folder (install dir, or the downloaded content pack)
-            var modId = App.Mods?.ActiveModId;
+            var modId = CoreMods.ActiveModIdProvider?.Invoke();
             if (!string.IsNullOrEmpty(modId))
             {
-                var pm = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, file);
+                var pm = ResolveCompanionAudioFile("mods", modId, file);
                 if (File.Exists(pm)) return pm;
             }
             // 3) embedded shared fallback
-            var embedded = CompanionPhraseService.ResolveCompanionAudioFile(file);
+            var embedded = ResolveCompanionAudioFile(file);
             return File.Exists(embedded) ? embedded : null;
         }
 
-        /// <summary>
-        /// Best-effort duration of an mp3/wav clip so callers can wait for her to finish speaking
-        /// before opening the mic (otherwise the recognizer hears her own delivery). Null if unknown.
-        /// </summary>
-        public TimeSpan? GetAudioDuration(string? fullPath)
-        {
-            if (string.IsNullOrWhiteSpace(fullPath) || !File.Exists(fullPath)) return null;
-            try
-            {
-                var ext = Path.GetExtension(fullPath).ToLowerInvariant();
-                if (ext == ".wav")
-                {
-                    using var r = new NAudio.Wave.WaveFileReader(fullPath);
-                    return r.TotalTime;
-                }
-                using var mp3 = new NAudio.Wave.Mp3FileReader(fullPath);
-                return mp3.TotalTime;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug(ex, "MantraVoiceService: could not read duration of {Path}", fullPath);
-                return null;
-            }
-        }
+        // GetAudioDuration (NAudio) stays in the WPF head: MantraVoiceAudio.cs.
 
         // ── Loading ───────────────────────────────────────────────────────────────
 
@@ -148,7 +127,7 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lock)
             {
-                var modId = App.Mods?.ActiveModId ?? "";
+                var modId = CoreMods.ActiveModIdProvider?.Invoke() ?? "";
                 if (_set != null && _loadedModId == modId) return _set;
 
                 _set = Load(modId);
@@ -158,6 +137,9 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        private static string ResolveCompanionAudioFile(params string[] parts) =>
+            ContentLocator.Resolve(Path.Combine(CompanionAudioRelativeDir, Path.Combine(parts)));
+
         private static MantraSet? Load(string modId)
         {
             try
@@ -165,18 +147,18 @@ namespace ConditioningControlPanel.Services
                 var path = ResolveSetPath(modId);
                 if (path == null)
                 {
-                    App.Logger?.Information("MantraVoiceService: no mantras.json for mod {Mod}", modId);
+                    Log.Information("MantraVoiceService: no mantras.json for mod {Mod}", modId);
                     return null;
                 }
                 var json = File.ReadAllText(path);
                 var set = JsonConvert.DeserializeObject<MantraSet>(json);
-                App.Logger?.Information("MantraVoiceService: loaded {Count} mantras for mod {Mod} from {Path}",
+                Log.Information("MantraVoiceService: loaded {Count} mantras for mod {Mod} from {Path}",
                     set?.Mantras.Count ?? 0, modId, path);
                 return set;
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "MantraVoiceService: failed to load mantras for mod {Mod}", modId);
+                Log.Warning(ex, "MantraVoiceService: failed to load mantras for mod {Mod}", modId);
                 return null;
             }
         }
@@ -184,7 +166,7 @@ namespace ConditioningControlPanel.Services
         private static string? ResolveSetPath(string modId)
         {
             // 1) packaged mod (InstalledPath)
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
+            var modPath = CoreMods.ActiveModPackage?.InstalledPath;
             if (!string.IsNullOrEmpty(modPath))
             {
                 var p = Path.Combine(modPath, "resources", "sounds", "companion_audio", "mantras.json");
@@ -194,7 +176,7 @@ namespace ConditioningControlPanel.Services
             //    pack-only mod folder still resolves)
             if (!string.IsNullOrEmpty(modId))
             {
-                var pm = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, "mantras.json");
+                var pm = ResolveCompanionAudioFile("mods", modId, "mantras.json");
                 if (File.Exists(pm)) return pm;
             }
             return null;

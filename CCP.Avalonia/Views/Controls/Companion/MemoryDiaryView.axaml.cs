@@ -14,6 +14,10 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Views.Controls.Companion;
+using Brain = ConditioningControlPanel.Services.Companion.Brain;
+using CompanionMemoryViewModel = ConditioningControlPanel.ViewModels.CompanionMemoryViewModel;
+using MemoryFactRowViewModel = ConditioningControlPanel.ViewModels.MemoryFactRowViewModel;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 {
@@ -241,7 +245,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             IsBoundary = isBoundary;
             IsDormant = isDormant;
 
-            PinCommand = new CompanionRelayCommand(() => { if (CanPin) IsPinned = !IsPinned; }, () => CanPin);
+            PinCommand = new CompanionRelayCommand(() =>
+            {
+                if (!CanPin) return;
+                if (PinRequested != null) PinRequested(this); else IsPinned = !IsPinned;
+            }, () => CanPin);
             EditCommand = new CompanionRelayCommand(() => IsEditing = true, () => CanEdit);
             ForgetCommand = new CompanionRelayCommand(Forget, () => CanForget);
             CommitEditCommand = new CompanionRelayCommand(CommitEdit);
@@ -257,6 +265,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         /// <summary>Set by the wall: a forget takes the card out of the list.</summary>
         public Action<MemoryFact>? Forgotten { get; set; }
+
+        /// <summary>Live wall: the stored row this card shows, and the store writes pin/edit route to.</summary>
+        internal MemoryFactRowViewModel? Row { get; init; }
+        internal Action<MemoryFact>? PinRequested { get; set; }
+        internal Action<MemoryFact, string>? EditCommitted { get; set; }
 
         public string Text { get => _text; private set => Set(ref _text, value); }
         public string MetaLabel { get => _metaLabel; private set => Set(ref _metaLabel, value); }
@@ -288,6 +301,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         private void CommitEdit()
         {
             if (!_isEditing) return;
+            if (EditCommitted != null)
+            {
+                _isEditing = false;
+                Raise(nameof(IsEditing));
+                EditCommitted(this, EditText ?? string.Empty);
+                return;
+            }
             string trimmed = (EditText ?? string.Empty).Trim();
             if (trimmed.Length > 0)
             {
@@ -328,6 +348,82 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         public MemoryDiaryViewModel() : this(ArtboardFacts(), ArtboardStats()) { }
 
+        // ---- live (WPF MemoryDiaryRuntimeVm over App.Brain.Memory) ----
+        /// <summary>The tube's on-screen bubble log the wipe clears. A seam only because a headless test
+        /// has no desktop lifetime for <c>AvatarTubeWindow.Live</c> to find.</summary>
+        internal static Func<ICollection<Views.AvatarTube.ChatMessage>?> TubeBubbleLog =
+            () => Views.AvatarTube.AvatarTubeWindow.Live?.ChatHistory;
+        private bool _live;
+        private Brain.IMemoryStore? _store;
+        private CompanionMemoryViewModel? _inner;
+
+        /// <summary>The live wall: every pin/edit/forget/wipe goes through the Core CompanionMemoryViewModel
+        /// to the brain's memory.json, exactly as WPF's MemoryDiaryRuntimeVm does.</summary>
+        internal static MemoryDiaryViewModel CreateLive()
+        {
+            bool v2 = ConditioningControlPanel.Services.Companion.CompanionExperience.IsV2Enabled;
+            var vm = new MemoryDiaryViewModel(new List<MemoryFact>(), Array.Empty<string>())
+            {
+                EmptyCopy = Loc.Get(v2 ? "companion_v2_memory_empty" : "companion_memory_empty_copy"),
+                StorageNote = Loc.Get(v2 ? "companion_v2_memory_storage" : "companion_memory_storage_note"),
+                ForgetEverythingLabel = Loc.Get(v2 ? "companion_v2_memory_clear" : "companion_memory_forget_everything"),
+            };
+            vm._live = true;
+            vm.Sync();
+            return vm;
+        }
+
+        /// <summary>Rebuilds the wall and the profile strip from the store, re-reading App.Brain (it may arrive late).</summary>
+        public void Sync()
+        {
+            if (!_live) return;
+            try
+            {
+                var brain = App.Brain;
+                brain?.EnsureCurrentAccount();
+                var live = brain?.Memory;
+                if (_inner == null || !ReferenceEquals(live, _store))
+                {
+                    _store = live;
+                    _inner = new CompanionMemoryViewModel(_store, brain?.CaptureForgetAction(_store));
+                }
+                else _inner.Refresh();
+
+                ProfileStats = _inner.ProfileSignals.Select(sig => $"{sig.Label} {sig.Value}".Trim()).ToArray();
+
+                foreach (var f in _all) Detach(f);
+                _all.Clear();
+                var byId = (_store?.GetFacts() ?? Array.Empty<Brain.MemoryFact>())
+                    .Where(f => f != null).ToDictionary(f => f.Id, StringComparer.Ordinal);
+                foreach (var row in _inner.Groups.SelectMany(g => g.Facts))
+                {
+                    if (!byId.TryGetValue(row.Id, out var fact)) continue;
+                    var key = CompanionRoomLogic.KindKeyFor(row.Kind);
+                    var card = new MemoryFact(row.Text, key, Loc.Get("companion_memory_card_" + key),
+                        CompanionRoomLogic.BuildMeta(fact.Uses, fact.LastUsed, row.IsUserEdited),
+                        isBoundary: row.Kind == Brain.MemoryFactKind.Boundary, isPinned: row.Pinned) { Row = row };
+                    card.PinRequested = c => { _inner?.TogglePin(c.Row); Sync(); };
+                    card.EditCommitted = (c, text) =>
+                    {
+                        if (c.Row is not { } r) return;
+                        r.EditText = text;
+                        r.IsEditing = true;
+                        _inner?.CommitEdit(r);
+                        Sync();
+                    };
+                    _all.Add(card);
+                    Attach(card);
+                }
+                if (!ConditioningControlPanel.Services.Companion.CompanionExperience.IsV2Enabled)
+                    _all.Add(new MemoryFact(Loc.Get("companion_memory_dormant_promise"), "all",
+                        Loc.Get("companion_memory_card_dormant"), string.Empty, isDormant: true));
+
+                Reproject();
+                Raise(nameof(IsEmpty));
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Companion room: memory sync failed"); }
+        }
+
         public MemoryDiaryViewModel(List<MemoryFact> facts, IReadOnlyList<string> stats)
         {
             _all = facts;
@@ -353,7 +449,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         }
 
         public string ProfileStripLabel { get; init; } = Loc.Get("companion_memory_profile_strip");
-        public IReadOnlyList<string> ProfileStats { get; }
+        private IReadOnlyList<string> _profileStats = Array.Empty<string>();
+        public IReadOnlyList<string> ProfileStats { get => _profileStats; private set => Set(ref _profileStats, value); }
         public IReadOnlyList<FactFilter> Filters { get; }
 
         public IReadOnlyList<MemoryFact> Facts
@@ -381,13 +478,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public string StorageLinkLabel { get; init; } = Loc.Get("companion_memory_storage_link");
         public string ForgetEverythingLabel { get; init; } = Loc.Get("companion_memory_forget_everything");
 
-        // WPF MemoryDiaryRuntimeVm.OpenStorageFolder: MemoryStore.CompanionDirectory (head-only, so
-        // its one-line path is spelled here). Shell-execute on a directory is xdg-open on Linux.
+        // WPF MemoryDiaryRuntimeVm.OpenStorageFolder. Shell-execute on a directory is xdg-open on Linux.
         public ICommand OpenStorageFolderCommand { get; } = new CompanionRelayCommand(() =>
         {
             try
             {
-                var dir = System.IO.Path.Combine(CorePaths.UserData, "companion");
+                var dir = Brain.MemoryStore.CompanionDirectory;
                 System.IO.Directory.CreateDirectory(dir);
                 Platform.ExternalOpener.Open(dir);
             }
@@ -414,6 +510,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         public void Forget(MemoryFact fact)
         {
+            if (_live) { _inner?.Delete(fact.Row); Sync(); return; }
             if (!_all.Remove(fact)) return;
             Detach(fact);
             Reproject();
@@ -423,6 +520,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// <summary>Every real fact goes; the dormant promise card is copy, not a memory, so it stays.</summary>
         public void ForgetEverything()
         {
+            if (_live)
+            {
+                // THE wipe (WPF MemoryDiaryRuntimeVm.ForgetEverything): facts, profile, episodes AND
+                // the conversation through CompanionBrain.Forget, plus the tube's bubble log.
+                CoreBark.NotifyUiAction("reset_memory");
+                _inner?.ForgetEverything();
+                TubeBubbleLog()?.Clear();
+                Serilog.Log.Information("Companion memory wiped from the diary");
+                Sync();
+                return;
+            }
             foreach (var fact in _all.Where(f => !f.IsDormant).ToList())
             {
                 _all.Remove(fact);

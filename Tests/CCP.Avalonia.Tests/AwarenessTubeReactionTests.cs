@@ -30,6 +30,13 @@ public sealed class AwarenessTubeReactionTests
         try
         {
             tube.Show();
+            // App.WindowAwareness is process-global: Show starts it polling the REAL desktop (any focus
+            // change - another gate's app - reacts and arms the cooldown), and an earlier test may have
+            // armed it already. Only this test's events may drive the tube.
+            var awareness = global::ConditioningControlPanel.Avalonia.App.WindowAwareness;
+            awareness.Stop();
+            typeof(WindowAwarenessService).GetField("_lastReactionTime", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(awareness, DateTime.MinValue);
             Dispatcher.UIThread.RunJobs();
             tube._startupTime = DateTime.MinValue;   // past WPF's 3 s startup quiet
             var bubble = tube.FindControl<Border>("SpeechBubble")!;

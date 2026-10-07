@@ -57,8 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // ponytail: Force Start is a hidden debug button on WPF too (bypasses every gate); not ported.
             BtnGateUnlock.Click += (s, e) => Shell?.BtnGateUnlock_Click(s, e);
             BtnTestAutonomy.Click += (_, _) => Shell?.TestAutonomy();
-            // ponytail: needs AutonomyService.VoiceCommands / MantraVoice (slice 2).
-            BtnTestVoice.Click += (_, _) => { };
+            BtnTestVoice.Click += (_, _) => Shell?.TestSpokenMantra();   // WPF TestVoiceCommand
             BtnOpenDeviceSettings.Click += BtnOpenDeviceSettings_Click;
             BtnWallpaperFolder.Click += BtnWallpaperFolder_Click;
 
