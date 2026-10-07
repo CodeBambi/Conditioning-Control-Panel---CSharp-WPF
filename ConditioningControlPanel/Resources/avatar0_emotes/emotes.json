@@ -4,7 +4,6 @@
   "fadeMs": 1000,
   "idleRotation": [
     { "clip": "idle",  "weight": 6 },
-    { "clip": "idle2", "weight": 6 },
     { "clip": "idle3", "weight": 6 },
     { "clip": "idle4", "weight": 6 },
     { "clip": "idle5", "weight": 6 },
