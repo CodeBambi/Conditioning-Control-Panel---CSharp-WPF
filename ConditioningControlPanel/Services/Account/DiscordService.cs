@@ -97,92 +97,22 @@ namespace ConditioningControlPanel.Services
             _oauthCts?.Cancel();
         }
 
-        /// <summary>
-        /// Map the active mod to the theme id the community bot uses to pick a voice for the post.
-        /// Community/custom mods (and anything we can't resolve) fall back to "default".
-        /// </summary>
+        /// <summary>The theme id the community bot voices posts with; moved to Core
+        /// (<see cref="DiscordAccount.ModThemeId"/>) so both heads share it.</summary>
         private static string GetModThemeId()
         {
-            try
-            {
-                return App.Mods?.ActiveModId switch
-                {
-                    BuiltInMods.CCPDefaultId => "default",
-                    BuiltInMods.BambiSleepId => "bambi",
-                    BuiltInMods.SissyHypnoId => "sissy",
-                    BuiltInMods.DronificationId => "drone",
-                    BuiltInMods.LockedId => "circe",
-                    _ => "default"
-                };
-            }
-            catch
-            {
-                // Never throw: this runs inside the fire-and-forget share path.
-                return "default";
-            }
+            try { return DiscordAccount.ModThemeId(App.Mods?.ActiveModId); }
+            catch { return "default"; } // Never throw: this runs inside the fire-and-forget share path.
         }
 
         /// <summary>
-        /// Send achievement announcement to community Discord via server
+        /// Send achievement announcement to community Discord via server (Core
+        /// <see cref="DiscordAccount.SendAchievementWebhookAsync"/>; this head supplies the name, id, token and theme).
         /// </summary>
-        public async Task<bool> SendAchievementWebhookAsync(Achievement achievement, string? displayName = null)
-        {
-            try
-            {
-                // Use display name setting
-                var name = displayName ?? App.Patreon?.DisplayName ?? App.Discord?.DisplayName ?? "Someone";
-
-                var unifiedId = App.EffectiveUserId;
-                if (string.IsNullOrEmpty(unifiedId))
-                {
-                    App.Logger?.Warning("Achievement share skipped: no unified user id (sharing is on but the account isn't fully linked)");
-                    return false;
-                }
-
-                var payload = new
-                {
-                    type = "achievement",
-                    display_name = name,
-                    unified_id = unifiedId,
-                    achievement_name = achievement.Name,
-                    achievement_requirement = achievement.Requirement,
-                    image_name = achievement.ImageName,
-                    // New fields the bot composes mod-themed posts from; the legacy fields above
-                    // stay so servers that haven't rolled out yet keep working.
-                    achievement_id = achievement.Id,
-                    mod_id = GetModThemeId()
-                };
-
-                var request = new HttpRequestMessage(HttpMethod.Post, "/discord/community-webhook")
-                {
-                    Content = JsonContent.Create(payload)
-                };
-                var authToken = App.Settings?.Current?.AuthToken;
-                if (!string.IsNullOrEmpty(authToken))
-                    request.Headers.Add("X-Auth-Token", authToken);
-
-                var response = await _core.Http.SendAsync(request);
-                var responseText = await response.Content.ReadAsStringAsync();
-
-                if (response.IsSuccessStatusCode)
-                {
-                    App.Logger?.Information("Achievement shared to community: {Achievement} ({Status}, {Bytes} bytes)",
-                        achievement.Id, (int)response.StatusCode, responseText?.Length ?? 0);
-                    return true;
-                }
-                else
-                {
-                    App.Logger?.Warning("Achievement share failed: {Status} (body {Bytes} bytes)",
-                        (int)response.StatusCode, responseText?.Length ?? 0);
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Failed to share achievement to community");
-                return false;
-            }
-        }
+        public Task<bool> SendAchievementWebhookAsync(Achievement achievement, string? displayName = null) =>
+            _core.SendAchievementWebhookAsync(achievement,
+                displayName ?? App.Patreon?.DisplayName ?? App.Discord?.DisplayName ?? "Someone",
+                App.EffectiveUserId, App.Settings?.Current?.AuthToken, GetModThemeId());
 
         /// <summary>
         /// Send level up announcement to community Discord via server

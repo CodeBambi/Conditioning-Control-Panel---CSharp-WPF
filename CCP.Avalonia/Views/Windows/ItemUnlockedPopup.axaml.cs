@@ -24,8 +24,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///
     /// PORTED from ConditioningControlPanel/Windows/ItemUnlockedPopup.xaml.cs. Deviations:
     ///  - <c>DoubleAnimation</c> on Opacity becomes a <see cref="DoubleTransition"/>.
-    ///  - <c>SystemParameters.WorkArea</c> becomes <c>Screens.Primary.WorkingArea</c>, populated only
-    ///    once the window has a handle, so placement moves to OnOpened.
+    ///  - <c>SystemParameters.WorkArea</c> + PassiveToastWindow become AchievementPopup.PlacePassive
+    ///    (device pixels, X11 override-redirect before Show()).
     ///  - The Twemoji header/gift SVG lookups and their fallbacks collapse to plain TextBlocks.
     ///  - <c>App.Logger</c> is Serilog's static <c>Log</c>; the templates are unchanged.
     /// </summary>
@@ -88,9 +88,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             LoadItemArt(itemId);
 
-            // Never take the foreground - same focus-theft gap as the Pink Rush toast (ccp-bugs
-            // #1000). ponytail: needs Helpers.PassiveToastWindow (Win32 WS_EX_NOACTIVATE), wired
-            // when the per-platform equivalent lands. ShowActivated="False" is the portable half.
+            // Never take the foreground - same focus-theft gap as the Pink Rush toast (ccp-bugs #1000).
+            // Above the achievement popup; stackIndex pushes each extra toast a further (Height + 8) up.
+            AchievementPopup.PlacePassive(this, AchievementPopupHeight + StackGap + _stackIndex * (Height + SiblingGap));
 
             _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _autoCloseTimer.Tick += (_, _) =>
@@ -147,31 +147,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             image.Source = art;
             image.IsVisible = art != null;
             this.FindControl<TextBlock>("FallbackGlyphText")!.IsVisible = art == null;
-        }
-
-        /// <summary>
-        /// Bottom-right of the work area, stacked ABOVE the achievement popup (and above any earlier
-        /// toast from the same unlock). Falls back to CenterScreen if the work area is unreadable -
-        /// same contract as AchievementPopup.
-        /// </summary>
-        protected override void OnOpened(EventArgs e)
-        {
-            base.OnOpened(e);
-            try
-            {
-                var workArea = Screens.Primary?.WorkingArea
-                    ?? throw new InvalidOperationException("no primary screen");
-
-                Position = new PixelPoint(
-                    workArea.Right - (int)Width - 20,
-                    (int)(workArea.Bottom - AchievementPopupHeight - Height - StackGap
-                          - _stackIndex * (Height + SiblingGap)));
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to position item unlocked popup, using defaults");
-                WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            }
         }
 
         private void FadeOutAndClose()
