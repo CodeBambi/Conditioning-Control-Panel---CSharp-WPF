@@ -5,21 +5,6 @@ using System.Windows.Media;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
-/// <summary>How a chaos bubble travels across the screen.</summary>
-public enum ChaosMotion
-{
-    /// <summary>Rises from the bottom and exits the top (the ambient bubble behaviour).</summary>
-    FloatUp,
-    /// <summary>Falls from the top and exits the bottom.</summary>
-    RainDown,
-    /// <summary>Drifts and bounces off the screen edges; never exits on its own.</summary>
-    RoamBounce,
-    /// <summary>Slides in from a random side edge, crosses horizontally (with the shared
-    /// vertical wobble) and exits the far side. Rolled in as a slice of the vertical
-    /// travellers so the field isn't a bottom-camp shooting gallery.</summary>
-    SideDrift
-}
-
 /// <summary>
 /// Everything BubbleService needs to render + run one chaos effect-bubble. Built
 /// by <see cref="ChaosBubbleVariants"/> from a variant row, then handed to

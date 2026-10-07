@@ -121,7 +121,13 @@ public sealed class HerRoomChatMemoryTests
             Assert.Empty(brain.Session.Turns);
             Assert.True(!File.Exists(session) || !File.ReadAllText(session).Contains("hello you"));
         }
-        finally { (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain); }
+        finally
+        {
+            (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain);
+            // The grid saved memory OFF to the run's settings.json; every later SettingsService loads it.
+            CoreSettings.Current.CompanionPrompt.ChatMemoryEnabled = true;
+            CoreSettings.SaveImmediate();
+        }
     });
 
     [Fact]

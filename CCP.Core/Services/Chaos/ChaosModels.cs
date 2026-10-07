@@ -4,8 +4,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Windows;
-using System.Windows.Media;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -19,7 +17,8 @@ public sealed class ChaosSidebarBoon
 {
     /// <summary>Lifetime-boon id for pocket tiles (click-to-unequip pre-run). Empty for run picks/modifiers.</summary>
     public string Id { get; init; } = "";
-    public ImageSource? Icon { get; init; }
+    /// <summary>Head image (WPF ImageSource / Avalonia IImage); null = draw the glyph.</summary>
+    public object? Icon { get; init; }
     public string Glyph { get; init; } = "◈";
     public string Name { get; init; } = "";
     public int Level { get; init; }
@@ -40,33 +39,13 @@ public sealed class ChaosSidebarBoon
 
     // ---- hover card + tile accents ----
     public string TipTitle => Level > 0 ? $"{Name} · L{Level}" : Name;
-    public Visibility LevelBadgeVisibility => Level > 0 ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility DescVisibility => string.IsNullOrEmpty(Desc) ? Visibility.Collapsed : Visibility.Visible;
-    public Visibility FlavorVisibility => string.IsNullOrEmpty(Flavor) ? Visibility.Collapsed : Visibility.Visible;
-    public Visibility ExtraVisibility => string.IsNullOrEmpty(Extra) ? Visibility.Collapsed : Visibility.Visible;
-    public Brush AccentBrush
-    {
-        get
-        {
-            var fallback = IsEmptySlot ? EmptyAccent : IsModifier ? ModAccent : IsCurse ? CurseAccent : Level > 0 ? PocketAccent : BoonAccent;
-            // Payload-based color language: a mapped boon shows its family color; everything else
-            // (empty slots, unmapped mechanics) keeps the category fallback above.
-            return IsEmptySlot ? fallback : ConditioningControlPanel.ChaosBoonColors.BrushForOrDefault(Id, fallback);
-        }
-    }
-    public Brush TileBackBrush => IsEmptySlot ? Brushes.Transparent : IsModifier ? ModBack : IsCurse ? CurseBack : Level > 0 ? PocketBack : BoonBack;
+    // Bools, not Visibility: each head maps them (WPF BoolToVis converter, Avalonia IsVisible).
+    // The accent/back brushes live in each head's ChaosBoonColors.SidebarAccent/SidebarBack.
+    public bool HasLevelBadge => Level > 0;
+    public bool HasDesc => !string.IsNullOrEmpty(Desc);
+    public bool HasFlavor => !string.IsNullOrEmpty(Flavor);
+    public bool HasExtra => !string.IsNullOrEmpty(Extra);
     public double TileOpacity => IsEmptySlot ? 0.55 : 1.0;
-
-    private static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
-    private static readonly Brush EmptyAccent = Frozen(Color.FromArgb(0x60, 0xB8, 0xB8, 0xD0));
-    private static readonly Brush PocketAccent = Frozen(Color.FromRgb(0xFF, 0x69, 0xB4));
-    private static readonly Brush BoonAccent = Frozen(Color.FromRgb(0x9C, 0xE8, 0xA0));
-    private static readonly Brush CurseAccent = Frozen(Color.FromRgb(0xFF, 0x8A, 0x8A));
-    private static readonly Brush ModAccent = Frozen(Color.FromRgb(0x8B, 0x5C, 0xF6));
-    private static readonly Brush PocketBack = Frozen(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4));
-    private static readonly Brush BoonBack = Frozen(Color.FromArgb(0x2E, 0x9C, 0xE8, 0xA0));
-    private static readonly Brush CurseBack = Frozen(Color.FromArgb(0x2E, 0xFF, 0x8A, 0x8A));
-    private static readonly Brush ModBack = Frozen(Color.FromArgb(0x2E, 0x8B, 0x5C, 0xF6));
 }
 
 /// <summary>
@@ -156,7 +135,7 @@ public sealed class ChaosRunConfig
     public bool DartersEnabled { get; set; } = true;
     /// <summary>If a boon draft is left untouched this many seconds, auto-take the SKIP (+1 shield) and
     /// resume so an unattended run never freezes forever. 0 disables (wait indefinitely).</summary>
-    public int DraftAutoResumeSec { get; set; } = ChaosModeService.DraftAutoResumeSecDefault;
+    public int DraftAutoResumeSec { get; set; } = ChaosTuning.DRAFT_AUTO_RESUME_SEC_DEFAULT;
     /// <summary>Opt-in ambient mode (OFF by default): remap intrusive detonations (video / HT link) to a
     /// lighter payload (bouncing text / gif cascade) so a background run is never yanked fullscreen.</summary>
     public bool AmbientMode { get; set; } = false;
@@ -192,7 +171,7 @@ public sealed class ChaosRunConfig
 
     public static ChaosRunConfig FromSettings()
     {
-        var s = App.Settings?.Current;
+        var s = CoreSettings.HasProvider ? CoreSettings.Current : null;
         var cfg = new ChaosRunConfig();
         cfg.SinChance = DefaultSinChance(ChaosMeta.State.RunsCompleted);
         if (s == null) { ChaosRunEffects.ApplyTo(cfg); return cfg; }
@@ -261,12 +240,15 @@ public sealed class ChaosRunConfig
     /// this passes the saved list through untouched — kept as the backstop should the
     /// predicates ever gate again. The saved setting is never mutated.
     /// </summary>
+    /// <summary>WPF <c>ChaosBubbleVariants.AllIds()</c> (the variant catalogue is head-side).</summary>
+    public static Func<List<string>>? AllVariantIds;
+
     private static List<string>? ClampVariants(List<string>? saved)
     {
         bool videoOk = RevealService.IsUnlocked(RevealIds.VariantVideo);
         bool htOk = RevealService.IsUnlocked(RevealIds.VariantHtlink);
         if (videoOk && htOk) return saved;
-        var list = new List<string>(saved ?? ChaosBubbleVariants.AllIds());
+        var list = new List<string>(saved ?? AllVariantIds?.Invoke() ?? new List<string>());
         if (!videoOk) list.Remove("video");
         if (!htOk) list.Remove("htlink");
         return list;
@@ -541,7 +523,11 @@ public sealed class ChaosRunState : INotifyPropertyChanged
     public string TotalMultText => $"x{TotalMult:0.0}";
 
     /// <summary>Skill-tree multiplier (incl. Pink Rush) — informational; applied once at payout.</summary>
-    public double SkillMult => App.SkillTree?.GetTotalXpMultiplier() ?? 1.0;
+    public double SkillMult => SkillMultProvider?.Invoke() ?? 1.0;
+    /// <summary>WPF <c>App.SkillTree?.GetTotalXpMultiplier()</c>; null = 1.0.</summary>
+    public static Func<double>? SkillMultProvider;
+    /// <summary>WPF <c>ChaosArt.Resolve(category, id)</c>: the head's boon art; null = glyph.</summary>
+    public static Func<string, string, object?>? IconResolver;
     public string SkillMultText => $"x{SkillMult:0.0}";
 
     // ---- counters ----
@@ -582,7 +568,7 @@ public sealed class ChaosRunState : INotifyPropertyChanged
         RunPickTiles.Add(new ChaosSidebarBoon
         {
             Id = boon.Id,   // carry the id so the ribbon tile colors by payload family
-            Icon = ChaosArt.Resolve("boons", boon.Id),
+            Icon = IconResolver?.Invoke("boons", boon.Id),
             Glyph = boon.IsCurse ? "☠" : "◈",
             Name = boon.Name,
             Desc = boon.Desc,
@@ -738,4 +724,19 @@ public sealed class ChaosRunState : INotifyPropertyChanged
         <= 1 => "I", 2 => "II", 3 => "III", 4 => "IV", 5 => "V",
         6 => "VI", 7 => "VII", 8 => "VIII", 9 => "IX", _ => n.ToString()
     };
+}
+
+/// <summary>How a chaos bubble travels across the screen.</summary>
+public enum ChaosMotion
+{
+    /// <summary>Rises from the bottom and exits the top (the ambient bubble behaviour).</summary>
+    FloatUp,
+    /// <summary>Falls from the top and exits the bottom.</summary>
+    RainDown,
+    /// <summary>Drifts and bounces off the screen edges; never exits on its own.</summary>
+    RoamBounce,
+    /// <summary>Slides in from a random side edge, crosses horizontally (with the shared
+    /// vertical wobble) and exits the far side. Rolled in as a slice of the vertical
+    /// travellers so the field isn't a bottom-camp shooting gallery.</summary>
+    SideDrift
 }
