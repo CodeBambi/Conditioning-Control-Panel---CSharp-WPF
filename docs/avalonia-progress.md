@@ -1235,3 +1235,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/test-isolation: +214
 - Assembly-wide per-test snapshot/restore of process-wide statics, CoreSettings and test-profile json (order leaks impossible by construction); optional seeded test order.
+
+## avalonia-port/flake-tubechat: +12
+- TubeChatBrain flake: HerRoom test leaked ChatMemoryEnabled=false through the shared settings.json; restored at the source.
