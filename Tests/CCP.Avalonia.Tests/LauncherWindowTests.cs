@@ -4,12 +4,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Launcher;
 using Xunit;
@@ -77,11 +79,101 @@ public sealed class LauncherWindowTests
         Assert.Contains(Loc.Get("launcher_game_intake_title"), Texts(tile));
         Assert.Contains(Loc.Get("launcher_play"), Texts(tile));
 
-        launcher.Play(ConditioningControlPanel.Services.Launcher.LauncherCards.Find("intake")!);
+        ClickPlay(tile);
         Dispatcher.UIThread.RunJobs();
         Assert.False(launcher.IsVisible);
         Assert.True(shell.IsVisible);
         Assert.Equal("gradedintake", shell.CurrentTab);
+    });
+
+    private static void ClickPlay(Control tile) =>
+        tile.GetVisualDescendants().OfType<Button>().Single()
+            .RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+    [Fact]
+    public void Lockdown_TilePlayRefuses_LauncherStaysAndPanelStaysTucked() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreEntitlement.HasLabProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var launcher = LauncherWindow.Instance!;
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            ld.Activate(TimeSpan.FromMinutes(30));
+            ClickPlay(launcher.FindControl<UniformGrid>("GamesGrid")!.Children[0]);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(launcher.IsVisible);
+            Assert.False(shell.IsVisible);
+        }
+        finally { ld.Deactivate(); }
+    });
+
+    private static bool LoginOpen(LauncherWindow w) =>
+        w.OwnedWindows.Any(o => o is ConditioningControlPanel.Avalonia.Views.Dialogs.LoginDialog { IsVisible: true });
+
+    private static void Raise(LauncherWindow w, string name) =>
+        w.FindControl<Button>(name)!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+    [Fact]
+    public void Lockdown_SignedOutCardPress_AndSignInPillOpenNoLogin() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => false;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var tile = w.FindControl<UniformGrid>("GamesGrid")!.Children[0];
+        // A real press/release on the art plate (not the Play button), as a user taps the card.
+        void Press()
+        {
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            var p = tile.TranslatePoint(new Point(tile.Bounds.Width / 2, tile.Bounds.Height / 4), w)!.Value;
+            w.MouseDown(p, MouseButton.Left);
+            w.MouseUp(p, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+        }
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Press();
+            Assert.False(LoginOpen(w));
+            Raise(w, "SignInPill");
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(LoginOpen(w));
+            // Control: the same press reaches the card once Lockdown ends.
+            ld.Deactivate();
+            Press();
+            Assert.True(LoginOpen(w));
+        }
+        finally
+        {
+            ld.Deactivate();
+            foreach (var o in w.OwnedWindows.ToList()) o.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    });
+
+    [Theory]
+    [InlineData("PanelCta")]
+    [InlineData("AccountChipButton")]
+    public void Lockdown_PanelCtaAndAccountChip_LeaveThePanelTucked(string button) => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Raise(w, button);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(w.IsVisible);
+            Assert.False(shell.IsVisible);
+        }
+        finally { ld.Deactivate(); }
     });
 
     [Fact]
@@ -304,5 +396,167 @@ public sealed class LauncherWindowTests
             panel.Close();
             CoreSettings.Current.AvatarEnabled = old;
         }
+    });
+
+    // ---- slice 3: account chip, mod pill, panel card status/stats (WPF LauncherWindow.xaml.cs:220-606)
+
+    private static string? Text(LauncherWindow w, string name) => w.FindControl<TextBlock>(name)!.Text;
+
+    [Fact]
+    public void AccountChip_SignedInShowsNameInitialAndSp_SignedOutShowsThePill() => Run(shell =>
+    {
+        var s = CoreSettings.Current;
+        s.UserDisplayName = "  bambi ";
+        s.SkillPoints = 1234;
+        CoreAccount.IsLoggedInProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        Assert.True(w.FindControl<Button>("AccountChipButton")!.IsVisible);
+        Assert.False(w.FindControl<Button>("SignInPill")!.IsVisible);
+        Assert.Equal("bambi", Text(w, "AccountName"));
+        Assert.Equal("B", Text(w, "AvatarInitial"));
+        Assert.True(w.FindControl<StackPanel>("SpChip")!.IsVisible);
+        Assert.Equal(1234.ToString("N0"), Text(w, "SpReadout"));
+        Assert.False(w.FindControl<Image>("TierBadge")!.IsVisible);   // no Patreon tier here
+
+        CoreAccount.IsLoggedInProvider = () => false;
+        w.RefreshAccount();
+        Assert.False(w.FindControl<Button>("AccountChipButton")!.IsVisible);
+        Assert.True(w.FindControl<Button>("SignInPill")!.IsVisible);
+        Assert.False(w.FindControl<StackPanel>("SpChip")!.IsVisible);
+    });
+
+    [Fact]
+    public void PanelCard_ShowsStatsAndRunningStatus_StopLinkStopsTheEngine() => Run(shell =>
+    {
+        var s = CoreSettings.Current;
+        (s.PlayerLevel, s.PlayerXP, s.SkillPoints, s.TotalConditioningMinutes) = (3, 50, 7, 125);
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        Assert.Equal("3", Text(w, "StatLevel"));
+        Assert.Equal("7", Text(w, "StatSparkles"));
+        Assert.Equal("2h 05m", Text(w, "StatTime"));
+        var need = XpCurve.GetXPForLevel(3, XpCurve.EpochOf(s));
+        Assert.Equal(Loc.GetF("launcher_stat_xp", "50", ((int)need).ToString("N0")), Text(w, "XpCaption"));
+        Assert.Equal(Loc.Get("launcher_panel_idle"), Text(w, "StatusText"));
+        Assert.Equal(Loc.Get("launcher_panel_launch"), Text(w, "PanelCtaText"));
+        var stop = w.FindControl<Button>("StopLink")!;
+        Assert.False(stop.IsVisible);
+
+        try
+        {
+            s.FlashEnabled = true;
+            shell.StartEngine();
+            w.RefreshStatus();
+            Assert.True(CoreEngine.IsRunning);
+            Assert.Equal(Loc.GetF("launcher_panel_running", CoreEngine.StartedUtc!.Value.ToLocalTime().ToString("HH:mm")),
+                Text(w, "StatusText"));
+            Assert.Equal(Loc.Get("launcher_panel_open"), Text(w, "PanelCtaText"));
+            Assert.True(stop.IsVisible);
+
+            stop.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.False(CoreEngine.IsRunning);
+            Assert.Null(CoreEngine.StartedUtc);
+            Assert.False(stop.IsVisible);
+            Assert.Equal(Loc.Get("launcher_panel_idle"), Text(w, "StatusText"));
+        }
+        finally { CoreEngine.Stop(); }
+    });
+
+    [Fact]
+    public void ModPill_ReadsTheActiveMod_ASwitchRepaintsThePillAndRedrawsTheTiles() => Run(shell =>
+    {
+        var snapshot = new CoreModsSnapshot();
+        var oldResources = Application.Current!.Resources.Keys.ToHashSet();
+        try
+        {
+            CoreSettings.Current.ActiveModId = BuiltInMods.CCPDefaultId;
+            global::ConditioningControlPanel.Avalonia.App.StartMods();
+            var mods = global::ConditioningControlPanel.Avalonia.App.Mods!;
+            LauncherWindow.BackToLauncher(shell);
+            Dispatcher.UIThread.RunJobs();
+            var w = LauncherWindow.Instance!;
+            string Label() => LauncherModMenu.Label(Loc.Get("launcher_mod_label"), mods.ActiveMod.Name, "-");
+            Assert.Equal(Label(), Text(w, "ModPillText"));
+            var tileBefore = w.FindControl<UniformGrid>("GamesGrid")!.Children[0];
+
+            w.SwitchMod(BuiltInMods.DronificationId);
+            Dispatcher.UIThread.RunJobs();   // the tile redraw is posted, as WPF's
+            Assert.Equal(BuiltInMods.DronificationId, mods.ActiveModId);
+            Assert.Equal(Label(), Text(w, "ModPillText"));
+            Assert.NotSame(tileBefore, w.FindControl<UniformGrid>("GamesGrid")!.Children[0]);
+        }
+        finally
+        {
+            foreach (var key in Application.Current.Resources.Keys.Where(k => !oldResources.Contains(k)).ToList())
+                Application.Current.Resources.Remove(key);
+            snapshot.Dispose();
+            global::ConditioningControlPanel.Avalonia.App.ResetReleaseContent();
+            CoreSettings.Current.ActiveModId = BuiltInMods.CCPDefaultId;
+        }
+    });
+    [Fact]
+    public void Lockdown_StopLinkRefuses_EngineKeepsRunning() => Run(shell =>
+    {
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            CoreSettings.Current.FlashEnabled = true;
+            shell.StartEngine();
+            ld.Activate(TimeSpan.FromMinutes(30));
+            w.FindControl<Button>("StopLink")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.True(CoreEngine.IsRunning);
+        }
+        finally { ld.Deactivate(); CoreEngine.Stop(); }
+    });
+
+    [Fact]
+    public void Lockdown_ModPillOpensNoMenu_AndSwitchModRefuses() => Run(shell =>
+    {
+        var snapshot = new CoreModsSnapshot();
+        var oldResources = Application.Current!.Resources.Keys.ToHashSet();
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            CoreSettings.Current.ActiveModId = BuiltInMods.CCPDefaultId;
+            global::ConditioningControlPanel.Avalonia.App.StartMods();
+            LauncherWindow.BackToLauncher(shell);
+            Dispatcher.UIThread.RunJobs();
+            var w = LauncherWindow.Instance!;
+            ld.Activate(TimeSpan.FromMinutes(30));
+            var pill = w.FindControl<Button>("ModPill")!;
+            pill.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Assert.Null(pill.ContextMenu);
+            w.SwitchMod(BuiltInMods.DronificationId);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(BuiltInMods.CCPDefaultId, global::ConditioningControlPanel.Avalonia.App.Mods!.ActiveModId);
+        }
+        finally
+        {
+            ld.Deactivate();
+            foreach (var key in Application.Current.Resources.Keys.Where(k => !oldResources.Contains(k)).ToList())
+                Application.Current.Resources.Remove(key);
+            snapshot.Dispose();
+            global::ConditioningControlPanel.Avalonia.App.ResetReleaseContent();
+            CoreSettings.Current.ActiveModId = BuiltInMods.CCPDefaultId;
+        }
+    });
+
+    [Fact]
+    public void StatusTimer_StopsWhenTheLauncherHides() => Run(shell =>
+    {
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var timer = (DispatcherTimer)typeof(LauncherWindow)
+            .GetField("_statusTimer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(w)!;
+        Assert.True(timer.IsEnabled);
+        w.Hide();
+        Assert.False(timer.IsEnabled);
     });
 }

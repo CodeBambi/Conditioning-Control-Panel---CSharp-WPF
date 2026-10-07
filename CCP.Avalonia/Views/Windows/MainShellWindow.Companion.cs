@@ -207,13 +207,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
 
             if (_avatarTubeWindow == null) InitializeAvatarTube();
-            if (_avatarTubeWindow == null) return;
-
-            _avatarTubeWindow.ShowSafe();
-            _avatarTubeWindow.StartPoseAnimation();
-
-            _avatarTubeWindow.Detach();
-            // ponytail: WPF also has her Giggle("Good morning~!") - Speech.cs has not crossed.
+            if (_avatarTubeWindow != null)
+            {
+                _avatarTubeWindow.ShowSafe();
+                _avatarTubeWindow.StartPoseAnimation();
+                _avatarTubeWindow.Detach();
+                // ponytail: WPF also has her Giggle("Good morning~!") - Speech.cs has not crossed.
+            }
+            SyncHero();   // WPF CompanionRoom?.SyncHero(): every on/off label follows the switch
         }
 
         /// <summary>Force a pose. Poses themselves load in the tube's Avatar.cs partial, which has

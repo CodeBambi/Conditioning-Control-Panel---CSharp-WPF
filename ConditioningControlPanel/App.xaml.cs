@@ -438,6 +438,10 @@ namespace ConditioningControlPanel
                 Enum.TryParse<Services.NotificationType>(kind, out var t) ? t : Services.NotificationType.Info,
                 duration);
             CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
+            Services.Invites.InviteRewards.UnlockedProvider = () => Achievements?.Progress?.UnlockedAchievements;
+            Services.Invites.InviteRewards.TryUnlockProvider = id => Achievements?.TryUnlock(id) == true;
+            Services.Invites.InviteApi.DefaultIdentity = Services.BackRoom.BackRoomApi.AppIdentity;
+            Services.Invites.InviteApi.DefaultBaseUrl = () => Services.BackRoom.BackRoomApi.BaseUrl;
             Services.WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
             CoreProgram.ActivePackVideoCountProvider = () => ContentPacks?.GetAllActivePackVideos().Count ?? 0;
             CoreProgram.RoadmapProvider = () => Roadmap;
@@ -564,6 +568,10 @@ namespace ConditioningControlPanel
             // AiService moved to Core; these two are the App-bound bits it used to reach directly.
             CoreAccount.PatreonAccessTokenProvider = () => Patreon?.GetAccessToken();
             AiService.MergedAccountHook = r => MergedAccountRecovery.TryHandleAsync(r);
+            // The local providers and their router moved to Core too; same App-bound bits, same answers.
+            Services.AIService.AiServiceStrategy.BrainProvider = () => Brain;
+            Services.AIService.LocalAiService.EnsureServerRunning = host => Services.AIService.OllamaSetupService.EnsureServerRunningAsync(host);
+            Services.AIService.OpenAiCompatibleService.ApiKeyUnprotect = Services.SecureStringHelper.Unprotect;
             // Webcam capability + the consent revoke. The tracking engine stays here (capture
             // device, ONNX sessions, OpenCvSharp loop); only "is there one" and "undo consent"
             // cross. Read lazily: Webcam is constructed in OnStartup, long after this ctor, and is

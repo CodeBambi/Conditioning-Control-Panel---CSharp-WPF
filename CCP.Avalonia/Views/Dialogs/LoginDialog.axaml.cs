@@ -729,6 +729,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 AccountSeed.Sync?.Reset();
             }
             ProfileAdopt.ApplyUserData(CoreSettings.Current, user, authToken, DateTime.UtcNow);
+            // WPF V2AuthServiceHead: an invite week rides its own exact end date (main 6f5e76610).
+            ConditioningControlPanel.Services.Invites.InviteRules.ApplyGrant(CoreSettings.Current, ConditioningControlPanel.Services.Invites.InviteRules.ParseUtc(user.InviteGrantUntilRaw), DateTime.UtcNow);
+            Controls.Invites.InvitePanel.ArmExpiry();
             CoreSettings.Save();
             CoreAccount.UnifiedUserId = user.UnifiedId; // before the load: its push is gated on signed in
             ProfileLoad = AccountSeed.LoadProfileAsync(); // WPF MainWindow.Login.cs:170

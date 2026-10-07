@@ -29,9 +29,6 @@
 //                            shipping it without the preset lookup would be a SKIPPED gate, not a
 //                            degraded one. Blocked whole, deliberately.
 //   ActivatePersonalityPreset - the same PersonalityService, plus GetPersonalityDisplayName.
-//   SetAiProviderMode      - EngineRoomRuntimeVm.SettingsFor / ClearsLiveActions
-//                            (…/Views/Controls/Companion/Runtime/EngineRoomRuntimeVm.cs) and
-//                            App.AiLiveActions.
 //   SetCustomApiKey        - Services.Auth.SecureStringHelper.Protect
 //                            (ConditioningControlPanel/Services/Auth/SecureStringHelper.cs).
 //                            CompanionPromptSettings.OpenAiCompatibleApiKey holds a DPAPI blob,
@@ -39,17 +36,14 @@
 //                            in settings.json IN THE CLEAR. CoreSecrets is the seam that fixes
 //                            this (CoreSecrets.ApiKey), but nothing READS the key from it yet, so
 //                            half the pair is worse than neither. Blocked on purpose.
-//   TestCloudConnection    - EngineRoomRuntimeVm.SetStatus. CoreAi.IsAvailable already answers
-//                            the fact it reports; only the status line to write it to is missing.
-//   ClearCompanionConversation - App.Brain.ForgetThread
-//                            (ConditioningControlPanel/Services/Companion/Brain/) and
-//                            AiServiceStrategy.ClearLocalHistory. The confirm dialog is portable;
-//                            a confirmed button that then forgets nothing is not.
 //   the awareness observer - App.WindowAwareness.Start/Stop
 //                            (ConditioningControlPanel/Services/Awareness/). Dropped from
 //                            SetAwarenessEnabled and EnsureAwarenessV2Consent below: there is no
 //                            observer on this head to start, so the setting write and the consent
 //                            record are the whole of what can be honoured.
+// RESTORED since (local-providers): ClearCompanionConversation below - Brain.ForgetThread and
+// AiServiceStrategy.ClearLocalHistory are both Core now; the Engine Room drawer's EngineRoomVm calls it.
+// SetAiProviderMode / TestCloudConnection live in that VM (EngineRoomDrawer.axaml.cs) over Core EngineRoomProviders.
 // RESTORED since: the premium bar. TierGate is in Core (CCP.Core/Services/TierGate.cs) over the
 // CoreEntitlement seam, so SetAwarenessEnabled's ON-edge gate is the real one. This head seeds no
 // entitlement providers, so it denies - the same answer WPF gives with no Patreon service.
@@ -61,6 +55,8 @@
 // twins carry inert handlers, and the tray/dashboard paths are in MainShellWindow.axaml.cs.
 
 using System;
+using System.Linq;
+using Avalonia.LogicalTree;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Awareness;
@@ -93,6 +89,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (enabled) ShowAvatarTube();
             else HideAvatarTube();
             CoreSettings.Save();
+            // Every on/off button reads the hero's copy of the switch, wherever it was flipped from.
+            SyncHero();
+        }
+
+        /// <summary>WPF CompanionRoom?.SyncHero(): re-read every seated hero card.</summary>
+        internal void SyncHero()
+        {
+            foreach (var hero in this.GetLogicalDescendants().OfType<Controls.Companion.CompanionHeroCard>())
+                hero.ViewModel?.Sync();
         }
 
         /// <summary>
@@ -217,7 +222,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// parse rules: blank or unparseable means "no limit" (0), negatives are clamped by the
         /// same test. async because Avalonia's ShowDialog is.
         /// </summary>
-        internal async void PromptForDailyRequestLimit()
+        internal async System.Threading.Tasks.Task PromptForDailyRequestLimit()
         {
             var s = CoreSettings.Current.CompanionPrompt;
             if (s == null) return;
@@ -233,6 +238,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var text = (dialog.ResultText ?? string.Empty).Trim();
             s.DailyRequestLimit = int.TryParse(text, out var value) && value > 0 ? value : 0;
             CoreSettings.Save();
+        }
+
+        /// <summary>
+        /// "Clear conversation" (WPF MainWindow.CompanionRoom.cs:353): drops the thread, leaves what she
+        /// knows. ForgetThread, not ForgetConversation, for the reason WPF gives (pinned and Boundary facts).
+        /// The bark echo is not here: this head has no bark engine (CoreBark is a doorbell).
+        /// </summary>
+        internal async System.Threading.Tasks.Task ClearCompanionConversationAsync()
+        {
+            var message = string.Join(Environment.NewLine + Environment.NewLine,
+                Loc.Get("companion_engine_clear_conversation_confirm"),
+                Loc.Get("companion_engine_clear_conversation_confirm_body"),
+                Loc.Get("companion_engine_clear_conversation_confirm_warn"));
+            if (!await MessageDialog.ConfirmAsync(this, Loc.Get("companion_engine_clear_conversation"), message,
+                    defaultToCancel: true)) return;
+            ClearCompanionConversationConfirmed();
+        }
+
+        /// <summary>The confirmed half, separate so a headless test drives exactly what the button does.</summary>
+        internal void ClearCompanionConversationConfirmed()
+        {
+            try
+            {
+                App.Brain?.ForgetThread();
+                // Backstop for the no-brain case: the legacy local transcript must not survive the button.
+                if (App.Brain == null)
+                    (App.Ai as ConditioningControlPanel.Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
+                _avatarTubeWindow?.ChatHistory.Clear();
+                Log.Information("Companion conversation cleared from the Engine Room");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to clear companion conversation");
+            }
         }
     }
 }

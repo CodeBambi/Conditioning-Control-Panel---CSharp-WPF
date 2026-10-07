@@ -121,7 +121,10 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The cloud companion AI (WPF App.Ai), the same Core AiService. Its base URL follows
         /// AiService.ResolveBaseUrl: a sandbox without a loopback CCP_AI_BASE_URL never sends.
         /// Settable so a test can hand in a fake-endpoint instance.</summary>
-        internal static AiService? Ai { get; set; } = new();
+        /// <para>local-providers: WPF's router (App.xaml.cs:2736) now in Core, so Settings → Local / OpenAI-compatible
+        /// reaches the user's own server exactly as WPF; the cloud leg is the same AiService as before.</para>
+        internal static ConditioningControlPanel.Services.AIService.IAiService? Ai { get; set; } =
+            new ConditioningControlPanel.Services.AIService.AiServiceStrategy();
 
         /// <summary>The companion's conversational spine (WPF App.Brain, App.xaml.cs:2690): the same Core
         /// CompanionBrain over <see cref="Ai"/>, so history and memory live where WPF keeps them
@@ -540,6 +543,13 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
                 SeedCompanionTubeSeams();
                 CompanionEffects.Seed();
+                // WPF App.xaml.cs:554 / 2786 / 2816: legacy adapters route through the brain, a brain wipe also
+                // clears the legacy local transcript, and a Local user gets the model warmed up in the background.
+                ConditioningControlPanel.Services.AIService.AiServiceStrategy.BrainProvider = () => Brain;
+                ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ClearLegacyLocalHistoryHook =
+                    () => (Ai as ConditioningControlPanel.Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
+                if (Ai is ConditioningControlPanel.Services.AIService.AiServiceStrategy strategy)
+                    _ = Task.Run(async () => { try { await strategy.WarmUpLocalAsync(); } catch (Exception ex) { Serilog.Log.Debug("WarmUpLocal: {E}", ex.Message); } });
                 //
                 // CoreModerationLog's record half stays unseeded, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes
@@ -562,6 +572,12 @@ namespace ConditioningControlPanel.Avalonia
                 Achievements.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
+                // WPF App.xaml.cs: the invite ladder's badges and the invites wire (friends' proxy and
+                // door; a sandbox reaches only a loopback CCP_FRIENDS_API_URL, else nothing is sent).
+                Services.Invites.InviteRewards.UnlockedProvider = () => Achievements?.Progress?.UnlockedAchievements;
+                Services.Invites.InviteRewards.TryUnlockProvider = id => Achievements?.TryUnlock(id) == true;
+                Platform.FriendsHead.SeedInvites(
+                    Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 CoreProgression.TrackBubbleCountGameStartedProvider = () => Achievements?.TrackBubbleCountGameStarted();
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
@@ -633,16 +649,19 @@ namespace ConditioningControlPanel.Avalonia
                     Notifications.Show(message,
                         Enum.TryParse<Helpers.NotificationType>(kind, out var t) ? t : Helpers.NotificationType.Info,
                         duration));
-                // ponytail: WPF's Reconnect-Patreon branch (PatreonReconnectRule, head-only) is absent -
-                // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
-                // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
+                // WPF App.xaml.cs:505: the Reconnect answer for gates (Core PatreonReconnectRule).
+                TierGate.ReconnectIsTheAnswerProvider = Views.Windows.MainShellWindow.ReconnectIsTheAnswerNow;
+                // Dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
                 Sessions.Ticked += shell.OnSessionTick;
                 Sessions.SessionLog.LogReady += shell.OnSessionLogReady;
+                // WPF App.xaml.cs:529 (main fbe161de2): "See tiers" opens the vault gate card at the tier this door needs.
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
-                        Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
+                    shell.ShowTierDenied(verdict, Notifications));
+                // WPF App.xaml.cs:509-511 (main 2e9080399). No Arcademy host here: unseeded, so its card stays hidden.
+                Models.ExclusiveFeature.JustDropDoorProvider = SettingsPaletteIndex.JustDropDoorAvailable;
+                Models.ExclusiveFeature.BreakoutFullProvider = () => TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
                 // WPF MainWindow.xaml.cs:484 (the ? box rolled over or its override landed) and
                 // OnPatreonTierChanged: both move the veils, the Play bands and the lapse pass.
                 // WPF MainWindow.xaml.cs:486 / UpdatePatreonUI also repaint the vault (RefreshExclusivesTab).
@@ -662,6 +681,7 @@ namespace ConditioningControlPanel.Avalonia
                 });
                 if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
+                Views.Controls.Invites.InvitePanel.ArmExpiry(); // WPF MainWindow.Patreon.cs: a running invite week's end repaints
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
                 // WPF RequestExit (MainWindow.Launcher.cs:126) stops the engine first: the lock-card
@@ -905,9 +925,11 @@ namespace ConditioningControlPanel.Avalonia
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
             try { (Platform.FriendsHead.Service as IDisposable)?.Dispose(); } catch { /* WPF App.OnExit: the friends poll stops */ }
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }
+            try { Ai?.Dispose(); } catch { /* WPF App.OnExit:6250 (#629): unloads the local Ollama model */ }
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
             try { Views.Overlays.BlinkTrainerSession.Stop(); } catch { /* WPF Application.Exit += Stop */ }
+            try { Views.Chaos.ChaosRunHost.ForceShutdown(); } catch { /* WPF App.OnExit:6241 Chaos.ForceShutdown */ }
             try { Platform.WebcamTracker.Instance.Stop(); } catch { /* WPF App.OnExit:6185 Webcam.Dispose */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never

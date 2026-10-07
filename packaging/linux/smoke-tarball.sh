@@ -2,6 +2,12 @@
 # Extract a built tarball to a temp dir and run --smoke from it, requiring the bundled Vosk model to load.
 #   bash packaging/linux/smoke-tarball.sh <ConditioningControlPanel-*-linux-x64.tar.gz>
 set -euo pipefail
+# The AUR PKGBUILD downloads the release asset by pkgver, so it must follow Version.props (it sat at 6.11.3 under 7.0.5).
+pkgver=$(sed -n 's/^pkgver=//p' "$(dirname "$0")/../aur/PKGBUILD")
+case "$(basename "$1")" in
+  "ConditioningControlPanel-$pkgver-linux-x64.tar.gz") ;;
+  *) echo "packaging/aur/PKGBUILD pkgver=$pkgver does not match $(basename "$1"); bump it (see the PKGBUILD header)" >&2; exit 1 ;;
+esac
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 tar -xzf "$1" -C "$tmp"

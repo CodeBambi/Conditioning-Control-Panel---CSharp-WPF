@@ -466,6 +466,22 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - The 2x2 keys do not go through `ChasterImportConfirmDialog`: like WPF Preset_Click they only rewrite ChasterPrices and
   request limits (Core `TabPresets`), never add time to the lock; that dialog's Summary is the awareness-preset import.
 - Calendar on Core `LockCalendar`; cross strokes straight, padlock a glyph, key on gold, no draw-in/tonight tag (ponytail noted).
+## 2026-10-02: Local AI providers as brain transports (avalonia-port/local-providers)
+- AiServiceStrategy, LocalAiService (Ollama), OpenAiCompatibleService, TransportModeration, AiResponseParser,
+  IAiResponseParser, BrainAdapter and Enrichment/KnowledgeService moved to Core by git mv. App.* became the existing
+  seams (Serilog Log, CoreSettings.Service, CoreMods.Service/GetPhrases, CoreModerationLog, CompanionBrain.CommandExecutor
+  for the legacy App.Commands batch) plus three new head seams that WPF seeds with exactly what it called:
+  `AiServiceStrategy.BrainProvider` (App.Brain), `LocalAiService.EnsureServerRunning` (OllamaSetupService) and
+  `OpenAiCompatibleService.ApiKeyUnprotect` (DPAPI SecureStringHelper). TransportModeration keeps "override returns null =
+  no guard"; unseeded it uses CoreModerationLog.Guard, which fails closed.
+- The Avalonia `App.Ai` is the same AiServiceStrategy, so the brain follows the Engine Room's provider as on WPF. The
+  configured host/endpoint is the only destination; a sandbox reaches loopback only (SandboxNet, unchanged).
+- OpenAI-compatible on this head: no DPAPI and no BYO key store, so ApiKeyUnprotect stays unseeded and the provider never
+  sends (WPF requires a key too; the stored blob is never sent in the clear). The key box writes nothing.
+- The Engine Room's mapping (CompanionProviderMode, ModeFor/SettingsFor/ClearsLiveActions) and the two Test probes are Core
+  `EngineRoomProviders`; WPF EngineRoomRuntimeVm and both MainWindow Test handlers delegate. Avalonia `EngineRoomVm` binds
+  the existing drawer; "Clear conversation" (ForgetThread + legacy local transcript + tube log) is restored on this head.
+- Not ported: OllamaSetupService (detect/install/auto-offer), the Live actions feed, the login deep link.
 - Advisor: worker.
 ## 2026-10-02: Chaos run engine in Core, runs stay WPF-only (avalonia-port/chaos-waves)
 - `ChaosModels.cs` (run config/state, boon pool, toy state, sidebar tile) and `ChaosRunEffects.cs` are git mvs into Core.
@@ -484,6 +500,51 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   proof, a stepped run in its test). Panic and mid-run saves are untouched (WPF `OnPanicKeyDuringRun` → stop; saves only
   where WPF writes them).
 
+
+## 2026-10-02: Launcher account row, mod pill and panel-card stats (avalonia-port/launcher-account)
+- `LauncherModMenu` git-mv'd to Core (pure; WPF and its tests unchanged). `CoreEngine.StartedUtc` added so the status line
+  reads "Running since HH:mm" as WPF's `MainWindow.EngineStartedUtc`; no head-side stamp.
+- Tier badge reads `AccountSeed.Patreon.CurrentTier` (WPF `App.Patreon.CurrentTier`), art through `ModArt.TryLoad` as WPF's
+  launcher goes through ModResourceResolver; the 8 s wobble, odometers and XP tween are deferred to launcher-fx (values snap).
+- Tile refresh: only ModChanged is wired. This head has no PrizeGrants service and no grant-revealed card, so every drawn tile
+  is recorded revealed and GrantsChanged comes with launcher-games. WPF's immediate EngineStopped refresh is covered by the
+  1 s status tick (CoreEngine.StoppedHook is the shell's single hook).
+- Advisor: worker.
+## 2026-10-07: Lockdown veil (avalonia-port/lockdown-veil)
+- WPF veils the launcher only (`LauncherWindow.xaml:597`). MainWindow has no veil: it stays usable under Lockdown
+  because its own exits (Emergency Exit, the timer phrase, the badge) live there, and it refuses per control
+  (`MainWindow.Lab.cs:605ff` and every `App.Lockdown?.IsActive` check). So no shell veil on this head, by WPF design.
+  The structural replacement is a table test, `LockdownVeilTests.EveryShellDoorWpfShutsUnderLockdownRefuses`: one row
+  per door WPF greys or refuses; a new door belongs in that table (PLAYBOOK P05).
+- Launcher veil: same colour, text and breath as WPF; the breath is a 30 fps DispatcherTimer (P01: only while the veil
+  and the window are shown, not minimised, ambient loops allowed). Deliberately stronger than WPF: keys are swallowed at
+  the window and focus moves to the veil, so Tab/Enter/Space cannot reach a veiled control (WPF covered the pointer only).
+  No in-window exception: the panic key is global and is ignored under Lockdown on both heads. WPF has one exception
+  (`MainWindow/MainWindow.xaml.cs:864-869`): while leashed, panic still works under Lockdown. The leash is not ported
+  to this head, so neither is that exception; it comes back with the leash.
+- Gaps the table found and closed: session Stop, factory reset, Settings Exit message, no-panic box (greyed at 0.4
+  with WPF's "no escape" tooltip, given back on exit), Takeover Start/Stop button, and the shell's CC Labs button
+  (greyed as well as refused, like WPF `MainWindow.Lab.cs:611-612`).
+- Advisor: supervisor.
+
+## 2026-10-07: release closed-shell lifetime roots (fix/avalonia-window-memory)
+- A six-window headless reproduction retained all six after forced GC (595 -> 1733 MiB RSS,
+  managed heap 57 -> 243 MiB). `dotnet-dump gcroot` identified managed lifetime roots retaining
+  visual trees and their native images, not just an independently leaking native allocator.
+- Five never-loaded feature controls subscribed to settings in their constructors; they now
+  subscribe only while loaded and still repaint on every load/rebind. Badge motion likewise
+  waits for loading. Relay and language subscriptions now pair attachment with detachment.
+- Closing the shell stops banner/monitor-settle timers, unsubscribes screen changes, and releases
+  its catalogue/hotkey callbacks without removing a newer window's registration.
+- `ShellMemoryTests` repeatedly opens/closes real shells and requires all weak references to die
+  after draining rendering, dispatcher and finalizer work (no sleeps or RSS thresholds). It
+  failed against the original code. Focused validation plateaus around 17-21 MiB managed heap
+  with no retained test shells. The full suite passes 461 tests, skips 3; Core catalogue tests 7/7.
+- This is not a claim that every allocation in the app is fixed: the full unsharded suite still
+  peaked at 10.3 GiB child RSS. Keep coverage-checked sharding and bounded/serialized local gates.
+- Full local gate validation was blocked by the shared queue; `--nav-check` reports the identical
+  rail-selection failure on this fix and clean base a8304e6d0. WPF runtime validation not run.
+- Local investigation evidence: `~/ccp-port/evidence/memory-fix/`.
 ## Quest card quotes the streak the completion pays at (port-misc, 2026-10-07)
 
 - Found: `QuestService.CompleteQuest` advances the quest streak on the day's first daily completion

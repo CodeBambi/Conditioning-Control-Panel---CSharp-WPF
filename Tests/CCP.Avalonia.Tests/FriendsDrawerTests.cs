@@ -167,4 +167,22 @@ public sealed class FriendsDrawerTests
         Assert.Null(Tagged<TextBlock>(d, "friends-my-code"));
         return Task.CompletedTask;
     });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task TheAddBoxOffersSubscribersTheInviteLink(bool subscriber) => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var (svc, _) = Service();
+        var d = new FriendsRailChip(svc).Drawer;
+        await svc.RefreshAsync();
+        d.OffersInviteLink = () => subscriber;
+        d.Render();
+        var asked = 0;
+        d.InvitesRequested += () => asked++;
+        Tagged<Button>(d, "friends-add-open")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(subscriber, Tagged<WrapPanel>(d, "friends-invite-line")!.IsVisible);
+        Tagged<Button>(d, "friends-invite-link")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(1, asked);
+    });
 }

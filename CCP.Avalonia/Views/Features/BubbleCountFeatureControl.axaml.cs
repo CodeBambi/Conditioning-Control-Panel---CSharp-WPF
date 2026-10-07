@@ -52,8 +52,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public void RebindToCurrentSettings()
         {
             Unhook();
-            _hooked = CoreSettings.Current;
-            _hooked.PropertyChanged += OnSettingsPropertyChanged;
+            // Hidden rack controls can be constructed without ever loading/unloading.
+            if (IsLoaded)
+            {
+                _hooked = CoreSettings.Current;
+                _hooked.PropertyChanged += OnSettingsPropertyChanged;
+            }
             LoadFromSettings();
         }
 
@@ -167,7 +171,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                     "• You will NOT be able to skip the bubble count challenge\n" +
                     "• You MUST answer correctly to dismiss\n" +
                     "• Wrong answers force you to REWATCH the video\n" +
-                    "• Mercy system grants escape after 3 retries (if enabled)\n" +
+                    "• " + (CoreSettings.Current.MercySystemEnabled   // #1145: names the picked threshold
+                        ? global::ConditioningControlPanel.Localization.Loc.GetF("warning_strict_mercy_line", CoreSettings.Current.MercyAfterFails)
+                        : global::ConditioningControlPanel.Localization.Loc.Get("warning_strict_mercy_off")) + "\n" +
                     "• This can be very restrictive!");
 
                 if (!confirmed)

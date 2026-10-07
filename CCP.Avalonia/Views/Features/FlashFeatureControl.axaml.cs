@@ -38,6 +38,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             BtnTestFlash.IsEnabled = Platform.X11Overlay.IsAvailable;
             SliderFrequency.ValueChanged += SliderFrequency_Changed;
             SliderImages.ValueChanged += SliderImages_Changed;
+            ChkRandomImages.IsCheckedChanged += ChkRandomImages_Changed;
+            SliderImagesMin.ValueChanged += SliderImagesMin_Changed;
             SliderMaxOnScreen.ValueChanged += SliderMaxOnScreen_Changed;
             ChkClickable.IsCheckedChanged += ChkClickable_Changed;
             ChkCorruption.IsCheckedChanged += ChkCorruption_Changed;
@@ -104,6 +106,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 TxtFrequency.Text = s.FlashFrequency.ToString();
                 SliderImages.Value = s.SimultaneousImages;
                 TxtImages.Text = s.SimultaneousImages.ToString();
+                ChkRandomImages.IsChecked = s.SimultaneousImagesRandom;
+                SliderImagesMin.Value = s.SimultaneousImagesMin;
+                TxtImagesMin.Text = s.SimultaneousImagesMin.ToString();
+                RowImagesMin.IsVisible = s.SimultaneousImagesRandom;
                 SliderMaxOnScreen.Value = s.HydraLimit;
                 TxtMaxOnScreen.Text = s.HydraLimit.ToString();
                 ChkClickable.IsChecked = s.FlashClickable;
@@ -128,6 +134,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (e.PropertyName == nameof(AppSettings.FlashEnabled) ||
                 e.PropertyName == nameof(AppSettings.FlashFrequency) ||
                 e.PropertyName == nameof(AppSettings.SimultaneousImages) ||
+                e.PropertyName == nameof(AppSettings.SimultaneousImagesRandom) ||
+                e.PropertyName == nameof(AppSettings.SimultaneousImagesMin) ||
                 e.PropertyName == nameof(AppSettings.HydraLimit) ||
                 e.PropertyName == nameof(AppSettings.FlashClickable) ||
                 e.PropertyName == nameof(AppSettings.CorruptionMode) ||
@@ -222,6 +230,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var v = (int)e.NewValue;
             TxtImages.Text = v.ToString();
             CoreSettings.Current.SimultaneousImages = v;
+            CoreSettings.Save();
+        }
+
+        // #658: WPF FlashFeatureControl.xaml.cs ChkRandomImages_Changed / SliderImagesMin_Changed.
+        private void ChkRandomImages_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var on = ChkRandomImages.IsChecked ?? false;
+            CoreSettings.Current.SimultaneousImagesRandom = on;
+            RowImagesMin.IsVisible = on;
+            CoreSettings.Save();
+        }
+
+        private void SliderImagesMin_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var v = (int)e.NewValue;
+            TxtImagesMin.Text = v.ToString();
+            CoreSettings.Current.SimultaneousImagesMin = v;
             CoreSettings.Save();
         }
 

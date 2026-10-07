@@ -128,14 +128,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         Everything
     }
 
-    /// <summary>The Engine Room's provider segment (Z7) — the four legacy radios.</summary>
-    public enum CompanionProviderMode
-    {
-        Off,
-        Cloud,
-        LocalOllama,
-        Custom
-    }
+    // CompanionProviderMode moved to CCP.Core (Services/AIService/EngineRoomProviders.cs).
 
     /// <summary>
     /// The attention meter's copy ladder (Z6). Pure function of the remaining fraction so it is
