@@ -35,6 +35,9 @@ public sealed class VaultGateDialog : Window
 {
     public const string PatreonUrl = "https://www.patreon.com/CodeBambi";
 
+    /// <summary>The site's own checkout (card or PayPal, monthly). {0} is basic or prime.</summary>
+    public const string CardUrlFormat = "https://app.cclabs.app/subscribe?plan={0}&from=panel";
+
     private static readonly Brush CardBg = Frozen("#FF151528");
     private static readonly Brush RowBg = Frozen("#252542");
     private static readonly Brush Edge = Frozen("#3D3D60");
@@ -171,6 +174,7 @@ public sealed class VaultGateDialog : Window
         var open = PrimaryButton(Loc.Get(lab ? "vaultgate_open_lab" : "vaultgate_open_vault"));
         open.Click += (_, _) => { OpenPatreon("gate"); Close(); };
         _body.Children.Add(open);
+        _body.Children.Add(CardLink(lab, "gate"));
 
         var links = new Grid { Margin = new Thickness(0, 10, 0, 0) };
         links.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -311,6 +315,7 @@ public sealed class VaultGateDialog : Window
         choose.HorizontalAlignment = HorizontalAlignment.Stretch;
         choose.Click += (_, _) => { OpenPatreon(lab ? "compare-lab" : "compare-vault"); Close(); };
         col.Children.Add(choose);
+        col.Children.Add(CardLink(lab, lab ? "compare-lab" : "compare-vault"));
 
         return new Border
         {
@@ -346,6 +351,7 @@ public sealed class VaultGateDialog : Window
         var keep = PrimaryButton(Loc.Get("vaultgate_ending_keep"));
         keep.Click += (_, _) => { OpenPatreon("ending"); Close(); };
         _body.Children.Add(keep);
+        _body.Children.Add(CardLink(false, "ending"));
 
         var let = Link(Loc.Get("vaultgate_ending_let_close"));
         let.HorizontalAlignment = HorizontalAlignment.Center;
@@ -362,6 +368,24 @@ public sealed class VaultGateDialog : Window
         App.Logger?.Information("[VaultGate] open Patreon from {From}", from);
         try { Process.Start(new ProcessStartInfo { FileName = PatreonUrl, UseShellExecute = true }); }
         catch (Exception ex) { App.Logger?.Error(ex, "[VaultGate] failed to open Patreon"); }
+    }
+
+    /// <summary>The other way to pay, under every Patreon button: the site's card / PayPal checkout.</summary>
+    private FrameworkElement CardLink(bool lab, string from)
+    {
+        var link = Link(Loc.Get("vaultgate_or_card"));
+        link.HorizontalAlignment = HorizontalAlignment.Center;
+        link.TextAlignment = TextAlignment.Center;
+        link.Margin = new Thickness(0, 8, 0, 0);
+        link.MouseLeftButtonUp += (_, _) => { OpenCard(lab ? "prime" : "basic", from); Close(); };
+        return link;
+    }
+
+    private static void OpenCard(string plan, string from)
+    {
+        App.Logger?.Information("[VaultGate] open card checkout ({Plan}) from {From}", plan, from);
+        try { Process.Start(new ProcessStartInfo { FileName = string.Format(CardUrlFormat, plan), UseShellExecute = true }); }
+        catch (Exception ex) { App.Logger?.Error(ex, "[VaultGate] failed to open the card checkout"); }
     }
 
     private static FrameworkElement Chip(string text, Brush? tint)
