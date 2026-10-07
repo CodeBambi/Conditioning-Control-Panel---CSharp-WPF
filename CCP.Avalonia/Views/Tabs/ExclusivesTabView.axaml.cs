@@ -50,6 +50,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // unload. The canvas self-gates on motion, tier and window focus regardless.
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
+            // Main bf57cecdf: columns follow the width, cards stretch to fill the row (Core ExclusiveShelfFit).
+            this.FindControl<ItemsControl>("ExclusivesShelf")!.SizeChanged += (_, e) => { if (e.WidthChanged) FitShelf(); };
+        }
+
+        /// <summary>WPF FitExclusiveShelf: every card sized for the shelf's width; the Gap is each card's right/bottom margin.</summary>
+        internal void FitShelf()
+        {
+            var shelf = this.FindControl<ItemsControl>("ExclusivesShelf")!;
+            if (shelf.Bounds.Width <= 0 || shelf.ItemsPanelRoot is not WrapPanel wrap) return;
+            var (_, w, h) = Services.UI.ExclusiveShelfFit.For(shelf.Bounds.Width);
+            wrap.ItemWidth = w + Services.UI.ExclusiveShelfFit.Gap;
+            wrap.ItemHeight = h + Services.UI.ExclusiveShelfFit.Gap;
         }
 
         private void OnLoaded(object? sender, RoutedEventArgs e)
@@ -95,11 +107,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal void RefreshVault()
         {
-            // Just Drop is hidden, not veiled, until the server opens its door (WPF :745).
+            // Main 2e9080399: Prime first, then Basic, then the untiered doors. Just Drop until the server opens
+            // its door and the Arcademy behind its build flag are hidden, not veiled (ExclusiveFeature.IsShown).
             var rows = new List<ExclusiveCardRow>();
-            foreach (var f in ExclusiveFeature.All)
-                if (f.Key != "justdrop" || SettingsPaletteIndex.JustDropDoorAvailable())
-                    rows.Add(new ExclusiveCardRow(f));
+            foreach (var f in ExclusiveFeature.ShelfOrder(ExclusiveFeature.All))
+                if (f.Shown()) rows.Add(new ExclusiveCardRow(f));
             this.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource = rows;
 
             var spot = new ExclusiveCardRow(ExclusiveFeature.All[0]);
@@ -144,17 +156,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>
-        /// ponytail: "fyp"/"justdrop" are shell WindowKeys and "backroom" (WPF BtnStartBackRoom_Click)
-        /// has no launcher on this head. Their cards stay visible but inert (no hand, honest tooltip),
-        /// and never reach ShowTab, so they do not fire a navigation bark either.
+        /// ponytail: "fyp"/"justdrop" are shell WindowKeys; "backroom" (WPF BtnStartBackRoom_Click) and main
+        /// 2e9080399's Breakout, Goon hosting, Down the Rabbit Hole and Arcademy have no host on this head.
+        /// Their cards stay visible but inert (no hand, honest tooltip) and never reach ShowTab or a bark.
         /// </summary>
-        internal static bool IsOnThisBuild(string key) => key is not ("fyp" or "justdrop" or "backroom");
+        internal static bool IsOnThisBuild(string key) =>
+            key is not ("fyp" or "justdrop" or "backroom" or "breakout" or "goon" or "dtrh" or "arcademy");
 
         /// <summary>WPF OpenExclusiveFeature: the card never blocks, the destination's own gate does.</summary>
         private void Open(ExclusiveFeature feature)
         {
             if (IsOnThisBuild(feature.Key))
-                (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ShowTab(feature.Key);
+                (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OpenExclusiveFeature(feature.Key);
         }
 
         /// <summary>WPF OnExclusiveCardHover: the shared hover pop on the art, driven from the card.

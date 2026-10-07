@@ -71,6 +71,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             RefreshInvites();
         }
 
+        /// <summary>WPF OpenExclusiveFeature (main 2e9080399): each card opens the door the launcher or the Play
+        /// wall uses, so the card never decides access; the door's own gate refuses. Doors with no host on this
+        /// head never get here (ExclusivesTabView.IsOnThisBuild).</summary>
+        internal void OpenExclusiveFeature(string key)
+        {
+            switch (key)
+            {
+                case "gazeminigame": Named<Tabs.PlayTabView>("PlayTab")?.OpenGazeMinigame(); break;
+                case "focusgaze":
+                    // A switch on the Play wall, not a window: go there and show it.
+                    ShowTab("play");
+                    if (Named<Tabs.PlayTabView>("PlayTab")?.FindControl<Control>("SlotFocusGaze") is { } slot)
+                        global::Avalonia.Threading.Dispatcher.UIThread.Post(() => slot.BringIntoView());
+                    break;
+                default: ShowTab(key); break;
+            }
+        }
+
         /// <summary>WPF _invitePanel.RefreshAsync(): throttled inside, so a repaint storm costs one read.</summary>
         internal void RefreshInvites() => _ = Named<Tabs.ExclusivesTabView>("ExclusivesTab")
             ?.FindControl<Controls.Invites.InvitePanel>("InvitesHost")?.RefreshAsync();

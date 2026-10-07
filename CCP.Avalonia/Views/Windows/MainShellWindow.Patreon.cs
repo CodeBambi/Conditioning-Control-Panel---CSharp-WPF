@@ -84,7 +84,11 @@
 //   internal void BtnImportPrompt_Click(…)
 //   internal async void BtnExportPrompt_Click(…)
 
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -169,9 +173,68 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             g.IsVisible = !(CoreEntitlement.HasPremium || (dailyKey != null && CoreEntitlement.IsFreeToday(dailyKey)));
         }
 
-        /// <summary>WPF MainWindow.Patreon.cs:46 -> ShowAppInfoPopup -> ShowAccountSettings.</summary>
+        /// <summary>WPF MainWindow.Patreon.cs:48 (main fbe161de2): every padlock opens the vault gate card for the
+        /// feature behind it, found from the tab view the button sits in. Graded Intake keeps Account; so does a
+        /// patron whose grant died here (no Reconnect flow on this head, so Account is where they repair it).</summary>
         internal void BtnGateUnlock_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
-            => OpenAppSettingsSection("account");
+        {
+            if (TierGate.ReconnectIsTheAnswer()) { OpenAppSettingsSection("account"); return; }
+            var view = (sender as global::Avalonia.LogicalTree.ILogical)?.FindLogicalAncestorOfType<UserControl>(includeSelf: true)?.GetType().Name;
+            if (Services.Vault.VaultOffer.KeepsAccountRoute(view)) { OpenAppSettingsSection("account"); return; }
+            ShowVaultGate(Services.Vault.VaultOffer.FeatureKeyForView(view), 1);
+        }
+
+        /// <summary>WPF ShowVaultGate. Null feature = the tier as a whole (the TierGate toast's "See tiers").</summary>
+        internal void ShowVaultGate(string? featureKey, int tier)
+        {
+            try { Dialogs.VaultGateDialog.ShowOffer(this, featureKey, tier, () => OpenAppSettingsSection("account")); }
+            catch (System.Exception ex)
+            {
+                Serilog.Log.Warning(ex, "[VaultGate] card failed; falling back to Account");
+                OpenAppSettingsSection("account");
+            }
+        }
+
+        /// <summary>WPF MainWindow.xaml.cs:3590 + Patreon.cs:1209: the invite week's last-day card, at launch and on focus.</summary>
+        private void InitializeInviteEnding()
+        {
+            Opened += (_, _) => MaybeShowInviteEnding();
+            Activated += (_, _) => MaybeShowInviteEnding();
+        }
+
+        private string? _inviteEndingPosted;
+
+        /// <summary>WPF MaybeShowInviteEnding: once per week, through the presenter (an Inbox row when quiet).</summary>
+        internal void MaybeShowInviteEnding()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                var key = Services.Vault.VaultOffer.InviteEndingOwed(s.InviteGrantUntil, System.DateTime.UtcNow,
+                    ProviderSubscription.IsInviteWeekOnly(Platform.AccountSeed.Patreon, Platform.AccountSeed.SubscribeStar, s), s.SeenFeatureIntros);
+                if (key == null || _inviteEndingPosted == key) return;
+                _inviteEndingPosted = key;
+                var until = s.InviteGrantUntil!.Value;
+                Platform.StartupLadder.PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:" + key,
+                    Glyph = "⏳",
+                    Title = Loc.Get("vaultgate_ending_inbox"),
+                    Summary = Loc.GetF("vaultgate_ending_until", until.ToLocalTime().ToString("ddd d MMM, HH:mm")),
+                    Open = () => { MarkIntroSeen(key); Dialogs.VaultGateDialog.ShowEnding(this, until, () => OpenAppSettingsSection("account")); },
+                    Dismiss = () => MarkIntroSeen(key),
+                });
+            }
+            catch (System.Exception ex) { Serilog.Log.Warning(ex, "[VaultGate] invite-ending check failed"); }
+        }
+
+        private static void MarkIntroSeen(string key)
+        {
+            var s = CoreSettings.Current;
+            if (s.SeenFeatureIntros.Contains(key)) return;
+            s.SeenFeatureIntros.Add(key);
+            CoreSettings.Save();
+        }
 
     }
 }
