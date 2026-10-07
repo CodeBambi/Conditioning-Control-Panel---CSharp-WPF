@@ -234,10 +234,11 @@ namespace ConditioningControlPanel.Controls.Billboard
         /// <summary>Plays or holds the art and the clock, from every gate there is.</summary>
         private void UpdateRunning()
         {
-            // Contract: hover, another tab or Motion Off holds the art still. The board still takes
-            // a touch while held (its ripple runs on a clock of its own).
+            // Contract: another tab or a fold holds the art still; Motion Off is each view's own gate.
+            // Hover holds only the deck (the hold below and the pill), never the art: a board frozen
+            // mid-wave under the pointer reads as stuck (owner, 2026-10-07).
             var art = _current?.Art;
-            bool artRuns = IsVisible && !_folding && !_pointerOver;
+            bool artRuns = DashboardBillboard.ArtShouldPlay(IsVisible, _folding);
             try
             {
                 if (art != null)

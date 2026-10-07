@@ -128,7 +128,8 @@ namespace ConditioningControlPanel.Services
             IReadOnlyDictionary<string, DateTime>? snoozes,
             DateTime nowUtc,
             int cycle,
-            ISet<string>? newShown = null)
+            ISet<string>? newShown = null,
+            bool everyCard = false)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var clean = new List<BillboardCardSpec>();
@@ -138,9 +139,12 @@ namespace ConditioningControlPanel.Services
                 // A board post may carry no words; every other card needs a title to be a card.
                 if (string.IsNullOrWhiteSpace(c.Title) && c.Kind != BillboardCardKind.Board) continue;
                 if (!seen.Add(c.Id)) continue;
-                if (IsSnoozed(c, snoozes, nowUtc)) continue;
+                if (!everyCard && IsSnoozed(c, snoozes, nowUtc)) continue;
                 clean.Add(c);
             }
+
+            // Review mode (DEBUG, CCP_BOARD_DECK_ALL=1): every card, snoozed or not, no slot or house cut.
+            if (everyCard) return Rank(clean, newShown);
 
             var showcases = Ordered(clean.Where(c => c.Kind == BillboardCardKind.Showcase));
             var tips = Ordered(clean.Where(c => c.Kind == BillboardCardKind.Tip));
@@ -218,6 +222,15 @@ namespace ConditioningControlPanel.Services
         public static bool ShouldAdvance(bool pointerOver, bool onScreen, bool motionOn, bool focusWithin = false) =>
             onScreen && motionOn && !pointerOver && !focusWithin;
 
+        /// <summary>
+        /// Whether the card's ART plays. Owner, 2026-10-07: hover holds only the deck (the hold and
+        /// the "paused while you read" pill); the art keeps moving under the pointer, or a board
+        /// frozen mid-ola reads as stuck. It stops only off screen and while the card folds away.
+        /// Motion Off is each view's own gate (Play() under Motion Off holds the still frame).
+        /// There is deliberately no pointer argument.
+        /// </summary>
+        public static bool ArtShouldPlay(bool onScreen, bool folding) => onScreen && !folding;
+
         /// <summary>Milliseconds left in a hold that has run to <paramref name="progress"/> (0..1).</summary>
         public static double RemainingMs(double progress) =>
             HoldSeconds * 1000.0 * (1 - Math.Clamp(double.IsNaN(progress) ? 0 : progress, 0, 1));
@@ -276,9 +289,35 @@ namespace ConditioningControlPanel.Services
             return FallbackAccent;
         }
 
-        /// <summary>The loc key of a card's chip label, or null for a card that names its chip with
-        /// its own title (house cards, events).</summary>
-        public static string? ChipKey(BillboardCardSpec card) => card.Kind switch
+        /// <summary>
+        /// Chips name the CARD, not its kind (owner, 2026-10-07: two chips both read "Waiting").
+        /// One short word per known card id; a card not in the table falls back to its kind's label.
+        /// </summary>
+        public static readonly IReadOnlyDictionary<string, string> ChipNameKeys = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [Billboard.Providers.LiveCards.CardJoinFriend] = "billboard_chip_friend",
+            [Billboard.Providers.LiveCards.CardTables] = "billboard_chip_tables",
+            [Billboard.Providers.LiveCards.CardPlaying] = "billboard_chip_playing",
+            [Billboard.Providers.WaitingCards.CardQuests] = "billboard_chip_quests",
+            [Billboard.Providers.WaitingCards.CardProgram] = "billboard_chip_program",
+            [Billboard.Providers.WaitingCards.CardInvite] = "billboard_chip_invite",
+            [Billboard.Providers.ResumeCards.CardSession] = "billboard_chip_session",
+            [Billboard.Providers.ResumeCards.CardDeeper] = "billboard_chip_deeper",
+            [Billboard.Providers.EventCards.CardLocktober] = "billboard_chip_locktober",
+            ["house.discord"] = "billboard_chip_discord",
+            ["house.webapp"] = "billboard_chip_webapp",
+            ["house.remix"] = "billboard_chip_remix",
+            ["house.loom"] = "billboard_chip_loom",
+            ["house.support"] = "billboard_chip_support",
+        };
+
+        /// <summary>The loc key of a card's chip label: its own name when the table knows the card,
+        /// else its kind's label, or null for a card that names its chip with its own title.</summary>
+        public static string? ChipKey(BillboardCardSpec card) =>
+            card.Id != null && ChipNameKeys.TryGetValue(card.Id, out var named) ? named : KindChipKey(card);
+
+        /// <summary>The kind's own chip label (Live, Board, Tip, Basic, Prime...), or null.</summary>
+        public static string? KindChipKey(BillboardCardSpec card) => card.Kind switch
         {
             BillboardCardKind.Live => "billboard_deck_chip_live",
             BillboardCardKind.Board => "billboard_deck_chip_board",
@@ -342,6 +381,25 @@ namespace ConditioningControlPanel.Services
             _context = context ?? throw new ArgumentNullException(nameof(context));
             _snoozes = snoozes ?? new Dictionary<string, DateTime>(StringComparer.Ordinal);
             _snoozesChanged = snoozesChanged;
+            EveryCard = DeckAllRequested();
+        }
+
+        /// <summary>
+        /// Review mode: the deck holds every card any provider returns (asked as Free and as Prime
+        /// too, so tips, showcases and the Support card all come), snoozed ones included, with no
+        /// one-per-cycle cut. Only a DEBUG build turns it on, from <c>CCP_BOARD_DECK_ALL=1</c>.
+        /// </summary>
+        public bool EveryCard { get; set; }
+
+        /// <summary>DEBUG only: <c>CCP_BOARD_DECK_ALL=1</c>. Always false in Release.</summary>
+        public static bool DeckAllRequested()
+        {
+#if DEBUG
+            try { return Environment.GetEnvironmentVariable("CCP_BOARD_DECK_ALL") == "1"; }
+            catch { return false; }
+#else
+            return false;
+#endif
         }
 
         /// <summary>The cards of this cycle, in order.</summary>
@@ -462,11 +520,16 @@ namespace ConditioningControlPanel.Services
             try { providers = _providers()?.Where(p => p != null).ToList() ?? new List<IBillboardProvider>(); }
             catch { providers = new List<IBillboardProvider>(); }
 
+            // Review mode asks as the viewer, then as Free and Prime, so tier-bound cards come too.
+            var asks = EveryCard
+                ? new[] { ctx, ctx with { Tier = BillboardTier.Free }, ctx with { Tier = BillboardTier.Prime } }
+                : new[] { ctx };
+            foreach (var ask in asks)
             foreach (var p in providers)
             {
                 List<BillboardCardSpec> mine;
                 // A provider that throws loses its own cards, never the deck.
-                try { mine = p.Current(ctx)?.Where(c => c != null).ToList() ?? new List<BillboardCardSpec>(); }
+                try { mine = p.Current(ask)?.Where(c => c != null).ToList() ?? new List<BillboardCardSpec>(); }
                 catch { continue; }
                 foreach (var c in mine)
                 {
@@ -476,7 +539,7 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            if (!newCycle)
+            if (!newCycle && !EveryCard)
             {
                 specs.RemoveAll(IsSlotKind);
                 if (_cycleSlot != null)
@@ -486,7 +549,7 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            var deck = DashboardBillboard.Build(specs, ctx.Tier, new Dictionary<string, DateTime>(_snoozes), ctx.NowUtc, Cycle, _newShown);
+            var deck = DashboardBillboard.Build(specs, ctx.Tier, new Dictionary<string, DateTime>(_snoozes), ctx.NowUtc, Cycle, _newShown, EveryCard);
             _cards = deck.Select(s => new DeckCard(s, byId.TryGetValue(s.Id, out var p) ? p : null, false)).ToList();
             if (newCycle) _cycleSlot = _cards.FirstOrDefault(c => IsSlotKind(c.Spec));
         }

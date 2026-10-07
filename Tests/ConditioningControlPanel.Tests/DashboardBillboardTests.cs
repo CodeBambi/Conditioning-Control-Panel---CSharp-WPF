@@ -231,6 +231,59 @@ public class DashboardBillboardTests
     public void The_hold_runs_only_when_nothing_holds_it(bool pointer, bool onScreen, bool motion, bool focus, bool expected)
         => Assert.Equal(expected, DashboardBillboard.ShouldAdvance(pointer, onScreen, motion, focus));
 
+    [Theory]
+    [InlineData(true, false, true)]   // on Home: the art plays, pointer or not
+    [InlineData(false, false, false)] // another tab
+    [InlineData(true, true, false)]   // folding away
+    public void Hover_holds_the_deck_but_never_the_art(bool onScreen, bool folding, bool expected)
+    {
+        // Owner, 2026-10-07: a board frozen mid-ola under the pointer reads as stuck. Hover holds
+        // the hold clock (ShouldAdvance above) and nothing else; the art rule takes no pointer.
+        Assert.Equal(expected, DashboardBillboard.ArtShouldPlay(onScreen, folding));
+        Assert.False(DashboardBillboard.ShouldAdvance(pointerOver: true, onScreen: true, motionOn: true));
+        Assert.DoesNotContain(typeof(DashboardBillboard).GetMethod(nameof(DashboardBillboard.ArtShouldPlay))!.GetParameters(),
+            p => p.Name!.Contains("pointer", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Chips_name_the_card_not_the_kind()
+    {
+        var quests = Card(ConditioningControlPanel.Services.Billboard.Providers.WaitingCards.CardQuests, BillboardCardKind.Waiting);
+        var invite = Card(ConditioningControlPanel.Services.Billboard.Providers.WaitingCards.CardInvite, BillboardCardKind.Waiting);
+        Assert.Equal("billboard_chip_quests", DashboardBillboard.ChipKey(quests));
+        Assert.Equal("billboard_chip_invite", DashboardBillboard.ChipKey(invite));
+        // Every house card has its own short name.
+        foreach (var h in HouseProvider.Cards)
+            Assert.True(DashboardBillboard.ChipNameKeys.ContainsKey(h.Id), h.Id + " has no chip name");
+        // A card the table does not know falls back to its kind's label.
+        Assert.Equal("billboard_deck_chip_tip", DashboardBillboard.ChipKey(Card("tip.blink", BillboardCardKind.Tip)));
+        Assert.Equal("billboard_deck_chip_board", DashboardBillboard.ChipKey(Card("board:9", BillboardCardKind.Board)));
+        // No two cards share a chip name.
+        Assert.Equal(DashboardBillboard.ChipNameKeys.Count, DashboardBillboard.ChipNameKeys.Values.Distinct().Count());
+    }
+
+    [Fact]
+    public void Review_mode_keeps_every_card_the_providers_return()
+    {
+        var snoozes = new Dictionary<string, DateTime> { ["house.loom"] = Now.AddDays(3) };
+        var cards = new[]
+        {
+            Card("show.a", BillboardCardKind.Showcase), Card("show.b", BillboardCardKind.Showcase),
+            Card("tip.a", BillboardCardKind.Tip), Card("tip.b", BillboardCardKind.Tip),
+            Card("house.discord", BillboardCardKind.House), Card("house.webapp", BillboardCardKind.House),
+            Card("house.remix", BillboardCardKind.House), Card("house.loom", BillboardCardKind.House),
+            Card("waiting.quests", BillboardCardKind.Waiting),
+        };
+        var normal = DashboardBillboard.Build(cards, BillboardTier.Free, snoozes, Now, cycle: 0);
+        var all = DashboardBillboard.Build(cards, BillboardTier.Free, snoozes, Now, cycle: 0, everyCard: true);
+        Assert.True(normal.Count < cards.Length);
+        Assert.Equal(cards.Length, all.Count);
+        Assert.Equal(cards.Select(c => c.Id).OrderBy(x => x), all.Select(c => c.Id).OrderBy(x => x));
+        // Without the env switch the deck is the normal one.
+        if (Environment.GetEnvironmentVariable("CCP_BOARD_DECK_ALL") != "1")
+            Assert.False(BillboardDeck.DeckAllRequested());
+    }
+
     [Fact]
     public void A_paused_hold_resumes_with_what_is_left()
     {
@@ -552,7 +605,7 @@ public class DashboardBillboardTests
     [Fact]
     public void Every_deck_and_house_string_reached_all_nine_languages_in_the_house_voice()
     {
-        var keys = DeckKeys.Concat(HouseProvider.Cards.SelectMany(c => new[]
+        var keys = DeckKeys.Concat(DashboardBillboard.ChipNameKeys.Values).Concat(HouseProvider.Cards.SelectMany(c => new[]
         {
             $"billboard_{c.Stem}_eyebrow", $"billboard_{c.Stem}_title", $"billboard_{c.Stem}_line", c.ButtonKey,
         })).Distinct().ToList();

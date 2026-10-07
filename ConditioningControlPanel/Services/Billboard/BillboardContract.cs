@@ -133,7 +133,7 @@ namespace ConditioningControlPanel.Services.Billboard
         /// <summary>The card is on screen and motion is allowed: start clocks, players, loops.</summary>
         void Play();
 
-        /// <summary>Hover, another tab, or Motion Off: hold still on the current frame.</summary>
+        /// <summary>Another tab, a fold, or Motion Off: hold still on the current frame. Hover never pauses art.</summary>
         void Pause();
 
         /// <summary>The card left the screen for good. Release clocks, players, bitmaps.</summary>
