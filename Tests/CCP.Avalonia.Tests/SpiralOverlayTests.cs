@@ -144,6 +144,105 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
         finally { foreach (var f in frames) f.Dispose(); }
     }
 
+    // 8x8 red; frame 1 a green 2x2 patch with "restore previous" disposal; frame 2 a 2x2 patch on top. PIL-made.
+    private const string RestorePreviousGif =
+        "R0lGODlhCAAIAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQEAwAAACwAAAAACAAIAAAIDwABCBxIsKDBgwgTKkwYEAAh+QQNAwACACwAAAAAAgACAIEA/wD/AAAAAAAAAAAIBgABCAQQEAAh+QQFAwACACwAAAAAAgACAIH/AAAAAP8AAAAAAAAIBgADABgYEAA7";
+
+    [Fact]
+    public void A_restore_previous_frame_does_not_cut_the_gif_short()
+    {
+        var dir = Directory.CreateTempSubdirectory("ccp-spiral-").FullName;
+        var gif = Path.Combine(dir, "restore.gif");
+        File.WriteAllBytes(gif, Convert.FromBase64String(RestorePreviousGif));
+        var (frames, _) = SpiralOverlay.Decode(gif);
+        try { Assert.Equal(3, frames.Count); }
+        finally { foreach (var f in frames) f.Dispose(); Directory.Delete(dir, true); }
+    }
+
+    /// <summary>A path picked while the first decode is in flight is decoded once that lands, not dropped.</summary>
+    [Fact]
+    public async Task A_path_change_mid_decode_shows_the_new_spiral()
+        => await WithShell(async (shell, s, gif) =>
+        {
+            var other = Path.Combine(Path.GetDirectoryName(gif)!, "other.gif");
+            File.WriteAllBytes(other, Convert.FromBase64String(RestorePreviousGif));   // 8x8, the first is 4x4
+            shell.StartEngine();
+            var first = SpiralOverlay.Decoding!;
+            s.SpiralPath = other;
+            SpiralOverlay.Refresh(shell);   // the card's SelectSpiral, while the 4x4 decode runs
+            await first;
+            if (SpiralOverlay.Decoding is { } next) await next;
+            Assert.True(SpiralOverlay.IsShowing);
+            Assert.Equal(new PixelSize(8, 8), ((global::Avalonia.Media.Imaging.Bitmap)SpiralOverlay.Shown[0].Spiral.Source!).PixelSize);
+        });
+
+    /// <summary>WPF PauseSession -> App.Overlay.Stop(), ResumeSession -> Start(); StartSession starts it.</summary>
+    [Fact]
+    public async Task Session_start_shows_it_pause_hides_it_resume_brings_it_back()
+        => await WithShell(async (shell, s, gif) =>
+        {
+            var runner = global::ConditioningControlPanel.Avalonia.App.Sessions = new SessionRunner(new SessionLogService());
+            try
+            {
+                s.SkipPauseXpWarning = true;
+                shell.StartSession(new Session { Id = "spiral_test", Name = "Spiral Test", DurationMinutes = 1 });
+                if (SpiralOverlay.Decoding is { } d) await d;
+                Assert.True(runner.IsRunning && SpiralOverlay.IsShowing && SpiralOverlay.IsAnimating);
+                var pause = shell.Named<Button>("BtnPauseSession")!;
+                pause.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));   // Pause
+                await Task.Yield();
+                Assert.True(runner.IsPaused);
+                Assert.False(SpiralOverlay.IsShowing || SpiralOverlay.IsAnimating);
+                pause.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));   // Resume
+                Assert.False(runner.IsPaused);
+                Assert.True(SpiralOverlay.IsShowing && SpiralOverlay.IsAnimating);
+            }
+            finally
+            {
+                runner.Stop();
+                CoreSession.IsSessionRunningProvider = null;
+                global::ConditioningControlPanel.Avalonia.App.Sessions = null;
+            }
+        });
+
+    private static async Task WithShell(Func<MainShellWindow, AppSettings, string, Task> body)
+    {
+        var dir = Directory.CreateTempSubdirectory("ccp-spiral-").FullName;
+        var gif = Path.Combine(dir, "tiny.gif");
+        File.WriteAllBytes(gif, Convert.FromBase64String(TinyGif));
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var s = CoreSettings.Current;
+            var saved = (s.SpiralEnabled, s.SpiralPath, s.SpiralOpacity, s.SpiralTargetMonitor, s.SkipPauseXpWarning);
+            var provider = CoreSession.IsEngineRunningProvider;
+            var shell = new MainShellWindow();
+            shell.Show();
+            try
+            {
+                CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;
+                CoreEngine.StoppedHook = shell.OnEngineStopped;
+                SpiralOverlay.SkipPlatformChecksForTests = true;
+                (s.SpiralEnabled, s.SpiralPath, s.SpiralOpacity, s.SpiralTargetMonitor) = (true, gif, 40, -1);
+                await body(shell, s, gif);
+            }
+            finally
+            {
+                CoreEngine.StoppedHook = null;
+                CoreEngine.Stop();
+                SpiralOverlay.CloseAll();
+                SpiralOverlay.SkipPlatformChecksForTests = false;
+                CoreSession.IsEngineRunningProvider = provider;
+                (s.SpiralEnabled, s.SpiralPath, s.SpiralOpacity, s.SpiralTargetMonitor, s.SkipPauseXpWarning) = saved;
+                shell.Close();
+                Directory.Delete(dir, true);
+            }
+        });
+    }
+
     [Fact]
     public void Spiral_settings_round_trip_through_settings_json()
     {

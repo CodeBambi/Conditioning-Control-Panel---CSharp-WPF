@@ -175,6 +175,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (frames.Count == 0) Log.Warning("Spiral: no frames decoded from {Path}; spiral not shown", path);
             foreach (var old in _frames) old.Dispose();
             (_frames, _framesKey, _delay, _index) = (frames, path, delay, 0);
+            Decoding = null;   // or the Refresh below, still inside this task, cannot start a newer path's decode
             Refresh(host);   // the user may have stopped the engine or unticked it mid-decode
         }
 
@@ -188,6 +189,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 using var codec = SKCodec.Create(path);
                 if (codec is null) return (frames, TimeSpan.FromMilliseconds(50));
                 var count = Math.Max(1, codec.FrameCount);
+                var info = codec.FrameInfo;
                 var plan = SpiralFrames.Plan(codec.Info.Width, codec.Info.Height, count,
                     codec.FrameCount > 0 ? codec.FrameInfo[0].Duration : 50);
                 var full = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
@@ -195,7 +197,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 using var scaled = new SKBitmap(new SKImageInfo(plan.Width, plan.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
                 for (var i = 0; i < count && frames.Count < plan.Frames; i++)
                 {
-                    var r = codec.GetPixels(full, canvas.GetPixels(), new SKCodecOptions(i, i - 1));
+                    // canvas holds frame i-1. Reuse it only when that is the frame i builds on; otherwise
+                    // (restore-previous disposal) the codec decodes the required frame itself.
+                    var required = i < info.Length ? info[i].RequiredFrame : -1;
+                    var r = codec.GetPixels(full, canvas.GetPixels(), new SKCodecOptions(i, required == i - 1 ? i - 1 : -1));
                     if (r != SKCodecResult.Success && r != SKCodecResult.IncompleteInput) break;
                     if (i % plan.Step != 0) continue;
                     canvas.ScalePixels(scaled, new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
