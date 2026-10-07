@@ -82,6 +82,12 @@ namespace ConditioningControlPanel
             internal Border Dish = null!;
             internal Border Socket = null!;
             internal Border Rim = null!;
+            /// <summary>Polish wave 11: the dark hairline that cuts the coin out of the rail.</summary>
+            internal Border Outer = null!;
+            /// <summary>Polish wave 11: the shadow ring where the art meets the dish.</summary>
+            internal Border Inner = null!;
+            /// <summary>Polish wave 11: the small crisp specular crescent at the top-left.</summary>
+            internal Path Specular = null!;
         }
 
         private readonly List<NavSectionRow> _navSectionRows = new();
@@ -273,7 +279,8 @@ namespace ConditioningControlPanel
                 Opacity = 0,
                 IsHitTestVisible = false,
             };
-            coin.Socket.SetResourceReference(Border.BackgroundProperty, "DepthPressedShade");
+            // Polish wave 11: a deeper socket than the shared pressed shade (owner: more 3d).
+            coin.Socket.SetResourceReference(Border.BackgroundProperty, "DepthCoinSocket");
             coin.Rim = new Border
             {
                 Width = NavRailRules.CoinRimSize,
@@ -285,7 +292,41 @@ namespace ConditioningControlPanel
                 IsHitTestVisible = false,
             };
             coin.Rim.SetResourceReference(Border.BorderBrushProperty, "DepthCoinRim");
-            foreach (var part in new FrameworkElement[] { coin.Disc, coin.Dish, coin.Socket, coin.Rim })
+            coin.Outer = new Border
+            {
+                Width = NavRailRules.CoinOuterSize,
+                Height = NavRailRules.CoinOuterSize,
+                CornerRadius = new CornerRadius(NavRailRules.CoinOuterRadius),
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Outer.SetResourceReference(Border.BorderBrushProperty, "DepthCoinOuterRim");
+            coin.Inner = new Border
+            {
+                Width = NavRailRules.CoinInnerSize,
+                Height = NavRailRules.CoinInnerSize,
+                CornerRadius = new CornerRadius(NavRailRules.CoinInnerRadius),
+                BorderThickness = new Thickness(NavRailRules.CoinInnerThickness),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Inner.SetResourceReference(Border.BorderBrushProperty, "DepthCoinInnerShadow");
+            coin.Specular = new Path
+            {
+                Data = BuildNavCoinCrescent(),
+                Width = NavRailRules.CoinRimSize,
+                Height = NavRailRules.CoinRimSize,
+                Stretch = Stretch.None,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Specular.SetResourceReference(Shape.FillProperty, "DepthCoinSpecular");
+            coin.DiscShift.X = NavRailRules.CoinDiscRightPx;
+            foreach (var part in new FrameworkElement[] { coin.Disc, coin.Dish, coin.Socket, coin.Rim, coin.Outer, coin.Inner, coin.Specular })
                 Grid.SetRow(part, row);
 
             var kids = face.Children;
@@ -301,7 +342,30 @@ namespace ConditioningControlPanel
             int at = over < 0 ? kids.IndexOf(coin.Dish) + 1 : over + 1;
             kids.Insert(at, coin.Socket);
             kids.Insert(at + 1, coin.Rim);
+            kids.Insert(at + 2, coin.Inner);
+            // The outer hairline under everything but the contact shadow; the crescent is the glass
+            // on top of the face (over the ring, under the badge).
+            kids.Insert(kids.IndexOf(coin.Disc) + 1, coin.Outer);
+            int ringAt = -1;
+            for (int i = 0; i < kids.Count; i++)
+                if (kids[i] is Border b && (b.Tag as string) == NavRingTag) ringAt = i;
+            kids.Insert(ringAt < 0 ? kids.IndexOf(coin.Inner) + 1 : ringAt + 1, coin.Specular);
             return coin;
+        }
+
+        /// <summary>The specular crescent (polish wave 11): the sliver between the coin face and the
+        /// face nudged down-right, kept only near the top-left corner. Its inner edge is crisp, its
+        /// fill (DepthCoinSpecular) fades past the corner, so it reads as a glint, not a veil.</summary>
+        internal static Geometry BuildNavCoinCrescent()
+        {
+            double s = NavRailRules.CoinRimSize, r = NavRailRules.CoinRimRadius;
+            var face = new RectangleGeometry(new Rect(0, 0, s, s), r, r);
+            var nudged = new RectangleGeometry(new Rect(NavRailRules.SpecularOffsetX, NavRailRules.SpecularOffsetY, s, s), r, r);
+            var sliver = new CombinedGeometry(GeometryCombineMode.Exclude, face, nudged);
+            var corner = new EllipseGeometry(new Point(r * 0.8, r * 0.8), s * 0.48, s * 0.48);
+            var g = new CombinedGeometry(GeometryCombineMode.Intersect, sliver, corner);
+            g.Freeze();
+            return g;
         }
 
         /// <summary>The contact disc: the DepthDropDisc shape in the row's own shadow colour.</summary>
@@ -606,24 +670,42 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("PaintNavRowActive: {E}", ex.Message); }
         }
 
-        /// <summary>The medallion ring (polish wave 9): idle = the hue at 80% (hover 95%), 3 px;
-        /// active = the hue lifted 25% toward white, solid, 3.5 px. Painted on the "navring" Border
+        /// <summary>The medallion ring (polish wave 9, re-lit in wave 11): the section hue made vivid
+        /// (NavRailRules.Vivid), a diagonal bevel lit from the top-left at 80% (hover 95%), 3 px;
+        /// lit = the bevel flipped (a socket lip), solid, 3.5 px. Painted on the "navring" Border
         /// that sits over the art, so a thicker ring eats no picture; a row without one falls back
         /// to the tile's own border. Values live in NavRailRules so a test can pin them.</summary>
         private static void PaintNavRing(NavSectionRow row, bool hover)
         {
-            var target = row.Ring ?? row.Tile;
-            if (target == null || row.Hue == null) return;
-            if (row.Tile != null) row.Tile.Opacity = 1.0;
-            target.BorderBrush = NavFrozen(NavRailRules.RingColor(row.Hue.Color, row.Active, hover));
-            target.BorderThickness = new Thickness(NavRailRules.RingThickness(row.Active));
+            if (row.Hue == null) return;
+            PaintNavRingParts(row.Tile, row.Ring, row.Hue.Color, row.Active, hover);
+        }
+
+        /// <summary>The ring painter on bare parts, so a render test paints exactly what the rail does.</summary>
+        internal static void PaintNavRingParts(Border? tile, Border? ring, Color hue, bool active, bool hover)
+        {
+            var target = ring ?? tile;
+            if (target == null) return;
+            if (tile != null) tile.Opacity = 1.0;
+            // Polish wave 11: a vivid hue lit from the top-left (raised) or flipped (lit = socket).
+            var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+            foreach (var (c, o) in NavRailRules.RingStops(hue, active, hover)) g.GradientStops.Add(new GradientStop(c, o));
+            g.Freeze();
+            target.BorderBrush = g;
+            target.BorderThickness = new Thickness(NavRailRules.RingThickness(active));
         }
 
         /// <summary>The hue wash over the medallion art: a touch louder on the lit row.</summary>
         private static void PaintNavTint(NavSectionRow row)
         {
-            if (row.Tint == null || row.Hue == null) return;
-            row.Tint.Background = NavFrozen(NavRailRules.WithAlpha(row.Hue.Color, NavRailRules.ArtTintAlpha(row.Active)));
+            if (row.Hue == null) return;
+            PaintNavTintPart(row.Tint, row.Hue.Color, row.Active);
+        }
+
+        internal static void PaintNavTintPart(Border? tint, Color hue, bool active)
+        {
+            if (tint == null) return;
+            tint.Background = NavFrozen(NavRailRules.WithAlpha(hue, NavRailRules.ArtTintAlpha(active)));
         }
 
         /// <summary>

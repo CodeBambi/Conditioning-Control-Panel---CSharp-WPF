@@ -151,4 +151,31 @@
         <GradientStop Offset="1.0" Color="#99000000"/>
     </LinearGradientBrush>
 
+    <!-- COIN (polish wave 11, "more 3d, less pastel"). The lit coin's socket: deeper than
+         DepthPressedShade (NavRailRules.SocketTopAlpha at the top, clear by 70%). -->
+    <LinearGradientBrush x:Key="DepthCoinSocket" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.00" Color="#66000000"/>
+        <GradientStop Offset="0.35" Color="#26000000"/>
+        <GradientStop Offset="0.70" Color="#00000000"/>
+    </LinearGradientBrush>
+    <!-- COIN: the inner shadow ring where the art meets the dish (a BorderBrush, 2.5 px). The rim
+         overhangs the lamp side, so the top-left is the darkest. -->
+    <LinearGradientBrush x:Key="DepthCoinInnerShadow" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0.0" Color="#A6000000"/>
+        <GradientStop Offset="0.55" Color="#4D000000"/>
+        <GradientStop Offset="1.0" Color="#26000000"/>
+    </LinearGradientBrush>
+    <!-- COIN: the outer hairline that cuts the coin out of the rail (a BorderBrush, 1 px). -->
+    <LinearGradientBrush x:Key="DepthCoinOuterRim" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0.0" Color="#40000000"/>
+        <GradientStop Offset="1.0" Color="#D9000000"/>
+    </LinearGradientBrush>
+    <!-- COIN: the specular crescent's fill, bright at the top-left corner, gone past the middle
+         (NavRailRules.SpecularAlpha at the peak). Small and crisp, never a veil over the face. -->
+    <RadialGradientBrush x:Key="DepthCoinSpecular" Center="0.12,0.12" GradientOrigin="0.12,0.12" RadiusX="0.62" RadiusY="0.62">
+        <GradientStop Offset="0.00" Color="#C8FFFFFF"/>
+        <GradientStop Offset="0.45" Color="#59FFFFFF"/>
+        <GradientStop Offset="1.00" Color="#00FFFFFF"/>
+    </RadialGradientBrush>
+
 </ResourceDictionary>

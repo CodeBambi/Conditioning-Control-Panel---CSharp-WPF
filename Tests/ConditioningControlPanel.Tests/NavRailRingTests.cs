@@ -65,8 +65,9 @@ public class NavRailRingTests
     [Fact]
     public void TheArtWashIsLouderOnTheLitRow()
     {
-        Assert.Equal(0x2E, NavRailRules.ArtTintAlpha(true));
-        Assert.Equal(0x14, NavRailRules.ArtTintAlpha(false));
+        // polish wave 11: the idle wash is gone (it greyed the art), the lit row only breathes the hue
+        Assert.Equal(0x0D, NavRailRules.ArtTintAlpha(true));
+        Assert.Equal(0x00, NavRailRules.ArtTintAlpha(false));
     }
 
     [Fact]
