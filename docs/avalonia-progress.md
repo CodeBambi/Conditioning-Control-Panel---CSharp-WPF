@@ -1289,3 +1289,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/chaos-overlays: +422
 - ChaosOverlayWindow on Core run types; ChaosRunHost runs HUD + countdown -> 4 Hz clock -> recap (no payout); panic/tray/exit end it without arming double-press exit. FALL IN not wired; rows stay stub.
+
+## avalonia-port/port-misc: +425
+- Quests: Takeover time credited while minimised; cards and streak header quote what the completion pays (Core StreakPaidOn, shield-aware).
+- Presets drop sniffing, programs active-mod-first, Deeper opacity % labels; 7 rows folded.
