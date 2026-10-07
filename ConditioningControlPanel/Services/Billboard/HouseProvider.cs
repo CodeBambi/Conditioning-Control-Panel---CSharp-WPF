@@ -15,8 +15,16 @@ namespace ConditioningControlPanel.Services.Billboard
         /// <summary>The support page the rest of the app already links to.</summary>
         public const string PatreonUrl = "https://www.patreon.com/CodeBambi";
 
-        /// <summary>One house card as data: id, loc stem, poster, hue, target, button key.</summary>
-        public sealed record HouseCard(string Id, string Stem, string Poster, string Hue, string Url, string ButtonKey, bool HiddenForPrime = false);
+        /// <summary>The Callback target of the Daily Daze card: open the Back Room in the app.</summary>
+        public const string BackRoomCallback = "backroom";
+
+        /// <summary>
+        /// One house card as data: id, loc stem, poster, hue, target, button key. A card with
+        /// <paramref name="Callback"/> set runs <see cref="Invoke"/> with its target instead of
+        /// opening a link. The poster path's stem picks the drawn scene
+        /// (<c>Controls/Billboard/HouseScenes</c>); a drawn-only card has no file behind it.
+        /// </summary>
+        public sealed record HouseCard(string Id, string Stem, string Poster, string Hue, string Url, string ButtonKey, bool HiddenForPrime = false, bool Callback = false);
 
         /// <summary>
         /// The house, pinned card first. External cards on cclabs.app carry <c>from=panel</c> so the
@@ -30,7 +38,12 @@ namespace ConditioningControlPanel.Services.Billboard
             new HouseCard("house.remix", "remix", "billboard/remix.png", "#ff4fa8", "https://cclabs.app/remix/?from=panel", "billboard_deck_btn_open"),
             new HouseCard("house.loom", "loom", "billboard/loom.png", "#9b7bff", "https://cclabs.app/loom/?from=panel", "billboard_deck_btn_open"),
             new HouseCard("house.support", "support", "billboard/support.png", "#ffc94a", PatreonUrl, "billboard_deck_btn_support", HiddenForPrime: true),
+            // The Daily Daze: one free wheel spin a day in the Back Room, free for everyone.
+            new HouseCard("house.backroom", "backroom", "billboard/backroom.png", "#ffc94a", BackRoomCallback, "billboard_deck_btn_take_seat", Callback: true),
         };
+
+        /// <summary>Test seam: what opening the Back Room runs (sign-in first, then the room).</summary>
+        internal static Action OpenBackRoom { get; set; } = OpenBackRoomInApp;
 
         private readonly Func<string, string> _loc;
 
@@ -59,11 +72,27 @@ namespace ConditioningControlPanel.Services.Billboard
                     AccentHex: c.Hue,
                     ArtKey: BuiltInArtKeys.Poster,
                     ArtData: c.Poster,
-                    Action: new BillboardAction(BillboardActionKind.Link, c.Url, _loc(c.ButtonKey)));
+                    Action: new BillboardAction(c.Callback ? BillboardActionKind.Callback : BillboardActionKind.Link, c.Url, _loc(c.ButtonKey)));
             }
         }
 
-        /// <summary>House cards only ever open links; nothing to run.</summary>
-        public void Invoke(string actionTarget) { }
+        /// <summary>The one house callback: the Daily Daze card takes a seat in the Back Room.</summary>
+        public void Invoke(string actionTarget)
+        {
+            if (actionTarget != BackRoomCallback) return;
+            try { OpenBackRoom(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "[Billboard] Back Room from the house card failed"); }
+        }
+
+        /// <summary>
+        /// The room's own door, the one the Play tab uses (its open-failed prompt included).
+        /// Signed out, the sign-in dialog comes first, the way the live join card does it.
+        /// </summary>
+        private static void OpenBackRoomInApp()
+        {
+            if (BackRoom.BackRoomApi.AppIdentity() == null) { App.MainWindowRef?.OpenUnifiedLoginDialog(); return; }
+            if (App.MainWindowRef is { } main) main.LaunchPlayBackRoom();
+            else BackRoom.BackRoomHostService.Launch();
+        }
     }
 }

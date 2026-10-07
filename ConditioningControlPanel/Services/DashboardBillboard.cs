@@ -324,6 +324,7 @@ namespace ConditioningControlPanel.Services
             ["house.remix"] = "billboard_chip_remix",
             ["house.loom"] = "billboard_chip_loom",
             ["house.support"] = "billboard_chip_support",
+            ["house.backroom"] = "billboard_chip_backroom",
         };
 
         /// <summary>The loc key of a card's chip label: its own name when the table knows the card,

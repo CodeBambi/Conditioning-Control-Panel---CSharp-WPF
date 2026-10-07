@@ -183,6 +183,8 @@ public class DashboardBillboardTests
         var csproj = File.ReadAllText(Path.Combine(root!.FullName, "ConditioningControlPanel", "ConditioningControlPanel.csproj"));
         foreach (var c in HouseProvider.Cards)
         {
+            // A drawn-only scene (the Daily Daze wheel) has no file; its path is a scene key.
+            if (ConditioningControlPanel.Controls.Billboard.HouseScenes.DrawnOnly(c.Poster)) continue;
             Assert.True(File.Exists(Path.Combine(root.FullName, "ConditioningControlPanel", "Resources", c.Poster)), c.Poster);
             Assert.Contains(@"Resources\" + c.Poster.Replace('/', '\\'), csproj);
             Assert.NotNull(BuiltInArt.PosterUri(c.Poster));
