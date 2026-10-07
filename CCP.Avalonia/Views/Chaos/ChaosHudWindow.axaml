@@ -47,7 +47,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Chaos.ChaosHudWindow"
         xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Chaos"
-        x:DataType="local:ChaosHudState"
+        xmlns:chaos="clr-namespace:ConditioningControlPanel.Services.Chaos;assembly=CCP.Core"
+        x:DataType="chaos:ChaosRunState"
         Title="Rabbit Hole HUD"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"
@@ -71,9 +72,9 @@
 
         <!-- Hover card shared by every boon tile (pockets + run picks). The chrome moved to the
              ToolTip selector in Window.Styles; this is only the content. -->
-        <DataTemplate x:Key="BoonTipContent" x:DataType="local:ChaosHudBoon">
+        <DataTemplate x:Key="BoonTipContent" x:DataType="chaos:ChaosSidebarBoon">
             <StackPanel MaxWidth="240">
-                <TextBlock Text="{Binding TipTitle}" FontWeight="Bold" FontSize="13" Foreground="{Binding AccentBrush}"/>
+                <TextBlock Text="{Binding TipTitle}" FontWeight="Bold" FontSize="13" Foreground="{Binding Converter={x:Static local:ChaosBoonColors.AccentOf}}"/>
                 <TextBlock Text="{Binding Desc}" Foreground="#DDE0E0F0" FontSize="12" TextWrapping="Wrap"
                            Margin="0,3,0,0" IsVisible="{Binding HasDesc}"/>
                 <TextBlock Text="{Binding Flavor}" IsVisible="{Binding HasFlavor}" FontStyle="Italic" FontSize="11"
@@ -84,19 +85,19 @@
         </DataTemplate>
 
         <!-- Equipped-boon tile for the collapsed strip (toys group above, accessories group below) -->
-        <DataTemplate x:Key="StripBoonTile" x:DataType="local:ChaosHudBoon">
+        <DataTemplate x:Key="StripBoonTile" x:DataType="chaos:ChaosSidebarBoon">
             <Grid Width="64" Height="64" Margin="0,0,0,8" HorizontalAlignment="Center" Opacity="{Binding TileOpacity}">
                 <ToolTip.Tip>
                     <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BoonTipContent}"/>
                 </ToolTip.Tip>
                 <!-- rounded clip so square art can't poke past the ring corners -->
-                <Border CornerRadius="13" Background="{Binding TileBackBrush}" BorderThickness="0" ClipToBounds="True">
+                <Border CornerRadius="13" Background="{Binding Converter={x:Static local:ChaosBoonColors.BackOf}}" BorderThickness="0" ClipToBounds="True">
                     <Panel>
                         <TextBlock Text="{Binding Glyph}" FontSize="30" Foreground="White"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
                         <!-- ring ABOVE the art: full-bleed sprites bury a behind-border -->
-                        <Border CornerRadius="13" BorderBrush="{Binding AccentBrush}" BorderThickness="3.5" IsHitTestVisible="False"/>
+                        <Border CornerRadius="13" BorderBrush="{Binding Converter={x:Static local:ChaosBoonColors.AccentOf}}" BorderThickness="3.5" IsHitTestVisible="False"/>
                     </Panel>
                 </Border>
                 <Border Background="#DD121026" CornerRadius="6" Padding="4,0"
@@ -108,19 +109,19 @@
         </DataTemplate>
 
         <!-- Pocket tile for the expanded panel: pre-run, click a filled tile to take it off -->
-        <DataTemplate x:Key="PocketTile" x:DataType="local:ChaosHudBoon">
+        <DataTemplate x:Key="PocketTile" x:DataType="chaos:ChaosSidebarBoon">
             <Grid Width="57" Height="57" Margin="0,0,8,6" Opacity="{Binding TileOpacity}"
                   Background="Transparent" Cursor="Hand"
                   Tag="{Binding Id}" PointerPressed="PocketTile_Click">
                 <ToolTip.Tip>
                     <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BoonTipContent}"/>
                 </ToolTip.Tip>
-                <Border CornerRadius="12" Background="{Binding TileBackBrush}" BorderThickness="0" ClipToBounds="True">
+                <Border CornerRadius="12" Background="{Binding Converter={x:Static local:ChaosBoonColors.BackOf}}" BorderThickness="0" ClipToBounds="True">
                     <Panel>
                         <TextBlock Text="{Binding Glyph}" FontSize="26" Foreground="White"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
-                        <Border CornerRadius="12" BorderBrush="{Binding AccentBrush}" BorderThickness="3.5" IsHitTestVisible="False"/>
+                        <Border CornerRadius="12" BorderBrush="{Binding Converter={x:Static local:ChaosBoonColors.AccentOf}}" BorderThickness="3.5" IsHitTestVisible="False"/>
                     </Panel>
                 </Border>
                 <Border Background="#DD121026" CornerRadius="6" Padding="4,0"
@@ -240,8 +241,14 @@
                 <!-- equipped toys (max 2), then accessories (max 2) - separate groups, thin seam between -->
                 <ItemsControl ItemsSource="{Binding ActiveSidebarToys}" Margin="0,18,0,0" HorizontalAlignment="Center"
                               ItemTemplate="{StaticResource StripBoonTile}"/>
-                <Border Height="1" Width="48" Background="{StaticResource PanelBorder}" Margin="0,0,0,8"
-                        IsVisible="{Binding ShowGroupSeam}"/>
+                <Border Height="1" Width="48" Background="{StaticResource PanelBorder}" Margin="0,0,0,8">
+                    <Border.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="!!ActiveSidebarToys.Count"/>
+                            <Binding Path="!!ActiveSidebarAccessories.Count"/>
+                        </MultiBinding>
+                    </Border.IsVisible>
+                </Border>
                 <ItemsControl ItemsSource="{Binding ActiveSidebarAccessories}" HorizontalAlignment="Center"
                               ItemTemplate="{StaticResource StripBoonTile}"/>
 
@@ -347,13 +354,13 @@
 
                     <!-- loadout: what you took down with you, split by group (max 2 each). hover a tile
                          for its card; pre-run, click a filled tile to take it off (no-op once SINK fires) -->
-                    <TextBlock x:Name="HdrPockets" Text="TOYS" Theme="{StaticResource Hdr}" IsVisible="{Binding HasToys}"/>
+                    <TextBlock x:Name="HdrPockets" Text="TOYS" Theme="{StaticResource Hdr}" IsVisible="{Binding !!ActiveSidebarToys.Count}"/>
                     <ItemsControl ItemsSource="{Binding ActiveSidebarToys}" ItemTemplate="{StaticResource PocketTile}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
-                    <TextBlock x:Name="HdrAccessories" Text="ACCESSORIES" Theme="{StaticResource Hdr}" IsVisible="{Binding HasAccessories}"/>
+                    <TextBlock x:Name="HdrAccessories" Text="ACCESSORIES" Theme="{StaticResource Hdr}" IsVisible="{Binding !!ActiveSidebarAccessories.Count}"/>
                     <ItemsControl ItemsSource="{Binding ActiveSidebarAccessories}" ItemTemplate="{StaticResource PocketTile}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -363,21 +370,21 @@
                     <!-- mantras/sins taken this run: tile + name rows, hover for the description -->
                     <TextBlock x:Name="HdrConditioning" Text="CONDITIONING" Theme="{StaticResource Hdr}"/>
                     <ItemsControl ItemsSource="{Binding RunPickTiles}">
-                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="local:ChaosHudBoon">
+                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="chaos:ChaosSidebarBoon">
                             <StackPanel Orientation="Horizontal" Margin="0,1">
                                 <ToolTip.Tip>
                                     <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BoonTipContent}"/>
                                 </ToolTip.Tip>
                                 <Border Width="33" Height="33" CornerRadius="8"
-                                        Background="{Binding TileBackBrush}" BorderThickness="0" ClipToBounds="True">
+                                        Background="{Binding Converter={x:Static local:ChaosBoonColors.BackOf}}" BorderThickness="0" ClipToBounds="True">
                                     <Panel>
-                                        <TextBlock Text="{Binding Glyph}" FontSize="16" Foreground="{Binding AccentBrush}"
+                                        <TextBlock Text="{Binding Glyph}" FontSize="16" Foreground="{Binding Converter={x:Static local:ChaosBoonColors.AccentOf}}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
-                                        <Border CornerRadius="8" BorderBrush="{Binding AccentBrush}" BorderThickness="3" IsHitTestVisible="False"/>
+                                        <Border CornerRadius="8" BorderBrush="{Binding Converter={x:Static local:ChaosBoonColors.AccentOf}}" BorderThickness="3" IsHitTestVisible="False"/>
                                     </Panel>
                                 </Border>
-                                <TextBlock Text="{Binding Name}" Foreground="{Binding AccentBrush}" FontSize="13"
+                                <TextBlock Text="{Binding Name}" Foreground="{Binding Converter={x:Static local:ChaosBoonColors.AccentOf}}" FontSize="13"
                                            Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </DataTemplate></ItemsControl.ItemTemplate>
@@ -390,9 +397,9 @@
                             <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="local:ChaosHudBoon">
+                            <DataTemplate x:DataType="chaos:ChaosSidebarBoon">
                                 <Border Width="45" Height="45" Margin="0,0,7,7" CornerRadius="10"
-                                        Background="{Binding TileBackBrush}" BorderThickness="0" ClipToBounds="True">
+                                        Background="{Binding Converter={x:Static local:ChaosBoonColors.BackOf}}" BorderThickness="0" ClipToBounds="True">
                                     <ToolTip.Tip>
                                         <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BoonTipContent}"/>
                                     </ToolTip.Tip>
@@ -400,7 +407,7 @@
                                         <TextBlock Text="{Binding Glyph}" FontSize="20" Foreground="White"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
-                                        <Border CornerRadius="10" BorderBrush="{Binding AccentBrush}" BorderThickness="3" IsHitTestVisible="False"/>
+                                        <Border CornerRadius="10" BorderBrush="{Binding Converter={x:Static local:ChaosBoonColors.AccentOf}}" BorderThickness="3" IsHitTestVisible="False"/>
                                     </Panel>
                                 </Border>
                             </DataTemplate>

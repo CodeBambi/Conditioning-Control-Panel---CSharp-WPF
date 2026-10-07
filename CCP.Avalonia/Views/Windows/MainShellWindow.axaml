@@ -576,7 +576,45 @@
                        Opacity is BOUND to the name's - one animation, two riders.
                      Sized for the shut rail: 56 column - 8px margins - 1px borders = a 40x30 pill
                      with the lens centred in its fixed 38px first column. -->
-                <Button x:Name="BtnNavSearch" Grid.Row="0" Height="30" Margin="8,0,8,10"
+                <StackPanel Grid.Row="0">
+                <!-- BACK: returns to the tab shown before this one (MainShellWindow.TabHistory.cs),
+                     WPF MainWindow.xaml BtnNavBack. Hidden until there is somewhere to go back to;
+                     the arrow stays on the shut rail, the label rides the search label's fade. -->
+                <Button x:Name="BtnNavBack" Height="26" Margin="8,0,8,6" IsVisible="False"
+                        Cursor="Hand" Click="BtnNavBack_Click"
+                        ToolTip.Tip="{loc:Str tooltip_nav_back}">
+                    <Button.Styles>
+                        <Style Selector="Button:pointerover /template/ Border">
+                            <Setter Property="Background" Value="#22FF69B4"/>
+                            <Setter Property="BorderBrush" Value="#88FF69B4"/>
+                        </Style>
+                        <Style Selector="Button:pressed /template/ Border">
+                            <Setter Property="Background" Value="#33FF69B4"/>
+                        </Style>
+                    </Button.Styles>
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border CornerRadius="13" Background="Transparent"
+                                    BorderBrush="Transparent" BorderThickness="1">
+                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="38"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Tag="navrailstatic" Text="&#x2190;" FontSize="16" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextLightBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
+                        <TextBlock Grid.Column="1" Text="{loc:Str nav_back_label}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"
+                                   Opacity="{Binding #TxtNavSearchLabel.Opacity}"/>
+                    </Grid>
+                </Button>
+                <Button x:Name="BtnNavSearch" Height="30" Margin="8,0,8,10"
                         Cursor="Hand" Click="BtnNavSearch_Click"
                         ToolTip.Tip="{loc:Str tooltip_nav_search}">
                     <Button.Template>
@@ -617,6 +655,7 @@
                         </Border>
                     </Grid>
                 </Button>
+                </StackPanel>
 
                 <!-- VerticalScrollBarVisibility authors the COLLAPSED state, like every other
                      rail part: Hidden, because a WPF vertical scrollbar is ~17px and the shut

@@ -16,8 +16,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     ///   Avalonia equivalent exists, a wheel notch over the capped live-actions list may be eaten
     ///   by that list instead of reaching the page.</description></item>
     ///   <item><description>The typed <c>ViewModel</c> accessor — <c>IEngineRoomDrawerVm</c> lives
-    ///   in the WPF head, so it cannot be named from this assembly. Hosts set
-    ///   <see cref="StyledElement.DataContext"/> directly, which is what that property did.</description></item>
+    ///   in the WPF head. The drawer builds its own <see cref="EngineRoomVm"/> instead.</description></item>
     /// </list>
     /// </summary>
     public partial class EngineRoomDrawer : UserControl
@@ -26,10 +25,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             AvaloniaXamlLoader.Load(this);
 
-            // FindControl, not the generated field: Load(this) leaves every x:Name field null
-            // (CLAUDE.md porting trap 7), so a field write here would be a silent no-op.
-            var sampler = this.FindControl<Button>("BtnSampler");
-            if (sampler != null) sampler.Click += async (_, _) => await OpenSamplerSettingsAsync();
+            // local-providers: the drawer's own viewmodel (WPF EngineRoomRuntimeVm). The sampler
+            // button's Click hook is gone with it - SamplerSettingsCommand binds now.
+            DataContext = new EngineRoomVm(this);
         }
 
         /// <summary>
@@ -42,12 +40,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// (Views/Dialogs/OpenAiCompatibleSamplerSettingsDialog) and edits the settings object in
         /// place, so this is the same four lines with the seam swapped in.</para>
         ///
-        /// <para>ponytail: Click, not Command. That viewmodel is head-side, so the
-        /// <c>SamplerSettingsCommand</c> binding on the button resolves to nothing today; the
-        /// binding is left in place for when it ports, and this handler is what must be deleted
-        /// then — two live paths to one dialog would open it twice.</para>
         /// </summary>
-        private async System.Threading.Tasks.Task OpenSamplerSettingsAsync()
+        internal async System.Threading.Tasks.Task OpenSamplerSettingsAsync()
         {
             try
             {

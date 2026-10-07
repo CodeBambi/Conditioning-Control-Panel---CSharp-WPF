@@ -121,7 +121,14 @@ public sealed class HerRoomChatMemoryTests
             Assert.Empty(brain.Session.Turns);
             Assert.True(!File.Exists(session) || !File.ReadAllText(session).Contains("hello you"));
         }
-        finally { (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain); }
+        finally
+        {
+            // The switch saved OFF (debounced) to the process-wide settings.json; every later
+            // new SettingsService() would load it and persist no session (TubeChatBrain, LocalProviders).
+            if (CoreSettings.Current.CompanionPrompt is { } prompt) prompt.ChatMemoryEnabled = true;
+            CoreSettings.SaveImmediate();
+            (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain);
+        }
     });
 
     [Fact]

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows.Media;
 using SkiaSharp;
+using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel;
 
@@ -63,4 +64,38 @@ public static class ChaosBoonColors
         => (id != null && _map.TryGetValue(id, out var c)) ? new SKColor(c.R, c.G, c.B) : fallback;
 
     public static SKColor ToSk(Color c) => new(c.R, c.G, c.B, c.A);
+
+    // ---- sidebar/ribbon tile accents (were ChaosSidebarBoon.AccentBrush/TileBackBrush before the
+    //      model moved to Core; same palette, same branch order) ----
+    public static Brush SidebarAccent(ChaosSidebarBoon b)
+    {
+        var fallback = b.IsEmptySlot ? EmptyAccent : b.IsModifier ? ModAccent : b.IsCurse ? CurseAccent : b.Level > 0 ? PocketAccent : BoonAccent;
+        // Payload-based color language: a mapped boon shows its family color; everything else
+        // (empty slots, unmapped mechanics) keeps the category fallback above.
+        return b.IsEmptySlot ? fallback : BrushForOrDefault(b.Id, fallback);
+    }
+    public static Brush SidebarBack(ChaosSidebarBoon b)
+        => b.IsEmptySlot ? Brushes.Transparent : b.IsModifier ? ModBack : b.IsCurse ? CurseBack : b.Level > 0 ? PocketBack : BoonBack;
+
+    private static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+    private static readonly Brush EmptyAccent = Frozen(Color.FromArgb(0x60, 0xB8, 0xB8, 0xD0));
+    private static readonly Brush PocketAccent = Frozen(Color.FromRgb(0xFF, 0x69, 0xB4));
+    private static readonly Brush BoonAccent = Frozen(Color.FromRgb(0x9C, 0xE8, 0xA0));
+    private static readonly Brush CurseAccent = Frozen(Color.FromRgb(0xFF, 0x8A, 0x8A));
+    private static readonly Brush ModAccent = Frozen(Color.FromRgb(0x8B, 0x5C, 0xF6));
+    private static readonly Brush PocketBack = Frozen(Color.FromArgb(0x33, 0xFF, 0x69, 0xB4));
+    private static readonly Brush BoonBack = Frozen(Color.FromArgb(0x2E, 0x9C, 0xE8, 0xA0));
+    private static readonly Brush CurseBack = Frozen(Color.FromArgb(0x2E, 0xFF, 0x8A, 0x8A));
+    private static readonly Brush ModBack = Frozen(Color.FromArgb(0x2E, 0x8B, 0x5C, 0xF6));
+}
+
+/// <summary>XAML bridge: <c>{Binding Converter={StaticResource SidebarAccent}}</c> on a tile's
+/// <see cref="ChaosSidebarBoon"/> (immutable, so binding the whole item is safe).
+/// ConverterParameter "back" picks the tile back instead of the accent.</summary>
+public sealed class ChaosSidebarBrushConverter : System.Windows.Data.IValueConverter
+{
+    public object? Convert(object? value, Type t, object? p, System.Globalization.CultureInfo c)
+        => value is not ChaosSidebarBoon b ? null : (p as string) == "back" ? ChaosBoonColors.SidebarBack(b) : ChaosBoonColors.SidebarAccent(b);
+    public object ConvertBack(object? value, Type t, object? p, System.Globalization.CultureInfo c)
+        => throw new NotSupportedException();
 }

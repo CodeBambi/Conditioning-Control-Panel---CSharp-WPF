@@ -34,7 +34,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>Dispatcher.BeginInvoke</c> -&gt; <c>Dispatcher.UIThread.Post</c>.
     ///  - <c>App.Logger</c> is Serilog's static <c>Log</c> here; the warning templates are unchanged.
     /// </summary>
-    public partial class AnnouncementPopup : Window
+    public partial class AnnouncementPopup : Window, Services.Startup.IPassiveStartupSurface
     {
         /// <summary>Window width once the card-art rail is showing. The default 440 is sized for the
         /// stacked, text-only server announcement; the rail eats 210 of it, so the copy column would

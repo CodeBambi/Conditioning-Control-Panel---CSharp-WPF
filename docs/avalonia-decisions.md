@@ -459,3 +459,43 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   wipes - shared Core, so WPF gains it (`Tests/CCP.Core.Tests/MemoryWipeSiblingsTests.cs`, fail-proven). Avalonia chat VMs
   `Detach` from `TurnsChanged` when the view's VM is replaced; the diary clears the tube bubble log through the
   `MemoryDiaryViewModel.TubeBubbleLog` seam (headless tests have no desktop lifetime for `AvatarTubeWindow.Live`). Both fail-proven.
+
+## 2026-10-01: Chaster tab receipt, calendar and keys (avalonia-port/chaster-receipt)
+- The tab's receipt reuses `ChasterReceiptView`; the language re-render lives in the view (re-Show the last bill on
+  LanguageChanged while attached), so the exit bill gets it too. Opens/closes at once: FxBill's print-down not ported.
+- The 2x2 keys do not go through `ChasterImportConfirmDialog`: like WPF Preset_Click they only rewrite ChasterPrices and
+  request limits (Core `TabPresets`), never add time to the lock; that dialog's Summary is the awareness-preset import.
+- Calendar on Core `LockCalendar`; cross strokes straight, padlock a glyph, key on gold, no draw-in/tonight tag (ponytail noted).
+## 2026-10-02: Local AI providers as brain transports (avalonia-port/local-providers)
+- AiServiceStrategy, LocalAiService (Ollama), OpenAiCompatibleService, TransportModeration, AiResponseParser,
+  IAiResponseParser, BrainAdapter and Enrichment/KnowledgeService moved to Core by git mv. App.* became the existing
+  seams (Serilog Log, CoreSettings.Service, CoreMods.Service/GetPhrases, CoreModerationLog, CompanionBrain.CommandExecutor
+  for the legacy App.Commands batch) plus three new head seams that WPF seeds with exactly what it called:
+  `AiServiceStrategy.BrainProvider` (App.Brain), `LocalAiService.EnsureServerRunning` (OllamaSetupService) and
+  `OpenAiCompatibleService.ApiKeyUnprotect` (DPAPI SecureStringHelper). TransportModeration keeps "override returns null =
+  no guard"; unseeded it uses CoreModerationLog.Guard, which fails closed.
+- The Avalonia `App.Ai` is the same AiServiceStrategy, so the brain follows the Engine Room's provider as on WPF. The
+  configured host/endpoint is the only destination; a sandbox reaches loopback only (SandboxNet, unchanged).
+- OpenAI-compatible on this head: no DPAPI and no BYO key store, so ApiKeyUnprotect stays unseeded and the provider never
+  sends (WPF requires a key too; the stored blob is never sent in the clear). The key box writes nothing.
+- The Engine Room's mapping (CompanionProviderMode, ModeFor/SettingsFor/ClearsLiveActions) and the two Test probes are Core
+  `EngineRoomProviders`; WPF EngineRoomRuntimeVm and both MainWindow Test handlers delegate. Avalonia `EngineRoomVm` binds
+  the existing drawer; "Clear conversation" (ForgetThread + legacy local transcript + tube log) is restored on this head.
+- Not ported: OllamaSetupService (detect/install/auto-offer), the Live actions feed, the login deep link.
+- Advisor: worker.
+## 2026-10-02: Chaos run engine in Core, runs stay WPF-only (avalonia-port/chaos-waves)
+- `ChaosModels.cs` (run config/state, boon pool, toy state, sidebar tile) and `ChaosRunEffects.cs` are git mvs into Core.
+  `ChaosSidebarBoon` lost its WPF `Visibility`/`Brush` members: `Has*` bools stay, the accent/back brushes are each head's
+  `ChaosBoonColors.SidebarAccent/SidebarBack` (same palette and branch order), WPF binds them through a converter and
+  `BoolToVisibility`. `Icon` is `object?`. Three head hooks replace `App.SkillTree`, `ChaosArt.Resolve` and
+  `ChaosBubbleVariants.AllIds` (set in WPF `App`); `App.Settings?.Current` became `CoreSettings` with the same null case.
+  `ChaosMotion` moved beside them (an enum only).
+- New `ChaosRunEngine` is the pure tail of WPF `RunTick`: tick advance + lust decay, T-10 s, end/Relapse, wave index and
+  progress, act number, and the gold/drop/base-point scalars. WPF calls it in the same order; every effect stays in WPF.
+  Not moved: spawning, pops/defuses/detonations, drafts, toys, slow-mo/freeze — each reads bubbles, overlays, audio or
+  Win32 input, and splitting them under the line cap would leave half-moved methods.
+- Can a run start on Avalonia? No. A run's surfaces are the bubble field, the draft table, the overlays and the WebView
+  host, none of which exist on this head; starting one would show a clock over an empty desktop with nothing to pop and no
+  panic-stop path to test. So no entry point starts a run; the HUD only binds `ChaosRunState` (sample in the render
+  proof, a stepped run in its test). Panic and mid-run saves are untouched (WPF `OnPanicKeyDuringRun` → stop; saves only
+  where WPF writes them).
