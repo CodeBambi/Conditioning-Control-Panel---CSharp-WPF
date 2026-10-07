@@ -34,9 +34,98 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// its own Border drawn OVER the art (Tag "navring"), so the thickness eats no art.</summary>
         internal const double RingIdleThickness = 3.0, RingActiveThickness = 3.5;
 
-        /// <summary>The hue wash over the medallion art (Tag "navtint"): about 18% lit, 8% idle.
-        /// WPF has no multiply blend without a shader, so the icon leans toward the hue by a wash.</summary>
-        internal const byte ArtTintActiveAlpha = 0x2E, ArtTintIdleAlpha = 0x14;
+        /// <summary>The hue wash over the medallion art (Tag "navtint"). Polish wave 11: the owner
+        /// read the rail as pastel, and a pastel hue laid over dark ink art lifts and greys it, so
+        /// the idle wash is gone (0) and the lit row only breathes the hue (about 5%). The ring,
+        /// the halo and the bar carry the section colour; the art reads as its author made it.</summary>
+        internal const byte ArtTintActiveAlpha = 0x0D, ArtTintIdleAlpha = 0x00;
+
+        // ============================== vivid ring (polish wave 11) ==============================
+        // The section hues (NavStripRules.Accent) are pastel by design: L .69 to .81, good for text
+        // on the dark chrome. A ring in them reads milky. The ring takes the same hue angle at a
+        // neon lightness instead, and wears the lamp: bright top-left, deep bottom-right.
+
+        /// <summary>The ring's lightness (HSL) and its saturation floor.</summary>
+        internal const double VividLightness = 0.58, VividSaturation = 0.80;
+
+        /// <summary>How far the ring's lit corner mixes toward white, and its shaded corner toward black.</summary>
+        internal const double RingBevelLight = 0.35, RingBevelShade = 0.50;
+
+        /// <summary>The section hue at neon strength: same angle, lightness pulled down to
+        /// <see cref="VividLightness"/>, saturation raised to at least <see cref="VividSaturation"/>.
+        /// A hue already deeper than that keeps its own lightness.</summary>
+        internal static System.Windows.Media.Color Vivid(System.Windows.Media.Color hue)
+        {
+            var (h, s, l) = ToHsl(hue);
+            return FromHsl(h, Math.Max(s, VividSaturation), Math.Min(l, VividLightness), hue.A);
+        }
+
+        /// <summary>HSL of a colour: hue in degrees 0..360, saturation and lightness 0..1.</summary>
+        internal static (double H, double S, double L) ToHsl(System.Windows.Media.Color c)
+        {
+            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+            double l = (max + min) / 2, d = max - min;
+            if (d < 1e-9) return (0, 0, l);
+            double s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            double h = max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
+            return (h * 60, s, l);
+        }
+
+        internal static System.Windows.Media.Color FromHsl(double h, double s, double l, byte a = 0xFF)
+        {
+            double q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q, k = h / 360.0;
+            static double Ch(double p, double q, double t)
+            {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1 / 6.0) return p + (q - p) * 6 * t;
+                if (t < 0.5) return q;
+                if (t < 2 / 3.0) return p + (q - p) * (2 / 3.0 - t) * 6;
+                return p;
+            }
+            byte B(double v) => (byte)Math.Round(Math.Clamp(v, 0, 1) * 255);
+            return System.Windows.Media.Color.FromArgb(a, B(Ch(p, q, k + 1 / 3.0)), B(Ch(p, q, k)), B(Ch(p, q, k - 1 / 3.0)));
+        }
+
+        /// <summary>
+        /// The ring as a diagonal gradient (StartPoint 0,0 to 1,1). Raised (idle, hover): the lamp
+        /// catches the top-left (vivid mixed toward white), the vivid hue runs through the middle,
+        /// the bottom-right falls into shade. ON IS PRESSED IN: a lit row's ring is the lip of a
+        /// socket, so the light flips (shaded top-left, lit bottom-right) and it is solid.
+        /// </summary>
+        internal static (System.Windows.Media.Color Color, double Offset)[] RingStops(System.Windows.Media.Color hue, bool active, bool hover)
+        {
+            var v = Vivid(hue);
+            byte a = RingAlpha(active, hover);
+            var light = WithAlpha(NavStripRules.Mix(v, System.Windows.Media.Colors.White, RingBevelLight), a);
+            var mid = WithAlpha(v, a);
+            var shade = WithAlpha(NavStripRules.Mix(v, System.Windows.Media.Colors.Black, RingBevelShade), a);
+            return active
+                ? new[] { (shade, 0.0), (mid, 0.5), (light, 1.0) }
+                : new[] { (light, 0.0), (mid, 0.42), (shade, 1.0) };
+        }
+
+        // ============================== coin glass (polish wave 11) ==============================
+
+        /// <summary>The coin's outer edge: a dark hairline just outside the 56 px ring, so the coin
+        /// separates from the rail (58 px, inside the 60 px medallion budget).</summary>
+        internal const double CoinOuterSize = 58, CoinOuterRadius = 16;
+
+        /// <summary>Where the art meets the dish: a 2.5 px inner shadow ring inside the lip, strongest
+        /// at the top-left (the rim overhangs the lamp side).</summary>
+        internal const double CoinInnerSize = 48, CoinInnerRadius = 11, CoinInnerThickness = 2.5;
+
+        /// <summary>The specular crescent: the sliver between the face and the face shifted by this
+        /// offset, faded out past the top-left corner. Peak alpha <see cref="SpecularAlpha"/>.</summary>
+        internal const double SpecularOffsetX = 2.5, SpecularOffsetY = 3.0;
+        internal const byte SpecularAlpha = 0xC8;
+
+        /// <summary>The contact shadow falls down AND right of a lamp at the top-left.</summary>
+        internal const double CoinDiscRightPx = 1.5;
+
+        /// <summary>A lit coin's socket is darker than the shared DepthPressedShade (owner: deeper socket).</summary>
+        internal const byte SocketTopAlpha = 0x66;
 
         /// <summary>The spur that bridges the window edge to the lit medallion: 20 x 8 px, its top
         /// at 25 px so its centre sits on the tile centre (ContentPresenter top 1 + 56 / 2 = 29).
@@ -48,8 +137,9 @@ namespace ConditioningControlPanel.Controls.NavRail
         internal static byte RingAlpha(bool active, bool hover) =>
             active ? RingActiveAlpha : hover ? RingHoverAlpha : RingIdleAlpha;
 
-        /// <summary>The ring colour: the plain hue at <see cref="RingAlpha"/> idle and on hover,
-        /// the hue lifted 25% toward white, solid, when active.</summary>
+        /// <summary>The ring's flat colour (wave 9; polish wave 11 paints <see cref="RingStops"/>
+        /// instead and keeps this as the colour a flat consumer would use): the plain hue at
+        /// <see cref="RingAlpha"/> idle and on hover, the hue lifted 25% toward white, solid, when active.</summary>
         internal static System.Windows.Media.Color RingColor(System.Windows.Media.Color hue, bool active, bool hover) =>
             active
                 ? WithAlpha(NavStripRules.Mix(hue, System.Windows.Media.Colors.White, RingActiveLift), RingActiveAlpha)

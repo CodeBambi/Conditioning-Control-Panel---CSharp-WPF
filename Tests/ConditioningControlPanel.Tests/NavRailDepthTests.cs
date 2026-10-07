@@ -205,7 +205,8 @@ public class NavRailDepthTests
                 Assert.True(tint < socket && socket < rim && rim < ring, row.Name + ": wash/socket/lip/ring order");
 
                 Assert.Equal(depth["DepthCoinDish"], coin.Dish.Background);
-                Assert.Equal(depth["DepthPressedShade"], coin.Socket.Background);
+                // polish wave 11: the lit coin's socket is the deeper DepthCoinSocket
+                Assert.Equal(depth["DepthCoinSocket"], coin.Socket.Background);
                 Assert.Equal(depth["DepthCoinRim"], coin.Rim.BorderBrush);
                 Assert.Equal(new Thickness(1), coin.Rim.BorderThickness);
                 Assert.Equal(tile.Width, coin.Dish.Width);
