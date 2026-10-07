@@ -1274,3 +1274,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/port-brain7: +251
 - Companion/awareness 7.0.3: pages widen, pop-out wakes the companion, listening bubble while the mic is open, chat stays open, cooldowns to an hour (Core AwarenessCooldownScale), Brain Drain in the preset editor.
+
+## avalonia-port/launcher-games: +109
+- Launcher slice 4: no game host on Avalonia yet, so tiles/mystery/return-poll wait for the first host; every launcher door refuses under Lockdown.
