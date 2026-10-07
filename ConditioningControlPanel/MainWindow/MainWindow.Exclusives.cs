@@ -69,7 +69,11 @@ namespace ConditioningControlPanel
         /// <summary>Title drop-shadows (cards and teasers) that wear the accent.</summary>
         private readonly List<DropShadowEffect> _exclusiveAccentShadows = new();
 
-        private bool _exclusivesBuilt;
+        /// <summary>The views the builder has built (the Premium page, the Account &amp; Plans copy).</summary>
+        private readonly HashSet<Views.Tabs.ExclusivesTabView> _vaultBuilt = new();
+
+        /// <summary>The view being painted is built.</summary>
+        private bool VaultBuilt => VaultView != null && _vaultBuilt.Contains(VaultView);
 
         /// <summary>The invites section under the shelf (Controls/Invites). Dark until the server has invites.</summary>
         private Controls.Invites.InvitePanel? _invitePanel;
@@ -262,24 +266,57 @@ namespace ConditioningControlPanel
             }), System.Windows.Threading.DispatcherPriority.Normal);
         }
 
-        /// <summary>
-        /// Collection order: Prime (tier 2) first, then Basic (tier 1), then the untiered doors.
-        /// Stable, so roster order holds inside each shelf. The spotlight still reads All[0].
-        /// </summary>
-        internal static IEnumerable<ExclusiveFeature> ShelfOrder(IEnumerable<ExclusiveFeature> roster) =>
-            roster.OrderBy(f => f.Tier switch { 2 => 0, 1 => 1, _ => 2 });
+        // ============================== the two views ==============================
+        // Polish 12 (owner, 2026-10-07): the full vault is a page again, Home > Premium, tab key
+        // "premium" (lane registry, created on its first show). Settings > Account & Plans keeps
+        // its PlansMode copy (tier plates, invites, a link here). ONE builder paints both: every
+        // method below reads VaultView, and PaintVault points VaultView at the view in hand.
+
+        /// <summary>The Premium page, null until its first ShowTab("premium").</summary>
+        private Views.Tabs.ExclusivesTabView? _premiumView;
+
+        /// <summary>The Account &amp; Plans copy. Null before the Settings page is built.</summary>
+        private Views.Tabs.ExclusivesTabView? PlansVaultView => AppSettingsTab?.SectionAccount?.PlansView;
+
+        /// <summary>The view <see cref="PaintVault"/> is painting right now.</summary>
+        private Views.Tabs.ExclusivesTabView? _vaultTarget;
 
         /// <summary>
-        /// The view this file paints. Since the nav rework (2026-10-06) that is the copy hosted in
-        /// Settings · Account &amp; Plans, not the retired Exclusives tab mounted in MainWindow.xaml
-        /// (left mounted and never shown until the integrator removes its line). Null before the
-        /// Settings page is built; every caller here already tolerates that.
+        /// The view this file paints: the one PaintVault set, else the Premium page, else the
+        /// Account &amp; Plans copy. Null before either exists; every caller tolerates that.
         /// </summary>
-        private Views.Tabs.ExclusivesTabView VaultView => (AppSettingsTab?.SectionAccount?.PlansView)!;
+        private Views.Tabs.ExclusivesTabView VaultView => (_vaultTarget ?? _premiumView ?? PlansVaultView)!;
+
+        /// <summary>Runs <paramref name="paint"/> with VaultView pointed at <paramref name="view"/>.</summary>
+        private void PaintVault(Views.Tabs.ExclusivesTabView? view, Action paint)
+        {
+            if (view == null) return;
+            var previous = _vaultTarget;
+            _vaultTarget = view;
+            try { paint(); }
+            finally { _vaultTarget = previous; }
+        }
+
+        /// <summary>Registers the Premium page (called once from RegisterLaneNavTabs).</summary>
+        partial void RegisterPremiumTab()
+        {
+            RegisterNavTab(new NavTabHost("premium",
+                () => _premiumView = new Views.Tabs.ExclusivesTabView(),
+                OnShown: v => PaintVault(v as Views.Tabs.ExclusivesTabView, ShowVaultPage),
+                OnHidden: v => PaintVault(v as Views.Tabs.ExclusivesTabView, StopVaultMotion)));
+        }
+
+        /// <summary>Build once, repaint, start the motion: the view in hand is on screen.</summary>
+        private void ShowVaultPage()
+        {
+            EnsureExclusivesBuilt();
+            RefreshVaultCore();
+            StartExclusivesMotion();
+        }
 
         /// <summary>
         /// Account &amp; Plans became visible or hidden (Settings shown, another tab chosen, panel
-        /// to tray). Same three steps the old "exclusives" ShowTab case ran, and the park on leave.
+        /// to tray). Same three steps the Premium page runs, and the park on leave.
         /// </summary>
         internal void OnPlansVisibilityChanged(bool visible)
         {
@@ -289,16 +326,7 @@ namespace ConditioningControlPanel
                 // The motion runs only while Account & Plans is the section in view (its pill lit).
                 if (visible && AppSettingsTab?.CurrentSectionKey is { } current && current != "account")
                     visible = false;
-                if (visible)
-                {
-                    EnsureExclusivesBuilt();
-                    RefreshExclusivesTab();
-                    StartExclusivesMotion();
-                }
-                else
-                {
-                    StopExclusivesMotion();
-                }
+                PaintVault(PlansVaultView, visible ? ShowVaultPage : StopVaultMotion);
             }
             catch (Exception ex)
             {
@@ -310,8 +338,8 @@ namespace ConditioningControlPanel
 
         private void EnsureExclusivesBuilt()
         {
-            if (_exclusivesBuilt || VaultView == null) return;
-            _exclusivesBuilt = true;
+            if (VaultView == null || VaultBuilt) return;
+            _vaultBuilt.Add(VaultView);
 
             try
             {
@@ -327,37 +355,193 @@ namespace ConditioningControlPanel
                 // EVERY feature gets a card - the spotlight is a highlight on top of
                 // the collection, not a hole in it. (The hero and its card share the
                 // same registry entry, so chips/veils/titles refresh identically.)
-                // Account & Plans (nav rework 2026-10-06) does not carry the shelf: every card on it
-                // has its own home on the rail now. The full page (PlansMode false) still builds it.
+                // Account & Plans does not carry the shelf: it links here instead. The Premium
+                // page (PlansMode false) builds it, grouped Basic, Prime, Free (ArrangeVaultShelf).
+                // The two reserved "coming soon" seats are gone (polish 12): a page that shows
+                // everything you have is no place for filler.
                 if (!VaultView.PlansMode)
                 {
-                    foreach (var feature in ShelfOrder(ExclusiveFeature.All))
-                        VaultView.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
+                    foreach (var feature in ExclusiveFeature.All)
+                        BuildExclusiveCard(feature);
+                    ArrangeVaultShelf();
 
-                    // The casino fills the first former teaser. Two seats remain reserved.
-                    VaultView.ExclusivesShelf.Children.Add(BuildComingSoonCard(2,
-                        "play_racing_reserved_title", "play_racing_reserved_blurb"));
-                    VaultView.ExclusivesShelf.Children.Add(BuildComingSoonCard(3,
-                        "play_future_reserved_title", "play_future_reserved_blurb"));
+                    // Columns follow the width: a wide window gets more cards a row, never an empty strip.
+                    VaultView.ExclusivesShelf.SizeChanged += (_, e) => { if (e.WidthChanged) FitExclusiveShelf(); };
+                    FitExclusiveShelf();
                 }
 
                 // Parks/resumes with tab switches like every other ambient canvas.
-                RegisterTabFx("appsettings", VaultView.ExclusivesAmbientFx);
+                RegisterTabFx(VaultView.PlansMode ? "appsettings" : "premium", VaultView.ExclusivesAmbientFx);
 
-                // Columns follow the width: a wide window gets more cards a row, never an empty strip.
-                VaultView.ExclusivesShelf.SizeChanged += (_, e) => { if (e.WidthChanged) FitExclusiveShelf(); };
-                FitExclusiveShelf();
-
-                _invitePanel = new Controls.Invites.InvitePanel();
-                VaultView.InvitesHost.Child = _invitePanel;
-                // Every read the card makes also repaints the header ticket (MainWindow.InviteTicket.cs).
-                _invitePanel.Read += ApplyInviteTicket;
+                // The invites card lives on Account & Plans, where the header ticket opens it.
+                if (VaultView.PlansMode && _invitePanel == null)
+                {
+                    _invitePanel = new Controls.Invites.InvitePanel();
+                    VaultView.InvitesHost.Child = _invitePanel;
+                    // Every read the card makes also repaints the header ticket (MainWindow.InviteTicket.cs).
+                    _invitePanel.Read += ApplyInviteTicket;
+                }
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Exclusives shelf build failed");
             }
         }
+
+        // ============================== the grouped shelf ==============================
+
+        /// <summary>Tag on a shelf group header, so the shelf fit gives it a whole row.</summary>
+        private const string VaultGroupTag = "vault-group";
+
+        /// <summary>One header per group, built once and reused by every re-sort.</summary>
+        private readonly Dictionary<Services.UI.PremiumGroup, (Border Head, TextBlock Count)> _vaultGroupHeads = new();
+
+        /// <summary>Gold of the BASIC SUBJECT plate (tier_badge_t1.png) and cyan of PRIME's (t2).
+        /// Commerce colours: they never follow the mod accent.</summary>
+        private static readonly Color VaultBasicGold = Color.FromRgb(0xFF, 0xC8, 0x5A);
+        private static readonly Color VaultPrimeCyan = Color.FromRgb(0x6F, 0xE8, 0xFF);
+        private static readonly Color VaultFreeLilac = Color.FromRgb(0xB7, 0x9C, 0xFF);
+
+        /// <summary>Open for this account right now: owned, a pass ready, or today's free door.</summary>
+        private static bool IsVaultDoorOpen(ExclusiveFeature f)
+        {
+            var state = f.GateState();
+            return state != ExclusiveGateState.Locked || IsExclusiveFreeToday(f, state);
+        }
+
+        /// <summary>
+        /// Lays the Premium page's shelf out as Basic, Prime, Free (Services/UI/PremiumShelfOrder),
+        /// each under its header, open doors first. Children are only re-added when the order
+        /// changed, so a plain repaint never disturbs the cards' adorners.
+        /// </summary>
+        private void ArrangeVaultShelf()
+        {
+            var shelf = VaultView?.ExclusivesShelf;
+            if (shelf == null || VaultView.PlansMode) return;
+            try
+            {
+                var shown = _exclusiveCards.Where(u => u.Feature.Shown()).ToList();
+                var groups = Services.UI.PremiumShelfOrder.Arrange(shown,
+                    u => u.Feature.Key, u => u.Feature.Tier, u => IsVaultDoorOpen(u.Feature));
+
+                var wanted = new List<UIElement>();
+                foreach (var (group, items) in groups)
+                {
+                    var (head, count) = VaultGroupHead(group);
+                    count.Text = string.Format(Loc.Get("premium_group_count"),
+                        items.Count(u => IsVaultDoorOpen(u.Feature)), items.Count);
+                    wanted.Add(head);
+                    wanted.AddRange(items.Select(u => (UIElement)u.Card));
+                }
+                // Hidden cards (a door not open in this build) stay in the panel, collapsed, last.
+                wanted.AddRange(_exclusiveCards.Where(u => !u.Feature.Shown()).Select(u => (UIElement)u.Card));
+
+                if (shelf.Children.Cast<UIElement>().SequenceEqual(wanted)) return;
+                shelf.Children.Clear();
+                foreach (var e in wanted) shelf.Children.Add(e);
+                FitExclusiveShelf();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Premium shelf arrange failed"); }
+        }
+
+        /// <summary>A group's header: the tier sign, the plan's name, one line, and "n of m yours".</summary>
+        private (Border Head, TextBlock Count) VaultGroupHead(Services.UI.PremiumGroup group)
+        {
+            if (_vaultGroupHeads.TryGetValue(group, out var made)) return made;
+
+            var (hue, badge, titleKey, subKey) = group switch
+            {
+                Services.UI.PremiumGroup.Basic => (VaultBasicGold, "Resources/features/tier_badge_t1.png",
+                    "premium_group_basic", "premium_group_basic_sub"),
+                Services.UI.PremiumGroup.Prime => (VaultPrimeCyan, "Resources/features/tier_badge_t2.png",
+                    "premium_group_prime", "premium_group_prime_sub"),
+                _ => (VaultFreeLilac, (string?)null, "premium_group_free", "premium_group_free_sub"),
+            };
+
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            if (badge != null && LoadPackImage(badge, 240) is { } sign)
+            {
+                var img = new Image
+                {
+                    Source = sign,
+                    Height = 44,
+                    Stretch = Stretch.Uniform,
+                    Margin = new Thickness(0, 0, 14, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+                row.Children.Add(img);
+            }
+
+            var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(words, 1);
+            var title = new TextBlock
+            {
+                FontFamily = FredokaFont,
+                FontSize = 22,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Freeze(hue),
+            };
+            BindVaultLoc(title, titleKey);
+            var sub = new TextBlock
+            {
+                FontSize = 12.5,
+                Foreground = Freeze(Color.FromArgb(0xC8, 0xE6, 0xE0, 0xF5)),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 1, 0, 0),
+            };
+            BindVaultLoc(sub, subKey);
+            words.Children.Add(title);
+            words.Children.Add(sub);
+            row.Children.Add(words);
+
+            var count = new TextBlock
+            {
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = Freeze(hue),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var countPill = new Border
+            {
+                Child = count,
+                Padding = new Thickness(10, 4, 10, 4),
+                CornerRadius = new CornerRadius(10),
+                Background = Freeze(WithAlpha(hue, 0x1F)),
+                BorderBrush = Freeze(WithAlpha(hue, 0x66)),
+                BorderThickness = new Thickness(1),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetColumn(countPill, 2);
+            row.Children.Add(countPill);
+
+            // A hairline in the plan's colour under the row, fading out to the right.
+            var rule = new LinearGradientBrush(WithAlpha(hue, 0xAA), WithAlpha(hue, 0x00), 0);
+            rule.Freeze();
+            var head = new Border
+            {
+                Tag = VaultGroupTag,
+                Child = row,
+                Padding = new Thickness(2, 0, 2, 10),
+                Margin = new Thickness(0, group == Services.UI.PremiumGroup.Basic ? 0 : 14, 0, 16),
+                BorderBrush = rule,
+                BorderThickness = new Thickness(0, 0, 0, 1.5),
+            };
+            System.Windows.Automation.AutomationProperties.SetName(head, Loc.Get(titleKey));
+
+            made = (head, count);
+            _vaultGroupHeads[group] = made;
+            return made;
+        }
+
+        /// <summary>A live loc binding (a language switch repaints the header's words).</summary>
+        private static void BindVaultLoc(TextBlock target, string key) =>
+            System.Windows.Data.BindingOperations.SetBinding(target, TextBlock.TextProperty,
+                new System.Windows.Data.Binding($"[{key}]") { Source = LocalizationManager.Instance, Mode = System.Windows.Data.BindingMode.OneWay });
 
         /// <summary>
         /// Paints the hero band's art. The band is roughly 5:1, so a card-aspect PNG
@@ -558,7 +742,8 @@ namespace ConditioningControlPanel
                             Background = AccentGradient(0xE6, 0xD9),
                             Child = new TextBlock
                             {
-                                Text = Loc.Get("exclusives_chip_lab"),
+                                // Polish 12: the Lab name is retired, and this veil sits on Basic cards too.
+                                Text = Loc.Get("plans_chip_unlock"),
                                 Foreground = Brushes.White,
                                 FontSize = 10,
                                 FontWeight = FontWeights.Bold,
@@ -796,15 +981,24 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void RefreshExclusivesTab()
         {
-            // Lazily built on first tab show (ShowTab calls EnsureExclusivesBuilt);
-            // until then there is nothing to repaint and startup pays nothing.
-            if (VaultView == null || !_exclusivesBuilt) return;
+            // Lazily built on first show; until then there is nothing to repaint and startup pays
+            // nothing. Every view the builder has built is repainted, shown or not.
+            foreach (var view in _vaultBuilt.ToArray())
+                PaintVault(view, RefreshVaultCore);
+        }
+
+        /// <summary>One view's repaint (VaultView is the view in hand).</summary>
+        private void RefreshVaultCore()
+        {
+            if (VaultView == null || !VaultBuilt) return;
+            bool page = !VaultView.PlansMode;
 
             try
             {
                 RetintVaultChrome();
 
-                foreach (var ui in _exclusiveCards)
+                // The shelf's cards live on the Premium page only.
+                foreach (var ui in page ? _exclusiveCards : new List<ExclusiveCardUi>())
                 {
                     // Just Drop is the one card that can be ABSENT rather than veiled. Every other
                     // feature on this shelf exists for everybody and is merely gated by tier, so a
@@ -832,6 +1026,37 @@ namespace ConditioningControlPanel
                 foreach (var mark in _exclusiveTeaserMarks)
                     ApplyVeilLockBreath(mark, true);
 
+                // A tier change can open a door: the shelf re-sorts, open doors first.
+                if (page) ArrangeVaultShelf();
+
+                // The header plate's vault art. ImageSource is swapped ON the existing brush -
+                // replacing the brush would drop the OpacityMask fade the header is composed with.
+                var heroArt = ModTileVariant("vault", ExclusiveHeroDecodeWidth);
+                if (heroArt != null && VaultView.VaultHeroBrush is { IsFrozen: false } heroBrush)
+                    heroBrush.ImageSource = heroArt;
+                RefreshExclusiveTierPlates();
+
+                if (page) RefreshVaultSpotlight();
+
+                // Opportunistic server-override check, exactly as RefreshMosaicTierBadges does:
+                // the 6h/10min gates inside make this free on every repaint, so a user parked on
+                // the vault catches a same-day override without this tab owning a clock.
+                _ = App.DailyFree?.RefreshAsync();
+
+                // Throttled inside (30s), so a repaint storm costs one read.
+                if (!page) _ = _invitePanel?.RefreshAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RefreshExclusivesTab failed");
+            }
+        }
+
+        /// <summary>The spotlight band (the Premium page only; Account &amp; Plans hides it).</summary>
+        private void RefreshVaultSpotlight()
+        {
+            try
+            {
                 // Spotlight veil follows the same probe - including the daily free unlock, so
                 // the hero can never sit padlocked above its own card wearing FREE TODAY.
                 var spot = ExclusiveFeature.All[0];
@@ -840,11 +1065,6 @@ namespace ConditioningControlPanel
                 VaultView.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
                 ApplySpotlightArt(spot);   // banner/card art, in place on the hero Image
 
-                // The header plate's vault art. ImageSource is swapped ON the existing brush -
-                // replacing the brush would drop the OpacityMask fade the header is composed with.
-                var heroArt = ModTileVariant("vault", ExclusiveHeroDecodeWidth);
-                if (heroArt != null && VaultView.VaultHeroBrush is { IsFrozen: false } heroBrush)
-                    heroBrush.ImageSource = heroArt;
                 VaultView.SpotVeil.Visibility =
                     spotState == ExclusiveGateState.Locked && !spotFree ? Visibility.Visible : Visibility.Collapsed;
                 ApplyVeilLockBreath(VaultView.SpotVeilLock, VaultView.SpotVeil.Visibility == Visibility.Visible);
@@ -865,20 +1085,11 @@ namespace ConditioningControlPanel
                 VaultView.SpotFreeToday.Visibility = spotPill ? Visibility.Visible : Visibility.Collapsed;
                 _spotFreeFx = ApplyFreeTodayPulse(VaultView.SpotFreeToday, _spotFreeFx, spotPill);
 
-                RefreshExclusiveTierPlates();
                 RestartExclusiveSheens();
-
-                // Opportunistic server-override check, exactly as RefreshMosaicTierBadges does:
-                // the 6h/10min gates inside make this free on every repaint, so a user parked on
-                // the vault catches a same-day override without this tab owning a clock.
-                _ = App.DailyFree?.RefreshAsync();
-
-                // Throttled inside (30s), so a repaint storm costs one read.
-                _ = _invitePanel?.RefreshAsync();
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "RefreshExclusivesTab failed");
+                App.Logger?.Warning(ex, "Premium spotlight repaint failed");
             }
         }
 
@@ -1197,7 +1408,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void StartExclusivesMotion()
         {
-            if (!_exclusivesBuilt) return;
+            if (!VaultBuilt) return;
+            // Account & Plans carries no shelf and no spotlight: only the room's canvas moves there.
+            bool page = !VaultView.PlansMode;
             try
             {
                 VaultView.ExclusivesAmbientFx.StartLayers(new AmbientFxConfig
@@ -1207,7 +1420,7 @@ namespace ConditioningControlPanel
                     FogPuffs = 3,
                 });
 
-                if (MotionFx.AllowAmbientLoops)
+                if (page && MotionFx.AllowAmbientLoops)
                 {
                     var drift = new DoubleAnimation(1.0, 1.07, TimeSpan.FromSeconds(26))
                     {
@@ -1226,6 +1439,7 @@ namespace ConditioningControlPanel
                 // each of these re-reads the gate for itself and settles into its static look when
                 // it is shut - calling them either way is what makes a motion-level change land on
                 // the next visit to the tab instead of needing a rebuild.
+                if (!page) return;
                 foreach (var ui in _exclusiveCards)
                 {
                     TierFxBorder.Resume(ui.Card);
@@ -1237,10 +1451,18 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("StartExclusivesMotion: {E}", ex.Message); }
         }
 
-        /// <summary>Parks every loop this tab started. Runs at the top of ShowTab.</summary>
+        /// <summary>Parks every loop either view started. Runs at the top of ShowTab.</summary>
         private void StopExclusivesMotion()
         {
-            if (!_exclusivesBuilt) return;
+            foreach (var view in _vaultBuilt.ToArray())
+                PaintVault(view, StopVaultMotion);
+        }
+
+        /// <summary>Parks the loops of the view in hand.</summary>
+        private void StopVaultMotion()
+        {
+            if (!VaultBuilt) return;
+            if (VaultView.PlansMode) return;   // nothing but the registered canvas runs there
             try
             {
                 VaultView.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
@@ -1289,7 +1511,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (VaultView?.IsVisible != true || !MotionFx.AllowAmbientLoops) return;
+                if (_premiumView?.IsVisible != true || !MotionFx.AllowAmbientLoops) return;
                 foreach (var ui in _exclusiveCards)
                 {
                     if (ui.Sheen == null) continue;
@@ -1332,7 +1554,7 @@ namespace ConditioningControlPanel
                     _exclusivesSheenRetryQueued = false;
                     try
                     {
-                        if (VaultView?.IsVisible == true && MotionFx.AllowAmbientLoops)
+                        if (_premiumView?.IsVisible == true && MotionFx.AllowAmbientLoops)
                             AttachExclusiveSheens();
                     }
                     catch (Exception ex) { App.Logger?.Debug("Exclusives sheen retry: {E}", ex.Message); }
@@ -1370,11 +1592,15 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var shelf = VaultView?.ExclusivesShelf;
+                var shelf = _premiumView?.ExclusivesShelf;
                 if (shelf == null || shelf.ActualWidth <= 0) return;
                 var (_, w, h) = Services.UI.ExclusiveShelfFit.For(shelf.ActualWidth);
                 foreach (var child in shelf.Children)
-                    if (child is FrameworkElement card) { card.Width = w; card.Height = h; }
+                {
+                    // A group header spans the row, so the WrapPanel breaks the line after it.
+                    if (child is FrameworkElement { Tag: VaultGroupTag } head) head.Width = Math.Max(0, shelf.ActualWidth - 1);
+                    else if (child is FrameworkElement card) { card.Width = w; card.Height = h; }
+                }
             }
             catch (Exception ex) { App.Logger?.Debug("[Exclusives] shelf fit failed: {E}", ex.Message); }
         }

@@ -13,20 +13,21 @@ namespace ConditioningControlPanel.Tests;
 public class PaletteSynonymTests
 {
     [Fact]
-    public void Vault_finds_Account_and_Plans_with_the_was_hint()
+    public void Vault_finds_the_Premium_page_with_the_was_hint()
     {
+        // Polish 12 (2026-10-07): the vault is a page again, Home > Premium.
         var hits = SettingsPaletteIndex.Search("vault");
-        var account = hits.FirstOrDefault(e => e.Id == "section.account");
-        Assert.NotNull(account);
-        Assert.Equal("appsettings", account!.TabKey);
-        Assert.Equal("account", account.SectionKey);
-        Assert.False(string.IsNullOrEmpty(SettingsPaletteIndex.WasHint(account, "vault")));
+        var premium = hits.FirstOrDefault(e => e.Id == "tab.premium");
+        Assert.NotNull(premium);
+        Assert.Equal("premium", premium!.TabKey);
+        Assert.False(string.IsNullOrEmpty(SettingsPaletteIndex.WasHint(premium, "vault")));
     }
 
     [Theory]
-    [InlineData("premium", "section.account")]
-    [InlineData("exclusives", "section.account")]
-    [InlineData("velvet vault", "section.account")]
+    [InlineData("premium", "tab.premium")]
+    [InlineData("exclusives", "tab.premium")]
+    [InlineData("velvet vault", "tab.premium")]
+    [InlineData("plans", "section.account")]
     [InlineData("lab", "tab.play")]
     [InlineData("effects rack", "tab.studio")]
     [InlineData("available subjects", "tab.availablesubjects")]

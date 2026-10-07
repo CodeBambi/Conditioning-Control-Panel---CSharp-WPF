@@ -72,7 +72,7 @@ public class NavStripPolishGlyphTests
         {
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
-                var strip = Laid(s.Key, s.DefaultTab);
+                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key));
                 foreach (var key in strip.PillKeys)
                 {
                     Assert.Equal(NavStripRules.Glyph(key), strip.PillGlyph(key));
@@ -126,7 +126,7 @@ public class NavStripPolishGlyphTests
         {
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
-                var strip = Laid(s.Key, s.DefaultTab, MotionLevel.Off, width);
+                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key), MotionLevel.Off, width);
                 var last = strip.PillFor(strip.PillKeys.Last())!;
                 var right = last.TranslatePoint(new Point(last.ActualWidth, 0), strip).X;
                 _out.WriteLine($"{s.Key,-10} last pill ends at {right:0} of {width}");
@@ -144,7 +144,7 @@ public class NavStripPolishGlyphTests
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
                 var tab = s.Tabs.Where(t => !t.Hidden && t.Kind is NavTabKind.Tab or NavTabKind.Zone)
-                                .Skip(1).FirstOrDefault()?.Key ?? s.DefaultTab;
+                                .Skip(1).FirstOrDefault()?.Key ?? NavStripRules.HeaderTab(s.Key);
                 var strip = Laid(s.Key, tab, MotionLevel.Full, 1180);
                 _out.WriteLine($"{s.Key,-10} {tab,-18} row {strip.DesiredSize.Height:0.0} track {strip.TrackHeightForTests:0.0}");
                 if (!string.IsNullOrEmpty(dir)) Shot(strip, dir!, $"strip-{s.Key}.png");

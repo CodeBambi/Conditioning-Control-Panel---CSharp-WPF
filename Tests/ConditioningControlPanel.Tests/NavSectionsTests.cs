@@ -144,7 +144,7 @@ public class NavSectionsTests
             Assert.True(section!.Tabs.Any(t => t.Key == to.Tab) || section.DefaultTab == to.Tab,
                 $"redirect {old} -> {to.Section}/{to.Tab}, which that section does not own");
         }
-        Assert.Equal(("settings", "account"), NavSections.Redirects["exclusives"]);
+        Assert.Equal(("home", "premium"), NavSections.Redirects["exclusives"]);   // polish 12
         Assert.Equal(("settings", "account"), NavSections.Redirects["patreon"]);
         Assert.Equal(("play", "play"), NavSections.Redirects["lab"]);
         Assert.Equal(("home", "settings"), NavSections.Redirects["progression"]);

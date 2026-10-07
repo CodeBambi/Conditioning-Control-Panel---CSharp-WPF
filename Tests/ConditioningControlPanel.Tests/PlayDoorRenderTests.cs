@@ -459,10 +459,11 @@ public class PlayDoorRenderTests
         // to score the same index or every caller still passing "lab" gets the fallback "rise"
         // entrance instead of its neighbours' horizontal slide.
         // Nav rework 2026-10-06: NavOrder is derived from NavSections; Play's first pill is 12.
-        Assert.Equal("play", ChromeFxNav.NavOrder[12]);
+        // Polish 12 (2026-10-07): Home gained its Premium pill, so Play's first pill is 13.
+        Assert.Equal("play", ChromeFxNav.NavOrder[13]);
         Assert.DoesNotContain("lab", ChromeFxNav.NavOrder);
-        Assert.Equal(12, ChromeFxNav.IndexOf("lab"));
-        Assert.Equal(12, ChromeFxNav.IndexOf("play"));
+        Assert.Equal(13, ChromeFxNav.IndexOf("lab"));
+        Assert.Equal(13, ChromeFxNav.IndexOf("play"));
     }
 
     [Fact]
@@ -481,11 +482,12 @@ public class PlayDoorRenderTests
         // And the other Play entries did not lose their door on the way past.
         foreach (var key in new[] { "deeper", "gradedintake", "lockdown", "blinktrainer" })
             Assert.Equal("play", (string?)m.Invoke(null, new object?[] { key }));
-        // Nav rework (2026-10-06): the Lobby and Remote moved to Social, the old Exclusives shelf
-        // to Settings > Account & Plans (the gear's row Tag is "appsettings").
+        // Nav rework (2026-10-06): the Lobby and Remote moved to Social. Polish 12 (2026-10-07):
+        // the old Exclusives key lands on Home > Premium again.
         foreach (var key in new[] { "remotecontrol", "availablesubjects" })
             Assert.Equal("social", (string?)m.Invoke(null, new object?[] { key }));
-        Assert.Equal("appsettings", (string?)m.Invoke(null, new object?[] { "exclusives" }));
+        Assert.Equal("home", (string?)m.Invoke(null, new object?[] { "exclusives" }));
+        Assert.Equal("home", (string?)m.Invoke(null, new object?[] { "premium" }));
     }
 
     [Fact]

@@ -499,6 +499,10 @@ namespace ConditioningControlPanel.Services
             // palette can navigate to.
             Tab("deeper", "tab_deeper", "🌊", "deeper", "deeper files audio video");
             Tab("exclusives", "tab_exclusives", "⭐", "exclusives", "premium exclusives velvet vault showcase");
+            // Polish 12 (2026-10-07): the vault is a page again. The retired row above stays
+            // registered and out of search; this one answers, old names via NavSections.Aliases.
+            Tab("premium", "nav_tab_premium", "⭐", "premium",
+                "premium basic prime plan plans unlock unlocked tier showcase what do i get");
             // Pop Quiz's only switch (ChkPopQuizEnabled) lives on this page, so "turn off the pop
             // quiz" has to land here - asked in support 2026-09-16 and answered by hand.
             Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake",

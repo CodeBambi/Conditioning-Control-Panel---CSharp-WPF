@@ -88,6 +88,9 @@ namespace ConditioningControlPanel
             // the new key still announces itself with the old one. ShowTab("lab") keeps working as
             // a permanent alias and fires "lab" directly - it never round-trips through here.
             ["play"] = "lab",
+            // Polish 12 (2026-10-07): the Velvet Vault is back as the Premium page. A rule keyed
+            // `tab_eq: "exclusives"` (a .ccpmod on disk) still hears the vault opening.
+            ["premium"] = "exclusives",
         };
 
         /// <summary>
@@ -139,6 +142,7 @@ namespace ConditioningControlPanel
         partial void RegisterSocialTabs();
         partial void RegisterCompanionTabs();
         partial void RegisterRehomeTabs();
+        partial void RegisterPremiumTab();
 
         private bool _laneTabsRegistered;
 
@@ -150,6 +154,7 @@ namespace ConditioningControlPanel
             try { RegisterSocialTabs(); } catch (Exception ex) { App.Logger?.Warning(ex, "RegisterSocialTabs failed"); }
             try { RegisterCompanionTabs(); } catch (Exception ex) { App.Logger?.Warning(ex, "RegisterCompanionTabs failed"); }
             try { RegisterRehomeTabs(); } catch (Exception ex) { App.Logger?.Warning(ex, "RegisterRehomeTabs failed"); }
+            try { RegisterPremiumTab(); } catch (Exception ex) { App.Logger?.Warning(ex, "RegisterPremiumTab failed"); }
         }
 
         /// <summary>Collapse the shown lane page (part of ShowTab's collapse-all).</summary>
@@ -218,8 +223,9 @@ namespace ConditioningControlPanel
             // them without touching a single comparison.
             tab = (tab ?? string.Empty).ToLowerInvariant();
 
-            // Nav rework: old keys with a new home ("exclusives" -> Settings > Account & Plans,
+            // Nav rework: old keys with a new home ("exclusives" -> Home > Premium, silent;
             // "together" -> Social > Lobby) land there and say "Moved" the first three times.
+            if (TryRedirectSilentTab(tab)) return;
             if (TryRedirectMovedTab(tab)) return;
 
             // The dashboard's RECENT rail. At the door, before the three intercepts below, so a
@@ -740,8 +746,8 @@ namespace ConditioningControlPanel
                     }
                     break;
 
-                // "exclusives" has no arm: the Velvet Vault retired into Settings > Account & Plans
-                // and TryRedirectMovedTab lands the old key there before this switch.
+                // "exclusives" has no arm: TryRedirectMovedTab lands the old key on the Premium
+                // page ("premium", MainWindow.Exclusives.cs) before this switch, without a note.
 
                 // Lane-registered pages (RegisterNavTab). The door check at the top already
                 // refused keys nobody registered.

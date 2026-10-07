@@ -167,7 +167,7 @@ namespace ConditioningControlPanel
                     try
                     {
                         if (_invitePanel != null) await _invitePanel.RefreshAsync(force: true);
-                        VaultView?.InvitesHost?.BringIntoView();
+                        PlansVaultView?.InvitesHost?.BringIntoView();
                     }
                     catch (Exception ex)
                     {

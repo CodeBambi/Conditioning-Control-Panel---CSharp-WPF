@@ -69,7 +69,7 @@ public class PageDepthTests
         {
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
-                var strip = Laid(s.Key, s.DefaultTab);
+                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key));
                 var shadow = DepthRules.ShadowColor(NavStripRules.Accent(s.Key), DepthRules.ShadowAlpha);
                 foreach (var key in strip.PillKeys)
                 {
@@ -115,7 +115,7 @@ public class PageDepthTests
         {
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
-                var strip = Laid(s.Key, s.DefaultTab, 1469);
+                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key), 1469);
                 Assert.True(strip.TrayHostForTests.ActualWidth <= 1469, $"{s.Key}: tray {strip.TrayHostForTests.ActualWidth}");
                 Assert.Equal(49, strip.TrackHeightForTests, 1);
             }

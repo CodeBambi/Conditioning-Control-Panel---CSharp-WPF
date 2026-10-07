@@ -93,12 +93,12 @@ public class SectionTabStripTests
         {
             foreach (var s in NavSections.Order)
             {
-                var strip = Laid(s.Key, s.DefaultTab);
                 if (s.Key == NavSections.Home)
                 {
-                    Assert.Equal(Visibility.Collapsed, strip.Visibility);
-                    continue;
+                    // The dashboard itself carries no header; its other pages do (polish 12).
+                    Assert.Equal(Visibility.Collapsed, Laid(s.Key, s.DefaultTab).Visibility);
                 }
+                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key));
                 Assert.Equal(Visibility.Visible, strip.Visibility);
                 var expected = s.Key == NavSections.Settings
                     ? Array.Empty<string>()
@@ -116,7 +116,7 @@ public class SectionTabStripTests
         {
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
-                var strip = Laid(s.Key, s.DefaultTab);
+                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key));
                 foreach (var t in NavStripRules.Pills(s.Key))
                 {
                     var pill = strip.PillFor(t.Key);
@@ -161,7 +161,8 @@ public class SectionTabStripTests
     [InlineData("haptics", "haptics")]
     [InlineData("ramp", "ramp")]
     [InlineData("spiral", null)]
-    [InlineData("settings", null)]
+    [InlineData("settings", "settings")]   // polish 12: Home has pills (Dashboard, Premium)
+    [InlineData("premium", "premium")]
     [InlineData("appsettings", null)]
     public void EveryPageLightsTheRightPill(string tab, string? pill)
         => Assert.Equal(pill, NavStripRules.ActivePill(tab));
@@ -260,7 +261,9 @@ public class SectionTabStripTests
 
         foreach (var key in MainWindow.MovedRedirectKeys)
             Assert.True(NavSections.Redirects.ContainsKey(key), $"{key} is toasted as moved but has no redirect");
-        Assert.Equal(("settings", "account"), NavSections.Redirects["exclusives"]);
+        foreach (var key in MainWindow.SilentRedirectKeys)
+            Assert.True(NavSections.Redirects.ContainsKey(key), $"{key} lands silently but has no redirect");
+        Assert.Equal(("home", "premium"), NavSections.Redirects["exclusives"]);   // polish 12
         Assert.Equal(3, MainWindow.NavMovedNoteLimit);
     }
 
@@ -274,7 +277,7 @@ public class SectionTabStripTests
             {
                 // Light the second pill where there is one, so the shot shows rest and active.
                 var tab = s.Tabs.Where(t => !t.Hidden && t.Kind is NavTabKind.Tab or NavTabKind.Zone)
-                                .Skip(1).FirstOrDefault()?.Key ?? s.DefaultTab;
+                                .Skip(1).FirstOrDefault()?.Key ?? NavStripRules.HeaderTab(s.Key);
                 var strip = Laid(s.Key, s.Key == NavSections.Settings ? "appsettings" : tab, 1180);
                 Assert.True(strip.ActualHeight > 20 && strip.ActualHeight < 80, $"{s.Key} strip is {strip.ActualHeight} px tall");
                 if (!string.IsNullOrEmpty(dir)) Shot(strip, dir!, $"strip-{s.Key}.png");

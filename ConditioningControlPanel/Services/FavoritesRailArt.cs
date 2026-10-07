@@ -124,6 +124,7 @@ namespace ConditioningControlPanel.Services
             // The Velvet Vault storefront. vault.png ships themed faces (vault_bambi.png and
             // friends), so this chip re-skins with the active built-in mod for free.
             ["tab.exclusives"] = Cover("features/vault.png"),
+            ["tab.premium"] = Cover("features/vault.png"),
             ["tab.gradedintake"] = Cover("features/lab_quiz_hero.png"),
             ["tab.lockdown"] = Cover("lockdown_icon.png"),
             ["tab.blinktrainer"] = Cover("features/blink_trainer.png"),

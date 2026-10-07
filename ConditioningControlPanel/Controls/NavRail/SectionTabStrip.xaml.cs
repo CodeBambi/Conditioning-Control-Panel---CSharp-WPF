@@ -22,13 +22,31 @@ namespace ConditioningControlPanel.Controls.NavRail
     /// </summary>
     public static class NavStripRules
     {
-        /// <summary>Home is the dashboard (no strip); Settings keeps its own left pill column.</summary>
+        /// <summary>Settings keeps its own left pill column. Home draws Dashboard and Premium
+        /// (polish 12, 2026-10-07), but only while a page other than the dashboard is up: see
+        /// <see cref="ShowsHeader(string?, string?)"/>.</summary>
         public static bool ShowsPills(string? section) =>
-            section != null && section != NavSections.Home && section != NavSections.Settings;
+            section != null && section != NavSections.Settings;
 
-        /// <summary>The header (breadcrumb row) shows everywhere but Home.</summary>
-        public static bool ShowsHeader(string? section) =>
-            section != null && section != NavSections.Home;
+        /// <summary>The header (breadcrumb row) shows everywhere but the dashboard itself. The
+        /// mosaic's height is budgeted to the pixel, so Home grows a header only on its other pages
+        /// (Premium). A null tab on Home reads as the dashboard.</summary>
+        public static bool ShowsHeader(string? section, string? tab = null) =>
+            section != null && !(section == NavSections.Home && IsDashboard(tab));
+
+        /// <summary>The first tab a section's header shows on: its default tab, or on Home (whose
+        /// dashboard carries no header) the first pill that does.</summary>
+        public static string HeaderTab(string? section)
+        {
+            var s = NavSections.Find(section);
+            if (s == null) return string.Empty;
+            if (ShowsHeader(s.Key, s.DefaultTab)) return s.DefaultTab;
+            return s.Tabs.FirstOrDefault(t => !t.Hidden && ShowsHeader(s.Key, t.Key))?.Key ?? s.DefaultTab;
+        }
+
+        /// <summary>The Home dashboard's own tab key ("settings"), or no tab at all.</summary>
+        public static bool IsDashboard(string? tab) =>
+            string.IsNullOrEmpty(tab) || string.Equals(tab, "settings", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>The loc key of a pill's "what is this" line, shown on its "?" badge (2026-10-07).</summary>
         public static string HelpKey(NavTab tab) => "nav_help_" + tab.Key;
@@ -287,6 +305,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         {
             // Home
             ["settings"] = '\uE80F',         // Dashboard: a home
+            ["premium"] = '\uE735',          // Premium: a filled star
             // Studio
             ["studio"] = '\uE790',           // Effects: a palette
             ["presets"] = '\uE9E9',          // sliders
@@ -613,7 +632,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// breadcrumb's page word (Settings passes its current section's label).</summary>
         public void Show(string? section, string? tab, string? pageLabel = null)
         {
-            if (!NavStripRules.ShowsHeader(section))
+            if (!NavStripRules.ShowsHeader(section, tab))
             {
                 Visibility = Visibility.Collapsed;
                 _section = section;

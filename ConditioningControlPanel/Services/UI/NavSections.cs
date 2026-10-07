@@ -57,6 +57,8 @@ namespace ConditioningControlPanel.Services.UI
             new NavSection(Home, "nav_door_home", "settings", new[]
             {
                 T("settings", "tab_dashboard"),
+                // Polish 12 (owner, 2026-10-07): the full vault is back as its own page.
+                T("premium", "nav_tab_premium"),
             }),
             new NavSection(Studio, "nav_door_studio", "studio", new[]
             {
@@ -135,7 +137,7 @@ namespace ConditioningControlPanel.Services.UI
         public static readonly IReadOnlyDictionary<string, (string Section, string Tab)> Redirects =
             new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase)
             {
-                ["exclusives"] = (Settings, "account"),
+                ["exclusives"] = (Home, "premium"),
                 ["lab"] = (Play, "play"),
                 ["progression"] = (Home, "settings"),
                 ["patreon"] = (Settings, "account"),
@@ -143,11 +145,12 @@ namespace ConditioningControlPanel.Services.UI
             };
 
         /// <summary>Old and alternate names per destination, for search ("(was X)" hints).
-        /// Keyed by tab key; the Settings account section is "account".</summary>
+        /// Keyed by tab key; the Settings account section is "account", the full vault "premium".</summary>
         public static readonly IReadOnlyDictionary<string, string[]> Aliases =
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
             {
-                ["account"] = new[] { "Exclusives", "Premium", "Velvet Vault", "The Vault" },
+                ["premium"] = new[] { "Exclusives", "Premium", "Velvet Vault", "The Vault" },
+                ["account"] = new[] { "Plans" },
                 ["play"] = new[] { "Lab" },
                 ["studio"] = new[] { "Effects Rack" },
                 ["availablesubjects"] = new[] { "Available Subjects", "Together" },

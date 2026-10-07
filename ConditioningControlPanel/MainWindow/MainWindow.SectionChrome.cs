@@ -36,7 +36,12 @@ namespace ConditioningControlPanel
 
         /// <summary>Old keys that land on a new home with a "Moved" note. "lab", "progression" and
         /// "patreon" keep their own ShowTab arms (bark and tutorial API), so they are not here.</summary>
-        internal static readonly string[] MovedRedirectKeys = { "exclusives", "together" };
+        internal static readonly string[] MovedRedirectKeys = { "together" };
+
+        /// <summary>Old keys that land on their new home WITHOUT the note. "exclusives" is the
+        /// Premium page again (polish 12, 2026-10-07): the Vault tile, the billboard and EMI all
+        /// still say it, and nothing moved from where they expect to land.</summary>
+        internal static readonly string[] SilentRedirectKeys = { "exclusives" };
 
         /// <summary>How many times the "Moved" note shows across the app's life, then never.</summary>
         internal const int NavMovedNoteLimit = 3;
@@ -44,6 +49,17 @@ namespace ConditioningControlPanel
         /// <summary>Scroll the Play wall to a zone: "games" | "sessions" | "eyes". Implemented by
         /// the REHOME lane (PlayTab.ScrollToZone); until then the pill lands on the wall's top.</summary>
         partial void ScrollPlayZone(string zone);
+
+        /// <summary>An old key that lands on its new home without a word (SilentRedirectKeys).
+        /// True when the key was one and has been handled.</summary>
+        private bool TryRedirectSilentTab(string tab)
+        {
+            if (Array.IndexOf(SilentRedirectKeys, tab) < 0) return false;
+            if (!NavSections.Redirects.TryGetValue(tab, out var to)) return false;
+            if (to.Section == NavSections.Settings) OpenAppSettingsSection(to.Tab);
+            else ShowTab(to.Tab);
+            return true;
+        }
 
         /// <summary>
         /// An old ShowTab key with a new home: navigate there and, the first three times, say so.
@@ -350,7 +366,7 @@ namespace ConditioningControlPanel
             _navBaseTitle ??= Title;
             _navTitleParts = (section, tab, pageLabel);
             var sectionLabel = section == null ? null : Loc.Get(NavSections.Find(section)?.LabelKey ?? string.Empty);
-            var page = pageLabel ?? (section == NavSections.Home ? null : Loc.Get(NavStripRules.PageLabelKey(tab) ?? string.Empty));
+            var page = pageLabel ?? (section == NavSections.Home && NavStripRules.IsDashboard(tab) ? null : Loc.Get(NavStripRules.PageLabelKey(tab) ?? string.Empty));
             var title = string.IsNullOrEmpty(sectionLabel) ? _navBaseTitle
                 : string.IsNullOrEmpty(page)
                     ? $"{_navBaseTitle} - {sectionLabel}"

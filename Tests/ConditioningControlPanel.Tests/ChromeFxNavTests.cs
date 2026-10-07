@@ -25,16 +25,17 @@ public class ChromeFxNavTests
 
     [Theory]
     [InlineData("settings", 0)]     // Home
-    [InlineData("studio", 1)]       // Studio, first entry (Phase 4's effects rack)
-    [InlineData("presets", 2)]      // Studio
-    [InlineData("haptics", 3)]      // Studio zone pill
-    [InlineData("lab", 12)]         // Play, first pill (Games)
-    [InlineData("playsessions", 14)] // Play zone pill (after Eyes: page order)
-    [InlineData("availablesubjects", 19)] // Social, first pill (Lobby)
-    [InlineData("assets", 30)]      // Library, first pill
+    [InlineData("premium", 1)]      // Home, the Premium page (polish 12: everything after moved one)
+    [InlineData("studio", 2)]       // Studio, first entry (Phase 4's effects rack)
+    [InlineData("presets", 3)]      // Studio
+    [InlineData("haptics", 4)]      // Studio zone pill
+    [InlineData("lab", 13)]         // Play, first pill (Games)
+    [InlineData("playsessions", 15)] // Play zone pill (after Eyes: page order)
+    [InlineData("availablesubjects", 20)] // Social, first pill (Lobby)
+    [InlineData("assets", 31)]      // Library, first pill
     // No "justdrop" row: the shop became a window (JustDropHostService), so it left the rail and
     // "appsettings" moved back from 24 to 23. A key that is not on the strip indexes -1.
-    [InlineData("appsettings", 32)] // Settings gear, pinned below everything
+    [InlineData("appsettings", 33)] // Settings gear, pinned below everything
     public void IndexOf_FollowsTheNavStrip(string tab, int expected)
         => Assert.Equal(expected, ChromeFxNav.IndexOf(tab));
 

@@ -103,10 +103,10 @@
                             </Border>
                             <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
                                 <TextBlock Style="{StaticResource Type.CardTitle}" x:Name="TxtVaultTitle" x:FieldModifier="internal"
-                                           Text="{loc:Str exclusives_vault_title}"
+                                           Text="{loc:Str premium_page_title}"
                                            FontFamily="/Fonts/#Fredoka, Segoe UI"/>
                                 <TextBlock x:Name="TxtVaultSub" x:FieldModifier="internal"
-                                           Text="{loc:Str exclusives_vault_sub}"
+                                           Text="{loc:Str premium_page_sub}"
                                            FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}"
                                            Margin="0,1,0,0" MaxWidth="620" HorizontalAlignment="Left"
                                            TextTrimming="CharacterEllipsis"/>
@@ -129,6 +129,13 @@
                             </Border>
                         </Grid>
                     </Border>
+
+                    <!-- Account & Plans only (PlansMode): the way to the full Premium page. -->
+                    <Button x:Name="BtnSeePremium" x:FieldModifier="internal"
+                            Style="{StaticResource SecondaryButton}"
+                            Content="{loc:Str plans_see_premium}"
+                            HorizontalAlignment="Left" Margin="0,-8,0,18"
+                            Padding="18,7" Visibility="Collapsed" Click="SeePremium_Click"/>
 
                     <!-- Spotlight: the newest exclusive, hero-sized -->
                     <Border x:Name="SpotlightCard" x:FieldModifier="internal"
@@ -271,15 +278,17 @@
                                         </Border.Background>
                                         <TextBlock x:Name="TxtSpotVeilChip" x:FieldModifier="internal"
                                                    FontSize="11" FontWeight="Bold" Foreground="White"
-                                                   Text="{loc:Str exclusives_chip_lab}"/>
+                                                   Text="{loc:Str plans_chip_unlock}"/>
                                     </Border>
                                 </StackPanel>
                             </Border>
                         </Grid>
                     </Border>
 
-                    <!-- Collection label -->
-                    <Grid x:Name="CollectionLabel" x:FieldModifier="internal" Margin="2,0,2,12">
+                    <!-- Collection label. Collapsed since polish 12 (2026-10-07): the shelf carries
+                         its own Basic / Prime / Free headers (MainWindow.Exclusives.cs). -->
+                    <Grid x:Name="CollectionLabel" x:FieldModifier="internal" Margin="2,0,2,12"
+                          Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -307,9 +316,11 @@
                     <WrapPanel x:Name="ExclusivesShelf" x:FieldModifier="internal"
                                Orientation="Horizontal"/>
 
-                    <!-- Invites (Controls/Invites/InvitePanel), added in MainWindow.Exclusives.cs.
-                         Collapsed until the server answers /v2/invites/mine. -->
-                    <Border x:Name="InvitesHost" x:FieldModifier="internal" Margin="0,18,0,0"/>
+                    <!-- Invites (Controls/Invites/InvitePanel), added in MainWindow.Exclusives.cs on
+                         the Account & Plans copy only (PlansMode shows this host). The panel itself
+                         stays collapsed until the server answers /v2/invites/mine. -->
+                    <Border x:Name="InvitesHost" x:FieldModifier="internal" Margin="0,18,0,0"
+                            Visibility="Collapsed"/>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

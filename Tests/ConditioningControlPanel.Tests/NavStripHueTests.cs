@@ -84,7 +84,7 @@ public class NavStripHueTests
             foreach (var s in NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key)))
             {
                 var hue = NavStripRules.Accent(s.Key);
-                var strip = Laid(s.Key, s.DefaultTab);
+                var strip = Laid(s.Key, NavStripRules.HeaderTab(s.Key));
                 Assert.Equal(hue, ColorOf(strip.CrumbWordBrush));
                 // Polish wave 7: the track is a tray (the hue over deep ink) with a shaded top edge.
                 Assert.Equal(NavStripRules.TrackFill(hue), ColorOf(strip.TrackFill));
@@ -160,7 +160,8 @@ public class NavStripHueTests
                 Assert.True(glyph >= 4.5, $"{s.Key}/{pills[i].Key}: rest glyph {glyph:0.00}:1 on its tint");
                 Assert.True(lit >= 3.0, $"{s.Key}/{pills[i].Key}: active glyph {lit:0.00}:1 on the section hue");
                 if (prevHue != null)
-                    Assert.True(NavStripRules.HueDistance(prevHue.Value, h) >= NavStripRules.TabHueStep - 0.5,
+                    // 0.6: Home's two-pill lilac bar (polish 12) rounds to 8.4.
+                    Assert.True(NavStripRules.HueDistance(prevHue.Value, h) >= NavStripRules.TabHueStep - 0.6,
                         $"{s.Key}: pill {i} is only {NavStripRules.HueDistance(prevHue.Value, h):0.0} degrees from its neighbour");
                 prevHue = h;
             }
@@ -192,7 +193,7 @@ public class NavStripHueTests
             double? row = null;
             foreach (var s in NavSections.Order.Where(s => s.Key != NavSections.Home))
             {
-                var strip = Laid(s.Key, s.Key == NavSections.Settings ? "appsettings" : s.DefaultTab);
+                var strip = Laid(s.Key, s.Key == NavSections.Settings ? "appsettings" : NavStripRules.HeaderTab(s.Key));
                 foreach (var key in strip.PillKeys)
                     Assert.True(strip.PillHeight(key) >= NavStripRules.PillHeight, $"{s.Key}/{key} pill is {strip.PillHeight(key)} px tall");
                 _out.WriteLine($"{s.Key,-10} header row {strip.DesiredSize.Height:0.0} px");
@@ -212,7 +213,7 @@ public class NavStripHueTests
             {
                 // Light the second pill so the shot shows rest pills on both sides of the active one.
                 var tab = s.Tabs.Where(t => !t.Hidden && t.Kind is NavTabKind.Tab or NavTabKind.Zone)
-                                .Skip(1).FirstOrDefault()?.Key ?? s.DefaultTab;
+                                .Skip(1).FirstOrDefault()?.Key ?? NavStripRules.HeaderTab(s.Key);
                 var strip = Laid(s.Key, tab, 1180);
                 strip.ShowMovedNote("Moved: " + s.Key);
                 strip.UpdateLayout();

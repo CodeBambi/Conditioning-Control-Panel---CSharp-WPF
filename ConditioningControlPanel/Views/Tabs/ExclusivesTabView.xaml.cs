@@ -98,11 +98,12 @@ namespace ConditioningControlPanel.Views.Tabs
         }
 
         /// <summary>
-        /// Account &amp; Plans mode (nav rework 2026-10-06). The Premium page retired into
-        /// Settings · Account &amp; Plans, which hosts this view inline: the vault header with the
-        /// tier plates, the spotlight and the invites stay; the collection shelf does not (every
-        /// card on it now has its own home on the rail). The inner ScrollViewer is unhooked so a
-        /// wheel notch reaches the Settings page scroller instead of dying here.
+        /// Account &amp; Plans mode (nav rework 2026-10-06, trimmed in polish 12, 2026-10-07).
+        /// Settings · Account &amp; Plans hosts this view inline: the header with the tier plates,
+        /// a "See everything Premium gets you" link and the invites. The spotlight and the shelf
+        /// live on the Premium page (Home > Premium, the same view with this off). The inner
+        /// ScrollViewer is unhooked so a wheel notch reaches the Settings page scroller instead
+        /// of dying here.
         /// </summary>
         public bool PlansMode
         {
@@ -111,14 +112,16 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 _plansMode = value;
                 var v = value ? Visibility.Collapsed : Visibility.Visible;
-                CollectionLabel.Visibility = v;
+                var plansOnly = value ? Visibility.Visible : Visibility.Collapsed;
                 ExclusivesShelf.Visibility = v;
+                SpotlightCard.Visibility = v;
+                BtnSeePremium.Visibility = plansOnly;
+                InvitesHost.Visibility = plansOnly;
                 // Settings > Account & Plans wears its own header (nav polish 2026-10-06): no Vault
-                // or Exclusives names, no Lab chip. Rebound, never assigned, so a language switch
-                // still repaints them (a plain Text write would drop the live loc binding).
-                BindLoc(TxtVaultTitle, value ? "plans_header_title" : "exclusives_vault_title");
-                BindLoc(TxtVaultSub, value ? "plans_header_sub" : "exclusives_vault_sub");
-                BindLoc(TxtSpotVeilChip, value ? "plans_chip_unlock" : "exclusives_chip_lab");
+                // or Exclusives names. Rebound, never assigned, so a language switch still repaints
+                // them (a plain Text write would drop the live loc binding).
+                BindLoc(TxtVaultTitle, value ? "plans_header_title" : "premium_page_title");
+                BindLoc(TxtVaultSub, value ? "plans_header_sub" : "premium_page_sub");
                 ContentScroll.VerticalScrollBarVisibility =
                     value ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
                 if (value && ContentScroll.Content is UIElement content && ContentScroll.Parent is Panel host)
@@ -142,6 +145,13 @@ namespace ConditioningControlPanel.Views.Tabs
         }
 
         private void Spotlight_Click(object sender, RoutedEventArgs e) => OpenSpotlight();
+
+        /// <summary>Account &amp; Plans' link to the full Premium page.</summary>
+        private void SeePremium_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ShowTab("premium");
+        }
 
         private void Spotlight_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenSpotlight();
 
