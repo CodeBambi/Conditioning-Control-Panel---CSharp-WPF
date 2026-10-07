@@ -25,6 +25,8 @@ namespace ConditioningControlPanel.Controls.Billboard
 
         private Geometry? _spiral;
         private double _spiralRd = -1, _spiralLen, _r0, _r1;
+        private const int SpiralSteps = 260;
+        private readonly double[] _arc = new double[SpiralSteps + 1]; // arc length up to each point
 
         protected override void Paint(DrawingContext dc, double w, double h, double t)
         {
@@ -65,7 +67,7 @@ namespace ConditioningControlPanel.Controls.Billboard
             var spin = Pose(c, theta, ds * (1 + 0.32 * EaseOut(lift)));
             if (p >= WindFrom && p < LiftTo && _spiral != null)
             {
-                double laid = k * _spiralLen;
+                double laid = LaidLength(k);
                 double th = h * 0.024;
                 dc.PushOpacity(1 - lift);
                 // Shadow: the same path down and right, not turning the light with it.
@@ -108,8 +110,8 @@ namespace ConditioningControlPanel.Controls.Billboard
 
             // The thread: the bead drops from the bobbin to the hub, rides the tip while it winds,
             // and on the snip the loose end whips back up to the bobbin.
-            double tipA = -k * Turns * Math.PI * 2, tipR = _r0 + (_r1 - _r0) * k;
-            var tip = spin.Transform(new Point(Math.Cos(tipA) * tipR, Math.Sin(tipA) * tipR));
+            // The free end of what is laid so far: the same k that sets the reveal length.
+            var tip = spin.Transform(TipLocal(k));
             Point? bead = null;
             if (p >= 0.2 && p < WindFrom)
             {
@@ -121,7 +123,7 @@ namespace ConditioningControlPanel.Controls.Billboard
             else if (after >= 0 && after < 0.32)
             {
                 double d = EaseOut(after / 0.32);
-                var end = Pose(c, Phi0, ds).Transform(new Point(_r1, 0));
+                var end = tip; // the finished spiral's end, still turning with the disc
                 bead = new Point(end.X + (feed.X - end.X) * d, end.Y + (feed.Y - end.Y) * d);
             }
             if (bead is Point b && kBob > 0.6)
@@ -183,23 +185,66 @@ namespace ConditioningControlPanel.Controls.Billboard
             Point prev = default;
             using (var ctx = g.Open())
             {
-                const int n = 260;
-                for (int i = 0; i <= n; i++)
+                for (int i = 0; i <= SpiralSteps; i++)
                 {
-                    double s = i / (double)n, a = -s * Turns * Math.PI * 2, r = _r0 + (_r1 - _r0) * s;
-                    var pt = new Point(Math.Cos(a) * r, Math.Sin(a) * r);
+                    var pt = SpiralPoint(i / (double)SpiralSteps);
                     if (i == 0) ctx.BeginFigure(pt, false, false);
                     else
                     {
                         ctx.LineTo(pt, true, true);
                         len += (pt - prev).Length;
                     }
+                    _arc[i] = len;
                     prev = pt;
                 }
             }
             g.Freeze();
             _spiral = g;
             _spiralLen = len;
+        }
+
+        /// <summary>A point on the spiral at parameter <paramref name="s"/> (0 hub, 1 rim), disc coordinates.</summary>
+        private Point SpiralPoint(double s)
+        {
+            double a = -s * Turns * Math.PI * 2, r = _r0 + (_r1 - _r0) * s;
+            return new Point(Math.Cos(a) * r, Math.Sin(a) * r);
+        }
+
+        /// <summary>
+        /// Where the free end of the laid thread is at fill <paramref name="k"/>: the polyline's own
+        /// point, so it sits exactly where the dash of <see cref="LaidLength"/> ends.
+        /// </summary>
+        private Point TipLocal(double k)
+        {
+            double f = Math.Clamp(k, 0, 1) * SpiralSteps;
+            int i = Math.Min((int)Math.Floor(f), SpiralSteps - 1);
+            var a = SpiralPoint(i / (double)SpiralSteps);
+            var b = SpiralPoint((i + 1) / (double)SpiralSteps);
+            double r = f - i;
+            return new Point(a.X + (b.X - a.X) * r, a.Y + (b.Y - a.Y) * r);
+        }
+
+        /// <summary>
+        /// The length of thread laid at fill <paramref name="k"/>, measured along the path. The arc
+        /// of a spiral grows with its radius, so this is never <c>k * length</c>: that ran the reveal
+        /// past the bead by about half a turn.
+        /// </summary>
+        private double LaidLength(double k)
+        {
+            double f = Math.Clamp(k, 0, 1) * SpiralSteps;
+            int i = Math.Min((int)Math.Floor(f), SpiralSteps - 1);
+            return _arc[i] + (_arc[i + 1] - _arc[i]) * (f - i);
+        }
+
+        /// <summary>Tests: the bead's point and the end of the revealed path at fill <paramref name="k"/>,
+        /// both in disc coordinates for a card <paramref name="h"/> tall. The path end is measured by WPF
+        /// along the geometry itself, the way the dash is.</summary>
+        internal (Point Bead, Point PathEnd) TipForTests(double k, double h)
+        {
+            EnsureSpiral(h * 0.36);
+            var path = PathGeometry.CreateFromGeometry(_spiral);
+            path.GetPointAtFractionLength(Math.Clamp(LaidLength(k) / _spiralLen, 0, 1), out var end, out _);
+            return (TipLocal(k), end);
         }
 
         /// <summary>A pen that draws only the first <paramref name="laid"/> px of a path.</summary>
