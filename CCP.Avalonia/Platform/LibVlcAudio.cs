@@ -99,6 +99,47 @@ namespace ConditioningControlPanel.Avalonia.Platform
             if (!player.Play()) Finish();
         }
 
+        /// <summary>A clip the caller can re-volume and stop (mind wipe); looped on LibVLC's own repeat.</summary>
+        internal MindWipePlayer.IVoice? PlayVoice(string path, double volume, bool loop)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+            var media = new Media(_vlc, path, FromType.FromPath);
+            media.AddOption(NoVideo);
+            if (loop) media.AddOption(":input-repeat=65535");
+            var voice = new Voice(new MediaPlayer(media), media) { Volume = volume };
+            return voice.Play() ? voice : null;
+        }
+
+        private sealed class Voice(MediaPlayer player, Media media) : MindWipePlayer.IVoice
+        {
+            private int _vol, _done;
+            public double Volume
+            {
+                // Cubic like PlayOneShot; applied off libvlc's thread once the output exists.
+                set { _vol = (int)Math.Round(Math.Cbrt(Math.Clamp(value, 0, 1)) * 100); Apply(); }
+            }
+            private void Apply() => ThreadPool.QueueUserWorkItem(_ => { lock (player) if (_done == 0 && player.IsPlaying) player.Volume = _vol; });
+            public bool Play()
+            {
+                player.Playing += (_, _) => Apply();
+                player.EndReached += (_, _) => Dispose();
+                player.EncounteredError += (_, _) => Dispose();
+                if (player.Play()) return true;
+                Dispose();
+                return false;
+            }
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _done, 1) != 0) return;
+                // Never dispose a player from inside its own libvlc event: that deadlocks.
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { lock (player) { player.Stop(); player.Dispose(); } media.Dispose(); }
+                    catch (Exception ex) { Log.Debug(ex, "[Audio] mindwipe dispose"); }
+                });
+            }
+        }
+
         /// <summary>Media option for audio players: skip any video track (an mp3's cover art would open a window).</summary>
         internal const string NoVideo = ":no-video";
 
