@@ -71,6 +71,38 @@ namespace ConditioningControlPanel.Controls
         /// <summary>Seconds between spawns while a layer is under its target.</summary>
         public const double SpawnEverySeconds = 0.35;
 
+        /// <summary>Dust (owner, 2026-10-07: "more particles, granular, like little dust"): tiny
+        /// specks drifting through the fog, brighter than the puffs and lighter than the hue, each
+        /// twinkling as it lives. Diameter, along speed (px/s), peak alpha, life (s).</summary>
+        public const double DustSizeMinPx = 1.2, DustSizeMaxPx = 3.0;
+        public const double DustSpeedMinPx = 5, DustSpeedMaxPx = 16;
+        public const double DustAlphaMin = 0.45, DustAlphaMax = 0.95;
+        public const double DustLifeMin = 2.5, DustLifeMax = 6.5;
+        /// <summary>Sideways wander across the strip: amplitude (px) and rate (radians per second).</summary>
+        public const double DustWanderPxMin = 2, DustWanderPxMax = 7;
+        public const double DustWanderRateMin = 0.6, DustWanderRateMax = 1.8;
+        /// <summary>Twinkle: the alpha swings this share around its envelope, at this rate (rad/s).</summary>
+        public const double DustTwinkleShare = 0.45, DustTwinkleRateMin = 2.0, DustTwinkleRateMax = 6.0;
+        /// <summary>Depth bias toward the frame: depth = strip x u^power (higher = more by the edge).</summary>
+        public const double DustDepthPower = 1.7;
+        /// <summary>How far the speck colour is lifted toward white, so dust glints over the fog.</summary>
+        public const double DustLift = 0.55;
+        /// <summary>Full dust counts per strip (long side, short side): 2 x 44 + 2 x 28 = 144 specks.</summary>
+        public const int DustLong = 44, DustShort = 28;
+        /// <summary>Seconds between dust spawns while under target.</summary>
+        public const double DustSpawnEverySeconds = 0.08;
+
+        /// <summary>Dust alpha: peak x envelope x twinkle x gain, capped at 0.95.</summary>
+        public static double DustAlpha(double peak, double age, double life, double twinkle, double gain)
+        {
+            double tw = 1.0 - DustTwinkleShare * 0.5 * (1.0 - Math.Sin(twinkle));
+            return Math.Min(0.95, Math.Max(0, peak) * Envelope(age, life) * tw * Math.Clamp(gain, 0, 1.5));
+        }
+
+        /// <summary>A speck's resting depth: biased toward the frame, always inside the strip.</summary>
+        public static double DustDepth(double u, double wanderPx) =>
+            1 + wanderPx + Math.Pow(Math.Clamp(u, 0, 1), DustDepthPower) * Math.Max(0, StripPx - 2 - 2 * wanderPx - 1);
+
         /// <summary>Puffs one layer may hold. Zero budget = zero puffs; under 60 the lean share;
         /// Reduced halves it (never below one while anything is allowed).</summary>
         public static int Target(int fullCount, int liveBudget, bool reduced)
@@ -153,6 +185,19 @@ namespace ConditioningControlPanel.Controls
             public bool Big;
         }
 
+        private struct GrainMote
+        {
+            public float Along, BaseDepth, Speed, Size, Peak, Age, Life, Phase, PhaseSpd, Wander, Twinkle, TwinkleSpd;
+        }
+
+        private GrainMote[] _grain = Array.Empty<GrainMote>();
+        private int _grainN;
+        private float _grainT;
+        private SKColorFilter? _grainTint;
+
+        /// <summary>Dust specks alive right now (tests).</summary>
+        internal int GrainCount => _grainN;
+
         private FogPuff[] _fog = Array.Empty<FogPuff>();
         private int _fogN;
         private float _fogBigT, _fogSmallT;
@@ -207,6 +252,105 @@ namespace ConditioningControlPanel.Controls
         {
             _fogTint?.Dispose();
             _fogTint = SKColorFilter.CreateBlendMode(_fogNow, SKBlendMode.Modulate);
+            float k = (float)EdgeFogMath.DustLift;
+            var lifted = new SKColor(
+                (byte)(_fogNow.Red + (255 - _fogNow.Red) * k),
+                (byte)(_fogNow.Green + (255 - _fogNow.Green) * k),
+                (byte)(_fogNow.Blue + (255 - _fogNow.Blue) * k));
+            _grainTint?.Dispose();
+            _grainTint = SKColorFilter.CreateBlendMode(lifted, SKBlendMode.Modulate);
+        }
+
+        private int GrainTarget()
+        {
+            bool longSide = _config.EdgeSide is EdgeSide.Top or EdgeSide.Bottom;
+            return EdgeFogMath.Target(longSide ? EdgeFogMath.DustLong : EdgeFogMath.DustShort,
+                _liveBudget, _config.EdgeFogReduced);
+        }
+
+        private void SpawnGrain(bool prefill)
+        {
+            if (_grainN >= _grain.Length) return;
+            double length = EdgeFogMath.Length(_config.EdgeSide, ActualWidth, ActualHeight);
+            if (length <= 1) return;
+            double r() => _rng.NextDouble();
+            double speed = EdgeFogMath.DustSpeedMinPx + r() * (EdgeFogMath.DustSpeedMaxPx - EdgeFogMath.DustSpeedMinPx);
+            double life = EdgeFogMath.DustLifeMin + r() * (EdgeFogMath.DustLifeMax - EdgeFogMath.DustLifeMin);
+            double rate = EdgeFogMath.DustWanderRateMin + r() * (EdgeFogMath.DustWanderRateMax - EdgeFogMath.DustWanderRateMin);
+            double tw = EdgeFogMath.DustTwinkleRateMin + r() * (EdgeFogMath.DustTwinkleRateMax - EdgeFogMath.DustTwinkleRateMin);
+            if (_config.EdgeFogReduced)
+            {
+                speed *= EdgeFogMath.ReducedSpeed; life /= EdgeFogMath.ReducedSpeed;
+                rate *= EdgeFogMath.ReducedSpeed; tw *= EdgeFogMath.ReducedSpeed;
+            }
+            if (r() < 0.5) speed = -speed;
+            double wander = EdgeFogMath.DustWanderPxMin + r() * (EdgeFogMath.DustWanderPxMax - EdgeFogMath.DustWanderPxMin);
+            _grain[_grainN++] = new GrainMote
+            {
+                Along = (float)EdgeFogMath.SpawnAlong(r(), r(), length),
+                BaseDepth = (float)EdgeFogMath.DustDepth(r(), wander),
+                Speed = (float)speed,
+                Size = (float)(EdgeFogMath.DustSizeMinPx + r() * (EdgeFogMath.DustSizeMaxPx - EdgeFogMath.DustSizeMinPx)),
+                Peak = (float)(EdgeFogMath.DustAlphaMin + r() * (EdgeFogMath.DustAlphaMax - EdgeFogMath.DustAlphaMin)),
+                Life = (float)life,
+                Age = prefill ? (float)(r() * life) : 0f,
+                Phase = (float)(r() * Math.PI * 2),
+                PhaseSpd = (float)rate,
+                Wander = (float)wander,
+                Twinkle = (float)(r() * Math.PI * 2),
+                TwinkleSpd = (float)tw,
+            };
+        }
+
+        /// <summary>Age, drift, wander and twinkle every speck; retire the spent; refill to target.</summary>
+        private void StepGrain(float dt)
+        {
+            if (_grain.Length == 0) return;
+            double length = EdgeFogMath.Length(_config.EdgeSide, ActualWidth, ActualHeight);
+            for (int i = _grainN - 1; i >= 0; i--)
+            {
+                var d = _grain[i];
+                d.Age += dt;
+                d.Along = (float)EdgeFogMath.Advance(d.Along, d.Speed, dt);
+                d.Phase += d.PhaseSpd * dt;
+                d.Twinkle += d.TwinkleSpd * dt;
+                if (EdgeFogMath.IsSpent(d.Age, d.Life, d.Along, length, 4)) _grain[i] = _grain[--_grainN];
+                else _grain[i] = d;
+            }
+            if (!FogLayer || length <= 1) return;
+            int target = GrainTarget();
+            _grainT = _grainN >= target
+                ? Math.Min(_grainT + dt, (float)EdgeFogMath.DustSpawnEverySeconds)
+                : _grainT + dt;
+            while (_grainN < target && _grainT > EdgeFogMath.DustSpawnEverySeconds && _grainN < _grain.Length)
+            {
+                _grainT -= (float)EdgeFogMath.DustSpawnEverySeconds;
+                SpawnGrain(prefill: false);
+            }
+        }
+
+        /// <summary>Paint the dust over the fog: tiny lifted-hue specks, additive like the puffs.</summary>
+        private void DrawGrain(SKCanvas canvas, float w, float h)
+        {
+            if (_grainN == 0 || _grainTint == null) return;
+            double aw = ActualWidth, ah = ActualHeight;
+            if (aw <= 1 || ah <= 1) return;
+            float sx = (float)(w / aw), sy = (float)(h / ah);
+            var side = _config.EdgeSide;
+            _paint.ColorFilter = _grainTint;
+            for (int i = 0; i < _grainN; i++)
+            {
+                var d = _grain[i];
+                float a = (float)EdgeFogMath.DustAlpha(d.Peak, d.Age, d.Life, d.Twinkle, _fogGainNow);
+                if (a <= 0.01f) continue;
+                double depth = d.BaseDepth + d.Wander * Math.Sin(d.Phase);
+                var (x, y) = EdgeFogMath.Position(side, d.Along, depth, aw, ah);
+                _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+                // The Dot sprite is a soft disc: drawn 2.2x the speck so its bright core is the speck.
+                float s = d.Size * 2.2f;
+                DrawSprite(canvas, Dot, (float)x * sx, (float)y * sy, s * sx, s * sy);
+            }
+            _paint.ColorFilter = null;
         }
 
         /// <summary>Seed the fog when the canvas (re)composes: the tint from the config, and the
@@ -215,7 +359,14 @@ namespace ConditioningControlPanel.Controls
         {
             _fogN = 0;
             _fogBigT = _fogSmallT = 0f;
-            if (!FogLayer || _particleBudget <= 0) { _fog = Array.Empty<FogPuff>(); return; }
+            _grainN = 0;
+            _grainT = 0f;
+            if (!FogLayer || _particleBudget <= 0)
+            {
+                _fog = Array.Empty<FogPuff>();
+                _grain = Array.Empty<GrainMote>();
+                return;
+            }
 
             var tint = _config.Tint ?? FxTheme.ParticleColor;
             _fogFrom = _fogTo = _fogNow = new SKColor(tint.R, tint.G, tint.B);
@@ -226,6 +377,7 @@ namespace ConditioningControlPanel.Controls
             bool longSide = _config.EdgeSide is EdgeSide.Top or EdgeSide.Bottom;
             int cap = EdgeFogMath.FullCount(true, longSide) + EdgeFogMath.FullCount(false, longSide);
             _fog = new FogPuff[cap];
+            _grain = new GrainMote[longSide ? EdgeFogMath.DustLong : EdgeFogMath.DustShort];
             _fogSeeded = false;
             PrefillFog();
         }
@@ -240,6 +392,8 @@ namespace ConditioningControlPanel.Controls
             int small = EdgeFogMath.Target(EdgeFogMath.FullCount(false, longSide), _liveBudget, _config.EdgeFogReduced);
             for (int i = 0; i < big; i++) SpawnFog(true, prefill: true);
             for (int i = 0; i < small; i++) SpawnFog(false, prefill: true);
+            int dust = GrainTarget();
+            for (int i = 0; i < dust; i++) SpawnGrain(prefill: true);
         }
 
         private int FogCount(bool big)
@@ -322,6 +476,7 @@ namespace ConditioningControlPanel.Controls
 
             if (_fog.Length == 0) return;
             if (!_fogSeeded) PrefillFog();
+            StepGrain(dt);
             double length = EdgeFogMath.Length(_config.EdgeSide, ActualWidth, ActualHeight);
             for (int i = _fogN - 1; i >= 0; i--)
             {
@@ -361,7 +516,7 @@ namespace ConditioningControlPanel.Controls
         /// tinted to the fog hue (hue at the centre, clear at the rim), additive like the rest.</summary>
         private void DrawEdgeFog(SKCanvas canvas, float w, float h)
         {
-            if (_fogN == 0 || _fogTint == null) return;
+            if (_fogN == 0 || _fogTint == null) { DrawGrain(canvas, w, h); return; }
             double aw = ActualWidth, ah = ActualHeight;
             if (aw <= 1 || ah <= 1) return;
             float sx = (float)(w / aw), sy = (float)(h / ah);
@@ -388,6 +543,7 @@ namespace ConditioningControlPanel.Controls
                 }
             }
             _paint.ColorFilter = null;
+            DrawGrain(canvas, w, h);
         }
 
         /// <summary>
