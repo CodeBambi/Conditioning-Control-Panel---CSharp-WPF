@@ -132,6 +132,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 base.OnClosing(e);
                 return;
             }
+            // WPF WindowChrome.cs:140: closing (real exit OR minimize-to-tray) always ends a Chaos run.
+            try { Views.Chaos.ChaosRunHost.ForceShutdown(); } catch { }
             if (Tray is not null && !_exitRequested && e.CloseReason == WindowCloseReason.WindowClosing
                 && TrayHostPresent())
             {

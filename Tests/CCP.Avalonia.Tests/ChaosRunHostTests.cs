@@ -104,7 +104,7 @@ public sealed class ChaosRunHostTests
                 overlay.FinishCountdown();   // a late countdown completion must not revive it
                 Assert.False(ChaosRunHost.IsDescending);
 
-                // Mid-run (a later, uncounted press: 3 s on).
+                // Mid-run, 3 s on (outside the 2 s double-press window).
                 ChaosRunHost.StartRun(Cfg());
                 overlay = ChaosRunHost.Overlay!;
                 hud = ChaosRunHost.Hud!;
@@ -119,6 +119,37 @@ public sealed class ChaosRunHostTests
                 Assert.Equal(at, state.ElapsedSec);
             }
             finally { ChaosRunHost.ForceShutdown(); shell.Close(); }
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>WPF MainWindow.xaml.cs:1621,1626: the press that ends a descent does not arm the
+    /// double-press exit, so a reflexive double tap mid-run ends the run and keeps the app up.</summary>
+    [Fact]
+    public async Task Two_quick_panic_presses_during_a_run_end_it_without_quitting()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            Setup();
+            var s = CoreSettings.Current;
+            s.PanicKeyEnabled = true;
+            s.PanicKey = "F8";
+            var shell = new MainShellWindow();
+            shell.Show();
+            var closed = false;
+            shell.Closed += (_, _) => closed = true;
+            var t0 = new DateTime(2026, 1, 1, 12, 0, 0);
+            try
+            {
+                ChaosRunHost.StartRun(Cfg());
+                ChaosRunHost.Overlay!.FinishCountdown();
+                Ticks(4);
+                shell.HandlePanicKeyPress(t0);
+                shell.HandlePanicKeyPress(t0.AddSeconds(0.5));
+                Assert.False(ChaosRunHost.IsActive);
+                Assert.False(closed);
+            }
+            finally { ChaosRunHost.ForceShutdown(); if (!closed) shell.Close(); }
             return Task.CompletedTask;
         });
     }

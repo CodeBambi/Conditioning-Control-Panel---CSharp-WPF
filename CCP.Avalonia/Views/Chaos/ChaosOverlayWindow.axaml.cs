@@ -81,21 +81,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// <c>ChaosBoonColors</c> (an id table, now ChaosBoonColors.cs beside this file),
     /// <c>ChaosRanks</c>/<c>ChaosRank</c>/<c>ChaosGlyphs</c> (Core, Services/Chaos/ChaosRanks.cs)
     /// and <c>ChaosWindowZ.BornTopmost</c> (<c>AppSettings.ChaosPinOnTop</c>). <c>ChaosArt</c>,
-    /// <c>ChaosNarrator</c>, <c>ChaosAnnouncerOverlay</c> and <c>ChaosModeService</c> still live
-    /// in the WPF head (ConditioningControlPanel/Services/Chaos/, the announcer in
-    /// ConditioningControlPanel/Chaos/) and are stubbed in the Stubs region below, shaped so every
-    /// call site ports unchanged. <c>ChaosMeta</c>, <c>ChaosLessons</c> and <c>RevealService</c>
-    /// are in Core now (CCP.Core/Services/Chaos/), but the overlay keeps local stand-ins for
-    /// them on purpose: its recap is a sample until ChaosModeService drives it, and a sample must
-    /// never read or write the real save. <c>ChaosBoon</c>, <c>ChaosRarity</c>
-    /// and the run snapshot are local stand-ins for the same reason;
-    /// <c>ChaosConversation</c> and friends are already in Core and are used for real, as is
-    /// <c>ChaosMetaState</c> — the recap reads the real save MODEL, over a sample instance.</para>
+    /// <c>ChaosNarrator</c> and <c>ChaosAnnouncerOverlay</c> still live in the WPF head and are
+    /// stubbed in the Stubs region below. <c>ChaosBoon</c>, <c>ChaosRunState</c>, <c>ChaosMeta</c>,
+    /// <c>ChaosLessons</c>, <c>RevealService</c> and <c>ChaosConversation</c> are the real Core
+    /// types; <see cref="ChaosRunHost"/> (the run-lifecycle slice of WPF ChaosModeService) drives
+    /// the window during a run.</para>
     ///
-    /// <para><b>The parameterless constructor draws a sample recap.</b> WPF's showed an empty
-    /// transparent window - every panel starts collapsed and a service drives it - and there is no
-    /// service on this head to drive it, so <c>--render-all</c> would prove nothing. Same choice
-    /// as ChaosSlotPickerWindow. Drop <see cref="ShowSampleRecap"/> when ChaosModeService lands.</para>
+    /// <para><b>The parameterless constructor draws a sample recap</b> for <c>--render-all</c>
+    /// (WPF's opened empty); it passes no rank-up, so it never saves. A run opens the window
+    /// through <see cref="ForRun"/>, empty like WPF's.</para>
     /// </summary>
     public partial class ChaosOverlayWindow : Window
     {
@@ -1088,6 +1082,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             // keep the 16ms pump awake on a dead window for the process's life.
             _tweens.Clear();
             _tweenTimer?.Stop(); _tweenTimer = null;
+            _countdownTimer?.Stop(); _countdownTimer = null;   // a mid-countdown close must not tick on
             try { RemoveCountdownSkipHooks(); } catch { }
             _rankBeatTimer?.Stop(); _rankBeatTimer = null;
             _rankCardTimer?.Stop(); _rankCardTimer = null;
