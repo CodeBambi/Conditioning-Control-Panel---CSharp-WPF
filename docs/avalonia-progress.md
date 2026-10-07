@@ -1267,3 +1267,19 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/launcher-account: +567
 - Launcher slice 3: account chip, tier badge, SP, mod pill (Core LauncherModMenu), panel card status/Stop/stats; Lockdown refusals stand in for the missing veil.
+
+## avalonia-port/port-vault: +971
+- Vault gate card on every padlock and the "See tiers" toast; Reconnect via Core PatreonReconnectRule; doors refuse under Lockdown; VaultOffer/VaultSale to Core.
+- Exclusives: Prime-first shelf (Core ShelfOrder), IsShown hides Arcademy/Just Drop, width-fit columns.
+
+## avalonia-port/port-brain7: +251
+- Companion/awareness 7.0.3: pages widen, pop-out wakes the companion, listening bubble while the mic is open, chat stays open, cooldowns to an hour (Core AwarenessCooldownScale), Brain Drain in the preset editor.
+
+## avalonia-port/launcher-games: +109
+- Launcher slice 4: no game host on Avalonia yet, so tiles/mystery/return-poll wait for the first host; every launcher door refuses under Lockdown.
+
+## avalonia-port/lockdown-veil: +509
+- Launcher Lockdown veil (WPF look, keys too, breath only while visible); shell door table test (19 rows) closed 5 gaps; shell has no veil by WPF design.
+
+## avalonia-port/package-verify: +71
+- Tarball, AUR (host makepkg + bwrap) and GNOME 50 runtime smoke-verified for 7.0.5; stale PKGBUILD version fixed and enforced in smoke-tarball.sh; Flatpak build still blocked.

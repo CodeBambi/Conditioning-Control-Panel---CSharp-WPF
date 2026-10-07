@@ -112,7 +112,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             HookAutonomy();     // MainShellWindow.Autonomy.cs: Takeover seeds; starts only on the user's switch
             InitializeDescentFuse(); // MainShellWindow.DescentFuse.cs (WPF MainWindow ctor); no-op without App.DescentCountdown
             InitializeInboxBadge(); // MainShellWindow.Inbox.cs (WPF MainWindow.Inbox.cs:27)
+            InitializeLockdownGreys(); // MainShellWindow.Lockdown.cs (WPF Lab.cs:612/707)
             InitializeInviteTicket(); // MainShellWindow.InviteTicket.cs (WPF MainWindow.xaml.cs, main e2d4e35ef)
+            InitializeInviteEnding(); // MainShellWindow.Patreon.cs (WPF MainWindow.xaml.cs:3590, main fbe161de2)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
             Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
             Closed += (_, _) => _avatarTubeWindow?.Close();
@@ -170,7 +172,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         // MainWindow.Settings.cs's BtnExit_Click: the real exit, not the X-to-tray close.
-        private void BtnExit_Click(object? sender, RoutedEventArgs e) => RequestExit();
+        internal void BtnExit_Click(object? sender, RoutedEventArgs e)
+        {
+            if (LockdownActive)   // WPF MainWindow.Settings.cs:451: say so, then refuse
+            {
+                _ = Dialogs.MessageDialog.ShowAsync(this, ConditioningControlPanel.Localization.Loc.Get("title_lockdown"),
+                    ConditioningControlPanel.Localization.Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"));
+                return;
+            }
+            RequestExit();
+        }
     }
 }
 
