@@ -47,7 +47,7 @@ public class LockdownQuestMinimumTests
         Assert.NotEmpty(ids);
 
         var minutes = ((int)QuestService.LockdownQuestMinimum.TotalMinutes).ToString();
-        var langs = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var langs = SourceRoots.LanguagesDirectory;
         foreach (var file in Directory.GetFiles(langs, "*.json"))
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(file));

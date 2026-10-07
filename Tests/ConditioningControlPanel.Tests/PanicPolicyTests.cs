@@ -755,7 +755,7 @@ public class PanicPolicyTests
     public void BreakoutInFront_IsAGameInFrontForTheEscapePause()
     {
         var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+            SourceRoots.RepoRoot, "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
         var start = source.IndexOf("private bool TryRacePauseOnEscape()", StringComparison.Ordinal);
         var end = source.IndexOf("private void HandlePanicKeyPress()", start, StringComparison.Ordinal);
         var body = source[start..end];

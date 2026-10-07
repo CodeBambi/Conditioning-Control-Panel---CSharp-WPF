@@ -70,7 +70,10 @@ public sealed class ExclusivesVaultTests
                 CoreEntitlement.HasPremiumProvider = () => true;
                 view.RefreshVault();
                 rows = Rows(view);
-                Assert.All(rows.Where(r => r.Feature.Key != "gradedintake"), r => Assert.False(r.IsLocked));
+                // Main 2e9080399: the collection now lists the Prime (tier 2) doors too, and Basic
+                // premium does not open those; the Lab bar does.
+                Assert.All(rows.Where(r => r.Feature.Key != "gradedintake" && r.Feature.Tier < 2), r => Assert.False(r.IsLocked));
+                Assert.All(rows.Where(r => r.Feature.Tier == 2), r => Assert.True(r.IsLocked));
                 Assert.False(rows.Single(r => r.Feature.Key == "fyp").FreeToday);
             }
             finally

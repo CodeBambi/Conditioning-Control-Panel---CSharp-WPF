@@ -191,3 +191,13 @@ Web-only rows for Piece by Piece (chess) reach Avalonia users only once the head
 | 135 | `8c877e8d4` | release: 7.0.4 "Stay Tuned" | `ConditioningControlPanel.csproj`, `MainWindow.xaml`, `UpdateService.cs`; languages; `build-installer.bat`, `installer.iss` | - | n/a | release bump: WPF csproj version, installer, release notes; strings merged |
 | 136 | `365d4cf5d` | fix: 7.0.5 hotfix - Circe's third arm, Lockdown quest says 20 minutes, Remote Full copy | `ConditioningControlPanel.csproj`, `spiral_overlay.png`, `MainWindow.RemoteControl.cs`, `LockdownTabView.xaml` +1; languages; Core: `CirceNeutralPackPatch.cs`; tests: 2 | Core CirceNeutralPackPatch + strings merged | ported-by-merge | hotfix; WPF RemoteControl copy folds into remote-v2; LockedMod png is WPF locked-mod resource |
 | 137 | `da3ebd544` | release: 7.0.5 "Stay Tuned" | `ConditioningControlPanel.csproj`, `MainWindow.xaml`, `UpdateService.cs`; languages; `build-installer.bat`, `installer.iss` | - | n/a | release bump: WPF csproj version, installer, release notes; strings merged |
+
+## Merge notes (12ae86b3d) and -compat
+
+- Placed in Core by the merge: `VideoTitleMatcher.cs`, `PresetDropRules.cs`, new `CapNoticeRule` (the rule half of WPF `CapNotice`).
+- New Core seams the WPF head seeds and the Avalonia head does not yet: `MediaCommand.HypnoTubeSurface` (an AI-named
+  HypnoTube video is refused on Avalonia until a browser host seeds it: lane `browser`), `TierGate.ReconnectIsTheAnswerProvider`
+  (lane `vault-gate`), `ExclusiveFeature.JustDrop/Arcademy/BreakoutFullProvider` (unseeded = hidden/locked; lane `exclusives`),
+  `AssetPresetService.OnlineChannelsReset` (lane `presets`).
+- Invite-week premium is folded into Core `ProviderSubscription.HasPremiumAccess` (both heads); `IsInviteWeekOnly` added.
+- -compat: WPF test paths that pointed at moved languages/assets now go through `SourceRoots` / `Assets/`.

@@ -26,7 +26,7 @@ public class InviteCopyTests
     }
 
     private static JObject Lang(string lang) =>
-        JObject.Parse(File.ReadAllText(Path.Combine(AppDir(), "Localization", "Languages", lang + ".json")));
+        JObject.Parse(File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json")));
 
     private static string[] KeysThePanelReads()
     {

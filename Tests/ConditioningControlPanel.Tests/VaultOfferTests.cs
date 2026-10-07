@@ -150,10 +150,10 @@ public class VaultOfferTests
         Assert.Contains("vaultgate_open_vault", keys);
         Assert.Contains("vaultgate_ending_inbox", keys);
 
-        var en = JObject.Parse(File.ReadAllText(Path.Combine(AppDir(), "Localization", "Languages", "en.json")));
+        var en = JObject.Parse(File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, "en.json")));
         foreach (var lang in Languages)
         {
-            var json = JObject.Parse(File.ReadAllText(Path.Combine(AppDir(), "Localization", "Languages", lang + ".json")));
+            var json = JObject.Parse(File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, lang + ".json")));
             foreach (var key in keys)
             {
                 var value = json.Value<string>(key);
