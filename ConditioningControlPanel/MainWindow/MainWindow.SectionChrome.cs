@@ -366,7 +366,9 @@ namespace ConditioningControlPanel
             _navBaseTitle ??= Title;
             _navTitleParts = (section, tab, pageLabel);
             var sectionLabel = section == null ? null : Loc.Get(NavSections.Find(section)?.LabelKey ?? string.Empty);
-            var page = pageLabel ?? (section == NavSections.Home && NavStripRules.IsDashboard(tab) ? null : Loc.Get(NavStripRules.PageLabelKey(tab) ?? string.Empty));
+            // Home's pages: the dashboard names only the section; Premium (a hidden tab) names itself.
+            var page = pageLabel ?? (section == NavSections.Home && (string.IsNullOrEmpty(tab) || tab == "settings")
+                ? null : Loc.Get(NavStripRules.PageLabelKey(tab) ?? string.Empty));
             var title = string.IsNullOrEmpty(sectionLabel) ? _navBaseTitle
                 : string.IsNullOrEmpty(page)
                     ? $"{_navBaseTitle} - {sectionLabel}"

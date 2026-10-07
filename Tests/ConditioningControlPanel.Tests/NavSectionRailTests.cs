@@ -197,6 +197,8 @@ public class NavSectionRailTests
         // Zones are pages too.
         Assert.Equal("playeyes", NavRailRules.TargetTab("play", "{\"play\":\"playeyes\"}"));
         Assert.Equal("appsettings", NavRailRules.TargetTab("settings", null));
+        // Polish 12 round 2: Home's rail row is the way back from Premium, never a return to it.
+        Assert.Equal("settings", NavRailRules.TargetTab("home", "{\"home\":\"premium\"}"));
         Assert.Null(NavRailRules.TargetTab("nope", null));
     }
 

@@ -45,6 +45,13 @@ namespace ConditioningControlPanel.Controls
         /// asks for it (half the puffs at half the speed).
         /// </summary>
         EdgeFog = 1 << 7,
+        /// <summary>
+        /// The Premium page's motes (polish 12 round 2): gold glitter rising off the Basic cards,
+        /// cyan diamonds off the Prime ones, a few loose sparkles anywhere. Zones from
+        /// <see cref="AmbientFxCanvas.SetVaultZones"/>, numbers in <see cref="VaultMoteMath"/>, sim and
+        /// paint in AmbientFxCanvas.Vault.cs. May tick at Reduced (a few slow motes) like EdgeFog.
+        /// </summary>
+        VaultMotes = 1 << 8,
     }
 
     /// <summary>Which window edge an <see cref="AmbientFxLayers.EdgeDrift"/> strip lines.</summary>
@@ -436,6 +443,7 @@ namespace ConditioningControlPanel.Controls
             _emberN = 0;
             _edgeN = 0;
             _fogN = 0;
+            _vaultN = 0;
             _sk.InvalidateVisual();
         }
 
@@ -818,7 +826,7 @@ namespace ConditioningControlPanel.Controls
             if (!oneShotLive)
             {
                 if (_targetFps <= 0) return false;
-                if (!MotionFx.AllowAmbientLoops && !ReducedFogMayRun()) return false;
+                if (!MotionFx.AllowAmbientLoops && !ReducedFogMayRun() && !ReducedVaultMayRun()) return false;
             }
             var w = _window;
             if (w != null)
@@ -865,6 +873,7 @@ namespace ConditioningControlPanel.Controls
                 StepEmbers(dt);
                 StepEdge(dt);
                 StepFog(dt);
+                StepVault(dt);
                 StepBurst(dt);
                 StepTokens(dt);
 
@@ -1176,6 +1185,7 @@ namespace ConditioningControlPanel.Controls
                 if ((layers & AmbientFxLayers.EdgeFog) != 0) DrawEdgeFog(canvas, w, h);
                 if (!_fogOnly && (layers & AmbientFxLayers.EdgeDrift) != 0) DrawEdge(canvas, w, h, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.SheenSweep) != 0) DrawSheen(canvas, w, h, intensity);
+                if ((layers & AmbientFxLayers.VaultMotes) != 0) DrawVault(canvas, w, h);
                 DrawBurst(canvas, w, h, min);
                 DrawTokens(canvas, w, h, min);
             }

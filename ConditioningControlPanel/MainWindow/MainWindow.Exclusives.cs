@@ -42,6 +42,8 @@ namespace ConditioningControlPanel
             public CardSheenAdorner? Sheen;
             /// <summary>The stamped tier badge, or null on an untiered card (Graded Intake).</summary>
             public TierBadge? Badge;
+            /// <summary>The "this one is yours" rim glow + glint (MainWindow.Exclusives.Flair.cs).</summary>
+            public VaultCardAura? Aura;
         }
 
         // The rim weights, the edge brushes and the "what does this surface wear" decision live in
@@ -312,6 +314,11 @@ namespace ConditioningControlPanel
             EnsureExclusivesBuilt();
             RefreshVaultCore();
             StartExclusivesMotion();
+            if (VaultBuilt && !VaultView.PlansMode)
+            {
+                PlayVaultEntrance();
+                StartVaultFlair();
+            }
         }
 
         /// <summary>
@@ -474,7 +481,8 @@ namespace ConditioningControlPanel
                     VerticalAlignment = VerticalAlignment.Center,
                 };
                 RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
-                row.Children.Add(img);
+                // Round 2: a shimmer crosses the sign, and motes rise off it (Flair.cs).
+                row.Children.Add(VaultSignWithSheen(img, hue, group == Services.UI.PremiumGroup.Prime));
             }
 
             var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -530,6 +538,7 @@ namespace ConditioningControlPanel
                 Margin = new Thickness(0, group == Services.UI.PremiumGroup.Basic ? 0 : 14, 0, 16),
                 BorderBrush = rule,
                 BorderThickness = new Thickness(0, 0, 0, 1.5),
+                RenderTransform = new TranslateTransform(),   // the entrance rises it in (Flair.cs)
             };
             System.Windows.Automation.AutomationProperties.SetName(head, Loc.Get(titleKey));
 
@@ -791,7 +800,8 @@ namespace ConditioningControlPanel
 
             card.MouseEnter += (_, _) => OnExclusiveCardHover(card, art, true);
             card.MouseLeave += (_, _) => OnExclusiveCardHover(card, art, false);
-            card.MouseLeftButtonUp += (_, _) => OpenExclusiveFeature(feature);
+            card.MouseLeftButtonUp += (_, _) => OnVaultCardClicked(card, feature);
+            GiveVaultCardTransforms(card);
 
             _exclusiveCards.Add(new ExclusiveCardUi
             {
@@ -1413,10 +1423,16 @@ namespace ConditioningControlPanel
             bool page = !VaultView.PlansMode;
             try
             {
+                // The Premium page is the vault: richer dust plus its own motes (gold off Basic,
+                // cyan diamonds off Prime). At Reduced only the motes run, a few and slow
+                // (AmbientFxCanvas.Vault.cs); Account & Plans keeps the plain room.
+                var room = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash;
                 VaultView.ExclusivesAmbientFx.StartLayers(new AmbientFxConfig
                 {
-                    Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash,
-                    Intensity = 0.55,
+                    Layers = !page ? room
+                        : MotionFx.Level == MotionLevel.Full ? room | AmbientFxLayers.VaultMotes
+                        : AmbientFxLayers.VaultMotes,
+                    Intensity = page ? 0.75 : 0.55,
                     FogPuffs = 3,
                 });
 
@@ -1463,6 +1479,7 @@ namespace ConditioningControlPanel
         {
             if (!VaultBuilt) return;
             if (VaultView.PlansMode) return;   // nothing but the registered canvas runs there
+            StopVaultFlair();
             try
             {
                 VaultView.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
