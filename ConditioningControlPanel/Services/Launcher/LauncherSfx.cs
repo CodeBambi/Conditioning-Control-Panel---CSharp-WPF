@@ -107,6 +107,10 @@ public static class LauncherSfx
     // ---- Home's Tonight Board (2026-10-07) --------------------------------------------------
     // Home borrows the launcher's voice: the same pluck ladder, the same speaker button. The
     // rungs are DashboardBillboard's (pure, tested); these only play them.
+    // SILENT (owner, 2026-10-07): a note out of nowhere every card change confused people, so
+    // the whole board is quiet. Flip BoardSoundOn to bring all four back.
+
+    internal static readonly bool BoardSoundOn = false;
 
     private const float BoardChangeScale = 0.06f;
     private const float BoardChimeScale = 0.08f;
@@ -114,24 +118,32 @@ public static class LauncherSfx
     private const float BoardRippleScale = 0.06f;
 
     /// <summary>One pluck per card change, walking the pentatonic ladder.</summary>
-    public static void BoardCardChange(int step) =>
+    public static void BoardCardChange(int step)
+    {
+        if (!BoardSoundOn) return;
         Play(NoteCue(DashboardBillboard.ChangeRung(step)), BoardChangeScale, "board-change", HoverCue);
+    }
 
     /// <summary>A card's button pressed: a two-note chime.</summary>
     public static void BoardPress()
     {
+        if (!BoardSoundOn) return;
         var c = DashboardBillboard.PressChime;
         Play(NoteCue(c.First), BoardChimeScale, "board-press", HoverCue);
         Later(c.GapMs, () => Play(NoteCue(c.Second), BoardChimeScale * 0.8f, "board-press"));
     }
 
     /// <summary>A card snoozed: one soft low note.</summary>
-    public static void BoardSnooze() =>
+    public static void BoardSnooze()
+    {
+        if (!BoardSoundOn) return;
         Play(NoteCue(DashboardBillboard.SnoozeRung), BoardSnoozeScale, "board-snooze", HoverCue);
+    }
 
     /// <summary>A touch on the pixel board: the ripple's two notes.</summary>
     public static void BoardTouch()
     {
+        if (!BoardSoundOn) return;
         var c = DashboardBillboard.RippleChime;
         Play(NoteCue(c.First), BoardRippleScale, "board-touch", HoverCue);
         Later(c.GapMs, () => Play(NoteCue(c.Second), BoardRippleScale * 0.7f, "board-touch"));
