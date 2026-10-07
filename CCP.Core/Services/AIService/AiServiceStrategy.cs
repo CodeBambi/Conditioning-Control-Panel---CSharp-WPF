@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Companion.Brain;
@@ -20,13 +21,16 @@ namespace ConditioningControlPanel.Services.AIService
     /// </summary>
     public class AiServiceStrategy : IAiService
     {
+        /// <summary>Head seam for App.Brain (the legacy adapters' routing target). Unseeded: never routes.</summary>
+        public static volatile Func<CompanionBrain?>? BrainProvider;
+
         private readonly object _lock = new();
         private AiService? _cloud;
         private LocalAiService? _local;
         private OpenAiCompatibleService? _openAi;
 
         private static AiProviderType Provider =>
-            App.Settings?.Current?.CompanionPrompt?.AiProvider ?? AiProviderType.Cloud;
+            CoreSettings.Service?.Current?.CompanionPrompt?.AiProvider ?? AiProviderType.Cloud;
 
         private IAiService Active
         {
@@ -103,7 +107,7 @@ namespace ConditioningControlPanel.Services.AIService
         [Obsolete(AiLegacyApi.OneShotObsolete)]
         public Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
         {
-            var brain = App.Brain;
+            var brain = BrainProvider?.Invoke();
             if (BrainAdapter.ShouldRouteChat(brain, CompanionBrain.IsEnabled, isUserMessage))
                 return brain!.ChatAsync(userInput);
 
@@ -114,7 +118,7 @@ namespace ConditioningControlPanel.Services.AIService
         public Task<string?> GetAwarenessReactionAsync(string detectedName, string category,
             string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
-            var brain = App.Brain;
+            var brain = BrainProvider?.Invoke();
             if (BrainAdapter.ShouldRouteAmbient(brain, CompanionBrain.IsEnabled, IsAvailable, promptTemplate: null))
             {
                 return BrainAdapter.ReactAsync(brain!,
@@ -127,7 +131,7 @@ namespace ConditioningControlPanel.Services.AIService
         [Obsolete(AiLegacyApi.OneShotObsolete)]
         public Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
         {
-            var brain = App.Brain;
+            var brain = BrainProvider?.Invoke();
             if (BrainAdapter.ShouldRouteAmbient(brain, CompanionBrain.IsEnabled, IsAvailable, promptTemplate: null))
                 return BrainAdapter.ReactAsync(brain!, FrameFormatter.StillOnEvent(displayName, category, duration));
 
@@ -137,7 +141,7 @@ namespace ConditioningControlPanel.Services.AIService
         [Obsolete(AiLegacyApi.OneShotObsolete)]
         public Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
         {
-            var brain = App.Brain;
+            var brain = BrainProvider?.Invoke();
             if (BrainAdapter.ShouldRouteAmbient(brain, CompanionBrain.IsEnabled, IsAvailable, promptTemplate))
                 return BrainAdapter.ReactAsync(brain!, FrameFormatter.KeywordEvent(keyword));
 
@@ -147,7 +151,7 @@ namespace ConditioningControlPanel.Services.AIService
         [Obsolete(AiLegacyApi.OneShotObsolete)]
         public Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
         {
-            var brain = App.Brain;
+            var brain = BrainProvider?.Invoke();
             if (BrainAdapter.ShouldRouteAmbient(brain, CompanionBrain.IsEnabled, IsAvailable, promptTemplate))
                 return BrainAdapter.ReactAsync(brain!, FrameFormatter.LockScreenEvent(sentance, mistakes, amount));
 
@@ -157,7 +161,7 @@ namespace ConditioningControlPanel.Services.AIService
         [Obsolete(AiLegacyApi.OneShotObsolete)]
         public Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
         {
-            var brain = App.Brain;
+            var brain = BrainProvider?.Invoke();
             if (BrainAdapter.ShouldRouteAmbient(brain, CompanionBrain.IsEnabled, IsAvailable, promptTemplate))
                 return BrainAdapter.ReactAsync(brain!, FrameFormatter.VideoDoneEvent(title));
 

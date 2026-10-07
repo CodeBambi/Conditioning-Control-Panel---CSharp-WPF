@@ -30,8 +30,12 @@ public sealed class QuestsTabLiveTests
             var oldQuests = AvApp.Quests;
             Window? host = null;
             QuestService? quests = null;
+            // CompleteQuest reads CoreSettings.Service (null when no earlier test set a provider, so it
+            // paid unscaled XP) and advances the streak first; pin both so quote and payout match in any order.
+            var oldProvider = ConditioningControlPanel.CoreSettings.ServiceProvider;
+            var service = new SettingsService();
+            ConditioningControlPanel.CoreSettings.ServiceProvider = () => service;
             var settings = ConditioningControlPanel.CoreSettings.Current;
-            var (oldLevel, oldStreak) = (settings.PlayerLevel, settings.DailyQuestStreak);
             try
             {
                 if (Application.Current is null)
@@ -41,7 +45,11 @@ public sealed class QuestsTabLiveTests
 
                 // Explicit, not whatever an earlier test left in the shared settings.
                 settings.PlayerLevel = 1;
-                settings.DailyQuestStreak = 0;
+                // Today's first completion re-starts a gap-broken streak at 1 (AdvanceQuestStreak), so 1
+                // is the streak both before and after the payout.
+                settings.DailyQuestStreak = 1;
+                settings.StreakShieldUsedDates?.Clear();
+                settings.LastDailyQuestDate = null;   // no shield fill (CoreQuests.UseStreakShieldProvider)
                 quests = new QuestService(null, dir);
                 quests.Progress.DailyQuests = new List<ActiveQuest> { new("pop_parade_d"), new("flash_rush_d"), new("spiral_sink_d") };
                 quests.Progress.WeeklyQuest = new ActiveQuest("flash_monsoon_w");
@@ -106,7 +114,7 @@ public sealed class QuestsTabLiveTests
             {
                 try { host?.Close(); } catch { }
                 quests?.Dispose();
-                (settings.PlayerLevel, settings.DailyQuestStreak) = (oldLevel, oldStreak);
+                ConditioningControlPanel.CoreSettings.ServiceProvider = oldProvider;
                 AvApp.Quests = oldQuests;
                 try { Directory.Delete(dir, recursive: true); } catch { }
             }

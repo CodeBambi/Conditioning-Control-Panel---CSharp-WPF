@@ -566,6 +566,10 @@ namespace ConditioningControlPanel
             // AiService moved to Core; these two are the App-bound bits it used to reach directly.
             CoreAccount.PatreonAccessTokenProvider = () => Patreon?.GetAccessToken();
             AiService.MergedAccountHook = r => MergedAccountRecovery.TryHandleAsync(r);
+            // The local providers and their router moved to Core too; same App-bound bits, same answers.
+            Services.AIService.AiServiceStrategy.BrainProvider = () => Brain;
+            Services.AIService.LocalAiService.EnsureServerRunning = host => Services.AIService.OllamaSetupService.EnsureServerRunningAsync(host);
+            Services.AIService.OpenAiCompatibleService.ApiKeyUnprotect = Services.SecureStringHelper.Unprotect;
             // Webcam capability + the consent revoke. The tracking engine stays here (capture
             // device, ONNX sessions, OpenCvSharp loop); only "is there one" and "undo consent"
             // cross. Read lazily: Webcam is constructed in OnStartup, long after this ctor, and is

@@ -1244,3 +1244,19 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/main-20261005-compat: +32
 - Test paths through SourceRoots, release button key 7.0.5, two tests updated to main's new catalogue.
+
+## avalonia-port/port-shellcopy: +435
+- Rail Back arrow + mouse/Alt+arrow tab history (TabHistory in Core; refused under Lockdown/tutorial); bug report on top; startup cards one at a time (stepped clock); "Monthly Recap".
+- shell-layout n/a (Win32-only); side-art folded into the shared feat-adaptive-side-art row.
+
+## avalonia-port/local-providers: +774
+- Local AI providers (Ollama / OpenAI-compatible) moved to Core as brain transports; Avalonia Engine Room drawer chooses a provider, tests the connection and clears the conversation (confirmed); App.Ai disposed on exit; logged URLs redacted.
+
+## avalonia-port/port-fx: +576
+- Flash picks walk the whole folder before repeating (ShuffleBag in Core); Random image count + Fewest slider.
+- Video card: monitor picker and Mercy "after N fails" in a keyboard-reachable More options fold; both Core schedulers use MercyAfterFails.
+- Folded: drift speed, no-videos reason, spiral opacity curve, gaze camera at boot, Lock Card and Brain Drain folds.
+
+## avalonia-port/port-chaster7: +352
+- Circe's tab: setup line covers "adds off"/"nothing can count", raffle rows in a SplitRowPanel, ladder note; demo picks never save.
+- Lock Card: Reset on typo inside More options. Leash, booked-pop tag and keys glow folded into their parity rows.

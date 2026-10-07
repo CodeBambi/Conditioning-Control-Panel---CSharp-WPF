@@ -20,6 +20,7 @@
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.BugReportWindow"
         Width="760" Height="780"
         WindowStartupLocation="CenterOwner"
+        Topmost="True"
         Background="#0F0F1E"
         Foreground="#E0E0E0"
         CanResize="True"

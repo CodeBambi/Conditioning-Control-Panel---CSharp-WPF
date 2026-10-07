@@ -123,10 +123,11 @@ public sealed class HerRoomChatMemoryTests
         }
         finally
         {
-            (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain);
-            // The grid saved memory OFF to the run's settings.json; every later SettingsService loads it.
-            CoreSettings.Current.CompanionPrompt.ChatMemoryEnabled = true;
+            // The switch saved OFF (debounced) to the process-wide settings.json; every later
+            // new SettingsService() would load it and persist no session (TubeChatBrain, LocalProviders).
+            if (CoreSettings.Current.CompanionPrompt is { } prompt) prompt.ChatMemoryEnabled = true;
             CoreSettings.SaveImmediate();
+            (AvApp.Ai, AvApp.Brain) = (previousAi, previousBrain);
         }
     });
 

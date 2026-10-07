@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using ConditioningControlPanel.Services.Moderation;
 
 namespace ConditioningControlPanel.Services.AIService
@@ -63,19 +64,19 @@ namespace ConditioningControlPanel.Services.AIService
         /// <summary>The counter source string this provider reports, e.g. <c>input:local</c>.</summary>
         public string InputCounterSource => "input:" + _counterSource;
 
-        private IModerationGuard? Guard => GuardOverride != null ? GuardOverride() : App.ModerationGuard;
+        private IModerationGuard? Guard => GuardOverride != null ? GuardOverride() : CoreModerationLog.Guard;
 
         private void Record(ProhibitedCategory category, string source)
         {
             var hint = _modelHint();
             if (RecordOverride != null) { RecordOverride(category, source, hint); return; }
-            App.ModerationLog?.Record(category, source, hint);
+            CoreModerationLog.Record(category, source, hint);
         }
 
         private void Escalate(ProhibitedCategory category)
         {
             if (CounterOverride != null) { CounterOverride(category, InputCounterSource); return; }
-            App.ModerationCounter?.RecordHit(category, InputCounterSource);
+            CoreModerationLog.Counter?.RecordHit(category, InputCounterSource);
         }
 
         /// <summary>
@@ -97,7 +98,7 @@ namespace ConditioningControlPanel.Services.AIService
             {
                 Record(check.Category.Value, "input");
                 if (escalate) Escalate(check.Category.Value);
-                App.Logger?.Information("{Provider}: input blocked by ModerationGuard (category={Cat})",
+                Log.Information("{Provider}: input blocked by ModerationGuard (category={Cat})",
                     _label, check.Category);
                 return check.Category;
             }
@@ -122,7 +123,7 @@ namespace ConditioningControlPanel.Services.AIService
             if (!check.Allow && check.Category.HasValue)
             {
                 Record(check.Category.Value, "output");
-                App.Logger?.Information("{Provider}: output blocked by ModerationGuard (category={Cat})",
+                Log.Information("{Provider}: output blocked by ModerationGuard (category={Cat})",
                     _label, check.Category);
                 return check.Category;
             }
