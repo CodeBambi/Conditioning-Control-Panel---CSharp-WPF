@@ -34,6 +34,8 @@ public sealed class LauncherWindowTests
             // A welcomed, 18+-accepted install: the age gate would exit a panel it finds hidden.
             CoreSettings.Current.Welcomed = true;
             CoreSettings.Current.HasAcceptedAgeVerification = true;
+            // Routing tests: motion off, so a hide is not held for the exit beat and the fade (LauncherFxTests cover those).
+            CoreSettings.Current.MotionLevel = MotionLevel.Off;
             var (oldIn, oldLab) = (CoreAccount.IsLoggedInProvider, CoreEntitlement.HasLabProvider);
             var shell = new MainShellWindow();
             try

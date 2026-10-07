@@ -1,7 +1,7 @@
 // PORTED (slice 1) from WPF LauncherWindow.xaml.cs/.Tiles.cs and LauncherHost.cs; rules are Core's
 // LauncherCards/LauncherRules; slice 2 adds the boot surface and the second-instance handoff (WPF App.xaml.cs
 // RouteBootSurface/RouteSurfaceHandoff, LauncherHost.OnBareRelaunch). Slice 3 adds the account chip, mod pill and panel-card status/stats (WPF LauncherWindow.xaml.cs:220-606).
-// ponytail: games and FX = later slices.
+// Slice 5 (FX) lives in LauncherWindow.Fx.cs. ponytail: games = a later slice.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -74,9 +74,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
             BuildTiles();
             HookVeil();
+            HookFx();
         }
 
-        /// <summary>WPF OnShown, minus the FX (launcher-fx slice).</summary>
+        /// <summary>WPF OnShown; its FX half is FxOnShown (LauncherWindow.Fx.cs).</summary>
         private void OnShown()
         {
             try
@@ -214,10 +215,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var panel = Panel;
             if (panel == null) { Log.Warning("[Launcher] OpenPanel with no main window"); return; }
-            Hide();
-            panel.ShowFromTray();
-            try { then?.Invoke(panel); }
-            catch (Exception ex) { Log.Debug(ex, "[Launcher] step after OpenPanel failed"); }
+            AfterExitBeat(() =>
+            {
+                Hide();
+                panel.ShowFromTray();
+                try { then?.Invoke(panel); }
+                catch (Exception ex) { Log.Debug(ex, "[Launcher] step after OpenPanel failed"); }
+            });
         }
 
         /// <summary>WPF LauncherHost.RequestClose, decided by Core's LauncherRules.Close.</summary>
@@ -265,7 +269,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnClose_Click(object? sender, RoutedEventArgs e) => RequestClose();
 
-        private void PanelCta_Click(object? sender, RoutedEventArgs e) => OpenPanel();
+        private void PanelCta_Click(object? sender, RoutedEventArgs e) { FxPanelLaunchBeat(); OpenPanel(); }
 
         /// <summary>WPF AccountChip_Click: the panel's account settings.</summary>
         private void AccountChip_Click(object? sender, RoutedEventArgs e) => OpenPanel(p => p.ShowTab("appsettings"));
@@ -462,7 +466,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             bool needsAccount = card.RequiresAccount && !CoreAccount.IsLoggedIn;
             // No leash gate on this head yet, and every destination here is a panel tab: a locked
             // one still opens it (its own gate paints the refusal), as WPF's does.
-            if (LauncherRules.Game(needsAccount, Locked(dest), leashBlocks: false) == LauncherGameStep.SignIn)
+            bool locked = Locked(dest);
+            FxPlayBeat(card.Id, needsAccount || locked);
+            if (LauncherRules.Game(needsAccount, locked, leashBlocks: false) == LauncherGameStep.SignIn)
             {
                 OpenSignIn();
                 return;
@@ -589,9 +595,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             body.Children.Add(text);
 
             // A signed-out card is the ask as a whole, not only its button (WPF Tiles.cs:218).
-            if (needsAccount) tile.PointerReleased += (_, _) => OpenSignIn();
+            if (needsAccount) tile.PointerReleased += (_, _) => { FxPlayBeat(card.Id, true); OpenSignIn(); };
 
             tile.Child = body;
+            DecorateTileFx(tile, hue);
             return tile;
         }
 
