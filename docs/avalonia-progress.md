@@ -1256,3 +1256,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Flash picks walk the whole folder before repeating (ShuffleBag in Core); Random image count + Fewest slider.
 - Video card: monitor picker and Mercy "after N fails" in a keyboard-reachable More options fold; both Core schedulers use MercyAfterFails.
 - Folded: drift speed, no-videos reason, spiral opacity curve, gaze camera at boot, Lock Card and Brain Drain folds.
+
+## avalonia-port/port-chaster7: +352
+- Circe's tab: setup line covers "adds off"/"nothing can count", raffle rows in a SplitRowPanel, ladder note; demo picks never save.
+- Lock Card: Reset on typo inside More options. Leash, booked-pop tag and keys glow folded into their parity rows.

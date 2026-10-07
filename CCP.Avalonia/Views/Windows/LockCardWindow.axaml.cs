@@ -476,7 +476,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // Both sides through Core's LockCardText (WPF :740-760, ccp-bugs#1169): "..." against a
             // typographic ellipsis, straight vs curly quotes, NBSPs are neither errors nor blockers.
             if (input.Length > 0 && !LockCardText.IsPrefixOf(input, _phrase))
+            {
                 _totalErrors++;
+
+                // "Reset on typo" (WPF :763-775, ccp-bugs #1163, off by default): a mistake wipes
+                // the line the way a finished repeat does, so the user starts this repeat over.
+                if (CoreSettings.Current.LockCardResetOnTypo)
+                {
+                    ClearTyped(full.Length);
+                    ResetKeystrokeGate();
+                    SyncInputToAllWindows("");
+                    return;
+                }
+            }
 
             SyncInputToAllWindows(full);
 
