@@ -347,7 +347,8 @@ public class BoardGlowTests
             return vals.Max() - vals.Min();
         }
         double ratio = Mean(fm, fa, 160) / Mean(pm, pa, 160);
-        Assert.InRange(ratio, 0.65, 0.75);
+        Assert.InRange(ratio, BoardRaster.FieldDim - 0.05, BoardRaster.FieldDim + 0.05);
+        Assert.True(BoardRaster.FieldDim <= 0.5, "owner: the field stays well dimmed");
         Assert.True(Spread(fm, fa, 160) < Spread(pm, pa, 160) * 0.6, "the field's bevel is flatter");
         Assert.True(Mean(im, ia, 160) > Mean(pm, pa, 160) * 1.05);
     }

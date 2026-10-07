@@ -85,8 +85,8 @@ namespace ConditioningControlPanel.Services.Billboard.Board
     {
         public const int GroutRgb = 0x04030A;
 
-        /// <summary>Field tiles: 70% bright (a 30% dark overlay) under a half-strength bevel.</summary>
-        public const double FieldDim = 0.70;
+        /// <summary>Field tiles: 45% bright under a half-strength bevel (owner, 2026-10-07: dimmer than the first 70%, so the message carries the board).</summary>
+        public const double FieldDim = 0.45;
         public const double FieldBevel = 0.5;
 
         /// <summary>Message tiles: a touch brighter than their colour.</summary>
