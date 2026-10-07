@@ -19,7 +19,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class MainShellWindow
     {
         private DispatcherTimer? _inviteTicketFirst, _inviteTicketRefresh, _inviteTicketWobble;
-        private bool _inviteTicketReading;
+        private bool _inviteTicketReading, _inviteTicketShown;
         private readonly Random _inviteTicketRng = new();
 
         /// <summary>The ticket's server read (tests swap the wire).</summary>
@@ -41,6 +41,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _inviteTicketWobble.Tick += (_, _) => WobbleInviteTicket();
             if (InvitesCard is { } card) card.Read += ApplyInviteTicket;
             CoreAccount.UnifiedIdentityChanged += OnInviteTicketIdentityChanged;
+            // Better than WPF (P01): no wobble ticks while the panel window is hidden.
+            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) SyncInviteWobble(); };
             Closed += (_, _) =>
             {
                 CoreAccount.UnifiedIdentityChanged -= OnInviteTicketIdentityChanged;
@@ -76,11 +78,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void ApplyInviteTicket(InviteMine? mine)
         {
             if (Named<Button>("BtnInviteTicket") is not { } ticket) return;
-            bool show = InviteTicketRule.ShouldShow(mine);
-            ticket.IsVisible = show;
-            if (show && _inviteTicketWobble?.IsEnabled == false) _inviteTicketWobble.Start();
-            else if (!show) _inviteTicketWobble?.Stop();
+            ticket.IsVisible = _inviteTicketShown = InviteTicketRule.ShouldShow(mine);
+            SyncInviteWobble();
         }
+
+        /// <summary>The wobble runs only while the ticket is up AND the window is shown.</summary>
+        private void SyncInviteWobble()
+        {
+            if (_inviteTicketWobble == null) return;
+            bool run = _inviteTicketShown && IsVisible;
+            if (run && !_inviteTicketWobble.IsEnabled) _inviteTicketWobble.Start();
+            else if (!run) _inviteTicketWobble.Stop();
+        }
+
+        internal bool InviteWobbleRunning => _inviteTicketWobble?.IsEnabled == true;
 
         /// <summary>WPF WobbleInviteTicket: a 420 ms shake about the -8 degree rest and a small pop.</summary>
         private void WobbleInviteTicket()

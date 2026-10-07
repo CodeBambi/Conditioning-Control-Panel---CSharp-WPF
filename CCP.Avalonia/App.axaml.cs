@@ -557,10 +557,8 @@ namespace ConditioningControlPanel.Avalonia
                 // door; a sandbox reaches only a loopback CCP_FRIENDS_API_URL, else nothing is sent).
                 Services.Invites.InviteRewards.UnlockedProvider = () => Achievements?.Progress?.UnlockedAchievements;
                 Services.Invites.InviteRewards.TryUnlockProvider = id => Achievements?.TryUnlock(id) == true;
-                var inviteUrl = Platform.FriendsHead.BaseUrl(
+                Platform.FriendsHead.SeedInvites(
                     Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
-                Services.Invites.InviteApi.DefaultIdentity = Platform.FriendsHead.Identity;
-                Services.Invites.InviteApi.DefaultBaseUrl = () => inviteUrl;
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 CoreProgression.TrackBubbleCountGameStartedProvider = () => Achievements?.TrackBubbleCountGameStarted();
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
@@ -676,6 +674,7 @@ namespace ConditioningControlPanel.Avalonia
                     CoreEngine.Stop();
                     StopDesktopOverlays();
                     Views.Windows.LockCardWindow.ForceCloseAll();
+                    Views.Controls.Invites.InvitePanel.CancelExpiry(); // no end-of-week one-shot outlives the shell
                 };
                 // Boot surface (WPF App.xaml.cs:3403-3419): the launcher, a game or the panel. A boot
                 // into the launcher shows the panel unactivated and off the taskbar only so its Opened

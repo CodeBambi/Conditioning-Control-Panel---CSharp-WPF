@@ -32,7 +32,8 @@ public sealed class InvitePanel : Border
         Gold = B("#E5C76B"), Good = B("#7FD8A6"), Warn = B("#FFB347"), Text = B("#E0E0E0"), Muted = B("#B8B1CC");
     private enum Face { None, Inviter, Redeem, Redeemed }
 
-    private readonly Func<IInviteApi> _api;
+    /// <summary>The wire (tests swap it; the XAML-built card uses the seeded Core default).</summary>
+    internal Func<IInviteApi> Api { get; set; }
     private readonly Func<bool> _signedIn, _premium;
     private readonly StackPanel _body = new();
     private DateTime _lastReadUtc = DateTime.MinValue, _redeemedAtUtc = DateTime.MinValue;
@@ -49,7 +50,7 @@ public sealed class InvitePanel : Border
 
     internal InvitePanel(Func<IInviteApi>? api, Func<bool>? signedIn = null, Func<bool>? premium = null)
     {
-        _api = api ?? (() => new InviteApi());
+        Api = api ?? (() => new InviteApi());
         _signedIn = signedIn ?? (() => InviteApi.DefaultIdentity() != null);
         _premium = premium ?? (() => CoreAccount.HasPremiumAccess);
         IsVisible = false;
@@ -71,7 +72,7 @@ public sealed class InvitePanel : Border
         _reading = true;
         try
         {
-            var mine = await _api().MineAsync();
+            var mine = await Api().MineAsync();
             _lastReadUtc = DateTime.UtcNow;
             try { Read?.Invoke(mine); }
             catch (Exception ex) { Log.Debug("[Invites] read observer failed: {E}", ex.GetType().Name); }
@@ -322,7 +323,7 @@ public sealed class InvitePanel : Border
         _go.IsEnabled = false;
         try
         {
-            var outcome = await _api().RedeemAsync(_box.Text!);
+            var outcome = await Api().RedeemAsync(_box.Text!);
             if (!outcome.Ok) { Say(Loc.Get(ReasonKey(outcome.Reason)), Warn); return; }
             ApplyGrant(outcome.GrantUntilUtc);
             ((Control)_box.Parent!).IsVisible = false;
@@ -364,12 +365,20 @@ public sealed class InvitePanel : Border
 
     private static IDisposable? _expiry;
 
+    internal static bool ExpiryArmed => _expiry != null;
+
+    /// <summary>Shell close (and tests): no end-of-week one-shot outlives the window.</summary>
+    internal static void CancelExpiry()
+    {
+        _expiry?.Dispose();
+        _expiry = null;
+    }
+
     /// <summary>WPF InviteGrantSync.ArmExpiry: HasPremiumAccess turns false silently at the end of a week,
     /// so a one-shot tells the gates to repaint then. At startup, sign-in and after every grant.</summary>
     internal static void ArmExpiry()
     {
-        _expiry?.Dispose();
-        _expiry = null;
+        CancelExpiry();
         if (CoreSettings.Current.InviteGrantUntil is not DateTime end) return;
         var left = end - DateTime.UtcNow;
         if (left <= TimeSpan.Zero || left > InviteRules.MaxGrantAhead) return;

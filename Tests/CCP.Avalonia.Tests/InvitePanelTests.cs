@@ -61,9 +61,23 @@ public sealed class InvitePanelTests
     [Fact]
     public Task ASubscriberSeesTheirCodesAndTheLadder() => AvaloniaTestDispatcher.RunAsync(async () =>
     {
-        var wire = new Wire(Mine, "{}");
-        var panel = Panel(wire);
-        await panel.RefreshAsync(force: true);
+        var (oldUnlocked, oldUnlock) = (InviteRewards.UnlockedProvider, InviteRewards.TryUnlockProvider);
+        var unlocked = new List<string>();
+        try
+        {
+            InviteRewards.UnlockedProvider = () => new HashSet<string>();
+            InviteRewards.TryUnlockProvider = id => { unlocked.Add(id); return true; };
+            var wire = new Wire(Mine, "{}");
+            var panel = Panel(wire);
+            await panel.RefreshAsync(force: true);
+            Assert.Equal(new[] { "invite_first" }, unlocked); // two converted friends earn the first badge only
+            Body(panel);
+        }
+        finally { (InviteRewards.UnlockedProvider, InviteRewards.TryUnlockProvider) = (oldUnlocked, oldUnlock); }
+    });
+
+    private static void Body(InvitePanel panel)
+    {
         Assert.True(panel.IsVisible);
         var texts = All<TextBlock>(panel).Select(t => t.Text).ToList();
         Assert.Contains("BAMBI-AAAA", texts);
@@ -71,7 +85,7 @@ public sealed class InvitePanelTests
         Assert.Contains(Loc.GetF("invites_left", 1, 2), texts);
         Assert.Equal(InviteRewards.Ladder.Count, All<Border>(panel).Count(b => b.Tag as string == "invite-rung"));
         Assert.Contains(Loc.GetF("invites_ladder_progress", 2, 3), texts); // the next rung (3 friends) carries the bar
-    });
+    }
 
     [Fact]
     public Task SignedOutOrPremiumWithoutCodesShowsNothing() => AvaloniaTestDispatcher.RunAsync(async () =>
@@ -118,10 +132,11 @@ public sealed class InvitePanelTests
             Tagged<Button>(panel, "invite-redeem")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await panel.Redeeming!;
             Assert.True(s.HasInviteGrant);
+            Assert.True(InvitePanel.ExpiryArmed); // the end of the week will repaint the gates
             Assert.Equal(Loc.GetF("invites_redeem_ok", s.InviteGrantUntil!.Value.ToLocalTime().ToString("d MMM, HH:mm")),
                 Tagged<TextBlock>(panel, "invite-result")!.Text);
         }
-        finally { s.InviteGrantUntil = until; }
+        finally { s.InviteGrantUntil = until; InvitePanel.CancelExpiry(); }
     });
 
     [Fact]
@@ -158,4 +173,54 @@ public sealed class InvitePanelTests
             shell.Close();
         }
     });
+
+    [Fact]
+    public Task TheShellsTicketFollowsTheCardFromStartupAndWobblesOnlyWhileShown() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        EnsurePlatform();
+        var oldId = InviteApi.DefaultIdentity;
+        var shell = new MainShellWindow(); // the ctor wires the ticket (InitializeInviteTicket)
+        try
+        {
+            InviteApi.DefaultIdentity = () => ("u_me", "tok");
+            shell.Show();
+            var ticket = shell.Named<Button>("BtnInviteTicket")!;
+            var card = shell.Named<ConditioningControlPanel.Avalonia.Views.Tabs.ExclusivesTabView>("ExclusivesTab")!.FindControl<InvitePanel>("InvitesHost")!;
+            string reply = Mine;
+            card.Api = () => new InviteApi(new HttpClient(new Wire(reply, "{}")), () => ("u_me", "tok"), "http://127.0.0.1:9");
+            await card.RefreshAsync(force: true); // the card's read repaints the ticket
+            Assert.True(ticket.IsVisible);
+            Assert.True(shell.InviteWobbleRunning);
+            shell.Hide();
+            Assert.False(shell.InviteWobbleRunning); // no ticks while the panel is hidden
+            shell.Show();
+            Assert.True(shell.InviteWobbleRunning);
+            reply = """{"ok":true,"codes":[{"code":"BAMBI-BBBB","state":"converted","invitee_name":"Mia"}]}""";
+            await card.RefreshAsync(force: true);
+            Assert.False(ticket.IsVisible);
+            Assert.False(shell.InviteWobbleRunning);
+        }
+        finally
+        {
+            InviteApi.DefaultIdentity = oldId;
+            shell.Close();
+        }
+    });
+
+    [Fact]
+    public async Task ASandboxWithoutAnInvitesAddressSendsNothing()
+    {
+        var (oldId, oldUrl) = (InviteApi.DefaultIdentity, InviteApi.DefaultBaseUrl);
+        try
+        {
+            ConditioningControlPanel.Avalonia.Platform.FriendsHead.SeedInvites("/tmp/sandbox", null);
+            InviteApi.DefaultIdentity = () => ("u_me", "tok"); // signed in: only the address is missing
+            var wire = new Wire(Mine, """{"ok":true}""");
+            var api = new InviteApi(new HttpClient(wire));
+            Assert.False((await api.MineAsync()).Reachable);
+            Assert.False((await api.RedeemAsync("BAMBI-CCCC")).Ok);
+            Assert.Empty(wire.Ops);
+        }
+        finally { (InviteApi.DefaultIdentity, InviteApi.DefaultBaseUrl) = (oldId, oldUrl); }
+    }
 }
