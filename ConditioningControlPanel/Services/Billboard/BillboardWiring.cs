@@ -34,11 +34,7 @@ namespace ConditioningControlPanel.Services.Billboard
     /// deck asks. Started lazily by the Home billboard the first time the fold settles (that is at
     /// load), so it costs nothing in a run that never shows Home.
     ///
-    /// <para>The board, showcase and providers lanes land their types separately. Their calls sit
-    /// behind <c>BILLBOARD_LANES_MERGED</c> so the deck builds alone; the coordinator removes the
-    /// guard after the merge. Names as the lanes handed them back: Board.BoardArtRegistration +
-    /// Board.BoardProvider (its service is the static BoardService.Shared), Showcase.ShowcaseArtRegistration
-    /// + Showcase.ShowcaseProvider, Providers.BillboardProviders.CreateAll(); all parameterless.</para>
+    /// <para>Each provider starts on its own: one that throws is logged and the rest still load.</para>
     /// </summary>
     public static class BillboardWiring
     {
@@ -66,7 +62,6 @@ namespace ConditioningControlPanel.Services.Billboard
                 BuiltInArt.Register();
                 Add(new HouseProvider());
 
-#if BILLBOARD_LANES_MERGED
                 try { Board.BoardArtRegistration.Register(); }
                 catch (Exception ex) { App.Logger?.Warning(ex, "Billboard: board art did not register"); }
                 try { Showcase.ShowcaseArtRegistration.Register(); }
@@ -77,7 +72,6 @@ namespace ConditioningControlPanel.Services.Billboard
                 catch (Exception ex) { App.Logger?.Warning(ex, "Billboard: showcase provider did not start"); }
                 try { foreach (var p in global::ConditioningControlPanel.Services.Billboard.Providers.BillboardProviders.CreateAll()) Add(p); }
                 catch (Exception ex) { App.Logger?.Warning(ex, "Billboard: providers did not start"); }
-#endif
             }
         }
 
