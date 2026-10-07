@@ -189,7 +189,7 @@ namespace ConditioningControlPanel.Controls
 
     /// <summary>
     /// The one reusable in-window FX surface: a hit-test-invisible Skia canvas running a
-    /// self-stopping ~30fps <see cref="DispatcherTimer"/>, composed from the layer vocabulary in
+    /// self-stopping ~30fps frame-locked <see cref="FrameClock"/>, composed from the layer vocabulary in
     /// <see cref="AmbientFxLayers"/>. Deliberately NOT the fullscreen compositor - that is
     /// per-monitor topmost overlay windows, and keeping its shared tick alive for ambient loops
     /// would undo the idle-parking that fixed #550. This control spawns no window of any kind.
@@ -238,8 +238,16 @@ namespace ConditioningControlPanel.Controls
         /// <summary>Fade-in after a token's stagger delay expires, so it arrives instead of popping.</summary>
         private const float BankTokenFadeInMs = 90f;
 
-        private readonly SKElement _sk;
-        private readonly DispatcherTimer _timer;
+        private readonly FxSurface _sk;
+        private readonly FrameClock _timer;
+
+        /// <summary>
+        /// Share of the screen's pixels the ambient layers raster at (perf pass, 2026-10-07). Fog,
+        /// aurora, dust and embers are soft sprites and read the same at half resolution for a
+        /// quarter of the CPU fill and of the per-frame bitmap upload. A live burst or token flight
+        /// paints at full resolution, because sparks and coins are crisp.
+        /// </summary>
+        public const double AmbientResolution = 0.5;
         private AmbientFxConfig _config = new();
 
         // ---- cached at (re)start: never read per tick ----
@@ -346,13 +354,14 @@ namespace ConditioningControlPanel.Controls
         public AmbientFxCanvas()
         {
             IsHitTestVisible = false;
-            _sk = new SKElement { IsHitTestVisible = false };
+            _sk = new FxSurface { IsHitTestVisible = false, ResolutionScale = AmbientResolution };
             _sk.PaintSurface += OnPaintSurface;
             Child = _sk;
 
-            // Default (Background) priority on purpose: ambient FX must yield to input and layout,
-            // and the frame gaps that causes are exactly what the governor reads to degrade itself.
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+            // Frame-locked (perf pass): the tick lands right before a frame is composed and holds
+            // the tier's rate on whole frames, so motion steps evenly. Late frames still show up
+            // as gaps, which is what the governor reads to degrade itself.
+            _timer = new FrameClock { Interval = TimeSpan.FromMilliseconds(33) };
             _timer.Tick += (_, _) => Tick();
 
             Loaded += OnLoaded;
@@ -385,7 +394,7 @@ namespace ConditioningControlPanel.Controls
             {
                 _config.Tint = tint;
                 ApplyAccent(new SKColor(tint.R, tint.G, tint.B));
-                _sk.InvalidateVisual();
+                _sk.Redraw();
             }
             catch (Exception ex)
             {
@@ -444,7 +453,7 @@ namespace ConditioningControlPanel.Controls
             _edgeN = 0;
             _fogN = 0;
             _vaultN = 0;
-            _sk.InvalidateVisual();
+            _sk.Redraw();
         }
 
         /// <summary>
@@ -768,7 +777,7 @@ namespace ConditioningControlPanel.Controls
                 try
                 {
                     ReadEnvironment();
-                    _sk.InvalidateVisual();
+                    _sk.Redraw();
                 }
                 catch (Exception ex) { App.Logger?.Debug("AmbientFxCanvas.OnModChanged: {E}", ex.Message); }
             }
@@ -821,6 +830,7 @@ namespace ConditioningControlPanel.Controls
             // drive somebody else's counter - stopping the clock under it would strand the display.
             bool oneShotLive = (_burst != null && _burstN > 0) || _tokN > 0;
             if (_paused || _faults >= FaultLimit) return false;
+            if (Services.Diagnostics.FxBisect.Off("canvas:" + (string.IsNullOrEmpty(Name) ? _config.Layers.ToString() : Name))) return false;
             if (!_running && !oneShotLive) return false;
             if (!IsLoaded || !IsVisible) return false;
             if (!oneShotLive)
@@ -832,7 +842,7 @@ namespace ConditioningControlPanel.Controls
             if (w != null)
             {
                 if (w.WindowState == WindowState.Minimized) return false;
-                if (!w.IsActive && !oneShotLive) return false;
+                if (!w.IsActive && !oneShotLive && !Services.Diagnostics.FxBisect.Off("forceactive")) return false;
             }
             return true;
         }
@@ -877,7 +887,9 @@ namespace ConditioningControlPanel.Controls
                 StepBurst(dt);
                 StepTokens(dt);
 
-                _sk.InvalidateVisual();
+                bool crisp = (_burst != null && _burstN > 0) || _tokN > 0;
+                _sk.ResolutionScale = crisp ? 1.0 : AmbientResolution;
+                _sk.Redraw();
             }
             catch (Exception ex)
             {

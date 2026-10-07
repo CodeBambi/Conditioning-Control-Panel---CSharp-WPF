@@ -134,7 +134,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var active = IsActive && WindowState != WindowState.Minimized;
+                var active = (IsActive || Services.Diagnostics.FxBisect.Off("forceactive")) && WindowState != WindowState.Minimized;
                 if (active == _chromeFxWindowActive) return;
                 _chromeFxWindowActive = active;
                 ApplyChromeFxLoops();
@@ -159,7 +159,7 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>The single gate for every chrome ambient loop: window focus + motion + tier.</summary>
-        private bool ChromeAmbientAllowed => _chromeFxWindowActive && MotionFx.AllowAmbientLoops;
+        private bool ChromeAmbientAllowed => _chromeFxWindowActive && MotionFx.AllowAmbientLoops && !Services.Diagnostics.FxBisect.Off("chrome");
 
         private void ApplyChromeFxLoops()
         {

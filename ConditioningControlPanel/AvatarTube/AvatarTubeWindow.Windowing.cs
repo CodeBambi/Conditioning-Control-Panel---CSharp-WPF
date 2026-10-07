@@ -734,6 +734,7 @@ namespace ConditioningControlPanel
         {
             // Stop any existing animation first
             StopFloatingAnimation();
+            if (Services.Diagnostics.FxBisect.Off("tube")) return;
 
             // Use a timer-based approach instead of WPF animations for maximum reliability
             // This won't interfere with other animations on the element

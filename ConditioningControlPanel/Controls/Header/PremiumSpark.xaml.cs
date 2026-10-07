@@ -65,7 +65,7 @@ namespace ConditioningControlPanel.Controls.Header
         private Brush[] _moteBrushes = Array.Empty<Brush>();
         private Brush _flareBrush = Brushes.White;
 
-        private DispatcherTimer? _clock;
+        private FrameClock? _clock;
         private readonly System.Diagnostics.Stopwatch _clockWatch = new();
         private double _clockLast;
         private double _t;
@@ -127,6 +127,7 @@ namespace ConditioningControlPanel.Controls.Header
             var level = MotionFx.Level;
             var perf = PerformanceProfile.CurrentTier;
             var motion = PremiumSparkRules.MotionFrom(level, PerformanceProfile.AllowAmbientMotion(perf));
+            if (Services.Diagnostics.FxBisect.Off("spark")) motion = SparkMotion.Off;
             Apply(tier, motion, MotionFx.AllowParticles);
         }
 
@@ -568,7 +569,7 @@ namespace ConditioningControlPanel.Controls.Header
             _t = _rng.NextDouble() * 1.2;
             Prewarm(1.2);
 
-            _clock = new DispatcherTimer(DispatcherPriority.Render)
+            _clock = new FrameClock
             {
                 Interval = TimeSpan.FromMilliseconds(1000.0 / PremiumSparkRules.FrameRate),
             };

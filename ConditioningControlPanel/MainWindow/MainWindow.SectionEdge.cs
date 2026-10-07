@@ -169,7 +169,7 @@ namespace ConditioningControlPanel
             if (!_edgeReady || SectionEdgeLift == null || _edgeLiftMoves.Count == 0) return;
             try
             {
-                var motion = SectionEdgeRules.MotionFor(MotionFx.Level, MotionFx.AllowAmbientLoops);
+                var motion = SectionEdgeRules.MotionFor(MotionFx.Level, MotionFx.AllowAmbientLoops && !Services.Diagnostics.FxBisect.Off("edgeglow"));
                 SectionEdgeLift.Visibility = motion == SectionEdgeMotion.Solid ? Visibility.Collapsed : Visibility.Visible;
                 if (motion != SectionEdgeMotion.Spin)
                 {
@@ -179,7 +179,7 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                bool run = SectionEdgeRules.SpinShouldRun(motion, IsActive, IsVisible,
+                bool run = SectionEdgeRules.SpinShouldRun(motion, IsActive || Services.Diagnostics.FxBisect.Off("forceactive"), IsVisible,
                                                           WindowState == WindowState.Minimized);
                 if (_edgeLiftClocks.Count == 0)
                 {

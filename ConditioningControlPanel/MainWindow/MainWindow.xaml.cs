@@ -251,6 +251,7 @@ namespace ConditioningControlPanel
         public MainWindow()
         {
             InitializeComponent();
+            Services.Diagnostics.FxBisect.Watch(this);
             // Nav rework: lane-owned pages register their ShowTab hosts (MainWindow.TabNavigation.cs).
             RegisterLaneNavTabs();
 

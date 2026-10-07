@@ -25,7 +25,7 @@ namespace ConditioningControlPanel.Controls
         internal const double GlintMinSeconds = 5.0, GlintMaxSeconds = 9.0;
         internal const double StaticOpacity = 0.6;
         private const double GlintSize = 26;
-        private const int FrameRate = 24;
+        private const int FrameRate = 30;
 
         private readonly Pen[] _halo;
         private readonly Pen _rim;

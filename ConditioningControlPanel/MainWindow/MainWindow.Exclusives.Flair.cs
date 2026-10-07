@@ -105,6 +105,7 @@ namespace ConditioningControlPanel
             try
             {
                 var level = MotionFx.Level;
+                if (Services.Diagnostics.FxBisect.Off("vault")) level = MotionLevel.Off;
                 StartVaultSignSheens(level);
                 AttachVaultAuras(level, retries: 5);
                 HookVaultZones();

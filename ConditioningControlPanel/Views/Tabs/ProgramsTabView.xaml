@@ -627,7 +627,7 @@
                                                         <DataTrigger.EnterActions>
                                                             <BeginStoryboard>
                                                                 <Storyboard RepeatBehavior="Forever" AutoReverse="True"
-                                                                            Timeline.DesiredFrameRate="24">
+                                                                            Timeline.DesiredFrameRate="30">
                                                                     <DoubleAnimation Storyboard.TargetName="PipGlow"
                                                                                      Storyboard.TargetProperty="Opacity"
                                                                                      From="0.35" To="0.95" Duration="0:0:1.2">
