@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -74,8 +75,12 @@ namespace ConditioningControlPanel.Services.AIService
         private static void RaisePersistentMemoryRecalled()
         {
             try { PersistentMemoryRecalled?.Invoke(null, EventArgs.Empty); }
-            catch (Exception ex) { App.Logger?.Debug("PersistentMemoryRecalled subscriber error: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Debug("PersistentMemoryRecalled subscriber error: {Error}", ex.Message); }
         }
+
+        /// <summary>Head seam for WPF OllamaSetupService.EnsureServerRunningAsync (#1079). Unseeded: warm-up
+        /// only tries the configured host, it never starts a server.</summary>
+        public static volatile Func<string, Task>? EnsureServerRunning;
 
         public LocalAiService()
         {
@@ -91,8 +96,8 @@ namespace ConditioningControlPanel.Services.AIService
             // between launches. (Cloud provider doesn't have or use this.)
             LoadPersistedHistory();
 
-            App.Logger?.Information("LocalAiService initialized (host={Host}, model={Model}, restored={Count} turns)",
-                _activeHost, GetConfiguredModel(), _messages.Count);
+            Log.Information("LocalAiService initialized (host={Host}, model={Model}, restored={Count} turns)",
+                Logging.UrlLog.Host(_activeHost), GetConfiguredModel(), _messages.Count);
         }
 
         // -------- Persistent chat memory (local only) --------
@@ -126,7 +131,7 @@ namespace ConditioningControlPanel.Services.AIService
         {
             try
             {
-                if (App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
+                if (CoreSettings.Service?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
                 if (!File.Exists(HistoryFilePath)) return;
                 var json = File.ReadAllText(HistoryFilePath);
                 var turns = JsonSerializer.Deserialize<List<PersistedTurn>>(json);
@@ -145,7 +150,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "LocalAiService: failed to load persisted chat history");
+                Log.Warning(ex, "LocalAiService: failed to load persisted chat history");
             }
         }
 
@@ -159,7 +164,7 @@ namespace ConditioningControlPanel.Services.AIService
         {
             try
             {
-                if (App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
+                if (CoreSettings.Service?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
                 var dialogue = _messages
                     .Where(IsDialogueTurn)
                     .Select(m => new PersistedTurn { Role = m.Role, Content = m.Content ?? string.Empty })
@@ -178,7 +183,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "LocalAiService: failed to persist chat history");
+                Log.Warning(ex, "LocalAiService: failed to persist chat history");
             }
         }
 
@@ -246,8 +251,8 @@ namespace ConditioningControlPanel.Services.AIService
         {
             _messages.Clear();
             try { if (File.Exists(HistoryFilePath)) File.Delete(HistoryFilePath); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "LocalAiService: failed to delete chat history file"); }
-            App.Logger?.Information("LocalAiService: chat history cleared");
+            catch (Exception ex) { Log.Warning(ex, "LocalAiService: failed to delete chat history file"); }
+            Log.Information("LocalAiService: chat history cleared");
         }
 
         /// <summary>
@@ -272,17 +277,17 @@ namespace ConditioningControlPanel.Services.AIService
             // below and let the normal "can't reach Ollama" diagnostics speak.
             try
             {
-                await OllamaSetupService.EnsureServerRunningAsync(_activeHost).ConfigureAwait(false);
+                if (EnsureServerRunning is { } ensure) await ensure(_activeHost).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                App.Logger?.Information("LocalAiService: ensure-server-running failed: {Error}", ex.Message);
+                Log.Information("LocalAiService: ensure-server-running failed: {Error}", ex.Message);
             }
 
             try
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                App.Logger?.Information("LocalAiService: warming up model={Model} on host={Host}", model, _activeHost);
+                Log.Information("LocalAiService: warming up model={Model} on host={Host}", model, Logging.UrlLog.Host(_activeHost));
 
                 var payload = JsonSerializer.Serialize(new
                 {
@@ -299,17 +304,17 @@ namespace ConditioningControlPanel.Services.AIService
                 sw.Stop();
                 if (resp.IsSuccessStatusCode)
                 {
-                    App.Logger?.Information("LocalAiService: warm-up succeeded in {Ms}ms", sw.ElapsedMilliseconds);
+                    Log.Information("LocalAiService: warm-up succeeded in {Ms}ms", sw.ElapsedMilliseconds);
                 }
                 else
                 {
-                    App.Logger?.Information("LocalAiService: warm-up returned HTTP {Status} (model may not be pulled yet)",
+                    Log.Information("LocalAiService: warm-up returned HTTP {Status} (model may not be pulled yet)",
                         (int)resp.StatusCode);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Information("LocalAiService: warm-up failed (Ollama not reachable?): {Error}", ex.Message);
+                Log.Information("LocalAiService: warm-up failed (Ollama not reachable?): {Error}", ex.Message);
             }
         }
 
@@ -330,13 +335,13 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static string GetConfiguredHost()
         {
-            var host = App.Settings?.Current?.CompanionPrompt?.AiOllamaHost;
+            var host = CoreSettings.Service?.Current?.CompanionPrompt?.AiOllamaHost;
             return string.IsNullOrWhiteSpace(host) ? DefaultHost : host;
         }
 
         private static string GetConfiguredModel()
         {
-            var model = App.Settings?.Current?.CompanionPrompt?.AiModel;
+            var model = CoreSettings.Service?.Current?.CompanionPrompt?.AiModel;
             return string.IsNullOrWhiteSpace(model) ? DefaultModel : model;
         }
 
@@ -346,8 +351,8 @@ namespace ConditioningControlPanel.Services.AIService
             var configured = NormalizeHost(GetConfiguredHost());
             if (string.Equals(configured, _activeHost, StringComparison.OrdinalIgnoreCase)) return;
 
-            App.Logger?.Information("LocalAiService: host changed {Old} -> {New}, rebuilding HTTP client",
-                _activeHost, configured);
+            Log.Information("LocalAiService: host changed {Old} -> {New}, rebuilding HTTP client",
+                Logging.UrlLog.Host(_activeHost), Logging.UrlLog.Host(configured));
             _http.Dispose();
             _activeHost = configured;
             _http = BuildHttpClient(_activeHost);
@@ -356,7 +361,7 @@ namespace ConditioningControlPanel.Services.AIService
         private static string GetFallbackResponse()
         {
             // Bambi keeps its flavored fallback; all other mods get a neutral one.
-            if (App.Mods?.IsBambiMode == true)
+            if (CoreMods.Service?.IsBambiMode == true)
                 return "Bambi's head is so empty right now~ *giggles*";
             return "...";
         }
@@ -478,7 +483,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (!options.Interactive && _isProcessing)
             {
-                App.Logger?.Debug("LocalAiService.SendAsync: ambient request dropped (busy)");
+                Log.Debug("LocalAiService.SendAsync: ambient request dropped (busy)");
                 return Fail(cancellationToken.IsCancellationRequested ? AiFailureKind.Cancelled : AiFailureKind.Unavailable);
             }
 
@@ -504,7 +509,7 @@ namespace ConditioningControlPanel.Services.AIService
                 var outgoing = BuildOutgoing(incoming, BuildEnrichmentContent());
                 meterInputChars = outgoing.Sum(m => m.Content?.Length ?? 0);
 
-                App.Logger?.Information(
+                Log.Information(
                     "LocalAiService.SendAsync: sending to Ollama (model={Model}, msgs={MsgCount}, purpose={Purpose})",
                     model, outgoing.Count, options.MeterPurpose);
 
@@ -518,7 +523,7 @@ namespace ConditioningControlPanel.Services.AIService
 
                 if (status != 200)
                 {
-                    App.Logger?.Warning("LocalAiService.SendAsync: Ollama returned HTTP {Status} (body {Bytes} bytes)", status, body?.Length ?? 0);
+                    Log.Warning("LocalAiService.SendAsync: Ollama returned HTTP {Status} (body {Bytes} bytes)", status, body?.Length ?? 0);
                     Meter(AiMeter.OutcomeError);
                     // Diagnostics are not model output and must never wear the AI badge, but they are
                     // the single most useful thing we can show ("Ollama isn't running — start it").
@@ -528,7 +533,7 @@ namespace ConditioningControlPanel.Services.AIService
                 var content = ExtractContent(body, rejectTruncated: options.CompanionV2);
                 if (string.IsNullOrEmpty(content))
                 {
-                    App.Logger?.Warning("LocalAiService.SendAsync: empty content in 200 response (model={Model}, {Shape})", model, DescribeReplyShape(body));
+                    Log.Warning("LocalAiService.SendAsync: empty content in 200 response (model={Model}, {Shape})", model, DescribeReplyShape(body));
                     Meter(AiMeter.OutcomeEmpty);
                     return Fail(AiFailureKind.InvalidResponse, GetFallbackResponse());
                 }
@@ -561,18 +566,17 @@ namespace ConditioningControlPanel.Services.AIService
                     return Fail(AiFailureKind.InvalidResponse);
                 cancellationToken.ThrowIfCancellationRequested();
                 _currentCommands = options.CompanionV2 ? new List<AiCommandData>() : parsed.Commands;
-                if (_currentCommands.Count > 0 && App.Commands != null)
+                if (_currentCommands.Count > 0 && Companion.Brain.CompanionBrain.CommandExecutor is { } execute)
                 {
-                    App.Logger?.Information("LocalAiService.SendAsync: parsed {Count} command(s) from response",
+                    Log.Information("LocalAiService.SendAsync: parsed {Count} command(s) from response",
                         _currentCommands.Count);
-                    App.Commands.BeginBatch();
-                    foreach (var cmd in _currentCommands) App.Commands.ExecuteCommand(cmd);
+                    execute(_currentCommands);
                 }
 
                 if (string.IsNullOrWhiteSpace(parsed.CleanText))
                 {
                     // #1210: this path showed the fallback line with no trace in the log at all.
-                    App.Logger?.Warning("LocalAiService.SendAsync: reply cleaned to nothing (model={Model}, {Shape})", model, DescribeReplyShape(body));
+                    Log.Warning("LocalAiService.SendAsync: reply cleaned to nothing (model={Model}, {Shape})", model, DescribeReplyShape(body));
                     Meter(AiMeter.OutcomeEmpty, content.Length);
                     return Fail(AiFailureKind.InvalidResponse, GetFallbackResponse());
                 }
@@ -588,8 +592,8 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "LocalAiService.SendAsync: chat call threw (host={Host}, model={Model})",
-                    _activeHost, model);
+                Log.Error(ex, "LocalAiService.SendAsync: chat call threw (host={Host}, model={Model})",
+                    Logging.UrlLog.Host(_activeHost), model);
                 Meter(AiMeter.OutcomeError);
                 return Fail(AiFailureKind.Unavailable, DescribeChatException(ex, model));
             }
@@ -657,7 +661,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("LocalAiService: enrichment block build failed: {Error}", ex.Message);
+                Log.Debug("LocalAiService: enrichment block build failed: {Error}", ex.Message);
                 return null;
             }
         }
@@ -683,7 +687,7 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static string GetRandomThinkingPhrase()
         {
-            var modPhrases = App.Mods?.GetPhrases("Thinking");
+            var modPhrases = CoreMods.GetPhrases("Thinking");
             var pool = modPhrases != null && modPhrases.Length > 0 ? modPhrases : StillThinkingPhrases;
             return pool[_random.Next(pool.Length)];
         }
@@ -754,12 +758,12 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (isUser)
             {
-                if (_isUserQueued) { App.Logger?.Debug("LocalAiService: user request dropped (one already queued)"); return GetRandomThinkingPhrase(); }
+                if (_isUserQueued) { Log.Debug("LocalAiService: user request dropped (one already queued)"); return GetRandomThinkingPhrase(); }
                 _isUserQueued = true;
             }
             else
             {
-                if (_isProcessing) { App.Logger?.Debug("LocalAiService: automated request dropped (busy)"); return null; }
+                if (_isProcessing) { Log.Debug("LocalAiService: automated request dropped (busy)"); return null; }
             }
 
             await _aiSemaphore.WaitAsync();
@@ -826,7 +830,7 @@ namespace ConditioningControlPanel.Services.AIService
                     outgoing.Add(new ChatMessage("user", userInput));
                 }
 
-                App.Logger?.Information("LocalAiService: sending to Ollama (model={Model}, effects={Effects}, isUser={IsUser}, msgs={MsgCount})",
+                Log.Information("LocalAiService: sending to Ollama (model={Model}, effects={Effects}, isUser={IsUser}, msgs={MsgCount})",
                     model, effectsEnabled, isUser, outgoing.Count);
 
                 meterInputChars = outgoing.Sum(m => m.Content?.Length ?? 0);
@@ -835,7 +839,7 @@ namespace ConditioningControlPanel.Services.AIService
 
                 if (status != 200)
                 {
-                    App.Logger?.Warning("LocalAiService: Ollama returned HTTP {Status} (body {Bytes} bytes)", status, body?.Length ?? 0);
+                    Log.Warning("LocalAiService: Ollama returned HTTP {Status} (body {Bytes} bytes)", status, body?.Length ?? 0);
                     // Roll back the user turn so we don't poison history with an unanswered turn.
                     // (Automated reactions never appended to _messages, so there's nothing to undo.)
                     if (isUser && _messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
@@ -846,13 +850,13 @@ namespace ConditioningControlPanel.Services.AIService
                 var content = ExtractContent(body);
                 if (string.IsNullOrEmpty(content))
                 {
-                    App.Logger?.Warning("LocalAiService: empty content in 200 response (model={Model}, {Shape})", model, DescribeReplyShape(body));
+                    Log.Warning("LocalAiService: empty content in 200 response (model={Model}, {Shape})", model, DescribeReplyShape(body));
                     if (isUser && _messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                     Meter(AiMeter.OutcomeEmpty);
                     return GetFallbackResponse();
                 }
 
-                App.Logger?.Information("LocalAiService: got reply ({Len} chars)", content.Length);
+                Log.Information("LocalAiService: got reply ({Len} chars)", content.Length);
 
                 // Append assistant turn so future requests have context — USER chat only.
                 // Automated ambient reactions stay stateless (see outgoing-list note above).
@@ -864,7 +868,7 @@ namespace ConditioningControlPanel.Services.AIService
 
                 if (effectsEnabled)
                 {
-                    App.Logger?.Information("LocalAiService: parsed {Count} command(s) from response", _currentCommands.Count);
+                    Log.Information("LocalAiService: parsed {Count} command(s) from response", _currentCommands.Count);
                 }
 
                 // OUTPUT MODERATION (Layer 1). Scan the user-visible text — the JSON
@@ -911,11 +915,8 @@ namespace ConditioningControlPanel.Services.AIService
                     RaisePersistentMemoryRecalled();
                 }
 
-                if (_currentCommands.Count > 0 && App.Commands != null)
-                {
-                    App.Commands.BeginBatch();
-                    foreach (var cmd in _currentCommands) App.Commands.ExecuteCommand(cmd);
-                }
+                if (_currentCommands.Count > 0)
+                    Companion.Brain.CompanionBrain.CommandExecutor?.Invoke(_currentCommands);
 
                 Meter(string.IsNullOrWhiteSpace(parsed.CleanText) ? AiMeter.OutcomeEmpty : AiMeter.OutcomeOk, content.Length);
 
@@ -923,7 +924,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "LocalAiService: chat call threw (host={Host}, model={Model})", _activeHost, model);
+                Log.Error(ex, "LocalAiService: chat call threw (host={Host}, model={Model})", Logging.UrlLog.Host(_activeHost), model);
                 if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                 Meter(AiMeter.OutcomeError);
                 return DescribeChatException(ex, model);
@@ -1052,13 +1053,13 @@ namespace ConditioningControlPanel.Services.AIService
 
                 if (promptTokens >= numCtx)
                 {
-                    App.Logger?.Warning(
+                    Log.Warning(
                         "[AI-METER] ollama prompt_eval_count={PromptTokens} num_ctx={NumCtx} - AT THE WINDOW, the prompt was truncated",
                         promptTokens, numCtx);
                 }
                 else
                 {
-                    App.Logger?.Information("[AI-METER] ollama prompt_eval_count={PromptTokens} num_ctx={NumCtx}",
+                    Log.Information("[AI-METER] ollama prompt_eval_count={PromptTokens} num_ctx={NumCtx}",
                         promptTokens, numCtx);
                 }
             }
@@ -1107,7 +1108,7 @@ namespace ConditioningControlPanel.Services.AIService
                     && dr.ValueKind == JsonValueKind.String
                     && string.Equals(dr.GetString(), "length", StringComparison.OrdinalIgnoreCase))
                 {
-                    App.Logger?.Warning("[AI] Ollama reply truncated at the token cap (done_reason=length)");
+                    Log.Warning("[AI] Ollama reply truncated at the token cap (done_reason=length)");
                     if (rejectTruncated) return string.Empty;
                 }
                 if (doc.RootElement.TryGetProperty("message", out var msg) &&
@@ -1158,8 +1159,8 @@ namespace ConditioningControlPanel.Services.AIService
                 var body = await resp.Content.ReadAsStringAsync();
                 if (!resp.IsSuccessStatusCode)
                 {
-                    App.Logger?.Warning("LocalAiService.GetRawChatCompletionAsync: HTTP {Status} from {Host} (model={Model})",
-                        (int)resp.StatusCode, host, model);
+                    Log.Warning("LocalAiService.GetRawChatCompletionAsync: HTTP {Status} from {Host} (model={Model})",
+                        (int)resp.StatusCode, Logging.UrlLog.Host(host), model);
                     return null;
                 }
                 LogPromptEval(body, ComputeNumCtx(null));
@@ -1171,7 +1172,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "LocalAiService.GetRawChatCompletionAsync failed (host={Host}, model={Model})", host, model);
+                Log.Warning(ex, "LocalAiService.GetRawChatCompletionAsync failed (host={Host}, model={Model})", Logging.UrlLog.Host(host), model);
                 return null;
             }
         }
@@ -1241,8 +1242,8 @@ namespace ConditioningControlPanel.Services.AIService
                 using var resp = await http.GetAsync(configured + "api/tags");
                 if (!resp.IsSuccessStatusCode)
                 {
-                    App.Logger?.Information("LocalAiService.ListInstalledModelsAsync: HTTP {Status} from {Host}",
-                        (int)resp.StatusCode, configured);
+                    Log.Information("LocalAiService.ListInstalledModelsAsync: HTTP {Status} from {Host}",
+                        (int)resp.StatusCode, Logging.UrlLog.Host(configured));
                     return new List<string>();
                 }
 
@@ -1265,7 +1266,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Information(ex, "LocalAiService.ListInstalledModelsAsync: failed to reach {Host}", configured);
+                Log.Information(ex, "LocalAiService.ListInstalledModelsAsync: failed to reach {Host}", Logging.UrlLog.Host(configured));
                 return new List<string>();
             }
         }
@@ -1288,11 +1289,11 @@ namespace ConditioningControlPanel.Services.AIService
                     };
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
                     using var resp = _http.Send(req, cts.Token);
-                    App.Logger?.Information("LocalAiService: sent model unload (keep_alive=0) for {Model} on dispose", model);
+                    Log.Information("LocalAiService: sent model unload (keep_alive=0) for {Model} on dispose", model);
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Information("LocalAiService: model unload on dispose skipped ({Error})", ex.Message);
+                    Log.Information("LocalAiService: model unload on dispose skipped ({Error})", ex.Message);
                 }
             }
 
