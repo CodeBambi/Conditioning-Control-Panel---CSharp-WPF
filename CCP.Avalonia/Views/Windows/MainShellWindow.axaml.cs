@@ -118,6 +118,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Closed += (_, _) => _avatarTubeWindow?.Close();
             // WPF MainWindow.xaml.cs:674: catalogue downloads open in the player.
             App.CatalogueLookup.SetOpener(OpenCatalogueEnhancement);
+            Closed += (_, _) =>
+            {
+                App.CatalogueLookup.ClearOpener(OpenCatalogueEnhancement);
+                if (Platform.X11PanicKey.PushToTalk == OnPushToTalkKey)
+                    Platform.X11PanicKey.PushToTalk = null;
+            };
             // WPF MainWindow.xaml.cs:3531-3535: one forced share-status poll per launch.
             Opened += (_, _) => PollCatalogueStatuses(force: true);
         }
