@@ -22,6 +22,9 @@ namespace ConditioningControlPanel
 
         public static bool IsRunning => _running;
 
+        /// <summary>When the running engine started (WPF MainWindow._emiEngineStartedUtc); null when stopped.</summary>
+        public static DateTime? StartedUtc { get; private set; }
+
         /// <summary>The head's half of StopEngineCore: close what is on screen (overlays, lock
         /// cards, the pink tint). Runs after every Stop, running or not.</summary>
         public static volatile Action? StoppedHook;
@@ -59,6 +62,7 @@ namespace ConditioningControlPanel
             else CoreBouncingText.Stop();   // WPF: clean up any leftover state
 
             _running = true;
+            StartedUtc = DateTime.UtcNow;
             Log.Information("Engine started - Flash: {Flash}, Subliminal: {Sub}, LockCard: {Lock}, BouncingText: {Bt}",
                 s.FlashEnabled, s.SubliminalEnabled, s.LockCardEnabled, s.BouncingTextEnabled);
         }
@@ -81,6 +85,7 @@ namespace ConditioningControlPanel
                 LockCardScheduler.Instance.Stop();
                 PopQuiz?.Stop();   // closes an open quiz (WPF StartStop.cs:492)
                 _running = false;
+                StartedUtc = null;
                 try { StoppedHook?.Invoke(); }
                 catch (Exception ex) { Log.Warning(ex, "Engine stop hook failed"); }
                 Log.Information("Engine stopped");

@@ -563,6 +563,12 @@ namespace ConditioningControlPanel.Avalonia
                 Achievements.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
+                // WPF App.xaml.cs: the invite ladder's badges and the invites wire (friends' proxy and
+                // door; a sandbox reaches only a loopback CCP_FRIENDS_API_URL, else nothing is sent).
+                Services.Invites.InviteRewards.UnlockedProvider = () => Achievements?.Progress?.UnlockedAchievements;
+                Services.Invites.InviteRewards.TryUnlockProvider = id => Achievements?.TryUnlock(id) == true;
+                Platform.FriendsHead.SeedInvites(
+                    Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 CoreProgression.TrackBubbleCountGameStartedProvider = () => Achievements?.TrackBubbleCountGameStarted();
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
@@ -634,16 +640,19 @@ namespace ConditioningControlPanel.Avalonia
                     Notifications.Show(message,
                         Enum.TryParse<Helpers.NotificationType>(kind, out var t) ? t : Helpers.NotificationType.Info,
                         duration));
-                // ponytail: WPF's Reconnect-Patreon branch (PatreonReconnectRule, head-only) is absent -
-                // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
-                // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
+                // WPF App.xaml.cs:505: the Reconnect answer for gates (Core PatreonReconnectRule).
+                TierGate.ReconnectIsTheAnswerProvider = Views.Windows.MainShellWindow.ReconnectIsTheAnswerNow;
+                // Dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
                 Sessions.Ticked += shell.OnSessionTick;
                 Sessions.SessionLog.LogReady += shell.OnSessionLogReady;
+                // WPF App.xaml.cs:529 (main fbe161de2): "See tiers" opens the vault gate card at the tier this door needs.
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
-                        Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
+                    shell.ShowTierDenied(verdict, Notifications));
+                // WPF App.xaml.cs:509-511 (main 2e9080399). No Arcademy host here: unseeded, so its card stays hidden.
+                Models.ExclusiveFeature.JustDropDoorProvider = SettingsPaletteIndex.JustDropDoorAvailable;
+                Models.ExclusiveFeature.BreakoutFullProvider = () => TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
                 // WPF MainWindow.xaml.cs:484 (the ? box rolled over or its override landed) and
                 // OnPatreonTierChanged: both move the veils, the Play bands and the lapse pass.
                 // WPF MainWindow.xaml.cs:486 / UpdatePatreonUI also repaint the vault (RefreshExclusivesTab).
@@ -663,6 +672,7 @@ namespace ConditioningControlPanel.Avalonia
                 });
                 if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
+                Views.Controls.Invites.InvitePanel.ArmExpiry(); // WPF MainWindow.Patreon.cs: a running invite week's end repaints
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
                 // WPF RequestExit (MainWindow.Launcher.cs:126) stops the engine first: the lock-card
