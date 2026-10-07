@@ -29,7 +29,10 @@ namespace ConditioningControlPanel.Services.Billboard
         /// <summary>A paper invite pass: a code row with one glyph flipping up, seven day pips on the stub. ArtData unused.</summary>
         public const string Invite = "invite";
 
-        public static readonly IReadOnlyList<string> All = new[] { Poster, Tables, Wheel, Spiral, Calendar, Tip, Invite };
+        /// <summary>Today's quests as slips on a clipboard, the done ones checked. ArtData = {done, total}.</summary>
+        public const string Quests = "quests";
+
+        public static readonly IReadOnlyList<string> All = new[] { Poster, Tables, Wheel, Spiral, Calendar, Tip, Invite, Quests };
     }
 
     /// <summary>

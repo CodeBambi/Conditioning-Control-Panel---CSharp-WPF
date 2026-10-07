@@ -31,6 +31,7 @@ namespace ConditioningControlPanel.Controls.Billboard
             BillboardArt.Register(BuiltInArtKeys.Calendar, d => new CalendarArtView(CalendarData(d)));
             BillboardArt.Register(BuiltInArtKeys.Tip, d => TipScenes.Create(d as string));
             BillboardArt.Register(BuiltInArtKeys.Invite, _ => new InviteArtView());
+            BillboardArt.Register(BuiltInArtKeys.Quests, d => new QuestsArtView(QuestsArtView.Data(d)));
         }
 
         /// <summary>
