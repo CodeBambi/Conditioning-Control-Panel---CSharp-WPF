@@ -75,6 +75,7 @@ namespace ConditioningControlPanel.Services.UI
                 T("personality", "nav_tab_personality"),
                 T("permissions", "nav_tab_permissions"),
                 T("companionlinks", "nav_tab_companionlinks"),
+                T("companionai", "label_ai_badge"),             // Connection + Memory (7.1.2)
                 T("bambitakeover", "tab_takeover", tier: 1),
                 T("shelistening", "tab_shelistening", tier: 1),
                 T("awareness", "tab_awareness", tier: 1),

@@ -5370,6 +5370,7 @@
   "nav_help_personality": "Persönlichkeit und Tonfall deines Companions.",
   "nav_help_permissions": "Was die KI von sich aus tun darf, in einer Liste.",
   "nav_help_companionlinks": "Die Links und Videos, auf die dein Companion dich hinweisen kann.",
+  "nav_help_companionai": "Welche KI dein Companion nutzt, das Modell und was er sich merkt.",
   "nav_help_bambitakeover": "Die App startet Sessions nach eigenem Zeitplan, innerhalb der Grenzen, die du setzt.",
   "nav_help_shelistening": "Sag ein Trigger-Wort laut und die App reagiert. Deine Stimme wird nur auf diesem Computer gehört.",
   "nav_help_awareness": "Die App bemerkt, was du am PC machst, und reagiert nach Regeln, die du wählst.",

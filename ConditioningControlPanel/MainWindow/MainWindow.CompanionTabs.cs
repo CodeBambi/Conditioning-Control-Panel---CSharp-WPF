@@ -17,6 +17,8 @@ namespace ConditioningControlPanel
                 OnShown: v => ((PermissionsPage)v).OnShown()));
             RegisterNavTab(new NavTabHost("companionlinks", () => new LinksPage(this),
                 OnShown: v => ((LinksPage)v).OnShown()));
+            RegisterNavTab(new NavTabHost("companionai", () => new AiPage(this),
+                OnShown: v => ((AiPage)v).OnShown(), OnHidden: v => ((AiPage)v).OnHidden()));
         }
     }
 }

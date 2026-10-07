@@ -166,6 +166,7 @@ namespace ConditioningControlPanel.Services
             ["tab.personality"] = Cover("features/lab_aimemory_hero.png"),  // the AI memory hero: who she is
             ["tab.permissions"] = Cover("features/Phrase_Lock.png"),        // the lock card, which most permissions gate
             ["tab.companionlinks"] = Cover("features/mandatory_videos.png"),// videos she can play
+            ["tab.companionai"] = Cover("features/brain_drain.png"),          // which brain it runs on
             ["tab.friends"] = Cover("features/lobby_remote.png"),
             ["tab.leash"] = Cover("features/remote_control.png"),           // a holder's remote
             ["tab.folders"] = Cover("features/mysterybox.png"),             // a box of your own things

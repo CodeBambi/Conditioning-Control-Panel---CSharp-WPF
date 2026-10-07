@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.UI;
+using ConditioningControlPanel.Controls.NavRail;
 using ConditioningControlPanel.Views.Controls.Companion.Pages;
 using Xunit;
 
@@ -34,6 +36,7 @@ public class CompanionPagesTests
     [InlineData("personality", "PersonalityPage")]
     [InlineData("permissions", "PermissionsPage")]
     [InlineData("companionlinks", "LinksPage")]
+    [InlineData("companionai", "AiPage")]
     public void EachPageIsRegisteredThroughTheTabRegistry(string key, string page)
     {
         var src = Src("MainWindow", "MainWindow.CompanionTabs.cs");
@@ -143,6 +146,25 @@ public class CompanionPagesTests
         Assert.Contains("\"who\" or \"personality\" => \"personality\"", cs);
         Assert.Contains("\"permissions\" => \"permissions\"", cs);
         Assert.Contains("\"videos\" => \"companionlinks\"", cs);
+        Assert.Contains("\"memory\" or \"connection\" => \"companionai\"", cs);
+    }
+
+    /// <summary>
+    /// 7.1.1 regression (tier 2, 2026-10-07): the header Settings button opens Personality, so the
+    /// v2 sheet holding Memory and Connection (AI provider + model) had no door. Both live on the
+    /// Companion > AI pill now, hosting the live room zones with their own view models.
+    /// </summary>
+    [Theory]
+    [InlineData("MemoryZone", "MemoryDiaryView", "tab.Vm.Memory", "MemoryHost")]
+    [InlineData("EngineZone", "EngineRoomDrawer", "tab.Vm.Engine", "EngineHost")]
+    public void MemoryAndConnection_LiveOnTheAiPill_HostingTheLiveZones(string zone, string type, string vm, string host)
+    {
+        var cs = Page("AiPage.xaml.cs");
+        Assert.Contains($"FindName(\"{zone}\") is {type}", cs);
+        Assert.Contains($".DataContext = {vm};", cs);
+        Assert.Contains($", {host});", cs);
+        var pills = NavStripRules.Pills(NavSections.Companion).Select(t => t.Key).ToList();
+        Assert.Contains("companionai", pills);
     }
 
     [Theory]

@@ -459,11 +459,11 @@ public class PlayDoorRenderTests
         // to score the same index or every caller still passing "lab" gets the fallback "rise"
         // entrance instead of its neighbours' horizontal slide.
         // Nav rework 2026-10-06: NavOrder is derived from NavSections; Play's first pill is 12.
-        // Polish 12 (2026-10-07): Home gained its Premium pill, so Play's first pill is 13.
-        Assert.Equal("play", ChromeFxNav.NavOrder[13]);
+        // Polish 12 (2026-10-07): Home gained its Premium pill, so Play's first pill is 13. 7.1.2: Companion > AI makes it 14.
+        Assert.Equal("play", ChromeFxNav.NavOrder[14]);
         Assert.DoesNotContain("lab", ChromeFxNav.NavOrder);
-        Assert.Equal(13, ChromeFxNav.IndexOf("lab"));
-        Assert.Equal(13, ChromeFxNav.IndexOf("play"));
+        Assert.Equal(14, ChromeFxNav.IndexOf("lab"));
+        Assert.Equal(14, ChromeFxNav.IndexOf("play"));
     }
 
     [Fact]

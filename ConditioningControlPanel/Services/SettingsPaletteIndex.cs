@@ -831,6 +831,10 @@ namespace ConditioningControlPanel.Services
                  "permissions lock cards lock card permissions ai permissions what she can do allowed consent");
             Pill("companionlinks", "nav_tab_companionlinks", "🔗", "nav_door_companion",
                  "companion links video links hypnotube knowledge links she knows videos she can play");
+            Pill("companionai", "label_ai_badge", "🔌", "nav_door_companion",
+                 "ai settings connection ai provider model cloud local ollama openai openrouter custom endpoint " +
+                 "use my own model engine room sampler temperature test connection " +
+                 "memory remember memories preferred name call me recap forget diary what she knows");
             Pill("friends", "nav_tab_friends", "🤝", "nav_section_social",
                  "friends friend list add friend invite poke requests block");
             Pill("leash", "nav_tab_leash", "🦮", "nav_section_social",

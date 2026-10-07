@@ -303,6 +303,7 @@ namespace ConditioningControlPanel.Controls.NavRail
             ["personality"] = '\uE76E',      // a face (the font has no mask)
             ["permissions"] = '\uEA18',      // a shield
             ["companionlinks"] = '\uE71B',   // a link
+            ["companionai"] = '\uE701',      // a signal: which AI it talks to
             ["bambitakeover"] = '\uE7AD',    // a swirl
             ["shelistening"] = '\uE720',     // a microphone
             ["awareness"] = '\uEA80',        // a light bulb

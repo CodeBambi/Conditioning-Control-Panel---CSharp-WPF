@@ -1708,7 +1708,7 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void BtnLabEffectsSetupLocal_Click(object sender, RoutedEventArgs e)
         {
-            ShowTab("companion");
+            ShowTab(IsRegisteredNavTab("companionai") ? "companionai" : "companion");
             try { CompanionTab?.Room?.RevealEngineRoom(); }
             catch (Exception ex) { App.Logger?.Debug("BtnLabEffectsSetupLocal_Click: {E}", ex.Message); }
             LaunchLocalAiSetupWizard();
