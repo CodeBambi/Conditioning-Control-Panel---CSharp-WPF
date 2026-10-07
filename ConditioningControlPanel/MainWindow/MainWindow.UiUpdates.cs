@@ -2560,6 +2560,8 @@ namespace ConditioningControlPanel
                 StopLockdownPulse();
                 SwitchTabFx(string.Empty);
             }
+            // The Tonight Board: hold clock, art views and particles follow the level now.
+            RefreshBillboardMotion();
             StartMarqueeAnimation();
             // The OG border re-evaluates both ways too (PR-5 gave it a gate at last).
             ApplyOgBorderLoop();
