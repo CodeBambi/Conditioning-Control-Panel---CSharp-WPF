@@ -73,6 +73,8 @@ public sealed class LocalProvidersTests
         CoreSettings.Current.AiChatEnabled = true;
         CoreSettings.Current.OfflineMode = false;
         CoreSettings.Current.UseCompanionBrain = true;
+        // Explicit, not whatever an earlier test saved to the shared settings.json (off = no session.json).
+        CoreSettings.Current.CompanionPrompt.ChatMemoryEnabled = true;
         return service;
     }
 
@@ -212,7 +214,7 @@ public sealed class LocalProvidersTests
                 for (var i = 0; i < 250 && !shell.OwnedWindows.OfType<MessageDialog>().Any(); i++)
                 {
                     Dispatcher.UIThread.RunJobs();
-                    await Task.Delay(20);
+                    await Task.Yield();
                 }
                 shell.OwnedWindows.OfType<MessageDialog>().Single().FindControl<Button>(button)!
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
