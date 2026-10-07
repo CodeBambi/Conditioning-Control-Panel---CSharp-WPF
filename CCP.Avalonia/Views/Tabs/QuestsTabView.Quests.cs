@@ -97,8 +97,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal static (int Xp, string? Bonus) ComputeQuestXpDisplay(QuestDefinition def, AppSettings s)
         {
             var rerollMult = SkillTreeRules.GetRerollBonusMultiplier(s);
-            var streak = s.DailyQuestStreak;
-            var xp = QuestService.ScaledQuestXp(def.XPReward, s);
+            // The streak this completion pays at (the day's first daily advances it first).
+            var streak = App.Quests?.StreakPaidOn(def.Type, s) ?? s.DailyQuestStreak;
+            var xp = QuestService.ScaledQuestXp(def.XPReward, s, streak);
             string? bonus = null;
             if (streak > 0) bonus = $"+{streak * 3}%\U0001f525";
             if (rerollMult > 1.0)

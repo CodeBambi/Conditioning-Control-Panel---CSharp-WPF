@@ -124,7 +124,9 @@ namespace ConditioningControlPanel
         {
             var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
             var rerollMult = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
-            var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
+            // The streak this completion pays at: the day's first daily advances it before paying.
+            var questStreak = App.Quests?.StreakPaidOn(def.Type, App.Settings?.Current)
+                              ?? App.Settings?.Current?.DailyQuestStreak ?? 0;
             var streakMult = 1.0 + (questStreak * 0.03);
 
             var xp = (int)Math.Round(

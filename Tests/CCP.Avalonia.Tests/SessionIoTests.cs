@@ -188,4 +188,44 @@ public sealed class SessionIoTests
         }
         return Task.CompletedTask;
     });
+
+    /// <summary>WPF 97481fc56 (ccp-bugs #1331): a catalogue preset saved by the browser as
+    /// "x.preset (1).json" is recognised by its content and imports, not ignored.</summary>
+    [Fact]
+    public Task RenamedCataloguePresetDropImports() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+        LocalizationManager.Instance.SetLanguage("en");
+        var settings = ConditioningControlPanel.CoreSettings.Current;
+        var users = settings.UserPresets.ToList();
+        var root = Directory.CreateTempSubdirectory("ccp-preset-drop-").FullName;
+        var id = "drop-test-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            var preset = Preset.FromSettings(settings, "Catalogue Drop");
+            preset.Id = id;
+            var file = Path.Combine(root, "catalogue-drop.preset (1).json");
+            File.WriteAllText(file, new PresetFileService().SerializePreset(preset));
+            var view = new PresetsTabView();
+
+            Assert.True(view.ImportDroppedPath(file));
+
+            Assert.Equal("Preset imported: Catalogue Drop", view.FindControl<TextBlock>("DropZoneStatus")!.Text);
+            Assert.Contains(settings.UserPresets, p => p.Id == id);
+            Assert.False(view.ImportDroppedPath(Path.Combine(root, "missing.json")));
+        }
+        finally
+        {
+            settings.UserPresets.Clear();
+            settings.UserPresets.AddRange(users);
+            ConditioningControlPanel.CoreSettings.Save();
+            foreach (var f in Directory.Exists(PresetFileService.CustomPresetsFolder)
+                         ? Directory.GetFiles(PresetFileService.CustomPresetsFolder, id + "*") : Array.Empty<string>())
+                File.Delete(f);
+            try { Directory.Delete(root, true); } catch { }
+        }
+        return Task.CompletedTask;
+    });
 }

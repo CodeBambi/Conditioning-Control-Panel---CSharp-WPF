@@ -12,6 +12,7 @@ using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.Program;
 using ConditioningControlPanel.Services.Program;
 using Xunit;
@@ -20,6 +21,42 @@ namespace CCP.Avalonia.Tests;
 
 public sealed class ProgramsBrowseTests
 {
+    /// <summary>WPF 608ff3181 (ccp-bugs #966): a mod switch reorders the open list, that mod's programs first.</summary>
+    [Fact]
+    public async Task ModSwitchPutsThatModsProgramsFirst()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureAvalonia();
+            var oldProvider = CoreMods.ActiveModIdProvider;
+            Window? host = null;
+            try
+            {
+                CoreMods.ActiveModIdProvider = () => BuiltInMods.CCPDefaultId;
+                var view = new ProgramsTabView();
+                host = new Window { Width = 1200, Height = 900, Content = view };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+                var list = view.FindControl<ListBox>("ProgramLibraryList")!;
+                var drone = BuiltInPrograms.All().First(p => p.ModId == BuiltInMods.DronificationId).Id;
+                Assert.NotEqual(drone, list.Items.Cast<ProgramBrowseItem>().First().ProgramId);
+
+                CoreMods.ActiveModIdProvider = () => BuiltInMods.DronificationId;
+                CoreMods.RaiseModChanged(null, new ModPackage(new ModManifest(), null, false));
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.Equal(drone, list.Items.Cast<ProgramBrowseItem>().First().ProgramId);
+            }
+            finally
+            {
+                CoreMods.ActiveModIdProvider = oldProvider;
+                host?.Close();
+                Dispatcher.UIThread.RunJobs();
+            }
+            return Task.CompletedTask;
+        });
+    }
+
     [Fact]
     public async Task BrowseUsesCoreCatalogueSelectionAndReadOnlyDetails()
     {
@@ -29,7 +66,9 @@ public sealed class ProgramsBrowseTests
             Window? host = null;
             try
             {
-                var definitions = BuiltInPrograms.All();
+                // The active mod's programs lead (WPF #966); the default mod has none, so its
+                // mod-less programs come first.
+                var definitions = ProgramBrowseOrder.Sort(BuiltInPrograms.All(), CoreMods.ActiveModId);
                 var view = new ProgramsTabView { Width = 1200, Height = 900 };
                 host = new Window { Width = 1200, Height = 900, Content = view };
                 host.Show();

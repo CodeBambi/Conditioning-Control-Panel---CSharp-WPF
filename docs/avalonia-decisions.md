@@ -483,3 +483,21 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   panic-stop path to test. So no entry point starts a run; the HUD only binds `ChaosRunState` (sample in the render
   proof, a stepped run in its test). Panic and mid-run saves are untouched (WPF `OnPanicKeyDuringRun` → stop; saves only
   where WPF writes them).
+
+## Quest card quotes the streak the completion pays at (port-misc, 2026-10-07)
+
+- Found: `QuestService.CompleteQuest` advances the quest streak on the day's first daily completion
+  (`AdvanceQuestStreak`) BEFORE it computes the payout, while both heads' cards quoted the stored streak. The day's first
+  daily therefore paid 3% more than the card said, and after a missed day it paid +3% while the card still quoted the
+  broken streak's bonus. Shared Core behaviour, so both heads had it.
+- Intent: WPF `MainWindow.QuestsTab.cs` `ComputeQuestXpDisplay` says the card "multiplies exactly what
+  QuestService.CompleteQuest multiplies" and was rewritten once already because "the cards were quoting a number the
+  payout had no intention of paying". So the card is meant to quote the real payout: a bug, fixed in Core.
+- Fix: the payout is unchanged (the streak bonus includes today). New Core `QuestService.StreakPaidOn(type, settings)`
+  returns the streak that completion will pay at (projected for the day's first daily, stored for weekly and later
+  dailies), sharing `StreakAfterFirstCompletionToday` with `AdvanceQuestStreak`; `ScaledQuestXp` gains an explicit-streak
+  overload. Both heads' cards (and the "+N%" bonus text) read it. Visible WPF change: the first daily of a day quotes 3%
+  more (or the restarted +3% after a gap) - i.e. what it already paid.
+- Not foreseen: a streak shield spent by that same completion (spending it is the completion's side effect); after a gap
+  with a shield the quote says +3% and the payout keeps the streak. Test:
+  `QuestServiceTests.CardQuote_IsWhatTheDaysFirstCompletionPays` (fail-proven).
