@@ -1225,3 +1225,42 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/flake-minepoll: +17
 - Test-order flakes fixed at the source: a leaked auth token (MinePoll) and a shared awareness cooldown (AWindowChange). OpensPlays unconfirmed.
+
+## avalonia-port/chaster-receipt: +652
+- Chaster tab: own receipt panel with language re-render, calendar sheet, 2x2 preset keys (mood + limits refresh), 30 s hero tick; ticks only while visible.
+
+## avalonia-port/chaos-waves: +448
+- Chaos run engine (clock, end/Relapse, waves/acts, payout scalars) in Core as ChaosRunEngine; ChaosModels/ChaosRunEffects moved to Core; WPF RunTick delegates, behaviour unchanged.
+- Avalonia ChaosHudWindow binds the Core ChaosRunState; runs still cannot start on Avalonia (no bubble field/draft/overlays); chaos-hud-window stays stub.
+
+## avalonia-port/test-isolation: +214
+- Assembly-wide per-test snapshot/restore of process-wide statics, CoreSettings and test-profile json (order leaks impossible by construction); optional seeded test order.
+
+## avalonia-port/flake-tubechat: +12
+- TubeChatBrain flake: HerRoom test leaked ChatMemoryEnabled=false through the shared settings.json; restored at the source.
+
+## avalonia-port/main-20261005 (main sync #4): +23400
+- Imports WPF main 4629b1f4a (7.0.3–7.0.5). Delta ledger docs/avalonia-main-sync-20261005.md: 137 commits = 47 ported-by-merge, 79 needs-port (31 lanes), 11 n/a.
+
+## avalonia-port/main-20261005-compat: +32
+- Test paths through SourceRoots, release button key 7.0.5, two tests updated to main's new catalogue.
+
+## avalonia-port/port-shellcopy: +435
+- Rail Back arrow + mouse/Alt+arrow tab history (TabHistory in Core; refused under Lockdown/tutorial); bug report on top; startup cards one at a time (stepped clock); "Monthly Recap".
+- shell-layout n/a (Win32-only); side-art folded into the shared feat-adaptive-side-art row.
+
+## avalonia-port/local-providers: +774
+- Local AI providers (Ollama / OpenAI-compatible) moved to Core as brain transports; Avalonia Engine Room drawer chooses a provider, tests the connection and clears the conversation (confirmed); App.Ai disposed on exit; logged URLs redacted.
+
+## avalonia-port/port-fx: +576
+- Flash picks walk the whole folder before repeating (ShuffleBag in Core); Random image count + Fewest slider.
+- Video card: monitor picker and Mercy "after N fails" in a keyboard-reachable More options fold; both Core schedulers use MercyAfterFails.
+- Folded: drift speed, no-videos reason, spiral opacity curve, gaze camera at boot, Lock Card and Brain Drain folds.
+
+## avalonia-port/port-chaster7: +352
+- Circe's tab: setup line covers "adds off"/"nothing can count", raffle rows in a SplitRowPanel, ladder note; demo picks never save.
+- Lock Card: Reset on typo inside More options. Leash, booked-pop tag and keys glow folded into their parity rows.
+
+## avalonia-port/port-social: +1023
+- Invites: rules, wire and reward ladder in Core; Exclusives invites card, header ticket (wired at startup), drawer link; EveryShellInitializerIsCalled scan test.
+- Lobby folded into views-tab-available-subjects and win-launcher.

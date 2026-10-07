@@ -31,8 +31,7 @@ public sealed class GlobalMouseHook : IDisposable
     // hosted bubble over the dashboard also "clicked" the card beneath it. Right-clicks have
     // the same shape via context menus, which open on right-UP. Written on the hook's message
     // loop; volatile because Dispose reads them to decide whether to defer the unhook.
-    private volatile bool _swallowNextLeftUp;
-    private volatile bool _swallowNextRightUp;
+    private readonly UpSwallowGate _swallow = new();
 
     // Deferred dispose: Dispose() was called while a swallowed DOWN's matching UP was still in
     // flight (a real click's UP trails its DOWN by 60-100ms, and owners release the hook the
@@ -110,30 +109,32 @@ public sealed class GlobalMouseHook : IDisposable
         {
             if (wParam == (IntPtr)WM_RBUTTONDOWN || wParam == (IntPtr)WM_LBUTTONDOWN)
             {
+                bool isRight = wParam == (IntPtr)WM_RBUTTONDOWN;
+                bool swallow = false;
                 try
                 {
                     var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
                     var pt = new Point(info.pt.X, info.pt.Y);
-                    bool isRight = wParam == (IntPtr)WM_RBUTTONDOWN;
                     var cb = isRight ? RightDown : LeftDown;
-                    if (cb?.Invoke(pt) == true)
-                    {
-                        if (isRight) _swallowNextRightUp = true;
-                        else _swallowNextLeftUp = true;
-                        return (IntPtr)1;
-                    }
+                    swallow = cb?.Invoke(pt) == true;
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Debug("Mouse hook callback: {E}", ex.Message);
                 }
+                // Every DOWN re-decides its button's flag. A flag still set here is stale: its UP
+                // never came through this hook (another hook ate it, or Windows skipped this one
+                // on a callback timeout), and a button cannot go down twice without coming up.
+                // Left set, it swallowed the NEXT click's UP, so every hook after this one never
+                // heard that click let go: a quick click on a red bubble read as a hold.
+                _swallow.Down(isRight, swallow);
+                if (swallow) return (IntPtr)1;
             }
             else if (wParam == (IntPtr)WM_LBUTTONUP)
             {
                 Notify(LeftUp, lParam);
-                if (_swallowNextLeftUp)
+                if (_swallow.Up(right: false))
                 {
-                    _swallowNextLeftUp = false;
                     CompleteDeferredDisposeIfDrained();
                     return (IntPtr)1;
                 }
@@ -146,9 +147,8 @@ public sealed class GlobalMouseHook : IDisposable
             else if (wParam == (IntPtr)WM_RBUTTONUP)
             {
                 Notify(RightUp, lParam);
-                if (_swallowNextRightUp)
+                if (_swallow.Up(right: true))
                 {
-                    _swallowNextRightUp = false;
                     CompleteDeferredDisposeIfDrained();
                     return (IntPtr)1;
                 }
@@ -166,7 +166,7 @@ public sealed class GlobalMouseHook : IDisposable
             // A swallowed DOWN's matching UP may still be in flight - keep the hook installed
             // just long enough to swallow it (see the deferred-dispose field comment above).
             // No NEW swallows can start meanwhile: the decision callbacks are cleared here.
-            if (_hookId != IntPtr.Zero && (_swallowNextLeftUp || _swallowNextRightUp))
+            if (_hookId != IntPtr.Zero && _swallow.Pending)
             {
                 _unhookPending = true;
                 RightDown = null;
@@ -203,7 +203,7 @@ public sealed class GlobalMouseHook : IDisposable
     /// <summary>Hook message loop: finish a deferred dispose once no swallow remains pending.</summary>
     private void CompleteDeferredDisposeIfDrained()
     {
-        if (_unhookPending && !_swallowNextLeftUp && !_swallowNextRightUp)
+        if (_unhookPending && !_swallow.Pending)
             CompleteDeferredDispose();
     }
 
@@ -266,4 +266,34 @@ public sealed class GlobalMouseHook : IDisposable
     private static extern IntPtr GetModuleHandle(string lpModuleName);
 
     #endregion
+}
+
+/// <summary>Which UP a <see cref="GlobalMouseHook"/> still owes a swallow, one flag per button.
+/// Plain so the rule has a test. Written on the hook's message loop; volatile because Dispose
+/// reads <see cref="Pending"/> from another thread.</summary>
+internal sealed class UpSwallowGate
+{
+    private volatile bool _left;
+    private volatile bool _right;
+
+    /// <summary>A DOWN came through. Its flag becomes exactly whether this DOWN was swallowed,
+    /// whatever an earlier DOWN left: a flag still set here is stale, since a button cannot go
+    /// down twice without coming up.</summary>
+    public void Down(bool right, bool swallowed)
+    {
+        if (right) _right = swallowed;
+        else _left = swallowed;
+    }
+
+    /// <summary>An UP came through. True when it must be swallowed; the flag is spent either way.</summary>
+    public bool Up(bool right)
+    {
+        bool owed = right ? _right : _left;
+        if (right) _right = false;
+        else _left = false;
+        return owed;
+    }
+
+    /// <summary>A swallowed DOWN is still waiting for its UP.</summary>
+    public bool Pending => _left || _right;
 }

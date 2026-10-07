@@ -304,6 +304,10 @@
                          MainWindow.Exclusives.cs - this panel stays empty in XAML. -->
                     <WrapPanel x:Name="ExclusivesShelf" x:FieldModifier="internal"
                                Orientation="Horizontal"/>
+
+                    <!-- Invites (Controls/Invites/InvitePanel), added in MainWindow.Exclusives.cs.
+                         Collapsed until the server answers /v2/invites/mine. -->
+                    <Border x:Name="InvitesHost" x:FieldModifier="internal" Margin="0,18,0,0"/>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

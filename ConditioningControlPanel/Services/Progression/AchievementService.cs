@@ -38,14 +38,14 @@ public class AchievementService : IDisposable
     private DateTime _lastBrainDrainCheck = DateTime.Now;
     private DateTime _lastMindWipeCheck = DateTime.Now;
     private DateTime _lastDeeperCheck = DateTime.Now;
-    private DateTime _lastAutonomyCheck = DateTime.Now;
 
-    // Per-tick credit ceiling for Takeover quest time. The tracking timer fires every 1s, but when
-    // the app is backgrounded or busy with a fullscreen takeover video the tick gets starved and can
-    // slip well past that. Crediting min(elapsed, cap) still counts that legitimately-active time
-    // (fixing the "15-min quest took an hour, foreground/background changed the timing" report) while
-    // a single long stall — sleep/resume, the app suspended for minutes — can only ever add 10s.
-    private const double AutonomyTickCreditCapMinutes = 10.0 / 60.0;
+    // Takeover quest time ("On Autopilot", "Set It and Forget It"), measured on a monotonic clock
+    // between ticks instead of capped per tick. The old 10 s per-tick cap starved the quest while
+    // the panel was minimised, because Windows throttles a minimised app's 1 s timer to ticks tens
+    // of seconds apart (ccp-bugs #1327). RunningTimeCredit credits each interval in full and drops
+    // any interval past its 3 min ceiling (sleep, hibernate, a suspended process).
+    private readonly RunningTimeCredit _autonomyCredit = new();
+    private readonly System.Diagnostics.Stopwatch _trackingClock = System.Diagnostics.Stopwatch.StartNew();
 
     // The unlock thresholds live in CCP.Core AchievementRules (one copy, shared with the meter).
 
@@ -329,21 +329,11 @@ public class AchievementService : IDisposable
 
         // Track Bambi Takeover (autonomy) active time for Patreon quests — only while
         // autonomy is enabled/running. Mirrors the spiral/pink accumulation pattern.
-        if (App.Autonomy?.IsEnabled == true)
+        // Ticks come late while the panel is minimised; the credit measures the real interval.
+        var autonomyMinutes = _autonomyCredit.Sample(App.Autonomy?.IsEnabled == true, _trackingClock.Elapsed);
+        if (autonomyMinutes > 0)
         {
-            var elapsed = (now - _lastAutonomyCheck).TotalMinutes;
-            if (elapsed > 0)
-            {
-                // Credit the elapsed time, capping a single tick so a starved/backgrounded tick still
-                // counts (the old hard "< 6s or drop it" guard silently threw away real active time,
-                // which is why the quest crawled) while a long stall can't dump minutes in at once.
-                App.Quests?.TrackAutonomyMinutes(Math.Min(elapsed, AutonomyTickCreditCapMinutes));
-            }
-            _lastAutonomyCheck = now;
-        }
-        else
-        {
-            _lastAutonomyCheck = now;
+            App.Quests?.TrackAutonomyMinutes(autonomyMinutes);
         }
 
         // Check System Overload (Bubbles + Bouncing Text + Spiral all active)

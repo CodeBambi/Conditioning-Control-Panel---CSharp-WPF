@@ -1,168 +1,211 @@
 /* ============================================================================
- * ui/pictures.js - "Pictures" in the game's Options (2026-09-28).
+ * ui/pictures.js - where Distraction's pictures come from (2026-09-28), and the
+ * one-time ask at the first start (2026-09-30).
  *
- * Where Distraction's pictures come from: the player's own library, or one of
- * the Breakout / Goon Game flavours (a short list of Scrolller niches) mixed
- * in. The flavour table and the niche editing are the Goon Game's
- * ui/flavours.js, imported, not copied: that file is already the host-owned
- * port of breakout/flavours.js and carries the drift test against it. The chess
- * tree is desktop-only (no site vendors it), so the cross-tree import resolves
- * through ccp.game like the loom and rng imports already do.
+ * Owner, 2026-09-30: "no images were selected because we just let them start a
+ * game. Record this choice and don't make them pick again." So a start (solo,
+ * two here, quick match, a table, a join, a friend's challenge) with Distraction
+ * on and NO saved choice opens the picker first; the pick is sent to the host,
+ * which saves it, and the game starts. The picker never opens on its own again.
+ * The same choice is edited any time from the niche manager: Options > Pictures,
+ * the Pictures link on the menu, and the Pictures button on the pause card.
  *
- * The HOST owns persistence and consent (PieceByPieceHostService.Media.cs):
- *   host -> page  pbp:media-state  { flavour, last, custom, online, appWide }
+ * The widget is shared (../../backroom/shared/niches/picker.js, one look for
+ * every game), and so is the state logic (choice.js). This file only wires them
+ * to the chess host:
+ *   host -> page  pbp:media-state  { flavour, last, custom, online, appWide, chosen, library, canOnline }
  *   host -> page  pbp:online-media { state, have, want, ... }   (status line only)
- *   page -> host  pbp:media-flavour { flavour, custom, subs, online }
- * A picked flavour is this window's online opt-in; "Own pictures" is online:false.
- * Nothing here touches localStorage.
+ *   page -> host  pbp:media-flavour { flavour, custom, subs, online, chosen }
+ * The HOST owns persistence (desktop: PieceByPieceHostService.Media.cs, the site:
+ * the web shim's localStorage). A host that never sends pbp:media-state (a plain
+ * browser, the phone today) gets no picker and no ask: nothing here touches storage.
  * ==========================================================================*/
 
-import { FLAVOURS, MINE, flavourById, nichesOf, toggleNiche, addNiche, removeNiche,
-  readMediaInit, mediaFlavourFrame } from '../../goon/ui/flavours.js';
+import { readChoice, needsChoice, choiceFrame, sameChoice, statusLine } from '../../backroom/shared/niches/choice.js';
+import { createNichePicker } from '../../backroom/shared/niches/picker.js';
 import { onHostMessage, postToHost } from '../bridge.js';
+import { presentation } from '../game/preferences.js';
 
-const TILES = [...FLAVOURS, MINE];
-const ADD_ERRORS = { bad: 'Letters, numbers and _ only.', dup: 'Already in.', full: 'That is plenty. Remove one first.' };
+export { statusLine };
 
-/** The frame this state sends, typed for the chess host. Pure. */
+/** The frame a choice sends, typed for the chess host. Pure. */
 export function picturesFrame(state) {
-  return { ...mediaFlavourFrame(state), type: 'pbp:media-flavour' };
+  return { ...choiceFrame(state), type: 'pbp:media-flavour' };
 }
 
-/** The status line for an online-media frame. Pure. */
-export function statusLine(state, status) {
-  if (!state || state.online === false) return 'Your own pictures only.';
-  if (!state.flavour && !state.appWide) return 'Pick one to mix in online pictures.';
-  const s = status || {};
-  if (s.state === 'loading') return s.have > 0 ? `Finding pictures, ${s.have} so far.` : 'Finding pictures.';
-  if (s.state === 'ready') return `${s.have} online pictures in the mix.`;
-  if (s.state === 'empty') return 'Nothing found there. Your own pictures carry on.';
-  if (s.state === 'error') return 'Scrolller did not answer. Your own pictures carry on.';
-  if (s.state === 'off' && state.flavour) return 'No niches on. Add one under Niches.';
-  return '';
+/* ---- the one state, for every surface ----------------------------------- */
+
+let state = null;       // null until the host speaks
+let online = null;      // the last pbp:online-media, for the status line
+const watchers = new Set();
+let listening = false;
+
+function tell(what) {
+  for (const fn of [...watchers]) { try { fn(what); } catch (e) { console.warn('[pbp] pictures watcher', e); } }
 }
+
+function listen() {
+  if (listening) return;
+  listening = true;
+  onHostMessage((m) => {
+    if (m.type === 'pbp:media-state') {
+      const next = readChoice(m);
+      if (!next) return;
+      state = next;
+      tell('state');
+    } else if (m.type === 'pbp:online-media') {
+      online = { state: m.state, have: Number(m.have) || 0, want: Number(m.want) || 0 };
+      tell('online');
+    }
+  });
+}
+
+/** Send a choice to the host and hold it here at once (the host echoes it back). */
+function commit(next) {
+  if (!next) return;
+  state = { ...next, chosen: true };
+  postToHost(picturesFrame(state));
+  tell('state');
+}
+
+const status = () => statusLine(state, online);
+const experience = () => { try { return presentation().experience; } catch { return 'distraction'; } };
+
+/* ---- the modal: first-start card and the manager from the menu or pause ---- */
+
+let modal = null;       // { root, done(ok) }
+
+function openModal(mode, { still = false } = {}) {
+  if (typeof document === 'undefined' || !state) return Promise.resolve(mode !== 'first');
+  if (modal) modal.done(false);
+  return new Promise((resolve) => {
+    const root = document.createElement('div');
+    root.className = 'pbp-np-modal' + (mode === 'first' ? ' is-first' : '');
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-label', mode === 'first' ? 'Pick your pictures' : 'Pictures');
+    const card = document.createElement('div');
+    card.className = 'pbp-np-card';
+    const start = state;
+    let settled = false;
+    const picker = createNichePicker({
+      mode, state, still,
+      onChoose: (s) => { commit(s); finish(true); },
+    });
+    if (mode === 'manage') {
+      const h = document.createElement('h2');
+      h.className = 'pbp-np-title';
+      h.textContent = 'Pictures';
+      const sub = document.createElement('p');
+      sub.className = 'pbp-np-sub';
+      sub.textContent = 'What Distraction mixes in. Saved when you close this.';
+      const done = document.createElement('button');
+      done.type = 'button';
+      done.className = 'pbp-np-done';
+      done.textContent = 'Done';
+      done.addEventListener('click', () => finish(true));
+      card.append(h, sub, picker.el, done);
+      picker.status(status());
+    } else {
+      card.append(picker.el);
+    }
+    root.append(card);
+    document.body.append(root);
+
+    const watch = (what) => { if (what === 'online') picker.status(status()); };
+    watchers.add(watch);
+    // Escape leaves the card and nothing else: the menu, the pause card and the board
+    // never see it (capture, and the door checks isOpen before it acts). The manager
+    // keeps its edits on the way out; the first-start card starts nothing.
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      if (!e.repeat) finish(mode === 'manage');
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+
+    function finish(ok) {
+      if (settled) return;
+      settled = true;
+      if (mode === 'manage' && ok) {
+        const end = picker.value();
+        if (end && (!sameChoice(end, start) || (!start.chosen && end !== start))) commit(end);
+      }
+      watchers.delete(watch);
+      window.removeEventListener('keydown', onKey, { capture: true });
+      picker.dispose();
+      root.remove();
+      if (modal && modal.root === root) modal = null;
+      resolve(!!ok);
+    }
+    modal = { root, done: finish };
+    setTimeout(() => { if (!settled) picker.focus(); }, 30);
+  });
+}
+
+/** The page-wide handle: the door gates its starts on it, the menu and pause open the manager. */
+export const pictureChoice = {
+  /** A host has spoken, so there is something to choose. */
+  available: () => !!state,
+  state: () => state,
+  /** Would a start ask first right now. */
+  needsChoice: () => needsChoice(state, experience()),
+  /** Ask if nothing is saved. Resolves true to go on (chosen, or nothing to ask), false when the player backed out. */
+  ask(opts) { return needsChoice(state, experience()) ? openModal('first', opts) : Promise.resolve(true); },
+  /** The niche manager as a card over whatever is up. */
+  manage(opts) { return openModal('manage', opts); },
+  isOpen: () => !!modal,
+  /** For the harness. */
+  debug: { status, close(ok) { if (modal) modal.done(ok); } },
+};
+listen();
+
+/* ---- Options > Pictures: the same manager, inline ------------------------ */
 
 export function attachPictures(root) {
   if (!root || typeof document === 'undefined') return { setVisible() {}, dispose() {} };
-  const $ = (id) => root.querySelector('#' + id);
-  const tiles = $('flavour-pick'), pills = $('niche-pills'), box = $('niche-box');
-  const form = $('niche-add'), input = $('niche-input'), note = $('niche-note'), status = $('pictures-status');
-  let state = null;        // null until the host speaks: a plain browser shows nothing
-  let online = null;       // last pbp:online-media
-  let sent = '';           // the last frame sent, so a no-op close sends nothing
+  root.textContent = '';
+  const head = document.createElement('strong');
+  head.textContent = 'Pictures';
+  const hint = document.createElement('small');
+  hint.textContent = 'Flavours mix in pictures from Scrolller\'s Reddit communities. Saved when Options closes.';
+  const picker = createNichePicker({ mode: 'manage', state });
+  root.append(head, picker.el, hint);
+  let base = state;          // the state the edits started from
 
-  const current = () => (state && state.online !== false ? flavourById(state.flavour) : null);
-
-  function send() {
-    if (!state) return;
-    const frame = picturesFrame(state);
-    const key = JSON.stringify(frame);
-    if (key === sent) return;
-    sent = key;
-    postToHost(frame);
-  }
-
-  function tile(id, name, line, tint, pressed, onClick) {
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'hud-btn flavour-tile';
-    b.setAttribute('aria-pressed', String(pressed));
-    if (tint) b.style.setProperty('--tint', tint);
-    b.dataset.flavour = id;
-    b.innerHTML = '<span></span><small></small>';
-    b.firstChild.textContent = name; b.lastChild.textContent = line;
-    b.addEventListener('click', onClick);
-    return b;
-  }
-
-  function paint() {
-    root.hidden = !state || root.dataset.off === '1';
-    if (!state) return;
-    const own = state.online === false;
-    tiles.textContent = '';
-    tiles.appendChild(tile('own', 'Own pictures', 'Your library only.', null, own, () => {
-      state = { ...state, online: false, flavour: '' };
-      send(); paint();
-    }));
-    for (const f of TILES) {
-      tiles.appendChild(tile(f.id, f.name, f.line, f.tint, !own && state.flavour === f.id, () => {
-        state = { ...state, online: true, flavour: f.id, last: f.id };
-        send(); paint();
-      }));
-    }
-    const f = current();
-    box.hidden = !f;
-    pills.textContent = '';
-    if (f) {
-      for (const n of nichesOf(f, state.custom[f.id])) {
-        const p = document.createElement('button');
-        p.type = 'button'; p.className = 'niche-pill' + (n.on ? ' is-on' : '');
-        p.setAttribute('aria-pressed', String(n.on));
-        p.textContent = 'r/' + n.name;
-        p.title = n.kind === 'added' ? 'Right-click to remove' : '';
-        p.addEventListener('click', () => { edit(c => toggleNiche(f, c, n.name)); });
-        if (n.kind === 'added') p.addEventListener('contextmenu', (e) => { e.preventDefault(); edit(c => removeNiche(c, n.name)); });
-        pills.appendChild(p);
-      }
-    }
-    status.textContent = statusLine({ ...state, flavour: own ? '' : state.flavour }, online);
-  }
-
-  /** Niche edits wait for the box (or the options panel) to close: one fetch, not one per tap. */
-  function edit(fn) {
-    const f = current();
-    if (!f) return;
-    state = { ...state, custom: { ...state.custom, [f.id]: fn(state.custom[f.id]) } };
-    paint();
-  }
-
-  const onSubmit = (e) => {
-    e.preventDefault();
-    const f = current();
-    if (!f) return;
-    const r = addNiche(f, state.custom[f.id], input.value);
-    note.hidden = !r.error; note.textContent = ADD_ERRORS[r.error] || '';
-    if (!r.error) input.value = '';
-    state = { ...state, custom: { ...state.custom, [f.id]: r.custom } };
+  const paint = () => { root.hidden = !state || root.dataset.off === '1'; };
+  const watch = (what) => {
+    if (what === 'state') { base = state; picker.set(state); }
+    picker.status(status());
     paint();
   };
-  form.addEventListener('submit', onSubmit);
-  // typing r/ must not reach the board's own keys (Esc, arrows)
-  const stopKeys = (e) => { if (e.key !== 'Enter' && e.key !== 'Escape') e.stopPropagation(); };
-  input.addEventListener('keydown', stopKeys);
-  const onToggle = () => { if (!box.open && state && state.flavour) send(); };
-  box.addEventListener('toggle', onToggle);
+  watchers.add(watch);
+  picker.set(state);
+  picker.status(status());
+  paint();
 
-  // the options panel closing flushes pending niche edits too
+  // the options panel closing commits the edits, once, and only when something moved
+  const flush = () => {
+    const end = picker.value();
+    if (!end || !base) return;
+    if (!sameChoice(end, base) || (!base.chosen && end !== base)) commit(end);
+  };
   const panel = root.closest('.game-options-panel');
   let watcher = null;
   if (panel && typeof MutationObserver === 'function') {
-    watcher = new MutationObserver(() => { if (panel.hidden && state && state.flavour) send(); });
+    watcher = new MutationObserver(() => { if (panel.hidden) flush(); });
     watcher.observe(panel, { attributes: true, attributeFilter: ['hidden'] });
   }
 
-  const off = onHostMessage((m) => {
-    if (m.type === 'pbp:media-state') {
-      const init = readMediaInit(m);
-      if (!init) return;
-      state = { ...init, last: typeof m.last === 'string' ? m.last : init.flavour, appWide: !!m.appWide };
-      // the host already holds this state: sending it back would only restart the fetch
-      sent = JSON.stringify(picturesFrame(state));
-      paint();
-    } else if (m.type === 'pbp:online-media') {
-      online = { state: m.state, have: Number(m.have) || 0, want: Number(m.want) || 0 };
-      if (state) status.textContent = statusLine(state, online);
-    }
-  });
-
   return {
     /** Distraction only: Classic has no pictures to choose. */
-    setVisible(on) { root.dataset.off = on ? '0' : '1'; root.hidden = !state || !on; },
+    setVisible(on) { root.dataset.off = on ? '0' : '1'; paint(); },
+    flush,
     dispose() {
-      off();
-      form.removeEventListener('submit', onSubmit);
-      input.removeEventListener('keydown', stopKeys);
-      box.removeEventListener('toggle', onToggle);
+      watchers.delete(watch);
       if (watcher) watcher.disconnect();
+      picker.dispose();
     },
   };
 }

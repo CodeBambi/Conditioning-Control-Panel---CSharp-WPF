@@ -895,6 +895,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void SliderOverlayOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            RefreshOverlayOpacityLabels();
             if (_suppressEffectFieldSync || _selectedEffect == null) return;
             var v = Math.Clamp(e.NewValue, 0, 1);
             // Flat opacity always tracks this slider; when ramping it's also the start.
@@ -906,6 +907,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void SliderOverlayOpacityEnd_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            RefreshOverlayOpacityLabels();
             if (_suppressEffectFieldSync || _selectedEffect == null) return;
             if (ChkOverlayRamp.IsChecked == true)
                 _selectedEffect.EffectOpacityEnd = Math.Clamp(e.NewValue, 0, 1);
@@ -937,8 +939,25 @@ namespace ConditioningControlPanel.Views.Deeper
             var vis = ramp ? Visibility.Visible : Visibility.Collapsed;
             LblOverlayOpacityEnd.Visibility = vis;
             SliderOverlayOpacityEnd.Visibility = vis;
-            LblOverlayOpacity.Text = ramp ? "Start opacity" : "Opacity";
+            RefreshOverlayOpacityLabels();
         }
+
+        /// <summary>
+        /// The overlay opacity labels carry the slider's value ("Opacity  60%"), ccp-bugs #936.
+        /// ValueChanged fires during InitializeComponent, before every control exists, so each one
+        /// is null-checked.
+        /// </summary>
+        private void RefreshOverlayOpacityLabels()
+        {
+            if (LblOverlayOpacity == null || SliderOverlayOpacity == null) return;
+            bool ramp = ChkOverlayRamp?.IsChecked == true;
+            LblOverlayOpacity.Text = $"{(ramp ? "Start opacity" : "Opacity")}  {OpacityPercent(SliderOverlayOpacity.Value)}";
+            if (LblOverlayOpacityEnd != null && SliderOverlayOpacityEnd != null)
+                LblOverlayOpacityEnd.Text = $"End opacity  {OpacityPercent(SliderOverlayOpacityEnd.Value)}";
+        }
+
+        private static string OpacityPercent(double value) =>
+            (Math.Round(Math.Clamp(value, 0, 1) * 100)).ToString("0", CultureInfo.InvariantCulture) + "%";
 
         private void CmbOverlayKind_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

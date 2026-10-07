@@ -29,8 +29,13 @@ public sealed class TabState
     [JsonProperty("last_push_day")] public string? LastPushDay { get; set; }
     [JsonProperty("day")] public string? Day { get; set; }
 
-    /// <summary>Gross adds booked on <see cref="Day"/>. Credits never hand room back.</summary>
+    /// <summary>Gross adds booked on <see cref="Day"/>.</summary>
     [JsonProperty("day_added")] public int DayAddedSeconds { get; set; }
+
+    /// <summary>Credits booked on <see cref="Day"/>, as a positive number. They hand the day's
+    /// room back: the day limit cuts off adds minus credits, so a credit never shrinks the limit
+    /// itself (player report, 2026-10-02). See <see cref="CircesTab.DayUsed"/>.</summary>
+    [JsonProperty("day_credit")] public int DayCreditSeconds { get; set; }
 
     [JsonProperty("entries")] public List<TabEntry> Entries { get; set; } = new();
 
@@ -183,7 +188,10 @@ public static class CircesTab
         if (seconds > 0)
         {
             if (safetyExit) return new(0, TabRefusal.SafetyExit);
-            var room = Math.Max(0, caps.DailySeconds - state.DayAddedSeconds);
+            // The day's limit cuts off adds MINUS credits (player report, 2026-10-02). Before, it
+            // cut off gross adds and the credits came off after, so one -1:00 made a 60:00 day a
+            // 59:00 day for good, and enough credits made every slip-up that day add nothing.
+            var room = Math.Max(0, caps.DailySeconds - DayUsed(state));
             var backlogRoom = Math.Max(0, caps.BacklogSeconds - state.BalanceSeconds);
             applied = Math.Min(seconds, Math.Min(room, backlogRoom));
             if (applied == 0) return new(0, room == 0 ? TabRefusal.DailyCap : TabRefusal.Backlog);
@@ -196,6 +204,7 @@ public static class CircesTab
             var floor = -Math.Max(0, state.PushedNetSeconds);
             applied = Math.Max(seconds, Math.Min(0, floor - state.BalanceSeconds));
             if (applied == 0) return new(0, TabRefusal.Floor);
+            state.DayCreditSeconds += -applied;
         }
 
         state.BalanceSeconds += applied;
@@ -203,8 +212,15 @@ public static class CircesTab
         var clamped = applied != seconds;
         if (!clamped) return new(applied, TabRefusal.None);
         if (seconds < 0) return new(applied, TabRefusal.Floor);
-        return new(applied, state.DayAddedSeconds >= caps.DailySeconds ? TabRefusal.DailyCap : TabRefusal.Backlog);
+        return new(applied, DayUsed(state) >= caps.DailySeconds ? TabRefusal.DailyCap : TabRefusal.Backlog);
     }
+
+    /// <summary>What counts against today's limit: the day's adds minus its credits. Negative when
+    /// the credits came first; then the slip-ups that follow book until they have cancelled the
+    /// credits AND filled the limit. What is SENT stays held to the limit by
+    /// <see cref="PlanPush"/>, whatever this reads.</summary>
+    public static int DayUsed(TabState state) =>
+        state.DayAddedSeconds - Math.Max(0, state.DayCreditSeconds);
 
     /// <summary>The jackpot wipes the TAB. It never touches the lock: what was already pushed
     /// stays pushed, and a credit is left alone.</summary>
@@ -337,7 +353,7 @@ public static class CircesTab
     /// </summary>
     public static bool Sanitise(TabState state, TabLimits limits)
     {
-        var before = (state.BalanceSeconds, state.PendingSeconds, state.PushedNetSeconds, state.DayAddedSeconds, state.PushDaySeconds, state.RemoteDaySeconds, state.ForgivableSeconds);
+        var before = (state.BalanceSeconds, state.PendingSeconds, state.PushedNetSeconds, state.DayAddedSeconds, state.DayCreditSeconds, state.PushDaySeconds, state.RemoteDaySeconds, state.ForgivableSeconds);
         state.BalanceSeconds = Math.Min(state.BalanceSeconds, limits.BacklogSeconds);
         state.BalanceSeconds = Math.Max(state.BalanceSeconds, -Math.Max(0, state.PushedNetSeconds));
         state.PendingSeconds = Math.Clamp(state.PendingSeconds, 0, TabLimits.MaxDailySeconds);
@@ -345,11 +361,15 @@ public static class CircesTab
         state.PushedNetSeconds = Math.Max(0, state.PushedNetSeconds);
         // Counters that only ever hold time back may read high, never low.
         state.DayAddedSeconds = Math.Max(0, state.DayAddedSeconds);
+        // A credit counter reading high hands out room. A credit can never be bigger than what was
+        // on the tab plus what CCP put on the lock, so that is as high as it may read.
+        state.DayCreditSeconds = (int)Math.Clamp((long)state.DayCreditSeconds, 0,
+            (long)state.DayAddedSeconds + Math.Max(0, state.PushedNetSeconds));
         state.PushDaySeconds = Math.Max(0, state.PushDaySeconds);
         state.RemoteDaySeconds = Math.Max(0, state.RemoteDaySeconds);
         state.ForgivableSeconds = Math.Max(0, state.ForgivableSeconds);
         state.Entries ??= new List<TabEntry>();
-        return before != (state.BalanceSeconds, state.PendingSeconds, state.PushedNetSeconds, state.DayAddedSeconds, state.PushDaySeconds, state.RemoteDaySeconds, state.ForgivableSeconds);
+        return before != (state.BalanceSeconds, state.PendingSeconds, state.PushedNetSeconds, state.DayAddedSeconds, state.DayCreditSeconds, state.PushDaySeconds, state.RemoteDaySeconds, state.ForgivableSeconds);
     }
 
     /// <summary>"+0:30", "-10:00", "+1:05:00". The number that flashes when a price lands, and the
@@ -370,6 +390,7 @@ public static class CircesTab
         if (state.Day == today) return;
         state.Day = today;
         state.DayAddedSeconds = 0;
+        state.DayCreditSeconds = 0;
     }
 
     private static void Record(TabState state, string eventId, int applied, DateTime nowUtc, DateTime runStartUtc)

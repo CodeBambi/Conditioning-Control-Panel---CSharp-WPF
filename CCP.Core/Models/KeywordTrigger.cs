@@ -69,7 +69,8 @@ namespace ConditioningControlPanel.Models
         ImageFlash,
         OverlayPulse,
         MindWipe,
-        Bubbles
+        Bubbles,
+        BrainDrain
     }
 
     /// <summary>

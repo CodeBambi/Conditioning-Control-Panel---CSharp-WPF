@@ -304,6 +304,7 @@ internal static partial class PieceByPieceHostService
             _host?.FocusWeb();
             PostSettings();
             PostIdentity();
+            AdoptSavedMediaChoice();
             PostMediaState();
             StartOnlineMedia();
             PostFriendIntent();

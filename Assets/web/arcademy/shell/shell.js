@@ -102,6 +102,7 @@ import { createOst } from './ost.js';
 import { createIdSpotlight, idReducedMotion, studentNumber } from './idcard.js';
 import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
+import { annexProgress } from '../core/annex-progress.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
  * relationship with it is: build it, hand it read-only seams and three gate
  * answers, tell it when a class ended, tear it down. It writes nothing, it
@@ -4373,21 +4374,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     return true;
   }
 
-  /** Fire the reveal if - and only if - the whole school is sealed, the save
-   *  has never seen it, and there is a quiet stage to fire it on. `extraKey`
-   *  folds an in-flight tenth hole the way masteredCount always has. */
-  function maybeAnnexReveal(extraKey) {
+  /** Reveal once at 75% of roster stars, after the current ceremony finishes. */
+  function maybeAnnexReveal(pending = {}) {
     if (annexStage || destroyed) return;
-    if (screen === 'class' || active) return;
+    if (screen === 'class' || active || punchStage) return;
     if (store.get('annexRevealSeen')) return;
-    if (masteredCount(extraKey) < games.list.length) return;
+    if (!annexProgress(games.list, key => store.punchCard(key), pending).eligible) return;
     /* trap 66: the loader's whole contract is `hidden` - a reveal that fires
      * under the splash is a reveal that never happened. Probe until it lands. */
     let loader = null;
     try { loader = document.getElementById('arc-loader'); } catch (e) { /* noop */ }
     if (loader && !loader.hidden) {
       if (annexProbe) clearTimeout(annexProbe);
-      annexProbe = setTimeout(() => { annexProbe = 0; maybeAnnexReveal(extraKey); }, 450);
+      annexProbe = setTimeout(() => { annexProbe = 0; maybeAnnexReveal(pending); }, 450);
       return;
     }
     /* Never cut on top of a sentence: the greet (which can queue behind the
@@ -4399,7 +4398,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try { const emi = getEmi(); talking = !!(emi && emi.saying); } catch (e) { /* noop */ }
     if (talking) {
       if (annexProbe) clearTimeout(annexProbe);
-      annexProbe = setTimeout(() => { annexProbe = 0; maybeAnnexReveal(extraKey); }, 450);
+      annexProbe = setTimeout(() => { annexProbe = 0; maybeAnnexReveal(pending); }, 450);
       return;
     }
     /* Seen is stamped at MOUNT, not at finish - a beat half-watched is a beat
@@ -4476,12 +4475,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     dismissAnnexStage();
     if (!dom || !dom.screen) return null;
     const spec = o || {};
-    /* Whether THIS seal is the school's LAST - decided now, while the mint is
-     * in hand (the store echo may lag; masteredCount folds the in-flight card
-     * exactly the way the allMastered seam above does). Consumed in onDone:
-     * the reveal fires after the player has SEEN the tenth stamp and pressed
-     * Done - never over the ceremony it is about. */
-    const finalSeal = !!spec.justUnlocked && masteredCount(spec.gameKey) >= games.list.length;
+    // Partial cards and enrollment grants can also cross the Annex threshold.
+    const annexReady = annexProgress(games.list, key => store.punchCard(key), spec).eligible;
     punchStage = createPunchCeremony({
       mount: dom.screen,
       gameKey: spec.gameKey,
@@ -4503,10 +4498,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
          * the ordinary "Done" path and a screen change both read the same. */
         try { if (vn) vn.afterCeremony(); }
         catch (e) { say('first bell mail skipped (' + ((e && e.message) || e) + ')'); }
-        /* THE ANNEX REVEAL: the school's LAST seal. The two seams can never
-         * collide - a first-ever ceremony cannot be the tenth card's tenth
-         * hole - so this simply runs after the mail check. */
-        if (finalSeal) maybeAnnexReveal(spec.gameKey);
+        // Let the earned stamps land before the door reveal.
+        if (annexReady) maybeAnnexReveal(spec);
       },
       log: say,
     });

@@ -50,6 +50,7 @@ public sealed partial class FriendsDrawer : Border
 
     private TextBox? _codeBox;
     private TextBlock? _addResult;
+    private TextBlock? _inviteLine;
     private Button? _addGo;
     private TextBlock? _copied;
 
@@ -844,6 +845,7 @@ public sealed partial class FriendsDrawer : Border
             if (show)
             {
                 if (_addResult != null) _addResult.Text = "";
+                RefreshInviteLine();
                 _codeBox?.Focus();
                 MotionFx.StaggerIn(new FrameworkElement[] { _addBox });
             }
@@ -998,7 +1000,42 @@ public sealed partial class FriendsDrawer : Border
         _addResult.Margin = new Thickness(2, 5, 0, 0);
         _addResult.Tag = "friends-add-result";
         sp.Children.Add(_addResult);
+
+        // No account yet? A subscriber has an invite code for that; the link opens the Premium
+        // tab on the invites card (MainWindow.InviteTicket.cs). Shown only to subscribers.
+        _inviteLine = new TextBlock
+        {
+            FontFamily = FriendsLook.Body,
+            FontSize = 11.5,
+            Foreground = FriendsLook.MutedBrush,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(2, 6, 0, 0),
+            Tag = "friends-invite-line",
+        };
+        _inviteLine.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("friends_invite_line") + " "));
+        var inviteLink = new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run(Loc.Get("friends_invite_link")))
+        {
+            Foreground = FriendsLook.PinkBrush,
+            Cursor = Cursors.Hand,
+        };
+        inviteLink.Click += (_, _) =>
+        {
+            try { Services.Launcher.LauncherHost.OpenPanelInvites(); }
+            catch (Exception ex) { App.Logger?.Debug("[Friends] invite link failed: {E}", ex.GetType().Name); }
+        };
+        _inviteLine.Inlines.Add(inviteLink);
+        sp.Children.Add(_inviteLine);
+        RefreshInviteLine();
         _addBox.Child = sp;
+    }
+
+    /// <summary>The "Invite them" line shows only to subscribers (an invite week holds no codes).</summary>
+    private void RefreshInviteLine()
+    {
+        if (_inviteLine == null) return;
+        bool show = Services.Invites.InviteTicketRule.OffersInviteLink(
+            App.Patreon?.HasPremiumAccess == true, App.Patreon?.IsInviteWeekOnly == true);
+        _inviteLine.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Sends the typed code and words the answer under the box. Internal for the suite.</summary>

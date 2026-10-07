@@ -1,0 +1,66 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Serilog;
+
+namespace ConditioningControlPanel.Services.Invites;
+
+/// <summary>One step of the ladder: how many converted friends, the badge, and the wardrobe item
+/// that badge unlocks (gated in Resources/cosmetics/registry.json, mod bucket "invites").</summary>
+public sealed record InviteRung(int Converted, string AchievementId, string WardrobeItemId);
+
+/// <summary>
+/// The inviter's reward ladder. Rewards count CONVERTED friends (a first paid month), never
+/// redemptions, so handing out codes alone earns nothing. Each rung is an ordinary visible
+/// achievement, so it can be worn as a title and pinned like any other, and it gates one wardrobe
+/// item through the registry's existing <c>achievement:</c> unlock form.
+/// </summary>
+public static class InviteRewards
+{
+    public static readonly IReadOnlyList<InviteRung> Ladder = new[]
+    {
+        new InviteRung(1, "invite_first", "invite_pink_envelope"),
+        new InviteRung(3, "invite_hostess", "invite_hostess_headset"),
+        new InviteRung(5, "invite_pied_piper", "invite_recruiter_rose"),
+        new InviteRung(10, "invite_recruiter_chief", "invite_velvet_crown"),
+    };
+
+    /// <summary>Badges the count has earned that are not unlocked yet, lowest rung first.</summary>
+    public static IReadOnlyList<string> Due(int convertedTotal, ICollection<string>? unlocked)
+        => Ladder.Where(r => convertedTotal >= r.Converted && (unlocked == null || !unlocked.Contains(r.AchievementId)))
+                 .Select(r => r.AchievementId)
+                 .ToList();
+
+    /// <summary>The next rung still to reach, or null at the top of the ladder.</summary>
+    public static InviteRung? Next(int convertedTotal)
+        => Ladder.FirstOrDefault(r => convertedTotal < r.Converted);
+
+    /// <summary>
+    /// Unlock whatever a fresh <c>mine</c> read has earned (<see cref="InviteMine.ConvertedTotal"/>,
+    /// which a lapsed inviter's refusal carries too). Idempotent (TryUnlock is), so it is safe on
+    /// every read. Returns how many badges were newly unlocked.
+    /// </summary>
+    /// <summary>The head's achievements (WPF/Avalonia App.Achievements). Unseeded: nothing unlocks.</summary>
+    public static Func<ICollection<string>?>? UnlockedProvider { get; set; }
+    public static Func<string, bool>? TryUnlockProvider { get; set; }
+
+    public static int Apply(int convertedTotal)
+    {
+        if (convertedTotal <= 0) return 0;
+        try
+        {
+            var unlocked = UnlockedProvider?.Invoke();
+            var count = 0;
+            foreach (var id in Due(convertedTotal, unlocked))
+                if (TryUnlockProvider?.Invoke(id) == true) count++;
+            if (count > 0)
+                Log.Information("[Invites] {Count} invite reward(s) unlocked at {Converted} converted", count, convertedTotal);
+            return count;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "[Invites] reward apply failed");
+            return 0;
+        }
+    }
+}

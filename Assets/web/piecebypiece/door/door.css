@@ -113,6 +113,20 @@
 .door-pill:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
 .door-item.leaving { animation: door-leave 180ms ease both; }
 
+/* --- the computer's strength: five pills under Play solo, the pick lit --- */
+.level-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: -2px 0 0; }
+.level-pill {
+  cursor: pointer; padding: 6px 11px; border-radius: 999px; color: var(--pbp-ink);
+  background: rgba(245, 230, 200, 0.05); border: 1px solid rgba(245, 230, 200, 0.2);
+  font: 10px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase;
+  transition: transform 140ms cubic-bezier(.2, 1.5, .4, 1), background-color 140ms ease, border-color 140ms ease;
+}
+.level-pill:hover { border-color: rgba(255, 105, 180, 0.5); }
+.level-pill:active { transform: scale(0.95); }
+.level-pill.on { color: var(--pbp-pink); background: rgba(255, 105, 180, 0.16); border-color: rgba(255, 105, 180, 0.7); }
+.level-pill:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
+.level-blurb { margin: 2px 0 0; text-align: center; font-size: 11px; opacity: 0.55; }
+
 /* --- the stake row: one line of small pills, the pick lit; online games only --- */
 .stake-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .stake-k { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.55; margin-right: 4px; }
@@ -194,6 +208,32 @@
 .door-end .tally { margin: 0; font-size: 12px; letter-spacing: 0.16em; opacity: 0.55; text-transform: lowercase; font-variant-numeric: tabular-nums; }
 /* the slot the XP and recap agent fills; empty it takes no room */
 #door-recap:empty { display: none; }
+#door-recap { width: 100%; }
+/* the fall (door/fall.js): where your IQ went, the line it took, the move it left on.
+   The curve draws on once as the card lands; reduced motion gets it drawn. */
+.fall { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.fall-row { display: grid; justify-items: center; gap: 4px; }
+.fall-who { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.5; }
+.fall-iq { margin: 0; font-size: 34px; line-height: 1.1; color: var(--pbp-cream); font-variant-numeric: tabular-nums; }
+.fall-iq .from { font-size: 0.55em; letter-spacing: 0.08em; opacity: 0.6; }
+.fall-iq .arrow { font-size: 0.6em; opacity: 0.45; }
+.fall-iq .to { font-weight: 500; color: var(--pbp-pink); }
+.fall-curve { width: min(220px, 70vw); height: auto; overflow: visible; }
+.fall-curve path { fill: none; stroke: var(--pbp-pink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
+  stroke-dasharray: 1 1; animation: fall-draw 900ms ease-out 200ms both; }
+.fall-curve .base { stroke: rgba(245, 230, 200, 0.18); stroke-width: 1; stroke-dasharray: 2 3; }
+.fall-curve circle { fill: var(--pbp-cream); stroke: var(--pbp-pink); stroke-width: 1.5; animation: door-swap 200ms ease 1000ms both; }
+@keyframes fall-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.fall-line { margin: 0; font-size: 13px; letter-spacing: 0.02em; color: var(--pbp-ink); opacity: 0.85; }
+/* two players here: a compact row each */
+.fall.two { gap: 8px; }
+.fall.two .fall-iq { font-size: 24px; }
+.fall.two .fall-curve { width: min(180px, 60vw); }
+.fall.two .fall-line { font-size: 12px; }
+/* watch the fall, save the picture, copy it; one quiet line says how it went */
+.fall-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 2px; }
+.fall-note { margin: 0; font-size: 11px; letter-spacing: 0.06em; opacity: 0.7; }
+.fall-note:empty { display: none; }
 
 /* --- profile --- */
 .door-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -201,6 +241,7 @@
 .door-stat .n { display: block; font-size: 22px; color: var(--pbp-cream); font-variant-numeric: tabular-nums; }
 .door-stat .n.pink { color: var(--pbp-pink); }
 .door-stat .l { display: block; margin-top: 4px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.45; }
+.door-stat.wide { grid-column: 1 / -1; }
 .door-name { display: flex; align-items: center; gap: 10px; }
 .door-name input {
   flex: 1; min-width: 0; padding: 10px 12px; border-radius: 12px; color: var(--pbp-cream);
@@ -241,3 +282,103 @@
 
 .door-end .result { font-size: clamp(22px, 3vw, 30px); line-height: 1.25; }
 .door-end .tally { opacity: .8; letter-spacing: .05em; }
+
+/* --- open tables: a list you browse, one tap on Join sits you down ---
+   The scroll region holds the open tables and the games on now; the card
+   around it stays put. Rows land once (stagger, then never again on a poll),
+   the Join pill lifts on hover and dips on press, and reduced motion keeps
+   every state without the travel (.door.still above). */
+.door.screen-lobby .door-card { width: min(520px, 94vw); }
+.tables-panel { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.tables-side { display: flex; flex-direction: column; gap: 12px; }
+.tables-actions .door-btn { min-width: 0; }
+.host-btn.on { color: var(--pbp-pink); border-color: rgba(255, 105, 180, 0.7); background: rgba(255, 105, 180, 0.12); }
+.host-btn:disabled.on { opacity: 1; }
+.tc-row { justify-content: flex-start; margin: 0; }
+.tables-note { margin: 0; min-height: 0; font-size: 12px; letter-spacing: 0.08em; color: #FF8FB8; }
+.tables-note:empty { display: none; }
+.tables-note:not(:empty) { animation: door-shiver 250ms ease-in-out both; }
+
+.tables-scroll {
+  max-height: min(46vh, 440px); overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+  -webkit-overflow-scrolling: touch; scroll-behavior: smooth; padding: 2px 4px 10px 2px; margin-right: -4px;
+  scrollbar-width: thin; scrollbar-color: rgba(255, 105, 180, 0.55) transparent;
+  border-radius: 12px;
+  /* the bottom edge fades, so a list that goes on reads as one that goes on */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+}
+.tables-scroll:focus-visible { outline: 2px solid rgba(255, 105, 180, 0.6); outline-offset: 2px; }
+.tables-scroll::-webkit-scrollbar { width: 6px; }
+.tables-scroll::-webkit-scrollbar-track { background: transparent; }
+.tables-scroll::-webkit-scrollbar-thumb { background: rgba(255, 105, 180, 0.45); border-radius: 999px; }
+.tables-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 105, 180, 0.8); }
+.tables-list, .playing-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+
+.table-row {
+  display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 12px; row-gap: 3px;
+  align-items: center; padding: 11px 12px 11px 16px; border-radius: 14px;
+  background: linear-gradient(100deg, rgba(245, 230, 200, 0.07), rgba(245, 230, 200, 0.03));
+  border: 1px solid rgba(245, 230, 200, 0.1);
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms cubic-bezier(.2, 1.5, .4, 1);
+}
+.table-row.fresh { animation: table-land 300ms cubic-bezier(.2, 1.5, .4, 1) both; animation-delay: calc(var(--i, 0) * 40ms); }
+@keyframes table-land { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
+.table-row:hover { border-color: rgba(255, 105, 180, 0.38); background-color: rgba(255, 105, 180, 0.05); }
+.table-name {
+  grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 20px; line-height: 1.15; font-weight: 500; letter-spacing: 0.01em; color: var(--pbp-cream);
+  transition: transform 160ms ease;
+}
+.table-row:hover .table-name { transform: translateX(2px); }
+.table-meta { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; letter-spacing: 0.08em; opacity: 0.62; text-transform: lowercase; font-variant-numeric: tabular-nums; }
+.table-meta b { font-weight: 600; color: var(--pbp-pink); opacity: 1; }
+.table-meta .rating::before { content: '\2605  '; opacity: 0.7; }
+.table-row.mine { border-style: dashed; border-color: rgba(255, 105, 180, 0.5); }
+.table-row.mine .door-dot { grid-column: 2; grid-row: 1 / span 2; margin-right: 18px; }
+.table-row.sitting { border-color: rgba(255, 105, 180, 0.75); animation: table-sit 520ms ease-out both; }
+@keyframes table-sit { 0% { background-color: rgba(255, 105, 180, 0.32); } 100% { background-color: rgba(255, 105, 180, 0.08); } }
+
+.table-join {
+  grid-column: 2; grid-row: 1 / span 2; display: inline-flex; align-items: center; gap: 8px;
+  min-width: 84px; min-height: 42px; justify-content: center; padding: 0 20px; border-radius: 999px; cursor: pointer;
+  font: 600 12px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.2em; text-transform: uppercase;
+  color: #1A1A3E; background: linear-gradient(180deg, #FF8CC8, var(--pbp-pink));
+  border: 1px solid rgba(255, 190, 225, 0.9);
+  box-shadow: 0 3px 0 #B83A7E, 0 6px 14px rgba(255, 105, 180, 0.25);
+  transition: transform 140ms cubic-bezier(.2, 1.5, .4, 1), box-shadow 140ms ease, filter 140ms ease;
+}
+.table-join:hover { transform: translateY(-2px) scale(1.04); filter: brightness(1.06); box-shadow: 0 5px 0 #B83A7E, 0 10px 22px rgba(255, 105, 180, 0.45); }
+.table-join:active { transform: translateY(2px) scale(0.95); box-shadow: 0 1px 0 #B83A7E, 0 2px 6px rgba(255, 105, 180, 0.3); transition-duration: 60ms; }
+.table-join:focus-visible { outline: 2px solid var(--pbp-cream); outline-offset: 3px; }
+.table-join:disabled { cursor: default; opacity: 0.35; transform: none; filter: none; box-shadow: 0 2px 0 #B83A7E; }
+.table-row.sitting .table-join { opacity: 1; }
+.table-join .door-dot { background: #1A1A3E; box-shadow: none; }
+
+.tables-h { margin: 18px 2px 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.3em; text-transform: lowercase; opacity: 0.55; }
+.playing-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(245, 230, 200, 0.03); }
+.playing-row .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; color: var(--pbp-cream); }
+.playing-row .who i { font-style: normal; font-size: 11px; letter-spacing: 0.14em; opacity: 0.45; margin: 0 4px; }
+.playing-row .meta { flex: none; font-size: 11px; letter-spacing: 0.08em; opacity: 0.55; font-variant-numeric: tabular-nums; }
+.tables-none { margin: 0 2px; font-size: 12px; letter-spacing: 0.1em; opacity: 0.5; }
+.tables-empty { padding: 14px 4px; }
+
+/* a phone upright: the pills tighten and the buttons drop their small print */
+@media (max-width: 480px) {
+  .tables-actions { gap: 8px; }
+  .tables-actions .door-btn .k { display: none; }
+  .table-name { font-size: 18px; }
+  .table-join { min-width: 72px; padding: 0 14px; }
+  /* the card is tall here, so the list takes what is left of it */
+  .tables-scroll { max-height: max(220px, calc(86vh - 270px)); }
+}
+/* a phone on its side: two columns, the buttons left and the list right, so the list gets the height */
+@media (max-height: 500px) and (min-width: 600px) {
+  .door.screen-lobby .door-card { width: min(820px, 96vw); max-height: 94vh; padding: 14px 16px 10px; gap: 8px; }
+  .door.screen-lobby .door-body { gap: 8px; }
+  .tables-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; align-items: start; }
+  .tables-side { gap: 8px; }
+  .tables-actions { flex-direction: column; gap: 8px; }
+  .tables-actions .door-btn { min-height: 42px; }
+  .tables-scroll { max-height: calc(94vh - 74px); }
+}

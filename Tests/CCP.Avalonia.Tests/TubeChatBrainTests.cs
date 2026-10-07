@@ -37,6 +37,8 @@ public sealed class TubeChatBrainTests
         CoreSettings.Current.AiChatEnabled = true;
         CoreSettings.Current.OfflineMode = false;
         CoreSettings.Current.UseCompanionBrain = useBrain;
+        // The session store writes nothing while memory is off, and settings.json is shared across the run.
+        CoreSettings.Current.CompanionPrompt.ChatMemoryEnabled = true;
 
         var probe = new TcpListener(IPAddress.Loopback, 0);
         probe.Start();

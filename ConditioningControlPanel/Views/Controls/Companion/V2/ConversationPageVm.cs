@@ -99,6 +99,10 @@ internal sealed class ConversationPageVm : CompanionObservable
         }
     }
     public string VoiceLabel => Loc.Get(_room.Hero.IsMuted ? "companion_v2_unmute" : "companion_v2_mute");
+    // The tube's on switch (AvatarEnabled). This page hides the old room, whose eye toggle and
+    // Wake button were that switch, so 7.0.1 had no way back in the app but the tray.
+    public bool CompanionShown => _room.Hero.IsCompanionShown;
+    public bool CompanionHidden => !CompanionShown;
     public string StartLabel => Loc.Get(NeedsSignIn ? "companion_v2_signin" : "companion_v2_start");
     public string Status => Busy ? Loc.Get("companion_v2_replying") : HasNotice ? Loc.Get("companion_v2_reply_failed") : NeedsStart ? Loc.Get("companion_v2_off")
         : NeedsSignIn ? Loc.Get("companion_v2_signin_status") : DailyExhausted ? Loc.Get("companion_v2_error_limit")
@@ -125,7 +129,7 @@ internal sealed class ConversationPageVm : CompanionObservable
         _room.SyncBrain();
         if (_observing) Attach(App.Brain?.Session);
         Reconcile();
-        foreach (var name in new[] { nameof(NeedsStart), nameof(NeedsSignIn), nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost) }) Raise(name);
+        foreach (var name in new[] { nameof(NeedsStart), nameof(NeedsSignIn), nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost), nameof(CompanionShown), nameof(CompanionHidden) }) Raise(name);
     }
     public void Resume()
     {
@@ -157,7 +161,7 @@ internal sealed class ConversationPageVm : CompanionObservable
     }
     private void RoomChanged(object? sender, PropertyChangedEventArgs e)
     {
-        foreach (var name in new[] { nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost), nameof(VoiceLabel) }) Raise(name);
+        foreach (var name in new[] { nameof(ShowStart), nameof(StartLabel), nameof(Status), nameof(Privacy), nameof(Name), nameof(Flavor), nameof(Face), nameof(StatusColor), nameof(Allowance), nameof(Familiarity), nameof(PerkCost), nameof(VoiceLabel), nameof(CompanionShown), nameof(CompanionHidden) }) Raise(name);
     }
     private void Attach(ChatSession? session)
     {

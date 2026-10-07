@@ -4,8 +4,8 @@
 // the link flow (:830-863) on the Core loopback OAuth, the lock pick (:962-1053) and the fact cap.
 // ponytail: Circe's mood is a line (WPF chaster_mood_peek wording), not the CircesMoodMeter heat
 // row, and CirceSays lines are not shown. The ground (spiral/glow/ambient), hero art, paper tag,
-// calendar, LockTitle letters, the numbers, the receipt, limits, menu,
-// presets, trailer and all Fx. The heads-up clock, raffle card and ladder scrap are ChasterTabView.Ladder.cs (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
+// LockTitle letters, limits, menu, trailer and most Fx. The numbers + receipt (Numbers.cs), calendar (Calendar.cs) and keys (Keys.cs) are partials.
+// The heads-up clock, raffle card and ladder scrap are ChasterTabView.Ladder.cs (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
 // bursts included) are later slices. Unlink, the switch + consent and pause are real (slice 2).
 using System;
 using System.Collections.Generic;
@@ -36,7 +36,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static readonly FontFamily Display = new("Fredoka, Segoe UI");
 
         private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
+        // WPF's slow page tick (:53, :89): the hero, so the calendar rolls over at midnight.
+        internal readonly DispatcherTimer SlowTick = new() { Interval = TimeSpan.FromSeconds(30) };
+        internal bool ClockTicking => _tick.IsEnabled;
         private ChasterService? _subscribed;
+        private bool _attached;
         private string _clockShape = "";
         private readonly List<TextBlock> _clockNumbers = new();
         private bool _loading;
@@ -45,9 +49,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             InitializeComponent();
             _tick.Tick += (_, _) => { PaintHeroClock(); PaintChasterChip(ChasterHead.Service); };
-            AttachedToVisualTree += (_, _) => Subscribe(true);
-            DetachedFromVisualTree += (_, _) => Subscribe(false);
+            SlowTick.Tick += (_, _) => RefreshHero();
+            // WPF (:99) only listens and ticks while the page is on screen; the shell hides tabs with IsVisible.
+            AttachedToVisualTree += (_, _) => { _attached = true; Subscribe(IsVisible); };
+            DetachedFromVisualTree += (_, _) => { _attached = false; Subscribe(false); };
+            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) Subscribe(_attached && IsVisible); };
             LadderInit();
+            NumbersInit();
+            KeysInit();
             Refresh();
             LadderRenderSample();
         }
@@ -71,6 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 c.LockChanged += OnLockChanged;
                 c.Booked += OnBooked;
                 _tick.Start();
+                SlowTick.Start();
             }
             else if (!on && _subscribed is { } s)
             {
@@ -79,13 +89,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 s.Booked -= OnBooked;
                 _subscribed = null;
                 _tick.Stop();
+                SlowTick.Stop();
             }
         }
 
         // All three arrive on whatever thread found out.
         private void OnLinkChanged() => Dispatcher.UIThread.Post(OnTabShown);
         private void OnLockChanged() => Dispatcher.UIThread.Post(RefreshHero);
-        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); });
+        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); RefreshNumbers(); });
 
         internal void Refresh()
         {
@@ -95,6 +106,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             FactRow.IsVisible = !linked;
             AccountStrip.IsVisible = linked;
             AddedRow.IsVisible = linked;
+            NumbersPanel.IsVisible = linked;
+            if (linked) { RefreshNumbers(); RefreshPresets(); }
             if (linked) RefreshAdded(); else HideLadder();
             SwitchPill.IsVisible = linked;
             PausePill.IsVisible = linked;
@@ -213,9 +226,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 HeroClockRow.IsVisible = false;
                 TxtHeroEnds.IsVisible = false;
                 HeroPills.IsVisible = false;
+                BuildCalendar(null);
                 return;
             }
-            var key = TabPageText.SetupHint(true, chaster!.LockLookup, snapshot != null, CoreSettings.Current.ChasterTabEnabled);
+            // WPF RefreshSetupHint (:265-273): adds switched off by the keyholder (61a331c1d) and
+            // nothing switched on to count (c8dead5b3) each get their own line.
+            var key = TabPageText.SetupHint(true, chaster!.LockLookup, snapshot != null, CoreSettings.Current.ChasterTabEnabled,
+                addsBlocked: chaster.AddsBlocked,
+                anyRowOn: TabPageText.AnyRowOn(CoreSettings.Current.ChasterPrices));
             SetupHint.Text = key == null ? "" : Loc.Get(key);
             SetupHint.IsVisible = key != null;
             PaintHeroClock();
@@ -223,6 +241,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtHeroEnds.Text = ends is { } when ? Loc.GetF("chaster_hero_ends", when.ToString("ddd d MMM HH:mm")) : "";
             TxtHeroEnds.IsVisible = ends != null;
             RefreshPills(chaster.LockLookup, snapshot, chaster.SafetyHoldRemaining);
+            BuildCalendar(snapshot);
         }
 
         /// <summary>WPF PaintHeroClock (:301), without the count-up on show: d h m s off the last snapshot.</summary>
@@ -296,6 +315,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 case "chaster_state_pick": HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_pick"), AmberColour, "chaster_state_pick")); break;
                 case "chaster_state_away": HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_away"), AmberColour, "chaster_state_away")); break;
             }
+            if (lookup == LockLookup.Chosen && ChasterHead.Service?.AddsBlocked == true)   // WPF :396 (61a331c1d)
+                HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_blocked"), AmberColour, "chaster_state_keyholder_blocked"));
             if (snapshot?.IsTestLock == true || state == "chaster_state_test")
                 HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_test"), MutedColour));
             if (snapshot != null)
@@ -453,8 +474,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         internal void PickLock(string id)
         {
-            CoreSettings.Current.ChasterLockId = id;
-            CoreSettings.Save();
+            // The demo picks its fake lock for itself (WPF 2b7d742d0, ChasterService.IsDemo).
+            if (ChasterHead.Service?.IsDemo != true)
+            {
+                CoreSettings.Current.ChasterLockId = id;
+                CoreSettings.Save();
+            }
             BtnUseLock.IsVisible = false;
             _ = RepickAsync();
         }

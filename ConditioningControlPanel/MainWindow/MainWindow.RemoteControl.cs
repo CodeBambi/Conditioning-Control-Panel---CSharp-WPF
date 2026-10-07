@@ -180,12 +180,14 @@ namespace ConditioningControlPanel
             {
                 actions.AppendLine("  - Start/stop autonomy mode");
                 actions.AppendLine("  - Start/pause/stop sessions");
-                actions.AppendLine("  - Enable strict lock (videos cannot be skipped)");
-                actions.AppendLine("  - Disable panic button (ESC key won't work)");
+                // No strict lock or panic-off lines: since Remote v2 (7.0.3) the server refuses both
+                // for every tier (proxy/remote-commands.js FORBIDDEN_ACTIONS), so listing them here
+                // promised powers no controller has (ccp-bugs, Amelia 2026-10-04).
             }
 
             var message = $"You are about to allow another person to remotely control parts of your app.\n\n" +
                           $"The Controller will be able to:\n{actions}\n" +
+                          $"Your panic key always works. A controller cannot switch it off or turn Strict Lock on.\n" +
                           $"All media content shown comes from YOUR local files and settings.\n" +
                           $"You assume full responsibility for this interaction.\n" +
                           $"You can stop the session at ANY time by clicking \"Stop Session\" or closing the app.\n" +
@@ -476,148 +478,38 @@ namespace ConditioningControlPanel
         }
 
         // =====================================================================
-        // SP5 layer 3 — Available Subjects tab (controller side)
+        // The Lobby (was the Available Subjects tab). The page lives in MainWindow.Lobby.cs; the
+        // Remote half keeps its claim flow here.
         // =====================================================================
 
-        private bool _availableSubjectsBound;
-
-        // internal since Phase 6: the Play door's Available Subjects card forwards to this exact
-        // handler rather than calling ShowTab itself, so the polling lifecycle keeps exactly one
-        // caller shape (start lives in ShowTab's own case, never on a card).
+        // internal since Phase 6: the Play door's card forwards to this exact handler rather than
+        // calling ShowTab itself, so the polling lifecycle keeps one caller shape (start lives in
+        // ShowTab's own case, never on a card).
         internal void BtnAvailableSubjects_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("availablesubjects");
         }
 
-        internal void BtnBecomeASubject_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Join on a Remote table: claim the subject and open the returned session_url in the
+        /// browser. Privacy: the url lives on this stack only, referenced once for Process.Start,
+        /// never logged or stored (its hash fragment carries the PIN). A 409 (someone claimed
+        /// first) is handled by the service, which re-fetches; the row flips to playing.
+        /// </summary>
+        internal async System.Threading.Tasks.Task ClaimRemoteSubjectAsync(string subjectUnifiedId)
         {
-            // Premium (or the ? box's "remote" free day) → take them straight to the Remote
-            // Control tab so they can opt into the directory. Free → open the Patreon page.
-            if (App.Patreon?.HasPremiumAccess == true
-                || App.DailyFree?.IsFreeToday("remote") == true)
-            {
-                ShowTab("remotecontrol");
-                return;
-            }
+            if (App.AvailableSubjects == null || string.IsNullOrEmpty(subjectUnifiedId)) return;
+            var url = await App.AvailableSubjects.TryClaimAsync(subjectUnifiedId);
+            if (string.IsNullOrEmpty(url)) return;
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "https://www.patreon.com/CodeBambi",
-                    UseShellExecute = true
-                });
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "[Subjects] failed to open Patreon URL");
+                App.Logger?.Warning(ex, "[Lobby] failed to open browser for claimed session");
             }
-        }
-
-        /// <summary>
-        /// Shows the italic "support the project" subtitle only to free users.
-        /// Premium users see just the button (which opens the Remote Control tab).
-        /// </summary>
-        private void RefreshBecomeASubjectCta()
-        {
-            if (AvailableSubjectsTab.TxtBecomeASubjectSubtitle == null) return;
-            var hasPremium = App.Patreon?.HasPremiumAccess == true
-                             || App.DailyFree?.IsFreeToday("remote") == true;
-            AvailableSubjectsTab.TxtBecomeASubjectSubtitle.Visibility = hasPremium ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        /// <summary>
-        /// One-time binding: hook the service's ObservableCollection to the
-        /// ItemsControl ItemsSource and the IsEmpty/HasError flags to the
-        /// empty/error panels. Called from ShowTab on first navigation.
-        /// </summary>
-        private void EnsureAvailableSubjectsBound()
-        {
-            if (_availableSubjectsBound) return;
-            if (App.AvailableSubjects == null) return;
-            if (AvailableSubjectsTab.AvailableSubjectsList == null) return;
-
-            AvailableSubjectsTab.AvailableSubjectsList.ItemsSource = App.AvailableSubjects.Entries;
-            App.AvailableSubjects.PropertyChanged += OnAvailableSubjectsServicePropertyChanged;
-            UpdateAvailableSubjectsEmptyAndError();
-            RefreshBecomeASubjectCta();
-            _availableSubjectsBound = true;
-        }
-
-        private void OnAvailableSubjectsServicePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            // The service raises these from a background task — marshal to UI.
-            Dispatcher.Invoke(UpdateAvailableSubjectsEmptyAndError);
-        }
-
-        internal void AvailableSubjectsScroller_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
-        {
-            if (sender is not System.Windows.Controls.ScrollViewer sv) return;
-            sv.ScrollToHorizontalOffset(sv.HorizontalOffset - e.Delta);
-            e.Handled = true;
-        }
-
-        private void UpdateAvailableSubjectsEmptyAndError()
-        {
-            var svc = App.AvailableSubjects;
-            if (svc == null) return;
-            // Show error panel if last refresh failed; show empty panel if
-            // last refresh was clean but the roster is empty. Otherwise both
-            // hidden (cards visible).
-            if (AvailableSubjectsTab.AvailableSubjectsErrorPanel != null)
-                AvailableSubjectsTab.AvailableSubjectsErrorPanel.Visibility = svc.HasError
-                    ? Visibility.Visible : Visibility.Collapsed;
-            if (AvailableSubjectsTab.AvailableSubjectsEmptyPanel != null)
-                AvailableSubjectsTab.AvailableSubjectsEmptyPanel.Visibility = (!svc.HasError && svc.IsEmpty)
-                    ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        /// <summary>
-        /// Connect button on a subject card. Reads the entry from the button's
-        /// DataContext, calls the service to claim, and on success opens the
-        /// returned session_url in the user's default browser via Process.Start.
-        ///
-        /// Privacy: the session_url string lives in this method's stack only —
-        /// referenced once for Process.Start, never logged, never assigned to
-        /// any field. The hash fragment carries the PIN; the cclabs.app/remote/
-        /// page strips it from the URL after parsing.
-        ///
-        /// 409 → service handles silently (re-fetches, card flips to TAKEN).
-        /// other failures → no toast in v1; user can re-click. Audit-log
-        /// coverage for the failure mode is filed as the SP6 followup.
-        /// </summary>
-        internal async void BtnConnectSubject_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not System.Windows.Controls.Button btn) return;
-            if (btn.DataContext is not ConditioningControlPanel.Services.DirectoryEntry entry) return;
-            if (entry.Claimed) return; // belt-and-braces; IsEnabled binding already guards
-            if (App.AvailableSubjects == null) return;
-
-            btn.IsEnabled = false;
-            try
-            {
-                var url = await App.AvailableSubjects.TryClaimAsync(entry.UnifiedId);
-                if (string.IsNullOrEmpty(url)) return; // 409 handled silently or transient error
-
-                try
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
-                    {
-                        UseShellExecute = true
-                    });
-                }
-                catch (Exception ex)
-                {
-                    // Don't echo the URL into the log line — exception message
-                    // typically only carries the OS error code anyway.
-                    App.Logger?.Warning(ex, "[AvailableSubjects] failed to open browser for claimed session");
-                }
-            }
-            finally
-            {
-                // Restore the button — IsEnabled binding will recompute on the
-                // next refresh based on entry.Claimed.
-                btn.IsEnabled = entry.IsConnectEnabled;
-            }
+            _ = App.Lobby?.RefreshAsync();
         }
 
         // =====================================================================
@@ -859,6 +751,7 @@ namespace ConditioningControlPanel
             }
 
             HideRemoteControlOverlay();
+            DisposeRemoteHud();
             UpdateStartButtonForRemoteControl(false);
             RemoteControlTab.RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
             RemoteControlTab.RemoteLinkPanel.Visibility = System.Windows.Visibility.Collapsed;
@@ -912,10 +805,12 @@ namespace ConditioningControlPanel
                     // comment in RemoteControlService's connect path.
                     ShowRemoteControlOverlay();
                     NotifyRemoteControllerJoined();
+                    EnsureRemoteHud();
                 }
                 else
                 {
                     HideRemoteControlOverlay();
+                    RefreshRemoteHud();
                 }
             });
         }
@@ -939,6 +834,7 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 HideRemoteControlOverlay();
+                DisposeRemoteHud();
                 UpdateStartButtonForRemoteControl(false);
                 // Unticking under _isLoading deliberately suppresses ChkRemoteControlEnabled_Changed
                 // (it early-returns on _isLoading), so StopRemoteControl never runs on this path and

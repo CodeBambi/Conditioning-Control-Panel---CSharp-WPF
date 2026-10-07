@@ -109,6 +109,12 @@ public sealed class AppLeashTaskHost : ILeashTaskHost, IDisposable
 
     public bool SessionRunning => App.IsSessionRunning;
 
+    public void StopSession()
+    {
+        try { App.MainWindowRef?.StopLeashSession(); }
+        catch (Exception ex) { App.Logger?.Warning("Leash session stop failed: {E}", ex.Message); }
+    }
+
     public bool StartSession(PunishKind kind, int minutes)
     {
         var mw = App.MainWindowRef;

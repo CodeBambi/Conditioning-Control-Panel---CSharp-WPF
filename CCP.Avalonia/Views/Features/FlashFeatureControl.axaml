@@ -104,6 +104,34 @@
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
 
+                            <!-- #658: images per flash as a range. The switch reveals the floor; the
+                                 Images slider above is the ceiling. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_flash_random_images}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_random_images}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkRandomImages" sessionLock:SessionLock.Owned="True"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Grid x:Name="RowImagesMin" Height="36" IsVisible="False" ToolTip.Tip="{loc:Str tooltip_flash_fewest_images}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_fewest_images}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderImagesMin" sessionLock:SessionLock.Owned="True" Minimum="1" Maximum="20" Value="1"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtImagesMin" Text="1" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
                             <Grid Height="36">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="120"/>

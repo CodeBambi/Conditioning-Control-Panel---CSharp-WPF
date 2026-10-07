@@ -103,10 +103,34 @@ export function viewportSize() {
 export function isMobile() {
   const f = forcedAnswer();
   if (f !== null) return f;
-  if (!mq('(pointer: coarse)')) return false;
-  if (mq('(any-pointer: fine)')) return false;
   const vp = viewportSize();
-  return Math.min(vp.w, vp.h) <= MOBILE_MAX_SHORT_SIDE;
+  const short = Math.min(vp.w, vp.h);
+  if (mq('(pointer: coarse)') && !mq('(any-pointer: fine)')) return short <= MOBILE_MAX_SHORT_SIDE;
+  return stylusPhone(short);
+}
+
+/** Short-side ceiling, in CSS px, for the stylus-phone escape below. Every
+ *  phone is 360-430 on its short side; no desktop window that could reach
+ *  this branch is ever this small. */
+export const PHONE_MAX_SHORT_SIDE = 500;
+
+/**
+ * THE STYLUS PHONE (phone testers, 2026-10-01: the campus HUD stacked on
+ * itself in landscape and the hint said "hover"). Some Android phones - the
+ * S Pen Samsungs among them - report a FINE pointer in `any-pointer` because
+ * the digitizer could take a pen, so rule 2 refused a plain phone and it got
+ * the desktop campus at 850x390. A phone-SIZED screen whose primary input is
+ * a finger (coarse, or no hover at all) and that has a coarse pointer
+ * somewhere is a phone whatever else it lists. A touchscreen laptop still
+ * fails: its primary pointer is fine AND it hovers, and its window is never
+ * 500px on the short side anyway.
+ * @param {number} short  the viewport's short side in CSS px
+ * @returns {boolean}
+ */
+function stylusPhone(short) {
+  if (!(short > 0 && short <= PHONE_MAX_SHORT_SIDE)) return false;
+  if (!mq('(any-pointer: coarse)')) return false;
+  return mq('(pointer: coarse)') || mq('(hover: none)');
 }
 
 /**

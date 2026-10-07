@@ -1488,10 +1488,21 @@ public class QuestService : IDisposable
     }
 
     /// <summary>
-    /// Track a completed lockdown. Patreon-exclusive category.
+    /// The shortest lockdown that counts for a Lockdown quest or program task (ccp-bugs #705:
+    /// a 5-minute lockdown used to pay "Locked Away"). Programs ask for 20 minutes too.
     /// </summary>
-    public void TrackLockdownCompleted()
+    public static readonly TimeSpan LockdownQuestMinimum = TimeSpan.FromMinutes(20);
+
+    /// <summary>True when a lockdown that ran for <paramref name="served"/> counts for quests.</summary>
+    public static bool LockdownCountsForQuests(TimeSpan served) => served >= LockdownQuestMinimum;
+
+    /// <summary>
+    /// Track a completed lockdown. Patreon-exclusive category. A lockdown shorter than
+    /// <see cref="LockdownQuestMinimum"/> earns nothing.
+    /// </summary>
+    public void TrackLockdownCompleted(TimeSpan served)
     {
+        if (!LockdownCountsForQuests(served)) return;
         UpdateQuestProgress(QuestCategory.Lockdown, 1);
     }
 

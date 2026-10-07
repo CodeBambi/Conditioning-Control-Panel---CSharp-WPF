@@ -61,8 +61,8 @@ namespace ConditioningControlPanel
         internal void SliderAwarenessGlobalCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading || AwarenessTab.TxtAwarenessGlobalCooldown == null) return;
-            var value = (int)AwarenessTab.SliderAwarenessGlobalCooldown.Value;
-            AwarenessTab.TxtAwarenessGlobalCooldown.Text = $"{value}s";
+            var value = Services.Awareness.AwarenessCooldownScale.SecondsAt(AwarenessTab.SliderAwarenessGlobalCooldown.Value);
+            AwarenessTab.TxtAwarenessGlobalCooldown.Text = Services.Awareness.AwarenessCooldownScale.Format(value);
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.KeywordGlobalCooldownSeconds = value;
@@ -78,8 +78,8 @@ namespace ConditioningControlPanel
         internal void SliderAwarenessSameWordCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading || AwarenessTab.TxtAwarenessSameWordCooldown == null) return;
-            var value = (int)AwarenessTab.SliderAwarenessSameWordCooldown.Value;
-            AwarenessTab.TxtAwarenessSameWordCooldown.Text = $"{value}s";
+            var value = Services.Awareness.AwarenessCooldownScale.SecondsAt(AwarenessTab.SliderAwarenessSameWordCooldown.Value);
+            AwarenessTab.TxtAwarenessSameWordCooldown.Text = Services.Awareness.AwarenessCooldownScale.Format(value);
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.KeywordPerKeywordCooldownSeconds = value;

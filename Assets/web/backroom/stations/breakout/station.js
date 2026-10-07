@@ -42,6 +42,7 @@ export const roomStage = false;
 
 const num = (q, k, d) => (q.has(k) && !Number.isNaN(Number(q.get(k))) ? Number(q.get(k)) : d);
 const DEV_KEY = 'bo.dev.open', FOCUS_R = 140, REDEAL_WALLS = 3;
+const BLUR_PAUSE_MS = 150;   // a blur that is back within this is focus being handed around, not the player leaving
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
@@ -779,7 +780,7 @@ export async function mount(ctx) {
     const fieldPerCss = () => renderer.toField(dpr, 0).x - renderer.toField(0, 0).x;
 
     const steer = (e) => {
-      if (mouseLock?.locked && e.pointerType !== 'touch') { touchDrag = null; const p = game.snapshot().paddle; return lockedSteer(input.x ?? p.x, e.movementX, fieldPerCss(), p.w / 2, W); }
+      if (mouseLock?.locked && e.pointerType !== 'touch') { touchDrag = null; const p = game.snapshot().paddle; return lockedSteer(input.x ?? p.x, mouseLock.movement(e), fieldPerCss(), p.w / 2, W); }   // movement(): spikes clamped, the lock's first move dropped (#1337)
       if (e.pointerType !== 'touch') { touchDrag = null; return pointerX(e); }
       const p = game.snapshot().paddle;
       touchDrag = touchDrag && touchDrag.id === e.pointerId ? touchDrag : { id: e.pointerId, sx: pointerX(e), px: p.x };
@@ -790,7 +791,8 @@ export async function mount(ctx) {
 
     on(canvas, 'pointerdown', (e) => {
       if (menuOpen || paused || !e.isPrimary) return;
-      canvas.setPointerCapture(e.pointerId);
+      // Never a bare setPointerCapture: it throws while the mouse is locked and the click would not launch (mouse-lock.js capture).
+      if (mouseLock) mouseLock.capture(e); else { try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ } }
       touchDrag = null;
       const took = mouseLock?.request(e);            // a mouse click takes the mouse; the press itself still steers and launches
       startAudio(); if (!took) input.x = steer(e); input.launch = true; firstMove(); if (paused) setPaused(false);
@@ -799,9 +801,15 @@ export async function mount(ctx) {
     on(window, 'keydown', (e) => {
       const typing=e.target instanceof HTMLElement&&(e.target.isContentEditable||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'||(e.target.tagName==='INPUT'&&!['range','checkbox','radio','button'].includes(e.target.type)));
       if(!options.hidden){if(e.key==='Escape'){e.preventDefault();options.hidden=true;closePictures();optionsFrom?.focus();}return;}
+      if(e.key==='Escape'&&e.repeat){e.preventDefault();return;}   // a held Escape is one press (the panel counts it once too)
+      if(!typing&&e.key==='Escape'&&game.snapshot().demoComplete&&!ui.demoCard.hidden){e.preventDefault();ui.demoCard.querySelector('[data-demo="menu"]').click();return;}
       if(typing || game.snapshot().demoComplete)return;
       if(!menuOpen&&game.snapshot().finale?.phase!=='outro'&&(e.key==='Escape'||e.key.toLowerCase()==='p')){
-        e.preventDefault();setPaused(!paused);if(paused)el.querySelector('[data-menu="resume"]').focus();else canvas.focus();return;
+        e.preventDefault();
+        // Desktop (tester report 2026-09-30): the panel keeps a first Escape as the pause, and an Escape on any
+        // pause card leaves, as in chess (owner call). The web (no panel) keeps Escape as a pause toggle.
+        if(e.key==='Escape'&&paused&&ctx.hostKeepsEscape){back();return;}
+        setPaused(!paused);if(paused)el.querySelector('[data-menu="resume"]').focus();else canvas.focus();return;
       }
       if(paused)return;
       if(e.key==='Escape' && game.snapshot().finale?.phase==='outro') {
@@ -835,7 +843,14 @@ export async function mount(ctx) {
       else return;
       syncKeys();
     });
-    on(window, 'blur', () => { if (moved) setPaused(true); });
+    // A blur pauses only when the page is still out of focus a moment later. The desktop panel hands a kept
+    // Escape over and gives the game the keyboard back in the same beat, which blurs and refocuses the page at
+    // once; pausing on that blur put the real Escape on a pause card, and Escape there leaves (desk run 2026-09-30).
+    let blurWait = 0;
+    on(window, 'blur', () => {
+      if (!moved || blurWait) return;
+      blurWait = setTimeout(() => { blurWait = 0; if (moved && el && !document.hasFocus()) setPaused(true); }, BLUR_PAUSE_MS);
+    });
     on(document, 'visibilitychange', () => { if (document.hidden) pageFx?.cancelAll(); if (document.hidden && moved) setPaused(true); });
     if (ui.back) on(ui.back, 'click', back);
     on(window,'keydown',e=>{

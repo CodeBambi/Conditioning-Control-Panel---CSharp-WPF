@@ -114,6 +114,17 @@ public class ChasterRaffleTests
         Assert.Null(ChasterRaffle.TicketDue(Card(32, Range(1, 25), Need, frozen: true, ticket: 42)));
     }
 
+    [Theory]
+    [InlineData("en-US", "November 1")]
+    [InlineData("es-ES", "1 de noviembre")]
+    [InlineData("de-DE", "1. November")]
+    [InlineData("ja-JP", "11月1日")]
+    public void The_ticket_day_reads_the_way_the_culture_writes_it(string culture, string expected)
+    {
+        var due = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(expected, ChasterRaffle.FormatDueDay(due, new System.Globalization.CultureInfo(culture)));
+    }
+
     [Fact]
     public void A_frozen_list_shows_the_ticket_or_the_miss()
     {

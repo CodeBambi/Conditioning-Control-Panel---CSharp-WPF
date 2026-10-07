@@ -55,6 +55,8 @@
 //   private const int ExclusiveHeroDecodeWidth
 //   private static ImageSource? LoadPackImage(…)
 
+using Avalonia.Controls;
+
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
@@ -63,6 +65,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF RefreshExclusivesTab, for the entitlement events (tier change, day rollover).
         /// The body lives in ExclusivesTabView.RefreshVault.</summary>
-        internal void RefreshExclusivesTab() => Named<Tabs.ExclusivesTabView>("ExclusivesTab")?.RefreshVault();
+        internal void RefreshExclusivesTab()
+        {
+            Named<Tabs.ExclusivesTabView>("ExclusivesTab")?.RefreshVault();
+            RefreshInvites();
+        }
+
+        /// <summary>WPF _invitePanel.RefreshAsync(): throttled inside, so a repaint storm costs one read.</summary>
+        internal void RefreshInvites() => _ = Named<Tabs.ExclusivesTabView>("ExclusivesTab")
+            ?.FindControl<Controls.Invites.InvitePanel>("InvitesHost")?.RefreshAsync();
     }
 }

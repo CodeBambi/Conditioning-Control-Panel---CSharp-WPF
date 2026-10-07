@@ -71,6 +71,7 @@ public static class ChasterServiceApp
         var svc = new ChasterService(new ChasterClient(new DemoChaster()), new DemoTokens(), tabPath,
             () => options() with { LockId = "demo-lock" })
         {
+            IsDemo = true,
             LadderApi = new DemoRaffle(Environment.GetEnvironmentVariable(DemoEnvVar)),
             RafflePostDays = () => App.Settings?.Current?.ChasterRafflePostDays == true,
             LadderShowName = () => App.Settings?.Current?.ChasterLadderShowName == true,

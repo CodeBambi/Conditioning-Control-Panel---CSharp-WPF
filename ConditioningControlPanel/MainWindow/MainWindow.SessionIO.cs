@@ -1076,7 +1076,12 @@ namespace ConditioningControlPanel
                 var files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 var dropType = DetectDropType(files);
 
-                if (dropType != DropType.None)
+                if (dropType == DropType.Unrecognised)
+                {
+                    // Accept it (the drop explains itself in a toast), no overlay.
+                    e.Effects = DragDropEffects.Copy;
+                }
+                else if (dropType != DropType.None)
                 {
                     e.Effects = DragDropEffects.Copy;
                     UpdateDropOverlay(dropType, files);
@@ -1455,6 +1460,16 @@ namespace ConditioningControlPanel
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
 
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            await ImportDroppedFilesAsync(files);
+        }
+
+        /// <summary>
+        /// One door for a file drop: the panel's own Window_Drop and the launcher, which
+        /// opens the panel first and then hands its drop here (ccp-bugs #1331).
+        /// </summary>
+        internal async Task ImportDroppedFilesAsync(string[]? files)
+        {
+            if (files == null || files.Length == 0) return;
 
             // Single-file media drop: prompt Play / Edit / Add-to-Library.
             // Multi-file, folder, and .zip drops fall through to the existing flow.
@@ -1495,10 +1510,15 @@ namespace ConditioningControlPanel
                 case DropType.Folder:
                     await HandleAssetDropAsync(files);
                     break;
+
+                case DropType.Unrecognised:
+                    App.Notifications?.Show(Loc.Get("drop_not_recognised"),
+                        Services.NotificationType.Info);
+                    break;
             }
         }
 
-        private enum DropType { None, Session, Preset, Assets, Zip, Folder, Enhancement, Mod }
+        private enum DropType { None, Session, Preset, Assets, Zip, Folder, Enhancement, Mod, Unrecognised }
 
         private static readonly HashSet<string> AssetVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -1540,8 +1560,9 @@ namespace ConditioningControlPanel
             if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
                 return DropType.Session;
 
-            // Single preset file
-            if (files.Length == 1 && files[0].EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase))
+            // Single preset file: the name is the fast path, any other .json is sniffed,
+            // so a browser rename ("x.preset (1).json") or a plain "x.json" still imports.
+            if (files.Length == 1 && File.Exists(files[0]) && PresetDropRules.FileIsPreset(files[0]))
                 return DropType.Preset;
 
             // Single mod package. Must be detected before the generic zip/asset
@@ -1556,7 +1577,15 @@ namespace ConditioningControlPanel
             if (files.All(IsImportableEnhancementPath)
                 && !files.Any(f => f.EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
                 && !files.Any(f => f.EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase)))
+            {
+                // A lone plain .json that is neither a preset (checked above) nor an
+                // enhancement gets the generic "not recognised" toast, not the Deeper one.
+                if (files.Length == 1
+                    && !files[0].EndsWith(".ccpenh.json", StringComparison.OrdinalIgnoreCase)
+                    && !Services.Deeper.EnhancementImportRules.FileLooksLikeEnhancement(files[0]))
+                    return DropType.Unrecognised;
                 return DropType.Enhancement;
+            }
 
             // Single folder
             if (files.Length == 1 && Directory.Exists(files[0]))
@@ -1584,7 +1613,9 @@ namespace ConditioningControlPanel
             if (hasZip) return DropType.Zip;
             if (hasAssets) return DropType.Assets;
 
-            return DropType.None;
+            // Files that none of the rules claim: accepted so the drop says so in a
+            // toast instead of doing nothing.
+            return DropType.Unrecognised;
         }
 
         private void UpdateDropOverlay(DropType dropType, string[] files)

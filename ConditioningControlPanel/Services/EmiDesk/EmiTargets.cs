@@ -224,7 +224,9 @@ public static class EmiTargets
 
         "videos" => D(Always, Never, () => Rack("video")),
         "dtrh" => D(Always, () => !LabOk("emi_desk_target_dtrh", "dtrh"), () => Chaos.DtrhHostService.Launch()),
-        "intake" => D(Always, () => !PremiumOk("emi_desk_target_intake", null), () => Quiz.IntakeHostService.Launch()),
+        // Same rule as the launcher tile: Prime, or a free account with this week's pass unspent.
+        // Basic has no unlimited runs, so a refusal goes to the Prime offer (ShowGate).
+        "intake" => D(Always, () => !(App.IntakePass?.CanStartIntake ?? false), () => Quiz.IntakeHostService.Launch()),
         "subliminals" => D(Always, Never, () => Rack("subliminal")),
         "bubbles" => D(Always, Never, () => Rack("bubbles")),
 
@@ -338,6 +340,7 @@ public static class EmiTargets
         {
             case "arcademy": LabPrompt(key, null); break;
             case "dtrh": LabPrompt(key, "dtrh"); break;
+            case "intake": LabPrompt(key, null); break;
             case "fyp": PremiumPrompt(key, "fyp"); break;
             case "awareness": PremiumPrompt(key, "awareness"); break;
             case "remote": PremiumPrompt(key, "remote"); break;

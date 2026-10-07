@@ -576,7 +576,45 @@
                        Opacity is BOUND to the name's - one animation, two riders.
                      Sized for the shut rail: 56 column - 8px margins - 1px borders = a 40x30 pill
                      with the lens centred in its fixed 38px first column. -->
-                <Button x:Name="BtnNavSearch" Grid.Row="0" Height="30" Margin="8,0,8,10"
+                <StackPanel Grid.Row="0">
+                <!-- BACK: returns to the tab shown before this one (MainShellWindow.TabHistory.cs),
+                     WPF MainWindow.xaml BtnNavBack. Hidden until there is somewhere to go back to;
+                     the arrow stays on the shut rail, the label rides the search label's fade. -->
+                <Button x:Name="BtnNavBack" Height="26" Margin="8,0,8,6" IsVisible="False"
+                        Cursor="Hand" Click="BtnNavBack_Click"
+                        ToolTip.Tip="{loc:Str tooltip_nav_back}">
+                    <Button.Styles>
+                        <Style Selector="Button:pointerover /template/ Border">
+                            <Setter Property="Background" Value="#22FF69B4"/>
+                            <Setter Property="BorderBrush" Value="#88FF69B4"/>
+                        </Style>
+                        <Style Selector="Button:pressed /template/ Border">
+                            <Setter Property="Background" Value="#33FF69B4"/>
+                        </Style>
+                    </Button.Styles>
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border CornerRadius="13" Background="Transparent"
+                                    BorderBrush="Transparent" BorderThickness="1">
+                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="38"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Tag="navrailstatic" Text="&#x2190;" FontSize="16" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextLightBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
+                        <TextBlock Grid.Column="1" Text="{loc:Str nav_back_label}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" TextWrapping="NoWrap"
+                                   Opacity="{Binding #TxtNavSearchLabel.Opacity}"/>
+                    </Grid>
+                </Button>
+                <Button x:Name="BtnNavSearch" Height="30" Margin="8,0,8,10"
                         Cursor="Hand" Click="BtnNavSearch_Click"
                         ToolTip.Tip="{loc:Str tooltip_nav_search}">
                     <Button.Template>
@@ -617,6 +655,7 @@
                         </Border>
                     </Grid>
                 </Button>
+                </StackPanel>
 
                 <!-- VerticalScrollBarVisibility authors the COLLAPSED state, like every other
                      rail part: Hidden, because a WPF vertical scrollbar is ~17px and the shut
@@ -1948,7 +1987,7 @@
                             </ControlTheme>
                         </ComboBox.ItemContainerTheme>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_11_5_is_out}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v7_0_5_is_out}"
                             Click="BtnUpdateAvailable_Click" ToolTip.Tip="{loc:Str tooltip_v6_11_3_locktober}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Theme>
@@ -2041,6 +2080,46 @@
                               Fill="#FFE0B052" IsHitTestVisible="False"
                               Data="M 8,0 L 9.5,6.5 L 16,8 L 9.5,9.5 L 8,16 L 6.5,9.5 L 0,8 L 6.5,6.5 Z"/>
                     </Grid>
+                    <!-- Invite ticket (WPF BtnInviteTicket): shown only while this account has an unused
+                         invite code this month; wobbles now and then; a click opens the invites card.
+                         MainShellWindow.InviteTicket.cs. -->
+                    <Button x:Name="BtnInviteTicket" Width="30" Height="26" Margin="10,0,0,0"
+                            VerticalAlignment="Center" IsVisible="False" Cursor="Hand"
+                            Click="BtnInviteTicket_Click" ToolTip.Tip="{loc:Str invites_ticket_tooltip}">
+                        <Button.Styles>
+                            <Style Selector="Button:pointerover"><Setter Property="Opacity" Value="0.85"/></Style>
+                        </Button.Styles>
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="Transparent">
+                                    <ContentPresenter Content="{TemplateBinding Content}"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Grid Width="26" Height="18" RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <TransformGroup>
+                                    <ScaleTransform/>
+                                    <RotateTransform Angle="-8"/>
+                                </TransformGroup>
+                            </Grid.RenderTransform>
+                            <Path Stretch="Fill" Stroke="#FFE5C76B" StrokeThickness="1.2" IsHitTestVisible="False"
+                                  Data="M 2,0 H 22 A 2,2 0 0 1 24,2 V 5 A 3,3 0 0 0 24,11 V 14 A 2,2 0 0 1 22,16 H 2 A 2,2 0 0 1 0,14 V 11 A 3,3 0 0 0 0,5 V 2 A 2,2 0 0 1 2,0 Z">
+                                <Path.Fill>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#FFFF69B4" Offset="0"/>
+                                        <GradientStop Color="#FFFF8FC8" Offset="0.6"/>
+                                        <GradientStop Color="#FFE5C76B" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Path.Fill>
+                            </Path>
+                            <Line StartPoint="18,3" EndPoint="18,15" Stroke="#CCFFFFFF" StrokeThickness="1"
+                                  StrokeDashArray="1.5,1.5" IsHitTestVisible="False"/>
+                            <Path Width="8" Height="8" Margin="5,0,0,0" HorizontalAlignment="Left"
+                                  VerticalAlignment="Center" Stretch="Uniform" Fill="White" IsHitTestVisible="False"
+                                  Data="M 8,0 L 9.5,6.5 L 16,8 L 9.5,9.5 L 8,16 L 6.5,9.5 L 0,8 L 6.5,6.5 Z"/>
+                        </Grid>
+                    </Button>
 
                     <!-- Profile bubble: the user's avatar (Discord photo / preset bust / initials).
                          Hover opens the account menu below; a direct click jumps to the Profile

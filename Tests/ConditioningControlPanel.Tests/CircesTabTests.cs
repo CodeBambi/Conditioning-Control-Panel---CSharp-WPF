@@ -98,16 +98,119 @@ public class CircesTabTests
     }
 
     [Fact]
-    public void The_cap_clamps_the_last_add_and_earning_back_hands_no_room_back()
+    public void The_cap_clamps_the_last_add_and_earning_back_hands_its_room_back()
     {
         var s = new TabState { Day = CircesTab.DayKey(Noon), DayAddedSeconds = CircesTab.DailyCapSeconds - 10 };
 
         var clamped = Book(s, "attention", 120);
-        Book(s, "session", -600);
+        // Nothing on the lock yet, so the floor lets the credit take back only the 10 on the tab.
+        var credit = Book(s, "session", -600);
         var after = Book(s, "typo", 15);
 
         Assert.Equal(new TabBooking(10, TabRefusal.DailyCap), clamped);
-        Assert.Equal(TabRefusal.DailyCap, after.Refusal);
+        Assert.Equal(-10, credit.AppliedSeconds);
+        Assert.Equal(new TabBooking(10, TabRefusal.DailyCap), after);
+    }
+
+    // ---- The day limit cuts off adds minus credits (player report, 2026-10-02) ----
+
+    private static readonly TabLimits Hour = TabLimits.FromMinutes(60, 12 * 60);
+
+    // Book, then push like the live tab does after every add. Returns what went to the lock.
+    private static int BookAndPush(TabState s, string id, int seconds)
+    {
+        CircesTab.Book(s, id, seconds, Run.AddMinutes(s.Entries.Count + 1), Noon, Run, safetyExit: false, Hour);
+        var push = CircesTab.PlanPush(s, canRemove: false, Hour, Noon);
+        CircesTab.ApplyPush(s, push, Noon, Run);
+        return push.Kind == TabPushKind.Add ? push.Seconds : 0;
+    }
+
+    [Fact]
+    public void One_early_credit_no_longer_makes_a_sixty_minute_day_a_fifty_nine_minute_day()
+    {
+        var s = new TabState { PushedNetSeconds = 7200 };   // earlier days put time on the lock
+
+        BookAndPush(s, "lockcard", -60);
+        var sent = 0;
+        for (var i = 0; i < 20; i++) sent += BookAndPush(s, "attention", 300);
+
+        Assert.Equal(3600, sent);
+        Assert.Equal(3600, CircesTab.PushedToday(s, Noon));
+        Assert.Equal(0, s.BalanceSeconds);
+    }
+
+    [Fact]
+    public void Farming_credits_never_makes_a_day_add_nothing()
+    {
+        var s = new TabState { PushedNetSeconds = 4 * 3600 };
+
+        for (var i = 0; i < 60; i++) BookAndPush(s, "lockcard", -60);
+        var sent = 0;
+        for (var i = 0; i < 30; i++) sent += BookAndPush(s, "attention", 300);
+
+        // 150:00 of slip-ups minus 60:00 of credits is 90:00, cut off at the 60:00 limit.
+        Assert.Equal(3600, sent);
+        Assert.Equal(3600, CircesTab.PushedToday(s, Noon));
+    }
+
+    [Fact]
+    public void A_credit_still_books_on_a_capped_day_and_the_lock_never_gets_more_than_the_limit()
+    {
+        var s = new TabState { PushedNetSeconds = 3600 };
+        var sent = 0;
+        for (var i = 0; i < 12; i++) sent += BookAndPush(s, "attention", 300);
+        Assert.Equal(3600, sent);
+        Assert.Equal(TabRefusal.DailyCap, CircesTab.Book(s, "typo", 15, Run, Noon, Run, false, Hour).Refusal);
+
+        var credit = CircesTab.Book(s, "lockcard", -60, Run, Noon, Run, false, Hour);
+        Assert.Equal(new TabBooking(-60, TabRefusal.None), credit);
+
+        // The slip-up after it books again, and the credit waiting on the tab cancels it.
+        var slip = CircesTab.Book(s, "attention", 300, Run, Noon, Run, false, Hour);
+        Assert.Equal(new TabBooking(60, TabRefusal.DailyCap), slip);
+        Assert.Equal(0, s.BalanceSeconds);
+        Assert.Equal(TabPushKind.None, CircesTab.PlanPush(s, canRemove: false, Hour, Noon).Kind);
+        Assert.Equal(3600, CircesTab.PushedToday(s, Noon));
+    }
+
+    [Fact]
+    public void A_credit_that_outgrows_the_day_still_cannot_send_past_the_limit()
+    {
+        // A credit from yesterday still on the tab, and today's credits on top.
+        var s = new TabState { PushedNetSeconds = 4 * 3600, BalanceSeconds = -600 };
+        BookAndPush(s, "session", -1800);
+        var sent = 0;
+        for (var i = 0; i < 40; i++) sent += BookAndPush(s, "attention", 300);
+
+        // Today nets 60:00 (slip-ups minus today's credits, cut off at the limit); yesterday's
+        // 10:00 credit was waiting on the tab and cancels the first of it.
+        Assert.Equal(3000, sent);
+        Assert.Equal(3000, CircesTab.PushedToday(s, Noon));
+        Assert.Equal(0, s.BalanceSeconds);
+    }
+
+    [Fact]
+    public void The_day_credit_resets_with_the_day()
+    {
+        var s = new TabState { PushedNetSeconds = 3600 };
+        CircesTab.Book(s, "lockcard", -60, Run, Noon, Run, false, Hour);
+        Assert.Equal(60, s.DayCreditSeconds);
+
+        CircesTab.Book(s, "typo", 15, Run, Noon.AddDays(1), Run, false, Hour);
+        Assert.Equal(0, s.DayCreditSeconds);
+        Assert.Equal(15, CircesTab.DayUsed(s));
+    }
+
+    [Fact]
+    public void A_hand_edited_day_credit_is_held_to_what_a_credit_could_ever_be()
+    {
+        var s = new TabState { DayAddedSeconds = 600, PushedNetSeconds = 300, DayCreditSeconds = 99999 };
+        Assert.True(CircesTab.Sanitise(s, Hour));
+        Assert.Equal(900, s.DayCreditSeconds);
+
+        s.DayCreditSeconds = -5;
+        CircesTab.Sanitise(s, Hour);
+        Assert.Equal(0, s.DayCreditSeconds);
     }
 
     [Fact]

@@ -103,6 +103,37 @@
                                            FontSize="13" FontWeight="Bold"/>
                             </Grid>
 
+                            <!-- #658: images per flash as a range. The switch reveals the floor; the
+                                 Images slider above is the ceiling. Same shape as the lock card pair. -->
+                            <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_flash_random_images}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_random_images}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkRandomImages" feat:SessionLock.Owned="True"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkRandomImages_Changed" Unchecked="ChkRandomImages_Changed"/>
+                            </Grid>
+
+                            <Grid x:Name="RowImagesMin" Height="36" Visibility="Collapsed"
+                                  ToolTip="{loc:Str tooltip_flash_fewest_images}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_fewest_images}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderImagesMin" Minimum="1" Maximum="20" Value="1"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderImagesMin_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtImagesMin" Text="1" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
                             <Grid Height="36">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="120"/>
@@ -295,6 +326,26 @@
                                                   VerticalAlignment="Center"
                                                   Style="{DynamicResource DarkComboBoxStyle}"
                                                   SelectionChanged="CmbMotion_Changed"/>
+                                    </Grid>
+
+                                    <!-- #1265: Drift and Bounce speed. Shown only while Drift and Bounce is
+                                         owned and picked (or Mix); see UpdateDriftSpeedRow. -->
+                                    <Grid x:Name="RowDriftSpeed" Height="36" Background="Transparent" Visibility="Collapsed"
+                                          ToolTip="{loc:Str tooltip_flash_drift_speed}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_drift_speed}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <Slider Grid.Column="1" x:Name="SliderDriftSpeed" Minimum="0.25" Maximum="3" Value="1"
+                                                TickFrequency="0.25" IsSnapToTickEnabled="True"
+                                                VerticalAlignment="Center" Margin="14,0"
+                                                ValueChanged="SliderDriftSpeed_Changed"/>
+                                        <TextBlock Grid.Column="2" x:Name="TxtDriftSpeed" Text="1x" HorizontalAlignment="Right"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                                   FontSize="13" FontWeight="Bold"/>
                                     </Grid>
 
                                     <!-- Rounded corners (wave 2). Rides the motion grants, like the picker

@@ -468,9 +468,9 @@ public class BubbleCountService : IDisposable
             {
                 _retryCount++;
 
-                if (_retryCount >= 3 && settings.MercySystemEnabled)
+                if (_retryCount >= settings.MercyAfterFails && settings.MercySystemEnabled)
                 {
-                    // Mercy after 3 retries - let them go
+                    // Mercy after MercyAfterFails retries (2..10, default 3) - let them go
                     App.Logger?.Information("Bubble count mercy after {Retries} retries", _retryCount);
                     ShowFullscreenMessage(
                         App.Mods?.GetAttentionCheckMercyMessage() ?? "BAMBI GETS MERCY",
@@ -487,7 +487,7 @@ public class BubbleCountService : IDisposable
                 else
                 {
                     // Replay - show message then start new video
-                    App.Logger?.Information("Bubble count retry {Count} (mercy at 3)", _retryCount);
+                    App.Logger?.Information("Bubble count retry {Count} (mercy at {Mercy})", _retryCount, settings.MercyAfterFails);
                     ShowFullscreenMessage(
                         App.Mods?.GetBubbleCountRetryMessage() ?? "WRONG!\nWATCH AGAIN",
                         2000,

@@ -31,9 +31,14 @@ public static class AssetPresetService
         return presets.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.Ordinal));
     }
 
+    /// <summary>Head seam (main 03af6e8bb): re-deal every online channel after a preset switched the
+    /// online selection (WPF FypOnlineCoordinator.ResetAllChannels). Unseeded: nothing to re-deal.</summary>
+    public static volatile Action? OnlineChannelsReset;
+
     /// <summary>
     /// Makes <paramref name="presetId"/> the active preset: its disabled set replaces the app's,
-    /// it is stamped as last used, and the id is remembered. Returns the preset, or null when
+    /// its saved online choice is applied (<see cref="ApplyOnlineChoice"/>), it is stamped as
+    /// last used, and the id is remembered. Returns the preset, or null when
     /// the id names nothing, in which case nothing is written. Saving and cache invalidation
     /// are the caller's (the panel's InvalidateAssetPoolsAfterSelectionChange does both).
     /// </summary>
@@ -45,8 +50,61 @@ public static class AssetPresetService
 
         s.DisabledAssetPaths = new HashSet<string>(preset.DisabledAssetPaths ?? new HashSet<string>());
         s.DisabledAssetFolders = new HashSet<string>(preset.DisabledAssetFolders ?? new HashSet<string>());
+        if (ApplyOnlineChoice(s, preset))
+        {
+            // The rotation was dealt from the old channels; every consumer re-deals from the new.
+            try { OnlineChannelsReset?.Invoke(); }
+            catch (Exception ex) { Serilog.Log.Debug("Asset preset channel reset: {E}", ex.Message); }
+        }
         preset.LastUsed = DateTime.Now;
         s.CurrentAssetPresetId = preset.Id;
         return preset;
     }
+
+    /// <summary>
+    /// The online half of a preset switch (ccp-bugs #1142): the Scrolller niches, the user-added
+    /// subreddits and the media source the preset was saved with. Each is applied only when the
+    /// preset carries it, so a preset saved before this existed leaves the current choice alone.
+    /// The media source is applied only when it is "local" or the remote-media consent is
+    /// already given: a preset can never be the thing that turns online pictures on unasked.
+    /// Returns true when the online channel selection changed.
+    /// </summary>
+    public static bool ApplyOnlineChoice(AppSettings s, AssetPreset preset)
+    {
+        if (s == null) throw new ArgumentNullException(nameof(s));
+        if (preset == null) return false;
+
+        bool channelsChanged = false;
+
+        if (preset.OnlineNiches != null && !SameSet(s.FypOnlineNiches, preset.OnlineNiches))
+        {
+            s.FypOnlineNiches = new List<string>(preset.OnlineNiches);
+            channelsChanged = true;
+        }
+
+        if (preset.OnlineCustomSubs != null)
+        {
+            // Every saved sub joins the library first, so it shows as a pill in the pickers.
+            foreach (var sub in preset.OnlineCustomSubs) s.TryAddLibrarySub(sub);
+            if (!SameSet(s.FypOnlineCustomSubs, preset.OnlineCustomSubs))
+            {
+                s.FypOnlineCustomSubs = new List<string>(preset.OnlineCustomSubs);
+                channelsChanged = true;
+            }
+        }
+
+        var source = preset.MediaSource;
+        if (source is "local" or "online" or "mixed"
+            && !string.Equals(s.MediaSource, source, StringComparison.Ordinal)
+            && (source == "local" || s.HasRemoteMediaConsent))
+        {
+            s.MediaSource = source;
+        }
+
+        return channelsChanged;
+    }
+
+    private static bool SameSet(IEnumerable<string>? a, IEnumerable<string>? b)
+        => new HashSet<string>(a ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase)
+            .SetEquals(b ?? Array.Empty<string>());
 }

@@ -111,6 +111,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (_closed) return;
             _enableTimer.Start();
+            // ccp-bugs #704 (WPF bfe45f6db): Topmost (XAML) keeps the form above flashes and
+            // overlays; one Activate once it is up takes the keyboard back for the description.
+            try { Activate(); } catch { /* best effort */ }
             _txtDescription.Focus();
         }
 

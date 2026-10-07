@@ -25,7 +25,8 @@ export function settleSeconds(duration, afterReplay = false) {
 }
 
 export const CARD_STYLES = Object.freeze(['slam', 'ribbon', 'tag']);
-const LIFE = { slam: 1.0, ribbon: 1.05, tag: 1.1 };
+// Short and small (owner, 2026-10-01): it marks the turn, it does not hold the eye.
+const LIFE = { slam: .7, ribbon: .75, tag: .8 };
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const easeOut = t => 1 - (1 - t) ** 3;
 const easeIn = t => t * t * t;
@@ -76,8 +77,8 @@ export function createTurnHandoff({ bus, game, board, root = null, menuOpen = ()
   function show(side, short) {
     const still = stillMotion();
     const style = short || still ? 'tag' : chosenStyle();
-    shown = { side, style, age: 0, life: short ? .7 : LIFE[style], still, text: label(side) };
-    bus.emit?.('turn-card', { side, style, short: !!short });
+    shown = { side, style, age: 0, life: short ? .5 : LIFE[style], still, text: label(side) };
+    bus.emit?.('turn-card', { side, style, short: !!short, mine: mine(side) });
     if (!card) return;
     card.hidden = false;
     card.dataset.style = style;
@@ -102,12 +103,12 @@ export function createTurnHandoff({ bus, game, board, root = null, menuOpen = ()
     }
     if (shown.style === 'slam') {
       const i = clamp01(t / .14);
-      let s = t < .14 ? 1.8 - .85 * easeOut(i) : .95 + .05 * clamp01((t - .14) / .1);
+      let s = t < .14 ? 1.4 - .45 * easeOut(i) : .95 + .05 * clamp01((t - .14) / .1);
       s += .06 * out;
-      const shake = t > .14 && t < .36 ? Math.sin(t * 120) * 7 * (1 - (t - .14) / .22) : 0;
-      parts.word.style.transform = `translate(calc(-50% + ${shake.toFixed(2)}px), -50%) scale(${s.toFixed(3)}) rotate(-4deg)`;
+      const shake = t > .14 && t < .36 ? Math.sin(t * 120) * 4 * (1 - (t - .14) / .22) : 0;
+      parts.word.style.transform = `translate(calc(-50% + ${shake.toFixed(2)}px), -50%) scale(${s.toFixed(3)}) rotate(-2deg)`;
       parts.word.style.opacity = String(Math.min(1, i * 1.5) * (1 - out));
-      parts.band.style.transform = `skewY(-4deg) scaleX(${easeOut(clamp01((t - .03) / .14)).toFixed(3)})`;
+      parts.band.style.transform = `skewY(-2deg) scaleX(${easeOut(clamp01((t - .03) / .14)).toFixed(3)})`;
       parts.band.style.opacity = String(.93 * (1 - out));
       parts.clock.style.transform = `translate(-50%, ${((1 - easeOut(clamp01((t - .2) / .2))) * 14).toFixed(1)}px)`;
       parts.clock.style.opacity = String(clamp01((t - .2) / .15) * (1 - out));
