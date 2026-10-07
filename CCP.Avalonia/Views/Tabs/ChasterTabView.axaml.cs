@@ -37,8 +37,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private readonly DispatcherTimer _tick = new() { Interval = TimeSpan.FromSeconds(1) };
         // WPF's slow page tick (:53, :89): the hero, so the calendar rolls over at midnight.
-        private readonly DispatcherTimer _slowTick = new() { Interval = TimeSpan.FromSeconds(30) };
+        internal readonly DispatcherTimer SlowTick = new() { Interval = TimeSpan.FromSeconds(30) };
+        internal bool ClockTicking => _tick.IsEnabled;
         private ChasterService? _subscribed;
+        private bool _attached;
         private string _clockShape = "";
         private readonly List<TextBlock> _clockNumbers = new();
         private bool _loading;
@@ -47,9 +49,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             InitializeComponent();
             _tick.Tick += (_, _) => { PaintHeroClock(); PaintChasterChip(ChasterHead.Service); };
-            _slowTick.Tick += (_, _) => RefreshHero();
-            AttachedToVisualTree += (_, _) => Subscribe(true);
-            DetachedFromVisualTree += (_, _) => Subscribe(false);
+            SlowTick.Tick += (_, _) => RefreshHero();
+            // WPF (:99) only listens and ticks while the page is on screen; the shell hides tabs with IsVisible.
+            AttachedToVisualTree += (_, _) => { _attached = true; Subscribe(IsVisible); };
+            DetachedFromVisualTree += (_, _) => { _attached = false; Subscribe(false); };
+            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) Subscribe(_attached && IsVisible); };
             LadderInit();
             NumbersInit();
             KeysInit();
@@ -76,7 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 c.LockChanged += OnLockChanged;
                 c.Booked += OnBooked;
                 _tick.Start();
-                _slowTick.Start();
+                SlowTick.Start();
             }
             else if (!on && _subscribed is { } s)
             {
@@ -85,7 +89,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 s.Booked -= OnBooked;
                 _subscribed = null;
                 _tick.Stop();
-                _slowTick.Stop();
+                SlowTick.Stop();
             }
         }
 
