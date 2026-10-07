@@ -9,6 +9,7 @@
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
         xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
         xmlns:navrail="clr-namespace:ConditioningControlPanel.Controls.NavRail"
+        xmlns:header="clr-namespace:ConditioningControlPanel.Controls.Header"
         xmlns:friends="clr-namespace:ConditioningControlPanel.Controls.Friends"
         xmlns:poss="clr-namespace:ConditioningControlPanel.Services.Possession"
         Title="Conditioning Control Panel"
@@ -1184,6 +1185,14 @@
                      Bug Report lives in the title bar (BtnTitleBarBugReport) - the copy that
                      used to sit here was a duplicate and was removed for the bubble. -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- THE PREMIUM SPARK (polish 12, owner 2026-10-07): a die-cut cardstock sparkle with
+                         PREMIUM under it, between the welcome banner and the update pill. Gold
+                         shimmer for Basic, cyan halo and diamond motes for Prime, dim and still for
+                         Free. The card draws 54 x 42 but its -4 px top and bottom margins hold its
+                         layout to 34 px, the height the profile bubble already sets for this row, so
+                         the header never grows. Controls/Header/PremiumSpark, MainWindow.PremiumSpark.cs. -->
+                    <header:PremiumSpark x:Name="HeaderPremiumSpark" Margin="0,-4,12,-4"
+                                         VerticalAlignment="Center" Click="HeaderPremiumSpark_Click"/>
                     <ComboBox x:Name="CmbPresets" Width="160" Margin="0,0,10,0" Visibility="Collapsed"
                               SelectionChanged="CmbPresets_SelectionChanged"
                               ToolTip="{loc:Str tooltip_select_a_preset_configuration}">
