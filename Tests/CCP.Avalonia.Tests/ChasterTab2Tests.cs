@@ -30,16 +30,75 @@ public sealed class ChasterTab2Tests
     private sealed class FakeChaster : HttpMessageHandler
     {
         public readonly List<string> Paths = new();
+        /// <summary>Extra JSON members on the lock (e.g. its permissions).</summary>
+        public string LockExtra = "";
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             lock (Paths) Paths.Add(r.RequestUri!.AbsolutePath);
             var ends = DateTime.UtcNow.AddDays(12).AddHours(4).ToString("o");
             var body = r.RequestUri!.AbsolutePath == "/locks"
-                ? "[{\"_id\":\"l1\",\"title\":\"Test Cage\",\"status\":\"locked\",\"role\":\"wearer\",\"endDate\":\"" + ends + "\"}]"
+                ? "[{\"_id\":\"l1\",\"title\":\"Test Cage\",\"status\":\"locked\",\"role\":\"wearer\",\"endDate\":\"" + ends + "\"" + LockExtra + "}]"
                 : "{}";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
         }
     }
+
+    /// <summary>WPF 2b7d742d0: a pick on the page while the demo service runs never reaches the
+    /// real settings (the demo picks its fake lock for itself); a real service saves it.</summary>
+    [Fact]
+    public Task DemoPickNeverSavesTheLockId() => AvaloniaTestDispatcher.RunAsync(() => Run((real, fake, s) =>
+    {
+        var dir = Directory.CreateTempSubdirectory("ccp-chaster-demo-").FullName;
+        var demo = new ChasterService(new ChasterClient(fake), new SecretChasterTokenStore(), Path.Combine(dir, "chaster_tab.json"),
+            () => ChasterOptions.Off) { IsDemo = true };
+        var tab = new ChasterTabView();
+        try
+        {
+            ChasterHead.Service = demo;
+            tab.PickLock("demo1");
+            Assert.Equal("l1", s.ChasterLockId);
+            ChasterHead.Service = real;
+            tab.PickLock("l2");
+            Assert.Equal("l2", s.ChasterLockId);
+        }
+        finally
+        {
+            ChasterHead.Service = real;
+            demo.Dispose();
+            try { Directory.Delete(dir, true); } catch { }
+        }
+        return Task.CompletedTask;
+    }));
+
+    /// <summary>WPF RefreshSetupHint/RefreshPills after 61a331c1d and c8dead5b3: a tab that is on
+    /// with no row switched on says nothing can count; once a row is on, a lock whose keyholder
+    /// switched adding off says so on the line and with an "adds off" pill.</summary>
+    [Fact]
+    public Task SetupLineSaysNothingCountsThenAddsBlocked() => AvaloniaTestDispatcher.RunAsync(() => Run(async (chaster, fake, s) =>
+    {
+        s.ChasterTabEnabled = true;
+        s.ChasterPrices = new List<string>();
+        fake.LockExtra = ",\"permissions\":{\"grants\":[{\"resource\":\"lock.time.add\",\"subjects\":{\"wearer\":[]}}]}";
+        var tab = new ChasterTabView();
+        var w = new Window { Width = 1200, Height = 800, Content = tab };
+        w.Show();
+        try
+        {
+            await chaster.RefreshLockAsync();
+            Dispatcher.UIThread.RunJobs();
+            tab.Refresh();
+            var hint = tab.FindControl<TextBlock>("SetupHint")!;
+            Assert.True(hint.IsVisible);
+            Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("chaster_setup_nothing"), hint.Text);
+
+            s.ChasterPrices = new List<string> { TabPrices.All.First(p => !TabPrices.NeverPriced.Contains(p.Id)).Id };
+            tab.Refresh();
+            Assert.True(chaster.AddsBlocked);
+            Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("chaster_state_keyholder_blocked"), hint.Text);
+            Assert.Contains(ConditioningControlPanel.Localization.Loc.Get("chaster_pill_blocked"), tab.PillTexts);
+        }
+        finally { w.Close(); }
+    }));
 
     /// <summary>A linked service whose options read CoreSettings, as ChasterHead's do.</summary>
     private static async Task Run(Func<ChasterService, FakeChaster, ConditioningControlPanel.Models.AppSettings, Task> body)

@@ -1256,3 +1256,18 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - Flash picks walk the whole folder before repeating (ShuffleBag in Core); Random image count + Fewest slider.
 - Video card: monitor picker and Mercy "after N fails" in a keyboard-reachable More options fold; both Core schedulers use MercyAfterFails.
 - Folded: drift speed, no-videos reason, spiral opacity curve, gaze camera at boot, Lock Card and Brain Drain folds.
+
+## avalonia-port/port-chaster7: +352
+- Circe's tab: setup line covers "adds off"/"nothing can count", raffle rows in a SplitRowPanel, ladder note; demo picks never save.
+- Lock Card: Reset on typo inside More options. Leash, booked-pop tag and keys glow folded into their parity rows.
+
+## avalonia-port/port-social: +1023
+- Invites: rules, wire and reward ladder in Core; Exclusives invites card, header ticket (wired at startup), drawer link; EveryShellInitializerIsCalled scan test.
+- Lobby folded into views-tab-available-subjects and win-launcher.
+
+## avalonia-port/launcher-account: +567
+- Launcher slice 3: account chip, tier badge, SP, mod pill (Core LauncherModMenu), panel card status/Stop/stats; Lockdown refusals stand in for the missing veil.
+
+## avalonia-port/port-vault: +971
+- Vault gate card on every padlock and the "See tiers" toast; Reconnect via Core PatreonReconnectRule; doors refuse under Lockdown; VaultOffer/VaultSale to Core.
+- Exclusives: Prime-first shelf (Core ShelfOrder), IsShown hides Arcademy/Just Drop, width-fit columns.
