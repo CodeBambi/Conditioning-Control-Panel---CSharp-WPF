@@ -46,8 +46,9 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
         public const string Tip = "tip";
         public const string Poster = "poster";
         public const string Invite = "invite";
+        public const string Quests = "quests";
 
-        public static readonly IReadOnlyList<string> All = new[] { Tables, Wheel, Spiral, Calendar, Tip, Poster, Invite };
+        public static readonly IReadOnlyList<string> All = new[] { Tables, Wheel, Spiral, Calendar, Tip, Poster, Invite, Quests };
     }
 
     /// <summary>Text helpers for the pure halves. <c>loc</c> is <c>Loc.Get</c> in the app, identity in tests.</summary>

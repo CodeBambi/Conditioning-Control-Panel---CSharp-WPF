@@ -35,7 +35,7 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
                 : CardText.F(loc, "billboard_card_quests_title_many", left);
             return Card(CardQuests, 1, loc, title, CardText.F(loc, "billboard_card_quests_line", done, slots),
                 new BillboardAction(BillboardActionKind.Tab, "quests", loc("billboard_card_quests_button")),
-                CardArt.Wheel, new Dictionary<string, int> { ["done"] = done, ["total"] = slots });
+                CardArt.Quests, new Dictionary<string, int> { ["done"] = done, ["total"] = slots });
         }
 
         /// <summary>A program day not finished yet. Null when there is no running day or it is done.</summary>
