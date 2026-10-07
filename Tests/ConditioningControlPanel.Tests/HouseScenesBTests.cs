@@ -57,13 +57,30 @@ public class HouseScenesBTests
     });
 
     [Fact]
+    public void The_loom_bead_sits_on_the_free_end_of_the_laid_thread() => WpfRenderHarness.OnStaThread(() =>
+    {
+        // The thread from the bobbin must run to the very end of what is wound so far: the bead
+        // and the end of the revealed path come from one fill value and never drift apart.
+        var loom = new LoomHouseArt();
+        foreach (var h in new[] { 340.0, 420.0, 630.0 })
+        {
+            for (double k = 0; k <= 1.0001; k += 0.01)
+            {
+                var (bead, end) = loom.TipForTests(k, h);
+                Assert.True((bead - end).Length < h * 0.004, $"h {h} k {k:0.00}: bead {bead} vs path end {end}");
+            }
+        }
+    });
+
+    [Fact]
     public void Shots_when_asked() => WpfRenderHarness.OnStaThread(() =>
     {
         var dir = Environment.GetEnvironmentVariable("CCP_HOUSE_B_SHOTS");
         if (string.IsNullOrWhiteSpace(dir)) return;
         Directory.CreateDirectory(dir);
-        const int fw = 600, fh = 340, cols = 4;
+        const int cols = 4;
         var times = new[] { 0.3, 0.9, 1.6, 2.4, 3.0, 3.6, 4.2, 4.8, 5.4, 6.0, 6.6, 7.4 };
+        foreach (var (fw, fh, tag) in new[] { (600, 340, ""), (1000, 630, "-1000x630") })
         foreach (var (name, view, hue) in Scenes())
         {
             view.Accent = BillboardVectorArt.ParseHue(hue, Colors.HotPink);
@@ -81,12 +98,12 @@ public class HouseScenesBTests
                     bmp.Render(host);
                     bmp.Freeze();
                     dc.DrawImage(bmp, new Rect(i % cols * fw, i / cols * fh, fw, fh));
-                    if (Math.Abs(times[i] - BillboardVectorArt.StillSeconds) < 0.01) Save(bmp, Path.Combine(dir, $"{name}-still.png"));
+                    if (Math.Abs(times[i] - BillboardVectorArt.StillSeconds) < 0.01) Save(bmp, Path.Combine(dir, $"{name}{tag}-still.png"));
                 }
             }
             var all = new RenderTargetBitmap(fw * cols, fh * rows, 96, 96, PixelFormats.Pbgra32);
             all.Render(sheet);
-            Save(all, Path.Combine(dir, $"{name}-sheet.png"));
+            Save(all, Path.Combine(dir, $"{name}{tag}-sheet.png"));
 
             // One wide frame at the size the dashboard card uses.
             host.Children.Clear();
