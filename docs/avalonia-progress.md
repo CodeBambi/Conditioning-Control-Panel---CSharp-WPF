@@ -1225,3 +1225,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/flake-minepoll: +17
 - Test-order flakes fixed at the source: a leaked auth token (MinePoll) and a shared awareness cooldown (AWindowChange). OpensPlays unconfirmed.
+
+## avalonia-port/chaster-receipt: +652
+- Chaster tab: own receipt panel with language re-render, calendar sheet, 2x2 preset keys (mood + limits refresh), 30 s hero tick; ticks only while visible.
