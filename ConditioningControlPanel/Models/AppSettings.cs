@@ -9258,6 +9258,22 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("favorites_drawer_open")]
         public bool FavoritesDrawerOpen { get; set; } = false;
 
+        private Dictionary<string, DateTime> _billboardSnoozedUntil = new(StringComparer.Ordinal);
+        /// <summary>
+        /// The Tonight Board (2026-10-07): card id to the UTC time its snooze runs out. The x on a
+        /// card puts it away for 7 days (<see cref="Services.DashboardBillboard.SnoozeFor"/>); a
+        /// board post can never be snoozed. Expired entries are pruned when Home builds the deck.
+        /// Machine-local view state.
+        /// </summary>
+        [JsonProperty("billboard_snoozed_until")]
+        public Dictionary<string, DateTime> BillboardSnoozedUntil
+        {
+            get => _billboardSnoozedUntil;
+            set => _billboardSnoozedUntil = value == null
+                ? new Dictionary<string, DateTime>(StringComparer.Ordinal)
+                : new Dictionary<string, DateTime>(value, StringComparer.Ordinal);
+        }
+
         #endregion
 
         #region First-time experience
