@@ -50,6 +50,8 @@ namespace ConditioningControlPanel.Avalonia
 
         /// <summary>The typed mantra game (WPF App.Mantra, built unconditionally at App.xaml.cs:3260).</summary>
         internal static MantraService Mantra { get; } = new();
+        /// <summary>WPF App.MantraVoice: the active mod's Spoken Mantras (mantras.json).</summary>
+        internal static MantraVoiceService MantraVoice { get; } = new();
 
         /// <summary>WPF App.xaml.cs:2527-2536 plus the CoreQuests seeds of :398-421. Seeded where this
         /// head has the service; SkillTree (streak shield, perfect-week bonus) and Programs

@@ -66,7 +66,7 @@ public sealed class FirstRunFolderPickerTests
             wizard.OwnedWindows[0].Close();
             await WaitFor(() => button.IsEnabled);
             Assert.Equal(chosen, wizard.FindControl<TextBlock>("TxtPickFolder")!.Text);
-            await WaitFor(() => File.Exists(settingsPath) && File.ReadAllText(settingsPath).Contains(Path.GetFileName(chosen)));
+            await WaitFor(() => ReadShared(settingsPath).Contains(Path.GetFileName(chosen)));
         }
         finally
         {
@@ -74,6 +74,20 @@ public sealed class FirstRunFolderPickerTests
             service.SaveImmediate(); CoreSettings.ServiceProvider = null;
         }
     });
+
+    // Windows refuses an open that lands mid-publish (sharing violation) where Linux does not, and a
+    // reader holding the file can fail the writer's replace, so open only when the write time moved
+    // (metadata, no handle) and count a refused open as "not yet".
+    private static DateTime _seen;
+    private static string _last = "";
+    private static string ReadShared(string path)
+    {
+        var stamp = File.GetLastWriteTimeUtc(path);   // a fixed sentinel while the file is absent
+        if (stamp == _seen) return _last;
+        try { _last = File.Exists(path) ? File.ReadAllText(path) : ""; _seen = stamp; }
+        catch (IOException) { }
+        return _last;
+    }
 
     private static async Task WaitFor(Func<bool> condition)
     {

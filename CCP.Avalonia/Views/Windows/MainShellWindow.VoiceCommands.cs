@@ -4,8 +4,7 @@
 //
 // The mic opens only under WPF's conditions: VoiceInputRules.ModesToRun (consent + an armed mode +
 // premium or the "voice" free day + an available engine), re-read at every reconcile.
-// ponytail: no sherpa KWS spotter (the Vosk wake grammar is WPF's fallback path), no spoken-mantra
-// fallback (MantraVoiceService is not on this head), no bark voice lines (text confirmations), no
+// ponytail: no sherpa KWS spotter (the Vosk wake grammar is WPF's fallback path), no bark voice lines (text confirmations), no
 // echo wait on her clip (confirmations here are text-only; a 300 ms tail stands in). Intents with no
 // seam here (spiral, pink, mind wipe, quiz, keyword triggers, bubble count, shake, deeper,
 // session pause/resume, volume/mute, video pause/resume) are left out of the grammar.
@@ -34,6 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private CancellationTokenSource? _voicePromptCts; // the in-flight command chain (panic cancels it)
         private Task? _wakeLoopTask;
         private volatile bool _pttArmed;
+        private volatile bool _userVoiceTurn;   // the prompt in flight is a wake / push-to-talk turn
 
         internal VoiceCommands VoiceCmds => _voiceCommands ??= new VoiceCommands(new VoiceCommandHost
         {
@@ -116,7 +116,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var entitled = CoreEntitlement.HasPremium || CoreEntitlement.IsFreeToday("voice");
                 var (wake, ptt) = _windowClosed ? (false, false)
                     : VoiceInputRules.ModesToRun(CoreSettings.Current, entitled, CoreSpeech.IsAvailable);
-                if (!wake && !ptt) CancelVoicePrompt();   // a lapse / revoke mid-command ends the prompt too
+                // A lapse / disarm mid-command ends a wake/PTT turn; Takeover's own mantra is not that
+                // session and keeps running unless consent itself is gone.
+                if ((!wake && !ptt && _userVoiceTurn) || !CoreSettings.Current.MicConsentGiven) CancelVoicePrompt();
                 if (wake) StartWakeLoop(); else StopWakeLoop();
                 _pttArmed = ptt;
                 Platform.X11PanicKey.PushToTalkKey = () => CoreSettings.Current.SpeechPushToTalkKey is { Length: > 0 } k ? k : "F8";
@@ -148,30 +150,110 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (VoiceCmds.TryHandleInlineCommand(heard, VoiceInputRules.WakeWords(CoreSettings.Current.SpeechWakeWords))) return;
             VoiceCmds.PrepareWake();
-            _ = RequestVoiceCommandAsync();
+            _ = RequestVoiceCommandAsync(allowCommands: true);
         }
 
-        /// <summary>WPF RequestVoiceCommand: claim the mic, free the wake loop's hold, run one prompt.</summary>
-        internal async Task RequestVoiceCommandAsync()
+        /// <summary>WPF RequestVoiceCommand: claim the mic, free the wake loop's hold, run one prompt.
+        /// Wake / push-to-talk (<paramref name="allowCommands"/>) try a command first and fall back to a
+        /// mantra only with on-demand mantras on; Takeover's surprise mantra always asks one.</summary>
+        internal async Task RequestVoiceCommandAsync(bool allowCommands)
         {
             var sp = VoiceSpeech;
             if (sp?.IsAvailable != true || _avatarTubeWindow == null) return;
             if (Interlocked.CompareExchange(ref _voiceBusyFlag, 1, 0) != 0) return;
             var cts = new CancellationTokenSource();
             _voicePromptCts = cts;
+            _userVoiceTurn = allowCommands;
             try
             {
                 _wakeWaitCts?.Cancel();
                 for (int i = 0; i < 24 && sp.IsListening; i++) await Task.Delay(25).ConfigureAwait(false);
-                await VoiceCmds.TryHandleVoiceCommandAsync(cts.Token).ConfigureAwait(false);
+                if (allowCommands)
+                {
+                    if (await VoiceCmds.TryHandleVoiceCommandAsync(cts.Token).ConfigureAwait(false)) return;
+                    if (!CoreSettings.Current.SpokenMantrasEnabled) return;
+                }
+                if (cts.IsCancellationRequested) return;
+                // WPF OnSpeechPartial / OnSpeechLevel, for this prompt only.
+                EventHandler<string> partial = (_, t) => Dispatcher.UIThread.Post(() => ShowVoiceHeard(t));
+                EventHandler<double> level = (_, l) => Dispatcher.UIThread.Post(() => SetVoiceLevel(l));
+                sp.PartialTranscript += partial;
+                sp.LevelChanged += level;
+                try { await SpokenMantra.RunAsync(App.MantraVoice, MantraHost(sp, cts.Token), cts.Token).ConfigureAwait(false); }
+                finally { sp.PartialTranscript -= partial; sp.LevelChanged -= level; }
             }
             catch (Exception ex) { Log.Warning(ex, "RequestVoiceCommand failed"); }
             finally
             {
                 _voicePromptCts = null;
+                _userVoiceTurn = false;
                 cts.Dispose();
                 Volatile.Write(ref _voiceBusyFlag, 0);
             }
+        }
+
+        /// <summary>WPF AutonomyService.TestVoiceCommand (She's Listening and Takeover "Test"): say why
+        /// it can't run, ask for mic consent if missing, then ask one spoken mantra.</summary>
+        internal async void TestSpokenMantra()
+        {
+            try
+            {
+                string? why = null, title = null;
+                if (!CoreSpeech.IsAvailable)
+                {
+                    title = "Voice Test \u2014 Not Available";
+                    why = "Speech isn't available.\n\n" + (!CoreSpeech.HasCaptureDevice
+                        ? "No microphone was detected. Connect one, then try again."
+                        : CoreSpeech.ModelStatus == CoreSpeechModelStatus.LoadFailed
+                            ? "The speech model on disk would not load. If you added your own model under Resources/Models/vosk, remove it so the bundled one is used, then restart."
+                            : "No speech model was found under Resources/Models/vosk (see the README there).");
+                }
+                else if (_avatarTubeWindow == null)
+                    (title, why) = ("Voice Test \u2014 No Avatar", "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.");
+                else if (!App.MantraVoice.HasMantras())
+                    (title, why) = ("Voice Test \u2014 No Mantras", "No spoken mantras are available for the active mod.\n\nAdd a mantras.json under the mod's companion_audio folder, then try again.");
+                if (why != null) { await Dialogs.MessageDialog.ShowAsync(this, title!, why); return; }
+                // Privacy gate: the mic never opens until the consent dialog was accepted.
+                if (!CoreSettings.Current.MicConsentGiven)
+                {
+                    var dlg = new Dialogs.MicConsentDialog();
+                    if (await dlg.ShowDialog<bool?>(this) != true || !dlg.ConsentGiven || !CoreSettings.Current.MicConsentGiven)
+                    {
+                        Log.Information("TestVoiceCommand: mic consent declined, not opening mic");
+                        return;
+                    }
+                }
+                Log.Information("TestVoiceCommand invoked manually");
+                await RequestVoiceCommandAsync(allowCommands: false);
+            }
+            catch (Exception ex) { Log.Warning(ex, "TestSpokenMantra failed"); }
+        }
+
+        /// <summary>The Avalonia host for Core SpokenMantra. WaitSpoken completes from the tube's clip
+        /// onFinished (CoreAudio.PlayOneShot), so the mic opens only after her voiced prompt ended.</summary>
+        private SpokenMantraHost MantraHost(SpeechEngine sp, CancellationToken ct)
+        {
+            Task spoken = Task.CompletedTask;
+            return new SpokenMantraHost
+            {
+                Recognize = (phrase, opts) => sp.RecognizePhraseAsync(phrase, opts, ct),
+                Say = (text, audio) =>
+                {
+                    var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    spoken = done.Task;
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (_avatarTubeWindow is not { } tube) { done.TrySetResult(); return; }
+                        tube.GigglePriority(text, playSound: audio != null, aiGenerated: false, phraseAudioPath: audio,
+                            barkVoice: audio != null, onSpoken: () => done.TrySetResult());
+                    });
+                },
+                WaitSpoken = c => spoken.WaitAsync(c),
+                IsSpeaking = () => _avatarTubeWindow?.IsSpeaking == true,
+                Credit = () => { if (!App.Mantra.TryCompleteMantra()) App.Mantra.CreditExternalMantra(); },
+                PromptStarted = phrase => Dispatcher.UIThread.Post(() => ShowVoicePrompt(phrase)),
+                PromptFinished = r => Dispatcher.UIThread.Post(() => ShowVoiceVerdict(r)),
+            };
         }
 
         private void StartWakeLoop()
