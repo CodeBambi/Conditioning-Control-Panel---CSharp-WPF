@@ -545,3 +545,22 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Full local gate validation was blocked by the shared queue; `--nav-check` reports the identical
   rail-selection failure on this fix and clean base a8304e6d0. WPF runtime validation not run.
 - Local investigation evidence: `~/ccp-port/evidence/memory-fix/`.
+## Quest card quotes the streak the completion pays at (port-misc, 2026-10-07)
+
+- Found: `QuestService.CompleteQuest` advances the quest streak on the day's first daily completion
+  (`AdvanceQuestStreak`) BEFORE it computes the payout, while both heads' cards quoted the stored streak. The day's first
+  daily therefore paid 3% more than the card said, and after a missed day it paid +3% while the card still quoted the
+  broken streak's bonus. Shared Core behaviour, so both heads had it.
+- Intent: WPF `MainWindow.QuestsTab.cs` `ComputeQuestXpDisplay` says the card "multiplies exactly what
+  QuestService.CompleteQuest multiplies" and was rewritten once already because "the cards were quoting a number the
+  payout had no intention of paying". So the card is meant to quote the real payout: a bug, fixed in Core.
+- Fix: the payout is unchanged (the streak bonus includes today). New Core `QuestService.StreakPaidOn(type, settings)`
+  returns the streak that completion will pay at (projected for the day's first daily, stored for weekly and later
+  dailies), sharing `StreakAfterFirstCompletionToday` with `AdvanceQuestStreak`; `ScaledQuestXp` gains an explicit-streak
+  overload. Both heads' cards (and the "+N%" bonus text) read it. Visible WPF change: the first daily of a day quotes 3%
+  more (or the restarted +3% after a gap) - i.e. what it already paid.
+- Streak shield: after a gap, a completion that will spend a shield pays at streak + 1, so the quote asks the new
+  `CoreQuests.HasStreakShieldProvider` (skill `good_girl_streak` and a shield left; never spends). Avalonia now seeds it
+  and `UseStreakShieldProvider` (previously unseeded, so it never spent a shield) from Core settings, as WPF
+  `SkillTreeService.UseStreakShield`. The streak header's "+N% XP" reads the same projected streak on both heads. Test:
+  `QuestServiceTests.CardQuote_IsWhatTheDaysFirstCompletionPays` (shield case included; fail-proven).
