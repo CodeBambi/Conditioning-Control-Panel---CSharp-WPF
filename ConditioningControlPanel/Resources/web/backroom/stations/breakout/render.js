@@ -387,7 +387,7 @@ export function createRenderer(canvas, { reduced = false, media = null, rng = Ma
     if(front && s.wallAge<9) {
       g.save();g.globalAlpha=Math.min(1,9-s.wallAge);g.fillStyle=col(GOLD,mix,.75);
       g.font=`600 13px ${FONT}`;g.textAlign='center';
-      g.fillText(s.endless&&s.dome?'FREE THE SWING. FEED THE SPIRAL.':'HIT THE HINGES. FREE THE SWING.',W/2,H-106);g.restore();
+      g.fillText(s.endless&&s.dome?'FREE THE SWING. FEED THE SPIRAL.':'HIT THE HINGES. FREE THE SWING.',W/2,H-150);g.restore();   // a line above the DOM 'move to play' prompt (bottom 14%)
     }
   }
   // Baked bevels separate faces from busy backgrounds without per-frame filters.
