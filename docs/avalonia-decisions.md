@@ -483,3 +483,20 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   panic-stop path to test. So no entry point starts a run; the HUD only binds `ChaosRunState` (sample in the render
   proof, a stepped run in its test). Panic and mid-run saves are untouched (WPF `OnPanicKeyDuringRun` → stop; saves only
   where WPF writes them).
+
+## 2026-10-08: Panic stops the remote haptic loop, both heads (avalonia-port/port-remote)
+- Bug fix on both heads, in line with "panic stops everything" (same pattern as the getbacktome follow-ups and the
+  webcam decisions). `HapticMixer.PanicStop` mutes the toy for 400 ms; the remote haptic driver's next tick then
+  resubmitted a looping `haptic_pattern` (RemoteHapticPlayer.Tick), so a controller's loop survived panic.
+- Core `RemoteCommands.StopHaptics()` stops the driver and moves a panic generation. Avalonia calls it on the panic key,
+  the tray's Stop everything and the spoken safe word; a remote `trigger_panic` (StopEffects force) too. WPF calls
+  `RemoteControlService.StopRemoteHapticsForPanic()` from RunPanicStopTail, PanicStopEverySurface and the off-thread
+  fallback.
+- Core RemoteRelay: a command fetched before a panic or a controller leave is refused when its UI dispatch lands late
+  ("stopped by panic" / "the controller left"), so a slow haptic_level cannot restart the toy. The leave runs through the
+  same dispatch as commands, and the controller-set strict-lock flag is set inside the dispatched call, so a late
+  enable_strict_lock that lands before the leave is still released. WPF runs commands synchronously on its UI thread
+  and needs no generation check.
+- Tests: `Tests/CCP.Core.Tests/RemoteRelayTests.cs` (Remote_haptics_play_and_every_stop_path_ends_them,
+  A_command_in_flight_never_outlives_a_panic_or_a_leave), `Tests/CCP.Avalonia.Tests/RemoteHapticPanicTests.cs`;
+  each fail-proven. WPF path compile-verified only (Windows suite does not run on Linux).

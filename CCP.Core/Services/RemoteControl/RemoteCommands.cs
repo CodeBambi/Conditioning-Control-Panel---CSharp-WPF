@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services
@@ -39,7 +40,20 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>The remote haptic player (WPF RemoteControlService.RemoteHaptics). Easy is not on this head
         /// (no HUD), so the scale stays 1.</summary>
-        internal static readonly Remote.CoreRemoteHapticDriver RemoteHaptics = new(() => 1.0);
+        internal static Remote.CoreRemoteHapticDriver RemoteHaptics = new(() => 1.0);   // tests swap in a stepped clock
+
+        private static int _panicGeneration;
+        /// <summary>Moves on every panic: a command fetched before it never runs after it (RemoteRelay).</summary>
+        public static int PanicGeneration => Volatile.Read(ref _panicGeneration);
+
+        /// <summary>Panic stops the remote haptic loop (decisions 2026-10-08). HapticMixer.PanicStop only
+        /// silences for 400 ms; without this the driver's next tick restarts the loop. Every panic path
+        /// on every head calls it, any thread.</summary>
+        public static void StopHaptics()
+        {
+            Interlocked.Increment(ref _panicGeneration);
+            try { RemoteHaptics.Stop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] remote haptic stop failed"); }
+        }
 
         public static string? Execute(string action, JObject? p)
         {
@@ -97,7 +111,7 @@ namespace ConditioningControlPanel.Services
         public static void StopEffects(bool force)
         {
             if (force) Commands.AiCommandService.CancelAll();   // a remote panic cancels pending AI follow-ups too
-            RemoteHaptics.Stop();
+            if (force) StopHaptics(); else RemoteHaptics.Stop();
             try { CoreHaptics.Service?.PanicStop(); } catch { }
             CoreAudio.Unduck();
             if (force) CoreEngine.Stop();

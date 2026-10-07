@@ -1080,6 +1080,7 @@ namespace ConditioningControlPanel
                 VideoDiag.Log("PANIC", "FALLBACK firing — the UI thread never drained the queued handler");
 
                 try { App.Haptics?.PanicStop(); }        catch (Exception ex) { LogPanicFallbackStep("haptics", ex); }
+                App.RemoteControl?.StopRemoteHapticsForPanic();   // the remote loop too (decisions 2026-10-08)
                 CancelPendingAi();
                 // Conditional, matching the designed panic path in StopEverything (#668): with the
                 // standalone Audio Layers master on, the bed is the user's, not the session's.
@@ -1781,6 +1782,8 @@ namespace ConditioningControlPanel
         /// alone. See <see cref="Services.Safety.PanicPolicy.AdvancesExitLadder"/>.</param>
         private void RunPanicStopTail(bool advanceExitLadder)
         {
+            // Every panic rung that stops: the remote haptic loop never survives it (decisions 2026-10-08).
+            App.RemoteControl?.StopRemoteHapticsForPanic();
             var now = DateTime.Now;
             var timeSinceLastPress = (now - _lastPanicTime).TotalMilliseconds;
             
@@ -1987,6 +1990,7 @@ namespace ConditioningControlPanel
 
             // --- audio + hardware ---
             Step("haptics", () => App.Haptics?.PanicStop());
+            Step("remote haptics", () => App.RemoteControl?.StopRemoteHapticsForPanic());   // decisions 2026-10-08
             Step("autonomy pulses", () => App.Autonomy?.CancelActivePulses());
             Step("audio layers", () =>
             {

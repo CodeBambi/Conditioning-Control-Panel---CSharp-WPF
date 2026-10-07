@@ -86,6 +86,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (RefuseStopUnderLockdown()) return;   // WPF refuses every Stop under Lockdown (StartStop.cs:45)
             CancelPendingAi();
             try { CoreHaptics.Service?.PanicStop(); } catch (System.Exception ex) { Serilog.Log.Warning(ex, "Tray stop: haptics stop failed"); }
+            ConditioningControlPanel.Services.RemoteCommands.StopHaptics();   // the remote haptic loop too (decisions 2026-10-08)
             Current?.StopAutonomyForPanic();
             StopEngine();
             StopCameraForPanic();   // decision C: the only panic control on Windows, so it closes the camera too

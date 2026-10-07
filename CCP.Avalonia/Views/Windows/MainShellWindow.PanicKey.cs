@@ -82,6 +82,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF PanicStopEverySurface (MainWindow.xaml.cs:1992): the toys go to zero first, bypassing
             // throttles and gates, whatever else the stop pass does.
             try { CoreHaptics.Service?.PanicStop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: haptics stop failed"); }
+            ConditioningControlPanel.Services.RemoteCommands.StopHaptics();   // the remote haptic loop too (decisions 2026-10-08)
             StopAutonomyForPanic();   // WPF KillAllAudio -> Autonomy.Stop: panic stops Takeover (decisions 2026-09-30)
             StopEngine();
             StopLockCards();   // WPF StopAdHocEffects: App.LockCard.Stop(dismissOpenCards: true)

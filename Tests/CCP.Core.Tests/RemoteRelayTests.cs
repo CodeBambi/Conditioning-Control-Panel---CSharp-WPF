@@ -238,30 +238,89 @@ public sealed class RemoteRelayTests
         finally { CoreHaptics.Service = prev; }
     }
 
-    // main 719ed9ca5: haptic_level/haptic_pattern play through the mixer; haptic_stop, panic and a
-    // leaving controller stop them; a bad pattern is refused.
-    [Fact]
-    public void Remote_haptics_play_and_every_stop_path_ends_them()
+    private const string Loop = "{\"levels\":[50,80],\"step_ms\":100,\"loop\":true}";
+
+    /// <summary>A stepped-clock driver in place of the static one (P08), restored after (P02).</summary>
+    private static void WithSteppedHaptics(Action<PopQuizSchedulerTests.FakeClock, List<int>> body)
     {
+        var prev = RemoteCommands.RemoteHaptics;
         var clock = new PopQuizSchedulerTests.FakeClock();
         var sent = new List<int>();
-        var d = new ConditioningControlPanel.Services.Remote.CoreRemoteHapticDriver(() => 1.0, clock) { Sink = steps => { sent.Add(steps.Count); return null; } };
-        d.Play(ConditioningControlPanel.Services.Remote.RemoteHapticPlan.FromPattern(JObject.Parse("{\"levels\":[50,80],\"step_ms\":100,\"loop\":true}"), out _)!);
-        Assert.True(d.IsPlaying);
-        clock.Advance(TimeSpan.FromSeconds(2));
-        var n = sent.Count;
-        Assert.True(n > 1);
-        d.Stop();
-        clock.Advance(TimeSpan.FromSeconds(2));
-        Assert.False(d.IsPlaying);
-        Assert.Equal(n, sent.Count);
+        RemoteCommands.RemoteHaptics = new ConditioningControlPanel.Services.Remote.CoreRemoteHapticDriver(() => 1.0, clock)
+        { Sink = steps => { sent.Add(steps.Count); return null; } };
+        try { body(clock, sent); }
+        finally { RemoteCommands.RemoteHaptics.Stop(); RemoteCommands.RemoteHaptics = prev; }
+    }
+
+    private static string Cmd(string id, string action, string p = "{}") =>
+        "{\"controller_connected\":true,\"commands\":[{\"id\":\"" + id + "\",\"action\":\"" + action + "\",\"params\":" + p + "}]}";
+
+    // main 719ed9ca5: a looping pattern keeps playing until haptic_stop, a leaving controller, or panic
+    // ends it; after panic the loop never comes back (HapticMixer.PanicStop only mutes 400 ms).
+    [Fact]
+    public void Remote_haptics_play_and_every_stop_path_ends_them() => WithSteppedHaptics((clock, sent) =>
+    {
+        var f = new FakeRelay();
+        using var r = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", RemoteCommands.Execute, _ => { }, f) { AutoPoll = false };
+        r.StartAsync("full").Wait();
+        var d = RemoteCommands.RemoteHaptics;
+        void Playing(string id) { Poll(f, Cmd(id, "haptic_pattern", Loop)); r.PollOnceAsync().Wait(); Assert.True(d.IsPlaying); clock.Advance(TimeSpan.FromSeconds(2)); Assert.True(sent.Count > 1); }
+        void Silent() { Assert.False(d.IsPlaying); var n = sent.Count; clock.Advance(TimeSpan.FromSeconds(5)); Assert.Equal(n, sent.Count); }
+
+        Playing("1");
+        Poll(f, Cmd("2", "haptic_stop")); r.PollOnceAsync().Wait();
+        Silent();
+
+        Playing("3");
+        Poll(f, "{\"controller_connected\":false}"); r.PollOnceAsync().Wait();
+        Silent();
+
+        Playing("4");
+        RemoteCommands.StopHaptics();   // every panic path on both heads
+        Silent();
 
         Assert.Equal("no pattern", RemoteCommands.Execute("haptic_pattern", new JObject()));
-        Assert.Null(RemoteCommands.Execute("haptic_level", JObject.Parse("{\"level\":60,\"ms\":3000}")));
-        Assert.True(RemoteCommands.RemoteHaptics.IsPlaying);
-        RemoteCommands.StopEffects(force: true);
-        Assert.False(RemoteCommands.RemoteHaptics.IsPlaying);
-    }
+    });
+
+    // Safety review P1/P2: a command fetched before a panic or a leave never runs after it, however
+    // late its UI dispatch lands; a late enable_strict_lock that did land before the leave is released.
+    [Fact]
+    public void A_command_in_flight_never_outlives_a_panic_or_a_leave() => WithSteppedHaptics((clock, sent) =>
+    {
+        var s = CoreSettings.Current;
+        var saved = (s.StrictLockEnabled, s.PanicKeyEnabled, CoreDispatch.InvokeProvider);
+        Func<object?>? parked = null;
+        try
+        {
+            (s.StrictLockEnabled, s.PanicKeyEnabled) = (false, true);
+            var f = new FakeRelay();
+            using var r = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", RemoteCommands.Execute, _ => { }, f) { AutoPoll = false };
+            r.StartAsync("full").Wait();
+            Poll(f, "{\"controller_connected\":true}"); r.PollOnceAsync().Wait();
+            // The UI thread is busy: the first dispatch times out and runs later; the rest run at once.
+            CoreDispatch.InvokeProvider = (fn, _) => { if (parked == null) { parked = fn; return (false, null); } return (true, fn()); };
+
+            Poll(f, Cmd("1", "haptic_level", "{\"level\":60,\"ms\":3000}")); r.PollOnceAsync().Wait();
+            RemoteCommands.StopHaptics();
+            Assert.Equal("stopped by panic", parked!());
+            Assert.False(RemoteCommands.RemoteHaptics.IsPlaying);
+
+            parked = null;
+            Poll(f, Cmd("2", "haptic_pattern", Loop)); r.PollOnceAsync().Wait();
+            Poll(f, "{\"controller_connected\":false}"); r.PollOnceAsync().Wait();
+            Assert.Equal("the controller left", parked!());
+            Assert.False(RemoteCommands.RemoteHaptics.IsPlaying);
+
+            Poll(f, "{\"controller_connected\":true}"); r.PollOnceAsync().Wait();
+            parked = null;
+            Poll(f, Cmd("3", "enable_strict_lock")); r.PollOnceAsync().Wait();
+            Assert.Null(parked!());          // lands late, still before the leave
+            Assert.True(s.StrictLockEnabled);
+            Poll(f, "{\"controller_connected\":false}"); r.PollOnceAsync().Wait();
+            Assert.False(s.StrictLockEnabled);
+        }
+        finally { (s.StrictLockEnabled, s.PanicKeyEnabled, CoreDispatch.InvokeProvider) = saved; }
+    });
 
     // main d39969827: 1 s polls while a connected controller is busy; a 429 still backs off from 5 s.
     [Fact]

@@ -205,11 +205,13 @@ namespace ConditioningControlPanel.Services
                                                    result["controller_idle"]?.Value<bool>() ?? false);
 
                 string? lastId = null, lastAction = null;
+                // Fetched before a panic or a leave: never runs after it, however late its dispatch lands.
+                var gen = (Volatile.Read(ref _leaveGeneration), RemoteCommands.PanicGeneration);
                 foreach (var cmd in result["commands"] as JArray ?? new JArray())
                 {
                     var action = cmd["action"]?.ToString();
                     if (string.IsNullOrEmpty(action) || !IsActive) continue;
-                    RunCommand(action, cmd["params"] as JObject);
+                    RunCommand(action, cmd["params"] as JObject, gen);
                     (lastId, lastAction) = (cmd["id"]?.ToString(), action);
                 }
 
@@ -266,7 +268,15 @@ namespace ConditioningControlPanel.Services
         // A remote haptic never outlives its controller, and what could trap the subject is handed back
         // (WPF 71cfc4185 ReleaseRemoteSafetyState, ccp-bugs #1340): panic key on, the controller's own
         // strict lock off; a strict lock the subject set stays.
+        // Runs through the same UI dispatch as commands (and so PanicKeyUiSync, which Avalonia leaves unset,
+        // is on the UI thread), after bumping the leave generation that refuses anything still in flight.
         private void ControllerLeft()
+        {
+            Interlocked.Increment(ref _leaveGeneration);
+            CoreDispatch.Invoke(() => { ReleaseOnLeave(); return 0; }, TimeSpan.FromSeconds(10));
+        }
+
+        private void ReleaseOnLeave()
         {
             RemoteCommands.RemoteHaptics.Stop();
             var s = CoreSettings.Current;
@@ -283,19 +293,29 @@ namespace ConditioningControlPanel.Services
                 try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); }
         }
 
-        private void RunCommand(string action, JObject? parameters)
+        private int _leaveGeneration;
+
+        private void RunCommand(string action, JObject? parameters, (int Leave, int Panic) gen)
         {
             (_lastStatus, _lastReason) = ("ok", null);
             _lastControllerCommand = Now();          // WPF NoteControllerActivity: every command, refused or not
             RemoteCommands.RemoteHaptics.NoteCommand();
-            var strictBefore = CoreSettings.Current.StrictLockEnabled;
             var reason = RemoteCommandGate.Screen(action, LockdownService.Current?.IsActive == true);
             if (reason == null)
             {
                 Log.Information("[RemoteControl] Executing: {Action}", action);
                 var (done, refused) = CoreDispatch.Invoke(() =>
                 {
-                    try { return _execute(action, parameters); }
+                    if (gen.Leave != Volatile.Read(ref _leaveGeneration)) return "the controller left";
+                    if (gen.Panic != RemoteCommands.PanicGeneration) return "stopped by panic";
+                    var strictBefore = CoreSettings.Current.StrictLockEnabled;
+                    try
+                    {
+                        var refusal = _execute(action, parameters);
+                        // Set here, in the dispatched call, so even a late-landing switch-on is the controller's.
+                        if (refusal == null && action == "enable_strict_lock" && !strictBefore) _remoteSetStrictLock = true;
+                        return refusal;
+                    }
                     catch (Exception ex) { Log.Error(ex, "[RemoteControl] Error executing command: {Action}", action); return "error"; }
                 }, TimeSpan.FromSeconds(10));
                 reason = done ? refused : "timed out";
@@ -307,7 +327,6 @@ namespace ConditioningControlPanel.Services
                 Log.Warning("[RemoteControl] {Action} not delivered: {Reason}", action, reason);
                 return;
             }
-            if (action == "enable_strict_lock" && !strictBefore) _remoteSetStrictLock = true;
             CommandReceived?.Invoke(this, action);
         }
 
