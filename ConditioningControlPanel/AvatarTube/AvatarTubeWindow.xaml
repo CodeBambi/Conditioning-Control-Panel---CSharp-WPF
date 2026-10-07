@@ -705,35 +705,75 @@
                         Background="#FF2A2440" BorderBrush="#40E0B052" BorderThickness="1"/>
             </Grid>
 
-            <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything -->
+            <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything.
+                 Polish wave 13 (owner, 2026-10-07: "the tube as a whole could use a lift"): under the
+                 depth law the box is a FLOATING plate (you read it) with its band under it, and the
+                 two arrows are RAISED coins (you press them) that lift on hover. No Effect anywhere:
+                 the old purple glows on the arrows and the title's drop shadow were Effects. TitleBox
+                 stays the outer element: code moves its Margin and hit-tests against it. -->
             <Border x:Name="TitleBox"
                     Panel.ZIndex="4"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
                     Margin="0,0,121,180"
-                    Background="#CC1A1A2E"
-                    CornerRadius="12"
-                    BorderBrush="{DynamicResource PinkBrush}"
-                    BorderThickness="2"
-                    Padding="8,6">
+                    Background="Transparent">
+                <Border.Resources>
+                    <Style x:Key="TubeArrowFace" TargetType="Border">
+                        <Setter Property="Width" Value="30"/>
+                        <Setter Property="Height" Value="30"/>
+                        <Setter Property="CornerRadius" Value="15"/>
+                        <Setter Property="VerticalAlignment" Value="Top"/>
+                        <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource DepthRaisedBevel}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="RenderTransform">
+                            <Setter.Value><TranslateTransform Y="0"/></Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Grid}}" Value="True">
+                                <Setter Property="RenderTransform">
+                                    <Setter.Value><TranslateTransform Y="-2"/></Setter.Value>
+                                </Setter>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Resources>
+                <Grid>
+                    <!-- the plate's shadow band, FloatPx long, under its foot -->
+                    <Border Background="{StaticResource DepthFloatBand}" Height="12" VerticalAlignment="Bottom"
+                            Margin="8,0,8,-9" CornerRadius="6" IsHitTestVisible="False"/>
+                    <Border CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1.5" Padding="8,6">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Offset="0" Color="#F2281A36"/>
+                                <GradientStop Offset="1" Color="#F2140C1E"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+                    <!-- the lamp's sheen across the plate's top half -->
+                    <Border Grid.ColumnSpan="3" Margin="-7,-5,-7,0" Height="18" VerticalAlignment="Top" CornerRadius="10,10,4,4"
+                            Background="{StaticResource DepthRaisedSheen}" IsHitTestVisible="False"/>
 
-                    <!-- Left Arrow (Previous Avatar) - 50% bigger -->
+                    <!-- Left Arrow (Previous Avatar): a raised coin with its drop disc -->
                     <Border x:Name="BtnPrevAvatar" Grid.Column="0"
                             Background="Transparent" Cursor="Hand"
                             MouseLeftButtonDown="BtnPrevAvatar_Click"
                             Visibility="Collapsed"
                             VerticalAlignment="Center" Margin="0,0,10,0">
-                        <TextBlock Text="◀" FontSize="27" Foreground="{DynamicResource SecondaryBrush}" FontWeight="Bold">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="{DynamicResource PatreonPurple}" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
+                        <Grid Width="30" Height="34" Background="Transparent">
+                            <Ellipse Width="28" Height="10" VerticalAlignment="Bottom" Fill="{StaticResource DepthDropDisc}" IsHitTestVisible="False"/>
+                            <Border Style="{StaticResource TubeArrowFace}">
+                                <Border CornerRadius="15" Background="{StaticResource DepthRaisedSheen}">
+                                    <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI" FontSize="13"
+                                               Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-1,0,0,0"/>
+                                </Border>
+                            </Border>
+                        </Grid>
                     </Border>
 
                     <!-- Title and Level -->
@@ -744,31 +784,33 @@
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource PinkBrush}"
                                    TextAlignment="Center"
-                                   HorizontalAlignment="Center">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="Black" BlurRadius="2" ShadowDepth="1" Opacity="0.8"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
+                                   HorizontalAlignment="Center"/>
                         <TextBlock x:Name="TxtAvatarLevel"
                                    Text="{loc:Str label_lv_1_2}"
                                    FontSize="13"
-                                   Foreground="#B0B0B0"
+                                   Foreground="#B8A9C6"
                                    TextAlignment="Center"
                                    HorizontalAlignment="Center"
                                    Margin="0,-2,0,0"/>
                     </StackPanel>
 
-                    <!-- Right Arrow (Next Avatar) - 50% bigger -->
+                    <!-- Right Arrow (Next Avatar): a raised coin with its drop disc -->
                     <Border x:Name="BtnNextAvatar" Grid.Column="2"
                             Background="Transparent" Cursor="Hand"
                             MouseLeftButtonDown="BtnNextAvatar_Click"
                             Visibility="Collapsed"
                             VerticalAlignment="Center" Margin="10,0,0,0">
-                        <TextBlock Text="▶" FontSize="27" Foreground="{DynamicResource SecondaryBrush}" FontWeight="Bold">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="{DynamicResource PatreonPurple}" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
+                        <Grid Width="30" Height="34" Background="Transparent">
+                            <Ellipse Width="28" Height="10" VerticalAlignment="Bottom" Fill="{StaticResource DepthDropDisc}" IsHitTestVisible="False"/>
+                            <Border Style="{StaticResource TubeArrowFace}">
+                                <Border CornerRadius="15" Background="{StaticResource DepthRaisedSheen}">
+                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI" FontSize="13"
+                                               Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="1,0,0,0"/>
+                                </Border>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
                     </Border>
                 </Grid>
             </Border>
