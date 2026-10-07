@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text.Json;
 using ConditioningControlPanel.Models.AiEnrichment;
 using Serilog;
@@ -59,28 +58,8 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
                 }
             }
 
-            var assembly = Assembly.GetExecutingAssembly();
-            const string resourceName = "ConditioningControlPanel.assets.knowledge.json";
-
-            using var stream = assembly.GetManifestResourceStream(resourceName);
-            if (stream != null)
-            {
-                try
-                {
-                    using var reader = new StreamReader(stream);
-                    var json = reader.ReadToEnd();
-                    _context = JsonSerializer.Deserialize<List<Knowledge>>(json, options) ?? new();
-                    Log.Information("KnowledgeService: Loaded {Count} entries from embedded resource", _context.Count);
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "KnowledgeService: Error loading embedded resource");
-                }
-            }
-            else
-            {
-                Log.Debug("KnowledgeService: No knowledge.json found — using empty knowledge base");
-            }
+            // The embedded-resource fallback is gone: knowledge.json ships as Content, never embedded (WPF csproj).
+            Log.Debug("KnowledgeService: No knowledge.json found — using empty knowledge base");
         }
 
         public List<Knowledge> GetKnowledge(string keyword)

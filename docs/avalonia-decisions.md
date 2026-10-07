@@ -459,3 +459,21 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   wipes - shared Core, so WPF gains it (`Tests/CCP.Core.Tests/MemoryWipeSiblingsTests.cs`, fail-proven). Avalonia chat VMs
   `Detach` from `TurnsChanged` when the view's VM is replaced; the diary clears the tube bubble log through the
   `MemoryDiaryViewModel.TubeBubbleLog` seam (headless tests have no desktop lifetime for `AvatarTubeWindow.Live`). Both fail-proven.
+
+## 2026-10-02: Local AI providers as brain transports (avalonia-port/local-providers)
+- AiServiceStrategy, LocalAiService (Ollama), OpenAiCompatibleService, TransportModeration, AiResponseParser,
+  IAiResponseParser, BrainAdapter and Enrichment/KnowledgeService moved to Core by git mv. App.* became the existing
+  seams (Serilog Log, CoreSettings.Service, CoreMods.Service/GetPhrases, CoreModerationLog, CompanionBrain.CommandExecutor
+  for the legacy App.Commands batch) plus three new head seams that WPF seeds with exactly what it called:
+  `AiServiceStrategy.BrainProvider` (App.Brain), `LocalAiService.EnsureServerRunning` (OllamaSetupService) and
+  `OpenAiCompatibleService.ApiKeyUnprotect` (DPAPI SecureStringHelper). TransportModeration keeps "override returns null =
+  no guard"; unseeded it uses CoreModerationLog.Guard, which fails closed.
+- The Avalonia `App.Ai` is the same AiServiceStrategy, so the brain follows the Engine Room's provider as on WPF. The
+  configured host/endpoint is the only destination; a sandbox reaches loopback only (SandboxNet, unchanged).
+- OpenAI-compatible on this head: no DPAPI and no BYO key store, so ApiKeyUnprotect stays unseeded and the provider never
+  sends (WPF requires a key too; the stored blob is never sent in the clear). The key box writes nothing.
+- The Engine Room's mapping (CompanionProviderMode, ModeFor/SettingsFor/ClearsLiveActions) and the two Test probes are Core
+  `EngineRoomProviders`; WPF EngineRoomRuntimeVm and both MainWindow Test handlers delegate. Avalonia `EngineRoomVm` binds
+  the existing drawer; "Clear conversation" (ForgetThread + legacy local transcript + tube log) is restored on this head.
+- Not ported: OllamaSetupService (detect/install/auto-offer), the Live actions feed, the login deep link.
+- Advisor: worker.

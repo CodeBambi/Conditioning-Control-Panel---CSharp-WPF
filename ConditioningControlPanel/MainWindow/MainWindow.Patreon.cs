@@ -1598,32 +1598,10 @@ namespace ConditioningControlPanel
             var engine = CompanionRoom?.EngineVm;
             if (engine == null) return;
 
-            var host = (App.Settings?.Current?.CompanionPrompt?.AiOllamaHost ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(host))
-            {
-                engine.SetStatus(Loc.Get("label_status_failed"), healthy: false);
-                return;
-            }
-            var url = host.TrimEnd('/') + "/api/tags";
-
-            engine.SetStatus(Loc.Get("label_status_testing"), healthy: false);
-
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                using var http = new HttpClient();
-                var resp = await http.GetAsync(url, cts.Token);
-                sw.Stop();
-                engine.SetStatus(resp.IsSuccessStatusCode
-                    ? $"{Loc.Get("label_status_connected")} · {sw.ElapsedMilliseconds}ms"
-                    : $"{Loc.Get("label_status_failed")} · {(int)resp.StatusCode}",
-                    healthy: resp.IsSuccessStatusCode);
-            }
-            catch (Exception ex)
-            {
-                engine.SetStatus($"{Loc.Get("label_status_failed")} · {ex.GetType().Name}", healthy: false);
-            }
+            var host = App.Settings?.Current?.CompanionPrompt?.AiOllamaHost;
+            if (!string.IsNullOrWhiteSpace(host)) engine.SetStatus(Loc.Get("label_status_testing"), healthy: false);
+            var (text, healthy) = await Views.Controls.Companion.EngineRoomProviders.TestOllamaAsync(host);
+            engine.SetStatus(text, healthy);
         }
 
         internal void BtnOpenAiSamplerSettings_Click(object sender, RoutedEventArgs e)
@@ -1657,28 +1635,8 @@ namespace ConditioningControlPanel
             if (engine == null) return;
 
             engine.SetStatus(Loc.Get("label_status_testing"), healthy: false);
-
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                using var service = new Services.AIService.OpenAiCompatibleService();
-                var diag = await service.TestEndpointAsync(cts.Token);
-
-                if (diag.Success)
-                {
-                    engine.SetStatus($"{Loc.Get("label_status_connected")} · {diag.ElapsedMs ?? 0}ms", healthy: true);
-                }
-                else
-                {
-                    var codePart = diag.HttpStatusCode.HasValue ? $" (HTTP {diag.HttpStatusCode.Value})" : string.Empty;
-                    engine.SetStatus($"{Loc.Get("label_status_failed")} · {diag.Message}{codePart}", healthy: false);
-                }
-            }
-            catch (Exception ex)
-            {
-                engine.SetStatus($"{Loc.Get("label_status_failed")} · {ex.GetType().Name}", healthy: false);
-                App.Logger?.Warning(ex, "MainWindow: OpenAI-compatible test connection failed");
-            }
+            var (text, healthy) = await Views.Controls.Companion.EngineRoomProviders.TestOpenAiCompatibleAsync();
+            engine.SetStatus(text, healthy);
         }
 
         /// <summary>
