@@ -15,6 +15,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     {
         internal static bool LockdownActive => LockdownService.Current?.IsActive == true;
 
+        /// <summary>WPF Lab.cs:635-663/741-745: a control Lockdown holds is greyed at 0.4 with the
+        /// "no escape" tooltip, and given back on exit. The control's own refusal stays as well.</summary>
+        internal static void HoldUnderLockdown(global::Avalonia.Controls.Control c, bool held)
+        {
+            c.IsEnabled = !held;
+            c.Opacity = held ? 0.4 : 1.0;
+            global::Avalonia.Controls.ToolTip.SetTip(c, held ? Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape") : null);
+        }
+
+        /// <summary>WPF OnLockdownActivated/Deactivated (Lab.cs:612/707): the CC Labs door is greyed
+        /// as well as refused. Bound to the service current at construction (App seeds it first).</summary>
+        private void InitializeLockdownGreys()
+        {
+            void Refresh() => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (Named<global::Avalonia.Controls.Button>("BtnBackToLauncher") is { } door) door.IsEnabled = !LockdownActive;
+            });
+            if (LockdownService.Current is { } ld)
+            {
+                ld.LockdownActivated += Refresh;
+                ld.LockdownDeactivated += Refresh;
+                Closed += (_, _) => { ld.LockdownActivated -= Refresh; ld.LockdownDeactivated -= Refresh; };
+            }
+            Refresh();
+        }
+
         /// <summary>WPF StartStop.cs:45: under Lockdown a Stop (button, tray Stop everything) is
         /// refused with the WPF message, after the Stop tripwire. True when refused.</summary>
         internal static bool RefuseStopUnderLockdown()

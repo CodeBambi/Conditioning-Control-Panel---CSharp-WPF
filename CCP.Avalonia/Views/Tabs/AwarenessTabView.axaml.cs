@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Awareness;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
@@ -65,8 +66,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             SliderAwarenessGlobalCooldown.PropertyChanged += (_, e) =>
             {
                 if (e.Property != RangeBase.ValueProperty) return;
-                var value = (int)SliderAwarenessGlobalCooldown.Value;
-                TxtAwarenessGlobalCooldown.Text = $"{value}s";
+                // The slider is a stop index (ccp-bugs #640); the setting keeps plain seconds.
+                var value = AwarenessCooldownScale.SecondsAt(SliderAwarenessGlobalCooldown.Value);
+                TxtAwarenessGlobalCooldown.Text = AwarenessCooldownScale.Format(value);
                 if (_isLoading) return;
                 CoreSettings.Current.KeywordGlobalCooldownSeconds = value;
                 CoreSettings.Save();
@@ -74,8 +76,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             SliderAwarenessSameWordCooldown.PropertyChanged += (_, e) =>
             {
                 if (e.Property != RangeBase.ValueProperty) return;
-                var value = (int)SliderAwarenessSameWordCooldown.Value;
-                TxtAwarenessSameWordCooldown.Text = $"{value}s";
+                // The slider is a stop index (ccp-bugs #640); the setting keeps plain seconds.
+                var value = AwarenessCooldownScale.SecondsAt(SliderAwarenessSameWordCooldown.Value);
+                TxtAwarenessSameWordCooldown.Text = AwarenessCooldownScale.Format(value);
                 if (_isLoading) return;
                 CoreSettings.Current.KeywordPerKeywordCooldownSeconds = value;
                 CoreSettings.Save();
@@ -126,10 +129,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
                 SyncHighlightSwatchUi(s.KeywordHighlightColor);
 
-                // Clamped to the slider's own range: the settings clamp is wider (1-300 / 1-600)
-                // and a value past Maximum would be silently coerced back and then saved.
-                SliderAwarenessGlobalCooldown.Value = Math.Clamp(s.KeywordGlobalCooldownSeconds, 1, 180);
-                SliderAwarenessSameWordCooldown.Value = Math.Clamp(s.KeywordPerKeywordCooldownSeconds, 1, 180);
+                // WPF MainWindow.Awareness.cs: the slider sits at the nearest stop, the label shows the
+                // stored seconds as they are (an off-ladder value from an old file is not rewritten).
+                SliderAwarenessGlobalCooldown.Value = AwarenessCooldownScale.IndexFor(s.KeywordGlobalCooldownSeconds);
+                TxtAwarenessGlobalCooldown.Text = AwarenessCooldownScale.Format(s.KeywordGlobalCooldownSeconds);
+                SliderAwarenessSameWordCooldown.Value = AwarenessCooldownScale.IndexFor(s.KeywordPerKeywordCooldownSeconds);
+                TxtAwarenessSameWordCooldown.Text = AwarenessCooldownScale.Format(s.KeywordPerKeywordCooldownSeconds);
 
                 // Matched on Tag rather than index so reordering the XAML items cannot silently
                 // remap a saved setting onto the wrong mode.
