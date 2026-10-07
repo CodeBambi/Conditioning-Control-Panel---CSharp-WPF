@@ -74,12 +74,29 @@ public sealed class ShellCopyPortTests
         return Task.CompletedTask;
     });
 
-    [Fact]
-    public Task PassiveStartupCardsOpenOneAtATime() => AvaloniaTestDispatcher.RunAsync(async () =>
+    private sealed class SteppedClock : TimeProvider
     {
-        EnsureApp();   // WPF 8cbcbea01: the second card waits for the first, it never stacks
+        public DateTimeOffset Now = new(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private sealed class FakePassiveCard : Window, IPassiveStartupSurface { }
+
+    private static void WithLadder(Action<SteppedClock> body)
+    {
+        EnsureApp();
         StartupLadder.ResetForTests();
-        try
+        var clock = new SteppedClock();
+        StartupLadder.Time = clock;
+        try { body(clock); }
+        finally { StartupLadder.ResetForTests(); }
+    }
+
+    [Fact]
+    public Task PassiveStartupCardsOpenOneAtATime() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        // WPF 8cbcbea01: the second card waits for the first, it never stacks.
+        WithLadder(clock =>
         {
             int a = 0, b = 0;
             StartupLadder.PresentOrInbox(new InboxItem { Key = "a", Open = () => a++ });
@@ -88,12 +105,90 @@ public sealed class ShellCopyPortTests
             Assert.Equal(0, b);                                   // held, not stacked
             Assert.Equal(0, StartupLadder.Inbox.UnreadCount);     // and not filed away either
 
-            var until = DateTime.UtcNow + StartupQueueCore.PassiveSettle + TimeSpan.FromSeconds(2);
-            while (b == 0 && DateTime.UtcNow < until) { await Task.Delay(100); Dispatcher.UIThread.RunJobs(); }
+            clock.Now += StartupQueueCore.PassiveSettle - TimeSpan.FromMilliseconds(1);
+            StartupLadder.PumpHeld();
+            Assert.Equal(0, b);                                   // still settling
+            clock.Now += TimeSpan.FromMilliseconds(1);
+            StartupLadder.PumpHeld();
             Assert.Equal(1, b);                                   // opens once the first has settled
-        }
-        finally { StartupLadder.ResetForTests(); }
+        });
+        return Task.CompletedTask;
     });
+
+    [Fact]
+    public Task PassiveCardWaitsWhileAPassiveWindowIsOnScreen() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        WithLadder(clock =>
+        {
+            var card = new FakePassiveCard();
+            card.Show();
+            try
+            {
+                int b = 0;
+                StartupLadder.PresentOrInbox(new InboxItem { Key = "b", Open = () => b++ });
+                Assert.Equal(0, b);                               // a card is up: wait
+
+                clock.Now += StartupQueueCore.PassiveSettle + TimeSpan.FromMinutes(1);
+                StartupLadder.PumpHeld();
+                Assert.Equal(0, b);                               // settle elapsed, card still up
+
+                card.Close();
+                StartupLadder.PumpHeld();
+                Assert.Equal(1, b);                               // it closed: the next one opens
+            }
+            finally { card.Close(); }
+        });
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task BackIsRefusedUnderLockdown() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        // Deactivate in release (P02): Activate forces panic-key off and writes a recovery file,
+        // which would otherwise leak to disk and into later tests.
+        var ld = new LockdownService();
+        BackRefused(() =>
+        {
+            LockdownService.Current = ld;
+            ld.Activate(TimeSpan.FromMinutes(30));
+        }, () => { ld.Deactivate(); LockdownService.Current = null; });
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task BackIsRefusedDuringATutorial() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        BackRefused(() => CoreTutorial.IsActiveProvider = () => true,
+                    () => CoreTutorial.IsActiveProvider = null);
+        return Task.CompletedTask;
+    });
+
+    // PLAYBOOK P05: the Back arrow and the side buttons must not switch the page under a hold.
+    private static void BackRefused(Action hold, Action release)
+    {
+        EnsureApp();
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var shell = new MainShellWindow();
+        try
+        {
+            shell.Show();
+            Dispatcher.UIThread.RunJobs();
+            shell.ShowTab("studio");
+            var back = shell.Named<Button>("BtnNavBack")!;
+            hold();
+            back.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal("studio", shell.CurrentTab);
+            Assert.False(shell.TabHistoryStep(back: true));
+            Assert.Equal("studio", shell.CurrentTab);
+        }
+        finally
+        {
+            release();
+            shell.Close();
+            CoreSettings.ServiceProvider = null;
+        }
+    }
 
     [Fact]
     public Task RecapWindowSaysMonthlyNotSeason() => AvaloniaTestDispatcher.RunAsync(() =>

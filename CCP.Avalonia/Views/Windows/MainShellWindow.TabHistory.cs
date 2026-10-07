@@ -1,7 +1,9 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.TabHistory.cs: back and forward
 // between tabs (ccp-bugs #1290, the rail's Back arrow from eb6ccc404). The order lives in Core
 // (Services/UI/TabHistory.cs); this file only feeds it and reads the input.
-// WPF's remote-control overlay and leash gate guards are absent: neither surface exists here yet.
+// Guards WPF has on TabHistoryStep (MainWindow.TabHistory.cs:82-88) that are ABSENT here, each because
+// its surface does not exist on this head yet: App.StartupLadder.IsModalUp (this head's StartupLadder
+// has no modal ladder - see its ponytail note), RemoteControlOverlay visibility, and the leash gate.
 
 using System;
 using Avalonia.Controls;
