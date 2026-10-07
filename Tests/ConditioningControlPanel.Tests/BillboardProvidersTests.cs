@@ -383,14 +383,13 @@ public class BillboardProvidersTests
     }
 
     [Fact]
-    public void Tips_rotate_with_the_clock()
+    public void Tips_come_in_table_order_whatever_the_clock_says()
     {
+        // The deck turns the tips, one per cycle; the provider never rotates by wall clock.
         var a = TipCards.Decide(BillboardTier.Prime, Oct12, Loc);
-        var b = TipCards.Decide(BillboardTier.Prime, Oct12 + TipCards.Rotation, Loc);
-        Assert.NotEqual(a[0].Id, b[0].Id);
-        Assert.Equal(a[1].Id, b[0].Id);
-        Assert.Equal(TipCards.StartIndex(Oct12, 9), TipCards.StartIndex(Oct12.AddSeconds(30), 9));
-        Assert.Equal(0, TipCards.StartIndex(Oct12, 0));
+        var b = TipCards.Decide(BillboardTier.Prime, Oct12.AddHours(5).AddMinutes(17), Loc);
+        Assert.Equal(TipCards.Table.Select(t => TipCards.IdPrefix + t.Id), a.Select(c => c.Id));
+        Assert.Equal(a.Select(c => c.Id), b.Select(c => c.Id));
     }
 
     [Fact]

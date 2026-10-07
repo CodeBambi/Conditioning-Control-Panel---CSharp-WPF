@@ -10,14 +10,13 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
     /// <summary>
     /// TIP, the pure half. Prime players never see a showcase (they own everything it would sell);
     /// they get one of these in that slot instead. Every tip is about a real feature and opens
-    /// its page. The provider hands the whole table back, rotated, so the deck can take the first
-    /// one the player has not snoozed; the rotation moves on every <see cref="Rotation"/>.
+    /// its page. The provider hands the whole table back in table order (priority = place in the
+    /// table); the DECK turns it, one tip per cycle, the next one every time it comes round
+    /// (<see cref="DashboardBillboard.PickShowcaseOrTip"/>). Owner, 2026-10-07: no wall clock.
     /// </summary>
     public static class TipCards
     {
         public const string IdPrefix = "tip.";
-
-        public static readonly TimeSpan Rotation = TimeSpan.FromMinutes(2);
 
         public static readonly IReadOnlyList<BillboardTip> Table = new[]
         {
@@ -32,17 +31,16 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
             new BillboardTip("remote", "remotecontrol"),
         };
 
-        /// <summary>The table, starting at the tip whose turn it is. Empty unless the viewer is Prime.</summary>
+        /// <summary>The whole table, in table order. Empty unless the viewer is Prime.</summary>
         public static IReadOnlyList<BillboardCardSpec> Decide(BillboardTier tier, DateTime nowUtc, Func<string, string> loc,
             IReadOnlyList<BillboardTip>? table = null)
         {
             table ??= Table;
             if (tier != BillboardTier.Prime || table.Count == 0) return Array.Empty<BillboardCardSpec>();
-            int start = StartIndex(nowUtc, table.Count);
             var cards = new List<BillboardCardSpec>(table.Count);
             for (int i = 0; i < table.Count; i++)
             {
-                var tip = table[(start + i) % table.Count];
+                var tip = table[i];
                 cards.Add(new BillboardCardSpec(IdPrefix + tip.Id, BillboardCardKind.Tip, i,
                     loc("billboard_card_tip_eyebrow"),
                     loc("billboard_card_tip_" + tip.Id + "_title"),
@@ -52,17 +50,9 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
             }
             return cards;
         }
-
-        /// <summary>Which tip leads now: one step per <see cref="Rotation"/> of wall-clock time.</summary>
-        public static int StartIndex(DateTime nowUtc, int count)
-        {
-            if (count <= 0) return 0;
-            long step = nowUtc.Ticks / Rotation.Ticks;
-            return (int)(step % count);
-        }
     }
 
-    /// <summary>TIP, the adapter: nothing to read but the tier and the clock.</summary>
+    /// <summary>TIP, the adapter: nothing to read but the tier.</summary>
     public sealed class TipProvider : BillboardProviderBase
     {
         public override string Id => "tip";
