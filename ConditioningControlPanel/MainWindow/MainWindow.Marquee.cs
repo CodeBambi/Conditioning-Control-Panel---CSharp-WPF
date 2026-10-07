@@ -749,6 +749,8 @@ namespace ConditioningControlPanel
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadAsStringAsync();
+                    // The Tonight Board rides the same response (its own parse; never throws).
+                    Services.Billboard.Board.BoardService.Shared.OnMarquee(json);
                     var result = System.Text.Json.JsonSerializer.Deserialize<MarqueeResponse>(json);
                     var newMessage = result?.message;
 
