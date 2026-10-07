@@ -460,6 +460,13 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   `Detach` from `TurnsChanged` when the view's VM is replaced; the diary clears the tube bubble log through the
   `MemoryDiaryViewModel.TubeBubbleLog` seam (headless tests have no desktop lifetime for `AvatarTubeWindow.Live`). Both fail-proven.
 
+## 2026-10-01: Chaster tab receipt, calendar and keys (avalonia-port/chaster-receipt)
+- The tab's receipt reuses `ChasterReceiptView`; the language re-render lives in the view (re-Show the last bill on
+  LanguageChanged while attached), so the exit bill gets it too. Opens/closes at once: FxBill's print-down not ported.
+- The 2x2 keys do not go through `ChasterImportConfirmDialog`: like WPF Preset_Click they only rewrite ChasterPrices and
+  request limits (Core `TabPresets`), never add time to the lock; that dialog's Summary is the awareness-preset import.
+- Calendar on Core `LockCalendar`; cross strokes straight, padlock a glyph, key on gold, no draw-in/tonight tag (ponytail noted).
+- Advisor: worker.
 ## 2026-10-02: Chaos run engine in Core, runs stay WPF-only (avalonia-port/chaos-waves)
 - `ChaosModels.cs` (run config/state, boon pool, toy state, sidebar tile) and `ChaosRunEffects.cs` are git mvs into Core.
   `ChaosSidebarBoon` lost its WPF `Visibility`/`Brush` members: `Has*` bools stay, the accent/back brushes are each head's

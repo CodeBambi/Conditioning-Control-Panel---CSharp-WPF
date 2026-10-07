@@ -227,4 +227,131 @@ public sealed class ChasterBillTests
         }
         finally { owner.Close(); }
     });
+
+    /// <summary>The tab's own receipt (WPF StatRun_Click): the third number opens the bill under the
+    /// numbers, a language switch repaints it, a second click folds it away.</summary>
+    [Fact]
+    public Task TheRunNumberOpensTheReceiptAndALanguageSwitchRepaintsIt() => AvaloniaTestDispatcher.RunAsync(() => Run(async (chaster, _) =>
+    {
+        Assert.True(chaster.Note("attention").Booked);
+        var tab = new ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView();
+        var w = new Window { Width = 1200, Height = 900, Content = tab };
+        w.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var host = tab.FindControl<Border>("ReceiptHost")!;
+            var run = tab.FindControl<TextBlock>("TxtRun")!;
+            Assert.Equal(CircesTab.Format(chaster.Bill().NetSeconds), run.Text);
+            Assert.False(host.IsVisible);
+            Click(w, tab.FindControl<Border>("StatRun")!);
+            Assert.True(host.IsVisible);
+            var receipt = tab.FindControl<ChasterReceiptView>("Receipt")!;
+            Assert.Equal("NET " + CircesTab.Format(chaster.Bill().NetSeconds), receipt.StampText);
+
+            LocalizationManager.Instance.SetLanguage("de");
+            Dispatcher.UIThread.RunJobs();
+            Assert.StartsWith("NETTO ", receipt.StampText);
+
+            Click(w, tab.FindControl<Border>("StatRun")!);
+            Assert.False(host.IsVisible);
+        }
+        finally { LocalizationManager.Instance.SetLanguage("en"); w.Close(); }
+        await Task.CompletedTask;
+    }));
+
+    /// <summary>The calendar sheet (WPF BuildCalendar/Cell): one square per Core LockCalendar day, a
+    /// served day crossed, tonight ringed, the rest padlocked, and gone with no lock.</summary>
+    [Fact]
+    public Task TheCalendarDrawsOneSquareADayFromCore() => AvaloniaTestDispatcher.RunAsync(() => Run(async (chaster, _) =>
+    {
+        var tab = new ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView();
+        var w = new Window { Width = 1200, Height = 900, Content = tab };
+        w.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var today = new DateTime(2026, 9, 10, 12, 0, 0);
+            var (start, end) = (today.AddDays(-2), today.AddDays(3));
+            tab.BuildCalendar((start, end), today);
+            var grid = tab.FindControl<UniformGrid>("Calendar")!;
+            var cells = LockCalendar.CellsFor(start, end, today);
+            Assert.True(tab.FindControl<Panel>("CalendarRow")!.IsVisible);
+            Assert.Equal(cells.Count, grid.Children.Count);
+            var tips = grid.Children.Select(c => ToolTip.GetTip(c) as string).ToList();
+            Assert.Equal(Loc.GetF("chaster_cal_served", 1), tips[0]);
+            Assert.Equal(Loc.Get("chaster_chain_tonight"), tips[2]);
+            Assert.Equal(Loc.GetF("chaster_cal_locked", 4), tips[3]);
+            Assert.Single(grid.Children, c => ((Border)c).GetVisualDescendants().OfType<Canvas>().Any() && ToolTip.GetTip(c) as string == tips[0]);
+
+            tab.BuildCalendar(null, today);
+            Assert.False(tab.FindControl<Panel>("CalendarRow")!.IsVisible);
+
+            // CalendarSpan: Chaster's UTC instants become local days; no snapshot, no end or a hidden timer is no sheet.
+            var (startUtc, endUtc) = (new DateTime(2026, 9, 8, 23, 30, 0, DateTimeKind.Utc), new DateTime(2026, 9, 13, 0, 30, 0, DateTimeKind.Utc));
+            var snap = new LockSnapshot("l1", "Cage", endUtc, false, false, false, endUtc) { StartedAtUtc = startUtc };
+            var span = ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView.CalendarSpan(snap, today)!.Value;
+            Assert.Equal((startUtc.ToLocalTime(), endUtc.ToLocalTime()), span);
+            Assert.Equal(DateTimeKind.Local, span.Start.Kind);
+            Assert.Equal(DateTimeKind.Local, span.End.Kind);
+            Assert.Equal(today, ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView.CalendarSpan(snap with { StartedAtUtc = null }, today)!.Value.Start);
+            Assert.Null(ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView.CalendarSpan(null, today));
+            Assert.Null(ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView.CalendarSpan(snap with { EndsAtUtc = null }, today));
+            Assert.Null(ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView.CalendarSpan(snap with { TimerHidden = true }, today));
+            tab.BuildCalendar(snap with { StartedAtUtc = DateTime.UtcNow.AddDays(-2), EndsAtUtc = DateTime.UtcNow.AddDays(3) });
+            Assert.True(tab.FindControl<Panel>("CalendarRow")!.IsVisible);
+            tab.BuildCalendar((LockSnapshot?)null);                  // the null-snapshot path the tab takes with no lock
+            Assert.False(tab.FindControl<Panel>("CalendarRow")!.IsVisible);
+        }
+        finally { w.Close(); }
+        await Task.CompletedTask;
+    }));
+
+    /// <summary>The keys (WPF Preset_Click): a press rewrites the price list to the preset's set and
+    /// lights only that key; the fourth key lights for a hand-built set and rewrites nothing.</summary>
+    [Fact]
+    public Task AKeyRewritesThePricesAndLightsItself() => AvaloniaTestDispatcher.RunAsync(() => Run(async (chaster, _) =>
+    {
+        var tab = new ConditioningControlPanel.Avalonia.Views.Tabs.ChasterTabView();
+        var w = new Window { Width = 1200, Height = 1400, Content = tab };
+        w.Show();
+        var (oldDay, oldBacklog) = (CoreSettings.Current.ChasterDayLimit, CoreSettings.Current.ChasterBacklogLimit);
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var custom = tab.FindControl<ToggleButton>("BtnPresetCustom")!;
+            Assert.True(custom.IsChecked);                       // attention + typo is no preset
+            Click(w, custom);
+            Assert.Equal(new[] { "attention", "typo" }, CoreSettings.Current.ChasterPrices);
+            Assert.True(custom.IsChecked);
+
+            // Gentle has no heat row, so Circe's mood hides; Strict has one, so the key shows it (WPF RefreshPresets :1123).
+            var mood = tab.FindControl<TextBlock>("TxtMood")!;
+            Click(w, tab.FindControl<ToggleButton>("BtnPresetGentle")!);
+            Assert.False(mood.IsVisible);
+
+            var strict = tab.FindControl<ToggleButton>("BtnPresetStrict")!;
+            (CoreSettings.Current.ChasterDayLimit, CoreSettings.Current.ChasterBacklogLimit) = (new LimitSetting(1, 0, null), new LimitSetting(1, 0, null));
+            var (day, backlog) = TabPresets.RequestLimits(TabPresets.Find(TabPresets.Strict)!,
+                CoreSettings.Current.ChasterDayLimit, CoreSettings.Current.ChasterBacklogLimit, DateTime.UtcNow);
+            Assert.NotEqual((1, 0), (day.Minutes, day.PendingMinutes));          // the press has something to change
+            Assert.NotEqual((1, 0), (backlog.Minutes, backlog.PendingMinutes));
+            Click(w, strict);
+            Assert.Equal(TabPresets.Apply(TabPresets.Strict), CoreSettings.Current.ChasterPrices);
+            Assert.True(mood.IsVisible);
+            Assert.Equal(Loc.GetF("chaster_mood_peek", Loc.Get(chaster.Mood!.Value.WordKey), chaster.Mood!.Value.FactorText), mood.Text);
+            Assert.Equal((day.Minutes, day.PendingMinutes), (CoreSettings.Current.ChasterDayLimit.Minutes, CoreSettings.Current.ChasterDayLimit.PendingMinutes));
+            Assert.Equal((backlog.Minutes, backlog.PendingMinutes), (CoreSettings.Current.ChasterBacklogLimit.Minutes, CoreSettings.Current.ChasterBacklogLimit.PendingMinutes));
+            Assert.True(strict.IsChecked);
+            Assert.False(custom.IsChecked);
+            Assert.False(tab.FindControl<ToggleButton>("BtnPresetGentle")!.IsChecked);
+            Assert.False(string.IsNullOrEmpty(tab.FindControl<TextBlock>("TxtStakesStrict")!.Text));
+        }
+        finally
+        {
+            w.Close();
+            (CoreSettings.Current.ChasterDayLimit, CoreSettings.Current.ChasterBacklogLimit) = (oldDay, oldBacklog);
+        }
+        await Task.CompletedTask;
+    }));
 }
