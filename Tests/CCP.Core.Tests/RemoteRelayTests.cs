@@ -83,7 +83,7 @@ public sealed class RemoteRelayTests
         var status = f.Seen.Last(s => s.Path == "/v2/remote/status").Body["last_executed"]!;
         Assert.Equal("disable_panic", (string?)status["action"]);
         Assert.Equal("fail", (string?)status["status"]);
-        Assert.Equal("the panic key can only be turned off locally", (string?)status["reason"]);
+        Assert.Equal("the panic key stays on", (string?)status["reason"]);   // WPF 719ed9ca5
     }
 
     [Fact]
@@ -193,5 +193,94 @@ public sealed class RemoteRelayTests
             Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute("play_hypnotube", null));
         }
         finally { (s.StrictLockEnabled, s.PanicKeyEnabled) = (strict, panic); }
+    }
+    // main 71cfc4185 (ccp-bugs #1340): the controller leaving hands back the panic key and the strict
+    // lock IT switched on; a strict lock the subject set stays.
+    [Fact]
+    public async Task Controller_leave_releases_the_controllers_strict_lock_and_the_panic_key_only()
+    {
+        var s = CoreSettings.Current;
+        var saved = (s.StrictLockEnabled, s.PanicKeyEnabled, s.StopEffectsOnRemoteDisconnect);
+        try
+        {
+            (s.StrictLockEnabled, s.PanicKeyEnabled, s.StopEffectsOnRemoteDisconnect) = (false, false, false);
+            var f = new FakeRelay();
+            using var r = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", RemoteCommands.Execute, _ => { }, f) { AutoPoll = false };
+            await r.StartAsync("full");
+            Poll(f, "{\"controller_connected\":true,\"commands\":[{\"id\":\"1\",\"action\":\"enable_strict_lock\"}]}");
+            await r.PollOnceAsync();
+            Assert.True(s.StrictLockEnabled);
+            Poll(f, "{\"controller_connected\":false}");
+            await r.PollOnceAsync();
+            Assert.False(s.StrictLockEnabled);
+            Assert.True(s.PanicKeyEnabled);
+
+            s.StrictLockEnabled = true;   // the subject's own
+            Poll(f, "{\"controller_connected\":true,\"commands\":[{\"id\":\"2\",\"action\":\"enable_strict_lock\"}]}");
+            await r.PollOnceAsync();
+            Poll(f, "{\"controller_connected\":false}");
+            await r.PollOnceAsync();
+            Assert.True(s.StrictLockEnabled);
+        }
+        finally { (s.StrictLockEnabled, s.PanicKeyEnabled, s.StopEffectsOnRemoteDisconnect) = saved; }
+    }
+
+    // main 7b22ece8c (ccp-bugs #1065): no toy -> refused, never a silent "ok".
+    [Fact]
+    public void Trigger_haptic_with_no_toy_is_refused()
+    {
+        var prev = CoreHaptics.Service;
+        try
+        {
+            CoreHaptics.Service = null;
+            Assert.Equal("no_device", RemoteCommands.Execute("trigger_haptic", null));
+        }
+        finally { CoreHaptics.Service = prev; }
+    }
+
+    // main 719ed9ca5: haptic_level/haptic_pattern play through the mixer; haptic_stop, panic and a
+    // leaving controller stop them; a bad pattern is refused.
+    [Fact]
+    public void Remote_haptics_play_and_every_stop_path_ends_them()
+    {
+        var clock = new PopQuizSchedulerTests.FakeClock();
+        var sent = new List<int>();
+        var d = new ConditioningControlPanel.Services.Remote.CoreRemoteHapticDriver(() => 1.0, clock) { Sink = steps => { sent.Add(steps.Count); return null; } };
+        d.Play(ConditioningControlPanel.Services.Remote.RemoteHapticPlan.FromPattern(JObject.Parse("{\"levels\":[50,80],\"step_ms\":100,\"loop\":true}"), out _)!);
+        Assert.True(d.IsPlaying);
+        clock.Advance(TimeSpan.FromSeconds(2));
+        var n = sent.Count;
+        Assert.True(n > 1);
+        d.Stop();
+        clock.Advance(TimeSpan.FromSeconds(2));
+        Assert.False(d.IsPlaying);
+        Assert.Equal(n, sent.Count);
+
+        Assert.Equal("no pattern", RemoteCommands.Execute("haptic_pattern", new JObject()));
+        Assert.Null(RemoteCommands.Execute("haptic_level", JObject.Parse("{\"level\":60,\"ms\":3000}")));
+        Assert.True(RemoteCommands.RemoteHaptics.IsPlaying);
+        RemoteCommands.StopEffects(force: true);
+        Assert.False(RemoteCommands.RemoteHaptics.IsPlaying);
+    }
+
+    // main d39969827: 1 s polls while a connected controller is busy; a 429 still backs off from 5 s.
+    [Fact]
+    public async Task Hot_cadence_while_the_controller_is_busy()
+    {
+        var f = new FakeRelay();
+        using var r = Relay(f);
+        var now = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        r.Now = () => now;
+        await r.StartAsync("light");
+        Poll(f, "{\"controller_connected\":true,\"commands\":[{\"id\":\"1\",\"action\":\"start_flash\"}]}");
+        await r.PollOnceAsync();
+        Assert.Equal(RemoteRelay.HotPollSeconds, r.PollInterval);
+        f.Answer = _ => Json((HttpStatusCode)429, "{}");
+        await r.PollOnceAsync();
+        Assert.Equal(10, r.PollInterval);
+        Poll(f, "{\"controller_connected\":true}");
+        now = now.AddSeconds(61);
+        await r.PollOnceAsync();
+        Assert.Equal(RemoteRelay.PollIntervalSeconds, r.PollInterval);
     }
 }

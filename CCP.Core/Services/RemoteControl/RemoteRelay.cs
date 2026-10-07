@@ -55,6 +55,15 @@ namespace ConditioningControlPanel.Services
         private DateTime _lastStatusPush = DateTime.MinValue, _statusBackoffUntil = DateTime.MinValue;
         private string _lastStatus = "ok";
         private string? _lastReason;
+        private bool _remoteSetStrictLock, _pollBackedOff;
+        private DateTime _lastControllerCommand = DateTime.MinValue;
+        public const double HotPollSeconds = 1.0, HotWindowSeconds = 60.0, ConnectedHeartbeatSeconds = 5.0;   // WPF Screen.cs (d39969827)
+
+        /// <summary>WPF PollBaseSeconds: 1 s while a connected controller sent a command in the last minute or
+        /// a remote haptic loops, else 5 s.</summary>
+        private double PollBase => ControllerConnected
+            && ((Now() - _lastControllerCommand).TotalSeconds < HotWindowSeconds || RemoteCommands.RemoteHaptics.IsLooping)
+            ? HotPollSeconds : PollIntervalSeconds;
 
         /// <summary>Clock seam for the idle and throttle rules.</summary>
         internal Func<DateTime> Now = () => DateTime.UtcNow;
@@ -160,6 +169,7 @@ namespace ConditioningControlPanel.Services
             _loop?.Cancel();
             _loop = null;
             (IsActive, SessionCode, ConnectPin, Tier, ControllerIdle, _idleSince, _autoDisconnected) = (false, null, null, null, false, null, false);
+            (_remoteSetStrictLock, _pollBackedOff, _lastControllerCommand) = (false, false, DateTime.MinValue);
             try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); }
             if (ControllerConnected) { ControllerConnected = false; ControllerConnectedChanged?.Invoke(this, EventArgs.Empty); }
             SessionEnded?.Invoke(this, EventArgs.Empty);
@@ -178,7 +188,11 @@ namespace ConditioningControlPanel.Services
                 {
                     _consecutiveFailures++;
                     if (resp.StatusCode == HttpStatusCode.NotFound) { Log.Warning("[RemoteControl] Session expired during poll"); Cleanup(); }
-                    else if ((int)resp.StatusCode == 429) PollInterval = Math.Min(PollInterval * 2, MaxBackoffSeconds);
+                    else if ((int)resp.StatusCode == 429)
+                    {   // from at least 5 s, so hot mode backs off as hard as cold (WPF d39969827)
+                        _pollBackedOff = true;
+                        PollInterval = Math.Min(Math.Max(PollInterval, PollIntervalSeconds) * 2, MaxBackoffSeconds);
+                    }
                     else if (resp.StatusCode == HttpStatusCode.Unauthorized && _consecutiveFailures >= 3)
                     { Log.Error("[RemoteControl] 3 consecutive auth failures - terminating session"); Cleanup(); }
                     else Log.Warning("[RemoteControl] Poll failed: {Status}", resp.StatusCode);
@@ -186,7 +200,7 @@ namespace ConditioningControlPanel.Services
                 }
                 var result = JObject.Parse(await resp.Content.ReadAsStringAsync().ConfigureAwait(false));
                 _consecutiveFailures = 0;
-                PollInterval = PollIntervalSeconds;
+                _pollBackedOff = false;
                 var changed = ApplyControllerState(result["controller_connected"]?.Value<bool>() ?? false,
                                                    result["controller_idle"]?.Value<bool>() ?? false);
 
@@ -199,8 +213,10 @@ namespace ConditioningControlPanel.Services
                     (lastId, lastAction) = (cmd["id"]?.ToString(), action);
                 }
 
-                if (lastId != null || changed || (Now() - _lastStatusPush).TotalSeconds >= StatusPushIntervalSeconds)
+                var heartbeat = ControllerConnected ? ConnectedHeartbeatSeconds : StatusPushIntervalSeconds;
+                if (lastId != null || changed || (Now() - _lastStatusPush).TotalSeconds >= heartbeat)
                     await SendStatusAsync(lastId, lastAction).ConfigureAwait(false);
+                if (!_pollBackedOff) PollInterval = PollBase;
             }
             catch (Exception ex)
             {
@@ -247,8 +263,22 @@ namespace ConditioningControlPanel.Services
         }
 
         // WPF HandleControllerDisconnectCleanup: default leaves effects running; the opt-in stops them.
+        // A remote haptic never outlives its controller, and what could trap the subject is handed back
+        // (WPF 71cfc4185 ReleaseRemoteSafetyState, ccp-bugs #1340): panic key on, the controller's own
+        // strict lock off; a strict lock the subject set stays.
         private void ControllerLeft()
         {
+            RemoteCommands.RemoteHaptics.Stop();
+            var s = CoreSettings.Current;
+            var changed = false;
+            if (_remoteSetStrictLock) { _remoteSetStrictLock = false; if (s.StrictLockEnabled) { s.StrictLockEnabled = false; changed = true; } }
+            if (!s.PanicKeyEnabled) { s.PanicKeyEnabled = true; changed = true; }
+            if (changed)
+            {
+                CoreSettings.Save();
+                try { LockdownService.PanicKeyUiSync?.Invoke(); } catch { }
+                Log.Information("[RemoteControl] Controller left: panic key back on, controller's strict lock released");
+            }
             if (CoreSettings.Current.StopEffectsOnRemoteDisconnect)
                 try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); }
         }
@@ -256,6 +286,9 @@ namespace ConditioningControlPanel.Services
         private void RunCommand(string action, JObject? parameters)
         {
             (_lastStatus, _lastReason) = ("ok", null);
+            _lastControllerCommand = Now();          // WPF NoteControllerActivity: every command, refused or not
+            RemoteCommands.RemoteHaptics.NoteCommand();
+            var strictBefore = CoreSettings.Current.StrictLockEnabled;
             var reason = RemoteCommandGate.Screen(action, LockdownService.Current?.IsActive == true);
             if (reason == null)
             {
@@ -274,6 +307,7 @@ namespace ConditioningControlPanel.Services
                 Log.Warning("[RemoteControl] {Action} not delivered: {Reason}", action, reason);
                 return;
             }
+            if (action == "enable_strict_lock" && !strictBefore) _remoteSetStrictLock = true;
             CommandReceived?.Invoke(this, action);
         }
 
@@ -309,6 +343,7 @@ namespace ConditioningControlPanel.Services
         {
             var list = new List<string>();
             if (s.StrictLockEnabled) list.Add("strict_lock");
+            if (CoreHaptics.Service?.IsConnected == true) list.Add("haptics");   // WPF 7b22ece8c: trigger_haptic will land
             if (!s.PanicKeyEnabled) list.Add("no_panic");
             if (CoreEngine.IsRunning) list.Add("session");
             if (CoreFlash.IsRunning) list.Add("flash_loop");
@@ -334,7 +369,7 @@ namespace ConditioningControlPanel.Services
     public static class RemoteCommandGate
     {
         public static string? Screen(string action, bool lockdownActive) =>
-            action == "disable_panic" ? "the panic key can only be turned off locally"
+            action == "disable_panic" ? "the panic key stays on"   // WPF 719ed9ca5 wording
             : lockdownActive && action == "enable_strict_lock" ? "not during Lockdown"
             : null;
     }
