@@ -9,6 +9,7 @@ using ConditioningControlPanel.Avalonia.Views.AvatarTube;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
@@ -74,10 +75,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // hook, so the mic list is re-enumerated here too.
             SyncFromSettings();
             PopulateMicDevices();
+            _lockdown = LockdownService.Current;
+            if (_lockdown != null) { _lockdown.LockdownActivated += OnLockdownChanged; _lockdown.LockdownDeactivated += OnLockdownChanged; }
+            ApplyLockdownHold();
         }
+
+        private LockdownService? _lockdown;
+        private void OnLockdownChanged() => Dispatcher.UIThread.Post(ApplyLockdownHold);
+
+        private static bool NoPanicHeld => Windows.MainShellWindow.LockdownActive && CoreSettings.Current.LockdownDisablePanicKey;
+
+        /// <summary>WPF MainWindow.Lab.cs:659-663 (activate) / 741-745 (deactivate).</summary>
+        internal void ApplyLockdownHold() => Windows.MainShellWindow.HoldUnderLockdown(ChkNoPanic, NoPanicHeld);
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
+            if (_lockdown != null) { _lockdown.LockdownActivated -= OnLockdownChanged; _lockdown.LockdownDeactivated -= OnLockdownChanged; _lockdown = null; }
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
             base.OnDetachedFromVisualTree(e);
         }
@@ -519,8 +532,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
             var isNoPanic = ChkNoPanic.IsChecked ?? false;
 
-            // WPF MainWindow.Lab.cs:658 greys this box while a Lockdown holds the panic key off.
-            if (!isNoPanic && Windows.MainShellWindow.LockdownActive && CoreSettings.Current.LockdownDisablePanicKey)
+            // Greyed under Lockdown (ApplyLockdownHold); belt and braces if a click still lands.
+            if (!isNoPanic && NoPanicHeld)
             {
                 Dispatcher.UIThread.Post(() => { _loading = true; ChkNoPanic.IsChecked = true; _loading = false; });
                 return;

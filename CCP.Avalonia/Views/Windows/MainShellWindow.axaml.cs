@@ -112,6 +112,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             HookAutonomy();     // MainShellWindow.Autonomy.cs: Takeover seeds; starts only on the user's switch
             InitializeDescentFuse(); // MainShellWindow.DescentFuse.cs (WPF MainWindow ctor); no-op without App.DescentCountdown
             InitializeInboxBadge(); // MainShellWindow.Inbox.cs (WPF MainWindow.Inbox.cs:27)
+            InitializeLockdownGreys(); // MainShellWindow.Lockdown.cs (WPF Lab.cs:612/707)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
             Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
             Closed += (_, _) => _avatarTubeWindow?.Close();
