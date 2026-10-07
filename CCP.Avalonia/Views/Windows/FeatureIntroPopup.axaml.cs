@@ -65,7 +65,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>App.Logger</c> is Serilog's static <c>Log</c> here; the warning templates are
     ///    unchanged. The bare catches in ApplyContent / AccentBrush / GlowBrush are bare in WPF too.
     /// </summary>
-    public partial class FeatureIntroPopup : Window
+    public partial class FeatureIntroPopup : Window, Services.Startup.IPassiveStartupSurface
     {
         private Action? _onAction;
 
