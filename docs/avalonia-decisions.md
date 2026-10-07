@@ -499,3 +499,13 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   panic-stop path to test. So no entry point starts a run; the HUD only binds `ChaosRunState` (sample in the render
   proof, a stepped run in its test). Panic and mid-run saves are untouched (WPF `OnPanicKeyDuringRun` → stop; saves only
   where WPF writes them).
+
+## 2026-10-02: Launcher account row, mod pill and panel-card stats (avalonia-port/launcher-account)
+- `LauncherModMenu` git-mv'd to Core (pure; WPF and its tests unchanged). `CoreEngine.StartedUtc` added so the status line
+  reads "Running since HH:mm" as WPF's `MainWindow.EngineStartedUtc`; no head-side stamp.
+- Tier badge reads `AccountSeed.Patreon.CurrentTier` (WPF `App.Patreon.CurrentTier`), art through `ModArt.TryLoad` as WPF's
+  launcher goes through ModResourceResolver; the 8 s wobble, odometers and XP tween are deferred to launcher-fx (values snap).
+- Tile refresh: only ModChanged is wired. This head has no PrizeGrants service and no grant-revealed card, so every drawn tile
+  is recorded revealed and GrantsChanged comes with launcher-games. WPF's immediate EngineStopped refresh is covered by the
+  1 s status tick (CoreEngine.StoppedHook is the shell's single hook).
+- Advisor: worker.
