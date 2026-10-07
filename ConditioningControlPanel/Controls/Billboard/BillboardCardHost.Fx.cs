@@ -110,6 +110,9 @@ namespace ConditioningControlPanel.Controls.Billboard
                 Animate(bg.Children[0], ScaleTransform.ScaleXProperty, 0.6, 1, bBegin, thudMs, thud);
                 Animate(bg.Children[0], ScaleTransform.ScaleYProperty, 0.6, 1, bBegin, thudMs, thud);
             }
+
+            // The button lands with a flare and a shine across its face, then breathes.
+            RefreshCtaFx(landed: true, begin + TimeSpan.FromMilliseconds(thudMs * 0.55));
         }
 
         private void Rise(UIElement e, int delayMs, int ms, IEasingFunction ease)
@@ -136,6 +139,7 @@ namespace ConditioningControlPanel.Controls.Billboard
             }
             ClearGroup((TransformGroup)((FrameworkElement)_cta.Content).RenderTransform);
             ClearGroup((TransformGroup)_badge.RenderTransform);
+            RefreshCtaFx(landed: false, TimeSpan.Zero);
         }
 
         private static void ClearGroup(TransformGroup g)
@@ -199,6 +203,7 @@ namespace ConditioningControlPanel.Controls.Billboard
         /// <summary>Hover lifts the button (depth law); press sinks it 2 px in 90 ms.</summary>
         private void Lift(bool on)
         {
+            CtaHover(on);
             if (_ctaPress.Y > 0) return;
             double to = DepthRules.TravelFor(true, false, false, on);
             int ms = DepthRules.Ms(DepthRules.HoverMs, MotionFx.Level);
@@ -209,6 +214,7 @@ namespace ConditioningControlPanel.Controls.Billboard
         private void PressDown()
         {
             MoveCta(DepthRules.PressTravelPx, DepthRules.Ms(DepthRules.PressMs, MotionFx.Level), null);
+            CtaSquash(true);
             _ctaDrop.Visibility = Visibility.Hidden;
             _ctaFace.SetResourceReference(Border.BorderBrushProperty, "DepthPressedBevel");
         }
@@ -218,6 +224,7 @@ namespace ConditioningControlPanel.Controls.Billboard
         {
             _ctaDrop.Visibility = Visibility.Visible;
             _ctaFace.SetResourceReference(Border.BorderBrushProperty, "DepthRaisedBevel");
+            CtaSquash(false);
             int ms = DepthRules.Ms(DepthRules.ReleaseMs, MotionFx.Level);
             if (ms <= 0) { MoveCta(0, 0, null); return; }
             var spring = new DoubleAnimationUsingKeyFrames();
