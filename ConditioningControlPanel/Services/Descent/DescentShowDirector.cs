@@ -88,7 +88,6 @@ namespace ConditioningControlPanel.Services.Descent
                 }
 
                 var migration = App.DescentMigration;
-                if (migration != null) migration.CeremonyClosed += OnCeremonyClosed;
 
                 // Settled by Start() before the first tick, and never true at the same time as a
                 // live zero. Read once: the flags behind it are about to be written by the show.
@@ -163,8 +162,7 @@ namespace ConditioningControlPanel.Services.Descent
 
                 window.Closed += (s, _) =>
                 {
-                    if (s is DescentFuseWindow w && w.HandedOffToCeremony) FocusCeremony();
-                    else BeginPostZeroRetry("live handoff timed out");
+                    if (!(s is DescentFuseWindow w && w.HandedOffToCeremony)) BeginPostZeroRetry("live handoff timed out");
                 };
             }
             catch (Exception ex)
@@ -390,60 +388,13 @@ namespace ConditioningControlPanel.Services.Descent
         // The ignition (§2.4)
         // ------------------------------------------------------------------
 
-        /// <summary>
-        /// The ceremony window closed. <paramref name="committed"/> is the whole decision: a
-        /// "Not tonight" close is a deferral and gets nothing, because there is no Year One to
-        /// light yet. Runs for BOTH the live and the catch-up ceremonies — the ignition belongs to
-        /// the choice, not to the night.
-        /// </summary>
-        private void OnCeremonyClosed(object? sender, bool committed)
-        {
-            if (!committed) return;
-            if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
-
-            try
-            {
-                var window = DescentFuseWindow.Open(DescentShowKind.Ignition);
-                if (window is null) { RestoreChrome(); BeginFirstLight(); return; }
-
-                window.Closed += (_, _) => { RestoreChrome(); BeginFirstLight(); };
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "[Fuse] The Year One ignition could not start.");
-                RestoreChrome();
-                BeginFirstLight();
-            }
-        }
+        // THE IGNITION had one door: the ceremony window closing on a committed choice. The
+        // ceremony is retired (2026-10-06): an offer now restores silently, so nothing opens a
+        // fullscreen show from a sync, and the Year One ignition has no live path.
 
         // ------------------------------------------------------------------
         // The first light (§2.4, owner ruling 2026-08-16)
         // ------------------------------------------------------------------
-
-        /// <summary>
-        /// ONE PER PROCESS. The reveal is the payment for taking the ceremony, and paying it twice
-        /// in one session would be a bug rather than a bonus — the ignition can close more than once
-        /// in theory (a second ceremony cannot happen, but a handler firing twice is the kind of
-        /// thing that is only ever discovered on the night).
-        ///
-        /// <para><b>Deliberately NOT persisted.</b> If the app dies between the commit and the
-        /// reveal, the next launch simply has an open gate and a visible spiral — the surfaces are
-        /// unlocked, every ordinary door works, and the user has lost an animation rather than an
-        /// unlock. A settings flag would buy replaying a four-second intro at some random later
-        /// launch, out of the context that gave it its meaning, at the cost of another line of
-        /// account state that has to be right forever.</para>
-        /// </summary>
-        private static bool _firstLightPlayed;
-
-        /// <summary>The commit path's entry: the one-shot guard, then the reveal.</summary>
-        private static void BeginFirstLight()
-        {
-            // Retired with the shows: the reveal was the payment for the ceremony's animation.
-            if (DescentFuseWindow.ShowsRetired) return;
-            if (_firstLightPlayed) return;
-            _firstLightPlayed = true;
-            RunFirstLightReveal();
-        }
 
         /// <summary>
         /// THE FIRST LIGHT, whole (CONTRACT-FUSE-0816 §2.4, owner ruling 2026-08-16): "hide the
@@ -470,8 +421,8 @@ namespace ConditioningControlPanel.Services.Descent
         /// directly to film the reveal without standing up a server, a veteran account and a
         /// ceremony. It is deliberately not public, has no command-line wiring and is not on any
         /// menu — the rig adds its own scratch hook — and it deliberately skips the one-shot guard
-        /// so the rig can re-run it; <see cref="BeginFirstLight"/> is the guarded path the ceremony
-        /// itself takes. The seam is unchanged by the move: same name, same signature, same
+        /// so the rig can re-run it. Since the ceremony's retirement (2026-10-06) the rig is its
+        /// ONLY caller: the guarded path the ceremony's close took is gone with it. The seam is unchanged by the move: same name, same signature, same
         /// "no arguments, no server" promise — it just lands in a tab now.</para>
         /// </summary>
         internal static void RunFirstLightReveal()
@@ -524,23 +475,6 @@ namespace ConditioningControlPanel.Services.Descent
             }
         }
 
-        /// <summary>
-        /// Give the room its colour back.
-        ///
-        /// <para>The dimming holds step 4 through zero on purpose, so the chrome does not brighten
-        /// while the show is opening. Once the ignition is over that reason has expired, and
-        /// <c>DescentCountdownService.DimStep</c> reads 0 for a migrated account — so the ONLY thing
-        /// left to do is ask the app's single writer of the neutral palette to re-derive. Never a
-        /// private colour cache: <c>RefreshThemeAwareElements</c> re-reads the active mod every
-        /// time, which is exactly why the restore needs no saved "original" to get out of sync
-        /// with.</para>
-        /// </summary>
-        private static void RestoreChrome()
-        {
-            try { MainWindow.RestoreFuseChrome(); }
-            catch (Exception ex) { Log.Debug("[Fuse] Chrome restore failed: {Error}", ex.Message); }
-        }
-
         // ------------------------------------------------------------------
         // The heartbeat hook (§2.4)
         // ------------------------------------------------------------------
@@ -565,21 +499,6 @@ namespace ConditioningControlPanel.Services.Descent
 
         // ------------------------------------------------------------------
 
-        /// <summary>Find the ceremony and hand it the keyboard, now that the fuse is out of the way.</summary>
-        private static void FocusCeremony()
-        {
-            try
-            {
-                foreach (Window w in Application.Current?.Windows ?? new WindowCollection())
-                {
-                    if (w is not DescentCeremonyWindow ceremony) continue;
-                    ceremony.Activate();
-                    return;
-                }
-            }
-            catch (Exception ex) { Log.Debug("[Fuse] Could not focus the ceremony: {Error}", ex.Message); }
-        }
-
         public void Dispose()
         {
             if (_disposed) return;
@@ -594,8 +513,6 @@ namespace ConditioningControlPanel.Services.Descent
                     fuse.ZeroObservedLate -= OnZeroObservedLate;
                     fuse.PhaseChanged -= OnPhaseChanged;
                 }
-                var migration = App.DescentMigration;
-                if (migration != null) migration.CeremonyClosed -= OnCeremonyClosed;
             }
             catch { /* teardown races are not worth a log line */ }
 
