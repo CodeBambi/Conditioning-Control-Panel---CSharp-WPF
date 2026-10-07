@@ -46,6 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             SliderRepeats.ValueChanged += SliderRepeats_Changed;
             ChkStrict.IsCheckedChanged += ChkStrict_Changed;
             ChkVoiceMode.IsCheckedChanged += ChkVoiceMode_Changed;
+            ChkResetOnTypo.IsCheckedChanged += ChkResetOnTypo_Changed;
             BtnManagePhrases.Click += BtnManagePhrases_Click;
             BtnTest.Click += BtnTest_Click;
             BtnColorSettings.Click += BtnColorSettings_Click;
@@ -86,6 +87,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 TxtRepeats.Text = $"{s.LockCardRepeats}x";
                 ChkStrict.IsChecked = s.LockCardStrict;
                 ChkVoiceMode.IsChecked = s.LockCardVoiceMode && s.MicConsentGiven;
+                ChkResetOnTypo.IsChecked = s.LockCardResetOnTypo;
+                if (s.LockCardResetOnTypo) FoldMore.IsOpen = true; // never hide a changed setting (WPF :71)
                 UpdateVoiceHint();
             }
             finally { _isLoading = false; }
@@ -97,6 +100,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 e.PropertyName == nameof(AppSettings.LockCardFrequency) ||
                 e.PropertyName == nameof(AppSettings.LockCardRepeats) ||
                 e.PropertyName == nameof(AppSettings.LockCardStrict) ||
+                e.PropertyName == nameof(AppSettings.LockCardResetOnTypo) ||
                 e.PropertyName == nameof(AppSettings.LockCardVoiceMode))
             {
                 Dispatcher.UIThread.Post(LoadFromSettings);
@@ -129,6 +133,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             TxtFreq.Text = v.ToString();
             if (s.LockCardFrequency == v) return;
             s.LockCardFrequency = v;
+            CoreSettings.Save();
+        }
+
+        private void ChkResetOnTypo_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            var on = ChkResetOnTypo.IsChecked ?? false;
+            if (s.LockCardResetOnTypo == on) return;
+            s.LockCardResetOnTypo = on;
             CoreSettings.Save();
         }
 

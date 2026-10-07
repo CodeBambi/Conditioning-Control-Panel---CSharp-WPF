@@ -112,7 +112,10 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The cloud companion AI (WPF App.Ai), the same Core AiService. Its base URL follows
         /// AiService.ResolveBaseUrl: a sandbox without a loopback CCP_AI_BASE_URL never sends.
         /// Settable so a test can hand in a fake-endpoint instance.</summary>
-        internal static AiService? Ai { get; set; } = new();
+        /// <para>local-providers: WPF's router (App.xaml.cs:2736) now in Core, so Settings → Local / OpenAI-compatible
+        /// reaches the user's own server exactly as WPF; the cloud leg is the same AiService as before.</para>
+        internal static ConditioningControlPanel.Services.AIService.IAiService? Ai { get; set; } =
+            new ConditioningControlPanel.Services.AIService.AiServiceStrategy();
 
         /// <summary>The companion's conversational spine (WPF App.Brain, App.xaml.cs:2690): the same Core
         /// CompanionBrain over <see cref="Ai"/>, so history and memory live where WPF keeps them
@@ -531,6 +534,13 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
                 SeedCompanionTubeSeams();
                 CompanionEffects.Seed();
+                // WPF App.xaml.cs:554 / 2786 / 2816: legacy adapters route through the brain, a brain wipe also
+                // clears the legacy local transcript, and a Local user gets the model warmed up in the background.
+                ConditioningControlPanel.Services.AIService.AiServiceStrategy.BrainProvider = () => Brain;
+                ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ClearLegacyLocalHistoryHook =
+                    () => (Ai as ConditioningControlPanel.Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
+                if (Ai is ConditioningControlPanel.Services.AIService.AiServiceStrategy strategy)
+                    _ = Task.Run(async () => { try { await strategy.WarmUpLocalAsync(); } catch (Exception ex) { Serilog.Log.Debug("WarmUpLocal: {E}", ex.Message); } });
                 //
                 // CoreModerationLog's record half stays unseeded, and NOT because a log is unavailable here
                 // - ModerationLog is in Core and would construct fine. It hardcodes
@@ -903,6 +913,7 @@ namespace ConditioningControlPanel.Avalonia
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
             try { (Platform.FriendsHead.Service as IDisposable)?.Dispose(); } catch { /* WPF App.OnExit: the friends poll stops */ }
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }
+            try { Ai?.Dispose(); } catch { /* WPF App.OnExit:6250 (#629): unloads the local Ollama model */ }
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
             try { Views.Overlays.BlinkTrainerSession.Stop(); } catch { /* WPF Application.Exit += Stop */ }

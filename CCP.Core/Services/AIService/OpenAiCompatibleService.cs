@@ -1,6 +1,7 @@
 
 
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -63,13 +64,13 @@ namespace ConditioningControlPanel.Services.AIService
         // hand-copied spine for the new path is exactly how that happens again.
         private readonly TransportModeration _moderation = CreateModeration();
 
-        private static CompanionPromptSettings? Settings => App.Settings?.Current?.CompanionPrompt;
+        private static CompanionPromptSettings? Settings => CoreSettings.Service?.Current?.CompanionPrompt;
 
         public bool IsAvailable
         {
             get
             {
-                if (App.Settings?.Current?.OfflineMode == true) return false;
+                if (CoreSettings.Service?.Current?.OfflineMode == true) return false;
 
                 var s = Settings;
                 if (s == null) return false;
@@ -129,7 +130,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (!Uri.TryCreate(raw, UriKind.Absolute, out var parsed))
             {
-                App.Logger?.Warning("OpenAiCompatibleService: invalid endpoint ({Chars} chars), falling back to OpenAI base", (raw ?? "").Length);
+                Log.Warning("OpenAiCompatibleService: invalid endpoint ({Chars} chars), falling back to OpenAI base", (raw ?? "").Length);
                 return new Uri("https://api.openai.com/v1/");
             }
 
@@ -191,6 +192,9 @@ namespace ConditioningControlPanel.Services.AIService
         internal static TransportModeration CreateModeration() =>
             new("OpenAiCompatibleService", "openai_compat", ModelHint);
 
+        /// <summary>Head seam for WPF SecureStringHelper.Unprotect (the stored key is a DPAPI blob).</summary>
+        public static volatile Func<string, string?>? ApiKeyUnprotect;
+
         private static string? GetApiKey()
         {
             var raw = Settings?.OpenAiCompatibleApiKey;
@@ -199,11 +203,12 @@ namespace ConditioningControlPanel.Services.AIService
             try
             {
                 // Value is stored encrypted at rest; decrypt on use.
-                return SecureStringHelper.Unprotect(raw);
+                // Unseeded (no DPAPI on this head): no key, never the stored blob sent in the clear.
+                return ApiKeyUnprotect?.Invoke(raw);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "OpenAiCompatibleService: failed to decrypt API key");
+                Log.Warning(ex, "OpenAiCompatibleService: failed to decrypt API key");
                 return null;
             }
         }
@@ -376,7 +381,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             _dailyRequestCount = 0;
             _lastResetDate = DateTime.Today;
-            App.Logger?.Debug("OpenAiCompatibleService: Daily request count reset");
+            Log.Debug("OpenAiCompatibleService: Daily request count reset");
         }
 
         private void BumpDailyCounter()
@@ -412,9 +417,9 @@ namespace ConditioningControlPanel.Services.AIService
             bool returnRefusalSentinel, string purpose, CancellationToken cancellationToken = default,
             AiCallOptions? options = null, Action<IReadOnlyList<AiCommandData>>? proposedCommands = null)
         {
-            if (App.Settings?.Current?.OfflineMode == true)
+            if (CoreSettings.Service?.Current?.OfflineMode == true)
             {
-                App.Logger?.Debug("OpenAiCompatibleService: Offline mode enabled, skipping AI request");
+                Log.Debug("OpenAiCompatibleService: Offline mode enabled, skipping AI request");
                 return null;
             }
 
@@ -439,7 +444,7 @@ namespace ConditioningControlPanel.Services.AIService
             var apiKey = GetApiKey();
             if (string.IsNullOrEmpty(apiKey))
             {
-                App.Logger?.Debug("OpenAiCompatibleService: missing API key");
+                Log.Debug("OpenAiCompatibleService: missing API key");
                 return null;
             }
 
@@ -447,7 +452,7 @@ namespace ConditioningControlPanel.Services.AIService
             var limit = Settings?.DailyRequestLimit ?? 0;
             if (limit > 0 && _dailyRequestCount >= limit)
             {
-                App.Logger?.Debug("OpenAiCompatibleService: daily limit reached ({Limit})", limit);
+                Log.Debug("OpenAiCompatibleService: daily limit reached ({Limit})", limit);
                 return null;
             }
 
@@ -480,7 +485,7 @@ namespace ConditioningControlPanel.Services.AIService
                     };
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-                    App.Logger?.Debug("OpenAiCompatibleService: request to {Host} (attempt {Attempt})", Logging.UrlLog.Host(request.RequestUri), attempt + 1);
+                    Log.Debug("OpenAiCompatibleService: request to {Host} (attempt {Attempt})", Logging.UrlLog.Host(request.RequestUri), attempt + 1);
 
                     using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                     var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -498,7 +503,7 @@ namespace ConditioningControlPanel.Services.AIService
 
                         // Host + size. A bring-your-own endpoint can carry the key in the URL,
                         // and the error body of a chat completion often quotes the prompt back.
-                        App.Logger?.Warning("OpenAiCompatibleService: HTTP {Status} from {Host} (body {Bytes} bytes)",
+                        Log.Warning("OpenAiCompatibleService: HTTP {Status} from {Host} (body {Bytes} bytes)",
                             status,
                             Logging.UrlLog.Host(endpointUri),
                             json?.Length ?? 0);
@@ -509,7 +514,7 @@ namespace ConditioningControlPanel.Services.AIService
                     using var doc = JsonDocument.Parse(json);
                     if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
                     {
-                        App.Logger?.Warning("OpenAiCompatibleService: response has no choices");
+                        Log.Warning("OpenAiCompatibleService: response has no choices");
                         Meter(AiMeter.OutcomeError);
                         return null;
                     }
@@ -521,13 +526,13 @@ namespace ConditioningControlPanel.Services.AIService
                     {
                         // Truncation was invisible in logs until the guillotined effects
                         // envelope leaked as raw JSON in the bubble - make it loud.
-                        App.Logger?.Warning("[AI] reply truncated at the token cap (finish_reason=length)");
+                        Log.Warning("[AI] reply truncated at the token cap (finish_reason=length)");
                         if (options?.CompanionV2 == true) return null;
                     }
                     if (!first.TryGetProperty("message", out var message) ||
                         !message.TryGetProperty("content", out var contentElement))
                     {
-                        App.Logger?.Warning("OpenAiCompatibleService: response missing message.content");
+                        Log.Warning("OpenAiCompatibleService: response missing message.content");
                         Meter(AiMeter.OutcomeError);
                         return null;
                     }
@@ -564,13 +569,13 @@ namespace ConditioningControlPanel.Services.AIService
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "OpenAiCompatibleService: request failed");
+                    Log.Warning(ex, "OpenAiCompatibleService: request failed");
                     Meter(AiMeter.OutcomeError);
                     return null;
                 }
             }
 
-            App.Logger?.Warning("OpenAiCompatibleService: request failed after retry");
+            Log.Warning("OpenAiCompatibleService: request failed after retry");
             Meter(AiMeter.OutcomeError);
             return null;
         }
@@ -609,7 +614,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("OpenAiCompatibleService: enrichment block build failed: {Error}", ex.Message);
+                Log.Debug("OpenAiCompatibleService: enrichment block build failed: {Error}", ex.Message);
             }
         }
 
@@ -670,13 +675,8 @@ namespace ConditioningControlPanel.Services.AIService
             if (preview) proposedCommands?.Invoke(commands.ToArray());
             else if (commands.Count > 0)
             {
-                App.Logger?.Information("OpenAiCompatibleService: parsed {Count} command(s) from response", commands.Count);
-                if (App.Commands != null)
-                {
-                    App.Commands.BeginBatch();
-                    foreach (var cmd in commands)
-                        App.Commands.ExecuteCommand(cmd);
-                }
+                Log.Information("OpenAiCompatibleService: parsed {Count} command(s) from response", commands.Count);
+                Companion.Brain.CompanionBrain.CommandExecutor?.Invoke(commands);
             }
 
             return string.IsNullOrWhiteSpace(parsed.CleanText) ? null : parsed.CleanText;
@@ -684,7 +684,7 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static string GetFallbackResponse()
         {
-            if (App.Mods?.IsBambiMode == true)
+            if (CoreMods.Service?.IsBambiMode == true)
                 return "Bambi's head is so empty right now~ *giggles*";
             return "...";
         }
@@ -709,7 +709,7 @@ namespace ConditioningControlPanel.Services.AIService
         {
             _ = isUserMessage; // queueing semantics are local-only
 
-            if (App.Settings?.Current?.OfflineMode == true)
+            if (CoreSettings.Service?.Current?.OfflineMode == true)
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             var prompt = _bambiSprite.GetSystemPrompt();
@@ -753,7 +753,7 @@ namespace ConditioningControlPanel.Services.AIService
             options ??= AiCallOptions.Chat;
             var list = messages ?? (IReadOnlyList<ChatMessage>)Array.Empty<ChatMessage>();
 
-            if (App.Settings?.Current?.OfflineMode == true)
+            if (CoreSettings.Service?.Current?.OfflineMode == true)
                 return options.CompanionV2 ? AiReplyResult.Failed(cancellationToken.IsCancellationRequested
                     ? AiFailureKind.Cancelled : AiFailureKind.Unavailable, true)
                     : new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);

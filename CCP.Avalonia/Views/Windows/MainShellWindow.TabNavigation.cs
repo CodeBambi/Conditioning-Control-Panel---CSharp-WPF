@@ -156,6 +156,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var panel = this.FindControl<Control>(name);
                 if (panel is not null) panel.IsVisible = name == target;
             }
+            NoteTabHistory(tab); // back/forward (MainShellWindow.TabHistory.cs); unknown keys never reach it
             CurrentTab = tab;
             SetExpandedDoor(NavDoorForTab(tab));
             SwitchTabFx(tab);

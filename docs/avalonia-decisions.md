@@ -466,6 +466,22 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - The 2x2 keys do not go through `ChasterImportConfirmDialog`: like WPF Preset_Click they only rewrite ChasterPrices and
   request limits (Core `TabPresets`), never add time to the lock; that dialog's Summary is the awareness-preset import.
 - Calendar on Core `LockCalendar`; cross strokes straight, padlock a glyph, key on gold, no draw-in/tonight tag (ponytail noted).
+## 2026-10-02: Local AI providers as brain transports (avalonia-port/local-providers)
+- AiServiceStrategy, LocalAiService (Ollama), OpenAiCompatibleService, TransportModeration, AiResponseParser,
+  IAiResponseParser, BrainAdapter and Enrichment/KnowledgeService moved to Core by git mv. App.* became the existing
+  seams (Serilog Log, CoreSettings.Service, CoreMods.Service/GetPhrases, CoreModerationLog, CompanionBrain.CommandExecutor
+  for the legacy App.Commands batch) plus three new head seams that WPF seeds with exactly what it called:
+  `AiServiceStrategy.BrainProvider` (App.Brain), `LocalAiService.EnsureServerRunning` (OllamaSetupService) and
+  `OpenAiCompatibleService.ApiKeyUnprotect` (DPAPI SecureStringHelper). TransportModeration keeps "override returns null =
+  no guard"; unseeded it uses CoreModerationLog.Guard, which fails closed.
+- The Avalonia `App.Ai` is the same AiServiceStrategy, so the brain follows the Engine Room's provider as on WPF. The
+  configured host/endpoint is the only destination; a sandbox reaches loopback only (SandboxNet, unchanged).
+- OpenAI-compatible on this head: no DPAPI and no BYO key store, so ApiKeyUnprotect stays unseeded and the provider never
+  sends (WPF requires a key too; the stored blob is never sent in the clear). The key box writes nothing.
+- The Engine Room's mapping (CompanionProviderMode, ModeFor/SettingsFor/ClearsLiveActions) and the two Test probes are Core
+  `EngineRoomProviders`; WPF EngineRoomRuntimeVm and both MainWindow Test handlers delegate. Avalonia `EngineRoomVm` binds
+  the existing drawer; "Clear conversation" (ForgetThread + legacy local transcript + tube log) is restored on this head.
+- Not ported: OllamaSetupService (detect/install/auto-offer), the Live actions feed, the login deep link.
 - Advisor: worker.
 ## 2026-10-02: Chaos run engine in Core, runs stay WPF-only (avalonia-port/chaos-waves)
 - `ChaosModels.cs` (run config/state, boon pool, toy state, sidebar tile) and `ChaosRunEffects.cs` are git mvs into Core.
