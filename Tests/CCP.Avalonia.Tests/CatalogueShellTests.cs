@@ -181,10 +181,15 @@ public sealed class CatalogueShellTests
             };
             var (oldClient, oldGet) = (AppA.Catalogue, CoreSecrets.RetrieveProvider);
             AppA.Catalogue = new CatalogueClient(() => "tok", () => "uid", "test", fake);
+            // Repro of the order flake: an earlier test left a token in the secret store.
+            CoreSecrets.RetrieveProvider = n => n == CoreSecrets.AuthToken ? "leaked" : null;
             s.CataloguePresetSubmissions[preset.Id] = new DeeperSubmissionRecord { CatalogueId = "c1", Status = "pending" };
             var host = new StackPanel();
             AppA.Notifications.AttachHost(host);
             var shell = new MainShellWindow();
+            // Signed out at launch: the Opened startup poll, whose fake fetch completes synchronously,
+            // must not approve the record before the pending pill is read.
+            CoreSecrets.RetrieveProvider = _ => null;
             shell.Show();
             // After Show: the Opened startup poll must not race this test's poll.
             CoreSecrets.RetrieveProvider = n => n == CoreSecrets.AuthToken ? "tok" : null;

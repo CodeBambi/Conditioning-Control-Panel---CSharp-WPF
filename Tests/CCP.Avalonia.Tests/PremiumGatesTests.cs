@@ -55,8 +55,20 @@ public sealed class PremiumGatesTests
                 Assert.Equal(before, System.IO.File.ReadAllText(path));
 
                 shell.RefreshEntitlementVeils(persist: true);   // a tier/day/sign-in event
-                System.Threading.Thread.Sleep(900);
-                Assert.Contains("\"AutonomyModeEnabled\": false", System.IO.File.ReadAllText(path));
+                // The write is a 500 ms thread-pool debounce; a fixed 900 ms raced it on a loaded runner.
+                // Poll (bounded) the write time, a handle-free read, and open the file only when it moved:
+                // a reader open on every tick can hold it against the writer's own publish retries on Windows.
+                var written = "";
+                var seen = System.IO.File.GetLastWriteTimeUtc(path);
+                for (var deadline = DateTime.UtcNow.AddSeconds(10); DateTime.UtcNow < deadline; System.Threading.Thread.Sleep(50))
+                {
+                    var stamp = System.IO.File.GetLastWriteTimeUtc(path);
+                    if (stamp == seen) continue;
+                    try { written = System.IO.File.ReadAllText(path); } catch (System.IO.IOException) { continue; }
+                    seen = stamp;
+                    if (written.Contains("\"AutonomyModeEnabled\": false")) break;
+                }
+                Assert.Contains("\"AutonomyModeEnabled\": false", written);
             }
             finally
             {
