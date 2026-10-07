@@ -167,6 +167,25 @@ namespace ConditioningControlPanel.Services.Billboard.Board
         // ---- wave: columns bob up and down like a flag ---------------------------------------
         public static int WaveOffset(double t, int x) => (int)Math.Round(Math.Sin(t * 2.6 + x * 0.28));
 
+        // ---- glow: the message lights the field round it -------------------------------------
+        public const double GlowBreathPeriod = 4.0;
+        public const double GlowBreathLow = 0.8;
+        public const double GlowStill = 0.9;
+
+        /// <summary>
+        /// The one scale the baked glow is drawn at this frame: a slow breath (0.8..1.0 every 4 s)
+        /// while ambient loops may run, a steady 0.9 otherwise, times the arrival so the field never
+        /// glows where tiles have not landed yet. Pure.
+        /// </summary>
+        public static double GlowStrength(double t, double buildSeconds, bool still, bool breathe)
+        {
+            double arrival = still ? 1 : Math.Clamp(BuildProgress(buildSeconds), 0, 1);
+            double breath = breathe && !still
+                ? GlowBreathLow + (1 - GlowBreathLow) * (0.5 + 0.5 * Math.Sin(t * 2 * Math.PI / GlowBreathPeriod))
+                : GlowStill;
+            return arrival * breath;
+        }
+
         // ---- crt: scanlines, vignette, a faint flicker ---------------------------------------
         public static double CrtFlicker(double t) => 0.012 + 0.012 * Math.Sin(t * 40);
 
@@ -262,6 +281,11 @@ namespace ConditioningControlPanel.Services.Billboard.Board
         /// <param name="still">A board that never played (Motion Off): the flat picture, no motion at all.</param>
         public static void Compute(BoardPicture pic, int frame, BoardFxSet fx, double t, double buildSeconds,
             IReadOnlyList<BoardRipple>? ripples, double rippleNow, bool still, int[] colour, float[] lift)
+            => Compute(pic, frame, fx, t, buildSeconds, ripples, rippleNow, still, colour, lift, null);
+
+        /// <param name="role">Optional: what each tile is to the message this frame (it follows the wave; a tile not landed yet is field).</param>
+        public static void Compute(BoardPicture pic, int frame, BoardFxSet fx, double t, double buildSeconds,
+            IReadOnlyList<BoardRipple>? ripples, double rippleNow, bool still, int[] colour, float[] lift, BoardTileRole[]? role)
         {
             const int W = BoardPicture.GridW, H = BoardPicture.GridH;
             frame = Math.Clamp(frame, 0, pic.FrameCount - 1);
@@ -269,6 +293,8 @@ namespace ConditioningControlPanel.Services.Billboard.Board
             var lit = pic.Lit[frame];
             var bright = pic.Bright[frame];
             var cyc = pic.CycleRgb[frame];
+            var roles = pic.Role[frame];
+            var empty = pic.EmptyRole;
             double build = still ? 2 : BoardFxMath.BuildProgress(buildSeconds);
             double te = still ? 0 : t;
             bool building = build < 1 + BoardFxMath.BuildLiftBand;
@@ -282,7 +308,8 @@ namespace ConditioningControlPanel.Services.Billboard.Board
                     int c;
                     bool isLit;
                     int src = -1;
-                    if (sy >= 0 && sy < H) { src = sy * W + x; c = rgb[src]; isLit = lit[src]; }
+                    var ro = empty;
+                    if (sy >= 0 && sy < H) { src = sy * W + x; c = rgb[src]; isLit = lit[src]; ro = roles[src]; }
                     else { c = BoardPicture.BaseRgb; isLit = false; }
 
                     double m = 1;
@@ -306,7 +333,7 @@ namespace ConditioningControlPanel.Services.Billboard.Board
                     if (building)
                     {
                         double hv = BoardFxMath.Hash(i);
-                        if (BoardFxMath.BuildHidden(hv, build)) { c = BoardPicture.BaseRgb; m = 1; }
+                        if (BoardFxMath.BuildHidden(hv, build)) { c = BoardPicture.BaseRgb; m = 1; ro = empty; }
                         else if (isLit && BoardFxMath.BuildFlash(hv, build)) { c = 0xFFFFFF; m = 1; }
                         z = BoardFxMath.BuildLift(hv, build);
                     }
@@ -324,6 +351,7 @@ namespace ConditioningControlPanel.Services.Billboard.Board
 
                     colour[i] = BoardFxMath.Scale(c, m);
                     lift[i] = (float)z;
+                    if (role != null) role[i] = ro;
                 }
             }
         }

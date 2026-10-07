@@ -642,19 +642,25 @@ public class BoardTilesTests
         var pic = BoardPicture.FromPixels(px, 64, 36, Post(fx: BoardFx.All.ToArray()));
         var fx = BoardFxSet.From(pic.Post.Fx);
         var c = new int[BoardPicture.Tiles]; var z = new float[BoardPicture.Tiles];
+        var ro = new BoardTileRole[BoardPicture.Tiles];
         var r = new BoardRaster(BoardTileLayout.MaxPitch);
+        r.SetPicture(pic); // the message glow is baked once, outside the frame
+        Assert.True(pic.HasInk && r.GlowPixels > 0);
         var ripples = new[] { new BoardRipple(20, 10, 0.1) };
-        for (int k = 0; k < 10; k++) { BoardScene.Compute(pic, 0, fx, 0.3 + k / 30.0, 10, ripples, 0.3 + k / 30.0, false, c, z); r.Draw(c, z, true, 0.02); }
+        for (int k = 0; k < 10; k++) { BoardScene.Compute(pic, 0, fx, 0.3 + k / 30.0, 10, ripples, 0.3 + k / 30.0, false, c, z, ro); r.Draw(c, z, true, 0.02, ro, 0.9); }
         var sw = Stopwatch.StartNew();
         const int frames = 60;
         for (int k = 0; k < frames; k++)
         {
-            BoardScene.Compute(pic, 0, fx, 0.5 + k / 30.0, 10, ripples, 0.5 + k / 30.0, false, c, z);
-            r.Draw(c, z, true, 0.02);
+            double t = 0.5 + k / 30.0;
+            BoardScene.Compute(pic, 0, fx, t, 10, ripples, t, false, c, z, ro);
+            r.Draw(c, z, true, 0.02, ro, BoardFxMath.GlowStrength(t, 10, false, true));
         }
         double ms = sw.Elapsed.TotalMilliseconds / frames;
         // The design budget is 2 ms a frame. Measured 2026-10-07 (Release, warmed up, every effect on
         // and a ripple running): pitch 10 0.52 ms, pitch 10 + CRT 0.92 ms, pitch 14 + CRT 1.67 ms.
+        // With the message glow, field/message passes, face cache and packed CRT (same day, watch-party
+        // sample, every effect): pitch 14 + CRT 1.6-1.7 ms (1.93 ms before on the same machine).
         // This guard is loose (Debug, cold JIT, a loaded CI runner) and only catches a gross regression.
         Assert.True(ms < 12, $"a board frame took {ms:F2} ms");
     }

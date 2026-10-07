@@ -31,6 +31,7 @@ namespace ConditioningControlPanel.Controls.Billboard
         private readonly List<BoardRipple> _ripples = new();
         private readonly int[] _colour = new int[BoardPicture.Tiles];
         private readonly float[] _lift = new float[BoardPicture.Tiles];
+        private readonly BoardTileRole[] _role = new BoardTileRole[BoardPicture.Tiles];
 
         private BoardRaster? _raster;
         private WriteableBitmap? _bitmap;
@@ -169,6 +170,8 @@ namespace ConditioningControlPanel.Controls.Billboard
             if (_raster == null || _raster.Layout.Pitch != pitch)
             {
                 _raster = new BoardRaster(pitch);
+                // The message glow is baked once here, per picture and pitch; frames only scale it.
+                _raster.SetPicture(_picture);
                 _bitmap = new WriteableBitmap(_raster.Width, _raster.Height, 96 * scale, 96 * scale, PixelFormats.Bgra32, null);
                 _image.Source = _bitmap;
                 _dirty = true;
@@ -193,9 +196,13 @@ namespace ConditioningControlPanel.Controls.Billboard
             if (_picture.FrameCount > 1 && _ambient && !still)
                 frame = (int)(Math.Floor(t * _picture.Post.Fps) % _picture.FrameCount);
             double build = _arrivalStart is { } a ? t - a : BoardFxMath.BuildDoneSeconds;
-            BoardScene.Compute(_picture, frame, fx, t, build, _ripples, WallNow, still, _colour, _lift);
+            BoardScene.Compute(_picture, frame, fx, t, build, _ripples, WallNow, still, _colour, _lift, _role);
+            // The glow breathes only on a clock that already runs for the effects (Full motion);
+            // under Reduced or Off it holds still. It rises with the arrival, never ahead of it.
+            bool breathe = _ambient && _playing && _fx.Animates;
+            double glow = BoardFxMath.GlowStrength(t, build, still, breathe);
             // CRT is a look, not motion: it stays on a still board, only its flicker stops.
-            _raster.Draw(_colour, _lift, _fx.Crt, _ambient && _playing ? BoardFxMath.CrtFlicker(t) : 0.012);
+            _raster.Draw(_colour, _lift, _fx.Crt, _ambient && _playing ? BoardFxMath.CrtFlicker(t) : 0.012, _role, glow);
             _bitmap.WritePixels(new Int32Rect(0, 0, _raster.Width, _raster.Height), _raster.Pixels, _raster.Width * 4, 0);
         }
 

@@ -41,11 +41,66 @@ namespace ConditioningControlPanel.Services.Billboard.Board
         /// <summary>Per frame, per tile: the three colours a cycle walks through; a null entry = not saturated.</summary>
         public int[][][] CycleRgb { get; }
 
+        // ---- the message (owner, 2026-10-07: "the tiles with the message should glow") ----------
+
+        /// <summary>
+        /// RGB distance (Euclidean, 0..441) past which a tile counts as message rather than field.
+        /// 48 keeps a field's own soft shading in the field and puts any real stroke in the message.
+        /// </summary>
+        public const double InkDistance = 48;
+
+        /// <summary>The field: the picture's most frequent colour over every frame (transparent counts as the board's base).</summary>
+        public int BackgroundRgb { get; }
+
+        /// <summary>True when some tile is clearly not the field. False = a flat picture: every tile is <see cref="BoardTileRole.Plain"/>.</summary>
+        public bool HasInk { get; }
+
+        /// <summary>Per frame, per tile: field, message (ink) or message on the picture's outer ring (frame).</summary>
+        public BoardTileRole[][] Role { get; }
+
         private BoardPicture(BoardPost post, int frames, int x0, int y0, int w, int h,
-            int[][] rgb, bool[][] lit, bool[][] bright, int[][][] cycle)
+            int[][] rgb, bool[][] lit, bool[][] bright, int[][][] cycle,
+            int backgroundRgb, bool hasInk, BoardTileRole[][] role)
         {
             Post = post; FrameCount = frames; X0 = x0; Y0 = y0; PicW = w; PicH = h;
             Rgb = rgb; Lit = lit; Bright = bright; CycleRgb = cycle;
+            BackgroundRgb = backgroundRgb; HasInk = hasInk; Role = role;
+        }
+
+        /// <summary>A tile with no picture under it: field when the picture has a message, plain otherwise.</summary>
+        public BoardTileRole EmptyRole => HasInk ? BoardTileRole.Background : BoardTileRole.Plain;
+
+        /// <summary>Euclidean distance between two 0xRRGGBB colours.</summary>
+        public static double RgbDistance(int a, int b)
+        {
+            int dr = ((a >> 16) & 0xFF) - ((b >> 16) & 0xFF);
+            int dg = ((a >> 8) & 0xFF) - ((b >> 8) & 0xFF);
+            int db = (a & 0xFF) - (b & 0xFF);
+            return Math.Sqrt(dr * dr + dg * dg + db * db);
+        }
+
+        /// <summary>
+        /// The most frequent colour among <paramref name="count"/> composited pixels; a pixel marked
+        /// transparent counts as <see cref="BaseRgb"/>. Ties go to the darker colour so the result
+        /// never depends on enumeration order.
+        /// </summary>
+        public static int DominantRgb(int[] rgb, bool[] transparent, int count)
+        {
+            var counts = new System.Collections.Generic.Dictionary<int, int>();
+            for (int i = 0; i < count; i++)
+            {
+                int c = transparent[i] ? BaseRgb : rgb[i];
+                counts.TryGetValue(c, out var n);
+                counts[c] = n + 1;
+            }
+            int best = BaseRgb, bestN = -1;
+            double bestLuma = double.MaxValue;
+            foreach (var (c, n) in counts)
+            {
+                double l = BoardFxMath.Luma((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
+                if (n > bestN || (n == bestN && l < bestLuma)) { best = c; bestN = n; bestLuma = l; }
+            }
+            return best;
         }
 
         /// <summary>
@@ -94,6 +149,10 @@ namespace ConditioningControlPanel.Services.Billboard.Board
             var lit = new bool[frames][];
             var bright = new bool[frames][];
             var cycle = new int[frames][][];
+            // The picture's own pixels, composited, for the field/message split below.
+            int area = fw * fh;
+            var picRgb = new int[frames * area];
+            var picClear = new bool[frames * area];
             for (int f = 0; f < frames; f++)
             {
                 var c = new int[Tiles];
@@ -113,6 +172,8 @@ namespace ConditioningControlPanel.Services.Billboard.Board
                     int cg = (g * a + bg0 * (255 - a)) / 255;
                     int cb = (b * a + bb0 * (255 - a)) / 255;
                     c[i] = (cr << 16) | (cg << 8) | cb;
+                    picRgb[f * area + y * fw + x] = c[i];
+                    picClear[f * area + y * fw + x] = a < 128;
                     double luma = BoardFxMath.Luma(cr, cg, cb);
                     l[i] = a >= 128 && luma >= 0.12;
                     br[i] = l[i] && luma > 0.8;
@@ -120,7 +181,33 @@ namespace ConditioningControlPanel.Services.Billboard.Board
                 }
                 rgb[f] = c; lit[f] = l; bright[f] = br; cycle[f] = cy;
             }
-            return new BoardPicture(post, frames, x0, y0, fw, fh, rgb, lit, bright, cycle);
+
+            int field = DominantRgb(picRgb, picClear, picRgb.Length);
+            var role = new BoardTileRole[frames][];
+            bool hasInk = false;
+            for (int f = 0; f < frames; f++)
+            {
+                var ro = new BoardTileRole[Tiles];
+                for (int y = 0; y < fh; y++)
+                for (int x = 0; x < fw; x++)
+                {
+                    int k = f * area + y * fw + x;
+                    // Transparent is field; anything clearly away from the field colour is message.
+                    if (picClear[k] || RgbDistance(picRgb[k], field) <= InkDistance) continue;
+                    bool edge = x == 0 || y == 0 || x == fw - 1 || y == fh - 1;
+                    ro[(y0 + y) * GridW + x0 + x] = edge ? BoardTileRole.Frame : BoardTileRole.Ink;
+                    hasInk = true;
+                }
+                role[f] = ro;
+            }
+            // Every tile that is not message is field, including the board round a small picture.
+            // A picture with no message at all keeps the plain look (Plain = 0, the arrays' default).
+            if (hasInk)
+                foreach (var ro in role)
+                    for (int i = 0; i < ro.Length; i++)
+                        if (ro[i] == BoardTileRole.Plain) ro[i] = BoardTileRole.Background;
+
+            return new BoardPicture(post, frames, x0, y0, fw, fh, rgb, lit, bright, cycle, field, hasInk, role);
         }
 
         /// <summary>A plain picture of one colour, for tests and the preview.</summary>
@@ -130,5 +217,14 @@ namespace ConditioningControlPanel.Services.Billboard.Board
             Array.Fill(px, argb);
             return FromPixels(px, post.Width * post.Frames, post.Height, post);
         }
+    }
+
+    /// <summary>What a tile is to the message: drawn plain, the field (low, dark), message (raised, glowing) or frame (glows strongest).</summary>
+    public enum BoardTileRole : byte
+    {
+        Plain = 0,
+        Background = 1,
+        Ink = 2,
+        Frame = 3,
     }
 }
