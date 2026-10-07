@@ -483,3 +483,9 @@ read from source. The last three rows are Core behaviour ported in `avalonia-por
 The full delta ledger for the fourth main sync (`avalonia-port/main-20261005`) is
 [`avalonia-main-sync-20261005.md`](avalonia-main-sync-20261005.md): one row per non-merge commit (137), each
 ported-by-merge, needs-port (with its port lane) or n/a with a reason. Tick its rows as each lane lands.
+
+## main-sync-5 (descent ceremony retired, breakout fixes, pin `0d9e83383`)
+
+The delta ledger for the fifth main sync (`avalonia-port/main-20261008`) is
+[`avalonia-main-sync-20261008.md`](avalonia-main-sync-20261008.md): one row per non-merge commit (5), each
+ported-by-merge, needs-port (with its port lane) or n/a with a reason. Tick its rows as each lane lands.
