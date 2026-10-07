@@ -1244,3 +1244,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/main-20261005-compat: +32
 - Test paths through SourceRoots, release button key 7.0.5, two tests updated to main's new catalogue.
+
+## avalonia-port/port-shellcopy: +435
+- Rail Back arrow + mouse/Alt+arrow tab history (TabHistory in Core; refused under Lockdown/tutorial); bug report on top; startup cards one at a time (stepped clock); "Monthly Recap".
+- shell-layout n/a (Win32-only); side-art folded into the shared feat-adaptive-side-art row.
