@@ -83,6 +83,48 @@ public sealed class ChasterTab2Tests
         Dispatcher.UIThread.RunJobs();
     }
 
+    // WPF ChasterTabView.xaml.cs:99: the ticks run only while the page is on screen.
+    [Fact]
+    public Task HidingTheTabStopsBothTicksAndShowingResumesThem() => AvaloniaTestDispatcher.RunAsync(() => Run((_, _, _) =>
+    {
+        var tab = new ChasterTabView();
+        var w = new Window { Width = 1200, Height = 800, Content = tab };
+        w.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(tab.ClockTicking && tab.SlowTick.IsEnabled);
+            tab.IsVisible = false;
+            Assert.False(tab.ClockTicking);
+            Assert.False(tab.SlowTick.IsEnabled);
+            tab.IsVisible = true;
+            Assert.True(tab.ClockTicking && tab.SlowTick.IsEnabled);
+        }
+        finally { w.Close(); }
+        Assert.False(tab.ClockTicking || tab.SlowTick.IsEnabled);
+        return Task.CompletedTask;
+    }));
+
+    [Fact]
+    public Task SlowTickRefreshesTheHero() => AvaloniaTestDispatcher.RunAsync(() => Run(async (_, _, _) =>
+    {
+        var tab = new ChasterTabView();
+        var w = new Window { Width = 1200, Height = 800, Content = tab };
+        w.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(TimeSpan.FromSeconds(30), tab.SlowTick.Interval);
+            var title = tab.FindControl<Control>("HeroTitle")!;
+            Assert.True(title.IsVisible);
+            title.IsVisible = false; // RefreshHero repaints it for a linked account
+            tab.SlowTick.Interval = TimeSpan.FromMilliseconds(20);
+            for (var i = 0; i < 60 && !title.IsVisible; i++) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
+            Assert.True(title.IsVisible);
+        }
+        finally { w.Close(); }
+    }));
+
     [Fact]
     public Task UnlinkAsksThenRevokesAndClearsTheToken() => AvaloniaTestDispatcher.RunAsync(() => Run(async (chaster, fake, _) =>
     {
