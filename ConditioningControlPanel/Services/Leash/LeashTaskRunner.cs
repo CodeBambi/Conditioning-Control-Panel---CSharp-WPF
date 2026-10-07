@@ -40,6 +40,9 @@ public interface ILeashTaskHost
     /// wears the pink filter the whole way, <see cref="PunishKind.Detention"/> runs the player's
     /// own effects. False when it could not start.</summary>
     bool StartSession(PunishKind kind, int minutes);
+    /// <summary>Stop the running session. Only ever asked for a session this runner started
+    /// (<see cref="LeashTaskRunner.ParkAndStopItsSession"/>); a session the player started stays theirs.</summary>
+    void StopSession();
 
     event Action? BubblePopped;
     /// <summary>Make sure bubbles are floating. True when this call started them (the runner
@@ -121,6 +124,7 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
     private int _baseline;
     private int _count;
     private double _sessionSeconds;
+    private bool _startedSession;
     private DateTimeOffset _lastTick;
     private DateTimeOffset _lastShow = DateTimeOffset.MinValue;
     private DateTimeOffset _startedAt;
@@ -132,7 +136,7 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
     private bool _resetting;
 
     /// <summary>Progress kept for a punishment that was parked or stopped (one at a time).</summary>
-    private sealed record Kept(string Pid, int Count, double SessionSeconds, LeashWatchMeter? Meter);
+    private sealed record Kept(string Pid, int Count, double SessionSeconds, LeashWatchMeter? Meter, bool StartedSession = false);
     private Kept? _kept;
 
     public LeashTaskRunner(ILeashTaskHost host, Func<DateTimeOffset>? now = null)
@@ -147,6 +151,9 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
     public bool IsRunning => _task != null || _watchAssignment != null;
 
     public string? RunningPid => _task?.Pid;
+
+    /// <summary>What the running punishment asks for, or null (no task, or a video assignment).</summary>
+    public PunishKind? RunningKind => _task?.Kind;
 
     /// <summary>The open video assignment being watched, or null.</summary>
     public string? RunningAid => _watchAssignment?.Aid;
@@ -195,7 +202,18 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
             case PunishKind.Pink:
             case PunishKind.Detention:
                 if (kept != null) _sessionSeconds = kept.SessionSeconds;
-                ok = _host.SessionRunning || _host.StartSession(p.Kind, p.Size);
+                if (_host.SessionRunning)
+                {
+                    // adopted, not started: the player's own session stays theirs, unless this is the
+                    // session the runner started before a park
+                    if (!resume) _startedSession = kept?.StartedSession == true;
+                    ok = true;
+                }
+                else
+                {
+                    ok = _host.StartSession(p.Kind, p.Size);
+                    _startedSession = ok;
+                }
                 break;
             case PunishKind.Bubbles:
                 if (!resume)
@@ -252,6 +270,18 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
     /// <summary>Stop tracking but keep the progress for this punishment (a panic press): the
     /// window closes, bubbles the task started stop, and nothing comes back by itself.</summary>
     public void Park() => Reset(keep: true);
+
+    /// <summary>A panic press while the panic itself is switched off (owner, 2026-09-30): park, and
+    /// stop the session only when this runner started it. A session the player started keeps running.</summary>
+    public void ParkAndStopItsSession()
+    {
+        var mine = _startedSession && _host.SessionRunning;
+        Reset(keep: true);
+        if (mine) { try { _host.StopSession(); } catch { } }
+    }
+
+    /// <summary>True while the running task's session is one this runner started.</summary>
+    public bool StartedItsSession => _startedSession;
 
     /// <summary>One step. The app's timer calls it every second; tests call it by hand.</summary>
     public void Tick()
@@ -407,7 +437,7 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
         _resetting = true;
         try
         {
-            if (keep && _task is { } p) _kept = new Kept(p.Pid, _count, _sessionSeconds, _meter);
+            if (keep && _task is { } p) _kept = new Kept(p.Pid, _count, _sessionSeconds, _meter, _startedSession);
             var endWatch = _watch != null;
             var stopBubbles = _startedBubbles;
             _task = null;
@@ -418,6 +448,7 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
             _baseline = 0;
             _count = 0;
             _sessionSeconds = 0;
+            _startedSession = false;
             _startedBubbles = false;
             _sawActivity = false;
             _everPlayed = false;

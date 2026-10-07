@@ -143,6 +143,10 @@ namespace ConditioningControlPanel
             if (!_presetFileService.ValidatePresetFile(filePath, out var errorMessage))
             {
                 ShowDropZoneStatus($"Invalid: {errorMessage}", isError: true);
+                // The drop zone line only shows on the Presets tab; a drop anywhere else
+                // (or from the launcher) needs its own word.
+                App.Notifications?.Show(string.Format(Loc.Get("preset_drop_invalid_fmt"), errorMessage),
+                    Services.NotificationType.Warning);
                 return;
             }
 
@@ -150,6 +154,8 @@ namespace ConditioningControlPanel
             if (preset == null)
             {
                 ShowDropZoneStatus("Failed to read preset", isError: true);
+                App.Notifications?.Show(string.Format(Loc.Get("preset_drop_invalid_fmt"), Path.GetFileName(filePath)),
+                    Services.NotificationType.Warning);
                 return;
             }
 
@@ -176,6 +182,8 @@ namespace ConditioningControlPanel
             RefreshPresetsDropdown();
 
             ShowDropZoneStatus($"Preset imported: {preset.Name}", isError: false);
+            App.Notifications?.Show(string.Format(Loc.Get("preset_drop_imported_fmt"), preset.Name),
+                Services.NotificationType.Success);
             App.Logger?.Information("Preset imported via drag-drop: {Name}", preset.Name);
         }
 

@@ -8,6 +8,7 @@
         Background="#0F0F1E"
         Foreground="#E0E0E0"
         ResizeMode="CanResizeWithGrip"
+        Topmost="True"
         MinWidth="560" MinHeight="560">
     <Window.Resources>
         <Style x:Key="FormLabel" TargetType="TextBlock">

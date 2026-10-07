@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Services.Migrations
     /// <para>That tree is unzipped from <c>locked-resources.ccpmod</c>, which reaches users inside the
     /// mod-locked content pack, and ModService only re-extracts when the pack stamp changes. A user who
     /// already holds the pack therefore keeps the old gendered flash voice lines and art indefinitely.
-    /// The 29 replacement files ship in the installer under <c>LockedMod\overrides\</c> (same relative
+    /// The 30 replacement files ship in the installer under <c>LockedMod\overrides\</c> (same relative
     /// paths as inside the archive) and are copied over the tree every time it is ready.</para>
     ///
     /// <para>Deleting the 25 superseded voice lines is not optional: FlashService and the avatar's

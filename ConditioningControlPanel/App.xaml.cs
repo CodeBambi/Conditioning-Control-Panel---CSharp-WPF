@@ -496,6 +496,19 @@ namespace ConditioningControlPanel
             CoreEntitlement.HasLabProvider = () => Patreon?.HasLabAccess == true;
             CoreEntitlement.IsFreeTodayProvider = key => DailyFree?.IsFreeToday(key) == true;
             CoreEntitlement.IntakePassAvailableProvider = () => IntakePass?.IsPassAvailable == true;
+            // Tokens on disk are not a working grant: the proxy refusing to refresh leaves the .dat
+            // in place (#585), hence GrantLooksDead, exactly as the Account section's row reads it.
+            TierGate.ReconnectIsTheAnswerProvider = () => PatreonReconnectRule.Decide(
+                hasUnifiedId: !string.IsNullOrEmpty(Settings?.Current?.UnifiedId),
+                linkedServerSide: Settings?.Current?.HasLinkedPatreon == true,
+                desktopAuthenticated: Patreon?.IsAuthenticated == true && Patreon?.GrantLooksDead != true,
+                hasPremiumNow: Patreon?.HasPremiumAccess == true,
+                whitelisted: Patreon?.IsWhitelisted == true).Prominent;
+            AssetPresetService.OnlineChannelsReset = () => Services.Fyp.Online.FypOnlineCoordinator.ResetAllChannels();
+            // Exclusives cards whose door state lives in head services (main 2e9080399).
+            Models.ExclusiveFeature.JustDropDoorProvider = () => Services.JustDrop.JustDropService.DoorAvailable;
+            Models.ExclusiveFeature.ArcademyDoorProvider = () => Services.Arcademy.ArcademyHostService.DoorAvailable;
+            Models.ExclusiveFeature.BreakoutFullProvider = () => Services.BackRoom.BreakoutAccess.FullAllowed;
             CoreEntitlement.ShowDeniedHandler = verdict =>
             {
                 try
@@ -505,14 +518,7 @@ namespace ConditioningControlPanel
                     // PatreonReconnectRule says the row is in its prominent Reconnect state - linked
                     // server-side, no token here, premium off - the refusal says what actually
                     // happened and its button repairs it instead of selling them a tier they hold.
-                    var row = PatreonReconnectRule.Decide(
-                        hasUnifiedId: !string.IsNullOrEmpty(Settings?.Current?.UnifiedId),
-                        linkedServerSide: Settings?.Current?.HasLinkedPatreon == true,
-                        desktopAuthenticated: Patreon?.IsAuthenticated == true,
-                        hasPremiumNow: Patreon?.HasPremiumAccess == true,
-                        whitelisted: Patreon?.IsWhitelisted == true);
-
-                    if (row.Prominent)
+                    if (TierGate.ReconnectIsTheAnswer())
                     {
                         Notifications?.Show(Loc.Get("tiergate_denied_reconnect"), NotificationType.Warning,
                             TimeSpan.FromSeconds(10), Loc.Get("tiergate_reconnect_action"),
@@ -520,8 +526,10 @@ namespace ConditioningControlPanel
                     }
                     else
                     {
+                        // The vault gate card at the tier this door needs (Dialogs/VaultGateDialog).
+                        var tier = verdict.Required >= PatreonTier.Level2 ? 2 : 1;
                         Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
-                            Loc.Get("tiergate_see_tiers"), () => MainWindowRef?.ShowAppInfoPopup());
+                            Loc.Get("tiergate_see_tiers"), () => MainWindowRef?.ShowVaultGate(null, tier));
                     }
                 }
                 catch (Exception ex)
@@ -1180,6 +1188,8 @@ namespace ConditioningControlPanel
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
         public static RemoteControlService RemoteControl { get; private set; } = null!;
         public static AvailableSubjectsService AvailableSubjects { get; private set; } = null!;
+        /// <summary>The Lobby: chess, Goon and Remote open tables in one list. Polls only while watched.</summary>
+        public static Services.Lobby.LobbyService Lobby { get; private set; } = null!;
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
         public static CatalogueService Catalogue { get; private set; } = null!;
         public static CatalogueLookupService CatalogueLookup { get; private set; } = null!;
@@ -3081,6 +3091,7 @@ namespace ConditioningControlPanel
             // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
             // so an always-constructed idle singleton owned nothing and was never read.)
             AvailableSubjects = new AvailableSubjectsService();
+            Lobby = new Services.Lobby.LobbyService();
             CompanionPhrases = new CompanionPhraseService();
             Catalogue = new CatalogueService();
             CatalogueLookup = new CatalogueLookupService();
@@ -3265,8 +3276,9 @@ namespace ConditioningControlPanel
             Services.Haptics.LockdownDoseKeeper.RecoverIfNeeded();
             LockdownDose = new Services.Haptics.LockdownDoseKeeper(Lockdown);
             LockdownDose.Install();
-            // Quest credit: each completed lockdown (Patreon-exclusive quest category).
-            Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch (Exception ex) { Diag.Swallowed(ex); } };
+            // Quest credit: each completed lockdown of 20+ minutes (Patreon-exclusive quest category).
+            // LastActiveDuration is set in Deactivate before the event fires.
+            Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(Lockdown.LastActiveDuration); } catch (Exception ex) { Diag.Swallowed(ex); } };
 
             // Initialize mantra lab service
             Mantra = new MantraService();
@@ -3424,6 +3436,11 @@ namespace ConditioningControlPanel
             // putting it on screen, so the launcher is the first window the player sees; the panel
             // used to flash up here and vanish a pump later, in RouteBootSurface.
             bool panelHidden = Services.Launcher.LauncherBoot.PanelStartsHidden(Boot, Lockdown?.IsActive == true);
+            // Held BEFORE the hidden show: the panel's Loaded work and the dashboard's first
+            // visibility run inside it and ask the ladder for their cards (Today's Free Feature,
+            // a fast server announcement). Held from RouteBootSurface only, a pump later, they
+            // opened owned by a panel nobody could see, on top of the launcher.
+            if (panelHidden) Services.Launcher.LauncherHost.HoldStartupLadder();
             try
             {
                 if (panelHidden) mainWindow.ShowHiddenForBoot();
@@ -4813,7 +4830,7 @@ namespace ConditioningControlPanel
                 // rotation touches nothing of the user's, so it is a line, not a dialog.
                 var template = Loc.Get("wb_season_line");
                 if (string.IsNullOrWhiteSpace(template) || template == "wb_season_line")
-                    template = "The monthly leaderboard rotated to season {0} while you were away. Your level, your XP and everything you unlocked carried over.";
+                    template = "The monthly board rolled over to {0} while you were away. Your level, XP and everything you unlocked stayed.";
 
                 try { return string.Format(template, current); }
                 catch (FormatException) { return template; }
@@ -5038,6 +5055,7 @@ namespace ConditioningControlPanel
             // Tier-2 twin of the line above. Both are LOCAL entitlement grace windows, never the
             // backup's - a restore from another machine must not import (or drop) Lab access.
             restored.PatreonLabValidUntil = current.PatreonLabValidUntil;
+            restored.InviteGrantUntil = current.InviteGrantUntil;
             restored.LastPatreonVerification = current.LastPatreonVerification;
             restored.OpenRouterApiKey = current.OpenRouterApiKey;
 

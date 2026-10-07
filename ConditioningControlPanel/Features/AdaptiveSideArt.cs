@@ -50,6 +50,28 @@ namespace ConditioningControlPanel.Features
                 "OriginalWidth", typeof(object), typeof(AdaptiveSideArt),
                 new PropertyMetadata(null));
 
+        /// <summary>Whether the art column is collapsed right now, so the next pass can hold it.</summary>
+        private static readonly DependencyProperty IsCollapsedProperty =
+            DependencyProperty.RegisterAttached(
+                "IsCollapsed", typeof(bool), typeof(AdaptiveSideArt),
+                new PropertyMetadata(false));
+
+        /// <summary>
+        /// How far past the threshold a collapsed page has to grow before the art comes back. The
+        /// switch changes the page's height, which shows or hides the host ScrollViewer's vertical
+        /// scrollbar, which changes the Grid's width by that scrollbar's width: with one threshold
+        /// both ways a page sitting within a scrollbar of it flipped between wide and compact on
+        /// every layout pass (ccp-bugs #1321, Awareness and Listening). Wider than any scrollbar.
+        /// </summary>
+        internal const double WidenMargin = 48;
+
+        /// <summary>
+        /// The pure decision: collapse below <paramref name="threshold"/>, and once collapsed stay
+        /// collapsed until the width reaches the threshold plus <see cref="WidenMargin"/>.
+        /// </summary>
+        internal static bool ShouldCollapse(double width, double threshold, bool collapsedNow)
+            => collapsedNow ? width < threshold + WidenMargin : width < threshold;
+
         /// <summary>A settings column's authored MaxWidth, stashed so the restore is exact.</summary>
         private static readonly DependencyProperty OriginalMaxWidthProperty =
             DependencyProperty.RegisterAttached(
@@ -99,7 +121,8 @@ namespace ConditioningControlPanel.Features
                 if (col.GetValue(OriginalWidthProperty) is not GridLength)
                     col.SetValue(OriginalWidthProperty, col.Width);
 
-                bool collapse = width < threshold;
+                bool collapse = ShouldCollapse(width, threshold, (bool)grid.GetValue(IsCollapsedProperty));
+                grid.SetValue(IsCollapsedProperty, collapse);
                 var target = collapse
                     ? new GridLength(0)
                     : (col.GetValue(OriginalWidthProperty) is GridLength stashed ? stashed : new GridLength(2, GridUnitType.Star));

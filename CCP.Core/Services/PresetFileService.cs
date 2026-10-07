@@ -112,7 +112,10 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            if (!filePath.EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase))
+            // Any .json: a browser saves a second download as "x.preset (1).json" and the
+            // drop path has already sniffed the content (PresetDropRules). The checks below
+            // still decide whether it is a usable preset.
+            if (!PresetDropRules.IsJsonPath(filePath))
             {
                 errorMessage = "File must be a .preset.json file";
                 return false;

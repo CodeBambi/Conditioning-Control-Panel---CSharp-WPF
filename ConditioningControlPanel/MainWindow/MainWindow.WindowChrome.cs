@@ -149,6 +149,9 @@ namespace ConditioningControlPanel
                 // OnLastWindowClose open after the UI is gone.
                 try { Services.Remix.JackpotRemixBuilder.DisposeDefault(); } catch { }
 
+                // Same reason for the remote HUD pill: unowned and topmost by design.
+                DisposeRemoteHud();
+
                 // Kill all audio and effects first - ensures clean exit
                 App.KillAllAudio();
 

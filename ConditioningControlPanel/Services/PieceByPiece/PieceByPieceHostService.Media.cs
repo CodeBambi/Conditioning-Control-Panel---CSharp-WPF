@@ -24,13 +24,24 @@ internal static partial class PieceByPieceHostService
     private const string OnlineTenant = "pbp";
 
     private static GoonOnlineMedia? _onlineMedia;
-    /// <summary>The player picked a flavour inside the game this window. Never stored as consent.</summary>
+    /// <summary>The chess game's own opt-in: a flavour the player picked in the game, this window
+    /// or saved from an earlier one (<see cref="PbpMediaRules.SavedOptIn"/>, set at page ready).
+    /// Never app-wide consent.</summary>
     private static bool _sessionOptIn;
     private static int _onlineSharePct = PbpMediaRules.PickedSharePct;
 
+    /// <summary>At page ready: the saved pick stands as the opt-in, so a player who chose once is
+    /// never asked again and their pictures arrive without a trip to Options (owner, 2026-09-30).</summary>
+    private static void AdoptSavedMediaChoice()
+    {
+        var s = App.Settings?.Current;
+        _sessionOptIn = s != null && PbpMediaRules.SavedOptIn(s.PbpMediaOnline, s.PbpMediaFlavour);
+    }
+
     /// <summary>host -&gt; page <c>pbp:media-state</c>: what the picker shows. <c>flavour</c> is the
-    /// ACTIVE pick ("" until the player picks this session, unless the app-wide online source is
-    /// consented), <c>last</c> the stored preselection.</summary>
+    /// ACTIVE pick (the saved one, or "" before any pick unless the app-wide online source is
+    /// consented), <c>last</c> the stored preselection, <c>chosen</c> whether the one-time choice
+    /// is saved (the page asks at the first start while it is false).</summary>
     private static void PostMediaState()
     {
         try
@@ -38,22 +49,26 @@ internal static partial class PieceByPieceHostService
             var s = App.Settings?.Current;
             var stored = GoonOnlineMediaRules.CleanFlavour(s?.PbpMediaFlavour);
             bool appWide = PbpMediaRules.AppWideOnline(s?.MediaSource, s?.HasRemoteMediaConsent == true);
+            bool online = s?.PbpMediaOnline ?? true;
             _host?.Post(new
             {
                 type = "pbp:media-state",
                 flavour = _sessionOptIn || appWide ? stored : "",
                 last = stored,
                 custom = GoonOnlineMediaRules.ParseCustom(s?.PbpMediaCustom),
-                online = s?.PbpMediaOnline ?? true,
+                online,
                 appWide,
+                chosen = PbpMediaRules.HasSavedChoice(s?.PbpMediaChosen == true, online, stored),
+                library = true,
+                canOnline = true,
             });
         }
         catch (Exception ex) { App.Logger?.Debug("PieceByPiece: media-state post failed: {E}", ex.Message); }
     }
 
-    /// <summary>page -&gt; host <c>pbp:media-flavour { flavour, custom, subs, online }</c>: store the
-    /// pick, make it this window's opt-in, and restart the fetch. <c>online:false</c> is the
-    /// player's "Own pictures only".</summary>
+    /// <summary>page -&gt; host <c>pbp:media-flavour { flavour, custom, subs, online, chosen }</c>:
+    /// store the pick as the saved choice (the page only sends one because the player chose),
+    /// make it the opt-in, and restart the fetch. <c>online:false</c> is "no online pictures".</summary>
     private static void OnMediaFlavour(JObject o)
     {
         var s = App.Settings?.Current;
@@ -65,6 +80,7 @@ internal static partial class PieceByPieceHostService
         if (o["custom"] is JObject) s.PbpMediaCustom = GoonOnlineMediaRules.CleanCustom(o["custom"]);
         s.PbpMediaSubs = GoonOnlineMediaRules.JoinSubs(subs);
         if (o["online"]?.Type == JTokenType.Boolean) s.PbpMediaOnline = (bool)o["online"]!;
+        s.PbpMediaChosen = true;
         _sessionOptIn = GoonOnlineMediaRules.IsSessionOptIn(s.PbpMediaOnline, flavour);
         try { App.Settings?.Save(); } catch (Exception ex) { App.Logger?.Debug("PieceByPiece: media save: {E}", ex.Message); }
         App.Logger?.Information("PieceByPiece: media-flavour {F} ({N} niches, online {O})",

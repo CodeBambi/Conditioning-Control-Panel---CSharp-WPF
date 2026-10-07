@@ -82,18 +82,30 @@ namespace ConditioningControlPanel.Services.Safety
             return true;
         }
 
+        /// <summary>Which game page an Escape the panel kept as its pause is handed to.</summary>
+        internal enum KeptEscapePage { None, Race, Board, Breakout }
+
         /// <summary>
-        /// Whether an Escape a game kept as its pause is handed to the chess page as well. The board
-        /// pauses on its own keydown, and while its WebView2 is out of keyboard focus (the title bar
-        /// clicked) that keydown never comes: the press was kept, so nothing paused and nothing
-        /// panicked. Only once a press was kept (a full panic closes the board), only the board (the
-        /// race brakes on its own key, unchanged) and only to a page that is up: frames posted before
-        /// its ready are queued, and an Escape pressed during the boot must not pause or close the
-        /// board seconds later. The page drops the frame when the real key reached it too
-        /// (ui/host-escape.js), so a focused board still handles the press once.
+        /// Where an Escape a game kept as its pause is handed as well. Each of these games pauses on
+        /// its own keydown, and while its WebView2 is out of keyboard focus (the title bar clicked)
+        /// that keydown never comes: the press was kept, so nothing paused and nothing panicked.
+        /// Only once a press was kept (a full panic closes the game), only to the game in front, and
+        /// only to a page that is up: frames posted before its ready are queued, and an Escape
+        /// pressed during the boot must not pause or close the game seconds later. Each page drops
+        /// the frame when the real key reached it too (host-escape.js), so a focused game still
+        /// handles the press once. The race wins a tie, as the claim's log line reads.
         /// </summary>
-        internal static bool BoardGetsKeptEscape(bool claimed, bool raceInFront, bool boardInFront, bool boardReady)
-            => claimed && boardInFront && !raceInFront && boardReady;
+        internal static KeptEscapePage KeptEscapeGoesTo(bool claimed,
+            bool raceInFront, bool raceReady,
+            bool boardInFront, bool boardReady,
+            bool breakoutInFront, bool breakoutReady)
+        {
+            if (!claimed) return KeptEscapePage.None;
+            if (raceInFront) return raceReady ? KeptEscapePage.Race : KeptEscapePage.None;
+            if (boardInFront) return boardReady ? KeptEscapePage.Board : KeptEscapePage.None;
+            if (breakoutInFront) return breakoutReady ? KeptEscapePage.Breakout : KeptEscapePage.None;
+            return KeptEscapePage.None;
+        }
 
         /// <summary>Reads the master switch off settings, defaulting to ON when settings are missing
         /// (a panic with no settings loaded should still stop everything).</summary>

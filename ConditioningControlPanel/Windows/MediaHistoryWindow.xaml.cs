@@ -27,7 +27,7 @@ namespace ConditioningControlPanel
     {
         private readonly List<MediaHistoryRow> _allRows = new();          // newest first, unfiltered
         private readonly ObservableCollection<MediaHistoryRow> _view = new();
-        private string _filter = "all";       // all | image | video
+        private string _filter = "all";       // all | image | video | audio
         private string _search = "";
         private bool _subscribed;
         private int _previewGeneration;   // drops an online decode whose row was deselected
@@ -110,6 +110,7 @@ namespace ConditioningControlPanel
         {
             if (_filter == "image" && row.Entry.Type != MediaType.Image) return false;
             if (_filter == "video" && row.Entry.Type != MediaType.Video) return false;
+            if (_filter == "audio" && row.Entry.Type != MediaType.Audio) return false;
             if (!string.IsNullOrEmpty(_search) &&
                 row.DisplayName.IndexOf(_search, StringComparison.OrdinalIgnoreCase) < 0)
                 return false;
@@ -152,6 +153,7 @@ namespace ConditioningControlPanel
             SetActive(BtnFilterAll, _filter == "all");
             SetActive(BtnFilterImages, _filter == "image");
             SetActive(BtnFilterVideos, _filter == "video");
+            SetActive(BtnFilterAudio, _filter == "audio");
         }
 
         private static void SetActive(System.Windows.Controls.Button btn, bool active)
@@ -217,6 +219,17 @@ namespace ConditioningControlPanel
             if (plan.Kind == MediaPreviewKind.RemoteCached)
             {
                 ShowRemotePreview(row, _previewGeneration);
+                return;
+            }
+
+            // An audio clip has no picture: never hand an mp3 to the image decoder. The name and
+            // the folder / open-file buttons above still work (ccp-bugs #1098).
+            if (row.Entry.Type == MediaType.Audio)
+            {
+                PreviewImage.Visibility = Visibility.Collapsed;
+                PreviewVideo.Visibility = Visibility.Collapsed;
+                PreviewMissing.Text = Localization.Loc.Get("label_media_audio_preview");
+                PreviewMissing.Visibility = Visibility.Visible;
                 return;
             }
 
@@ -571,6 +584,12 @@ namespace ConditioningControlPanel
                     TypeBadge = Localization.Loc.Get("badge_video");
                     PlaceholderGlyph = "🎬";
                     BadgeBrush = new SolidColorBrush(Color.FromRgb(0x4A, 0x6C, 0xD0));
+                }
+                else if (entry.Type == MediaType.Audio)
+                {
+                    TypeBadge = Localization.Loc.Get("badge_audio");
+                    PlaceholderGlyph = "🎵";
+                    BadgeBrush = new SolidColorBrush(Color.FromRgb(0x3A, 0x9A, 0x86));
                 }
                 else
                 {

@@ -43,7 +43,7 @@ namespace ConditioningControlPanel
     /// starved in this app), and every path is guarded so an explainer can never be the reason a
     /// tab fails to open.
     /// </summary>
-    public partial class FeatureIntroPopup : Window
+    public partial class FeatureIntroPopup : Window, Services.Startup.IPassiveStartupSurface
     {
         private Action? _onAction;
 

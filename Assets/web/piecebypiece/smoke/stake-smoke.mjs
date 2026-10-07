@@ -123,6 +123,30 @@ function eq(what, got, want) {
   st.dispose(); off.dispose();
 }
 
+// --- the shelf (localStorage): a window closed mid-match must not carry the pick
+{
+  const shelf = new Map();
+  const hadWindow = 'window' in globalThis;
+  const was = globalThis.window;
+  globalThis.window = { localStorage: { getItem: (k) => shelf.get(k) ?? null, setItem: (k, v) => shelf.set(k, String(v)) } };
+  const quietHost = () => createStake({ post: () => {}, onMessage: (fn) => { quietHost.hear = fn; return () => {}; } });
+  const a = quietHost();
+  quietHost.hear({ type: 'stake', op: 'limits', ok: true, enabled: true, time_ok: true });
+  a.choose('sp', 10);
+  a.begin('m1');
+  a.clear();
+  eq('a match left on the found screen keeps the pick on the shelf', createStake({ store: true }).state.pick, { kind: 'sp', amount: 10 });
+  a.begin('m2');
+  a.play();
+  a.choose('sp', 25);
+  // the window closes here: no end(), no clear()
+  eq('a window closed mid-match leaves the shelf at Off', createStake({ store: true }).state.pick, { kind: 'none', amount: 0 });
+  a.dispose();
+  const door = readFileSync(new URL('../door/door.js', import.meta.url), 'utf8');
+  ok('the door calls play() as the online board is dealt', /stake\.begin\(match\.id\); stake\.play\?\.\(\);/.test(door));
+  if (hadWindow) globalThis.window = was; else delete globalThis.window;
+}
+
 // --- two quick taps (bug hunt 2026-09-29, STAKES-7). The server takes the first
 // offer and answers one that meets its held stake lock 'busy', so the first stands.
 // The row must never light an amount that is not the one at stake.

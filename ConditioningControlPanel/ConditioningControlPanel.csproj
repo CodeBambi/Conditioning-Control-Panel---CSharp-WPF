@@ -607,6 +607,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Desktop shortcut icons, one .ico per launcher tile (LauncherShortcuts.IconFolder). -->
+    <Content Include="..\Assets\launcher-icons\*.ico" Link="Resources\launcher-icons\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Sound files - must be copied to output and publish for file system access.
          Audio listed in $(ContentPackSoundsExclude) ships as a downloadable pack instead. -->
     <Content Include="..\Assets\sounds\**\*" Link="Resources\sounds\%(RecursiveDir)%(Filename)%(Extension)" Exclude="$(ContentPackSoundsExclude)">
@@ -729,12 +738,16 @@
        is not stripped, or is not packed. installer-content-deletions.iss still names these files;
        [InstallDelete] runs before [Files], so they are deleted and reinstalled fresh.
 
-       LockedMod\overrides\ is the other half: 25 flash voice lines and 4 PNGs that live INSIDE the
+       LockedMod\overrides\ is the other half: 25 flash voice lines and 5 PNGs that live INSIDE the
        extracted locked-resources.ccpmod tree, copied over it at runtime by
        CCP.Core\Services\Migrations\CirceNeutralPackPatch.cs (the .ccpmod itself is not build output).
        Those are copied by the two targets below rather than declared as <Content>: several voice
        line names contain a comma, and VideoLAN.LibVLC.Windows.targets batches %(FullPath) over
        every Content item into a MakeRelative call that a comma breaks (MSB4186).
+
+       The fifth PNG, resources\features\spiral_overlay.png (ccp-bugs #1354, Circe drawn with a third
+       arm), was fixed AFTER the gender-neutral pass: put it into locked-resources.ccpmod too before the
+       pack rebuild, or removing this overlay brings the third arm back.
 
        TO REMOVE (after the rebuilt packs are published and have had a full release cycle): delete
        this comment, the property, the ItemGroup and the two targets below, LockedMod\overrides\,

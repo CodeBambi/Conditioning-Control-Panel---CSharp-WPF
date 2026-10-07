@@ -33,6 +33,41 @@ public class LauncherShortcutsTests
         Assert.Equal("CC Labs - Racing Thoughts  Round 2.lnk", file);
     }
 
+    [Theory]
+    [InlineData("backroom", "backroom.ico")]
+    [InlineData(" piecebypiece ", "piecebypiece.ico")]
+    [InlineData("intake", "intake.ico")]
+    public void Game_shortcut_wears_its_own_icon_file(string id, string file)
+    {
+        Assert.Equal(file, LauncherShortcuts.IconFileName(id));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("panel")]
+    [InlineData("  ")]
+    [InlineData("a/b")]
+    public void Panel_and_unsafe_ids_keep_the_exe_icon(string? id)
+    {
+        Assert.Null(LauncherShortcuts.IconFileName(id));
+    }
+
+    [Fact]
+    public void Every_launcher_game_ships_an_icon_file()
+    {
+        var dir = new System.IO.DirectoryInfo(System.AppContext.BaseDirectory);
+        while (dir != null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "ConditioningControlPanel", LauncherShortcuts.IconFolder)))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        var folder = System.IO.Path.Combine(dir!.FullName, "ConditioningControlPanel", LauncherShortcuts.IconFolder);
+        foreach (var game in LauncherCatalogue.Games)
+        {
+            var name = LauncherShortcuts.IconFileName(game.Id);
+            Assert.True(name != null && System.IO.File.Exists(System.IO.Path.Combine(folder, name)),
+                "missing icon for " + game.Id);
+        }
+    }
+
     [Fact]
     public void Blank_title_falls_back_to_the_id_and_the_id_is_trimmed()
     {

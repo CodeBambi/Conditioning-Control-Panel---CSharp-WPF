@@ -65,7 +65,7 @@ public sealed partial class ChasterService
     {
         if (LadderApi == null || !IsLinked) return;
         var lockId = (_options() ?? ChasterOptions.Off).LockId;
-        if (string.IsNullOrEmpty(lockId)) return;
+        if (!ChasterClient.IsLockId(lockId)) return;
         await _ladderGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {

@@ -190,7 +190,7 @@ internal static class FypHostService
                     autoAdvance = s?.FypAutoAdvance ?? false,
                     muted = s?.FypMuted ?? false,
                     volume = s?.FypVolume ?? 100,
-                    windowOpacity = s?.FypWindowOpacity ?? 1.0,
+                    windowOpacity = s?.FypWindowOpacity ?? 0.6,
                     audioGlow = s?.FypAudioGlow ?? true,
                     eyeControl = s?.FypEyeControl ?? false,
                     eyeGaze = s?.FypEyeGaze ?? false,
@@ -785,7 +785,7 @@ internal static class FypHostService
 
             // The overlay ctor captures the feed's home monitor from its HWND, so it must run
             // BEFORE the park moves the window off every monitor.
-            _ghost = new FypGhostOverlay(hwnd, bounds, App.Settings?.Current?.FypWindowOpacity ?? 1.0,
+            _ghost = new FypGhostOverlay(hwnd, bounds, App.Settings?.Current?.FypWindowOpacity ?? 0.6,
                 onGear: GhostGearClicked, onMute: GhostMuteClicked,
                 isMuted: () => App.Settings?.Current?.FypMuted ?? false);
 

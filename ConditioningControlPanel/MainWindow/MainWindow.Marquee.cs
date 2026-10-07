@@ -199,12 +199,12 @@ namespace ConditioningControlPanel
                 stack.Children.Add(new System.Windows.Controls.TextBlock
                 {
                     Text = "You've been recognized as a Season 0 OG.\n\n" +
-                           "Your account has been reset for Season 1, but your legacy lives on:\n\n" +
+                           "Your legacy lives on:\n\n" +
                            "  ⭐ Your name now has a star icon on the leaderboard\n" +
                            "  ✨ Your row is highlighted in gold\n" +
                            "  👑 Everyone will know you were here from the beginning\n\n" +
                            "Your unlocks and achievements have been preserved.\n" +
-                           "Good luck climbing the leaderboard again!",
+                           "Nothing of yours resets. See you on the board.",
                     FontSize = 13,
                     Foreground = System.Windows.Media.Brushes.White,
                     TextWrapping = TextWrapping.Wrap,

@@ -150,6 +150,21 @@ namespace ConditioningControlPanel
         // settle (so a poller like BubbleCountResultWindow doesn't conclude the card closed before it opened).
         public static bool IsAnyOpen() => _allWindows.Count > 0 || _deferTimer != null;
 
+        /// <summary>Remote Control v2 preview: the card being typed right now (phrase, characters
+        /// typed, typos, repeats done), or null when no card is up. UI thread.</summary>
+        internal static (string Text, int Pos, int Typos, int Done)? RemoteSnapshot
+        {
+            get
+            {
+                LockCardWindow? w = null;
+                foreach (var x in _allWindows) { if (x._isPrimary) { w = x; break; } w ??= x; }
+                return w == null ? null : (w._phrase ?? "", _sharedInput.Length, _totalErrors, w._completedRepeats);
+            }
+        }
+
+        /// <summary>Raised on each typo, for the Remote Control v2 preview.</summary>
+        internal static event Action? TypoMade;
+
         /// <summary>
         /// Create a lock card window for a specific screen
         /// </summary>
@@ -745,6 +760,19 @@ namespace ConditioningControlPanel
                 if (!LockCardText.IsPrefixOf(input, _phrase))
                 {
                     _totalErrors++;
+                    try { TypoMade?.Invoke(); } catch { }
+
+                    // "Reset on typo" (ccp-bugs #1163, off by default): a mistake wipes the line the
+                    // same way a finished repeat does, so the user starts this repeat over. The clear
+                    // re-enters this handler with an empty box, which is not an error.
+                    if (App.Settings?.Current?.LockCardResetOnTypo == true)
+                    {
+                        TxtInput.Clear();
+                        ResetKeystrokeGate();
+                        _sharedInput = "";
+                        SyncInputToAllWindows("");
+                        return;
+                    }
                 }
             }
             

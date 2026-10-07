@@ -40,12 +40,93 @@ namespace ConditioningControlPanel
         // (weekly pass counts as an open door for free accounts).
 
         /// <summary>
-        /// Routes the gating overlay's CTA button to the App Info &amp; Data popup,
-        /// where users can sign in with Patreon/Discord to unlock premium features.
+        /// Every padlocked tab's CTA lands here. It opens the vault gate card for the feature
+        /// behind that padlock (Dialogs/VaultGateDialog), found from the tab view the button
+        /// sits in. A patron whose Patreon grant died on this PC is sent to Reconnect instead,
+        /// the same split TierGate.ShowDenied makes: selling a tier they already hold is wrong.
         /// </summary>
         internal void BtnGateUnlock_Click(object sender, RoutedEventArgs e)
         {
-            ShowAppInfoPopup();
+            if (TierGate.ReconnectIsTheAnswer()) { StartPatreonReconnectFromGate(); return; }
+            var view = GateViewName(sender as DependencyObject);
+            // Graded Intake's CTA also serves its NeedsLogin state and a tier-1 patron's spent
+            // pass; Account (sign-in and tiers in one place) stays the right door for both.
+            if (Services.Vault.VaultOffer.KeepsAccountRoute(view)) { ShowAppInfoPopup(); return; }
+            ShowVaultGate(Services.Vault.VaultOffer.FeatureKeyForView(view), 1);
+        }
+
+        /// <summary>The vault gate card. Null feature = the tier as a whole (e.g. a TierGate toast).</summary>
+        internal void ShowVaultGate(string? featureKey, int tier)
+        {
+            try
+            {
+                VaultGateDialog.ShowOffer(this, featureKey, tier, ShowAppInfoPopup);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[VaultGate] card failed; falling back to Account");
+                ShowAppInfoPopup();
+            }
+        }
+
+        /// <summary>Type name of the tab view a gate button sits in, or null.</summary>
+        private static string? GateViewName(DependencyObject? node)
+        {
+            while (node != null)
+            {
+                if (node is UserControl uc) return uc.GetType().Name;
+                node = node is Visual or System.Windows.Media.Media3D.Visual3D
+                    ? VisualTreeHelper.GetParent(node)
+                    : LogicalTreeHelper.GetParent(node);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// The last-day card of an invite week, once per week, through the presenter (an Inbox row
+        /// when something is quiet). Checked at launch and on every focus; both are cheap because
+        /// the seen-flag is spent at open time.
+        /// </summary>
+        private void MaybeShowInviteEnding()
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+                var key = Services.Vault.VaultOffer.InviteEndingOwed(settings.InviteGrantUntil, DateTime.UtcNow,
+                    App.Patreon?.IsInviteWeekOnly == true, settings.SeenFeatureIntros);
+                if (key == null || _inviteEndingPosted == key) return;
+                _inviteEndingPosted = key;
+                var until = settings.InviteGrantUntil!.Value;
+                PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:" + key,
+                    Glyph = "⏳",
+                    Title = Loc.Get("vaultgate_ending_inbox"),
+                    Summary = Loc.GetF("vaultgate_ending_until", until.ToLocalTime().ToString("ddd d MMM, HH:mm")),
+                    Open = () =>
+                    {
+                        MarkIntroSeen(key);
+                        VaultGateDialog.ShowEnding(this, until, ShowAppInfoPopup);
+                    },
+                    Dismiss = () => MarkIntroSeen(key),
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[VaultGate] invite-ending check failed");
+            }
+        }
+
+        /// <summary>The ending key already handed to the presenter this run.</summary>
+        private string? _inviteEndingPosted;
+
+        private static void MarkIntroSeen(string key)
+        {
+            var s = App.Settings?.Current;
+            if (s == null || s.SeenFeatureIntros.Contains(key)) return;
+            s.SeenFeatureIntros.Add(key);
+            App.Settings?.Save();
         }
 
         /// <summary>
@@ -103,7 +184,7 @@ namespace ConditioningControlPanel
                 {
                     App.KeywordTriggers?.Stop();
                     App.ScreenOcr?.Stop();
-                    if (settings.PanicKeyEnabled != true) _keyboardHook?.Stop();
+                    if (settings.PanicKeyEnabled != true) StopKeyboardHookUnlessLeashed();
                 }
                 if (cleared.Contains("awareness-mode")) App.WindowAwareness?.Stop();
                 if (cleared.Contains("takeover")) App.Autonomy?.Stop();
@@ -1044,6 +1125,9 @@ namespace ConditioningControlPanel
             {
                 var patreon = App.Patreon;
                 if (patreon?.HasPremiumAccess != true) return;
+                // An invite week is a free trial, not a purchase: celebrating it would spend the
+                // tier-1 seen-flag and the friend's real subscription later would get no card.
+                if (patreon.IsInviteWeekOnly) return;
                 var tier = patreon.HasLabAccess ? 2 : 1;
                 var onRise = riseTier > 0;
                 if (!TierCelebration.IsOwed(App.Settings?.Current?.SeenFeatureIntros, tier, onRise)) return;
@@ -1122,6 +1206,8 @@ namespace ConditioningControlPanel
             // Instant unlock for a tier bought on the site: a focus refresh when the user clicks back
             // in, and the rise's own fanfare on the profile bubble (EntitlementTierSync).
             Activated += (_, __) => EntitlementTierSync.OnAppFocused();
+            Activated += (_, __) => MaybeShowInviteEnding();
+            Services.Invites.InviteGrantSync.ArmExpiry();
             EntitlementTierSync.TierRaised += OnEntitlementTierRaised;
 
             // SubscribeStar is the third login provider and it OR's into the canonical premium gate
@@ -1195,9 +1281,12 @@ namespace ConditioningControlPanel
         internal void BtnDetachCompanion_Click(object sender, RoutedEventArgs e)
         {
             try { App.Bark?.NotifyUiAction("detach_companion"); } catch { }
-            if (_avatarTubeWindow == null) return;
 
-            _avatarTubeWindow.ToggleDetached();
+            // Popping out a switched-off companion wakes it, popped out, as the tray's Wake does.
+            // It used to do nothing here, and the v2 page had no other way to turn it back on.
+            if (App.Settings?.Current?.AvatarEnabled != true) WakeBambiUp();
+            else _avatarTubeWindow?.ToggleDetached();
+            if (_avatarTubeWindow == null) return;
 
             // The hero's Detach chip carries a fixed label and the tooltip reads the status text,
             // so only the (hidden, compat) status line is written now.

@@ -58,10 +58,17 @@ export function createCrowd({ bus, game, play, cancel = () => {}, canPlay = () =
       if (timer != null) clear(timer); timer = null; pending = null;
       return;
     }
+    // Each reaction names what just happened on the board, never how good it was.
     if (move.promotion) queue('crowdCheer');
-    else if (move.captured) queue('crowdApplause');
+    else if (move.captured) queue(move.captured === 'q' ? 'crowdCheer' : 'crowdApplause');
+    else if (/\+$/.test(move.san || '')) queue('crowdOoh');
+    else if (/[kq]/.test(move.flags || '')) queue('crowdClap');
   });
-  on('gameover', p => { stop(); if (p?.result === 'checkmate') queue('crowdCheer', true); });
+  on('gameover', p => {
+    stop();
+    if (p?.result === 'checkmate') queue('crowdCheer', true);
+    else if (p?.result === 'stalemate' || p?.result === 'draw') queue('crowdAww', true);
+  });
   for (const type of ['newgame', 'local', 'resync', 'menu-request', 'replay-start', 'takeback']) on(type, reset);
   return { cancel: stop, reset, update() { if (!canPlay()) stop(); }, debug: () => ({ seen, pending, candidate: !!candidate, lastKind }),
     dispose() { stop(); for (const off of offs) off(); }, };

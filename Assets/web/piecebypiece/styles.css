@@ -249,6 +249,10 @@ html, body {
 .chip.check { background: #48253b; border-color: #ff8295; }
 .chip .tally { font-size: 12px; letter-spacing: 0; opacity: 1; color: #c5bad4; margin-left: auto; white-space: nowrap; }
 .player-material { min-height: 18px; }
+/* The IQ readout (game/iq.js): local seats only, beside the name; what a move cost rises off it. */
+.chip .iq { position: relative; flex: none; font-size: 12px; font-weight: 600; color: #ffc4e1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chip .iq-pop { position: absolute; left: calc(100% + 5px); top: 0; font-weight: 700; color: #ff8295; pointer-events: none; animation: pbp-iq-pop 1100ms ease-out forwards; }
+@keyframes pbp-iq-pop { 0% { opacity: 0; transform: translateY(5px); } 18% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-9px); } }
 .captured { font: 17px/1 'Segoe UI Symbol', sans-serif; letter-spacing: -3px; color: #e2cfff; max-width: 135px; overflow: hidden; }
 .turn-line { display: none; }
 .statuscol { top: 276px; width: 214px; transform: none; transition: none; }
@@ -304,8 +308,12 @@ html, body {
 
 /* A small options drawer; presentation preferences never change chess rules. */
 .game-settings { position: absolute; bottom: 70px; right: 18px; pointer-events: auto; }
-.game-options-panel { position: absolute; right: 0; bottom: 45px; width: 280px; display: grid; gap: 12px;
+.game-options-panel { position: absolute; right: 0; bottom: 45px; width: min(620px, calc(100vw - 36px));
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; align-items: start;
+  max-height: calc(100vh - 140px); overflow: hidden auto; scrollbar-width: thin; scrollbar-color: #665474 transparent;
   padding: 18px; border: 1px solid #665474; border-radius: 14px; background: #211d38; box-shadow: 0 12px 36px #08071280; }
+.game-options-panel .opt-col { display: grid; gap: 12px; min-width: 0; }
+@media (max-width: 680px) { .game-options-panel { grid-template-columns: 1fr; gap: 12px; } }
 .game-options-panel strong { font-size: 16px; }
 .game-options-panel p { margin: 0; color: #d0c2de; font-size: 13px; line-height: 1.5; }
 .game-options-panel label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
@@ -314,24 +322,26 @@ html, body {
 .experience-pick { display: flex; gap: 6px; }
 .experience-pick .hud-btn { flex: 1; }
 .experience-pick [aria-pressed="true"] { border-color: #ff91c9; background: #58334e; color: #ffe1f0; }
-/* Distraction's pictures: flavour tiles, niches behind a small expander. */
+/* Distraction's pictures: the shared niche manager (backroom/shared/niches/picker.js) inline. */
 .pictures { display: grid; gap: 8px; }
-.pictures[hidden], .niche-box[hidden] { display: none; }
-.flavour-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.flavour-tile { display: grid; gap: 2px; padding: 7px 8px; text-align: left; border-left: 3px solid var(--tint, #8a7a9c); }
-.flavour-tile small { font-size: 11px; color: #bfb0d0; }
-.flavour-tile[aria-pressed="true"] { border-color: var(--tint, #ff91c9); background: #58334e; color: #ffe1f0; }
-.niche-box summary { cursor: pointer; font-size: 13px; color: #d0c2de; }
-.niche-pills { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
-.niche-pill { font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid #665474;
-  background: transparent; color: #8f809f; cursor: pointer; }
-.niche-pill.is-on { background: #3d2c4d; color: #ffe1f0; border-color: #ff91c9; }
-.niche-add { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #bfb0d0; }
-.game-options-panel .niche-add input { flex: 1; width: auto; height: 26px; min-width: 0; padding: 0 7px; border-radius: 7px;
-  border: 1px solid #665474; background: #171428; color: #ffe1f0; font: inherit; font-size: 13px; }
+.pictures[hidden] { display: none; }
+.game-options-panel .np { gap: 8px; }
+.game-options-panel .np-edit { padding: 8px; }
+.game-options-panel .np-tab { padding: 5px 10px; font-size: 12px; }
+/* The same manager as a card (menu, pause), and the first-start card: over the door and the pause card. */
+.pbp-np-modal { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 20px 16px;
+  overflow: auto; background: rgba(12, 10, 30, .72); backdrop-filter: blur(4px); }
+.pbp-np-modal.is-first { background: radial-gradient(ellipse at 50% 35%, #49223880, transparent 55%), rgba(16, 12, 21, .9); }
+.pbp-np-card { width: min(560px, 100%); max-height: 100%; overflow: auto; display: grid; gap: 10px; padding: 20px;
+  background: #211d38; border: 1px solid #80668e; border-radius: 16px; box-shadow: 0 12px 40px rgba(0, 0, 0, .45); color: var(--pbp-ink, #f4e8ff); }
+.pbp-np-modal.is-first .pbp-np-card { width: min(900px, 100%); background: transparent; border: 0; box-shadow: none; padding: 8px 0; }
+.pbp-np-title { margin: 0; font-size: 20px; letter-spacing: .12em; color: var(--pbp-cream, #fff0dc); }
+.pbp-np-sub { margin: 0; color: #cdb8e0; font-size: 13px; }
+.pbp-np-done { justify-self: end; padding: 9px 20px; border: 0; border-radius: 10px; background: var(--pbp-pink, #ff91c9); color: #1a1a3e; font: inherit; font-weight: 700; cursor: pointer; }
+.pbp-pause-card button[hidden] { display: none; }
 .intensity { margin-top: 12px; max-width: 214px; padding: 9px 11px; border-radius: 10px; background: #211d38; }
 .intensity > div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #cdbddd; }
-.intensity meter { display: block; width: 100%; height: 13px; margin-top: 5px; accent-color: #ff91c9; }
+.intensity meter { display: block; width: 100%; height: 13px; margin-top: 5px; accent-color: #ff91c9; -moz-appearance: none; appearance: none; background: #4b3a57; border: 0; border-radius: 6px; }
 @media (max-width: 760px) {
   .game-settings { bottom: 57px; right: 12px; }
   .game-options-panel { width: min(280px, calc(100vw - 24px)); }
@@ -393,17 +403,17 @@ body.pbp-replay-corner .game-settings:not(:has(.game-options-panel:not([hidden])
 .turn-card { position: fixed; inset: 0; z-index: 20; pointer-events: none; overflow: hidden; --tc: #ff5aa5; }
 .turn-card[hidden], .turn-card > div[hidden], .turn-card .tc-clock[hidden] { display: none; }
 .turn-card > div { position: absolute; inset: 0; }
-.tc-band { position: absolute; left: -6%; right: -6%; top: 38%; height: 24%; background: var(--tc); transform-origin: 50% 50%;
+.tc-band { position: absolute; left: -6%; right: -6%; top: 46%; height: 8%; background: var(--tc); transform-origin: 50% 50%;
   background-image: repeating-linear-gradient(115deg, #ffffff1c 0 14px, transparent 14px 34px); }
 .tc-word { position: absolute; left: 50%; top: 50%; white-space: nowrap; text-transform: uppercase; color: #fff;
-  font: 900 clamp(34px, 8vw, 100px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .02em;
+  font: 900 clamp(22px, 3.8vw, 52px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .02em;
   -webkit-text-stroke: .09em #0c0a1e; paint-order: stroke fill; }
-.tc-clock { position: absolute; left: 50%; top: 65%; padding: 6px 11px 5px; border-radius: 999px; background: #0c0a1e; color: #fff;
+.tc-clock { position: absolute; left: 50%; top: 56%; padding: 6px 11px 5px; border-radius: 999px; background: #0c0a1e; color: #fff;
   font: 700 13px/1 Consolas, 'Courier New', monospace; font-variant-numeric: tabular-nums; }
-.tc-rband { position: absolute; top: 39%; height: 22%; left: -10%; width: 120%; background: var(--tc); box-shadow: 0 7px 0 #0c0a1e; }
+.tc-rband { position: absolute; top: 46%; height: 8%; left: -10%; width: 120%; background: var(--tc); box-shadow: 0 7px 0 #0c0a1e; }
 .tc-rword { position: absolute; left: 50%; top: 50%; white-space: nowrap; text-transform: uppercase; color: #0c0a1e;
-  font: 900 clamp(28px, 6.4vw, 80px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .03em; }
-.tc-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; opacity: 0;
+  font: 900 clamp(18px, 3.2vw, 42px)/1 'Segoe UI Black', 'Segoe UI', system-ui, sans-serif; letter-spacing: .03em; }
+.tc-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 18%; opacity: 0;
   background: linear-gradient(to top, color-mix(in srgb, var(--tc) 55%, transparent), transparent); }
 .turn-card.theirs .tc-edge { top: 0; bottom: auto; background: linear-gradient(to bottom, color-mix(in srgb, var(--tc) 55%, transparent), transparent); }
 .tc-pill { position: absolute; top: 16px; left: 50%; display: flex; gap: 10px; align-items: center; padding: 9px 16px 8px 12px;
@@ -412,5 +422,16 @@ body.pbp-replay-corner .game-settings:not(:has(.game-options-panel:not([hidden])
 .tc-pip { width: 11px; height: 11px; border-radius: 50%; background: var(--tc); box-shadow: 0 0 12px var(--tc); }
 .tc-tclock { color: #bfb0d0; font: 700 12px/1 Consolas, 'Courier New', monospace; letter-spacing: .04em; }
 .tc-tclock:empty { display: none; }
-.turncard-pick { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; }
+.turncard-pick { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; }
 .turncard-pick [aria-pressed="true"] { border-color: #ff91c9; background: #58334e; color: #ffe1f0; }
+/* Distraction's dials: Amount and Ramp borrow the turn card row, Strength is a slider. */
+.dials { display: grid; gap: 8px; }
+.surrender { display: grid; gap: 8px; }
+.surrender[hidden], .surrender-ask[hidden] { display: none; }
+.surrender-ask { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: center; }
+.surrender-ask span { grid-column: 1 / -1; font-size: 13px; color: #ffe1f0; }
+.dials[hidden] { display: none; }
+.dials .turncard-pick { grid-template-columns: 64px repeat(3, minmax(0, 1fr)); }
+.game-options-panel .dial-slider { display: grid; grid-template-columns: 64px minmax(0, 1fr) 40px; gap: 6px; align-items: center; font-size: 13px; color: #d0c2de; cursor: default; }
+.game-options-panel .dial-slider input { width: 100%; min-width: 0; height: 17px; margin: 0; }
+.dial-slider output { text-align: right; font-variant-numeric: tabular-nums; color: #ffe1f0; }

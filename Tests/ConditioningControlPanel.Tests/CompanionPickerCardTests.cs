@@ -54,6 +54,24 @@ public class CompanionPickerCardTests
             Assert.Equal(Visibility.Collapsed, card.BtnMorePersonality.Visibility);
         });
 
+    [Fact]
+    public void SwitchedOff_OffersTurnItOnRightUnderTheHint()
+        => WpfRenderHarness.OnStaThread(() =>
+        {
+            // Headless there is no tube, which is exactly what a switched-off companion looks like.
+            var card = new CompanionPickerCard();
+            card.Refresh();
+            Layout(card, 540);
+
+            Assert.Equal(Visibility.Visible, card.TxtAvatarHint.Visibility);
+            Assert.Equal(Visibility.Visible, card.BtnTurnOn.Visibility);
+            var hint = card.TxtAvatarHint.TranslatePoint(new Point(0, 0), card);
+            var button = card.BtnTurnOn.TranslatePoint(new Point(0, 0), card);
+            var sample = card.SamplePanel.TranslatePoint(new Point(0, 0), card);
+            Assert.True(button.Y > hint.Y && button.Y < sample.Y,
+                $"Turn it on must sit right under the switched-off hint (hint {hint.Y}, button {button.Y}, samples {sample.Y})");
+        });
+
     [Theory]
     [InlineData(540)]   // the Companion tab's "who" sheet (580 wide, 18 px padding)
     [InlineData(700)]   // the Customise window's detail column
