@@ -1267,3 +1267,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/launcher-account: +567
 - Launcher slice 3: account chip, tier badge, SP, mod pill (Core LauncherModMenu), panel card status/Stop/stats; Lockdown refusals stand in for the missing veil.
+
+## avalonia-port/port-vault: +971
+- Vault gate card on every padlock and the "See tiers" toast; Reconnect via Core PatreonReconnectRule; doors refuse under Lockdown; VaultOffer/VaultSale to Core.
+- Exclusives: Prime-first shelf (Core ShelfOrder), IsShown hides Arcademy/Just Drop, width-fit columns.
