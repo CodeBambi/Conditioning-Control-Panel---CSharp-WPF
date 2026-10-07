@@ -130,6 +130,13 @@ namespace ConditioningControlPanel.Models
         public static volatile Func<bool>? JustDropDoorProvider, ArcademyDoorProvider, BreakoutFullProvider;
 
         /// <summary>
+        /// Collection order: Prime (tier 2) first, then Basic (tier 1), then the untiered doors.
+        /// Stable, so roster order holds inside each shelf. The spotlight still reads All[0].
+        /// </summary>
+        public static IEnumerable<ExclusiveFeature> ShelfOrder(IEnumerable<ExclusiveFeature> roster) =>
+            System.Linq.Enumerable.OrderBy(roster, f => f.Tier switch { 2 => 0, 1 => 1, _ => 2 });
+
+        /// <summary>
         /// True when this exclusive is today's daily free unlock AND the account does not already
         /// own it (premium owns the whole pool, so it never wears the gift tag).
         /// </summary>

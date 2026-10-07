@@ -65,6 +65,62 @@
             <Style Selector="^:pointerover /template/ Border#Rim"><Setter Property="Opacity" Value="0.35"/></Style>
             <Style Selector="^:pointerover /template/ ContentPresenter#Cp"><Setter Property="Foreground" Value="White"/></Style>
         </ControlTheme>
+        <!-- WPF LauncherSignInPill / LauncherBarPill / LauncherLink (LauncherWindow.xaml:31-190). -->
+        <ControlTheme x:Key="LauncherBarPill" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="17" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="Cp" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bg">
+                <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="LauncherSignInPill" TargetType="Button" BasedOn="{StaticResource LauncherBarPill}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentGradientBrush}"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Style Selector="^:pointerover /template/ Border#Bg">
+                <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ ContentPresenter#Cp">
+                <Setter Property="Foreground" Value="White"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="LauncherLink" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="Cp" Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ ContentPresenter#Cp">
+                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            </Style>
+        </ControlTheme>
     </Window.Resources>
 
     <Window.Styles>
@@ -72,6 +128,16 @@
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <!-- LauncherLink's underline on hover (a ControlTheme may not hold a descendant selector). -->
+        <Style Selector="Button#StopLink:pointerover TextBlock">
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
+        <Style Selector="TextBlock.stat">
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="30"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
         </Style>
     </Window.Styles>
 
@@ -86,7 +152,47 @@
                                FontFamily="Fredoka, Segoe UI" FontSize="18" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- signed out: a sign-in pill where the chip would be -->
+                    <Button x:Name="SignInPill" Theme="{StaticResource LauncherSignInPill}" Margin="0,0,6,0"
+                            IsVisible="False" Click="SignIn_Click">
+                        <TextBlock Text="{loc:Str launcher_sign_in}"/>
+                    </Button>
+                    <!-- account chip: a click opens the panel's account settings -->
+                    <Button x:Name="AccountChipButton" Theme="{StaticResource LauncherBarPill}" Padding="4,0,12,0"
+                            Margin="0,0,6,0" Click="AccountChip_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="26" Height="26" CornerRadius="13" Background="{DynamicResource AccentGradientBrush}">
+                                <TextBlock x:Name="AvatarInitial" Text="-" Foreground="White" FontFamily="Fredoka, Segoe UI"
+                                           FontSize="13" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock x:Name="AccountName" Text="-" Margin="8,0,0,0" FontSize="13" FontWeight="Normal"
+                                       VerticalAlignment="Center" MaxWidth="180" TextTrimming="CharacterEllipsis"/>
+                            <Image x:Name="TierBadge" Height="20" Margin="6,0,0,0" IsVisible="False"
+                                   PointerEntered="TierBadge_PointerEntered" PointerExited="TierBadge_PointerExited"/>
+                            <Popup x:Name="TierBadgePopup" PlacementTarget="TierBadge" Placement="Bottom"
+                                   IsHitTestVisible="False">
+                                <Image x:Name="TierBadgeBig" Height="72" Margin="12" IsHitTestVisible="False"/>
+                            </Popup>
+                            <StackPanel x:Name="SpChip" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="False">
+                                <Border Width="1" Height="14" Margin="10,0,8,0" Background="{DynamicResource GlassBorderBrush}"/>
+                                <TextBlock Text="&#x25C6;" FontSize="10" Foreground="{DynamicResource PanelAccentBrush}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SpReadout" Text="0" Margin="5,0,0,0" FontSize="13" FontWeight="SemiBold"
+                                           FontFamily="Fredoka, Segoe UI" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Button>
+                    <!-- the active mod: a click lists the installed mods and "Manage mods" -->
+                    <Button x:Name="ModPill" Theme="{StaticResource LauncherBarPill}" Margin="0,0,6,0"
+                            ToolTip.Tip="{loc:Str launcher_mod_tooltip}" Click="ModPill_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ModPillText" Text="Mod" VerticalAlignment="Center"
+                                       MaxWidth="170" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="&#x25BE;" FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
                             Click="BtnMinimize_Click" Theme="{StaticResource WindowControlButton}"/>
                     <Button x:Name="BtnClose" Content="✕" Width="46" Height="36"
@@ -121,10 +227,43 @@
                                    LineHeight="34" Foreground="{DynamicResource TextLightBrush}"/>
                         <TextBlock Text="{loc:Str launcher_panel_blurb}" Margin="0,14,0,0" TextWrapping="Wrap"
                                    FontSize="14" LineHeight="21" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,22,0,0">
+                            <Ellipse x:Name="RunningDot" Width="8" Height="8" Fill="#4CAF50" Opacity="0.35" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StatusText" Margin="10,0,0,0" FontSize="13"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            <Button x:Name="StopLink" Theme="{StaticResource LauncherLink}" Margin="6,0,0,0"
+                                    IsVisible="False" Click="StopLink_Click">
+                                <TextBlock Text="{loc:Str launcher_panel_stop}"/>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                    <!-- Three live numbers and a slim XP bar, read from the settings the panel's chips use. -->
+                    <StackPanel Grid.Row="2" VerticalAlignment="Center" Margin="32,18,32,18">
+                        <UniformGrid Columns="3">
+                            <StackPanel>
+                                <TextBlock x:Name="StatLevel" Text="1" Classes="stat"/>
+                                <TextBlock Text="{loc:Str launcher_stat_level}" Classes="eyebrow" Margin="1,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Margin="12,0,0,0">
+                                <TextBlock x:Name="StatSparkles" Text="0" Classes="stat"/>
+                                <TextBlock Text="{loc:Str launcher_stat_sparkles}" Classes="eyebrow" Margin="1,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Margin="12,0,0,0">
+                                <TextBlock x:Name="StatTime" Text="0m" Classes="stat"/>
+                                <TextBlock Text="{loc:Str launcher_stat_time}" Classes="eyebrow" Margin="1,2,0,0"/>
+                            </StackPanel>
+                        </UniformGrid>
+                        <Border x:Name="XpTrack" Height="6" CornerRadius="3" Margin="0,22,0,0"
+                                Background="{DynamicResource GlassBorderBrush}">
+                            <Border x:Name="XpFill" Width="0" HorizontalAlignment="Left" CornerRadius="3"
+                                    Background="{DynamicResource AccentGradientBrush}"/>
+                        </Border>
+                        <TextBlock x:Name="XpCaption" Margin="0,8,0,0" FontSize="11" HorizontalAlignment="Right"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
                     </StackPanel>
                     <StackPanel Grid.Row="3" Margin="32,0,32,26">
                         <Button x:Name="PanelCta" Theme="{StaticResource LauncherCta}" Click="PanelCta_Click">
-                            <TextBlock Text="{loc:Str launcher_panel_launch}"/>
+                            <TextBlock x:Name="PanelCtaText" Text="{loc:Str launcher_panel_launch}"/>
                         </Button>
                     </StackPanel>
                 </Grid>

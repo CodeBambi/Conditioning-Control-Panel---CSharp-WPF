@@ -101,6 +101,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Dispatcher.UIThread.Post(() => ApplyActiveModChange(), DispatcherPriority.Normal);
         }
 
+        /// <summary>WPF SwitchActiveModFromLauncher (MainWindow.xaml.cs:2984): the panel's own switching path.</summary>
+        internal void SwitchActiveModFromLauncher(string modId)
+        {
+            if (AvApp.Mods == null || string.IsNullOrWhiteSpace(modId)) return;
+            if (string.Equals(AvApp.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase)) return;
+            AvApp.Mods.ActivateMod(modId);
+            if (!string.Equals(AvApp.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase)) return;
+            ApplyActiveModChange();
+        }
+
+        /// <summary>WPF OpenModManagerFromLauncher: the launcher's "Manage mods" row.</summary>
+        internal void OpenModManagerFromLauncher() => BtnManageMods_Click(this, new global::Avalonia.Interactivity.RoutedEventArgs());
+
         /// <summary>WPF ActivateChosenMod: the first-run / picker choice through the same two steps.</summary>
         internal void ActivateChosenMod(string modId, ModChoiceTrigger trigger)
         {
