@@ -5884,7 +5884,7 @@
   "nav_help_personality": "你的伙伴是谁,怎么说话。",
   "nav_help_permissions": "AI 可以自行做什么,一张清单列清。",
   "nav_help_companionlinks": "你的伙伴可以推荐给你的链接和视频。",
-  "nav_help_companionai": "你的伙伴使用的 AI 和模型，以及它记住的内容。",
+  "nav_help_companionai": "你的伙伴使用的 AI、说话的频率，以及它记住的内容。",
   "nav_help_bambitakeover": "让应用按自己的时间表运行会话,在你设定的范围内。",
   "nav_help_shelistening": "大声说出触发词,应用就会回应。你的声音只在这台电脑上识别。",
   "nav_help_awareness": "应用会注意到你在电脑上做什么,并按你选定的规则回应。",

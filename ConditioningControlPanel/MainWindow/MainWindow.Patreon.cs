@@ -1643,8 +1643,8 @@ namespace ConditioningControlPanel
         {
             null => "personality",
             Views.Controls.Companion.CompanionRoomAnchors.WorkshopRosterCell => "personality",
-            Views.Controls.Companion.CompanionRoomAnchors.WorkshopBehaviorCell => "personality",
-            Views.Controls.Companion.CompanionRoomAnchors.WorkshopTriggersCell => "personality",
+            Views.Controls.Companion.CompanionRoomAnchors.WorkshopBehaviorCell => "companionai",
+            Views.Controls.Companion.CompanionRoomAnchors.WorkshopTriggersCell => "companionai",
             Views.Controls.Companion.CompanionRoomAnchors.WorkshopCommunityCell => "personality",
             Views.Controls.Companion.CompanionRoomAnchors.WorkshopLibraryCell => "companionlinks",
             _ => null,

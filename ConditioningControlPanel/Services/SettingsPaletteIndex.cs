@@ -825,8 +825,7 @@ namespace ConditioningControlPanel.Services
                 });
 
             Pill("personality", "nav_tab_personality", "🎭", "nav_door_companion",
-                 "personality persona presets prompt editor traits community prompts fork behaviour " +
-                 "bubble duration idle chatter mute voice lines trigger interval whispers");
+                 "personality persona presets prompt editor traits community prompts fork");
             Pill("permissions", "nav_tab_permissions", "🛂", "nav_door_companion",
                  "permissions lock cards lock card permissions ai permissions what she can do allowed consent");
             Pill("companionlinks", "nav_tab_companionlinks", "🔗", "nav_door_companion",
@@ -834,7 +833,9 @@ namespace ConditioningControlPanel.Services
             Pill("companionai", "label_ai_badge", "🔌", "nav_door_companion",
                  "ai settings connection ai provider model cloud local ollama openai openrouter custom endpoint " +
                  "use my own model engine room sampler temperature test connection " +
-                 "memory remember memories preferred name call me recap forget diary what she knows");
+                 "memory remember memories preferred name call me recap forget diary what she knows " +
+                 "behaviour behavior how often it talks speaks chatter idle chatter bubble duration " +
+                 "mute voice lines trigger mode trigger interval whispers pause browser midnight glass tube");
             Pill("friends", "nav_tab_friends", "🤝", "nav_section_social",
                  "friends friend list add friend invite poke requests block");
             Pill("leash", "nav_tab_leash", "🦮", "nav_section_social",

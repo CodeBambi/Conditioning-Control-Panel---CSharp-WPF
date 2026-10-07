@@ -7,8 +7,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Pages
     /// <summary>
     /// Companion > Personality. Hosts, live: the CompanionPickerCard (the pick), the room's
     /// MakeHerYoursView ("PersonalityZone": preset chips, re-interview, adjust), the Workshop
-    /// Community cell, and the Workshop Behaviour + Triggers cells inside a MoreFold. The Advanced
-    /// row is the prompt editor's door again (MainWindow.BtnCustomizeCompanion_Click).
+    /// Community cell. The Advanced row is the prompt editor's door again
+    /// (MainWindow.BtnCustomizeCompanion_Click). Behaviour + Triggers live on <see cref="AiPage"/>.
     /// </summary>
     public partial class PersonalityPage : UserControl
     {
@@ -45,27 +45,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Pages
                     presets.DataContext = tab.Vm.Personality;
                 }
                 CompanionPageHost.Adopt(tab.Vm.Shelf.Community, CommunityHost);
-                CompanionPageHost.Adopt(tab.Vm.Shelf.Behavior, BehaviorHost);
-                CompanionPageHost.Adopt(tab.Vm.Shelf.Triggers, TriggersHost);
                 tab.Vm.Sync();
             }
-
-            if (BehaviourOffDefault(App.Settings?.Current)) BehaviourFold.IsOpen = true;
-        }
-
-        /// <summary>True when any knob in the Behaviour fold is off its default (house rule: a
-        /// changed setting is never folded away).</summary>
-        internal static bool BehaviourOffDefault(AppSettings? s)
-        {
-            if (s == null) return false;
-            var d = new AppSettings();
-            return s.BubbleDurationSeconds != d.BubbleDurationSeconds
-                || s.IdleGiggleIntervalSeconds != d.IdleGiggleIntervalSeconds
-                || s.CompanionVoiceLinesMuted != d.CompanionVoiceLinesMuted
-                || s.TriggerModeEnabled != d.TriggerModeEnabled
-                || s.TriggerIntervalSeconds != d.TriggerIntervalSeconds
-                || s.TubeMidnightGlass != d.TubeMidnightGlass
-                || s.SubAudioMuted != d.SubAudioMuted;
         }
 
         private void OpenPromptEditor_Click(object sender, RoutedEventArgs e)

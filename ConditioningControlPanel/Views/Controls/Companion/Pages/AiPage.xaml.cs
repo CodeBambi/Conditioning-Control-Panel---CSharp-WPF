@@ -5,8 +5,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Pages
 {
     /// <summary>
     /// Companion > AI: hosts the room's live EngineRoomDrawer ("EngineZone": off / cloud / local /
-    /// custom, model, sampler, test) and MemoryDiaryView ("MemoryZone") with the preferred name
-    /// editor and recap the v2 Memory sheet put above it.
+    /// custom, model, sampler, test), the Workshop Behaviour + Triggers cells (how often it talks),
+    /// and MemoryDiaryView ("MemoryZone") with the preferred name editor and recap.
     /// </summary>
     public partial class AiPage : UserControl
     {
@@ -28,6 +28,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Pages
             RecapHost.Content = new ConversationRecap();
             if (CompanionPageHost.Tab(_owner) is not { } tab) return;
             tab.Vm.Sync();
+            CompanionPageHost.Adopt(tab.Vm.Shelf.Behavior, BehaviorHost);
+            CompanionPageHost.Adopt(tab.Vm.Shelf.Triggers, TriggersHost);
             var room = CompanionPageHost.Room(_owner);
             // The room binds each zone to {Binding Engine} / {Binding Memory}; the page has no room context.
             if (room?.FindName("EngineZone") is EngineRoomDrawer engine)

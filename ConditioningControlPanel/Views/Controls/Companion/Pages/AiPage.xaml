@@ -2,7 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
-    <!-- Companion > AI: the v2 "Connection" and "Memory" sheets, one page. The header Settings button
+    <!-- Companion > AI: the v2 "Connection" and "Memory" sheets plus Behaviour, one page. The header Settings button
          opens Personality since the nav rework, so both sheets had no door in 7.1.1. One pill, not
          two: two ran the Companion bar past 1469 px. Both hosts take the room's LIVE zones. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
@@ -11,6 +11,17 @@
 
             <!-- EngineRoomDrawer carries its own "Connection" header and note. -->
             <ContentControl x:Name="EngineHost" Focusable="False"/>
+
+            <!-- How often it talks: idle chatter, bubble time, voice lines, triggers, tube look. Open, never
+                 folded (7.1.3: the Personality page's fold hid them). The room's live Workshop cells. -->
+            <Border Background="#14FFFFFF" CornerRadius="10" Padding="16" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str companion_page_personality_behaviour}" FontSize="15" FontWeight="SemiBold" Foreground="#FF69B4"/>
+                    <TextBlock Text="{loc:Str companion_page_personality_behaviour_note}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,2,0,10"/>
+                    <ContentControl x:Name="BehaviorHost" Focusable="False" Margin="0,0,0,12"/>
+                    <ContentControl x:Name="TriggersHost" Focusable="False"/>
+                </StackPanel>
+            </Border>
 
             <Border Background="#14FFFFFF" CornerRadius="10" Padding="16" Margin="0,16,0,0">
                 <StackPanel>

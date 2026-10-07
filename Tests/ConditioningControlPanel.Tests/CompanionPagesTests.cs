@@ -103,30 +103,18 @@ public class CompanionPagesTests
     [InlineData("WorkshopBehaviorCell.xaml", "ChkPauseBrowserCompanion")]        // pause browser
     [InlineData("WorkshopTriggersCell.xaml", "ChkTriggerModeCompanion")]         // TriggerModeEnabled
     [InlineData("WorkshopTriggersCell.xaml", "SliderTriggerIntervalCompanion")]  // TriggerIntervalSeconds
-    public void PersonalityPage_BehaviourFold_CarriesEveryLostKnob(string cell, string control)
+    public void AiPage_CarriesEveryBehaviourKnob_Unfolded(string cell, string control)
     {
-        var xaml = Page("PersonalityPage.xaml");
-        var cs = Page("PersonalityPage.xaml.cs");
-        var fold = xaml.Substring(xaml.IndexOf("<feat:MoreFold x:Name=\"BehaviourFold\">", StringComparison.Ordinal));
-        fold = fold.Substring(0, fold.IndexOf("</feat:MoreFold>", StringComparison.Ordinal));
-        Assert.Contains("x:Name=\"BehaviorHost\"", fold);
-        Assert.Contains("x:Name=\"TriggersHost\"", fold);
+        // 7.1.3 (owner): folded at the bottom of Personality, nobody found how often it talks.
+        var xaml = Page("AiPage.xaml");
+        var cs = Page("AiPage.xaml.cs");
+        Assert.DoesNotContain("MoreFold", xaml);
+        Assert.DoesNotContain("BehaviorHost", Page("PersonalityPage.xaml"));
+        Assert.Contains("x:Name=\"BehaviorHost\"", xaml);
+        Assert.Contains("x:Name=\"TriggersHost\"", xaml);
         Assert.Contains("Adopt(tab.Vm.Shelf.Behavior, BehaviorHost)", cs);
         Assert.Contains("Adopt(tab.Vm.Shelf.Triggers, TriggersHost)", cs);
         Assert.Contains($"x:Name=\"{control}\"", Cell(cell));
-    }
-
-    [Fact]
-    public void BehaviourFold_OpensItselfWhenAKnobIsOffDefault()
-    {
-        Assert.False(PersonalityPage.BehaviourOffDefault(null));
-        Assert.False(PersonalityPage.BehaviourOffDefault(new AppSettings()));
-        var s = new AppSettings();
-        s.TubeMidnightGlass = !s.TubeMidnightGlass;
-        Assert.True(PersonalityPage.BehaviourOffDefault(s));
-        s = new AppSettings();
-        s.TriggerIntervalSeconds += 7;
-        Assert.True(PersonalityPage.BehaviourOffDefault(s));
     }
 
     [Fact]
@@ -169,8 +157,8 @@ public class CompanionPagesTests
 
     [Theory]
     [InlineData(Views.Controls.Companion.CompanionRoomAnchors.WorkshopRosterCell, "personality")]
-    [InlineData(Views.Controls.Companion.CompanionRoomAnchors.WorkshopBehaviorCell, "personality")]
-    [InlineData(Views.Controls.Companion.CompanionRoomAnchors.WorkshopTriggersCell, "personality")]
+    [InlineData(Views.Controls.Companion.CompanionRoomAnchors.WorkshopBehaviorCell, "companionai")]
+    [InlineData(Views.Controls.Companion.CompanionRoomAnchors.WorkshopTriggersCell, "companionai")]
     [InlineData(Views.Controls.Companion.CompanionRoomAnchors.WorkshopCommunityCell, "personality")]
     [InlineData(Views.Controls.Companion.CompanionRoomAnchors.WorkshopLibraryCell, "companionlinks")]
     [InlineData(Views.Controls.Companion.CompanionRoomAnchors.WorkshopAwarenessCell, null)]

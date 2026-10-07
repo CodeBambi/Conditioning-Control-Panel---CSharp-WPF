@@ -69,17 +69,25 @@ public class CompanionPagesRenderTests
     });
 
     [Fact]
-    public void PersonalityPage_Renders_WithTheBehaviourFoldOpen() => WpfRenderHarness.OnStaThread(() =>
+    public void PersonalityPage_Renders() => WpfRenderHarness.OnStaThread(() =>
     {
         var page = new PersonalityPage();
         page.PresetsHost.Content = new MakeHerYoursView { DataContext = new MockMakeHerYoursVm() };
         page.CommunityHost.Content = new WorkshopCommunityCell();
+        Realize(page, 1150, 2400);
+        Assert.True(page.CommunityHost.ActualHeight > 0);
+        Shot(page, "companion-personality.png");
+    });
+
+    [Fact]
+    public void AiPage_Renders_WithBehaviourOpen() => WpfRenderHarness.OnStaThread(() =>
+    {
+        var page = new AiPage();
         page.BehaviorHost.Content = new WorkshopBehaviorCell();
         page.TriggersHost.Content = new WorkshopTriggersCell();
-        page.BehaviourFold.IsOpen = true;
         Realize(page, 1150, 2400);
         Assert.True(page.BehaviorHost.ActualHeight > 0);
         Assert.True(page.TriggersHost.ActualHeight > 0);
-        Shot(page, "companion-personality.png");
+        Shot(page, "companion-ai.png");
     });
 }

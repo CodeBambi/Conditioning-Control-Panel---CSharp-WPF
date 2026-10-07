@@ -1,12 +1,11 @@
 <UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.Pages.PersonalityPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
     <!-- Companion > Personality: the ONE home for the personality. Pick (CompanionPickerCard),
          presets / re-interview / adjust (the room's MakeHerYoursView), the full prompt editor
-         (Advanced), community prompts, and a Behaviour fold with the room's Behaviour and
-         Triggers cells. Every control here is the live one, hosted, never copied. -->
+         (Advanced) and community prompts. Every control here is the live one, hosted, never
+         copied. Behaviour + Triggers moved to Companion > AI in 7.1.3 (folded here, nobody found them). -->
     <UserControl.Resources>
         <Style x:Key="PageButton" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
@@ -70,17 +69,6 @@
                 </StackPanel>
             </Border>
 
-            <!-- Behaviour: power knobs, folded; opens itself when one is off its default -->
-            <Border Background="#14FFFFFF" CornerRadius="10" Padding="16">
-                <StackPanel>
-                    <TextBlock Text="{loc:Str companion_page_personality_behaviour}" Style="{StaticResource Type.CardTitle}"/>
-                    <TextBlock Text="{loc:Str companion_page_personality_behaviour_note}" Style="{StaticResource Type.Body}" Margin="0,2,0,4"/>
-                    <feat:MoreFold x:Name="BehaviourFold">
-                        <ContentControl x:Name="BehaviorHost" Focusable="False" Margin="0,4,0,12"/>
-                        <ContentControl x:Name="TriggersHost" Focusable="False"/>
-                    </feat:MoreFold>
-                </StackPanel>
-            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

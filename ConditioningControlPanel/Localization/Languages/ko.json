@@ -5372,7 +5372,7 @@
   "nav_help_personality": "컴패니언이 누구이고 어떻게 말하는지.",
   "nav_help_permissions": "AI가 스스로 해도 되는 일을 한 목록으로.",
   "nav_help_companionlinks": "컴패니언이 알려줄 수 있는 링크와 영상.",
-  "nav_help_companionai": "컴패니언이 쓰는 AI와 모델, 그리고 기억하는 것.",
+  "nav_help_companionai": "컴패니언이 쓰는 AI, 말하는 빈도, 그리고 기억하는 것.",
   "nav_help_bambitakeover": "정해 둔 한도 안에서 앱이 자기 일정대로 세션을 진행합니다.",
   "nav_help_shelistening": "트리거 단어를 소리 내어 말하면 앱이 반응합니다. 음성은 이 컴퓨터에서만 인식됩니다.",
   "nav_help_awareness": "앱이 PC에서 하는 일을 알아차리고, 정한 규칙대로 반응합니다.",

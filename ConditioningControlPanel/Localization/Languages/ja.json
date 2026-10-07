@@ -5372,7 +5372,7 @@
   "nav_help_personality": "コンパニオンが誰で、どう話すか。",
   "nav_help_permissions": "AIが自分の判断でしてよいことを、ひとつのリストで。",
   "nav_help_companionlinks": "コンパニオンが案内できるリンクと動画。",
-  "nav_help_companionai": "コンパニオンが使うAIとモデル、そして覚えていること。",
+  "nav_help_companionai": "コンパニオンが使うAI、話す頻度、そして覚えていること。",
   "nav_help_bambitakeover": "あなたが決めた範囲内で、アプリが自分のスケジュールでセッションを始めます。",
   "nav_help_shelistening": "トリガーワードを声に出すとアプリが反応します。音声はこのPCの中だけで聞き取ります。",
   "nav_help_awareness": "PCでしていることにアプリが気づき、あなたの決めたルールで反応します。",
