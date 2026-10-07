@@ -50,6 +50,21 @@ namespace ConditioningControlPanel
         public const double SparkleStaggerSeconds = 0.09;
         public const double SparkleRepeatSeconds = 12;
 
+        // Polish wave 13: the drum. A beat change at Full rolls the face over: the outgoing line
+        // rises and foreshortens off the top, the incoming one climbs from the foot and settles.
+        /// <summary>The roll, in step with the 500 ms crossfade it rides.</summary>
+        public const int RollMs = 500;
+        /// <summary>How far a line travels off the face (a little under half the 31 px host).</summary>
+        public const double RollTravelPx = 13;
+        /// <summary>A line at the edge of the drum is seen edge-on: this much of its height.</summary>
+        public const double RollSquash = 0.3;
+        /// <summary>The incoming line's settle (BackEase amplitude), the depth law's release overshoot.</summary>
+        public const double RollSettle = 0.3;
+
+        /// <summary>The roll moves text a whole line, so it is Full only; Reduced keeps the plain
+        /// crossfade and Off swaps.</summary>
+        public static bool Roll(MotionLevel level) => level == MotionLevel.Full;
+
         /// <summary>A beat change. Nothing at Off or while the window is not in front.</summary>
         public static BannerBeatFx OnBeatChange(MotionLevel level, bool windowActive, bool isSupportBeat)
         {
@@ -213,13 +228,13 @@ namespace ConditioningControlPanel
         /// the support line a sparkle run crosses it (plus the sheen, which earns its pass here
         /// rather than waiting out its 20 s throttle).
         /// </summary>
-        private void OnBannerBeatChanged(TextBlock incoming)
+        private void OnBannerBeatChanged(TextBlock incoming, bool rolled = false)
         {
             try
             {
                 bool support = ReferenceEquals(incoming, TxtBannerPrimary);
                 var fx = BannerFxRules.OnBeatChange(MotionFx.Level, _chromeFxInitialized && _chromeFxWindowActive, support);
-                if (fx.Pop) PopBannerBeat(incoming);
+                if (fx.Pop) PopBannerBeat(incoming, popY: !rolled);
                 if (fx.Flash) FlashBannerRing();
                 if (fx.Sparkles)
                 {
@@ -236,20 +251,67 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("OnBannerBeatChanged: {E}", ex.Message); }
         }
 
-        private static void PopBannerBeat(TextBlock beat)
+        /// <summary>A beat's own scale + travel, made once (the pop and the drum roll share them).</summary>
+        private static (ScaleTransform Scale, TranslateTransform Slide) BeatTransforms(TextBlock beat)
         {
-            if (beat.RenderTransform is not ScaleTransform scale || scale.IsFrozen)
-            {
-                scale = new ScaleTransform(1, 1);
-                beat.RenderTransform = scale;
-                beat.RenderTransformOrigin = new Point(0.5, 0.5);
-            }
+            if (beat.RenderTransform is TransformGroup g && !g.IsFrozen && g.Children.Count == 2
+                && g.Children[0] is ScaleTransform s0 && g.Children[1] is TranslateTransform t0)
+                return (s0, t0);
+            var s = new ScaleTransform(1, 1);
+            var t = new TranslateTransform();
+            var group = new TransformGroup();
+            group.Children.Add(s);
+            group.Children.Add(t);
+            beat.RenderTransform = group;
+            beat.RenderTransformOrigin = new Point(0.5, 0.5);
+            return (s, t);
+        }
+
+        /// <summary>The pop. When the drum rolled the line in, the roll owns its height, so the
+        /// pop only widens it.</summary>
+        private static void PopBannerBeat(TextBlock beat, bool popY = true)
+        {
+            var (scale, _) = BeatTransforms(beat);
             var pop = new DoubleAnimation(BannerFxRules.PopFrom, 1, TimeSpan.FromMilliseconds(BannerFxRules.PopMs))
             {
                 EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 },
             };
             scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            if (popY) scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+        }
+
+        /// <summary>
+        /// Polish wave 13: rolls the drum one face, riding the crossfade the rotation already runs.
+        /// Every clip is FillBehavior.Stop, so when it ends both lines are back at rest (the
+        /// outgoing one already at opacity 0): nothing is ever left parked off the face, whatever
+        /// shows a beat next. Returns false (and drops any half-done roll) when the motion level
+        /// does not allow it.
+        /// </summary>
+        private static bool RollBannerDrum(TextBlock outgoing, TextBlock incoming)
+        {
+            var (outScale, outSlide) = BeatTransforms(outgoing);
+            var (inScale, inSlide) = BeatTransforms(incoming);
+            if (!BannerFxRules.Roll(MotionFx.Level))
+            {
+                foreach (var (s, t) in new[] { (outScale, outSlide), (inScale, inSlide) })
+                {
+                    s.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                    t.BeginAnimation(TranslateTransform.YProperty, null);
+                }
+                return false;
+            }
+
+            var span = TimeSpan.FromMilliseconds(BannerFxRules.RollMs);
+            var away = new QuadraticEase { EasingMode = EasingMode.EaseIn };
+            var settle = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = BannerFxRules.RollSettle };
+            DoubleAnimation Clip(double from, double to, IEasingFunction ease) =>
+                new(from, to, span) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
+
+            outSlide.BeginAnimation(TranslateTransform.YProperty, Clip(0, -BannerFxRules.RollTravelPx, away));
+            outScale.BeginAnimation(ScaleTransform.ScaleYProperty, Clip(1, BannerFxRules.RollSquash, away));
+            inSlide.BeginAnimation(TranslateTransform.YProperty, Clip(BannerFxRules.RollTravelPx, 0, settle));
+            inScale.BeginAnimation(ScaleTransform.ScaleYProperty, Clip(BannerFxRules.RollSquash, 1, settle));
+            return true;
         }
 
         private void FlashBannerRing()

@@ -421,6 +421,8 @@ namespace ConditioningControlPanel
             };
 
             // Apply animations. Motion Off (nav polish wave 6): nothing moves, the text just swaps.
+            // Polish wave 13: at Full the drum also rolls one face (MainWindow.BannerFx.cs).
+            bool rolled = RollBannerDrum(fadeOutTarget, fadeInTarget);
             if (MotionFx.AllowTransitions)
             {
                 fadeOutTarget.BeginAnimation(UIElement.OpacityProperty, fadeOut);
@@ -447,7 +449,7 @@ namespace ConditioningControlPanel
 
             // Nav polish wave 6: the incoming beat pops, the pill flashes, and the support line
             // gets its sparkle run (MainWindow.BannerFx.cs owns the gate and the motion).
-            OnBannerBeatChanged(fadeInTarget);
+            OnBannerBeatChanged(fadeInTarget, rolled);
         }
 
         /// <summary>

@@ -1068,17 +1068,49 @@
                                               BlurRadius="12" ShadowDepth="0" Opacity="0.35"/>
                         </Border.Effect>
                     </Border>
+                    <!-- Polish wave 13 (owner, 2026-10-07: "the marquee could use some three
+                         dimensionality"): the pill is a SUNKEN screen under the depth law (a
+                         bezel screen holds things). The floor is the well floor; the drum shade
+                         behind the text darkens the top (the lamp is above, WellTopAlpha, hue
+                         tinted from PaintDepthHud via PaintBannerDepth) and, weaker, the foot, so
+                         the face reads as a cylinder; the left lip is the well's left band and the
+                         foot line is the rim catching the lamp. The beats sit in BannerDrum
+                         (clipped) and ROLL on a beat change at Full motion (BannerFx.cs), and a
+                         strip of glass gloss rides over everything. All of it is paint, no Effect,
+                         and every layer is hit-test invisible so the hyperlinks stay live. -->
                     <Border Grid.Column="3" x:Name="HeaderBannerHost"
-                            Background="{DynamicResource SurfaceBgBrush}"
+                            Background="{DynamicResource DepthWellFloorBrush}"
                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                             CornerRadius="16" Padding="0" Height="31" MaxWidth="744"
                             Margin="12,0,12,0"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Grid>
+                        <Border x:Name="BannerDrumShade" CornerRadius="15" IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Offset="0.00" Color="#A6000000"/>
+                                    <GradientStop Offset="0.34" Color="#00000000"/>
+                                    <GradientStop Offset="0.70" Color="#00000000"/>
+                                    <GradientStop Offset="1.00" Color="#40000000"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <Border x:Name="BannerDrumLip" CornerRadius="15" IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="10,0" MappingMode="Absolute">
+                                    <GradientStop Offset="0" Color="#59000000"/>
+                                    <GradientStop Offset="1" Color="#00000000"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <Border x:Name="BannerDrumFoot" CornerRadius="15" BorderThickness="0,0,0,1"
+                                BorderBrush="{DynamicResource DepthWellFoot}" IsHitTestVisible="False"/>
                         <Border x:Name="BannerFlashRing" CornerRadius="15" BorderThickness="1.5"
                                 BorderBrush="{DynamicResource PinkButtonHoveredBrush}"
                                 Opacity="0" IsHitTestVisible="False"/>
                         <Grid x:Name="BannerBeatsGrid" Margin="14,0">
+                        <Grid x:Name="BannerDrum" ClipToBounds="True" Margin="-12,0">
+                        <Grid Margin="12,0">
                             <TextBlock x:Name="TxtBannerPrimary" Foreground="{DynamicResource PinkButtonHoveredBrush}"
                                        FontSize="14" FontStyle="Italic"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -1141,6 +1173,8 @@
                                     <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
                                 </TextBlock.Effect>
                             </TextBlock>
+                        </Grid>
+                        </Grid>
                             <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the
                                  message changes. Its own ClipToBounds host so the band can't
                                  escape the card - deliberately NOT ClipToBounds on the shared
@@ -1171,6 +1205,15 @@
                                  star may peek past the pill's edge), never hit-testable. -->
                             <Canvas x:Name="BannerSparkleLayer" IsHitTestVisible="False"/>
                         </Grid>
+                        <Border x:Name="BannerGlass" CornerRadius="12,12,5,5" Height="11" Margin="7,2,7,0"
+                                VerticalAlignment="Top" IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Offset="0.0" Color="#24FFFFFF"/>
+                                    <GradientStop Offset="1.0" Color="#00FFFFFF"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
                         </Grid>
                     </Border>
                 </Grid>

@@ -169,12 +169,43 @@ public class HeaderBannerFxTests
         Assert.Empty(BannerFxRules.PlanRun(0, 0, 31, 7, 1));
     }
 
+    /// <summary>Polish wave 13 (owner, 2026-10-07): the marquee is a sunken drum. It rolls only
+    /// at Full, every roll clip snaps back to rest when done (nothing parked off the face), and
+    /// the depth is paint: no Effect on any drum layer, and none of them takes a click.</summary>
+    [Fact]
+    public void TheMarqueeIsASunkenDrumThatRollsOnlyAtFull()
+    {
+        Assert.True(BannerFxRules.Roll(MotionLevel.Full));
+        Assert.False(BannerFxRules.Roll(MotionLevel.Reduced));
+        Assert.False(BannerFxRules.Roll(MotionLevel.Off));
+        Assert.InRange(BannerFxRules.RollTravelPx, 8, BannerFxRules.HostHeight / 2);
+        Assert.InRange(BannerFxRules.RollSquash, 0.1, 0.6);
+
+        var fx = Source("MainWindow", "MainWindow.BannerFx.cs");
+        var roll = Regex.Match(fx, @"bool RollBannerDrum\(.*?\n        \}", RegexOptions.Singleline).Value;
+        Assert.Contains("FillBehavior.Stop", roll);
+
+        var xaml = Source("MainWindow", "MainWindow.xaml");
+        var host = Regex.Match(xaml, "<Border Grid.Column=\"3\" x:Name=\"HeaderBannerHost\".*?>", RegexOptions.Singleline).Value;
+        Assert.Contains("DepthWellFloorBrush", host);
+        foreach (var name in new[] { "BannerDrumShade", "BannerDrumLip", "BannerDrumFoot", "BannerGlass" })
+        {
+            var layer = Regex.Match(xaml, "<Border x:Name=\"" + name + "\".*?(/>|</Border>)", RegexOptions.Singleline).Value;
+            Assert.True(layer.Length > 0, name + " is gone");
+            Assert.Contains("IsHitTestVisible=\"False\"", layer);
+            Assert.DoesNotContain(".Effect>", layer);
+        }
+        var drum = Regex.Match(xaml, "<Grid x:Name=\"BannerDrum\"[^>]*>").Value;
+        Assert.Contains("ClipToBounds=\"True\"", drum);
+    }
+
     [Fact]
     public void TheRotationAndTheChromeLoopsDriveTheFx()
     {
         var marquee = Source("MainWindow", "MainWindow.Marquee.cs");
         var tick = Regex.Match(marquee, @"void BannerRotationTimer_Tick\(.*?\n        \}", RegexOptions.Singleline).Value;
-        Assert.Contains("OnBannerBeatChanged(fadeInTarget);", tick);
+        Assert.Contains("OnBannerBeatChanged(fadeInTarget, rolled);", tick);
+        Assert.Contains("RollBannerDrum(fadeOutTarget, fadeInTarget)", tick);
         // Off swaps the text with no fade.
         Assert.Contains("MotionFx.AllowTransitions", tick);
 
