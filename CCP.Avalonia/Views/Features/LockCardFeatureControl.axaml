@@ -137,6 +137,19 @@
                                            Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" FontStyle="Italic"
                                            TextWrapping="Wrap" Margin="0,0,0,4"/>
 
+                                <!-- Reset on typo (ccp-bugs #1163): a mistake wipes the line. WPF folds this
+                                     row into a MoreFold; the fold is carried by the mercy-more-fold lane. -->
+                                <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_lockcard_reset_on_typo}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_lockcard_reset_on_typo}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkResetOnTypo"
+                                              Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                </Grid>
+
                             </StackPanel>
                         </Grid>
                     </Border>

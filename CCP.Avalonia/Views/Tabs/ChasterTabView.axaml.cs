@@ -215,7 +215,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 HeroPills.IsVisible = false;
                 return;
             }
-            var key = TabPageText.SetupHint(true, chaster!.LockLookup, snapshot != null, CoreSettings.Current.ChasterTabEnabled);
+            // WPF RefreshSetupHint (:265-273): adds switched off by the keyholder (61a331c1d) and
+            // nothing switched on to count (c8dead5b3) each get their own line.
+            var key = TabPageText.SetupHint(true, chaster!.LockLookup, snapshot != null, CoreSettings.Current.ChasterTabEnabled,
+                addsBlocked: chaster.AddsBlocked,
+                anyRowOn: TabPageText.AnyRowOn(CoreSettings.Current.ChasterPrices));
             SetupHint.Text = key == null ? "" : Loc.Get(key);
             SetupHint.IsVisible = key != null;
             PaintHeroClock();
@@ -296,6 +300,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 case "chaster_state_pick": HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_pick"), AmberColour, "chaster_state_pick")); break;
                 case "chaster_state_away": HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_away"), AmberColour, "chaster_state_away")); break;
             }
+            if (lookup == LockLookup.Chosen && ChasterHead.Service?.AddsBlocked == true)   // WPF :396 (61a331c1d)
+                HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_blocked"), AmberColour, "chaster_state_keyholder_blocked"));
             if (snapshot?.IsTestLock == true || state == "chaster_state_test")
                 HeroPills.Children.Add(Pill(Loc.Get("chaster_pill_test"), MutedColour));
             if (snapshot != null)
@@ -453,8 +459,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         internal void PickLock(string id)
         {
-            CoreSettings.Current.ChasterLockId = id;
-            CoreSettings.Save();
+            // The demo picks its fake lock for itself (WPF 2b7d742d0, ChasterService.IsDemo).
+            if (ChasterHead.Service?.IsDemo != true)
+            {
+                CoreSettings.Current.ChasterLockId = id;
+                CoreSettings.Save();
+            }
             BtnUseLock.IsVisible = false;
             _ = RepickAsync();
         }

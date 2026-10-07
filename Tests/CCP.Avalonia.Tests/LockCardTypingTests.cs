@@ -102,4 +102,48 @@ public sealed class LockCardTypingTests
         finally { LockCardWindow.ForceCloseAll(); }
         return Task.CompletedTask;
     });
+
+    /// <summary>WPF dda21a45a (ccp-bugs #1163): the feature card's "Reset on typo" switch makes a
+    /// mistake wipe the line, so the repeat starts over; the next correct repeat still counts.</summary>
+    [Fact]
+    public Task ResetOnTypoSwitchWipesTheLine() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var s = global::ConditioningControlPanel.CoreSettings.Current;
+        var was = s.LockCardResetOnTypo;
+        try
+        {
+            s.LockCardResetOnTypo = false;
+            var feature = new global::ConditioningControlPanel.Avalonia.Views.Features.LockCardFeatureControl();
+            var host = new Window { Content = feature };
+            host.Show();
+            Dispatcher.UIThread.RunJobs();
+            feature.FindControl<CheckBox>("ChkResetOnTypo")!.IsChecked = true;   // the user's switch
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(s.LockCardResetOnTypo);
+            host.Close();
+
+            LockCardWindow.ShowOnAllMonitors("obey", 2, strictMode: false, isTest: true);
+            Dispatcher.UIThread.RunJobs();
+            var card = LockCardWindow.Primary!;
+            var box = card.FindControl<TextBox>("TxtInput")!;
+            box.Focus();
+            foreach (var c in "obx") { card.KeyTextInput(c.ToString()); Dispatcher.UIThread.RunJobs(); }
+            Assert.Equal(1, card.TotalErrors);
+            Assert.Equal("", box.Text);             // the typo wiped the line
+
+            foreach (var c in "obey") { card.KeyTextInput(c.ToString()); Dispatcher.UIThread.RunJobs(); }
+            Assert.Equal(1, card.CompletedRepeats);
+            Assert.Equal(1, card.TotalErrors);
+        }
+        finally
+        {
+            s.LockCardResetOnTypo = was;
+            LockCardWindow.ForceCloseAll();
+        }
+        return Task.CompletedTask;
+    });
 }

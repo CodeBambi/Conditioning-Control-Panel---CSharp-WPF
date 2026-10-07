@@ -285,6 +285,8 @@
                             <TextBlock Text="{loc:Str chaster_added_title}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontWeight="SemiBold"/>
                             <TextBlock x:Name="TxtAddedMonth" FontFamily="Fredoka, Segoe UI" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}" Margin="0,2,0,0"/>
                             <TextBlock Text="{loc:Str chaster_added_note}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Opacity="0.8" Margin="1,4,0,0" TextWrapping="Wrap"/>
+                            <!-- this figure is the PC's own count; the ladder beside it is the server's Chaster reading (WPF c419d6201) -->
+                            <TextBlock Text="{loc:Str chaster_ladder_counts_note}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Opacity="0.8" Margin="1,2,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                         <Grid Grid.Column="2" VerticalAlignment="Center" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto">
                             <TextBlock Text="{loc:Str chaster_raffle_post_days}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" HorizontalAlignment="Right"
@@ -307,16 +309,17 @@
                     <Border x:Name="LadderCard" Width="360" Background="#F7201636" BorderBrush="#88FF6B8A" BorderThickness="1.5"
                             CornerRadius="16" Padding="14,12,14,12" RenderTransformOrigin="50%,0%">
                         <StackPanel>
-                            <Panel Margin="2,0,0,8">
-                                <TextBlock Text="{loc:Str chaster_raffle_title}" FontFamily="Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold" Foreground="#FFF3EAF7"/>
-                                <TextBlock x:Name="TxtRaffleDay" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#FFC9B8D8"/>
-                            </Panel>
+                            <!-- SplitRowPanel (WPF 54d020e60): side by side while both fit, the second drops under the first when a longer language does not -->
+                            <fx:SplitRowPanel Margin="2,0,0,8">
+                                <TextBlock Text="{loc:Str chaster_raffle_title}" FontFamily="Fredoka, Segoe UI" FontSize="17" FontWeight="SemiBold" Foreground="#FFF3EAF7" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="TxtRaffleDay" FontSize="12" FontWeight="SemiBold" Foreground="#FFC9B8D8" TextWrapping="Wrap"/>
+                            </fx:SplitRowPanel>
                             <StackPanel x:Name="LadderRows">
                                 <WrapPanel x:Name="RafflePips" Margin="0,0,0,10"/>
-                                <Panel Margin="0,0,0,2">
-                                    <TextBlock x:Name="TxtRaffleDays" FontSize="13" Foreground="#FFF3EAF7"/>
-                                    <TextBlock x:Name="TxtRaffleTotal" HorizontalAlignment="Right" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold" Foreground="#FFFF6B8A"/>
-                                </Panel>
+                                <fx:SplitRowPanel x:Name="RaffleCountsRow" Margin="0,0,0,2">
+                                    <TextBlock x:Name="TxtRaffleDays" FontSize="13" Foreground="#FFF3EAF7" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="TxtRaffleTotal" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold" Foreground="#FFFF6B8A" TextWrapping="Wrap"/>
+                                </fx:SplitRowPanel>
                                 <Border x:Name="RaffleStatusChip" CornerRadius="10" Padding="10,5,10,5" Margin="0,8,0,0" HorizontalAlignment="Left">
                                     <TextBlock x:Name="TxtRaffleStatus" FontFamily="Fredoka, Segoe UI" FontSize="14" FontWeight="SemiBold"/>
                                 </Border>
