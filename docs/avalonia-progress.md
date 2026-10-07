@@ -1286,3 +1286,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/window-memory: +181
 - Shell and views release their handlers on close/unload so MainShellWindow instances are collectable (user fix; ShellMemoryTests).
+
+## avalonia-port/chaos-overlays: +422
+- ChaosOverlayWindow on Core run types; ChaosRunHost runs HUD + countdown -> 4 Hz clock -> recap (no payout); panic/tray/exit end it without arming double-press exit. FALL IN not wired; rows stay stub.
