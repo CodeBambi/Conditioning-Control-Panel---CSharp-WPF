@@ -510,3 +510,19 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   is recorded revealed and GrantsChanged comes with launcher-games. WPF's immediate EngineStopped refresh is covered by the
   1 s status tick (CoreEngine.StoppedHook is the shell's single hook).
 - Advisor: worker.
+## 2026-10-07: Lockdown veil (avalonia-port/lockdown-veil)
+- WPF veils the launcher only (`LauncherWindow.xaml:597`). MainWindow has no veil: it stays usable under Lockdown
+  because its own exits (Emergency Exit, the timer phrase, the badge) live there, and it refuses per control
+  (`MainWindow.Lab.cs:605ff` and every `App.Lockdown?.IsActive` check). So no shell veil on this head, by WPF design.
+  The structural replacement is a table test, `LockdownVeilTests.EveryShellDoorWpfShutsUnderLockdownRefuses`: one row
+  per door WPF greys or refuses; a new door belongs in that table (PLAYBOOK P05).
+- Launcher veil: same colour, text and breath as WPF; the breath is a 30 fps DispatcherTimer (P01: only while the veil
+  and the window are shown, not minimised, ambient loops allowed). Deliberately stronger than WPF: keys are swallowed at
+  the window and focus moves to the veil, so Tab/Enter/Space cannot reach a veiled control (WPF covered the pointer only).
+  No in-window exception: the panic key is global and is ignored under Lockdown on both heads. WPF has one exception
+  (`MainWindow/MainWindow.xaml.cs:864-869`): while leashed, panic still works under Lockdown. The leash is not ported
+  to this head, so neither is that exception; it comes back with the leash.
+- Gaps the table found and closed: session Stop, factory reset, Settings Exit message, no-panic box (greyed at 0.4
+  with WPF's "no escape" tooltip, given back on exit), Takeover Start/Stop button, and the shell's CC Labs button
+  (greyed as well as refused, like WPF `MainWindow.Lab.cs:611-612`).
+- Advisor: supervisor.

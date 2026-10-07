@@ -1277,3 +1277,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/launcher-games: +109
 - Launcher slice 4: no game host on Avalonia yet, so tiles/mystery/return-poll wait for the first host; every launcher door refuses under Lockdown.
+
+## avalonia-port/lockdown-veil: +509
+- Launcher Lockdown veil (WPF look, keys too, breath only while visible); shell door table test (19 rows) closed 5 gaps; shell has no veil by WPF design.
