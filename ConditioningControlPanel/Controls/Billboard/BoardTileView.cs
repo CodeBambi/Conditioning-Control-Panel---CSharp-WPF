@@ -34,8 +34,9 @@ namespace ConditioningControlPanel.Controls.Billboard
 
         private BoardRaster? _raster;
         private WriteableBitmap? _bitmap;
-        private double _timeBank;         // effect seconds banked across pauses
-        private double? _arrivalStart;    // effect time the arrival began, null = never (still board)
+        private readonly Stopwatch _wall = Stopwatch.StartNew(); // ripple clock: always runs
+        private double _fxBank;           // effect seconds banked across pauses
+        private double? _arrivalStart;    // effect time the arrival began; null = never played (a flat, still board)
         private bool _playing;            // the deck wants motion
         private bool _ambient;            // effects and strip frames may loop (Full motion, a tier that allows it)
         private bool _released;
@@ -63,8 +64,10 @@ namespace ConditioningControlPanel.Controls.Billboard
             Unloaded += (_, _) => _clock.Stop();
         }
 
-        /// <summary>Effect seconds right now (frozen while paused).</summary>
-        private double Now => _timeBank + _watch.Elapsed.TotalSeconds;
+        /// <summary>Effect seconds: they run only while the deck has the card playing.</summary>
+        private double FxNow => _fxBank + _watch.Elapsed.TotalSeconds;
+
+        private double WallNow => _wall.Elapsed.TotalSeconds;
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
@@ -74,7 +77,7 @@ namespace ConditioningControlPanel.Controls.Billboard
                 try { _onShown?.Invoke(_picture.Post.Version); } catch (Exception) { }
             }
             EnsureSurface();
-            if (_playing) StartClock();
+            UpdateClock();
         }
 
         // ---- IBillboardArtView -----------------------------------------------------------------
@@ -85,27 +88,35 @@ namespace ConditioningControlPanel.Controls.Billboard
             if (!MotionFx.AllowTransitions) { Pause(); return; }
             _playing = true;
             _ambient = MotionFx.AllowAmbientLoops;
+            if (!_watch.IsRunning) _watch.Start();
             // The first Play is the arrival: tiles pop up and land one by one, then the effects roll.
-            _arrivalStart ??= Now;
-            StartClock();
+            _arrivalStart ??= FxNow;
+            _dirty = true;
+            UpdateClock();
         }
 
         public void Pause()
         {
             _playing = false;
+            if (_watch.IsRunning)
+            {
+                _fxBank += _watch.Elapsed.TotalSeconds;
+                _watch.Reset();
+            }
             // A board paused half built would look broken: let every tile land at once.
-            if (_arrivalStart is { } a && Now - a < BoardFxMath.BuildDoneSeconds)
-                _arrivalStart = Now - BoardFxMath.BuildDoneSeconds;
-            if (_ripples.Count == 0) StopClock();
+            if (_arrivalStart is { } a && FxNow - a < BoardFxMath.BuildDoneSeconds)
+                _arrivalStart = FxNow - BoardFxMath.BuildDoneSeconds;
             _dirty = true;
             Render();
+            UpdateClock();
         }
 
         public void Release()
         {
             _released = true;
             _playing = false;
-            StopClock();
+            _clock.Stop();
+            _watch.Reset();
             _ripples.Clear();
             _image.Source = null;
             _bitmap = null;
@@ -116,49 +127,33 @@ namespace ConditioningControlPanel.Controls.Billboard
         {
             if (_released || _picture == null || !MotionFx.AllowTransitions) return;
             if (!TryTileAt(normalized, out var tx, out var ty)) return;
-            _arrivalStart ??= Now - BoardFxMath.BuildDoneSeconds;
-            _ripples.Add(new BoardRipple(tx, ty, Now));
+            // A touch on a board that never played lands it first, so the ripple has tiles to lift.
+            _arrivalStart ??= FxNow - BoardFxMath.BuildDoneSeconds;
+            _ripples.Add(new BoardRipple(tx, ty, WallNow));
             if (_ripples.Count > 6) _ripples.RemoveAt(0);
-            StartClock(); // runs even while the deck holds the card paused under the pointer
+            _dirty = true;
+            UpdateClock(); // a ripple spreads even while the deck holds the card paused under the pointer
         }
 
         // ---- clock ---------------------------------------------------------------------------
 
-        private void StartClock()
+        /// <summary>The clock runs only while something moves: an effect, a strip, the arrival or a ripple.</summary>
+        private void UpdateClock()
         {
-            if (_released) return;
-            if (!_watch.IsRunning) _watch.Start();
-            if (IsLoaded) _clock.Start();
-            _dirty = true;
-        }
-
-        private void StopClock()
-        {
-            _clock.Stop();
-            if (_watch.IsRunning)
-            {
-                _timeBank += _watch.Elapsed.TotalSeconds;
-                _watch.Reset();
-            }
+            bool run = !_released && IsLoaded && (Animating || _ripples.Count > 0);
+            if (run) _clock.Start(); else _clock.Stop();
         }
 
         private void OnTick()
         {
             if (_released) { _clock.Stop(); return; }
-            double now = Now;
+            double wall = WallNow;
+            bool hadRipples = _ripples.Count > 0;
             for (int k = _ripples.Count - 1; k >= 0; k--)
-                if (now - _ripples[k].StartSeconds > BoardFxMath.RippleDropAfter) _ripples.RemoveAt(k);
-
-            if (!_playing && _ripples.Count == 0)
-            {
-                StopClock();
-                _dirty = true;
-                Render();
-                return;
-            }
+                if (wall - _ripples[k].StartSeconds > BoardFxMath.RippleDropAfter) _ripples.RemoveAt(k);
+            if (hadRipples && _ripples.Count == 0) _dirty = true; // draw the settled frame once
             Render();
-            // Landed, nothing looping, no ripple: the picture is final, so the clock rests until a touch.
-            if (!Animating && _ripples.Count == 0) StopClock();
+            UpdateClock();
         }
 
         // ---- drawing -------------------------------------------------------------------------
@@ -183,25 +178,24 @@ namespace ConditioningControlPanel.Controls.Billboard
 
         private bool Animating =>
             _playing && ((_ambient && (_fx.Animates || (_picture?.FrameCount ?? 1) > 1)) ||
-                         (_arrivalStart is { } a && Now - a < BoardFxMath.BuildDoneSeconds));
+                         (_arrivalStart is { } a && FxNow - a < BoardFxMath.BuildDoneSeconds));
 
         private void Render()
         {
             if (_raster == null || _bitmap == null || _picture == null) return;
-            bool moving = Animating || _ripples.Count > 0;
-            if (!moving && !_dirty) return;
+            if (!Animating && _ripples.Count == 0 && !_dirty) return;
             _dirty = false;
 
-            double t = Now;
-            bool still = !_playing && _ripples.Count == 0;
-            int frame = 0;
+            double t = FxNow;
+            bool still = _arrivalStart == null;
             var fx = _ambient ? _fx : default;
-            if (_picture.FrameCount > 1 && !still && _ambient)
+            int frame = 0;
+            if (_picture.FrameCount > 1 && _ambient && !still)
                 frame = (int)(Math.Floor(t * _picture.Post.Fps) % _picture.FrameCount);
-            double build = _arrivalStart is { } a ? t - a : 10;
-            BoardScene.Compute(_picture, frame, fx, t, build, _ripples, still, _colour, _lift);
+            double build = _arrivalStart is { } a ? t - a : BoardFxMath.BuildDoneSeconds;
+            BoardScene.Compute(_picture, frame, fx, t, build, _ripples, WallNow, still, _colour, _lift);
             // CRT is a look, not motion: it stays on a still board, only its flicker stops.
-            _raster.Draw(_colour, _lift, _fx.Crt, still || !_ambient ? 0.012 : BoardFxMath.CrtFlicker(t));
+            _raster.Draw(_colour, _lift, _fx.Crt, _ambient && _playing ? BoardFxMath.CrtFlicker(t) : 0.012);
             _bitmap.WritePixels(new Int32Rect(0, 0, _raster.Width, _raster.Height), _raster.Pixels, _raster.Width * 4, 0);
         }
 

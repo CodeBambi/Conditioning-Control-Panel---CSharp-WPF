@@ -39,10 +39,64 @@ namespace ConditioningControlPanel.Services.Billboard.Board
         public const double OlaSlantX = 0.85;
         public const double OlaSlantY = 0.18;
 
+        // Owner, 2026-10-07: the ola is a STADIUM wave, not a ruler. Every tile keeps its own timer:
+        // it stands up a beat early or late (+/- 120 ms around the crest reaching its column), takes
+        // a little more or less time to rise and sit (+/- 20%) and jumps a little less or more
+        // (0.75..1 of a full lift). All three come from the tile index, so they never change
+        // between frames or launches; the crest still rolls left to right, its front ragged.
+        public const double OlaJitterSeconds = 0.12;
+        public const double OlaRiseJitter = 0.2;
+        public const double OlaMinHeight = 0.75;
+
+        private static readonly float[] OlaOffsetTable = BuildTable(stream: 1, -OlaJitterSeconds, OlaJitterSeconds);
+        private static readonly float[] OlaRiseTable = BuildTable(stream: 2, 1 - OlaRiseJitter, 1 + OlaRiseJitter);
+        private static readonly float[] OlaHeightTable = BuildTable(stream: 3, OlaMinHeight, 1.0);
+
+        /// <summary>A tile's own ola timing: seconds early (-) or late (+), rise duration scale, jump height.</summary>
+        public static (double OffsetSeconds, double RiseScale, double Height) OlaTile(int tile)
+        {
+            int i = (int)((uint)tile % (uint)OlaOffsetTable.Length);
+            return (OlaOffsetTable[i], OlaRiseTable[i], OlaHeightTable[i]);
+        }
+
         public static double OlaLift(double t, int x, int y, int w = BoardPicture.GridW, int h = BoardPicture.GridH)
         {
-            double ph = Mod(t * OlaSpeed - (double)x / w * OlaSlantX - (double)y / h * OlaSlantY, OlaPeriod);
-            return ph < OlaCrest ? Math.Sin(ph / OlaCrest * Math.PI) : 0;
+            int tile = y * BoardPicture.GridW + x;
+            int i = (int)((uint)tile % (uint)OlaOffsetTable.Length);
+            double crest = OlaCrest * OlaRiseTable[i];
+            double ph = Mod((t - OlaOffsetTable[i]) * OlaSpeed - (double)x / w * OlaSlantX - (double)y / h * OlaSlantY, OlaPeriod);
+            return ph < crest ? OlaHeightTable[i] * Math.Sin(ph / crest * Math.PI) : 0;
+        }
+
+        /// <summary>The same idea for the touch ripple: each tile answers the ring +/- 40 ms, at 0.8..1 of the lift.</summary>
+        public const double RippleJitterSeconds = 0.04;
+        private static readonly float[] RippleOffsetTable = BuildTable(stream: 4, -RippleJitterSeconds, RippleJitterSeconds);
+        private static readonly float[] RippleHeightTable = BuildTable(stream: 5, 0.8, 1.0);
+
+        public static double RippleLiftAt(int tile, double age, double distance)
+        {
+            int i = (int)((uint)tile % (uint)RippleOffsetTable.Length);
+            return RippleHeightTable[i] * RippleLift(age - RippleOffsetTable[i], distance);
+        }
+
+        /// <summary>A stable value in [lo, hi) per tile, from an integer hash of (tile, stream). Never Random.</summary>
+        public static double TileNoise(int tile, int stream)
+        {
+            unchecked
+            {
+                uint z = (uint)tile * 0x9E3779B9u + (uint)stream * 0x85EBCA6Bu + 0x27D4EB2Fu;
+                z ^= z >> 16; z *= 0x7FEB352Du;
+                z ^= z >> 15; z *= 0x846CA68Bu;
+                z ^= z >> 16;
+                return z / 4294967296.0;
+            }
+        }
+
+        private static float[] BuildTable(int stream, double lo, double hi)
+        {
+            var a = new float[BoardPicture.Tiles];
+            for (int i = 0; i < a.Length; i++) a[i] = (float)(lo + (hi - lo) * TileNoise(i, stream));
+            return a;
         }
 
         /// <summary>Seconds between two crests.</summary>
@@ -201,9 +255,13 @@ namespace ConditioningControlPanel.Services.Billboard.Board
     /// </summary>
     public static class BoardScene
     {
-        /// <param name="still">Motion Off / reduced: no time-driven motion, build complete.</param>
+        /// <param name="t">Effect time in seconds (it stands still while the card is paused).</param>
+        /// <param name="buildSeconds">Effect seconds since the arrival began.</param>
+        /// <param name="ripples">Touches, timed on <paramref name="rippleNow"/>'s clock.</param>
+        /// <param name="rippleNow">The ripple clock now; it keeps running under a paused card so a touch still spreads.</param>
+        /// <param name="still">A board that never played (Motion Off): the flat picture, no motion at all.</param>
         public static void Compute(BoardPicture pic, int frame, BoardFxSet fx, double t, double buildSeconds,
-            IReadOnlyList<BoardRipple>? ripples, bool still, int[] colour, float[] lift)
+            IReadOnlyList<BoardRipple>? ripples, double rippleNow, bool still, int[] colour, float[] lift)
         {
             const int W = BoardPicture.GridW, H = BoardPicture.GridH;
             frame = Math.Clamp(frame, 0, pic.FrameCount - 1);
@@ -260,7 +318,7 @@ namespace ConditioningControlPanel.Services.Billboard.Board
                         {
                             var rp = ripples[k];
                             double dx = x - rp.X, dy = y - rp.Y;
-                            z = Math.Max(z, BoardFxMath.RippleLift(t - rp.StartSeconds, Math.Sqrt(dx * dx + dy * dy)));
+                            z = Math.Max(z, BoardFxMath.RippleLiftAt(i, rippleNow - rp.StartSeconds, Math.Sqrt(dx * dx + dy * dy)));
                         }
                     }
 

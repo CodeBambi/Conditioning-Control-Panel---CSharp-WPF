@@ -401,10 +401,74 @@ public class BoardTilesTests
         var lifted = Enumerable.Range(0, 64).Select(x => BoardFxMath.OlaLift(t, x, 0)).ToArray();
         Assert.All(lifted, z => Assert.InRange(z, 0, 1));
         int count = lifted.Count(z => z > 0);
-        Assert.InRange(count, 8, 11);
-        // The crest moves right as time goes on.
-        int First(double tt) => Enumerable.Range(0, 64).First(x => BoardFxMath.OlaLift(tt, x, 0) > 0);
-        Assert.True(First(1.2) > First(1.0));
+        Assert.InRange(count, 5, 14); // ragged: each tile keeps its own timer
+        // The crest moves right as time goes on (its centre, across all rows).
+        double Centre(double tt)
+        {
+            double sx = 0, n = 0;
+            for (int y = 0; y < 36; y++)
+                for (int x = 0; x < 64; x++)
+                {
+                    double z = BoardFxMath.OlaLift(tt, x, y);
+                    sx += z * x; n += z;
+                }
+            return sx / n;
+        }
+        Assert.True(Centre(1.2) > Centre(1.0) + 3);
+    }
+
+    [Fact]
+    public void Ola_is_a_stadium_wave_each_tile_on_its_own_timer()
+    {
+        // Per-tile timing stays inside the owner's bounds and never changes between calls.
+        for (int i = 0; i < BoardPicture.Tiles; i++)
+        {
+            var (off, rise, height) = BoardFxMath.OlaTile(i);
+            Assert.InRange(off, -0.12, 0.12);
+            Assert.InRange(rise, 0.8, 1.2);
+            Assert.InRange(height, 0.75, 1.0);
+            Assert.Equal((off, rise, height), BoardFxMath.OlaTile(i));
+        }
+        Assert.Equal(BoardFxMath.TileNoise(77, 1), BoardFxMath.TileNoise(77, 1));
+        Assert.NotEqual(BoardFxMath.TileNoise(77, 1), BoardFxMath.TileNoise(77, 2));
+
+        // Two neighbours in one column at the crest never move as one: in a run of crest frames
+        // some pair differs clearly, and the same call twice gives the same lift.
+        int x = 30, y = 17;
+        bool differs = false;
+        for (double t = 0; t < BoardFxMath.OlaEverySeconds; t += 1 / 30.0)
+        {
+            double a = BoardFxMath.OlaLift(t, x, y), b = BoardFxMath.OlaLift(t, x, y + 1);
+            Assert.Equal(a, BoardFxMath.OlaLift(t, x, y));
+            if ((a > 0.3 || b > 0.3) && Math.Abs(a - b) > 0.1) differs = true;
+        }
+        Assert.True(differs);
+
+        // The front is ragged: the first frame each tile of a column leaves the floor is spread out
+        // (a clean straight wave would differ only by the 0.18 slant, about 0.7 s over the column).
+        var starts = new List<double>();
+        for (int yy = 0; yy < 36; yy++)
+        {
+            double tPrev = BoardFxMath.OlaLift(0, x, yy);
+            for (double t = 1 / 120.0; t < 2 * BoardFxMath.OlaEverySeconds; t += 1 / 120.0)
+            {
+                double z = BoardFxMath.OlaLift(t, x, yy);
+                if (tPrev == 0 && z > 0) { starts.Add(t - yy * BoardFxMath.OlaSlantY / 36 / BoardFxMath.OlaSpeed); break; }
+                tPrev = z;
+            }
+        }
+        // Remove the straight-line slant and look at what is left: neighbours a beat early or late.
+        double spread = starts.Max() - starts.Min();
+        Assert.InRange(spread, 0.08, 0.5);
+    }
+
+    [Fact]
+    public void The_ripple_ring_is_ragged_too_but_stable()
+    {
+        Assert.Equal(BoardFxMath.RippleLiftAt(5, 0.3, 7), BoardFxMath.RippleLiftAt(5, 0.3, 7));
+        var values = Enumerable.Range(0, 40).Select(i => BoardFxMath.RippleLiftAt(i, 0.3, 7)).Distinct().Count();
+        Assert.True(values > 10);
+        Assert.All(Enumerable.Range(0, 40), i => Assert.InRange(BoardFxMath.RippleLiftAt(i, 0.3, 7), 0, 1));
     }
 
     [Fact]
@@ -487,7 +551,7 @@ public class BoardTilesTests
     {
         var pic = BoardPicture.Solid(Post(fx: BoardFx.All.ToArray()), Argb(255, 255, 79, 168));
         var c = new int[BoardPicture.Tiles]; var z = new float[BoardPicture.Tiles];
-        BoardScene.Compute(pic, 0, BoardFxSet.From(pic.Post.Fx), 7.3, 0, new[] { new BoardRipple(5, 5, 7.0) }, still: true, c, z);
+        BoardScene.Compute(pic, 0, BoardFxSet.From(pic.Post.Fx), 7.3, 0, new[] { new BoardRipple(5, 5, 7.0) }, 7.3, true, c, z);
         Assert.All(z, v => Assert.Equal(0f, v));
         Assert.Contains(0xFF4FA8, c);
     }
@@ -497,9 +561,9 @@ public class BoardTilesTests
     {
         var pic = BoardPicture.Solid(Post(), Argb(255, 255, 79, 168));
         var c = new int[BoardPicture.Tiles]; var z = new float[BoardPicture.Tiles];
-        BoardScene.Compute(pic, 0, default, 0, 0, null, still: false, c, z);
+        BoardScene.Compute(pic, 0, default, 0, 0, null, 0, false, c, z);
         Assert.All(c, v => Assert.Equal(BoardPicture.BaseRgb, v));
-        BoardScene.Compute(pic, 0, default, 5, 5, null, still: false, c, z);
+        BoardScene.Compute(pic, 0, default, 5, 5, null, 5, false, c, z);
         Assert.All(c, v => Assert.Equal(0xFF4FA8, v));
         Assert.All(z, v => Assert.Equal(0f, v));
     }
@@ -509,12 +573,12 @@ public class BoardTilesTests
     {
         var pic = BoardPicture.Solid(Post(fx: new[] { "ola" }), Argb(255, 200, 200, 200));
         var c = new int[BoardPicture.Tiles]; var z = new float[BoardPicture.Tiles];
-        BoardScene.Compute(pic, 0, BoardFxSet.From(pic.Post.Fx), 1.0, 10, null, still: false, c, z);
+        BoardScene.Compute(pic, 0, BoardFxSet.From(pic.Post.Fx), 1.0, 10, null, 1.0, false, c, z);
         int lifted = z.Count(v => v > 0.02f);
         Assert.InRange(lifted, 36 * 6, 36 * 12);
 
-        BoardScene.Compute(pic, 0, default, 2.3, 10, new[] { new BoardRipple(32, 18, 2.0) }, still: false, c, z);
-        Assert.True(z[18 * 64 + 32 + 8] > 0.1f);  // on the ring (front at 9 tiles)
+        BoardScene.Compute(pic, 0, default, 99, 10, new[] { new BoardRipple(32, 18, 2.0) }, 2.3, false, c, z); // effect time frozen, ripple clock runs
+        Assert.True(z[18 * 64 + 32 + 7] > 0.1f);  // on the ring (front at 9 tiles)
         Assert.Equal(0f, z[18 * 64 + 32]);         // the centre has settled
     }
 
@@ -559,7 +623,7 @@ public class BoardTilesTests
     {
         var pic = BoardPicture.Solid(Post(), Argb(255, 0, 255, 0));
         var c = new int[BoardPicture.Tiles]; var z = new float[BoardPicture.Tiles];
-        BoardScene.Compute(pic, 0, default, 0, 10, null, still: true, c, z);
+        BoardScene.Compute(pic, 0, default, 0, 10, null, 0, true, c, z);
         var r = new BoardRaster(10);
         r.Draw(c, z, crt: false, 0);
         int centre = r.Pixels[5 * r.Width + 5];
@@ -580,12 +644,12 @@ public class BoardTilesTests
         var c = new int[BoardPicture.Tiles]; var z = new float[BoardPicture.Tiles];
         var r = new BoardRaster(BoardTileLayout.MaxPitch);
         var ripples = new[] { new BoardRipple(20, 10, 0.1) };
-        for (int k = 0; k < 10; k++) { BoardScene.Compute(pic, 0, fx, 0.3 + k / 30.0, 10, ripples, false, c, z); r.Draw(c, z, true, 0.02); }
+        for (int k = 0; k < 10; k++) { BoardScene.Compute(pic, 0, fx, 0.3 + k / 30.0, 10, ripples, 0.3 + k / 30.0, false, c, z); r.Draw(c, z, true, 0.02); }
         var sw = Stopwatch.StartNew();
         const int frames = 60;
         for (int k = 0; k < frames; k++)
         {
-            BoardScene.Compute(pic, 0, fx, 0.5 + k / 30.0, 10, ripples, false, c, z);
+            BoardScene.Compute(pic, 0, fx, 0.5 + k / 30.0, 10, ripples, 0.5 + k / 30.0, false, c, z);
             r.Draw(c, z, true, 0.02);
         }
         double ms = sw.Elapsed.TotalMilliseconds / frames;
