@@ -1260,3 +1260,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/port-chaster7: +352
 - Circe's tab: setup line covers "adds off"/"nothing can count", raffle rows in a SplitRowPanel, ladder note; demo picks never save.
 - Lock Card: Reset on typo inside More options. Leash, booked-pop tag and keys glow folded into their parity rows.
+
+## avalonia-port/port-social: +1023
+- Invites: rules, wire and reward ladder in Core; Exclusives invites card, header ticket (wired at startup), drawer link; EveryShellInitializerIsCalled scan test.
+- Lobby folded into views-tab-available-subjects and win-launcher.
