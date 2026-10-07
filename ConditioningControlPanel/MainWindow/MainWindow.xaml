@@ -1805,7 +1805,7 @@
                                  leading edge. Both are children of the fill, so they follow its
                                  width on the fill's own clock; the sheen sweep and level flash stay. -->
                             <Border x:Name="XPBar" Background="{DynamicResource PinkBrush}" CornerRadius="5"
-                                    HorizontalAlignment="Left" Width="100">
+                                    HorizontalAlignment="Left" Width="100" SizeChanged="XPBar_SizeChanged">
                                 <!-- Chrome FX (PR-1): a slow gloss travelling along the filled part of
                                      the bar. White on purpose - it reads as light catching the fill
                                      rather than a second accent colour on top of the accent. Parked at
@@ -1817,8 +1817,14 @@
                                 <Grid>
                                 <Border x:Name="XPTubeGloss" CornerRadius="5" Background="{DynamicResource DepthTubeGloss}"
                                         IsHitTestVisible="False"/>
+                                <!-- Polish wave 11: the bead hangs HALF past the fill (Margin -4 on an 8 px dot), so
+                                     its centre is the tip and it lights the same spot as the meniscus.
+                                     It sat inside the fill before (Margin 1, bright origin at 0.4) and
+                                     read as a white glow about 6 px behind the tip. Hidden until the
+                                     fill is XpBeadMinFillPx wide (XPBar_SizeChanged), so it never
+                                     sits past the track start. A Border does not clip, so it shows. -->
                                 <Ellipse x:Name="XPTubeBead" Width="8" Height="8" HorizontalAlignment="Right"
-                                         VerticalAlignment="Center" Margin="0,0,1,0"
+                                         VerticalAlignment="Center" Margin="0,0,-4,0" Visibility="Hidden"
                                          Fill="{DynamicResource DepthTubeBead}" IsHitTestVisible="False"/>
                                 <Border x:Name="XPBarSheen" Margin="4,0" IsHitTestVisible="False" Opacity="0">
                                     <Border.Background>
@@ -1844,8 +1850,11 @@
                                  rather than a rectangle. Pre-built and parked at Opacity 0; its X is
                                  tweened on the fill's own clock from AnimateXpDisplay, and the pulse
                                  is an ambient loop owned by MainWindow.HeroFx.cs. No Effect: the
-                                 halo IS the gradient, so nothing here needs an intermediate surface. -->
-                            <Border x:Name="XPMeniscus" Width="12" Height="12" CornerRadius="6"
+                                 halo IS the gradient, so nothing here needs an intermediate surface.
+                                 Polish wave 11: 10 px, the groove's own height (was 12). At 12 the
+                                 10 px track clipped it top and bottom and the halo read as a flat grey
+                                 block past the tip. AnimateXpMeniscus reads this Width for its centre. -->
+                            <Border x:Name="XPMeniscus" Width="10" Height="10" CornerRadius="5"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
                                     Opacity="0" IsHitTestVisible="False">
                                 <Border.Background>

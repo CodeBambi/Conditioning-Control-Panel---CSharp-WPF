@@ -131,8 +131,12 @@
         <GradientStop Offset="0.55" Color="#00000000"/>
         <GradientStop Offset="1.00" Color="#47000000"/>
     </LinearGradientBrush>
-    <!-- TUBE: the bead at the leading edge of a fill (an Ellipse over the fill's end). -->
-    <RadialGradientBrush x:Key="DepthTubeBead" Center="0.4,0.35" GradientOrigin="0.4,0.35" RadiusX="0.6" RadiusY="0.6">
+    <!-- TUBE: the bead at the leading edge of a fill (an Ellipse over the fill's end).
+         Polish wave 11: CENTRED, so its glow lands where the bead is placed (the XP bead
+         hangs half past the fill, centre on the tip). The lamp still reads top-left through
+         a nudged GradientOrigin, under half a pixel on an 8 px bead; radius .5 fades it out
+         at its own edge instead of the ellipse cutting the gradient off. -->
+    <RadialGradientBrush x:Key="DepthTubeBead" Center="0.5,0.5" GradientOrigin="0.44,0.38" RadiusX="0.5" RadiusY="0.5">
         <GradientStop Offset="0.00" Color="#FFFFFFFF"/>
         <GradientStop Offset="0.55" Color="#80FFFFFF"/>
         <GradientStop Offset="1.00" Color="#00FFFFFF"/>

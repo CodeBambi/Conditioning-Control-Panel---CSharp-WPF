@@ -56,5 +56,33 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex) { App.Logger?.Debug("PaintDepthHud: {E}", ex.Message); }
         }
+
+        // ============================== the tube's bead (polish wave 11) ==============================
+
+        /// <summary>The shortest fill that shows the bead. It hangs half its 8 px past the fill's
+        /// edge, so below this it would sit past the track start; the meniscus hides at the same
+        /// width (XpMeniscusMinFillPx).</summary>
+        internal const double XpBeadMinFillPx = 5.0;
+
+        /// <summary>Whether a fill <paramref name="fillWidth"/> px wide carries the bead.</summary>
+        internal static bool XpBeadVisible(double fillWidth) =>
+            !double.IsNaN(fillWidth) && fillWidth >= XpBeadMinFillPx;
+
+        /// <summary>Shows or hides <paramref name="bead"/> for a fill <paramref name="fillWidth"/> px wide.
+        /// Hidden, not Collapsed: the bead keeps no layout of its own to give back.</summary>
+        internal static void ApplyXpBeadRule(UIElement? bead, double fillWidth)
+        {
+            if (bead == null) return;
+            var want = XpBeadVisible(fillWidth) ? Visibility.Visible : Visibility.Hidden;
+            if (bead.Visibility != want) bead.Visibility = want;
+        }
+
+        /// <summary>The fill's width is tweened (MotionFx.BarFill) or set outright; either way its
+        /// size changes, and the bead follows the rule. Only touches the bead when the answer flips.</summary>
+        private void XPBar_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            try { ApplyXpBeadRule(XPTubeBead, e.NewSize.Width); }
+            catch (Exception ex) { App.Logger?.Debug("XPBar_SizeChanged: {E}", ex.Message); }
+        }
     }
 }
