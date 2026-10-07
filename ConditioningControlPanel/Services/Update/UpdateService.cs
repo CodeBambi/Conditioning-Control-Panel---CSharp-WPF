@@ -20,23 +20,17 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.1.2";
+        public const string AppVersion = "7.1.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.1.2 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.1.3 - Stay Tuned
 
-NEW IN 7.1.2
-
-FIXES
-- the companion's AI settings are back: Companion > AI holds the connection (cloud, local or your own model) and its memory. 7.1.1 left them with no way in.
-
-NEW IN 7.1.1
-
-FIXES
-- the Companion page has Show, Hide, Pop out and Voice right in its header again. 7.1.0 tucked them out of reach.
+FIXES SINCE 7.1.0
+- new Companion > AI page: the connection (cloud, local or your own model), how often your companion talks (idle chatter, bubble time, voice lines, triggers, tube look) and its memory, all in one place and never folded away. 7.1.0 and 7.1.1 left some of them with no way in.
+- the Companion page has Show, Hide, Pop out and Voice right in its header again.
 
 NEW IN 7.1.0
 
