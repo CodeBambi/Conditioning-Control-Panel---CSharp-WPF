@@ -102,7 +102,7 @@ namespace ConditioningControlPanel.Services
             ["door.companion"] = Plate("nav/door_companion.png"),
             ["door.play"] = Plate("nav/door_play.png"),
             ["door.you"] = Plate("nav/door_you.png"),
-            ["door.social"] = Cover("skills/hive_mind.png"), // same face as its Lobby tab (no nav medallion yet)
+            ["door.social"] = Plate("nav/door_social.png"), // its own medallion since polish wave 11 (was skills/hive_mind.png)
             ["door.library"] = Plate("nav/door_library.png"),
             ["door.settings"] = Plate("nav/door_settings.png"),
             // The tab rows that land on the same room as a door wear the same medallion.
@@ -149,7 +149,7 @@ namespace ConditioningControlPanel.Services
             // reskins the Mods chip with it, exactly as one who reskins features/vault.png
             // reskins the Vault chip.
             ["tab.presets"] = Cover("Cards/spotlight.png"),            // a session, as the session-complete card draws one
-            ["tab.availablesubjects"] = Cover("skills/hive_mind.png"), // two dolls and a live count
+            ["tab.availablesubjects"] = Plate("nav/door_social.png"),  // the Lobby wears its door's medallion
             ["tab.quests"] = Cover("quests/daily_devotion_d.png"),     // the daily quest tile
             ["tab.achievements"] = Cover("achievements/honor_roll.png"),
             ["tab.enhancements"] = Cover("skills/sparkle_boost_3.png"),// a skill node, which is what the tree is made of
