@@ -96,22 +96,20 @@ namespace ConditioningControlPanel.Services.Billboard.Board
             {
                 var path = PathFor(post.Version);
                 byte[]? bytes = null;
-                bool fromDisk = false;
                 if (File.Exists(path))
                 {
-                    try { bytes = await File.ReadAllBytesAsync(path).ConfigureAwait(false); fromDisk = true; }
+                    try { bytes = await File.ReadAllBytesAsync(path).ConfigureAwait(false); }
                     catch (IOException) { bytes = null; }
+                    if (bytes != null && bytes.Length > 0 && bytes.Length <= MaxPngBytes)
+                        picture = await Task.Run(() => BoardPicture.Decode(bytes, post)).ConfigureAwait(false);
+                    if (picture == null) TryDelete(path); // a damaged cache file: fetch it again
                 }
-                if (bytes == null || bytes.Length == 0)
+                if (picture == null)
                 {
                     bytes = await _fetch(post.Version, CancellationToken.None).ConfigureAwait(false);
-                    fromDisk = false;
-                }
-                if (bytes != null && bytes.Length > 0 && bytes.Length <= MaxPngBytes)
-                {
-                    picture = await Task.Run(() => BoardPicture.Decode(bytes, post)).ConfigureAwait(false);
-                    if (picture != null && !fromDisk) Save(path, bytes);
-                    if (picture == null && fromDisk) TryDelete(path); // a damaged cache file is fetched again next poll
+                    if (bytes != null && bytes.Length > 0 && bytes.Length <= MaxPngBytes)
+                        picture = await Task.Run(() => BoardPicture.Decode(bytes, post)).ConfigureAwait(false);
+                    if (picture != null) Save(path, bytes!);
                 }
             }
             catch (Exception ex)
