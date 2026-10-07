@@ -28,6 +28,7 @@ public sealed class TakeoverQuestCreditTests
         var s = CoreSettings.Current;
         var (consent, enabled, resume) = (s.AutonomyConsentGiven, s.AutonomyModeEnabled, s.AutonomyResumeOnStartup);
         var oldQuests = AvApp.Quests;
+        var oldPremium = CoreEntitlement.HasPremiumProvider;
         var dir = Directory.CreateTempSubdirectory("ccp-takeover-quest-").FullName;
         var quests = new QuestService(null, dir);
         var shell = new MainShellWindow();
@@ -65,7 +66,7 @@ public sealed class TakeoverQuestCreditTests
         finally
         {
             shell.Autonomy.Stop();
-            CoreEntitlement.HasPremiumProvider = null;
+            CoreEntitlement.HasPremiumProvider = oldPremium;
             (s.AutonomyConsentGiven, s.AutonomyModeEnabled, s.AutonomyResumeOnStartup) = (consent, enabled, resume);
             AvApp.Quests = oldQuests;
             quests.Dispose();

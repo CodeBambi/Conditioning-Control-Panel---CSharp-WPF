@@ -217,8 +217,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtTotalQuestXP.Text = (quests.Progress.TotalXPFromQuests + s.MobileQuestXP).ToString();
             TxtStreakFixCharges.Text = s.StreakFixCharges.ToString();
             TxtQuestStats.Text = $"{dailyCompleted + (weekly?.IsCompleted == true ? 1 : 0)} completed today";
+            // The bonus the next daily pays at, as the daily cards quote it.
             TxtQuestStreakCount.Text = s.DailyQuestStreak > 0
-                ? $"\U0001f525 {s.DailyQuestStreak} day streak (+{s.DailyQuestStreak * 3}% XP)" : "";
+                ? $"\U0001f525 {s.DailyQuestStreak} day streak (+{quests.StreakPaidOn(QuestType.Daily, s) * 3}% XP)" : "";
 
             PaintStreakCalendar();
         }

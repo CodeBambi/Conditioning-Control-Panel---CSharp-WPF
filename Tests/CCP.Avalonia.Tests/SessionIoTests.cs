@@ -214,6 +214,13 @@ public sealed class SessionIoTests
 
             Assert.Equal("Preset imported: Catalogue Drop", view.FindControl<TextBlock>("DropZoneStatus")!.Text);
             Assert.Contains(settings.UserPresets, p => p.Id == id);
+            // A plain "x.json" (no .preset in the name) is also told apart by its content.
+            preset.Id = id + "-plain";
+            preset.Name = "Plain Drop";
+            var plain = Path.Combine(root, "plain.json");
+            File.WriteAllText(plain, new PresetFileService().SerializePreset(preset));
+            Assert.True(view.ImportDroppedPath(plain));
+            Assert.Contains(settings.UserPresets, p => p.Id == id + "-plain");
             Assert.False(view.ImportDroppedPath(Path.Combine(root, "missing.json")));
         }
         finally

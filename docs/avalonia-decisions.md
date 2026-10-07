@@ -498,6 +498,8 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   dailies), sharing `StreakAfterFirstCompletionToday` with `AdvanceQuestStreak`; `ScaledQuestXp` gains an explicit-streak
   overload. Both heads' cards (and the "+N%" bonus text) read it. Visible WPF change: the first daily of a day quotes 3%
   more (or the restarted +3% after a gap) - i.e. what it already paid.
-- Not foreseen: a streak shield spent by that same completion (spending it is the completion's side effect); after a gap
-  with a shield the quote says +3% and the payout keeps the streak. Test:
-  `QuestServiceTests.CardQuote_IsWhatTheDaysFirstCompletionPays` (fail-proven).
+- Streak shield: after a gap, a completion that will spend a shield pays at streak + 1, so the quote asks the new
+  `CoreQuests.HasStreakShieldProvider` (skill `good_girl_streak` and a shield left; never spends). Avalonia now seeds it
+  and `UseStreakShieldProvider` (previously unseeded, so it never spent a shield) from Core settings, as WPF
+  `SkillTreeService.UseStreakShield`. The streak header's "+N% XP" reads the same projected streak on both heads. Test:
+  `QuestServiceTests.CardQuote_IsWhatTheDaysFirstCompletionPays` (shield case included; fail-proven).

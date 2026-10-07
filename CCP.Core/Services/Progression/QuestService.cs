@@ -1951,8 +1951,8 @@ public class QuestService : IDisposable
     /// The quest streak a completion of <paramref name="type"/> is paid at. CompleteQuest advances
     /// the streak on the day's first daily completion BEFORE it pays, so a card quoting the stored
     /// streak under-quoted that quest by 3% (or over-quoted a broken streak). Weekly quests and
-    /// later dailies pay at the stored streak. A streak shield spent at that completion is not
-    /// foreseen (spending it is the completion's side effect).
+    /// later dailies pay at the stored streak. A streak shield that completion would spend is
+    /// foreseen via <see cref="CoreQuests.HasStreakShieldProvider"/> (asked, never spent).
     /// </summary>
     public int StreakPaidOn(QuestType type, AppSettings? settings)
     {
@@ -1961,7 +1961,13 @@ public class QuestService : IDisposable
         if (type != QuestType.Daily || CoreSettings.Service == null
             || Progress.DailyQuestCompletionDates.Any(d => d.Date == DateTime.Today))
             return settings.DailyQuestStreak;
-        return StreakAfterFirstCompletionToday(settings);
+        var next = StreakAfterFirstCompletionToday(settings);
+        // CompleteQuest's shield fill (same condition): yesterday becomes completed, so the chain continues.
+        if (next == 1 && settings.DailyQuestStreak > 0
+            && settings.LastDailyQuestDate?.Date < DateTime.Today.AddDays(-1)
+            && CoreQuests.HasStreakShieldProvider?.Invoke() == true)
+            return settings.DailyQuestStreak + 1;
+        return next;
     }
 
     /// <summary>

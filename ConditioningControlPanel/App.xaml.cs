@@ -407,6 +407,8 @@ namespace ConditioningControlPanel
             CoreQuests.PatreonVerifyingProvider = () => Patreon?.IsVerifying;
             CoreQuests.SubscribeStarVerifyingProvider = () => SubscribeStar?.IsVerifying == true;
             CoreQuests.UseStreakShieldProvider = () => SkillTree?.UseStreakShield() == true;
+            CoreQuests.HasStreakShieldProvider = () => SkillTree?.HasSkill("good_girl_streak") == true
+                && Settings?.Current?.StreakShieldsRemaining > 0;
             CoreQuests.CheckPerfectWeekBonusProvider = () => SkillTree?.CheckPerfectWeekBonus() ?? 0;
             CoreQuests.TrackProgramVerifierProvider = (category, amount) => Programs?.TrackVerifier(category, amount);
             CoreQuests.PlayCompletionEffectsProvider = () =>

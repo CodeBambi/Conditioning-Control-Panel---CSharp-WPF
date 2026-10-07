@@ -54,13 +54,22 @@ namespace ConditioningControlPanel.Avalonia
         internal static MantraVoiceService MantraVoice { get; } = new();
 
         /// <summary>WPF App.xaml.cs:2527-2536 plus the CoreQuests seeds of :398-421. Seeded where this
-        /// head has the service; SkillTree (streak shield, perfect-week bonus) and Programs
-        /// (TrackVerifier) are WPF-only, so those three stay unseeded: no shield, no bonus, no
-        /// program tracking - the WPF "service is null" answers.</summary>
+        /// head has the service. The streak shield is WPF SkillTreeService.UseStreakShield (:378) over
+        /// Core settings; perfect-week bonus and Programs (TrackVerifier) stay unseeded: no bonus,
+        /// no program tracking - the WPF "service is null" answers.</summary>
         private static void StartQuests()
         {
             CoreQuests.PatreonVerifyingProvider = () => Platform.AccountSeed.Patreon?.IsVerifying;
             CoreQuests.SubscribeStarVerifyingProvider = () => Platform.AccountSeed.SubscribeStar?.IsVerifying == true;
+            CoreQuests.HasStreakShieldProvider = () => CoreSettings.Service?.Current is { } s
+                && Models.SkillTreeRules.HasSkill(s, "good_girl_streak") && s.StreakShieldsRemaining > 0;
+            CoreQuests.UseStreakShieldProvider = () =>
+            {
+                if (CoreQuests.HasStreakShieldProvider?.Invoke() != true) return false;
+                CoreSettings.Current.StreakShieldsRemaining--;
+                CoreSettings.Save();
+                return true;
+            };
             // WPF plays SystemSounds.Exclamation; Linux has no stock equivalent, so a bundled chime
             // through the head audio. ponytail: no haptic post - no haptics service on this head.
             CoreQuests.PlayCompletionEffectsProvider = () => CoreAudio.PlayOneShot(

@@ -734,7 +734,9 @@ namespace ConditioningControlPanel
 
             // Update streak text
             var streak = App.Settings?.Current?.DailyQuestStreak ?? 0;
-            QuestsTab.TxtQuestStreakCount.Text = streak > 0 ? $"\U0001f525 {streak} day streak (+{streak * 3}% XP)" : "";
+            // The bonus the next daily pays at, as the daily cards quote it.
+            var paidStreak = App.Quests?.StreakPaidOn(Models.QuestType.Daily, App.Settings?.Current) ?? streak;
+            QuestsTab.TxtQuestStreakCount.Text = streak > 0 ? $"\U0001f525 {streak} day streak (+{paidStreak * 3}% XP)" : "";
 
             // Fix Day button. Streak fixes are now a cumulable charge balance every account earns
             // (+1 per season, never expires, free to spend), so the button is visible to EVERYONE —
