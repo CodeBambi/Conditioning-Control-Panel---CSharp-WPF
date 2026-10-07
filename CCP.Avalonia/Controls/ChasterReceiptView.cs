@@ -1,8 +1,8 @@
 // PORTED from ConditioningControlPanel/Controls/ChasterReceiptView.cs: Circe's bill as a paper
 // receipt (cream stock, ink, mono figures, dashed tear lines, a crooked NET stamp, her verdict).
 // Literal colours only, like WPF, so the paper reads as paper under every skin.
-// ponytail: texts are set from Loc at Show time, not live-bound; nothing re-shows a bill across a
-// language switch on this head yet (the exit bill lives four seconds).
+// Texts are set from Loc at Show time; a language switch while shown repaints the last bill (WPF's
+// tab does it through RefreshNumbers -> BuildBill, ChasterTabView.xaml.cs:219), same verdict line.
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -38,6 +38,23 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private readonly StackPanel _verdict = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0), IsVisible = false };
         private CirceMoment? _verdictMoment;
         private string? _verdictKey;
+        private TabBill? _bill;
+        private bool _shown;
+
+        private void OnLanguageChanged(object? sender, EventArgs e) =>
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (_shown) Show(_bill); });
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            base.OnDetachedFromVisualTree(e);
+        }
 
         public ChasterReceiptView()
         {
@@ -70,6 +87,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// <summary>Paint a bill. An empty bill is one muted line, not an empty receipt (WPF Show).</summary>
         public void Show(TabBill? bill)
         {
+            _bill = bill;
+            _shown = true;
             _lines.Children.Clear();
             _totals.Children.Clear();
             _head.Text = Loc.Get("chaster_bill_title");

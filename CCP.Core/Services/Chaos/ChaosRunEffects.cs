@@ -5,9 +5,9 @@ namespace ConditioningControlPanel.Services.Chaos;
 
 /// <summary>
 /// The run-side half of the Chaos meta catalogue. The catalogues and every purchase rule live
-/// in Core (<see cref="ChaosUpgrades"/>, <see cref="ChaosLifetimeBoons"/>, <see cref="ChaosMeta"/>);
-/// the effects each id has on a run stay here because <see cref="ChaosRunConfig"/> and
-/// <see cref="ChaosRunState"/> are head-side (the run engine). Same lambdas, keyed by id.
+/// beside it (<see cref="ChaosUpgrades"/>, <see cref="ChaosLifetimeBoons"/>, <see cref="ChaosMeta"/>);
+/// these are the effects each id has on <see cref="ChaosRunConfig"/> / <see cref="ChaosRunState"/>.
+/// Same lambdas, keyed by id.
 /// </summary>
 public static class ChaosRunEffects
 {

@@ -2,11 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+        xmlns:cc="clr-namespace:ConditioningControlPanel"
         Title="Rabbit Hole HUD"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ShowActivated="False"
         ResizeMode="NoResize" WindowStartupLocation="Manual" FontFamily="Segoe UI" Width="300">
     <Window.Resources>
+        <cc:ChaosSidebarBrushConverter x:Key="SidebarBrush"/>
         <SolidColorBrush x:Key="Pink" Color="#FF69B4"/>
         <SolidColorBrush x:Key="StripBg" Color="#E6121026"/>
         <SolidColorBrush x:Key="PanelBg" Color="#F2151226"/>
@@ -31,13 +33,13 @@
         </Style>
         <DataTemplate x:Key="BoonTipContent">
             <StackPanel MaxWidth="240">
-                <TextBlock Text="{Binding TipTitle}" FontWeight="Bold" FontSize="13" Foreground="{Binding AccentBrush}"/>
+                <TextBlock Text="{Binding TipTitle}" FontWeight="Bold" FontSize="13" Foreground="{Binding Converter={StaticResource SidebarBrush}}"/>
                 <TextBlock Text="{Binding Desc}" Foreground="#DDE0E0F0" FontSize="12" TextWrapping="Wrap"
-                           Margin="0,3,0,0" Visibility="{Binding DescVisibility}"/>
-                <TextBlock Text="{Binding Flavor}" Visibility="{Binding FlavorVisibility}" FontStyle="Italic" FontSize="11"
+                           Margin="0,3,0,0" Visibility="{Binding HasDesc, Converter={StaticResource BoolToVisibility}}"/>
+                <TextBlock Text="{Binding Flavor}" Visibility="{Binding HasFlavor, Converter={StaticResource BoolToVisibility}}" FontStyle="Italic" FontSize="11"
                            Foreground="#CCB0B0C8" TextWrapping="Wrap" Margin="0,2,0,0"/>
                 <TextBlock Text="{Binding Extra}" Foreground="#FFD700" FontSize="12" TextWrapping="Wrap"
-                           Margin="0,3,0,0" Visibility="{Binding ExtraVisibility}"/>
+                           Margin="0,3,0,0" Visibility="{Binding HasExtra, Converter={StaticResource BoolToVisibility}}"/>
             </StackPanel>
         </DataTemplate>
 
@@ -48,7 +50,7 @@
                     <ToolTip Style="{StaticResource BoonTipChrome}" Content="{Binding}"
                              ContentTemplate="{StaticResource BoonTipContent}"/>
                 </Grid.ToolTip>
-                <Border CornerRadius="13" Background="{Binding TileBackBrush}" BorderThickness="0">
+                <Border CornerRadius="13" Background="{Binding Converter={StaticResource SidebarBrush}, ConverterParameter=back}" BorderThickness="0">
                     <Grid>
                         <!-- rounded clip so square art can't poke past the ring corners -->
                         <Grid.Clip><RectangleGeometry Rect="0,0,64,64" RadiusX="13" RadiusY="13"/></Grid.Clip>
@@ -56,12 +58,12 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
                         <!-- ring ABOVE the art: full-bleed sprites bury a behind-border -->
-                        <Border CornerRadius="13" BorderBrush="{Binding AccentBrush}" BorderThickness="3.5" IsHitTestVisible="False"/>
+                        <Border CornerRadius="13" BorderBrush="{Binding Converter={StaticResource SidebarBrush}}" BorderThickness="3.5" IsHitTestVisible="False"/>
                     </Grid>
                 </Border>
                 <Border Background="#DD121026" CornerRadius="6" Padding="4,0"
                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-3,-3"
-                        Visibility="{Binding LevelBadgeVisibility}">
+                        Visibility="{Binding HasLevelBadge, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="{Binding LevelText}" Foreground="{StaticResource Pink}" FontSize="11" FontWeight="Bold"/>
                 </Border>
             </Grid>
@@ -76,18 +78,18 @@
                     <ToolTip Style="{StaticResource BoonTipChrome}" Content="{Binding}"
                              ContentTemplate="{StaticResource BoonTipContent}"/>
                 </Grid.ToolTip>
-                <Border CornerRadius="12" Background="{Binding TileBackBrush}" BorderThickness="0">
+                <Border CornerRadius="12" Background="{Binding Converter={StaticResource SidebarBrush}, ConverterParameter=back}" BorderThickness="0">
                     <Grid>
                         <Grid.Clip><RectangleGeometry Rect="0,0,57,57" RadiusX="12" RadiusY="12"/></Grid.Clip>
                         <TextBlock Text="{Binding Glyph}" FontSize="26" Foreground="White"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
-                        <Border CornerRadius="12" BorderBrush="{Binding AccentBrush}" BorderThickness="3.5" IsHitTestVisible="False"/>
+                        <Border CornerRadius="12" BorderBrush="{Binding Converter={StaticResource SidebarBrush}}" BorderThickness="3.5" IsHitTestVisible="False"/>
                     </Grid>
                 </Border>
                 <Border Background="#DD121026" CornerRadius="6" Padding="4,0"
                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-3,-3"
-                        Visibility="{Binding LevelBadgeVisibility}">
+                        Visibility="{Binding HasLevelBadge, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="{Binding LevelText}" Foreground="{StaticResource Pink}" FontSize="11" FontWeight="Bold"/>
                 </Border>
             </Grid>
@@ -404,16 +406,16 @@
                                              ContentTemplate="{StaticResource BoonTipContent}"/>
                                 </StackPanel.ToolTip>
                                 <Border Width="33" Height="33" CornerRadius="8"
-                                        Background="{Binding TileBackBrush}" BorderThickness="0">
+                                        Background="{Binding Converter={StaticResource SidebarBrush}, ConverterParameter=back}" BorderThickness="0">
                                     <Grid>
                                         <Grid.Clip><RectangleGeometry Rect="0,0,33,33" RadiusX="8" RadiusY="8"/></Grid.Clip>
-                                        <TextBlock Text="{Binding Glyph}" FontSize="16" Foreground="{Binding AccentBrush}"
+                                        <TextBlock Text="{Binding Glyph}" FontSize="16" Foreground="{Binding Converter={StaticResource SidebarBrush}}"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
-                                        <Border CornerRadius="8" BorderBrush="{Binding AccentBrush}" BorderThickness="3" IsHitTestVisible="False"/>
+                                        <Border CornerRadius="8" BorderBrush="{Binding Converter={StaticResource SidebarBrush}}" BorderThickness="3" IsHitTestVisible="False"/>
                                     </Grid>
                                 </Border>
-                                <TextBlock Text="{Binding Name}" Foreground="{Binding AccentBrush}" FontSize="13"
+                                <TextBlock Text="{Binding Name}" Foreground="{Binding Converter={StaticResource SidebarBrush}}" FontSize="13"
                                            Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                         </DataTemplate></ItemsControl.ItemTemplate>
@@ -428,7 +430,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Width="45" Height="45" Margin="0,0,7,7" CornerRadius="10"
-                                        Background="{Binding TileBackBrush}" BorderThickness="0">
+                                        Background="{Binding Converter={StaticResource SidebarBrush}, ConverterParameter=back}" BorderThickness="0">
                                     <Border.ToolTip>
                                         <ToolTip Style="{StaticResource BoonTipChrome}" Content="{Binding}"
                                                  ContentTemplate="{StaticResource BoonTipContent}"/>
@@ -438,7 +440,7 @@
                                         <TextBlock Text="{Binding Glyph}" FontSize="20" Foreground="White"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
-                                        <Border CornerRadius="10" BorderBrush="{Binding AccentBrush}" BorderThickness="3" IsHitTestVisible="False"/>
+                                        <Border CornerRadius="10" BorderBrush="{Binding Converter={StaticResource SidebarBrush}}" BorderThickness="3" IsHitTestVisible="False"/>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
