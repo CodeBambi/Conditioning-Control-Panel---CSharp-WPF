@@ -264,12 +264,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnClose_Click(object? sender, RoutedEventArgs e) => RequestClose();
 
-        private void PanelCta_Click(object? sender, RoutedEventArgs e) => OpenPanel();
+        // ponytail: no LockdownVeil on this head yet (WPF's covers these doors); these refusals stand in for it.
+        private void PanelCta_Click(object? sender, RoutedEventArgs e) { if (!MainShellWindow.LockdownActive) OpenPanel(); }
 
         /// <summary>WPF AccountChip_Click: the panel's account settings.</summary>
-        private void AccountChip_Click(object? sender, RoutedEventArgs e) => OpenPanel(p => p.ShowTab("appsettings"));
+        private void AccountChip_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!MainShellWindow.LockdownActive) OpenPanel(p => p.ShowTab("appsettings"));
+        }
 
-        private void SignIn_Click(object? sender, RoutedEventArgs e) => OpenSignIn();
+        private void SignIn_Click(object? sender, RoutedEventArgs e) { if (!MainShellWindow.LockdownActive) OpenSignIn(); }
 
         /// <summary>WPF StopLink_Click.</summary>
         private void StopLink_Click(object? sender, RoutedEventArgs e)
