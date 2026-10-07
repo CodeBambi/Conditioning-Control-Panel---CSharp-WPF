@@ -416,16 +416,6 @@ namespace ConditioningControlPanel.Views.Tabs
             }
         }
 
-        private void BillboardArtwork_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (sender is FrameworkElement art && art.ActualWidth > 0 && art.ActualHeight > 0)
-            {
-                var clip = new RectangleGeometry(new Rect(0, 0, art.ActualWidth, art.ActualHeight), 9, 9);
-                clip.Freeze();
-                art.Clip = clip;
-            }
-        }
-
         /// <summary>Re-reads ownership onto the wall's v2 pills. Safe from any thread.</summary>
         private void RefreshV2Badges()
         {
@@ -609,12 +599,6 @@ namespace ConditioningControlPanel.Views.Tabs
             var b = new SolidColorBrush(Color.FromArgb((byte)Math.Round(255 * alpha), hue.R, hue.G, hue.B));
             b.Freeze();
             return b;
-        }
-        // The billboard card in the row the folded browser gives back.
-        private void BillboardCard_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BillboardCard_Click(sender, e);
         }
         // Phase 2: BtnExportPhrases_Click / BtnImportPhrases_Click moved with the phrase-backup
         // card to Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
