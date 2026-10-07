@@ -589,14 +589,17 @@ namespace ConditioningControlPanel.Controls.Billboard
 
             int cyc = (int)Math.Floor(t / Cycle);
             double p = t - cyc * Cycle;
-            int k = ((cyc * 2) % 6 + 6) % 6, j = ((cyc * 2 + 3) % 6 + 6) % 6;
+            // Rows: the panel lights row rk's tile, the phone taps row rj. Alternates each loop.
+            bool even = (cyc & 1) == 0;
+            int rk = even ? 0 : 2, rj = even ? 3 : 1;
+            int k = RowTile[rk], j = RowTile[rj];
 
             double enter = BackOut(t / 0.85, 1.3), enterPhone = BackOut((t - 0.15) / 0.85, 1.3);
             double dark = EaseOut((p - DarkAt) / 0.45);
 
             // Tile states, per device: below 0 = off, else seconds since it lit (for the pop).
             double PanelLit(int i) => i == k ? p - ClickAt : i == j ? p - PanelLitAt : -1;
-            double PhoneLit(int i) => i == k ? p - PhoneLitAt : i == j ? p - TapAt : -1;
+            double PhoneLit(int row) => row == rk ? p - PhoneLitAt : row == rj ? p - TapAt : -1;
             double panelXp = 0.3 + 0.22 * (p >= ClickAt ? 1 : 0) + 0.22 * (p >= PanelLitAt ? 1 : 0);
             double phoneXp = 0.3 + 0.22 * (p >= PhoneLitAt ? 1 : 0) + 0.22 * (p >= TapAt ? 1 : 0);
             panelXp = Lerp(panelXp, 0.3, dark);
@@ -604,11 +607,8 @@ namespace ConditioningControlPanel.Controls.Billboard
 
             var phonePose = PhonePose(b, t, enterPhone);
 
-            // The link: a faint dotted arc between the two, its dots drifting along.
-            DrawLink(dc, b.P(8, -28 + (1 - enter) * 22), phonePose.Transform(new Point(-6 * u, -36 * u)), u, t);
-
             // Panel window.
-            dc.PushTransform(new TranslateTransform(0, (1 - enter) * 22 * u));
+            dc.PushTransform(new TranslateTransform(PanelX * u, (1 - enter) * 22 * u));
             dc.PushOpacity(Clamp01(t / 0.35));
             DrawPanel(dc, b, t, PanelLit, panelXp, dark);
             dc.Pop();
@@ -623,9 +623,9 @@ namespace ConditioningControlPanel.Controls.Billboard
 
             // Packets: panel -> phone after the click, phone -> panel after the tap.
             var panelK = PanelTileCentre(b, k, enter);
-            var phoneK = phonePose.Transform(PhoneTileCentre(k, u));
+            var phoneK = phonePose.Transform(PhoneToggle(rk, u));
             var panelJ = PanelTileCentre(b, j, enter);
-            var phoneJ = phonePose.Transform(PhoneTileCentre(j, u));
+            var phoneJ = phonePose.Transform(PhoneToggle(rj, u));
             DrawPacket(dc, panelK, phoneK, (p - ClickAt - 0.05) / (PhoneLitAt - ClickAt - 0.05), u, TileHue(k), 3);
             DrawPacket(dc, phoneJ, panelJ, (p - TapAt - 0.05) / (PanelLitAt - TapAt - 0.05), u, TileHue(j), 5);
 
@@ -640,16 +640,23 @@ namespace ConditioningControlPanel.Controls.Billboard
             Motes(dc, w, h, t, Colors.White, 5, 59, new Rect(0.55, 0.2, 0.42, 0.75), 0.1, 0.008, 0.28);
         }
 
+        // Where the pair sits: the panel a touch right of the box's left edge, the phone in front of
+        // its lower right corner, overlapping only the bezel and the third tile column.
+        private const double PanelX = 1, PhoneX = 24.5, PhoneY = 9;
+
+        // The phone shows four of the panel's tiles as a mobile list, one row each.
+        private static readonly int[] RowTile = { 0, 1, 3, 4 };
+
         private static Matrix PhonePose(Box b, double t, double enter)
         {
-            double bob = Bob(t, 1.1, 0.7) * b.U;
-            double rot = 6 + Math.Sin(t * 0.75) * 1.4 + (1 - enter) * 12;
-            var c = b.P(35, 2);
-            return Pose(c.X, c.Y + bob + (1 - enter) * 26 * b.U, rot);
+            double bob = Bob(t, 0.9, 0.7) * b.U;
+            double rot = 3 + Math.Sin(t * 0.75) * 0.5 + (1 - enter) * 5;
+            var c = b.P(PhoneX, PhoneY);
+            return Pose(c.X, c.Y + bob + (1 - enter) * 24 * b.U, rot);
         }
 
-        // Panel tiles: 3 x 2 grid. Phone tiles: 2 x 3 grid, same order.
-        private static Rect PanelTile(Box b, int i) => b.R(-35 + (i % 3) * 15.2, -16 + (i / 3) * 12.6, 13.4, 10.8);
+        // Panel tiles: 3 x 2 grid.
+        private static Rect PanelTile(Box b, int i, double shift = PanelX) => b.R(shift - 35 + (i % 3) * 15.2, -16 + (i / 3) * 12.6, 13.4, 10.8);
 
         private static Point PanelTileCentre(Box b, int i, double enter)
         {
@@ -657,12 +664,13 @@ namespace ConditioningControlPanel.Controls.Billboard
             return new Point(r.X + r.Width / 2, r.Y + r.Height / 2 + (1 - enter) * 22 * b.U);
         }
 
-        private static Rect PhoneTile(int i, double u) => new((-9.4 + (i % 2) * 10.2) * u, (-21 + (i / 2) * 10.2) * u, 8.6 * u, 8.6 * u);
+        // Phone list rows, in the phone's own space (centre of the body at 0,0).
+        private static Rect PhoneRow(int row, double u) => new(-11 * u, (-16.5 + row * 8.6) * u, 22 * u, 7 * u);
 
-        private static Point PhoneTileCentre(int i, double u)
+        private static Point PhoneToggle(int row, double u)
         {
-            var r = PhoneTile(i, u);
-            return new Point(r.X + r.Width / 2, r.Y + r.Height / 2);
+            var r = PhoneRow(row, u);
+            return new Point(r.Right - 4.4 * u, r.Y + r.Height / 2);
         }
 
         private void DrawPanel(DrawingContext dc, Box b, double t, Func<int, double> lit, double xp, double dark)
@@ -690,7 +698,7 @@ namespace ConditioningControlPanel.Controls.Billboard
                 d.DrawRoundedRectangle(null, Bevel(Math.Max(1, u * 0.35), pressed: true), b.R(-35, 13.6, 45.6, 3.6), 1.8 * u, 1.8 * u);
                 d.DrawRoundedRectangle(Solid(Colors.White, 0.2), null, b.R(-35, 19.4, 20, 1.6), 0.8 * u, 0.8 * u);
             }));
-            for (int i = 0; i < 6; i++) DrawTile(dc, PanelTile(b, i), TileHue(i), lit(i), dark, u, 2.4 * u);
+            for (int i = 0; i < 6; i++) DrawTile(dc, PanelTile(b, i, 0), TileHue(i), lit(i), dark, u, 2.4 * u);
             var xr = b.R(-35, 13.6, 45.6 * xp, 3.6);
             if (xr.Width > 1) dc.DrawRoundedRectangle(Fill(Mix(Accent, Colors.White, 0.2)), null, xr, 1.8 * u, 1.8 * u);
             var shape = new RectangleGeometry(win, 4 * u, 4 * u);
@@ -725,43 +733,78 @@ namespace ConditioningControlPanel.Controls.Billboard
             Ripple(dc, c, r.Width * 0.4, r.Width * 1.1, since / 0.6, Mix(hue, Colors.White, 0.4), u * 0.7);
         }
 
+        /// <summary>
+        /// The phone: upright with a small lean, a thin bezel round a 9:19.5 screen, a pill cut-out
+        /// up top. Its screen is the app's mobile layout: a status line, a header, four list rows
+        /// with toggles (the same tiles as the panel), the XP bar and the home bar.
+        /// </summary>
         private void DrawPhone(DrawingContext dc, double u, double t, Func<int, double> lit, double xp, double dark)
         {
+            var screen = new Rect(-12.7 * u, -27.7 * u, 25.4 * u, 55.4 * u);
             dc.DrawDrawing(Lay("wa-phone", d =>
             {
-                var body = new Rect(-13 * u, -36 * u, 26 * u, 72 * u);
-                PlateStatic(d, body, 5.2 * u, Linear(Color.FromRgb(0x4a, 0x45, 0x86), Color.FromRgb(0x1c, 0x1a, 0x3a), new Point(0, 0), new Point(1, 1)), u * 1.8);
-                var screen = new Rect(-11 * u, -33.5 * u, 22 * u, 67 * u);
-                d.DrawRoundedRectangle(Linear(Mix(Slate, Accent, 0.14), Mix(Ink, Slate, 0.35), new Point(0, 0), new Point(0, 1)), null, screen, 3.4 * u, 3.4 * u);
-                d.DrawRoundedRectangle(null, Bevel(Math.Max(1, u * 0.4), pressed: true), screen, 3.4 * u, 3.4 * u);
-                // Notch and header.
-                d.DrawRoundedRectangle(Solid(Ink, 0.85), null, new Rect(-3.5 * u, -32.6 * u, 7 * u, 1.8 * u), 0.9 * u, 0.9 * u);
-                d.DrawEllipse(Solid(Accent), null, new Point(-7.2 * u, -27.4 * u), 1.6 * u, 1.6 * u);
-                d.DrawRoundedRectangle(Solid(Colors.White, 0.35), null, new Rect(-4.4 * u, -28.2 * u, 10 * u, 1.6 * u), 0.8 * u, 0.8 * u);
-                // XP well, text lines and the home bar.
-                d.DrawRoundedRectangle(Solid(Ink, 0.6), null, new Rect(-9.4 * u, 10.4 * u, 18.8 * u, 2.8 * u), 1.4 * u, 1.4 * u);
-                d.DrawRoundedRectangle(Solid(Colors.White, 0.15), null, new Rect(-9.4 * u, 16 * u, 12 * u, 1.4 * u), 0.7 * u, 0.7 * u);
-                d.DrawRoundedRectangle(Solid(Colors.White, 0.1), null, new Rect(-9.4 * u, 19.4 * u, 16 * u, 1.4 * u), 0.7 * u, 0.7 * u);
-                d.DrawRoundedRectangle(Solid(Colors.White, 0.45), null, new Rect(-4 * u, 30.2 * u, 8 * u, 1.1 * u), 0.55 * u, 0.55 * u);
+                // Side buttons first, so the body sits over their inner edge.
+                var key = Solid(Color.FromRgb(0x3a, 0x36, 0x6c));
+                d.DrawRoundedRectangle(key, null, new Rect(-14.7 * u, -16 * u, 1.2 * u, 4.6 * u), 0.5 * u, 0.5 * u);
+                d.DrawRoundedRectangle(key, null, new Rect(-14.7 * u, -9.6 * u, 1.2 * u, 4.6 * u), 0.5 * u, 0.5 * u);
+                d.DrawRoundedRectangle(key, null, new Rect(13.5 * u, -12.5 * u, 1.2 * u, 7 * u), 0.5 * u, 0.5 * u);
+                var body = new Rect(-14 * u, -29 * u, 28 * u, 58 * u);
+                PlateStatic(d, body, 5.4 * u, Linear(Color.FromRgb(0x56, 0x50, 0x94), Color.FromRgb(0x1e, 0x1b, 0x3e), new Point(0, 0), new Point(1, 1)), u * 1.8);
+                d.DrawRoundedRectangle(Solid(Color.FromRgb(6, 5, 14)), null, new Rect(-13.3 * u, -28.3 * u, 26.6 * u, 56.6 * u), 4.8 * u, 4.8 * u);
+                d.DrawRoundedRectangle(Linear(Mix(Slate, Accent, 0.12), Mix(Ink, Slate, 0.3), new Point(0, 0), new Point(0, 1)), null, screen, 4.2 * u, 4.2 * u);
+                // Status line: the time on the left, the pill in the middle, a battery on the right.
+                d.DrawRoundedRectangle(Solid(Colors.White, 0.55), null, new Rect(-10.2 * u, -25.9 * u, 3.6 * u, 1.1 * u), 0.55 * u, 0.55 * u);
+                d.DrawRoundedRectangle(Solid(Color.FromRgb(4, 4, 10)), null, new Rect(-3.6 * u, -26.6 * u, 7.2 * u, 2.3 * u), 1.15 * u, 1.15 * u);
+                d.DrawRoundedRectangle(null, Stroke(Colors.White, Math.Max(0.75, u * 0.18), 0.55), new Rect(6.4 * u, -26 * u, 3.4 * u, 1.4 * u), 0.4 * u, 0.4 * u);
+                d.DrawRectangle(Solid(Mint, 0.85), null, new Rect(6.8 * u, -25.65 * u, 2.2 * u, 0.7 * u));
+                // App header: the mark, a title, an avatar.
+                d.DrawEllipse(Solid(Accent), null, new Point(-9.4 * u, -20.6 * u), 1.7 * u, 1.7 * u);
+                d.DrawRoundedRectangle(Solid(Colors.White, 0.7), null, new Rect(-6.8 * u, -21.5 * u, 8.6 * u, 1.8 * u), 0.9 * u, 0.9 * u);
+                d.DrawEllipse(Solid(Lilac), null, new Point(9.4 * u, -20.6 * u), 1.7 * u, 1.7 * u);
+                d.DrawEllipse(null, Bevel(Math.Max(0.75, u * 0.25)), new Point(9.4 * u, -20.6 * u), 1.55 * u, 1.55 * u);
+                // XP well, its label and the home bar.
+                d.DrawRoundedRectangle(Solid(Colors.White, 0.3), null, new Rect(-11 * u, 18.1 * u, 6 * u, 1.1 * u), 0.55 * u, 0.55 * u);
+                d.DrawRoundedRectangle(Solid(Ink, 0.7), null, new Rect(-11 * u, 20.2 * u, 22 * u, 2.4 * u), 1.2 * u, 1.2 * u);
+                d.DrawRoundedRectangle(null, Bevel(Math.Max(0.75, u * 0.25), pressed: true), new Rect(-11 * u, 20.2 * u, 22 * u, 2.4 * u), 1.2 * u, 1.2 * u);
+                d.DrawRoundedRectangle(Solid(Colors.White, 0.6), null, new Rect(-4.2 * u, 25 * u, 8.4 * u, 0.9 * u), 0.45 * u, 0.45 * u);
             }));
-            for (int i = 0; i < 6; i++) DrawTile(dc, PhoneTile(i, u), TileHue(i), lit(i), dark, u, 2 * u);
-            if (xp > 0.01) dc.DrawRoundedRectangle(Fill(Mix(Accent, Colors.White, 0.2)), null, new Rect(-9.4 * u, 10.4 * u, 18.8 * u * xp, 2.8 * u), 1.4 * u, 1.4 * u);
-            var glass = new RectangleGeometry(new Rect(-11 * u, -33.5 * u, 22 * u, 67 * u), 3.4 * u, 3.4 * u);
+            for (int row = 0; row < 4; row++) DrawRow(dc, PhoneRow(row, u), TileHue(RowTile[row]), lit(row), dark, u);
+            if (xp > 0.01) dc.DrawRoundedRectangle(Fill(Mix(Accent, Colors.White, 0.2)), null, new Rect(-11 * u, 20.2 * u, 22 * u * xp, 2.4 * u), 1.2 * u, 1.2 * u);
+            var glass = new RectangleGeometry(screen, 4.2 * u, 4.2 * u);
             glass.Freeze();
-            Sheen(dc, glass, glass.Rect, t, 6, 0.6, 0.45);
+            Sheen(dc, glass, screen, t, 6, 0.6, 0.4);
         }
 
-        private void DrawLink(DrawingContext dc, Point a, Point bpt, double u, double t)
+        /// <summary>A mobile list row: icon, label lines and a toggle. Off: raised, switch left.
+        /// On: pressed in, tinted, the switch fills with the tile's hue and its knob slides right.</summary>
+        private void DrawRow(DrawingContext dc, Rect r, Color hue, double since, double dark, double u)
         {
-            var ctrl = new Point((a.X + bpt.X) / 2, Math.Min(a.Y, bpt.Y) - 10 * u);
-            var hue = Mix(Accent, Colors.White, 0.4);
-            for (int i = 0; i < 9; i++)
-            {
-                double s = (i + t * 0.9 % 1) / 9;
-                double m = 1 - s;
-                var q = new Point(m * m * a.X + 2 * m * s * ctrl.X + s * s * bpt.X, m * m * a.Y + 2 * m * s * ctrl.Y + s * s * bpt.Y);
-                dc.DrawEllipse(Fill(hue, 0.15 + 0.4 * Math.Sin(s * Math.PI)), null, q, u * 0.7, u * 0.7);
-            }
+            bool on = since >= 0 && dark < 1;
+            double k = on ? Clamp01(BackOut(since / 0.3, 2.2)) * (1 - dark) : 0;
+            double knobK = on ? BackOut(since / 0.3, 2.2) * (1 - dark) : 0;
+            var baseFill = Color.FromRgb(0x33, 0x30, 0x62);
+            var pr = new Rect(r.X, r.Y + u * 0.35 * k, r.Width, r.Height);
+            if (k <= 0.01) Plate(dc, pr, 2.2 * u, Fill(baseFill), u * 0.8);
+            else Plate(dc, pr, 2.2 * u, Fill(Mix(baseFill, hue, 0.3 * k)), 0, pressed: true);
+            double cy = pr.Y + pr.Height / 2;
+            // Icon: a small rounded square in the tile's hue.
+            var icon = new Rect(pr.X + 1.6 * u, cy - 1.9 * u, 3.8 * u, 3.8 * u);
+            dc.DrawRoundedRectangle(Fill(hue, 0.55 + 0.45 * k), null, icon, 1.1 * u, 1.1 * u);
+            dc.DrawRoundedRectangle(Fill(Colors.White, 0.35 + 0.4 * k), null, new Rect(icon.X + 0.9 * u, icon.Y + 0.9 * u, 1.3 * u, 1.3 * u), 0.5 * u, 0.5 * u);
+            // Label lines.
+            dc.DrawRoundedRectangle(Fill(Colors.White, 0.55 + 0.25 * k), null, new Rect(pr.X + 6.9 * u, cy - 1.6 * u, 7 * u, 1.3 * u), 0.65 * u, 0.65 * u);
+            dc.DrawRoundedRectangle(Fill(Colors.White, 0.22), null, new Rect(pr.X + 6.9 * u, cy + 0.6 * u, 4.6 * u, 1 * u), 0.5 * u, 0.5 * u);
+            // Toggle.
+            var tc = new Point(pr.Right - 4.4 * u, cy);
+            var track = new Rect(tc.X - 2.8 * u, cy - 1.55 * u, 5.6 * u, 3.1 * u);
+            dc.DrawRoundedRectangle(Fill(Ink, 0.65), null, track, 1.55 * u, 1.55 * u);
+            if (k > 0.01) dc.DrawRoundedRectangle(Fill(hue, k), null, track, 1.55 * u, 1.55 * u);
+            dc.DrawRoundedRectangle(null, Bevel(Math.Max(0.75, u * 0.22), pressed: true), track, 1.55 * u, 1.55 * u);
+            double kx = Lerp(track.X + 1.55 * u, track.Right - 1.55 * u, knobK);
+            double squish = on ? 1 + 0.25 * Pulse(since, 0.02, 0.22) : 1;
+            dc.DrawEllipse(Fill(Ink, 0.35), null, new Point(kx + 0.25 * u, cy + 0.35 * u), 1.2 * u * squish, 1.2 * u);
+            dc.DrawEllipse(Fill(Colors.White, on ? 0.98 : 0.7), null, new Point(kx, cy), 1.2 * u * squish, 1.2 * u);
+            if (on) Ripple(dc, tc, u * 2, u * 6, since / 0.55, Mix(hue, Colors.White, 0.4), u * 0.5);
         }
 
         /// <summary>A packet arcing from one tile to the other, a short tail of glints behind it.</summary>
@@ -794,7 +837,7 @@ namespace ConditioningControlPanel.Controls.Billboard
 
         private void DrawPointer(DrawingContext dc, Box b, double p, Point target, double u, double enter)
         {
-            var rest = b.P(6, 23);
+            var rest = b.P(-4 + PanelX, 21);
             var aim = new Point(target.X + 1.5 * u, target.Y + 1 * u);
             double go = EaseOut((p - 0.1) / 0.6);
             double away = EaseOut((p - 1.15) / 0.8);

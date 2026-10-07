@@ -65,7 +65,7 @@ public class BillboardHouseScenesATests
         if (string.IsNullOrWhiteSpace(dir)) return;
         Directory.CreateDirectory(dir);
         var times = new[] { 0.3, 1.1, BillboardVectorArt.StillSeconds, 2.2, 2.9, 3.6, 4.0, 4.5, 5.3, 6.1 };
-        foreach (var size in new[] { (W: 1000, H: 420), (W: 600, H: 340) })
+        foreach (var size in new[] { (W: 1000, H: 420), (W: 1010, H: 700), (W: 600, H: 340) })
             foreach (var s in Scenes)
             {
                 var view = s.Make();
