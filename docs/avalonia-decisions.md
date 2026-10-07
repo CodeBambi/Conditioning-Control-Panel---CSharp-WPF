@@ -499,6 +499,8 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   panic-stop path to test. So no entry point starts a run; the HUD only binds `ChaosRunState` (sample in the render
   proof, a stepped run in its test). Panic and mid-run saves are untouched (WPF `OnPanicKeyDuringRun` → stop; saves only
   where WPF writes them).
+
+
 ## 2026-10-02: Launcher account row, mod pill and panel-card stats (avalonia-port/launcher-account)
 - `LauncherModMenu` git-mv'd to Core (pure; WPF and its tests unchanged). `CoreEngine.StartedUtc` added so the status line
   reads "Running since HH:mm" as WPF's `MainWindow.EngineStartedUtc`; no head-side stamp.
