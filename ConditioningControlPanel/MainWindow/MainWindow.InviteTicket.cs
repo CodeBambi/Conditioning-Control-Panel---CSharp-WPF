@@ -95,6 +95,8 @@ namespace ConditioningControlPanel
         /// card, so a code spent there updates the header too.</summary>
         private void ApplyInviteTicket(InviteMine? mine)
         {
+            // The Tonight Board's Waiting card reads the same answer (no second request).
+            try { Services.Billboard.Providers.WaitingSignals.NoteInvites(mine); } catch { }
             try
             {
                 if (BtnInviteTicket == null) return;
