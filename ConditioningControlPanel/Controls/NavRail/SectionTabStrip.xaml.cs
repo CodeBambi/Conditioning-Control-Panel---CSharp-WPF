@@ -30,6 +30,12 @@ namespace ConditioningControlPanel.Controls.NavRail
         public static bool ShowsHeader(string? section) =>
             section != null && section != NavSections.Home;
 
+        /// <summary>The loc key of a pill's "what is this" line, shown on its "?" badge (2026-10-07).</summary>
+        public static string HelpKey(NavTab tab) => "nav_help_" + tab.Key;
+
+        /// <summary>Pills that open their own window ask first, so the click is never a surprise.</summary>
+        public static bool AsksBeforeOpening(NavTab tab) => tab.Kind == NavTabKind.Window;
+
         /// <summary>The pills a section draws, in table order, hidden tabs skipped.</summary>
         /// <summary>Is a pill of this tier locked for the account on this machine? A paying
         /// account sees no tier sign on the pages it already owns (review fix, 2026-10-06: every
@@ -737,6 +743,8 @@ namespace ConditioningControlPanel.Controls.NavRail
         {
             PillRow.Children.Clear();
             _pills.Clear();
+            _helpBadges.Clear();
+            CloseConfirm();
             _activePill = null;
             ActiveFill.Width = 0;
             ActiveFill.Visibility = Visibility.Collapsed;
@@ -869,7 +877,6 @@ namespace ConditioningControlPanel.Controls.NavRail
                     FocusVisualStyle = null,
                     Tag = tab.Key,
                     ToolTip = PillToolTip(section, tab, label.Text),
-                    Margin = new Thickness(PillRow.Children.Count == 0 ? 0 : NavStripRules.PillGap, 0, 0, 0),
                 };
                 ToolTipService.SetInitialShowDelay(pill, 500);
                 KeyboardNavigation.SetIsTabStop(pill, false);
@@ -891,7 +898,10 @@ namespace ConditioningControlPanel.Controls.NavRail
                 pill.GotKeyboardFocus += (_, _) => ring.BorderBrush = FocusRing;
                 pill.LostKeyboardFocus += (_, _) => ring.BorderBrush = Brushes.Transparent;
 
-                PillRow.Children.Add(pill);
+                // The pill rides in a host with its "?" badge (2026-10-07), so the gap and the
+                // badge live outside the button: hovering the badge never presses the pill.
+                PillRow.Children.Add(HostWithHelp(section, tab, pill, label.Text, parts.Tint,
+                    new Thickness(PillRow.Children.Count == 0 ? 0 : NavStripRules.PillGap, 0, 0, 0)));
                 parts.Pill = pill;
                 parts.Face = face;
                 parts.RestPadding = face.Padding;
@@ -966,7 +976,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         internal static string PillToolTip(string section, NavTab tab, string label)
         {
             var lines = new List<string> { CrumbFor(section, label) };
-            var tip = SafeLoc(tab.LabelKey + "_tip", string.Empty);
+            var tip = HelpText(tab);
             if (!string.IsNullOrEmpty(tip)) lines.Add(tip);
             if (!NavStripRules.PillLocked(tab.Tier)) { }
             else if (tab.Tier == 1) lines.Add(SafeLoc("nav_tag_premium_tip", string.Empty));
@@ -1025,6 +1035,8 @@ namespace ConditioningControlPanel.Controls.NavRail
             // Launchers and windows open something else; the page on screen keeps its pill.
             if (tab.Kind is NavTabKind.Tab or NavTabKind.Zone) SetActive(tab.Key, animate: true);
             if (focus) PillFor(tab.Key)?.Focus();
+            // A pill that opens its own window asks first (owner, 2026-10-07: Just Drop).
+            if (NavStripRules.AsksBeforeOpening(tab)) { AskBeforeOpening(tab); return; }
             TabRequested?.Invoke(tab);
         }
 
