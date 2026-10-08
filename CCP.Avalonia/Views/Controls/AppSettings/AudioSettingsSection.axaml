@@ -64,7 +64,6 @@
                     <Slider Grid.Column="1" x:Name="SliderMaster"
                             Minimum="0" Maximum="100" Value="50"
                             Margin="6,0" VerticalAlignment="Center"
-                            ValueChanged="SliderMaster_Changed"
                             ToolTip.Tip="{loc:Str tooltip_overall_audio_volume_level}"/>
                     <TextBlock x:Name="TxtMaster" Grid.Column="2"
                                Theme="{StaticResource ValueLabel}" Text="50%" FontSize="12"
@@ -80,7 +79,6 @@
                     <Slider Grid.Column="1" x:Name="SliderVideoVolume"
                             Minimum="0" Maximum="100" Value="50"
                             Margin="6,0" VerticalAlignment="Center"
-                            ValueChanged="SliderVideoVolume_Changed"
                             ToolTip.Tip="{loc:Str tooltip_separate_volume_control_for_videos}"/>
                     <TextBlock x:Name="TxtVideoVolume" Grid.Column="2"
                                Theme="{StaticResource ValueLabel}" Text="50%" FontSize="12"
@@ -96,7 +94,6 @@
                     <CheckBox Grid.Column="1" x:Name="ChkAudioDuck"
                               Theme="{StaticResource ToggleStyle}"
                               IsChecked="True" VerticalAlignment="Center"
-                              IsCheckedChanged="ChkAudioDuck_Changed"
                               ToolTip.Tip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
                 </Grid>
 
@@ -109,7 +106,6 @@
                     <Slider Grid.Column="1" x:Name="SliderDuck"
                             Minimum="0" Maximum="100" Value="80"
                             Margin="6,0" VerticalAlignment="Center"
-                            ValueChanged="SliderDuck_Changed"
                             ToolTip.Tip="{loc:Str tooltip_ducking_percentage_80_reduce_other_audio_to_2}"/>
                     <TextBlock x:Name="TxtDuck" Grid.Column="2"
                                Theme="{StaticResource ValueLabel}" Text="80%" FontSize="12"
@@ -125,7 +121,6 @@
                     <CheckBox Grid.Column="1" x:Name="ChkExcludeBambiCloudDucking"
                               Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                               IsChecked="True"
-                              IsCheckedChanged="ChkExcludeBambiCloudDucking_Changed"
                               ToolTip.Tip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"/>
                 </Grid>
 
@@ -140,10 +135,8 @@
                     <ComboBox Grid.Column="1" x:Name="CmbAudioOutputDevice"
                               Theme="{StaticResource DarkComboBoxStyle}"
                               Margin="6,0" VerticalAlignment="Center" HorizontalAlignment="Stretch"
-                              ToolTip.Tip="{loc:Str tooltip_audio_output_device}"
-                              SelectionChanged="CmbAudioOutputDevice_SelectionChanged"/>
+                              ToolTip.Tip="{loc:Str tooltip_audio_output_device}"/>
                     <Button Grid.Column="2" x:Name="BtnAudioOutputRefresh" Content="↻"
-                            Click="BtnAudioOutputRefresh_Click"
                             ToolTip.Tip="{loc:Str set2_tooltip_audio_output_refresh}"
                             Padding="10,3" Background="#33FF69B4" Foreground="White" FontSize="12"
                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
@@ -153,7 +146,6 @@
                 <!-- Actions: diagnostics + the layered-audio mixer (#659) -->
                 <StackPanel Orientation="Horizontal">
                     <Button x:Name="BtnTestAudio"
-                            Click="BtnTestAudio_Click"
                             ToolTip.Tip="{loc:Str set2_tooltip_test_audio}"
                             Background="#33FF69B4" Foreground="White" FontSize="11" Padding="12,5"
                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"

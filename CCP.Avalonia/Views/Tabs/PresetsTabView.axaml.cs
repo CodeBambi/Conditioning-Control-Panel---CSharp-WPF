@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -533,6 +534,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (!_presetFileService.ValidatePresetFile(filePath, out var errorMessage))
             {
                 ShowDropZoneStatus($"Invalid: {errorMessage}", isError: true);
+                App.Notifications.Show(Loc.GetF("preset_drop_invalid_fmt", errorMessage), Helpers.NotificationType.Warning);
                 return;
             }
 
@@ -540,6 +542,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (preset == null)
             {
                 ShowDropZoneStatus("Failed to read preset", isError: true);
+                App.Notifications.Show(Loc.GetF("preset_drop_invalid_fmt", Path.GetFileName(filePath)), Helpers.NotificationType.Warning);
                 return;
             }
 
@@ -557,6 +560,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             RefreshPresetsList();
             ShowDropZoneStatus($"Preset imported: {preset.Name}", isError: false);
+            App.Notifications.Show(Loc.GetF("preset_drop_imported_fmt", preset.Name), Helpers.NotificationType.Success);
             Serilog.Log.Information("Preset imported via drag-drop: {Name}", preset.Name);
         }
 
@@ -1190,10 +1194,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (e.DataTransfer.TryGetFiles() is not { } files || files.Length != 1 ||
                 files[0].TryGetLocalPath() is not { } path) return;
+            if (ImportDroppedPath(path)) e.Handled = true;
+        }
+
+        /// <summary>WPF DetectDropType for one file: a session by name, a preset by name or by
+        /// content (PresetDropRules), so a browser's "x.preset (1).json" still imports (ccp-bugs #1331).</summary>
+        internal bool ImportDroppedPath(string path)
+        {
             if (path.EndsWith(".session.json", StringComparison.OrdinalIgnoreCase)) HandleSessionDrop(path);
-            else if (path.EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase)) HandlePresetDrop(path);
-            else return;
-            e.Handled = true;
+            else if (File.Exists(path) && PresetDropRules.FileIsPreset(path)) HandlePresetDrop(path);
+            else return false;
+            return true;
         }
 
         /// <summary>WPF's InitializeSessionManager on first use, for a view mounted without one.</summary>

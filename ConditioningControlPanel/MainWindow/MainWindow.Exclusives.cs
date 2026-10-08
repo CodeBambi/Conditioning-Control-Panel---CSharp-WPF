@@ -260,13 +260,6 @@ namespace ConditioningControlPanel
             }), System.Windows.Threading.DispatcherPriority.Normal);
         }
 
-        /// <summary>
-        /// Collection order: Prime (tier 2) first, then Basic (tier 1), then the untiered doors.
-        /// Stable, so roster order holds inside each shelf. The spotlight still reads All[0].
-        /// </summary>
-        internal static IEnumerable<ExclusiveFeature> ShelfOrder(IEnumerable<ExclusiveFeature> roster) =>
-            roster.OrderBy(f => f.Tier switch { 2 => 0, 1 => 1, _ => 2 });
-
         // ============================== build ==============================
 
         private void EnsureExclusivesBuilt()
@@ -288,7 +281,7 @@ namespace ConditioningControlPanel
                 // EVERY feature gets a card - the spotlight is a highlight on top of
                 // the collection, not a hole in it. (The hero and its card share the
                 // same registry entry, so chips/veils/titles refresh identically.)
-                foreach (var feature in ShelfOrder(ExclusiveFeature.All))
+                foreach (var feature in ExclusiveFeature.ShelfOrder(ExclusiveFeature.All))
                     ExclusivesTab.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
 
                 // The casino fills the first former teaser. Two seats remain reserved.

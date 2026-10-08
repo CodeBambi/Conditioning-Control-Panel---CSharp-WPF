@@ -38,11 +38,11 @@
 //     SessionRowLiftPx, SessionCardCornerRadius. Attached by
 //     MainWindow.SessionIO.BuildSessionRackRow as each row is built. The SWEEP is restored on
 //     PresetsTabView's own rack rows (Controls/RowSweepAdorner.cs); the lift is not.
-//   * per-card / per-tile hover - PreparePresetCardFx, PresetCard_MouseEnter/MouseLeave,
-//     PrepareAchievementTileFx, SetAchievementTileUnlocked, TiltTargetFor,
-//     AchievementTile_MouseEnter/MouseLeave, TiltAchievementTile, StaggerAchievementTiles, the
-//     three achievement dictionaries and four tuning constants. Same shape: called by the builder,
-//     and the builders are MainShellWindow.Presets.cs / .AchievementsTab.cs. In Avalonia these are
+//   * ACHIEVEMENTS: ported. Stagger, tilt/lift/pop and the unlocked gate (PrepareAchievementTileFx,
+//     SetAchievementTileUnlocked, AchievementTile_MouseEnter/MouseLeave, TiltAchievementTile,
+//     StaggerAchievementTiles) live in CCP.Avalonia/Views/Tabs/AchievementsTabView.Fx.cs, next to the grid.
+//   * per-card hover (Presets) - PreparePresetCardFx, PresetCard_MouseEnter/MouseLeave. Called by the
+//     builder, MainShellWindow.Presets.cs. In Avalonia these are
 //     pointer-over transitions on the item's own ControlTheme far more cheaply than as C# per-item
 //     hooks - prefer that when the builders land, over a literal transcription.
 //   * the button press squish - WireButtonPress, FxButton_PressDown/PressUp, PressFx,

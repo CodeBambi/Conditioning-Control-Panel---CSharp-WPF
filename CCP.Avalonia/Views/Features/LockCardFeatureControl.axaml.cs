@@ -63,8 +63,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public void RebindToCurrentSettings()
         {
             Unhook();
-            _hooked = CoreSettings.Current;
-            _hooked.PropertyChanged += OnSettingsPropertyChanged;
+            // Hidden rack controls can be constructed without ever loading/unloading.
+            if (IsLoaded)
+            {
+                _hooked = CoreSettings.Current;
+                _hooked.PropertyChanged += OnSettingsPropertyChanged;
+            }
             LoadFromSettings();
         }
 

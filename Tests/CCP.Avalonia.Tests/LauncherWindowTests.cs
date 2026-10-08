@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using CCP.Avalonia.Testing;
@@ -34,6 +35,8 @@ public sealed class LauncherWindowTests
             // A welcomed, 18+-accepted install: the age gate would exit a panel it finds hidden.
             CoreSettings.Current.Welcomed = true;
             CoreSettings.Current.HasAcceptedAgeVerification = true;
+            // Routing tests: motion off, so a hide is not held for the exit beat and the fade (LauncherFxTests cover those).
+            CoreSettings.Current.MotionLevel = MotionLevel.Off;
             var (oldIn, oldLab) = (CoreAccount.IsLoggedInProvider, CoreEntitlement.HasLabProvider);
             var shell = new MainShellWindow();
             try
@@ -78,11 +81,101 @@ public sealed class LauncherWindowTests
         Assert.Contains(Loc.Get("launcher_game_intake_title"), Texts(tile));
         Assert.Contains(Loc.Get("launcher_play"), Texts(tile));
 
-        launcher.Play(ConditioningControlPanel.Services.Launcher.LauncherCards.Find("intake")!);
+        ClickPlay(tile);
         Dispatcher.UIThread.RunJobs();
         Assert.False(launcher.IsVisible);
         Assert.True(shell.IsVisible);
         Assert.Equal("gradedintake", shell.CurrentTab);
+    });
+
+    private static void ClickPlay(Control tile) =>
+        tile.GetVisualDescendants().OfType<Button>().Single()
+            .RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+    [Fact]
+    public void Lockdown_TilePlayRefuses_LauncherStaysAndPanelStaysTucked() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreEntitlement.HasLabProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var launcher = LauncherWindow.Instance!;
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            ld.Activate(TimeSpan.FromMinutes(30));
+            ClickPlay(launcher.FindControl<UniformGrid>("GamesGrid")!.Children[0]);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(launcher.IsVisible);
+            Assert.False(shell.IsVisible);
+        }
+        finally { ld.Deactivate(); }
+    });
+
+    private static bool LoginOpen(LauncherWindow w) =>
+        w.OwnedWindows.Any(o => o is ConditioningControlPanel.Avalonia.Views.Dialogs.LoginDialog { IsVisible: true });
+
+    private static void Raise(LauncherWindow w, string name) =>
+        w.FindControl<Button>(name)!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+    [Fact]
+    public void Lockdown_SignedOutCardPress_AndSignInPillOpenNoLogin() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => false;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var tile = w.FindControl<UniformGrid>("GamesGrid")!.Children[0];
+        // A real press/release on the art plate (not the Play button), as a user taps the card.
+        void Press()
+        {
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            var p = tile.TranslatePoint(new Point(tile.Bounds.Width / 2, tile.Bounds.Height / 4), w)!.Value;
+            w.MouseDown(p, MouseButton.Left);
+            w.MouseUp(p, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+        }
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Press();
+            Assert.False(LoginOpen(w));
+            Raise(w, "SignInPill");
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(LoginOpen(w));
+            // Control: the same press reaches the card once Lockdown ends.
+            ld.Deactivate();
+            Press();
+            Assert.True(LoginOpen(w));
+        }
+        finally
+        {
+            ld.Deactivate();
+            foreach (var o in w.OwnedWindows.ToList()) o.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    });
+
+    [Theory]
+    [InlineData("PanelCta")]
+    [InlineData("AccountChipButton")]
+    public void Lockdown_PanelCtaAndAccountChip_LeaveThePanelTucked(string button) => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var ld = LockdownService.Current = new LockdownService();
+        try
+        {
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Raise(w, button);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(w.IsVisible);
+            Assert.False(shell.IsVisible);
+        }
+        finally { ld.Deactivate(); }
     });
 
     [Fact]

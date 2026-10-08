@@ -276,6 +276,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
             var pink = Brush("PinkBrush", Color.FromRgb(0xFF, 0x69, 0xB4));
             var body = new StackPanel { MaxWidth = BodyMaxWidth };
+            if (HelpLoops.HelpLoopRegistry.TryGet(_content.SectionId, out var scene))
+                body.Children.Add(BuildLoop(scene, pink));
 
             var header = new Border
             {
@@ -433,6 +435,25 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
             _popupRoot = root;
             _popup.Child = root;
+        }
+
+        /// <summary>WPF HelpPopover.BuildLoop: the drawn loop in a pink-rimmed frame, its step chips
+        /// under it. It plays only while the card is open (closing detaches it from the tree).</summary>
+        private static Control BuildLoop(HelpLoops.HelpLoopScene scene, IBrush pink)
+        {
+            var view = new HelpLoops.HelpLoopView(scene) { Name = "HelpLoop" };
+            var panel = new StackPanel();
+            panel.Children.Add(new Border
+            {
+                Margin = new Thickness(12, 12, 12, 0),
+                CornerRadius = new CornerRadius(8),
+                BorderBrush = pink,
+                BorderThickness = new Thickness(1),
+                Background = new SolidColorBrush(Color.FromRgb(0x0b, 0x09, 0x14)),
+                Child = view,
+            });
+            panel.Children.Add(new HelpLoops.HelpLoopSteps(view, pink));
+            return panel;
         }
 
         private static TextBlock Heading(string key, IBrush foreground)

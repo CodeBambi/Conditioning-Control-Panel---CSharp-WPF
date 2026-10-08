@@ -59,6 +59,13 @@ public sealed class CompanionHeroSyncTests
             Assert.False(s.AvatarEnabled);
             Assert.False(vm.IsCompanionShown);
 
+            // main-sync 9dfccda39: Pop out on a switched-off companion wakes it (the tray's Wake),
+            // and the shell re-syncs the hero, so its on/off state follows without the card's Sync.
+            vm.DetachCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(s.AvatarEnabled);
+            Assert.True(vm.IsCompanionShown);
+
             shell.ShowTab("achievements");
             Dispatcher.UIThread.RunJobs();
             s.CompanionProgressData[2].Level = 5;   // changed while the tab was hidden

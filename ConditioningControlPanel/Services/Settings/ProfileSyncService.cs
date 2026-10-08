@@ -1744,6 +1744,11 @@ namespace ConditioningControlPanel.Services
                         // back up through the take-higher merge. Legacy clients see no error and
                         // no wire change; their level writes just stop landing.
                         DescentEpoch = DescentEpochs.ClientEpoch,
+                        // THE AUTO FLAG (2026-10-06). This build takes a migration offer silently
+                        // (restore, no window), so the server may offer it. A build without this
+                        // field is never offered, which is what keeps the old fullscreen ceremony
+                        // off every install that still carries it. Unconditional, like the epoch.
+                        DescentAuto = true,
                         // Send false to clear server-side reset flags only when acknowledging
                         ResetWeeklyQuest = false,
                         ResetDailyQuest = false,
@@ -5035,20 +5040,25 @@ namespace ConditioningControlPanel.Services
         /// no-op. Nothing is lost in any ordering, because both choices are pure functions of a
         /// lifetime XP total that never moves.</para>
         /// </summary>
-        /// <summary>A server-recorded Cycle choice owes Cycle I and the lasting XP bonus. Only ever
-        /// raises (a Restore echo or a missing choice changes nothing). True when it wrote.</summary>
+        /// <summary>A completed migration owes the lasting XP bonus, whichever way it went (owner,
+        /// 2026-10-06: migrated = bonus); a server-recorded Cycle choice also owes Cycle I. Only
+        /// ever raises. Called only for an acked migration. True when it wrote.</summary>
         internal static bool EnsureCycleBonus(AppSettings settings, string? serverChoice)
         {
-            if (serverChoice != DescentMigrationChoices.Cycle) return false;
             var changed = false;
-            if (settings.DescentCycle < 1) { settings.DescentCycle = 1; changed = true; }
+            if (serverChoice == DescentMigrationChoices.Cycle && settings.DescentCycle < 1)
+            {
+                settings.DescentCycle = 1;
+                changed = true;
+            }
             if (settings.DescentCycleXpBonus < DescentMigration.CycleXpBonus)
             {
                 settings.DescentCycleXpBonus = DescentMigration.CycleXpBonus;
                 changed = true;
             }
             if (changed)
-                App.Logger?.Information("[Descent] Restored the Cycle bonus from the server's record of the choice.");
+                App.Logger?.Information("[Descent] Restored the migration XP bonus from the server's record (choice={Choice}).",
+                    serverChoice ?? "unknown");
             return changed;
         }
 
@@ -5087,7 +5097,8 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Open the ceremony when the server offers it. Every condition here is a reason NOT to:
+        /// Take the migration when the server offers it (silently, on the restore ledger, since
+        /// 2026-10-06). Every condition here is a reason NOT to:
         /// the block has to be present, it has to say required, the account must not already be
         /// migrated, and there must be no choice already made and waiting to land.
         ///

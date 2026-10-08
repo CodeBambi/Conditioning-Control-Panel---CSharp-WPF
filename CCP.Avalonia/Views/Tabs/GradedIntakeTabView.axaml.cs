@@ -52,12 +52,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // The frequency readout is written from code (WPF: "{val}/session hr"), so it has to be
             // rewritten when the language changes or the {loc:Str} binding still living under that
             // local value would put the seeded "2/session hr" back in the old language.
-            LocalizationManager.Instance.LanguageChanged += (_, _) =>
-                Dispatcher.UIThread.Post(() =>
-                {
-                    ShowFrequency((int)Math.Round(SliderPopQuizFrequency.Value));
-                    RefreshGradedIntakeGate();   // same trap: the gate copy is written from code
-                });
 
             SyncFromSettings();
         }
@@ -65,6 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnAttachedToVisualTree(e);
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             RefreshPastQuizzes();   // WPF refreshes on tab navigation (MainWindow.TabNavigation.cs:548)
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             App.IntakePass.PassStateChanged += OnIntakePassStateChanged;
@@ -74,10 +69,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
             App.IntakePass.PassStateChanged -= OnIntakePassStateChanged;
             base.OnDetachedFromVisualTree(e);
         }
+
+        private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
+        {
+            ShowFrequency((int)Math.Round(SliderPopQuizFrequency.Value));
+            RefreshGradedIntakeGate();
+        });
 
         // A cloud restore or a factory reset swaps the settings instance; repaint from the new one.
         private void OnCurrentReplaced() => Dispatcher.UIThread.Post(SyncFromSettings);

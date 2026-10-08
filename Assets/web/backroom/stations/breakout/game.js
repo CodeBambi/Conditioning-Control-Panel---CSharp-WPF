@@ -903,7 +903,10 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       movePaddle(dt,input);
       for(const b of g.balls) {b.x=g.paddle.x;b.y=g.paddle.y-g.paddle.h/2-b.r;}
       if (f.age >= 1.9) f.phase = 'ready';
-      if (f.phase === 'ready' && input.launch) {f.phase='approach';for(const b of g.balls)launch(b);}
+      // The finale never serves on its own, so a press while the ring is still forming is kept, not dropped:
+      // a player who clicked once early used to be left looking at a ball that would not leave.
+      if (input.launch) f.serveAsked = true;
+      if (f.phase === 'ready' && f.serveAsked) {f.serveAsked=false;f.phase='approach';for(const b of g.balls)launch(b);}
       return true;
     }
     if (f.phase === 'locked') {
@@ -1446,7 +1449,9 @@ export function createGame({ w = W, h = H, rng = Math.random, audio = null, onEv
       g.launchTimer += dt;
       // The auto launch waits for the first downbeat at or after LAUNCH_S (one beat of grace if the clock stalls); a manual launch is immediate.
       const auto = !g.finale && g.launchTimer >= LAUNCH_S && (g.downbeat || g.launchTimer >= LAUNCH_S + spb() + 0.05);
-      if ((g.reduced || g.wallAge >= 1.9) && (input.launch || auto)) { for (const b of g.balls) if (b.stuck) launch(b); g.launchTimer = 0; }
+      if (input.launch && g.finale) g.finale.serveAsked = true;   // manual only in the finale: an early press is kept (see updateFinale)
+      const asked = input.launch || !!g.finale?.serveAsked;
+      if ((g.reduced || g.wallAge >= 1.9) && (asked || auto)) { for (const b of g.balls) if (b.stuck) launch(b); g.launchTimer = 0; if (g.finale) g.finale.serveAsked = false; }
     }
     for (const b of g.balls) { if (g.freeze > 0 || ['interrupt','outro'].includes(g.finale?.phase)) break; moveBall(b, dt); }
     if (g.balls.some(b => b.lost)) {

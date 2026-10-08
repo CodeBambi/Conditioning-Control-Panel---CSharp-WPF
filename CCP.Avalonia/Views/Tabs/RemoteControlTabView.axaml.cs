@@ -40,9 +40,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             LstRemoteCommandLog.ItemsSource = _log;
             var r = Relay.Value;
-            r.ControllerConnectedChanged += (_, _) => Dispatcher.UIThread.Post(() => UpdateRemoteStatus(r.ControllerConnected));
-            r.CommandReceived += (_, a) => Dispatcher.UIThread.Post(() => AppendRemoteCommandLog(a));
-            r.SessionEnded += (_, _) => Dispatcher.UIThread.Post(() => ShowSession(null));
+            EventHandler connected = (_, _) => Dispatcher.UIThread.Post(() => UpdateRemoteStatus(r.ControllerConnected));
+            EventHandler<string> received = (_, a) => Dispatcher.UIThread.Post(() => AppendRemoteCommandLog(a));
+            EventHandler ended = (_, _) => Dispatcher.UIThread.Post(() => ShowSession(null));
+            // The relay outlives windows. Hidden tabs stay attached, closed tabs must unsubscribe.
+            AttachedToVisualTree += (_, _) =>
+            {
+                r.ControllerConnectedChanged += connected;
+                r.CommandReceived += received;
+                r.SessionEnded += ended;
+                ShowSession(r.SessionCode);
+                UpdateRemoteStatus(r.ControllerConnected, idle: !r.IsActive);
+            };
+            DetachedFromVisualTree += (_, _) =>
+            {
+                r.ControllerConnectedChanged -= connected;
+                r.CommandReceived -= received;
+                r.SessionEnded -= ended;
+            };
             RefreshTierCardHighlight();
         }
 

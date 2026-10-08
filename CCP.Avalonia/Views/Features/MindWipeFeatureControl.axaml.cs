@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Localization;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
@@ -24,13 +25,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// async and needs a TopLevel - so the handler is <c>async void</c> and the title and filter
     /// carry over verbatim.</para>
     ///
-    /// <para>Every editor now also drives <see cref="CoreMindWipe"/>, the one-for-one port of the
-    /// WPF card's <c>App.MindWipe.*</c> calls. That seam is unseeded on this head - there is no
-    /// mind-wipe playback here yet - so the card configures correctly and plays nothing, and says
-    /// so rather than pretending: <c>IsLooping</c> reads false, so the "restart the loop for the
-    /// new clip" path starts no silent loop. The deciding half (tick interval, per-tick
-    /// probability, session escalation, clip discovery) is <c>MindWipeSchedule</c> in Core.
-    /// Still head-side: the playback itself, and the mod-aware feature art.</para>
+    /// <para>Every editor also drives <see cref="CoreMindWipe"/>, the one-for-one port of the WPF
+    /// card's <c>App.MindWipe.*</c> calls, seeded by <c>Platform.MindWipePlayer</c> when LibVLC loads.</para>
     /// </summary>
     public partial class MindWipeFeatureControl : UserControl
     {
@@ -61,8 +57,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public void RebindToCurrentSettings()
         {
             Unhook();
-            _hooked = CoreSettings.Current;
-            _hooked.PropertyChanged += OnSettingsPropertyChanged;
+            // Hidden rack controls can be constructed without ever loading/unloading.
+            if (IsLoaded)
+            {
+                _hooked = CoreSettings.Current;
+                _hooked.PropertyChanged += OnSettingsPropertyChanged;
+            }
             LoadFromSettings();
         }
 
@@ -116,6 +116,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var on = ChkEnable.IsChecked ?? false;
             if (s.MindWipeEnabled == on) return;
             s.MindWipeEnabled = on;
+            // #1304: unticking used to leave a running Mind Wipe firing until the engine stopped.
+            CoreMindWipe.ApplyRunRule();
             CoreSettings.Save();
         }
 
@@ -150,8 +152,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var looping = ChkLoop.IsChecked ?? false;
             if (s.MindWipeLoop == looping) return;
             s.MindWipeLoop = looping;
-            if (looping) CoreMindWipe.StartLoop(s.MindWipeVolume / 100.0);
-            else CoreMindWipe.StopLoop();
+            // #1304: the loop plays on top of an enabled, running Mind Wipe only (WPF ChkLoop_Changed).
+            CoreMindWipe.ApplyRunRule();
             CoreSettings.Save();
         }
 
@@ -160,7 +162,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// check here and the service's <c>TriggerOnce</c> is documented as playing with the
         /// service stopped, so gating it would make this button do less than the original.
         /// </summary>
-        private void BtnTest_Click(object? sender, RoutedEventArgs e) => CoreMindWipe.TriggerOnce();
+        private async void BtnTest_Click(object? sender, RoutedEventArgs e)
+        {
+            // WPF MindWipeService.TriggerOnce: no clips is a warning box, not silence.
+            if (CoreMindWipe.ClipCount == 0)
+            {
+                if (TopLevel.GetTopLevel(this) is Window owner)
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("mindwipe_title"), Loc.Get("mindwipe_no_audio_files"));
+                return;
+            }
+            CoreMindWipe.TriggerOnce();
+        }
 
         /// <summary>
         /// Win32's <c>OpenFileDialog</c> in Avalonia terms. Same title, same extensions, and the
