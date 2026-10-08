@@ -34,6 +34,12 @@ public sealed class HelpLoopScenesTests
     [InlineData("BrainDrain")]
     [InlineData("MindWipe")]
     [InlineData("BubbleCount")]
+    [InlineData("LockCard")]
+    [InlineData("FocusGaze")]
+    [InlineData("IntensityRamp")]
+    [InlineData("Presets")]
+    [InlineData("Subliminals")]
+    [InlineData("WebcamCalibration")]
     public Task SceneRendersEveryStepAndLightsItsChipsInOrder(string id) => AvaloniaTestDispatcher.RunAsync(() =>
     {
         EnsureAvalonia();
@@ -114,6 +120,18 @@ public sealed class HelpLoopScenesTests
         // t=5000: the "7" button (245,120 40x40) has been picked and fills Mint #5fffd0 (WPF BubbleCountLoop);
         // the frame is RGBA, so the little-endian read gives 0xBBGGRR.
         Assert.Equal(0xD0FF5Fu, Pixel(new FixedAt(scene, 5000), 280, 135));
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task WebcamCalibrationTicksTheGridPointsAlreadyRead() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        Assert.True(HelpLoopRegistry.TryGet("WebcamCalibration", out var scene));
+        // Grid point 7 sits at (60,94) on the snake walk (WPF WebcamCalibrationLoop). At t=5000 the dot is on
+        // hop 8, so points 0..7 carry a Mint #5fffd0 tick; at t=2000 nothing has been read yet. RGBA -> 0xBBGGRR.
+        Assert.Equal(0xD0FF5Fu, Pixel(new FixedAt(scene, 5000), 60, 94));
+        Assert.NotEqual(0xD0FF5Fu, Pixel(new FixedAt(scene, 2000), 60, 94));
         return Task.CompletedTask;
     });
 
