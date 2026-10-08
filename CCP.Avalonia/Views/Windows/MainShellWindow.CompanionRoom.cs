@@ -22,13 +22,11 @@
 // STILL HEAD-SIDE, each with the exact symbol and where it lives today:
 //   CompanionRoom / SyncCompanionRoom - CompanionRoomRuntimeVm (path above). CompanionTabView on
 //                            this head publishes no Vm, deliberately.
-//   SetSlutMode            - App.Personality.GetActivePreset
-//                            (ConditioningControlPanel/Services/Companion/PersonalityService.cs).
-//                            ExplicitContentGate IS in Core and the acknowledgement dialog IS on
-//                            this head, but RequiresAcknowledgement(null, true) returns FALSE - so
-//                            shipping it without the preset lookup would be a SKIPPED gate, not a
-//                            degraded one. Blocked whole, deliberately.
-//   ActivatePersonalityPreset - the same PersonalityService, plus GetPersonalityDisplayName.
+//   SetSlutMode / ActivatePersonalityPreset - PersonalityService.Shared, ExplicitContentGate and the
+//                            acknowledgement dialog are all reachable now (the tube's Personality
+//                            submenu uses them: AvatarTube/AvatarTubeWindow.ContentGates.cs). What is
+//                            missing is a CALLER: the room's Z4 chip row / slut-mode cell are inert
+//                            (see NO CALLER YET below). Port both WITH the gate when those cells land.
 //   SetCustomApiKey        - Services.Auth.SecureStringHelper.Protect
 //                            (ConditioningControlPanel/Services/Auth/SecureStringHelper.cs).
 //                            CompanionPromptSettings.OpenAiCompatibleApiKey holds a DPAPI blob,

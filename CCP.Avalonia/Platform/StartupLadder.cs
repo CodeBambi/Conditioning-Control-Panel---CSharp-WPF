@@ -112,12 +112,13 @@ namespace ConditioningControlPanel.Avalonia.Platform
             foreach (var h in held) PresentOrInbox(h);
         }
 
-        /// <summary>Test seam: forget the quiet window, the passive pacing and every row.</summary>
+        /// <summary>Test seam: forget the quiet window, the passive pacing, the passive windows up and every row.</summary>
         internal static void ResetForTests()
         {
             _firstLaunchUntilUtc = null;
             _lastPassiveUtc = null;
             _held.Clear();
+            _passiveUp.Clear();   // a card another test left open must not hold this test's surface
             _passiveTimer?.Stop();
             _passiveTimer = null;
             Time = TimeProvider.System;

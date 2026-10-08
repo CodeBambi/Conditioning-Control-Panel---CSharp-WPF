@@ -1237,6 +1237,7 @@
   "label_easy_2": "⭐ 쉬움",
   "label_let_the_morning_carry_you_away": "아침이 당신을 데려가게 해요...",
   "label_corner_gif": "🖼 코너 GIF",
+  "corner_gif_force_disabled": "코너 GIF가 꺼졌습니다. 지난 세션이 화면에 표시된 채로 종료되었습니다. 나선 카드에서 다시 켜세요.",
   "label_place_a_subtle_gif_in_a_screen_corner": "화면 코너에 은은한 GIF를 배치해요",
   "btn_select_gif": "📁 GIF 선택",
   "label_position": "위치:",

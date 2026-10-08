@@ -1237,6 +1237,7 @@
   "label_easy_2": "⭐ Легко",
   "label_let_the_morning_carry_you_away": "Позволь утру унести тебя...",
   "label_corner_gif": "🖼 GIF в углу",
+  "corner_gif_force_disabled": "GIF в углу отключены: прошлый сеанс завершился, пока один из них был на экране. Включите их снова на карточке «Спираль».",
   "label_place_a_subtle_gif_in_a_screen_corner": "Размести незаметный GIF в углу экрана",
   "btn_select_gif": "📁 Выбрать GIF",
   "label_position": "Позиция:",

@@ -85,6 +85,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- WPF CornerGifMedia's built-in corner asset (pre-scaled), CornerGifOverlay's fallback. -->
+    <Content Include="..\Assets\spiral_corner.gif" Link="Resources\spiral_corner.gif">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- The shipped spiral (WPF Resources\spiral.gif): SpiralOverlay's default and the card's Default thumbnail. -->
     <Content Include="..\Assets\spiral.gif" Link="Resources\spiral.gif">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -178,6 +184,8 @@
     <AvaloniaResource Include="..\Assets\BlinkTrainer\Demo\*.png"
                       Link="Resources\BlinkTrainer\Demo\%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\Assets\app.ico" Link="Resources\app.ico" />
+    <!-- WPF EmiFace.PixelFont's shipped Press Start 2P (Resources/emi/fonts), for the ring cards. -->
+    <AvaloniaResource Include="..\Assets\emi\fonts\*.ttf" Link="Resources\emi\fonts\%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\Assets\*.png"
                       Link="Resources\%(Filename)%(Extension)" />
 

@@ -139,8 +139,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 Dispatcher.UIThread.Post(UpdateSelectionHighlight);
                 // A corner-GIF slot with no pick of its own plays the pool spiral
                 // (CornerGifPlanner.ResolveSourcePath), so a new pool selection changes what those
-                // slots draw. Ask the surface to rebuild them. Unseeded on this head until its
-                // overlay surface exists, so today this is a no-op rather than a wrong picture.
+                // slots draw. Ask the surface (CornerGifOverlay) to rebuild them.
                 CoreCornerGif.Refresh();
             }
         }

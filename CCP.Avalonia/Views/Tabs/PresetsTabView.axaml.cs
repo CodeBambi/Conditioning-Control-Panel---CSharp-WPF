@@ -1028,8 +1028,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnExportSession.IsEnabled = true;   // WPF SessionIO.cs:973
             SessionSpoilerPanel.IsVisible = false;
             SetRevealLabel("btn_reveal_details");
-            // ponytail: WPF shows it when session.HasCornerGifOption; this head has no corner-GIF
-            // overlay surface (CoreCornerGif unseeded), so the option would promise a picture that never appears.
+            // ponytail: WPF shows it when session.HasCornerGifOption. The standalone overlay exists
+            // (CornerGifOverlay) but SessionRunner has no session-scoped corner GIF (WPF SessionEngine's
+            // start/end minute, admission and handback), so the option would promise a picture that never appears.
             CornerGifOptionPanel.IsVisible = false;
 
             // WPF MainWindow.SessionIO.cs:927-972 (SelectSession).
