@@ -6,7 +6,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Platform.Storage;
+using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using Serilog;
@@ -19,8 +21,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// The language combo is populated for real from <see cref="LocalizationManager.AvailableLanguages"/>
     /// (Core). The settings logic is restored against <see cref="CoreSettings"/>: the live editors
     /// compare before writing, as on WPF, because the section is seeded from outside and an echo
-    /// must not save. What still needs the head is named at each handler: the Windows startup
-    /// shortcut, the start-hidden warning dialog, the shell's Deeper door. The startup-video
+    /// must not save. Run-on-startup is the XDG autostart entry (<see cref="XdgAutostart"/>, WPF's
+    /// Startup-folder shortcut), with WPF's start-hidden warning; the Deeper switch drives the
+    /// shell's rail door. The startup-video
     /// picker is wired to Avalonia's native <c>StorageProvider</c>; choosing a file only stores
     /// the path, playback of it stays with the video engine.
     /// <c>IAppSettingsSection</c> lives in the WPF head's AppSettingsTabView; <see cref="OnSectionShown"/>
@@ -48,6 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             ChkStartHidden.Click += ChkStartHidden_Click;
             ChkAutoRun.IsCheckedChanged += ChkAutoRun_Changed;
             ChkVidLaunch.IsCheckedChanged += ChkVidLaunch_Changed;
+            ChkShowSessionCountdown.IsCheckedChanged += ChkShowSessionCountdown_Changed;
             ChkEnableDeeper.IsCheckedChanged += ChkEnableDeeper_Changed;
             BtnSelectStartupVideo.Click += BtnSelectStartupVideo_Click;
             BtnClearStartupVideo.Click += BtnClearStartupVideo_Click;
@@ -64,15 +68,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             try
             {
                 var s = CoreSettings.Current;
-                // ponytail: WPF reconciles RunOnStartup against the Windows startup shortcut here
-                // (StartupManager). No equivalent on this head; the box shows the stored value.
-                Set(ChkWinStart, s.RunOnStartup);
+                // WPF reconciles RunOnStartup against the OS registration; settings stay the
+                // authority: stored ON + entry missing is re-created, an externally added entry adopted.
+                var registered = XdgAutostart.IsRegistered();
+                if (s.RunOnStartup && !registered)
+                {
+                    if (XdgAutostart.SetStartupState(true)) registered = true;
+                    else
+                    {
+                        s.RunOnStartup = false;
+                        CoreSettings.Save();
+                        Log.Warning("Settings/General: could not re-create the autostart entry - RunOnStartup cleared");
+                        if (TopLevel.GetTopLevel(this) is Window owner)
+                            _ = AskAsync(owner, "title_startup_error", "msg_failed_to_update_startup", confirm: false);
+                    }
+                }
+                else if (!s.RunOnStartup && registered)
+                {
+                    s.RunOnStartup = true;
+                    CoreSettings.Save();
+                    Log.Information("Settings/General: RunOnStartup adopted from an externally added autostart entry");
+                }
+                Set(ChkWinStart, registered);
                 // Assign only on a real difference: these raise IsCheckedChanged, and their
                 // handlers are live editors.
                 Set(ChkStartHidden, s.StartMinimized);
                 Set(ChkAutoRun, s.AutoStartEngine);
                 Set(ChkVidLaunch, s.ForceVideoOnLaunch);
                 Set(ChkEnableDeeper, s.EnableDeeper);
+                Set(ChkShowSessionCountdown, s.ShowSessionCountdown);
                 TxtStartupVideo.Text = string.IsNullOrEmpty(s.StartupVideoPath)
                     ? Loc.Get("label_random")
                     : System.IO.Path.GetFileName(s.StartupVideoPath);
@@ -95,10 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
             // The shell owns the shared writer and re-selects the chrome pill. Keep the direct
             // path for a standalone/headless section, where no shell exists to receive the event.
-            var shell = TopLevel.GetTopLevel(this) as MainShellWindow
-                ?? (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
-                    ?.MainWindow as MainShellWindow;
-            if (shell is not null)
+            if (Shell() is { } shell)
             {
                 shell.ApplyLanguageSelection(code);
                 return;
@@ -111,15 +132,56 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CoreSettings.Save();
         }
 
-        private void ChkWinStart_Click(object? sender, RoutedEventArgs e)
+        /// <summary>Tests replace the modal (title, message, confirm) -> answer; production shows MessageDialog.</summary>
+        internal static Func<string, string, bool, Task<bool>>? DialogOverride { get; set; }
+
+        private static Task<bool> AskAsync(Window? owner, string titleKey, string messageKey, bool confirm)
         {
-            // ponytail: needs StartupManager (a Windows Startup-folder shortcut); no equivalent on this head yet
+            var title = Loc.Get(titleKey);
+            var message = Loc.Get(messageKey);
+            if (DialogOverride is { } o) return o(title, message, confirm);
+            if (owner is null) return Task.FromResult(false);
+            return confirm
+                ? Dialogs.MessageDialog.ConfirmAsync(owner, title, message, okText: Loc.Get("label_yes"))
+                : Dialogs.MessageDialog.ShowAsync(owner, title, message);
         }
 
-        private void ChkStartHidden_Click(object? sender, RoutedEventArgs e)
+        private async void ChkWinStart_Click(object? sender, RoutedEventArgs e) => await ApplyWinStartAsync();
+
+        /// <summary>WPF MainWindow.ChkWinStart_Click: warn when hidden is on, register, revert on failure.</summary>
+        internal async Task ApplyWinStartAsync()
         {
-            // ponytail: WPF first warns (a Yes/No dialog) when hidden is enabled while startup is
-            // on, and may revert the box; no dialog on this head yet, so the write is direct.
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            var isEnabled = ChkWinStart.IsChecked ?? false;
+            if (isEnabled && (ChkStartHidden.IsChecked ?? false)
+                && !await AskAsync(owner, "title_startup_warning", "msg_startup_hidden_warning", confirm: true))
+            {
+                ChkWinStart.IsChecked = false;
+                return;
+            }
+
+            var s = CoreSettings.Current;
+            if (!XdgAutostart.SetStartupState(isEnabled))
+            {
+                await AskAsync(owner, "title_startup_error", "msg_failed_to_update_startup", confirm: false);
+                ChkWinStart.IsChecked = XdgAutostart.IsRegistered();
+                s.RunOnStartup = ChkWinStart.IsChecked ?? false;
+                CoreSettings.Save();
+                return;
+            }
+            s.RunOnStartup = isEnabled;
+            CoreSettings.Save();
+        }
+
+        private async void ChkStartHidden_Click(object? sender, RoutedEventArgs e) => await ApplyStartHiddenAsync();
+
+        /// <summary>WPF ChkStartHidden_Click: warn when startup is on (may revert), then persist.</summary>
+        internal async Task ApplyStartHiddenAsync()
+        {
+            if ((ChkWinStart.IsChecked ?? false) && (ChkStartHidden.IsChecked ?? false)
+                && !await AskAsync(TopLevel.GetTopLevel(this) as Window, "title_startup_warning", "msg_startup_hidden_warning", confirm: true))
+                ChkStartHidden.IsChecked = false;
+
             var s = CoreSettings.Current;
             var want = ChkStartHidden.IsChecked ?? false;
             if (s.StartMinimized == want) return;
@@ -266,6 +328,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             Log.Information("Auto-start engine set to {Enabled} (Settings/General)", want);
         }
 
+        private void ChkShowSessionCountdown_Changed(object? sender, RoutedEventArgs e)
+        {
+            var s = CoreSettings.Current;
+            var want = ChkShowSessionCountdown.IsChecked ?? false;
+            if (s.ShowSessionCountdown == want) return;   // seeding echo, not a user edit
+            s.ShowSessionCountdown = want;
+            CoreSettings.Save();
+            Log.Information("Session countdown set to {Enabled} (Settings/General)", want);
+        }
+
         private void ChkVidLaunch_Changed(object? sender, RoutedEventArgs e)
         {
             var s = CoreSettings.Current;
@@ -283,8 +355,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (s.EnableDeeper == enabled) return;
             s.EnableDeeper = enabled;
             CoreSettings.Save();
-            // ponytail: WPF also hides the shell's Deeper door and falls back to Settings if Deeper
-            // is the active tab (MainWindow.DeeperTab.cs); that is the shell's, not this section's.
+            Shell()?.ApplyEnableDeeper();   // the rail door + tab fallback (MainWindow.DeeperTab.cs:132)
         }
+
+        // Logical, not visual: a section on a hidden Settings tab may not be in the visual tree.
+        private MainShellWindow? Shell() => this.FindLogicalAncestorOfType<MainShellWindow>()
+            ?? (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+                ?.MainWindow as MainShellWindow;
     }
 }

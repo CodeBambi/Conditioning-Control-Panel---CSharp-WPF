@@ -103,6 +103,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // The rail's setup pass. Here, not in OnAttachedToVisualTree: a Window IS the visual
             // root, so that override never fires on it and the rail never opened.
             InitializeNavRail();
+            ApplyEnableDeeper(); // MainShellWindow.DeeperTab.cs (WPF LoadSettings: rail door follows EnableDeeper)
             InitializeTabHistoryInput(); // MainShellWindow.TabHistory.cs (WPF MainWindow ctor)
             // The mod switcher's rows, the saved mod's palette and the pending first-run choice
             // (MainShellWindow.ModSwitch.cs). No-op on the headless render path (no App.Mods).

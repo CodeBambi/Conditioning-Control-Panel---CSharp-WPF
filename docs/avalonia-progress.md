@@ -1383,3 +1383,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-spiral-tab: +285
 - SpiralRoom moved to Core; the Avalonia Spiral tab and rail row now read the real fuse and settings (live fog T-minus, phase pulse and flare, gold-ellipsis rail row). SpiralRoomShellTests is fail-proven 3 ways and checked live in Keincheck.
 - Both rows stay stub: the block and withhold services (DescentService, DescentMigrationService) are still WPF-only, so the Spiral/embed state, FIRST LIGHT, SFX and the bark are still missing.
+
+## avalonia-port/rows-haptics-tab: +713
+- Haptics VMs and their builders moved to Core and are shared with WPF. The Avalonia Haptics page now uses real chips, routing rows and toy cards, plus every Phase F/DSP/DtRH/sync dial and the pattern lab.
+- views-tab-haptics and shell-haptics move from stub to wired. One fail-proven headless test (mock toys only) and a sandbox live check.
+
+## avalonia-port/rows-settings-general: +803
+- Settings General: display card (monitor picker, countdown), XDG autostart run-on-startup with start-hidden warning, Deeper switch hides the rail button; views-settings-general stub->wired.
+- Settings Performance: Back Room FX combo; changing motion level updates loops already showing (5 controls); DND picker/guard still missing, row stays stub.
