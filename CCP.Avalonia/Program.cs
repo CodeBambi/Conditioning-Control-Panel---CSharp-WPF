@@ -206,6 +206,7 @@ namespace ConditioningControlPanel.Avalonia
                         (global::Avalonia.Application.Current?.ApplicationLifetime
                             as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.Shutdown());
                 });
+            App.SplashOnStartup = true;
             app.StartWithClassicDesktopLifetime(args);
             return 0;
         }

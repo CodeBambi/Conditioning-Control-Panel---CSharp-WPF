@@ -279,9 +279,47 @@ namespace ConditioningControlPanel.Avalonia
                 LocalizationManager.Instance.SetLanguage("en");
         }
 
+        /// <summary>Set by Program.Main: a real launch shows the splash. Every other desktop setup
+        /// (tests, PanicCheck, VideoCheck) starts synchronously without one, as before.</summary>
+        internal static bool SplashOnStartup;
+
         public override void OnFrameworkInitializationCompleted()
         {
+            // WPF App.xaml.cs:1949 shows the splash before anything else and threads SetProgress
+            // through startup. One UI thread here, so startup yields a frame per step instead.
+            var splash = SplashOnStartup && ApplicationLifetime is IClassicDesktopStyleApplicationLifetime
+                ? Views.Windows.SplashScreen.ShowOnOwnThread() : null;
+            var start = StartBehindSplash(splash, StartDesktop,
+                () => (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow);
+            // Without a splash every step completed inline, so a startup failure throws here as before;
+            // behind one it is rethrown on the UI thread.
+            if (start.IsCompleted) start.GetAwaiter().GetResult();
+            else start.ContinueWith(t => Dispatcher.UIThread.Post(() => t.GetAwaiter().GetResult()),
+                TaskContinuationOptions.OnlyOnFaulted);
+            base.OnFrameworkInitializationCompleted();
+        }
 
+        /// <summary>Runs <paramref name="start"/>, painting each step on the splash; then shows the
+        /// shell (the lifetime found no MainWindow to show yet) and fades the splash out (WPF
+        /// App.xaml.cs:3837-3867). No splash: the steps are no-ops and everything runs inline.</summary>
+        internal static async Task StartBehindSplash(Views.Windows.SplashScreen? splash,
+            Func<Func<double, string, Task>, Task> start, Func<global::Avalonia.Controls.Window?> shell)
+        {
+            if (splash is null) { await start(static (_, _) => Task.CompletedTask); return; }
+            try
+            {
+                await start((progress, status) => { splash.SetProgress(progress, status); return splash.NextFrame(); });
+            }
+            catch { splash.CloseImmediate(); throw; }
+            var window = shell();
+            window?.Show();
+            splash.SetProgress(1.0, "Ready!");
+            splash.FadeOutAndClose(() => { if (window is { IsVisible: true }) window.Activate(); });
+        }
+
+        private async Task StartDesktop(Func<double, string, Task> step)
+        {
+            await step(0.0, "Starting...");
             // The app shell is the startup window. Until now this head opened the diagnostics
             // MainWindow, which was right while the shell did not exist and is wrong now that it
             // does. The diagnostics window is still reachable, from Settings, and RenderProof
@@ -300,6 +338,7 @@ namespace ConditioningControlPanel.Avalonia
                 // not in Initialize() on purpose: the headless render path never reaches this
                 // callback, so a CI render cannot touch a user's profile. Unseeded, Core hands
                 // out one default instance, which is what the renders bind against.
+                await step(0.2, "Loading settings...");
                 // Secrets first: SettingsService's auth-token migration asks CoreSecrets.HasStore on load.
                 Platform.SecretStore.Seed();
                 Settings = new SettingsService();
@@ -342,6 +381,7 @@ namespace ConditioningControlPanel.Avalonia
                 CoreEngine.Video = Views.Overlays.MandatoryVideoOverlay.Instance.Scheduler;
                 CoreEngine.BubbleCount = Views.Windows.BubbleCountHost.Instance.Scheduler;
 
+                await step(0.4, "Initializing flash service...");
                 // The ambient flash surface. CoreFlash owns the rhythm; a burst needs any attached
                 // visual to reach Screens, and the main window is the one that always is.
                 CoreFlash.IsBusyProvider = () => Views.Overlays.FlashOverlay.IsBusy;
@@ -488,6 +528,7 @@ namespace ConditioningControlPanel.Avalonia
                 {
                     Serilog.Log.Error(ex, "Failed to initialize ReleaseContentService - downloaded content unavailable this session");
                 }
+                await step(0.6, "Initializing audio...");
                 // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
                 // CoreAudio stays unseeded: every clip "finishes" at once and nothing plays.
                 // Console as well as Serilog: this head configures no Serilog sink yet.
@@ -525,6 +566,7 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Debug("ModerationCounter.LoadFromDisk failed: {Error}", ex.Message); }
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
+                await step(0.7, "Initializing companion...");
                 // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
                 // echo stays unseeded (no bark engine here: CoreBark is a doorbell); command executor and
                 // activities are CompanionEffects (seeded below). SeedMemorySignals seeds UserMessageSent for the memory
@@ -555,6 +597,7 @@ namespace ConditioningControlPanel.Avalonia
                 // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
                 // open. Seeding it with anything would put a tour on screen that nothing drives.
 
+                await step(0.85, "Loading achievements...");
                 // Achievements: the Core engine over the same achievements.json WPF uses, seeded the
                 // way WPF App.xaml.cs:384/:394 seeds the two unlock seams. Unlocked is raised on the
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
@@ -626,6 +669,7 @@ namespace ConditioningControlPanel.Avalonia
                     Serilog.Log.Warning(ex, "Session catalogue could not be loaded; showing built-in fallback");
                 }
 
+                await step(0.95, "Opening main window...");
                 // WPF decides with `Welcomed && !FirstRunClaimedThisLaunch`: the shell's constructor
                 // claims Welcomed on a fresh install, so read it before the shell exists.
                 bool welcomed = Settings.Current.Welcomed;
@@ -748,7 +792,6 @@ namespace ConditioningControlPanel.Avalonia
                 // WPF App.xaml.cs:4858: pending-outcome report + background update check.
                 Dispatcher.UIThread.Post(async () => await Platform.AppUpdater.StartupAsync(shell));
             }
-            base.OnFrameworkInitializationCompleted();
         }
 
         /// <summary>Stops every desktop overlay and its schedule. <paramref name="final"/> is the shell
