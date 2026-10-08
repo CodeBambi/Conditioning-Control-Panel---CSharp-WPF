@@ -194,6 +194,14 @@
     <!-- Profile hero banners (Core CosmeticsPool.Banners), compiled in as WPF ConditioningControlPanel.csproj:436. -->
     <AvaloniaResource Include="..\Assets\banners\*.png"
                       Link="Resources\banners\%(Filename)%(Extension)" />
+    <!-- Avatar-0 (blonde) emote set shared by BambiSleep + Sissy at avatar set 1, compiled in as
+         WPF ConditioningControlPanel.csproj:386-388 (GIF clips + emotes.json + clip_timing.json). -->
+    <AvaloniaResource Include="..\Assets\avatar0_emotes\*.gif;..\Assets\avatar0_emotes\*.json"
+                      Link="Resources\avatar0_emotes\%(Filename)%(Extension)" />
+    <!-- Home dashboard billboard posters, one per roster card (WPF DashboardBillboard), as WPF
+         ConditioningControlPanel.csproj:419-424. Globbed: the folder holds exactly those six. -->
+    <AvaloniaResource Include="..\Assets\billboard\*.png"
+                      Link="Resources\billboard\%(Filename)%(Extension)" />
     <!-- Sparse folders: only what a view names. -->
     <AvaloniaResource Include="..\Assets\skills\pink_rush.png" Link="Resources\skills\pink_rush.png" />
   </ItemGroup>
