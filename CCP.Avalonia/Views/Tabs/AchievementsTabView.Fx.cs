@@ -4,7 +4,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Layout;
+using Avalonia.Controls.Primitives;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Controls;
@@ -69,14 +69,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>One clock tick at <see cref="Time"/>'s now.</summary>
         internal void StepFx()
         {
-            foreach (var tw in _tweens.ToArray())
+            for (int i = _tweens.Count - 1; i >= 0; i--)
             {
+                var tw = _tweens[i];
                 double ms = Time.GetElapsedTime(tw.Start).TotalMilliseconds - tw.Delay;
                 if (ms < 0) continue;
                 double p = Math.Min(ms / tw.Ms, 1);
                 tw.Set(tw.From + (tw.To - tw.From) * tw.Ease(p));
                 if (p < 1) continue;
-                _tweens.Remove(tw);
+                _tweens.RemoveAt(i);
                 tw.Done?.Invoke();
             }
             if (_tweens.Count == 0) _fxTimer?.Stop();
@@ -147,19 +148,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Animate(t.CardScale, RevealScale, 1, RevealMs, v => t.CardScale.ScaleX = t.CardScale.ScaleY = v, BackOut);
         }
 
-        /// <summary>WPF FireBurstAt: a fixed 560 px canvas moved so its centre sits on the tile.</summary>
+        /// <summary>WPF FireBurstAt: a fixed 560 px canvas moved so its centre sits on the tile, on a window-wide
+        /// layer (the window's overlay layer, as WPF's EventFxHost spans the window). Refused like WPF EventFxAllowed
+        /// (EventFx.cs:118-126): particles allowed, anchor shown, window visible, not minimised and active.</summary>
         private void Burst(Control anchor)
         {
-            var host = this.FindControl<Panel>("BurstHost");
-            if (host == null || anchor.Bounds.Width <= 0) return;
+            if (!Env.AllowParticles || !anchor.IsEffectivelyVisible || anchor.Bounds.Width <= 0) return;
+            if (TopLevel.GetTopLevel(this) is not Window { IsVisible: true, IsActive: true } w || w.WindowState == WindowState.Minimized) return;
+            if (OverlayLayer.GetOverlayLayer(anchor) is not { } host) return;
             if (anchor.TranslatePoint(new Point(anchor.Bounds.Width / 2, anchor.Bounds.Height / 2), host) is not { } at) return;
-            if (_burstLayer == null)
+            if (_burstLayer == null || _burstLayer.Parent != host)
             {
-                _burstLayer = new AmbientFxCanvas { Width = BurstBox, Height = BurstBox, IsHitTestVisible = false,
-                    HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+                (_burstLayer?.Parent as Panel)?.Children.Remove(_burstLayer!);
+                _burstLayer ??= new AmbientFxCanvas { Width = BurstBox, Height = BurstBox, IsHitTestVisible = false };
                 host.Children.Add(_burstLayer);
             }
-            _burstLayer.Margin = new Thickness(at.X - BurstBox / 2, at.Y - BurstBox / 2, 0, 0);
+            Canvas.SetLeft(_burstLayer, at.X - BurstBox / 2);
+            Canvas.SetTop(_burstLayer, at.Y - BurstBox / 2);
             _burstLayer.UpdateLayout();
             _burstLayer.Burst(BurstBox / 2, BurstBox / 2, Env.GlowColor, BurstCount);
             Bursts++;

@@ -75,8 +75,6 @@
     </ControlTheme>
   </UserControl.Resources>
   <Border Theme="{StaticResource SectionPanel}">
-   <!-- BurstHost: the unlock burst's layer (WPF EventFx EnsureEventBurstLayer), above the scroller. -->
-   <Panel>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
       <StackPanel>
         <Grid Margin="0,0,0,10">
@@ -151,7 +149,5 @@
         </Grid>
       </StackPanel>
     </ScrollViewer>
-    <Panel x:Name="BurstHost" IsHitTestVisible="False" ClipToBounds="True"/>
-   </Panel>
   </Border>
 </UserControl>

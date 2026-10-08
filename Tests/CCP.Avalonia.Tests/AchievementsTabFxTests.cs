@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -71,7 +72,10 @@ public sealed class AchievementsTabFxTests
             Frames(100);
             Assert.InRange(free[0].Opacity, 0.1, 0.99);
             Assert.True(free[0].Opacity > free[3].Opacity, "tiles must stagger, not land together");
-            Assert.Equal(free[6].Opacity, free[20].Opacity);   // capped at 6 slots
+            Frames(160);                                         // past slot 6's 240 ms start
+            Assert.True(free[6].Opacity > 0, "slot 6 has started");
+            Assert.True(free[5].Opacity > free[6].Opacity, "slots 0-6 are staggered");
+            Assert.Equal(free[6].Opacity, free[20].Opacity);   // capped at 6 slots: the rest ride slot 6's clock
             Frames(600);
             Assert.All(free, c => Assert.Equal(1, c.Opacity));
             Assert.False(view.FxRunning);                       // the clock stops when nothing moves
@@ -119,6 +123,78 @@ public sealed class AchievementsTabFxTests
             w.MouseMove(p, RawInputModifiers.None);
             Frames(200);
             Assert.Equal(0, Rotate(lockedHost).Angle, 3);
+        }
+        finally
+        {
+            w?.Close();
+            service.SaveImmediate();
+            CoreSettings.ServiceProvider = oldSettings;
+            AchievementsTabView.Time = TimeProvider.System;
+        }
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task MotionOffHiddenTabAndInactiveWindowRefuseTheCelebration() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        Setup();
+        var oldSettings = CoreSettings.ServiceProvider;
+        var clock = new SteppedClock();
+        AchievementsTabView.Time = clock;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var dir = Directory.CreateTempSubdirectory("ccp-ach-fx-off-").FullName;
+        Window? w = null;
+        try
+        {
+            var engine = new AchievementEngine(new AchievementStore(Path.Combine(dir, "achievements.json")));
+            var view = new AchievementsTabView(engine);
+            w = new Window { Width = 1200, Height = 900, Content = view };
+            w.Show();
+            w.Activate();
+            Dispatcher.UIThread.RunJobs();
+            ToggleButton Card(string id) => view.Cards.Single(c => (string)c.Tag! == id);
+            Image Badge(Control c) => c.GetVisualDescendants().OfType<Image>().First();
+
+            // MotionLevel Off: no stagger, no reveal tween, no sparks - everything lands at once.
+            CoreSettings.Current.MotionLevel = MotionLevel.Off;
+            view.IsVisible = false; view.IsVisible = true;
+            Assert.False(view.FxRunning);
+            Assert.All(view.Cards, c => Assert.Equal(1, c.Opacity));
+            engine.CheckLevelAchievements(10);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(view.FxRunning);
+            Assert.Equal(0, view.Bursts);
+            Assert.Equal(1, Scale(Card("plastic_initiation")).ScaleX, 3);
+            Assert.Null(Badge(Card("plastic_initiation")).Effect);
+
+            // Unlock while the tab is hidden: no reveal and no burst on a tab nobody sees.
+            CoreSettings.Current.MotionLevel = MotionLevel.Full;
+            view.IsVisible = false;
+            engine.CheckLevelAchievements(20);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(view.FxRunning);
+            Assert.Equal(0, view.Bursts);
+            Assert.Equal(1, Scale(Card("dumb_bimbo")).ScaleX, 3);
+            view.IsVisible = true;
+            Dispatcher.UIThread.RunJobs();
+
+            // Window minimised (WPF EventFxAllowed): the tile still reveals, but no sparks. The headless platform
+            // never deactivates a shown window, so the IsActive arm of the same gate is asserted, not driven.
+            w.WindowState = WindowState.Minimized;
+            Dispatcher.UIThread.RunJobs();
+            engine.CheckLevelAchievements(50);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, view.Bursts);
+            Assert.True(view.FxRunning);   // the reveal settle
+
+            // Restored: the next unlock bursts (proves the refusals above are the gate, not a broken layer).
+            w.WindowState = WindowState.Normal;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(w.IsActive);
+            engine.CheckLevelAchievements(75);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(1, view.Bursts);
         }
         finally
         {
