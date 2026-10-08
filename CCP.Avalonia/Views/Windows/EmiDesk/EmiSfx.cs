@@ -12,6 +12,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///
     /// <para>ponytail: WPF also stays silent while AudioService.IsOutputSuppressed or an
     /// EmiLineEngine hold is active; neither exists on this head, so only master volume 0 mutes.
+    /// Files resolve through ContentLocator only: WPF's ModResourceResolver.ResolveAudioPath (a
+    /// mod's replacement cue, the .wav/.mp3 swap) has no Core sounds seam yet, so a mod cannot
+    /// re-voice these here; a stock install sounds right.
     /// The toss cues (Lift/Bump/Thud/Chime) come with the toss port (row win-emi-desk-extras).</para>
     /// </summary>
     internal static class EmiSfx

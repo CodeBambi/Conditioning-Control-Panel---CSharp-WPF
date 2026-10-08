@@ -88,6 +88,45 @@ public sealed class EmiRingFanTests
         return Task.CompletedTask;
     });
 
+    [Fact]
+    public Task ClickPatSoundsEveryTimeAndCountsOncePerCooldown() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        Setup();
+        var played = new List<string>();
+        var oldProvider = CoreAudio.PlayOneShotProvider;
+        int oldVolume = CoreSettings.Current.MasterVolume;
+        var clock = new SteppedClock();
+        var st = EmiState.Current;
+        int pets = st.PetsTotal; bool gist = st.PetGistGot;
+        try
+        {
+            CoreAudio.PlayOneShotProvider = (path, _, tag, _, _) => played.Add(tag);
+            CoreSettings.Current.MasterVolume = 50;
+            EmiSfx.Clock = clock;
+            var desk = new EmiDeskWindow();
+            desk.Show();
+            var pat = typeof(EmiDeskWindow).GetMethod("PetFromClick",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            pat.Invoke(desk, null);
+            Assert.Equal(new[] { "emi-sfx-pat" }, played);
+            Assert.Equal(pets + 1, st.PetsTotal);
+
+            clock.Now += TimeSpan.TicksPerSecond;   // past the sfx floor, inside the 6 s pet cooldown
+            pat.Invoke(desk, null);
+            Assert.Equal(2, played.Count);
+            Assert.Equal(pets + 1, st.PetsTotal);
+            desk.Close();
+        }
+        finally
+        {
+            CoreAudio.PlayOneShotProvider = oldProvider;
+            CoreSettings.Current.MasterVolume = oldVolume;
+            EmiSfx.Clock = TimeProvider.System;
+            st.PetsTotal = pets; st.PetGistGot = gist;
+        }
+        return Task.CompletedTask;
+    });
+
     private sealed class SteppedClock : TimeProvider
     {
         public long Now = TimeSpan.TicksPerDay;

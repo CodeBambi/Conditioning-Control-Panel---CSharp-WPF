@@ -2535,15 +2535,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private void StopAlive() { }
 
         /// <summary>
-        /// ponytail: the pat is FIVE things, not one file, and none of them is on this head yet:
-        /// EmiChains + EmiChains.Player for the <c>pet</c> chain and the poke flick,
-        /// <c>EmiSfx.Pat()</c> for the sound, <c>EmiState.NotePet()</c> for the count behind her
-        /// affection, <c>App.EmiDesk.Fire("petted")</c> for the moment, and EmiDeskWindow.Alive.cs's
-        /// poke ladder for which face the flick wears. The cooldown arithmetic on its own would give
-        /// a pat that changes nothing you can see or hear, so it stays here rather than half-landing:
-        /// the click still squashes her, which is the one bit of feedback this head CAN give.
+        /// The click pat (WPF EmiDeskWindow.React.cs:119): disarms the hover pet so one gesture
+        /// cannot pat twice, plays the pat cue on every touch (EmiSfx's 130 ms floor stops a
+        /// double click machine-gunning it), and past the 6 s cooldown plays the pet chain and
+        /// counts the pat. ponytail: WPF's ChainLive guard, summon-cut, poke ladder (NotePoke /
+        /// PlayPokeFlick / glee streak) and the flick inside the cooldown are not on this head.
         /// </summary>
-        private void PetFromClick() { }
+        private void PetFromClick()
+        {
+            try
+            {
+                if (_transiting || InputLocked) return;
+                DisarmPet();
+                _petArmed = true;
+                RaiseActivity();
+                PlayPatSfx();
+                if (DateTime.UtcNow < _petCooldownUntil) return;
+                _petCooldownUntil = DateTime.UtcNow.AddMilliseconds(PetCooldownMs);
+                PlayChain("pet");
+                CountPat();
+                FireDeskEvent("petted");
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pat failed"); }
+        }
 
         /// <summary>WPF EmiDeskWindow.React.cs:198 - the pat counter behind her affection state.</summary>
         private void CountPat()
