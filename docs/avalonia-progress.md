@@ -1496,3 +1496,15 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/help-attach: +224
 - Every WPF tab ? (33 SetHelpContent buttons + Intake Pass) is now attached from shell startup through an x:Name table; all 23 help loops can be opened (ctrl-help-popover, feat-help-loops: stub -> wired).
 - New HelpButtonsTests: a WPF-source table scan, plus a shell walk that clicks every ?; fail-proven.
+
+## avalonia-port/reset-close: +105
+- The test isolation hook closes app windows a test left open and resets StartupLadder, so passive startup cards no longer leak between tests (P52).
+- Proven by a fixed-order leaky pair (LeakedWindowIsolationTests). B fails with the close commented out.
+
+## avalonia-port/rows-settings-account: +659
+- Settings · Account: provider cards, login/logout/link, Patreon reconnect, Chaster card and presence switch are wired. Backup/restore/export are still hidden (row stays stub).
+- 4 fail-proven shell tests on fake providers; ProviderLinkResponseRules moved to Core.
+
+## avalonia-port/rows-settings-devices: +196
+- Settings → Devices camera picker and ↻ live over V4L2 sysfs (metadata nodes skipped, WPF log lines verbatim); row stays stub
+- WebcamDevicePickerTests (fake sysfs, fail-proven); live props in evidence/rows-settings-devices
