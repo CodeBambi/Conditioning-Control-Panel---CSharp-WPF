@@ -207,4 +207,32 @@ public sealed class BubbleCountSchedulerTests
         Assert.Single(host.Shown);
         b.Stop();
     });
+
+    /// <summary>WPF TriggerGame :260/:277: a queued game replayed after Stop, or after the card
+    /// was switched off, is dropped.</summary>
+    [Fact]
+    public void Queued_game_drops_after_stop_or_card_off() => With(true, false, true, () =>
+    {
+        var clock = new FakeClock(); var host = new Host { Other = true };
+        var b = new BubbleCountScheduler(host, clock, () => Clips);
+        b.Start();
+        clock.Advance(TimeSpan.FromSeconds(721));
+        Assert.True(b.IsQueued);
+        b.Stop();
+        host.Other = false;
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.False(b.IsBusy);
+        Assert.Empty(host.Shown);
+
+        host.Other = true;
+        b.Start();
+        clock.Advance(TimeSpan.FromSeconds(721));
+        Assert.True(b.IsQueued);
+        CoreSettings.Current.BubbleCountEnabled = false;       // the card toggle
+        host.Other = false;
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.False(b.IsBusy);
+        Assert.Empty(host.Shown);
+        b.Stop();
+    });
 }
