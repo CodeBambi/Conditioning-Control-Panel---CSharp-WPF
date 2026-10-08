@@ -130,8 +130,13 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void The_shipped_spiral_is_linked_and_decodes_to_the_planned_frames()
+    // Bitmap needs the Skia render platform: run alone or first in a shard, a bare [Fact] has none.
+    public Task The_shipped_spiral_is_linked_and_decodes_to_the_planned_frames() => AvaloniaTestDispatcher.RunAsync(() =>
     {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
         var path = Path.Combine(AppContext.BaseDirectory, "Resources", "spiral.gif");
         var sw = Stopwatch.StartNew();
         var (frames, delay) = SpiralOverlay.Decode(path);
@@ -143,7 +148,8 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
             Assert.Equal(TimeSpan.FromMilliseconds(30), delay);
         }
         finally { foreach (var f in frames) f.Dispose(); }
-    }
+        return Task.CompletedTask;
+    });
 
     // 8x8 red; frame 1 a green 2x2 patch with "restore previous" disposal; frame 2 a 2x2 patch on top. PIL-made.
     private const string RestorePreviousGif =
