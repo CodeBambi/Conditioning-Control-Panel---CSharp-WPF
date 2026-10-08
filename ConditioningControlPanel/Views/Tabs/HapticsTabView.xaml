@@ -276,7 +276,7 @@
                                        FontSize="11" Margin="0,1,0,0"/>
                         </StackPanel>
                         <Border Grid.Column="1" Style="{StaticResource HapticChip}" VerticalAlignment="Center"
-                                Margin="6,0,8,0" Visibility="{Binding BatteryVisibility}">
+                                Margin="6,0,8,0" Visibility="{Binding HasBattery, Converter={StaticResource BoolToVis}}">
                             <TextBlock Text="{Binding BatteryText}" Foreground="{DynamicResource SuccessGreenBrush}"
                                        FontSize="10" FontWeight="Bold"/>
                         </Border>
@@ -404,10 +404,10 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
                             <TextBlock Text="{loc:Str haptics_col_pattern}" Style="{StaticResource HapticTinyLabel}"
-                                       Width="74" Visibility="{Binding ModeVisibility}"/>
+                                       Width="74" Visibility="{Binding ShowMode, Converter={StaticResource BoolToVis}}"/>
                             <ComboBox Style="{StaticResource DarkComboBoxStyle}" FontSize="11" Height="24" Width="124"
                                       Margin="6,0,0,0" VerticalAlignment="Center"
-                                      Visibility="{Binding ModeVisibility}"
+                                      Visibility="{Binding ShowMode, Converter={StaticResource BoolToVis}}"
                                       IsEnabled="{Binding RowEnabled}"
                                       SelectedIndex="{Binding ModeIndex, Mode=TwoWay}">
                                 <ComboBoxItem Content="{loc:Str btn_constant}"/>

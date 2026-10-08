@@ -10,8 +10,7 @@ public sealed class PanicCancelsAiScanTests
 {
     [Theory]
     [InlineData("CCP.Avalonia/Views/Windows/MainShellWindow.PanicKey.cs", "internal void HandlePanicKeyPress(DateTime now)", "CancelPendingAi();")]
-    [InlineData("CCP.Avalonia/Views/Windows/MainShellWindow.Tray.cs", "internal static void StopEverything()", "CancelPendingAi();")]
-    [InlineData("CCP.Avalonia/Views/Windows/MainShellWindow.VoiceCommands.cs", "internal void VoicePanic()", "CancelPendingAi();")]
+    [InlineData("CCP.Avalonia/Views/Windows/PanicSurfaces.cs", "internal static IReadOnlyList<Surface> All", "MainShellWindow.CancelPendingAi()")]   // tray + voice (PanicSurfacesTests)
     [InlineData("CCP.Core/Services/RemoteControl/RemoteCommands.cs", "public static void StopEffects(bool force)", "if (force) Commands.AiCommandService.CancelAll();")]
     [InlineData("ConditioningControlPanel/MainWindow/MainWindow.xaml.cs", "private void HandlePanicKeyPress()", "CancelPendingAi();")]
     [InlineData("ConditioningControlPanel/MainWindow/MainWindow.xaml.cs", "private void RunEmergencyPanicTeardown()", "CancelPendingAi();")]

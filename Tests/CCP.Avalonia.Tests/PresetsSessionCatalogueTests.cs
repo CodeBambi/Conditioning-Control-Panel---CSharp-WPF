@@ -56,11 +56,11 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.NotNull(start);
                 Assert.False(start!.IsEnabled);
                 Assert.False(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
-                Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);   // WPF: always live (Presets.cs:641)
                 Assert.False(view.FindControl<Button>("BtnExportSession")!.IsEnabled);   // nothing selected yet
                 Assert.True(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
                 Assert.True(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
-                Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
+                Assert.True(view.FindControl<Border>("SessionDropZone")!.IsEnabled);   // Catalogue chip (WPF CatalogueCard_Click)
                 Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
                 Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
                 var sourceChips = view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>().ToArray();
@@ -324,16 +324,16 @@ public sealed class PresetsSessionCatalogueTests
                 var customRow = rows.Single(row => (row.Tag as Session)?.Id == custom.Id);
                 Click(host, customRow);
                 Assert.Equal("🧩 Raw User Name", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
-                Assert.Equal("Raw user description\nSecond line",
+                Assert.StartsWith("Raw user description\nSecond line" + "\n\n",
                     view.FindControl<TextBlock>("TxtSessionDescription")!.Text);
 
                 customRow.Focus();
                 host.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal("🧩 Raw User Name", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
-                Assert.Equal("Raw user description\nSecond line",
+                Assert.StartsWith("Raw user description\nSecond line" + "\n\n",
                     view.FindControl<TextBlock>("TxtSessionDescription")!.Text);
-                Assert.Equal(Loc.GetF("rack_duration", 37),
+                Assert.Equal(Loc.GetF("label_0_minutes", 37),
                     view.FindControl<TextBlock>("TxtSessionDuration")!.Text);
                 Assert.Equal(Loc.GetF("rack_xp", 777),
                     view.FindControl<TextBlock>("TxtSessionXP")!.Text);
@@ -341,11 +341,11 @@ public sealed class PresetsSessionCatalogueTests
                     view.FindControl<TextBlock>("TxtSessionDifficulty")!.Text);
                 Assert.True(view.FindControl<Button>("BtnStartSession")!.IsEnabled);   // a selected session can start (WPF SessionIO.cs:923/:971)
                 Assert.True(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
-                Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);   // WPF: always live (Presets.cs:641)
                 Assert.True(view.FindControl<Button>("BtnExportSession")!.IsEnabled);   // WPF SessionIO.cs:973
                 Assert.True(view.FindControl<Button>("BtnSessionHistory")!.IsEnabled);
                 Assert.True(view.FindControl<Button>("BtnCreateSession")!.IsEnabled);
-                Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
+                Assert.True(view.FindControl<Border>("SessionDropZone")!.IsEnabled);   // Catalogue chip (WPF CatalogueCard_Click)
                 Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
                 Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
                 Assert.All(view.FindControl<StackPanel>("RackSourceChips")!.Children.OfType<ToggleButton>(),
@@ -365,11 +365,11 @@ public sealed class PresetsSessionCatalogueTests
                 LocalizationManager.Instance.SetLanguage("zh-CN");
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal("🧩 Raw User Name", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
-                Assert.Equal("Raw user description\nSecond line",
+                Assert.StartsWith("Raw user description\nSecond line" + "\n\n",
                     view.FindControl<TextBlock>("TxtSessionDescription")!.Text);
                 Assert.Equal(custom.GetDifficultyText(),
                     view.FindControl<TextBlock>("TxtSessionDifficulty")!.Text);
-                Assert.Equal(Loc.GetF("rack_duration", 37),
+                Assert.Equal(Loc.GetF("label_0_minutes", 37),
                     view.FindControl<TextBlock>("TxtSessionDuration")!.Text);
                 Assert.Equal(Loc.GetF("rack_xp", 777),
                     view.FindControl<TextBlock>("TxtSessionXP")!.Text);
@@ -581,11 +581,11 @@ public sealed class PresetsSessionCatalogueTests
                 // Search and sort are live views; row edit/export/delete are live (share is not).
                 Assert.True(view.FindControl<Button>("BtnStartSession")!.IsEnabled);   // a selected session can start (WPF SessionIO.cs:923/:971)
                 Assert.True(view.FindControl<StackPanel>("SessionButtonsPanel")!.IsVisible);
-                Assert.False(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnRevealSpoilers")!.IsEnabled);   // WPF: always live (Presets.cs:641)
                 Assert.True(view.FindControl<Button>("BtnExportSession")!.IsEnabled);   // WPF SessionIO.cs:973
                 Assert.True(view.FindControl<ComboBox>("CmbRackSort")!.IsEnabled);
                 Assert.True(view.FindControl<TextBox>("TxtRackSearch")!.IsEnabled);
-                Assert.False(view.FindControl<Border>("SessionDropZone")!.IsEnabled);
+                Assert.True(view.FindControl<Border>("SessionDropZone")!.IsEnabled);   // Catalogue chip (WPF CatalogueCard_Click)
                 Assert.All(panel.Children.OfType<Border>(), row =>
                 {
                     var actions = Assert.IsType<StackPanel>(Assert.IsType<Grid>(row.Child).Children[8]);
@@ -888,7 +888,7 @@ public sealed class PresetsSessionCatalogueTests
     {
         Assert.Equal($"{expected.Icon} {expected.LocalizedName}",
             view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
-        Assert.Equal(Loc.GetF("rack_duration", expected.DurationMinutes),
+        Assert.Equal(Loc.GetF("label_0_minutes", expected.DurationMinutes),
             view.FindControl<TextBlock>("TxtSessionDuration")!.Text);
         Assert.Equal(Loc.GetF("rack_xp", expected.BonusXP),
             view.FindControl<TextBlock>("TxtSessionXP")!.Text);

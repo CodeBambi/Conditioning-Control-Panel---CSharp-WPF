@@ -166,11 +166,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (System.Exception ex) { Serilog.Log.Warning(ex, "EnforceEntitlementLapse failed"); }
         }
 
-        /// <summary>WPF MainWindow.Patreon.cs:63. ponytail: PremiumGateFx (the animated scrim) not ported.</summary>
+        /// <summary>WPF MainWindow.Patreon.cs:144, with its PremiumGateFx decoration (fog, padlock
+        /// glow, CTA sheen) - idempotent, never touches visibility or entitlement.</summary>
         private static void RefreshPremiumGate(Control? tab, string gate, string? dailyKey = null)
         {
             if (tab?.FindControl<Control>(gate) is not { } g) return;
             g.IsVisible = !(CoreEntitlement.HasPremium || (dailyKey != null && CoreEntitlement.IsFreeToday(dailyKey)));
+            global::ConditioningControlPanel.Avalonia.Controls.PremiumGateFx.Attach(g as Border);
         }
 
         /// <summary>WPF MainWindow.Patreon.cs:48 (main fbe161de2): every padlock opens the vault gate card for the

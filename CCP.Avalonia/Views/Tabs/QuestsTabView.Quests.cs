@@ -33,6 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnAttachedToVisualTree(e);
+            UpdateAmbient(attached: true);
             if (App.Quests is not { } quests) return;
             quests.QuestCompleted += OnQuestCompleted;
             quests.QuestProgressChanged += OnQuestProgressChanged;
@@ -44,6 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnDetachedFromVisualTree(e);
+            UpdateAmbient(attached: false);
             if (App.Quests is not { } quests) return;
             quests.QuestCompleted -= OnQuestCompleted;
             quests.QuestProgressChanged -= OnQuestProgressChanged;
@@ -57,7 +59,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
-            if (change.Property == IsVisibleProperty && IsVisible && App.Quests != null) RefreshQuestUI();
+            if (change.Property != IsVisibleProperty) return;
+            UpdateAmbient(TopLevel.GetTopLevel(this) != null);
+            if (IsVisible && App.Quests != null) RefreshQuestUI();
         }
 
         private void OnQuestsRefreshed(object? sender, EventArgs e) => Dispatcher.UIThread.Post(RefreshQuestUI);
@@ -67,8 +71,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Dispatcher.UIThread.Post(() => { if (IsVisible) RefreshQuestUI(); });
 
         /// <summary>MainWindow.Quests.cs:40. ponytail: no flash voice line (App.Flash.PlayRandomSound
-        /// - FlashService audio is not on this head; the service's own chime still plays), no Event FX
-        /// burst (CelebrateQuestComplete) and no header stamps (MainWindow.QuestStamps.cs).</summary>
+        /// - FlashService audio is not on this head; the service's own chime still plays) and no header
+        /// stamps (MainWindow.QuestStamps.cs).</summary>
         private void OnQuestCompleted(object? sender, QuestCompletedEventArgs e) => Dispatcher.UIThread.Post(() =>
         {
             // Perk-announcement opt-out: the popup goes, the in-tab banner stays (WPF :47).
@@ -84,6 +88,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             QuestCompleteBanner.IsVisible = true;
             TxtQuestComplete.Text = $"{e.QuestDefinition.Name} COMPLETE! +{e.XPAwarded} XP";
             RefreshQuestUI();
+            CelebrateQuestComplete(e.QuestType, e.QuestDefinition.Id);
 
             _bannerTimer?.Dispose();
             _bannerTimer = DispatcherTimer.RunOnce(() => QuestCompleteBanner.IsVisible = false, TimeSpan.FromSeconds(5));

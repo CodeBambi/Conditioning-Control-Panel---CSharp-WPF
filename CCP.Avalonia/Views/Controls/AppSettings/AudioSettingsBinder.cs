@@ -27,6 +27,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// <summary>Raised on the UI thread after any surface writes an audio setting.</summary>
         internal static event Action? Changed;
 
+        /// <summary>For a surface outside this binder that writes an audio setting (the Haptics page's
+        /// sync delay/power, which WPF mirrors into Settings, MainWindow.Haptics.cs SliderVideoHaptic*).</summary>
+        internal static void RaiseChanged() => Changed?.Invoke();
+
         internal static Func<IReadOnlyList<LibVlcAudio.OutputDevice>> Enumerate = () => LibVlcAudio.EnumerateOutputDevices();
         internal static Func<Window?, string, Task> ShowDiagnostics = (owner, text) =>
             owner is null ? Task.CompletedTask : Dialogs.MessageDialog.ShowAsync(owner, "Audio Diagnostics", text);
