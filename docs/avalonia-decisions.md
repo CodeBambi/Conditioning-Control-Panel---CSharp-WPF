@@ -610,3 +610,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   Lockdown, so it must end everything the panic key would. Reviewer-checked (safety review, 2026-10-08).
 - Tests: `Tests/CCP.Avalonia.Tests/PanicSurfacesTests.cs` (routes call StopAll once, exact surface order, safe word
   stops chaos and the camera, starter scan); each fail-proven.
+## 2026-10-09: Linux has no Ollama auto-install; manual install, then Continue re-detects (avalonia-port/rows-local-ai-wizard)
+- WPF LocalAiSetupWizard downloads OllamaSetup.exe (Windows NSIS) to %TEMP% and runs it with `/S`. There is no Linux
+  equivalent that does not need root or piping a remote script into a shell.
+- Options: (A) download and run Ollama's install.sh (root, remote script); (B) manual install link, Continue re-runs
+  detection; (C) manual link only. Chosen: B, supervisor advised (P44).
+- `OllamaSetupService` moved to Core unchanged except a non-Windows branch: `ollama` is looked up on PATH, then
+  /usr/local/bin and /usr/bin. Windows behaviour is unchanged. Linux still starts `ollama serve`, pulls the model through
+  the local API and runs the smoke test like WPF. The Avalonia head now seeds `LocalAiService.EnsureServerRunning` and
+  calls `StopSpawnedServer` on exit, which stops only a server this app spawned.
+- Tests: `Tests/CCP.Avalonia.Tests/LocalAiSetupWizardTests.cs`, `Tests/CCP.Core.Tests/OllamaSetupServiceTests.cs`
+  (fake binary and loopback API; no real ollama, pull or network).

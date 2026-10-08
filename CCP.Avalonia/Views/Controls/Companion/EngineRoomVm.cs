@@ -23,7 +23,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// <para>ponytail: no Live actions feed (AiCommandService.LiveActionSink is unseeded on this head),
     /// so ShowLiveActions stays false and the placeholder shows. The BYO API key box writes nothing:
     /// MainShellWindow.CompanionRoom.cs says why (no at-rest store reads it yet). The "offer setup when
-    /// Ollama is unreachable" prompt needs OllamaSetupService.DetectAsync, still WPF-only. Login has
+    /// Ollama is unreachable" prompt is not wired yet (OllamaSetupService.DetectAsync is in Core now). Login has
     /// no account tab deep link here yet, so LoginCommand stays null.</para>
     /// </summary>
     public sealed class EngineRoomVm : INotifyPropertyChanged
