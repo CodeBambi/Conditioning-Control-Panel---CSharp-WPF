@@ -359,7 +359,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             try
             {
                 if (TopLevel.GetTopLevel(this) is not Window owner || !owner.IsVisible) return;
-                await new Views.Windows.EasterEggWindow(-1).ShowDialog(owner);
+                await new Views.Windows.EasterEggWindow(-1).ShowDialogSafe(owner);
             }
             catch (Exception ex)
             {

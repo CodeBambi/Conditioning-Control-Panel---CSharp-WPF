@@ -27,8 +27,10 @@
        DynamicResource on a GradientStop /
          DropShadowEffect Color                 -> StaticResource (SeasonRecapCard /
                                                    QuizReportWindow / QuizCategoryEditorWindow
-                                                   precedent: neither is a styled property host
-                                                   that tracks a dynamic resource).
+                                                   precedent). Stale reason: SeasonRecapCard now
+                                                   uses DynamicResource on both; SeasonRecapPortTests
+                                                   proves GradientStops repaint (effect colour
+                                                   untested). Switching here is still to do.
        DropShadowEffect ShadowDepth="0"         -> dropped; Avalonia's effect has OffsetX/Y, both
                                                    default to 0.
        Visibility="Collapsed"                   -> IsVisible="False"

@@ -227,7 +227,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (!CoreSettings.Current.MicConsentGiven)
                 {
                     var dlg = new Dialogs.MicConsentDialog();
-                    if (await dlg.ShowDialog<bool?>(this) != true || !dlg.ConsentGiven || !CoreSettings.Current.MicConsentGiven)
+                    if (await dlg.ShowDialogSafe<bool?>(this) != true || !dlg.ConsentGiven || !CoreSettings.Current.MicConsentGiven)
                     {
                         Log.Information("TestVoiceCommand: mic consent declined, not opening mic");
                         return;

@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// owner). The page re-reads its settings afterwards, as WPF BtnHapticsHelp_Click does.</summary>
         internal async System.Threading.Tasks.Task ShowHapticsSetupAsync()
         {
-            try { await new HapticsSetupWindow().ShowDialog(this); }
+            try { await new HapticsSetupWindow().ShowDialogSafe(this); }
             catch (Exception ex) { Log.Error(ex, "HapticsSetupWindow failed"); }
         }
     }

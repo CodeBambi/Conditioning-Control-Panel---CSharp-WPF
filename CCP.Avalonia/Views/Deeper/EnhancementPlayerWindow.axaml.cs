@@ -551,7 +551,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             try
             {
                 var dlg = new Dialogs.UrlPromptDialog();
-                await dlg.ShowDialog(this);
+                await dlg.ShowDialogSafe(this);
                 if (string.IsNullOrEmpty(dlg.Result)) return;
 
                 _txtStatus.Text = Loc.Get("deeper_player_status_fetching_url");

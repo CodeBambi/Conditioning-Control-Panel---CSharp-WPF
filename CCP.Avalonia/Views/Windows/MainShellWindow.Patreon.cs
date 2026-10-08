@@ -97,7 +97,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // WPF MainWindow.Patreon.cs:1312. ponytail: UpdatePhraseCountDisplay skipped - the
         // Companion tab's TxtPhraseCount needs CompanionPhraseService, still head-side.
         internal void BtnManagePhrases_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
-            => _ = new Dialogs.CompanionPhraseEditorDialog().ShowDialog(this);
+            => _ = new Dialogs.CompanionPhraseEditorDialog().ShowDialogSafe(this);
 
         /// <summary>WPF MainWindow.Patreon.cs RefreshEntitlementVeils. Called on every navigation, on
         /// sign-in/out (UpdateQuickLoginUI), on either provider's TierChanged and on the ? box's

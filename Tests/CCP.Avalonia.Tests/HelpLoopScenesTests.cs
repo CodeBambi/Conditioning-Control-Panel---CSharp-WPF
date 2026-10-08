@@ -27,6 +27,19 @@ public sealed class HelpLoopScenesTests
     [InlineData("KeywordTriggers")]
     [InlineData("Audio")]
     [InlineData("Scheduler")]
+    [InlineData("SpiralOverlay")]
+    [InlineData("GazeMinigame")]
+    [InlineData("Video")]
+    [InlineData("BubblePop")]
+    [InlineData("BrainDrain")]
+    [InlineData("MindWipe")]
+    [InlineData("BubbleCount")]
+    [InlineData("LockCard")]
+    [InlineData("FocusGaze")]
+    [InlineData("IntensityRamp")]
+    [InlineData("Presets")]
+    [InlineData("Subliminals")]
+    [InlineData("WebcamCalibration")]
     public Task SceneRendersEveryStepAndLightsItsChipsInOrder(string id) => AvaloniaTestDispatcher.RunAsync(() =>
     {
         EnsureAvalonia();
@@ -99,10 +112,49 @@ public sealed class HelpLoopScenesTests
         return Task.CompletedTask;
     });
 
+    [Fact]
+    public Task BubbleCountLightsTheRightAnswerMint() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        Assert.True(HelpLoopRegistry.TryGet("BubbleCount", out var scene));
+        // t=5000: the "7" button (245,120 40x40) has been picked and fills Mint #5fffd0 (WPF BubbleCountLoop);
+        // the frame is RGBA, so the little-endian read gives 0xBBGGRR.
+        Assert.Equal(0xD0FF5Fu, Pixel(new FixedAt(scene, 5000), 280, 135));
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task WebcamCalibrationTicksTheGridPointsAlreadyRead() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        Assert.True(HelpLoopRegistry.TryGet("WebcamCalibration", out var scene));
+        // Grid point 7 sits at (60,94) on the snake walk (WPF WebcamCalibrationLoop). At t=5000 the dot is on
+        // hop 8, so points 0..7 carry a Mint #5fffd0 tick; at t=2000 nothing has been read yet. RGBA -> 0xBBGGRR.
+        Assert.Equal(0xD0FF5Fu, Pixel(new FixedAt(scene, 5000), 60, 94));
+        Assert.NotEqual(0xD0FF5Fu, Pixel(new FixedAt(scene, 2000), 60, 94));
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task IntensityRampCurveStopsAtItsHead() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        // A point on the full climb curve (WPF IntensityRampLoop: plot 332,132 118x74, y = .12 + .78 * EaseInOut(u)),
+        // well right of the head at t=1500 (u ~ .23). Before the curve starts (t=300) and at t=1500 it shows the
+        // same card; once the curve has reached it (t=4800) it does not.
+        const double x = 420;
+        double u = (x - 332) / 118.0, y = 206 - 74 * (.12 + .78 * LoopMath.EaseInOut(u));
+        uint Px(double at) { Assert.True(HelpLoopRegistry.TryGet("IntensityRamp", out var s)); return Pixel(new FixedAt(s, at), x, y); }
+        var empty = Px(300);
+        Assert.Equal(empty, Px(1500));
+        Assert.NotEqual(empty, Px(4800));
+        return Task.CompletedTask;
+    });
+
     /// <summary>A black Back with a white bar ending at x=240 (Front bar 360..440, ground right of 280); the pixel 3 px right of its edge.</summary>
     private static uint EdgePixel(double blur) => Pixel(new BarScene { Blur = blur }, 243, 135);
 
-    private static uint Pixel(BarScene scene, double x, double y)
+    private static uint Pixel(HelpLoopScene scene, double x, double y)
     {
         var view = new HelpLoopView(scene);
         var host = new Window { Width = 480, Height = 270, Content = view };
@@ -126,6 +178,16 @@ public sealed class HelpLoopScenesTests
             host.Content = null;   // a closed Window keeps its content attached: detach so the loop stops
             host.Close();
         }
+    }
+
+    /// <summary>Draws <paramref name="inner"/> frozen at one time.</summary>
+    private sealed class FixedAt(HelpLoopScene inner, double at) : HelpLoopScene
+    {
+        public override string Id => "";
+        public override double DurationMs => inner.DurationMs;
+        public override double StillMs => 0;
+        public override IReadOnlyList<HelpLoopStep> Steps => inner.Steps;
+        public override void Draw(LoopFrame f, double t) => inner.Draw(f, at);
     }
 
     private sealed class BarScene : HelpLoopScene

@@ -9,11 +9,13 @@
 //
 // Live on the page: the tracker toggle (Platform/WebcamTracker), session start/stop with its countdown
 // (Views/Overlays/BlinkTrainerSession: click-through overlays per screen, swap per blink, duration
-// auto-stop, haptic pulse, quest credit; panic and exit stop it), the live stage preview, consent
-// manage/revoke (WebcamTracker.RevokeConsent, the seeded CoreWebcam verb), Quick Recal over the gaze
-// feed, the 16-point calibration (WebcamCalibrationWindow). STILL REFUSED, each needing a missing surface:
-// ToggleWebcamFromHotkey, the status pulse, the loading splash, stage video preview and the Deeper
-// hub's webcam twins.
+// auto-stop, haptic pulse, quest credit; panic and exit stop it), the live stage preview (images and,
+// through a VlcFrameSink, muted looping video), consent manage/revoke (WebcamTracker.RevokeConsent,
+// the seeded CoreWebcam verb), Quick Recal over the gaze feed, the 16-point calibration
+// (WebcamCalibrationWindow), the help popover, and the status pulse (the page calls
+// SetBlinkTrainerStatusPulse in MainShellWindow.TabFxTakeoverLabStatus.cs). STILL REFUSED, each needing
+// a missing surface: ToggleWebcamFromHotkey (global hotkey), the loading splash and the Deeper hub's
+// webcam twins.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {

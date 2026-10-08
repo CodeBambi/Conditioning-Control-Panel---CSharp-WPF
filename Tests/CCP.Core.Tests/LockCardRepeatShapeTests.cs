@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
-using static ConditioningControlPanel.Services.LockCardService;
+using static ConditioningControlPanel.Services.LockCardScheduler;
 
 namespace ConditioningControlPanel.Tests;
 

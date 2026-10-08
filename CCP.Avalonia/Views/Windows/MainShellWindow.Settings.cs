@@ -280,7 +280,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 if (!IsVisible) return;
-                await new BugReportWindow(ReportKind.Bug).ShowDialog(this);
+                await new BugReportWindow(ReportKind.Bug).ShowDialogSafe(this);
             }
             catch (Exception ex)
             {

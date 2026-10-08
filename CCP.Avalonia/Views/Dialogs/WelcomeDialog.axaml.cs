@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             if (CoreSettings.Current.Welcomed) return false;
 
-            await new WelcomeDialog().ShowDialog(owner);
+            await new WelcomeDialog().ShowDialogSafe(owner);
 
             // WPF latched Welcomed whatever the dialog returned — dismissing it still counts as
             // having seen it, otherwise the dialog reappears on every launch.

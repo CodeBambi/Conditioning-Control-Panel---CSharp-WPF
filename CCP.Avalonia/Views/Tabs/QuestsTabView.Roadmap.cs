@@ -336,7 +336,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 // Completed: the diary, read-only.
                 if (progress?.IsCompleted == true)
                 {
-                    await new RoadmapDiaryDialog(stepId, stepDef, progress).ShowDialog(owner);
+                    await new RoadmapDiaryDialog(stepId, stepDef, progress).ShowDialogSafe(owner);
                     return;
                 }
 
@@ -351,7 +351,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     return;
                 }
 
-                if (await new RoadmapStartDialog(stepDef).ShowDialog<bool?>(owner) != true) return;
+                if (await new RoadmapStartDialog(stepDef).ShowDialogSafe<bool?>(owner) != true) return;
 
                 // Records the start time. Only after the dialog said yes.
                 Roadmap.StartStep(stepId);
@@ -383,11 +383,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             string photoPath, Window owner)
         {
             var confirm = new RoadmapConfirmDialog(stepDef.Title, stepDef.PhotoRequirement);
-            if (await confirm.ShowDialog<bool?>(owner) != true || !confirm.Confirmed) return;
+            if (await confirm.ShowDialogSafe<bool?>(owner) != true || !confirm.Confirmed) return;
 
             string? note = null;
             var noteDialog = new InputDialog(Loc.Get("title_add_note"), Loc.Get("msg_add_note_prompt"), "");
-            if (await noteDialog.ShowDialog<bool?>(owner) == true && !string.IsNullOrEmpty(noteDialog.ResultText))
+            if (await noteDialog.ShowDialogSafe<bool?>(owner) == true && !string.IsNullOrEmpty(noteDialog.ResultText))
                 note = noteDialog.ResultText;
 
             Roadmap.SubmitPhoto(stepId, photoPath, note);
