@@ -1339,3 +1339,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-feat-bubble-count: +200
 - Bubble Count waits behind video / lock card / quiz like WPF TriggerGame; panic and stop drop the waiting game.
+
+## avalonia-port/rows-lockdown-tab: +325
+- Lockdown title-bar badge wired (clock, hide mask, click/Enter -> tab); Emergency Exit breath (off under Photosafe, motion Off, minimised); quest hint + Hide-clock toggle.
+- 3 shell tests, 9 itemised fail-proofs; live evidence rows-lockdown-tab/; row stays stub (theme, Possession, Dose, Strict greying, EE games, system keys).
