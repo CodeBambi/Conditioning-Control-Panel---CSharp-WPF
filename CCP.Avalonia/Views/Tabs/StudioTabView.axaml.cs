@@ -51,7 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// in one place.</para>
     ///
     /// <para><b>What is stubbed, and why.</b> Everything the WPF code-behind reaches into the app
-    /// head for: <c>PerimeterCometAdorner</c> (the active tile's comet) and the detail crossfade. Each is
+    /// head for: the detail crossfade. It is
     /// marked <c>ponytail:</c> at its site. The FeatureOpened bark is no longer among them - it
     /// crosses on <see cref="CoreBark"/>.</para>
     ///
@@ -101,6 +101,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             /// <summary>The element toggled by IsVisible (a ScrollViewer wrapper, or the panel itself).</summary>
             public Control? Host;
+
+            public PerimeterCometAdorner? Comet;   // the checked tile's, owned by SetTileComet
 
             /// <summary>The raw UserControl, for the session-lock sweep. Null = not swept here.</summary>
             public UserControl? Panel;
@@ -175,6 +177,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The rack key currently showing. Survives leaving and re-entering the door.</summary>
         internal string SelectedRackKey => _selected;
+
+        /// <summary>The comet on that row's tile, or null. Test seam.</summary>
+        internal PerimeterCometAdorner? CometFor(string key) => _entries.FirstOrDefault(e => e.Key == key)?.Comet;
 
         /// <summary>
         /// Every code-built brush on this page whose colour is the mod accent rather than a fixed
@@ -297,6 +302,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 RefreshRackLabels();
                 RefreshDots();
                 SelectEntry(_selected, announce: true);
+                RefreshTileComets();
             }
             catch { /* a door open must never throw */ }
         }
@@ -933,11 +939,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// IsVisible flip and a Height write, with no clock for a motion kill-switch to reach.
         /// <para>Height is CLEARED rather than set back to 38 so RackEntryStyle's own Height setter
         /// takes the row again — one place owns the resting height.</para>
-        /// <para>ponytail: WPF also lights a <c>PerimeterCometAdorner</c> on the checked tile here,
-        /// gated twice on <c>MotionFx</c>. The gate has a twin now
-        /// (<c>AmbientFxCanvas.Env.AllowAmbientLoops</c>); what is missing is
-        /// ConditioningControlPanel/Controls/PerimeterCometAdorner.cs, a WPF Adorner with no
-        /// Avalonia twin - the port carries no comet, the safe direction for a quiet surface.</para>
+        /// <para>And lights the checked tile's perimeter comet, as WPF StudioTabView.xaml.cs:1009.</para>
         /// </summary>
         private static void ApplyRowState(StudioRackEntry e)
         {
@@ -949,6 +951,45 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             if (on) e.Row.Height = ActiveTileHeight;
             else e.Row.ClearValue(HeightProperty);
+
+            SetTileComet(e, on);
+        }
+
+        // WPF StudioTabView.xaml.cs:1019-1024: BuildArtTile's 8px corners; a 4s lap, faster than
+        // the 9s default because this is the ONE live thing on the rack.
+        private const double ActiveTileCornerRadius = 8;
+        private const double ActiveTileLapSeconds = 4.0;
+
+        /// <summary>WPF StudioTabView.xaml.cs:1042: one comet on the checked tile, gated on
+        /// transitions here and ambient loops inside the adorner (which degrades to a static lit
+        /// outline).</summary>
+        private static void SetTileComet(StudioRackEntry e, bool on)
+        {
+            if (!on || e.Tile == null || !AmbientFxCanvas.Env.AllowTransitions)
+            {
+                PerimeterCometAdorner.Detach(e.Comet);
+                e.Comet = null;
+                return;
+            }
+            if (e.Comet != null) { e.Comet.Start(); return; }   // re-reads the motion gate (lap or static)
+            e.Comet = PerimeterCometAdorner.Attach(e.Tile, ActiveTileCornerRadius, ActiveTileLapSeconds);
+            if (e.Comet != null) return;
+            // The tile joins the visual tree (via the row's ContentPresenter) only on the tab's
+            // first layout pass, after ShowTab's OnTabShown. Retry on arrival.
+            void Arrived(object? sender, VisualTreeAttachmentEventArgs args)
+            {
+                e.Tile.AttachedToVisualTree -= Arrived;
+                SetTileComet(e, e.Row?.IsChecked == true);
+            }
+            e.Tile.AttachedToVisualTree += Arrived;   // each handler removes itself; extras no-op
+        }
+
+        /// <summary>Re-asserts every row's comet: on Loaded (the adorner layer exists from then on)
+        /// and on every door open (so a motion change made in Settings lands on the way back in).</summary>
+        private void RefreshTileComets()
+        {
+            foreach (var entry in _entries)
+                SetTileComet(entry, entry.Row?.IsChecked == true);
         }
 
         /// <summary>
@@ -1317,6 +1358,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshRackLabels();
             ApplyDoorIcon();
             RefreshDots();
+            RefreshTileComets();   // only now does an adorner layer exist for the ctor-built rows
         }
 
         // =====================================================================================

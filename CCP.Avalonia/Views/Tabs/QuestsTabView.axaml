@@ -95,12 +95,9 @@
       </Style>
     </ControlTheme>
 
-    <!-- ponytail: local copy of Resources/Theme/MainWindow.xaml:AnimatedGradientPanel and
-         :AnimatedGradientPanelWide, hoist when a second view needs it. The six floating
-         particles and the Forever storyboard that drifts them are DROPPED - they are a
-         Storyboard on an IsVisible trigger, which has no Avalonia equivalent that is worth
-         hand-rolling for a decoration; the gradient and the two corner glows carry the look.
-         ponytail: no particle drift, restore with Avalonia animations if the panel reads flat. -->
+    <!-- Local copy of Resources/Theme/MainWindow.xaml:AnimatedGradientPanel and :AnimatedGradientPanelWide
+         (only this view uses them). The particle drift WPF runs as an IsVisible-triggered storyboard is
+         driven by QuestsTabView.Fx.cs on the tab's ambient clock. -->
     <ControlTheme x:Key="AnimatedGradientPanel" TargetType="ContentControl">
       <Setter Property="Template">
         <ControlTemplate TargetType="ContentControl">
@@ -136,6 +133,15 @@
                   </RadialGradientBrush>
                 </Ellipse.Fill>
               </Ellipse>
+              <!-- Floating particles: drifted by QuestsTabView.Fx.cs (WPF storyboard on IsVisible). -->
+              <Canvas Classes="qparticles" Tag="std" IsHitTestVisible="False">
+                <Ellipse Width="4" Height="4" Fill="{DynamicResource PinkBrush}" Opacity="0.4" Canvas.Left="20" Canvas.Top="80"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="3" Height="3" Fill="{DynamicResource SecondaryBrush}" Opacity="0.35" Canvas.Left="80" Canvas.Top="120"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="5" Height="5" Fill="{DynamicResource PinkBrush}" Opacity="0.3" Canvas.Left="150" Canvas.Top="60"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="3" Height="3" Fill="{DynamicResource SecondaryBrush}" Opacity="0.35" Canvas.Left="220" Canvas.Top="100"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="4" Height="4" Fill="{DynamicResource SecondaryBrush}" Opacity="0.3" Canvas.Left="280" Canvas.Top="40"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="3" Height="3" Fill="{DynamicResource PinkBrush}" Opacity="0.4" Canvas.Left="50" Canvas.Top="150"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+              </Canvas>
               <Border Padding="20">
                 <ContentPresenter Content="{TemplateBinding Content}"
                                   ContentTemplate="{TemplateBinding ContentTemplate}"/>
@@ -172,6 +178,24 @@
                   </RadialGradientBrush>
                 </Ellipse.Fill>
               </Ellipse>
+              <Ellipse Width="200" Height="120" Opacity="0.1"
+                       HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-60,-30">
+                <Ellipse.Fill>
+                  <RadialGradientBrush>
+                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="0"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                  </RadialGradientBrush>
+                </Ellipse.Fill>
+              </Ellipse>
+              <!-- Floating particles: drifted by QuestsTabView.Fx.cs (WPF storyboard on IsVisible). -->
+              <Canvas Classes="qparticles" Tag="wide" IsHitTestVisible="False">
+                <Ellipse Width="4" Height="4" Fill="{DynamicResource PinkBrush}" Opacity="0.4" Canvas.Left="30" Canvas.Top="60"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="3" Height="3" Fill="{DynamicResource SecondaryBrush}" Opacity="0.35" Canvas.Left="120" Canvas.Top="100"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="5" Height="5" Fill="{DynamicResource PinkBrush}" Opacity="0.3" Canvas.Left="250" Canvas.Top="40"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="3" Height="3" Fill="{DynamicResource SecondaryBrush}" Opacity="0.35" Canvas.Left="380" Canvas.Top="80"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="4" Height="4" Fill="{DynamicResource SecondaryBrush}" Opacity="0.3" Canvas.Left="500" Canvas.Top="50"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+                <Ellipse Width="3" Height="3" Fill="{DynamicResource PinkBrush}" Opacity="0.4" Canvas.Left="180" Canvas.Top="120"><Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform></Ellipse>
+              </Canvas>
               <Border Padding="10">
                 <ContentPresenter Content="{TemplateBinding Content}"
                                   ContentTemplate="{TemplateBinding ContentTemplate}"/>

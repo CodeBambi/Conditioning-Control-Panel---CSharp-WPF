@@ -2,8 +2,8 @@
 // branch (:955), HandlePanicKeyPress (:1458) and RunPanicStopTail (:1694), engine-not-running path.
 // The decision is the same Core PanicPolicy; the listener is Platform/X11PanicKey (XInput2 raw keys,
 // non-consuming like the WH_KEYBOARD_LL hook - docs/avalonia-decisions.md, panic key row).
-// ponytail: no game surfaces, video grace pause or bark on this head yet, so the
-// stop pass is StopEngine (which pauses a running session first) plus the lock card; wire each as its surface arrives. The #919b off-thread watchdog is omitted: the listener is its own thread,
+// The stop pass is PanicSurfaces.StopAll (one registry shared with the tray and the safe word); a new
+// surface registers there, never here. ponytail: no bark on this head yet. The #919b off-thread watchdog is omitted: the listener is its own thread,
 // so a wedged UI thread cannot drop the hook, but the queued stop still waits for the UI thread.
 // ponytail: Windows has no panic listener on this head yet (WPF's WH_KEYBOARD_LL hook is not ported);
 // X11PanicKey.Start returns false there and the tray's Stop everything is the only panic control.
@@ -54,8 +54,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF MainWindow.xaml.cs:888: Lockdown ignores every GLOBAL key, whatever LockdownDisablePanicKey
             // says. Only this listener layer: window and TextBox input (the secret phrase) are untouched.
             if (LockdownActive) { Serilog.Log.Information("Panic key ignored under Lockdown"); return; }
-            IntakeHostWindow.StopMicsForPanic();   // before the capture abort (StopAutonomyForPanic -> CancelVoicePrompt -> StopListening, and the lock-card stop) reads as silence
-            CancelPendingAi();
+            IntakeHostWindow.StopMicsForPanic();   // every press, before the lock-card stop or the capture abort reads as silence
+            CancelPendingAi();   // every press, even one a lock card or the palette consumes
 
             // Same evaluation order as WPF: asking the palette closes it, so never ask with a card up.
             bool lockCardOpen = LockCardWindow.IsAnyOpen();
@@ -67,39 +67,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (rung == PanicPolicy.Rung.DismissLockCard) { StopLockCards(); StopCameraForPanic(); }
             if (!PanicPolicy.StopsSurfaces(rung)) return;
             // WPF MainWindow.xaml.cs:1709: close the game surface that owns the screen, then the normal
-            // stop tail with the exit ladder NOT armed (and no grace pause).
-            bool closedSurface = IntakeHostWindow.CloseAllForPanic();
+            // stop tail with the exit ladder NOT armed (and no grace pause). Sampled BEFORE the stop pass
+            // closes it (intake host, Chaos descent: PanicPolicy.AdvancesExitLadder(Rung, bool)).
+            bool gameOwnedTheScreen = PanicSurfaces.AnyOwnsTheScreen();
             // WPF #735: with PanicOverridesAll off (RunLadder), the first press over a playing mandatory
             // video grace-pauses it instead (TryGracePause refuses when panic overrides all), and the
             // window's own handling of the same keystroke is deduped there. Not a ladder rung.
-            if (!closedSurface && rung == PanicPolicy.Rung.RunLadder && Views.Overlays.MandatoryVideoOverlay.Instance.TryGracePause(fromPanicKey: true))
+            if (!gameOwnedTheScreen && rung == PanicPolicy.Rung.RunLadder && Views.Overlays.MandatoryVideoOverlay.Instance.TryGracePause(fromPanicKey: true))
             {
                 Serilog.Log.Information("Panic press consumed as video grace pause");
                 StopCameraForPanic();
                 return;
             }
             bool wasRunning = CoreEngine.IsRunning;
-            // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
-            Views.Overlays.BlinkTrainerSession.Stop();
-            // WPF MainWindow.xaml.cs:1621: sampled BEFORE the stop pass - a press that ends a descent
-            // must not also arm the double-press exit (PanicPolicy.AdvancesExitLadder(Rung, bool)).
-            bool chaosOwnedTheScreen = Views.Chaos.ChaosRunHost.IsDescending;
-            Views.Chaos.ChaosRunHost.ForceShutdown();   // WPF GameSurfaces "chaos" -> App.Chaos.ForceShutdown
-            // WPF RunPanicStopTail: StopEngine while running, StopAdHocEffects otherwise - both are
-            // CoreEngine.Stop here (it stops everything either way) and neither unticks a flag.
-            // WPF PanicStopEverySurface (MainWindow.xaml.cs:1992): the toys go to zero first, bypassing
-            // throttles and gates, whatever else the stop pass does.
-            try { CoreHaptics.Service?.PanicStop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: haptics stop failed"); }
-            ConditioningControlPanel.Services.RemoteCommands.StopHaptics();   // the remote haptic loop too (decisions 2026-10-08)
-            StopAutonomyForPanic();   // WPF KillAllAudio -> Autonomy.Stop: panic stops Takeover (decisions 2026-09-30)
-            StopEngine();
-            StopLockCards();   // WPF StopAdHocEffects: App.LockCard.Stop(dismissOpenCards: true)
-            StopCameraForPanic();
+            PanicSurfaces.StopAll("panic key", this);
             if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop
 
             if ((now - _lastPanicTime).TotalMilliseconds > 2000) _panicPressCount = 0;
             // A game surface (intake host or a Chaos descent) owned the screen: the press ends it, no exit rung.
-            if (PanicPolicy.AdvancesExitLadder(rung, closedSurface || chaosOwnedTheScreen)) { _panicPressCount++; _lastPanicTime = now; }
+            if (PanicPolicy.AdvancesExitLadder(rung, gameOwnedTheScreen)) { _panicPressCount++; _lastPanicTime = now; }
             if (_panicPressCount >= 2)
             {
                 Serilog.Log.Information("Double panic! Exiting application...");
@@ -196,7 +182,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF LockCardService.Stop(dismissOpenCards: true).</summary>
-        private static void StopLockCards()
+        internal static void StopLockCards()
         {
             LockCardWindow.ForceCloseAll();
             LockCardScheduler.Instance.Stop();

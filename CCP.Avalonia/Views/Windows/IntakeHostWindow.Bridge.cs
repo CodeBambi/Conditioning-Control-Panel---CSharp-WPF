@@ -116,6 +116,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private static IntakeHostWindow[] Snapshot() { lock (OpenWindows) return OpenWindows.ToArray(); }
 
+        /// <summary>PanicSurfaces 'intake' screen probe (WPF AnyGameSurfaceOwnsTheScreen).</summary>
+        internal static bool IsAnyOpen() { lock (OpenWindows) return OpenWindows.Count > 0; }
+
         /// <summary>The panic key's first step, before anything aborts the capture: cancel each say-it loop so
         /// an aborted listen is never read as silence and the mic never reopens. The page is told "stopped",
         /// because a rung that keeps the intake open (palette Escape, lock-card dismiss) would leave it

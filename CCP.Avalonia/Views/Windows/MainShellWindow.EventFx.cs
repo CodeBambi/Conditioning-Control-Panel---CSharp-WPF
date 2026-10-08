@@ -7,7 +7,7 @@
 //
 //   CelebrateLevelUp                <- the XP/level path (MainWindow.ProfileBubble.cs)
 //   CelebrateAchievementUnlock      <- MainWindow.AchievementsTab.cs:782 (on-tile reveal + burst: AchievementsTabView.Fx.cs)
-//   CelebrateQuestComplete          <- MainWindow.Quests.cs:77 (a quest-completed event)
+//   CelebrateQuestComplete          <- MainWindow.Quests.cs:77 (on-tab burst: QuestsTabView.Fx.cs)
 //   CelebrateProgramDayComplete     <- MainWindow.ProgramsTab.cs:1020
 //   CelebrateEnhancementPurchase    <- MainWindow.Enhancements.cs:2059
 //   CelebratePrestige               <- the prestige rank roll
