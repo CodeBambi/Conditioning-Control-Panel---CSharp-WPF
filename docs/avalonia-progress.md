@@ -1446,3 +1446,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-content-dialogs: +332
 - Tube Personality submenu with the CCBill explicit-content acknowledgement gate; content-policy warning on the moderation counter; both rows stub -> wired.
 - TubeContentGatesTests (fail-proven x4); other acknowledgement callers still head-blocked.
+
+## avalonia-port/rows-settings-data: +296
+- Settings · Data offline mode stops the heartbeat and greys the login and browser controls like WPF, including at startup; views-settings-data stub→wired.
+- Phrase import uses WPF's Import/Cancel confirm, with Enter on Cancel (supervisor decision).
