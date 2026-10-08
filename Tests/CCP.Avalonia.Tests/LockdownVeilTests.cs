@@ -336,7 +336,7 @@ public sealed class LockdownVeilTests
 
     /// <summary>WPF StartEmergencyExitPulse (LockdownTabView.xaml.cs:267): the slab's glow breathes
     /// 0.26-0.62 / 24-42 on a 1.5 s sine while a lockdown runs, only while the tab shows (P01),
-    /// never under LockdownPhotosafe, and rests at 0.32 / 28 when stopped.</summary>
+    /// never under LockdownPhotosafe or MotionLevel Off, never while minimised, and rests at 0.32 / 28 when stopped.</summary>
     [Fact]
     public void EmergencyExitGlow_BreathesOnlyWhileShown_AndNeverUnderPhotosafe() => Run((shell, ld) =>
     {
@@ -375,8 +375,36 @@ public sealed class LockdownVeilTests
             ld.Activate(TimeSpan.FromMinutes(30));
             Frame();
             Assert.False(tab.EmergencyExitPulsing);
+            ld.Deactivate();
+            Frame();
+
+            // Motion Off (WPF: SystemParameters.ClientAreaAnimation) holds the resting glow too.
+            CoreSettings.Current.LockdownPhotosafe = false;
+            CoreSettings.Current.MotionLevel = MotionLevel.Off;
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.False(tab.EmergencyExitPulsing);
+            ld.Deactivate();
+            Frame();
+
+            // P01: a minimised window stops the breath; restoring it brings it back.
+            CoreSettings.Current.MotionLevel = MotionLevel.Full;
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.True(tab.EmergencyExitPulsing);
+            shell.WindowState = WindowState.Minimized;
+            Frame();
+            Assert.False(tab.EmergencyExitPulsing);
+            shell.WindowState = WindowState.Normal;
+            Frame();
+            Assert.True(tab.EmergencyExitPulsing);
         }
-        finally { CoreSettings.Current.LockdownPhotosafe = false; }
+        finally
+        {
+            CoreSettings.Current.LockdownPhotosafe = false;
+            CoreSettings.Current.MotionLevel = MotionLevel.Full;
+            shell.WindowState = WindowState.Normal;
+        }
     });
 
     /// <summary>WPF LockdownTabView.xaml:202/218: the quest hint follows the picked duration

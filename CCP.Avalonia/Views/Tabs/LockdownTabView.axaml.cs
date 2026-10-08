@@ -52,8 +52,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // future safety panic clears a flag) and a stale toggle here is a toggle that lies.
             // WPF's Loaded + IsVisibleChanged pair maps to Avalonia's AttachedToVisualTree +
             // the IsVisible property changing.
-            AttachedToVisualTree += (_, _) => { LoadPossessionSettings(); UpdateEmergencyExitPulse(); };
-            DetachedFromVisualTree += (_, _) => StopEmergencyExitPulse();
+            AttachedToVisualTree += (_, _) =>
+            {
+                LoadPossessionSettings();
+                // P01: a minimised window draws nothing, so the breath stops with it.
+                _host = TopLevel.GetTopLevel(this) as Window;
+                if (_host != null) _host.PropertyChanged += OnHostChanged;
+                UpdateEmergencyExitPulse();
+            };
+            DetachedFromVisualTree += (_, _) =>
+            {
+                if (_host != null) _host.PropertyChanged -= OnHostChanged;
+                _host = null;
+                StopEmergencyExitPulse();
+            };
             PropertyChanged += (_, e) =>
             {
                 if (e.Property != IsVisibleProperty) return;
@@ -351,12 +363,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         internal bool EmergencyExitPulsing => _eePulse != null;
 
+        private Window? _host;
+
+        private void OnHostChanged(object? sender, global::Avalonia.AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == Window.WindowStateProperty) UpdateEmergencyExitPulse();
+        }
+
         /// <summary>Starts or stops the breath to match what is on screen. Called from every state
         /// change the WPF host called Start/StopEmergencyExitPulse from, plus show/hide/attach.</summary>
         internal void UpdateEmergencyExitPulse()
         {
             var want = Lockdown?.IsActive == true && IsVisible && LockdownActivePanel.IsVisible
-                && VisualRoot is not null
+                && VisualRoot is not null && _host?.WindowState != WindowState.Minimized
                 && !CoreSettings.Current.LockdownPhotosafe
                 && CoreSettings.Current.MotionLevel != Models.MotionLevel.Off;
             if (want) StartEmergencyExitPulse(); else StopEmergencyExitPulse();
