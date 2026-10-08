@@ -1500,3 +1500,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/reset-close: +105
 - The test isolation hook closes app windows a test left open and resets StartupLadder, so passive startup cards no longer leak between tests (P52).
 - Proven by a fixed-order leaky pair (LeakedWindowIsolationTests). B fails with the close commented out.
+
+## avalonia-port/rows-settings-account: +659
+- Settings · Account: provider cards, login/logout/link, Patreon reconnect, Chaster card and presence switch are wired. Backup/restore/export are still hidden (row stays stub).
+- 4 fail-proven shell tests on fake providers; ProviderLinkResponseRules moved to Core.
