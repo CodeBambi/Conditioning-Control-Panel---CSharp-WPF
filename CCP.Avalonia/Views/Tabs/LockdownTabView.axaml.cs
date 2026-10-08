@@ -44,6 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             InitializeComponent();
 
             LoadPossessionSettings();
+            UpdateQuestHint();
 
             // Tabs are shown and hidden rather than rebuilt, so the first attach fires once.
             // Re-read on every show for the same reason BambiTakeoverTabView does: something else
@@ -51,10 +52,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // future safety panic clears a flag) and a stale toggle here is a toggle that lies.
             // WPF's Loaded + IsVisibleChanged pair maps to Avalonia's AttachedToVisualTree +
             // the IsVisible property changing.
-            AttachedToVisualTree += (_, _) => LoadPossessionSettings();
+            AttachedToVisualTree += (_, _) => { LoadPossessionSettings(); UpdateEmergencyExitPulse(); };
+            DetachedFromVisualTree += (_, _) => StopEmergencyExitPulse();
             PropertyChanged += (_, e) =>
             {
-                if (e.Property == IsVisibleProperty && IsVisible) LoadPossessionSettings();
+                if (e.Property != IsVisibleProperty) return;
+                if (IsVisible) LoadPossessionSettings();
+                UpdateEmergencyExitPulse();
             };
 
             // WPF MainWindow.Lab.cs InitializeLockdown: the panels follow the running lockdown. The
@@ -69,6 +73,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
         }
 
+        // ==== Duration (WPF LockdownTabView.xaml.cs:36) =====================================
+
+        private void CmbLockdownDuration_SelectionChanged(object? sender, SelectionChangedEventArgs e) => UpdateQuestHint();
+
+        /// <summary>Shows the "does not count for quests" line while the picked duration is too short.</summary>
+        internal void UpdateQuestHint()
+        {
+            // SelectionChanged fires inside InitializeComponent (SelectedIndex="1"), before the hint exists.
+            if (TxtLockdownQuestHint == null || CmbLockdownDuration == null) return;
+            var minutes = (CmbLockdownDuration.SelectedItem as ComboBoxItem)?.Tag is string tag
+                          && int.TryParse(tag, out var m) ? m : 0;
+            TxtLockdownQuestHint.IsVisible = minutes > 0 && !QuestService.LockdownCountsForQuests(TimeSpan.FromMinutes(minutes));
+        }
+
+        /// <summary>WPF ChkLockdownHideTimer_Changed: read on every clock repaint, so nothing to push.</summary>
+        private void ChkLockdownHideTimer_Changed(object? sender, RoutedEventArgs e)
+            => WriteFlag(v => CoreSettings.Current.HideLockdownTimer = v, ChkLockdownHideTimer, "HideLockdownTimer");
+
         // ==== Possession + Safeties ======================================================
 
         /// <summary>Paints every control on the card from AppSettings. Never writes anything back.</summary>
@@ -80,6 +102,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
                 _loadingPossession = true;
 
+                Set(ChkLockdownHideTimer, s.HideLockdownTimer);
                 Set(ChkPossessionEnabled, s.LockdownPossessionEnabled);
                 Set(ChkPossTripwires, s.LockdownTripwiresEnabled);
                 Set(ChkPossWarden, s.LockdownWardenEnabled);
@@ -219,7 +242,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ==== the running lockdown (WPF MainWindow.Lab.cs) ================================
         // ponytail: ported: premium gate, double warning, Activate, panel swap, clock, the secret
-        // phrase. Not on this head: the title-bar badge, the blood-red theme and activation flash,
+        // phrase, the Emergency Exit breath; the title-bar badge is MainShellWindow.Lockdown.cs.
+        // Not on this head: the blood-red theme and activation flash,
         // the Possession haunt/readout, the Dose keeper, greying of the Strict/No-panic toggles and
         // the system-key hook (Linux has none, so the warning does not promise it).
 
@@ -248,6 +272,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // too whenever Possession is off).
             TxtPossessionRung.IsVisible = false;
             PossessionPips.IsVisible = false;
+            UpdateEmergencyExitPulse();
         }
 
         /// <summary>WPF MainWindow.Lab.cs:51 BtnActivateLockdown_Click. The consent lists only what
@@ -315,25 +340,62 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // one control on the page that must behave exactly the same every second of a lockdown,
         // so its animations live here, on the view, and answer only to the photosafe setting.
 
-        /// <summary>
-        /// Starts the slow ember breath under the slab. Called by the host when the active panel
-        /// is shown.
-        /// ponytail: BOTH halves are reachable now, and neither is a service. The gate is
-        /// <c>CoreSettings.Current.LockdownPhotosafe</c>; the target is the DropShadowEffect at
-        /// LockdownTabView.axaml:498, which Avalonia cannot x:Name (AVLN2000) but which this file
-        /// can reach through the owning Border and swap for a mutable instance, then step off one
-        /// ~16ms DispatcherTimer (ChaosHudWindow is the worked example - Animation.RunAsync throws
-        /// on a code-held Effect). Not built yet: ShowLockdownState is the caller it
-        /// would hang off (a real lockdown shows the active panel now); the breath itself is unported.
-        /// POSSESSION.md: photosafe means no flicker, not no colour, so the resting glow already
-        /// in the XAML is the correct photosafe state, which is why an unstarted pulse is a safe
-        /// stub rather than a missing one.
-        /// </summary>
-        internal void StartEmergencyExitPulse() { }
+        // WPF StartEmergencyExitPulse (LockdownTabView.xaml.cs:267): opacity 0.26->0.62 and blur
+        // 24->42, 1500 ms SineEase in-out, auto-reverse, forever; resting glow 0.32 / 28. Skipped
+        // under LockdownPhotosafe (POSSESSION.md: no flicker, the resting glow is the photosafe
+        // state) and when motion is off (WPF: SystemParameters.ClientAreaAnimation). Animation.RunAsync
+        // throws on a code-held Effect, so one ~30 fps DispatcherTimer steps it, and only while the
+        // active panel is on screen (P01).
+        private DispatcherTimer? _eePulse;
+        private readonly System.Diagnostics.Stopwatch _eeClock = new();
 
-        /// <summary>Stops the breath and puts the glow back where the XAML left it. Nothing to stop
-        /// yet - see StartEmergencyExitPulse.</summary>
-        internal void StopEmergencyExitPulse() { }
+        internal bool EmergencyExitPulsing => _eePulse != null;
+
+        /// <summary>Starts or stops the breath to match what is on screen. Called from every state
+        /// change the WPF host called Start/StopEmergencyExitPulse from, plus show/hide/attach.</summary>
+        internal void UpdateEmergencyExitPulse()
+        {
+            var want = Lockdown?.IsActive == true && IsVisible && LockdownActivePanel.IsVisible
+                && VisualRoot is not null
+                && !CoreSettings.Current.LockdownPhotosafe
+                && CoreSettings.Current.MotionLevel != Models.MotionLevel.Off;
+            if (want) StartEmergencyExitPulse(); else StopEmergencyExitPulse();
+        }
+
+        internal void StartEmergencyExitPulse()
+        {
+            if (_eePulse != null) return;
+            _eeClock.Restart();
+            _eePulse = new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Render,
+                (_, _) => PaintEmergencyExitGlow(_eeClock.Elapsed.TotalMilliseconds));
+            _eePulse.Start();
+        }
+
+        /// <summary>Stops the breath and puts the glow back where the XAML left it.</summary>
+        internal void StopEmergencyExitPulse()
+        {
+            _eePulse?.Stop();
+            _eePulse = null;
+            SetGlow(0.32, 28);
+        }
+
+        /// <summary>One frame of the breath at <paramref name="ms"/> into it (3000 ms per cycle).</summary>
+        internal void PaintEmergencyExitGlow(double ms)
+        {
+            var f = (1 - Math.Cos(2 * Math.PI * (ms % 3000) / 3000)) / 2;   // SineEase in-out, auto-reversed
+            SetGlow(0.26 + 0.36 * f, 24 + 18 * f);
+        }
+
+        private void SetGlow(double opacity, double blur)
+        {
+            // The XAML instance may be frozen/shared; a code-owned one is mutated in place.
+            if (_eeGlow is null || !ReferenceEquals(EEPlate.Effect, _eeGlow))
+                EEPlate.Effect = _eeGlow = new DropShadowEffect { Color = Color.Parse("#FF8A5C"), OffsetX = 0, OffsetY = 0 };
+            _eeGlow.Opacity = opacity;
+            _eeGlow.BlurRadius = blur;
+        }
+
+        private DropShadowEffect? _eeGlow;
 
         // The slab still sinks under the finger and comes back, but with no code: the WPF pair of
         // DoubleAnimations on a named ScaleTransform (60 ms down / 140 ms up) is a :pressed style
