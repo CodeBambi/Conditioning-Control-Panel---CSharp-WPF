@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -10,12 +11,15 @@ namespace ConditioningControlPanel.Services;
 /// </summary>
 public static class TrainerCardText
 {
-    /// <summary>1.2M / 3.4k / 999 (WPF FormatNumber).</summary>
+    /// <summary>1.2M / 3.4k / 999 (WPF FormatNumber). Invariant on every locale: "1,2M" mixes two styles.</summary>
     public static string Number(double n) =>
-        n >= 1_000_000 ? $"{n / 1_000_000:F1}M" : n >= 1_000 ? $"{n / 1_000:F1}k" : n.ToString("N0");
+        n >= 1_000_000 ? FormattableString.Invariant($"{n / 1_000_000:F1}M")
+        : n >= 1_000 ? FormattableString.Invariant($"{n / 1_000:F1}k")
+        : n.ToString("N0", CultureInfo.InvariantCulture);
 
     /// <summary>Hours with one decimal from an hour up, whole minutes below.</summary>
-    public static string Video(double minutes) => minutes >= 60 ? $"{minutes / 60:F1}h" : $"{minutes:F0}m";
+    public static string Video(double minutes) =>
+        minutes >= 60 ? FormattableString.Invariant($"{minutes / 60:F1}h") : FormattableString.Invariant($"{minutes:F0}m");
 
     /// <summary>"#12", or "#-" when unranked.</summary>
     public static string Rank(int? rank) => rank > 0 ? $"#{rank}" : "#-";

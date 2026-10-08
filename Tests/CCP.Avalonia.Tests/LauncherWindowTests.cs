@@ -75,9 +75,9 @@ public sealed class LauncherWindowTests
         Assert.True(launcher.IsVisible);
         Assert.False(shell.IsVisible);
 
-        // Only the destinations this head has: no game host exists here yet.
-        Assert.Equal(new[] { "intake" }, Tiles(launcher));
-        var tile = launcher.FindControl<UniformGrid>("GamesGrid")!.Children[0];
+        // Every card WPF 7.1.5 shows, in its order; only the Intake has a destination on this head.
+        Assert.Equal(LauncherCards.All.Select(c => c.Id), Tiles(launcher));
+        var tile = Tile(launcher, "intake");
         Assert.Contains(Loc.Get("launcher_game_intake_title"), Texts(tile));
         Assert.Contains(Loc.Get("launcher_play"), Texts(tile));
 
@@ -92,6 +92,85 @@ public sealed class LauncherWindowTests
         tile.GetVisualDescendants().OfType<Button>().Single()
             .RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
 
+    private static Control Tile(LauncherWindow w, string id) =>
+        w.FindControl<UniformGrid>("GamesGrid")!.Children.Single(c => Equals(c.Tag, id));
+
+    [Fact]
+    public void Shelf_WearsWpfFaces_NewPills_PrimeLocks_TheRaceMystery() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreEntitlement.HasLabProvider = () => false;
+        var oldGrants = ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted;
+        try
+        {
+            ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted = _ => false;
+            LauncherWindow.BackToLauncher(shell);
+            Dispatcher.UIThread.RunJobs();
+            var w = LauncherWindow.Instance!;
+            var newPill = Loc.Get("exclusives_badge_new");
+            var prime = Loc.Get("launcher_prime_pill");
+            // NEW: the two Breakout doors and Piece by Piece (WPF LauncherCatalogue isNew).
+            foreach (var id in new[] { "breakoutdemo", "breakout", "piecebypiece" })
+                Assert.Contains(newPill, Texts(Tile(w, id)));
+            Assert.DoesNotContain(newPill, Texts(Tile(w, "backroom")));
+            // Lab-gated without tier 2: Breakout, DtRH and the Arcademy wear the Prime pill; the free ones do not.
+            foreach (var id in new[] { "breakout", "dtrh", "arcademy" })
+                Assert.Contains(prime, Texts(Tile(w, id)));
+            foreach (var id in new[] { "backroom", "breakoutdemo", "piecebypiece", "goon" })
+                Assert.DoesNotContain(prime, Texts(Tile(w, id)));
+            // No track owned: Racing Thoughts is the mystery card pointing at the Back Room.
+            var race = Texts(Tile(w, "race"));
+            Assert.Contains(Loc.Get("launcher_mystery_title"), race);
+            Assert.Contains(Loc.Get("launcher_mystery_play"), race);
+            Assert.DoesNotContain(Loc.Get("launcher_game_race_title"), race);
+
+            // One track owned: the face comes back on the next build.
+            ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted = id => id == "rt.original.03";
+            w.BuildTiles();
+            Assert.Contains(Loc.Get("launcher_game_race_title"), Texts(Tile(w, "race")));
+        }
+        finally { ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted = oldGrants; }
+    });
+
+    [Fact]
+    public void HostlessCard_FlinchesAndSaysSo_LauncherStaysAndPanelStaysTucked() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreEntitlement.HasLabProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var backroom = Tile(w, "backroom");
+        Assert.Equal(Loc.Get("exclusives_not_on_this_build"), ToolTip.GetTip(backroom));
+        Assert.Null(ToolTip.GetTip(Tile(w, "intake")));
+        ClickPlay(backroom);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(w.IsVisible);
+        Assert.False(shell.IsVisible);
+    });
+
+    [Fact]
+    public void WholeCardPress_PlaysTheCard() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreEntitlement.HasLabProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var tile = Tile(w, "intake");
+        tile.BringIntoView();
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        // The art plate, not the Play button (WPF 7.1.5: the whole card is the Play button).
+        var p = tile.TranslatePoint(new Point(tile.Bounds.Width / 2, tile.Bounds.Height / 4), w)!.Value;
+        w.MouseDown(p, MouseButton.Left);
+        w.MouseUp(p, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(w.IsVisible);
+        Assert.True(shell.IsVisible);
+        Assert.Equal("gradedintake", shell.CurrentTab);
+    });
+
     [Fact]
     public void Lockdown_TilePlayRefuses_LauncherStaysAndPanelStaysTucked() => Run(shell =>
     {
@@ -104,7 +183,7 @@ public sealed class LauncherWindowTests
         try
         {
             ld.Activate(TimeSpan.FromMinutes(30));
-            ClickPlay(launcher.FindControl<UniformGrid>("GamesGrid")!.Children[0]);
+            ClickPlay(Tile(launcher, "intake"));
             Dispatcher.UIThread.RunJobs();
             Assert.True(launcher.IsVisible);
             Assert.False(shell.IsVisible);

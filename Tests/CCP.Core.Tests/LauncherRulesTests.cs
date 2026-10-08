@@ -47,6 +47,18 @@ public class LauncherRulesTests
     public void Game_ChecksAccountThenLockThenLeash(bool needsAccount, bool locked, bool leash, LauncherGameStep expected)
         => Assert.Equal(expected, LauncherRules.Game(needsAccount, locked, leash));
 
+    [Theory]
+    // 9 tiles at the default 1280x800: the overflow is added, under a 1080p work area.
+    [InlineData(800, 658, 852, 1032, 995)]
+    // A short screen (125% at 1080p): capped at the work area, the scroller stays.
+    [InlineData(800, 658, 852, 826, 826)]
+    // Already fits: unchanged.
+    [InlineData(800, 658, 568, 1032, 800)]
+    // Never shrinks, even if the work area reads smaller than the window.
+    [InlineData(800, 658, 852, 700, 800)]
+    public void Window_grows_to_seat_every_tile_row(double window, double available, double grid, double workArea, double expected)
+        => Assert.Equal(expected, LauncherGridLayout.FitWindowHeight(window, available, grid, workArea));
+
     [Fact]
     public void FadeIsTheTailOfTheBeat()
     {

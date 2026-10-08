@@ -334,7 +334,7 @@
             <!-- the games: two columns or three by the column's width (LauncherGridLayout) -->
             <Grid x:Name="GamesColumn" Grid.Column="2" RowDefinitions="Auto,*">
                 <TextBlock Text="{loc:Str launcher_section_games}" Classes="eyebrow" Margin="9,0,0,4"/>
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="GamesScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <UniformGrid x:Name="GamesGrid" Columns="2" VerticalAlignment="Top"/>
                 </ScrollViewer>
             </Grid>
