@@ -54,7 +54,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF MainWindow.xaml.cs:888: Lockdown ignores every GLOBAL key, whatever LockdownDisablePanicKey
             // says. Only this listener layer: window and TextBox input (the secret phrase) are untouched.
             if (LockdownActive) { Serilog.Log.Information("Panic key ignored under Lockdown"); return; }
-            IntakeHostWindow.StopMicsForPanic();   // before CancelPendingAi aborts the capture (an abort reads as silence)
+            IntakeHostWindow.StopMicsForPanic();   // before the capture abort (StopAutonomyForPanic -> CancelVoicePrompt -> StopListening, and the lock-card stop) reads as silence
             CancelPendingAi();
 
             // Same evaluation order as WPF: asking the palette closes it, so never ask with a card up.

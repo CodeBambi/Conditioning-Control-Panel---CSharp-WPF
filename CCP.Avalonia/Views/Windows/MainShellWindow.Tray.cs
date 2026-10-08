@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             Serilog.Log.Information("Tray: Stop everything");
             if (RefuseStopUnderLockdown()) return;   // WPF refuses every Stop under Lockdown (StartStop.cs:45)
-            IntakeHostWindow.CloseAllForPanic();     // before CancelPendingAi aborts the capture (an abort reads as silence)
+            IntakeHostWindow.CloseAllForPanic();     // before the capture abort (StopAutonomyForPanic -> CancelVoicePrompt -> StopListening) reads as silence
             CancelPendingAi();
             try { CoreHaptics.Service?.PanicStop(); } catch (System.Exception ex) { Serilog.Log.Warning(ex, "Tray stop: haptics stop failed"); }
             Current?.StopAutonomyForPanic();

@@ -91,7 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void VoicePanic()
         {
             Log.Information("Panic triggered by voice");
-            IntakeHostWindow.CloseAllForPanic();   // before CancelPendingAi aborts the capture (an abort reads as silence)
+            IntakeHostWindow.CloseAllForPanic();   // before the capture abort (StopAutonomyForPanic -> CancelVoicePrompt -> StopListening, and the lock-card stop) reads as silence
             CancelPendingAi();
             try { CoreHaptics.Service?.PanicStop(); } catch (Exception ex) { Log.Warning(ex, "Voice panic: haptics stop failed"); }
             StopAutonomyForPanic();

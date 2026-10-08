@@ -257,4 +257,20 @@ public sealed class IntakeBridgeTests
             (s.PanicKeyEnabled, s.PanicKey) = (enabled, key);
         }
     }));
+
+    /// <summary>A panic rung that keeps the intake open (palette Escape, lock-card dismiss) still stops
+    /// its mic, and tells the page so it stops showing "listening".</summary>
+    [Fact]
+    public Task PanicThatKeepsTheIntakeOpenTellsThePageTheMicStopped() => AvaloniaTestDispatcher.RunAsync(() => WithSpeech(async (host, engine, sent) =>
+    {
+        CoreSettings.Current.MicConsentGiven = true;
+        host.Show();
+        await Listen(host, engine, 9);
+        IntakeHostWindow.StopMicsForPanic();
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(engine.MicOpen);
+        Assert.Equal(1, engine.Listens);
+        Assert.True(host.IsVisible);
+        Assert.Contains(sent, f => (string?)f["kind"] == "stopped" && (int)f["id"]! == 9);
+    }));
 }

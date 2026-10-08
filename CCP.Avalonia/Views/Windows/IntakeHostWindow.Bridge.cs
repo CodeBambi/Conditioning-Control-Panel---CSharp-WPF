@@ -116,11 +116,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private static IntakeHostWindow[] Snapshot() { lock (OpenWindows) return OpenWindows.ToArray(); }
 
-        /// <summary>Every panic route, before anything aborts the capture: cancel each say-it loop so an
-        /// aborted listen is never read as silence and the mic never reopens.</summary>
+        /// <summary>The panic key's first step, before anything aborts the capture: cancel each say-it loop so
+        /// an aborted listen is never read as silence and the mic never reopens. The page is told "stopped",
+        /// because a rung that keeps the intake open (palette Escape, lock-card dismiss) would leave it
+        /// showing "listening".</summary>
         internal static void StopMicsForPanic()
         {
-            foreach (var w in Snapshot()) w.StopSpeechBridge("panic", notifyPage: false);
+            foreach (var w in Snapshot()) w.StopSpeechBridge("panic", notifyPage: true);
         }
 
         /// <summary>Panic closes the intake like WPF's GameSurfaces close pass. True when one was up
