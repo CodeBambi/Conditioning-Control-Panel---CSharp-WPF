@@ -202,6 +202,75 @@ public sealed class HapticsHeadTests
         });
     }
 
+    /// <summary>WPF HapticsSetupWindow.xaml.cs, from the Studio rack's "?" (MainWindow.Haptics.cs:668):
+    /// pick Mock, Next commits the provider, Connect is refused without premium (gate_premium_locked),
+    /// then with premium connects, lists the (virtual) toys, swaps Connect for Done, Test buzz reaches
+    /// the toy, and closing the wizard re-reads the page.</summary>
+    [Fact]
+    public void SetupWizardFromStudioPicksMockConnectsAndBuzzes() => AvaloniaTestDispatcher.Run(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        WithHaptics(premium: false, mock: false, (h, toasts) =>
+        {
+            var s = h.Settings;
+            var oldProvider = s.Provider;
+            var shell = new ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+            shell.Show();
+            ConditioningControlPanel.Avalonia.Views.Windows.HapticsSetupWindow? wiz = null;
+            Func<bool> pump(Func<bool> f) => () => { Dispatcher.UIThread.RunJobs(); return f(); };
+            void click(Button b) { b.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs(); }
+            try
+            {
+                shell.ShowTab("haptics");                                // re-routed to Studio's rack, as on WPF
+                Dispatcher.UIThread.RunJobs();
+                var page = shell.Named<StudioTabView>("StudioTab")!.HapticsPanel;
+                Assert.True(page.IsEffectivelyVisible);
+                click(page.BtnHapticsHelp);
+                wiz = shell.OwnedWindows.OfType<ConditioningControlPanel.Avalonia.Views.Windows.HapticsSetupWindow>().Single();
+                Assert.True(wiz.ProviderPage.IsVisible);
+                Assert.False(wiz.BtnPrevious.IsVisible);
+
+                click(wiz.BtnSelectMock);
+                Assert.True(wiz.MockGuide.IsVisible && !wiz.LovenseGuide.IsVisible);
+                click(wiz.BtnNext);                                    // commits the choice (WPF :67)
+                Assert.True(s.V2.Provider("mock").Enabled);
+                Assert.Equal(ConditioningControlPanel.Services.Haptics.HapticProviderType.Mock, s.Provider);
+                Assert.True(wiz.ConnectPage.IsVisible && wiz.BtnConnect.IsVisible && !wiz.BtnDone.IsVisible);
+
+                click(wiz.BtnConnect);                                 // no premium, no free day: refused
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("gate_premium_locked"), wiz.TxtConnectStatus.Text);
+                Assert.False(wiz.BtnWizardTestBuzz.IsVisible);
+                Assert.False(h.IsConnected);
+
+                CoreEntitlement.HasPremiumProvider = () => true;
+                click(wiz.BtnConnect);
+                Assert.True(Wait(pump(() => wiz.BtnDone.IsVisible)), wiz.TxtConnectStatus.Text);
+                Assert.True(h.IsConnected);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("wizard_connect_ok"), wiz.TxtConnectStatus.Text);
+                Assert.Equal(h.ConnectedDevices, wiz.WizardDeviceList.ItemsSource!.Cast<string>());
+                Assert.True(wiz.TxtConnectResultTitle.IsVisible && wiz.BtnWizardTestBuzz.IsVisible && !wiz.BtnConnect.IsVisible);
+
+                toasts.Clear();
+                click(wiz.BtnWizardTestBuzz);
+                Assert.True(Wait(pump(() => toasts.Any(t => t.Contains('%')))), string.Join(" | ", toasts));
+                Assert.True(Wait(pump(() => wiz.BtnWizardTestBuzz.IsEnabled), 10000));
+
+                s.Enabled = true;                                      // changed behind the page; Done re-reads it
+                click(wiz.BtnDone);
+                Assert.True(Wait(pump(() => page.ChkHapticsEnabled.IsChecked == true)));
+            }
+            finally
+            {
+                wiz?.Close();
+                shell.Close();
+                s.Provider = oldProvider;
+            }
+        });
+    });
+
     /// <summary>The page loads real settings, gates Enable behind premium as WPF (#1917), and a connect
     /// with Intiface not running ends "Disconnected" with the button usable again.</summary>
     [Fact]

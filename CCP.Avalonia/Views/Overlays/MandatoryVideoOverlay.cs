@@ -68,6 +68,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private string _path = "";
         private readonly Stopwatch _sinceFrame = new();
         private DateTime _lastGraceUtc, _gracePausedAt;
+        /// <summary>The grace pause's wall clock (dedup, countdown, auto-resume); tests step it.</summary>
+        internal TimeProvider Time { get; set; } = TimeProvider.System;
+        private DateTime Now => Time.GetUtcNow().UtcDateTime;
         private DispatcherTimer? _graceTimer, _guard;
         private readonly Stopwatch _sinceShow = new();
 
@@ -249,7 +252,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 Content = new Panel { ClipToBounds = true, Children = { fill, scrim, video, layer, grace } },
             };
             Place(w, screen);
-            w.KeyDown += (_, e) =>
+            void OnKey(KeyEventArgs e)
             {
                 var s = CoreSettings.Current;
                 var live = s.PanicKeyEnabled && PanicListenerLive();
@@ -266,7 +269,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     case VideoKeyAction.ForceStop: e.Handled = true; Scheduler.ForceCleanup(); break;
                     case VideoKeyAction.Swallow: e.Handled = true; break;
                 }
-            };
+            }
+            w.KeyDown += (_, e) => OnKey(e);
+            // The panic key always wins: tunnel it so a focused Resume button cannot take it as a click
+            // when the panic key is Enter/Space (the WPF card was a separate window). Other keys bubble as before.
+            w.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+            {
+                var s = CoreSettings.Current;
+                if (!s.PanicKeyEnabled || e.Key.ToString() != s.PanicKey) return;
+                OnKey(e);
+                e.Handled = true;
+            }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
             // WPF: strict vetoes a user close while playing; a non-strict close is a dismiss.
             w.Closing += (_, e) => { if (!_closing && strict && Scheduler.IsPlaying) e.Cancel = true; };
             w.Closed += (_, _) => { if (!_closing) Scheduler.End(); };
@@ -282,19 +295,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             var pink = new SolidColorBrush(Color.Parse("#FF69B4"));
             var countdown = new TextBlock { FontSize = 13, Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xA8, 0xC8)), HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center, Margin = new Thickness(0, 14, 0, 0) };
-            var resume = new Border
+            // A real Button like WPF's, so Tab + Enter/Space reach it (P17); the pill is a local template.
+            var resume = new Button
             {
                 Background = pink,
-                CornerRadius = new CornerRadius(20),
                 Padding = new Thickness(26, 8),
                 HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center,
                 Cursor = new Cursor(StandardCursorType.Hand),
-                Child = new TextBlock { Text = "▶  " + Loc.Get("btn_video_grace_resume"), FontSize = 16, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White },
+                Content = new TextBlock { Text = "▶  " + Loc.Get("btn_video_grace_resume"), FontSize = 16, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White },
+                Template = new global::Avalonia.Controls.Templates.FuncControlTemplate<Button>((b, _) => new Border
+                {
+                    CornerRadius = new CornerRadius(20),
+                    [!Border.BackgroundProperty] = b[!Button.BackgroundProperty],
+                    [!Border.PaddingProperty] = b[!Button.PaddingProperty],
+                    Child = new global::Avalonia.Controls.Presenters.ContentPresenter
+                    {
+                        HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center,
+                        VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+                        [!global::Avalonia.Controls.Presenters.ContentPresenter.ContentProperty] = b[!Button.ContentProperty],
+                    },
+                }),
             };
-            resume.PointerEntered += (_, _) => resume.Opacity = 0.85;
-            resume.PointerExited += (_, _) => resume.Opacity = 1;
-            resume.PointerPressed += (_, e) => { e.Handled = true; resume.Opacity = 0.7; };
-            resume.PointerReleased += (_, e) => { e.Handled = true; resume.Opacity = 1; ResumeFromGrace("resume button"); };
+            resume.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == Button.IsPressedProperty || e.Property == InputElement.IsPointerOverProperty)
+                    resume.Opacity = resume.IsPressed ? 0.7 : resume.IsPointerOver ? 0.85 : 1;
+            };
+            resume.Click += (_, e) => { e.Handled = true; ResumeFromGrace("resume button"); };
             var card = new Border
             {
                 Width = 360,
@@ -333,7 +360,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             if (!ConditioningControlPanel.Services.Safety.PanicPolicy.AllowGracePause(fromPanicKey,
                     ConditioningControlPanel.Services.Safety.PanicPolicy.OverrideEnabled(CoreSettings.Current))) return false;
-            var now = DateTime.UtcNow;
+            var now = Now;
             var since = _lastGraceUtc == default ? double.MaxValue : (now - _lastGraceUtc).TotalMilliseconds;
             var d = MandatoryVideoScheduler.EvaluateGrace(Scheduler.IsPlaying && _player != null, _closing, _gracePaused, _graceConsumed, since);
             if (d == GraceDecision.ConsumedDedup) return true;
@@ -346,15 +373,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             foreach (var x in _surfaces) { x.Layer.IsHitTestVisible = false; x.Grace.IsVisible = true; }
             SetCountdown(MandatoryVideoScheduler.GraceWindowSeconds);
             _graceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            _graceTimer.Tick += (_, _) =>
-            {
-                var left = MandatoryVideoScheduler.GraceSecondsRemaining((DateTime.UtcNow - _gracePausedAt).TotalSeconds);
-                if (left <= 0) ResumeFromGrace("auto-resume");
-                else SetCountdown(left);
-            };
+            _graceTimer.Tick += (_, _) => GraceTick();
             _graceTimer.Start();
             Log.Information("VideoService: grace pause engaged ({Window}s window)", MandatoryVideoScheduler.GraceWindowSeconds);
             return true;
+        }
+
+        /// <summary>WPF StartGraceCountdown's 1 s tick: refresh "Resuming in Ns", resume at 0.</summary>
+        internal void GraceTick()
+        {
+            if (!_gracePaused) return;
+            var left = MandatoryVideoScheduler.GraceSecondsRemaining((Now - _gracePausedAt).TotalSeconds);
+            if (left <= 0) ResumeFromGrace("auto-resume");
+            else SetCountdown(left);
         }
 
         private void SetCountdown(int left)
@@ -374,7 +405,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (FirstFrameMs >= 0) _sinceFrame.Start();
             FrameTs = Stopwatch.GetTimestamp();
             _player?.SetPause(false);
-            Log.Information("VideoService: grace pause released ({Reason}) after {Sec:F1}s", reason, (DateTime.UtcNow - _gracePausedAt).TotalSeconds);
+            Log.Information("VideoService: grace pause released ({Reason}) after {Sec:F1}s", reason, (Now - _gracePausedAt).TotalSeconds);
         }
 
         /// <summary>WPF safety/fallback/max-length timers and the vout watchdog, as one tick: a clip

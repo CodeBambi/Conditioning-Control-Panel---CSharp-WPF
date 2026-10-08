@@ -1,9 +1,13 @@
 using System;
-using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.AIService;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -15,10 +19,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// footer wording, advanced-model toggle and progress-bar maths are the original's, and the two
     /// settings touches are wired through <see cref="CoreSettings"/>: the wizard opens on whatever
     /// model <c>CompanionPrompt.AiModel</c> already names, and finishing flips the provider to Local
-    /// and saves. Everything that reached OllamaSetupService is still a stub that lands on the page
-    /// the real call would have shown and stops there - that service shells out to a Windows
-    /// installer and the local daemon, so it is head code, not a Core move. WPF's DialogResult
-    /// becomes Close(bool).
+    /// and saves. Every step drives OllamaSetupService (moved to Core unchanged) exactly as WPF does;
+    /// off Windows there is no installer download - the user installs Ollama and Continue re-detects
+    /// (see docs/avalonia-decisions.md). WPF's DialogResult becomes Close(bool).
     /// </summary>
     public partial class LocalAiSetupWizard : Window
     {
@@ -91,16 +94,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _btnPrimary.Click += (_, _) => BtnPrimary_Click();
             _btnSecondary.Click += (_, _) => BtnSecondary_Click();
             _chkAdvanced.IsCheckedChanged += (_, _) => ChkAdvanced_Changed();
-            C<TextBlock>("LinkManualInstall").PointerPressed += (_, _) => LinkManualInstall_Click();
-            C<TextBlock>("LinkManualInstallError").PointerPressed += (_, _) => LinkManualInstall_Click();
+            foreach (var link in new[] { C<TextBlock>("LinkManualInstall"), C<TextBlock>("LinkManualInstallError") })
+            {
+                // WPF Hyperlink: click and keyboard (Tab + Enter/Space) both open the page.
+                link.PointerPressed += (_, _) => LinkManualInstall_Click();
+                link.KeyDown += (_, e) => { if (e.Key is Key.Enter or Key.Space) { e.Handled = true; LinkManualInstall_Click(); } };
+            }
+            if (!CanAutoInstall)
+            {
+                // WPF's lines name a Windows installer, the tray and Add/Remove Programs; say what is true here.
+                C<TextBlock>("TxtConsentLine1").Text = Loc.Get("label_local_ai_consent_install_ollama_manual");
+                C<TextBlock>("TxtConsentLine3").Text = Loc.Get("label_local_ai_consent_runs_local_linux");
+                C<TextBlock>("TxtConsentDiskNote").Text = Loc.Get("label_local_ai_consent_disk_note_linux");
+            }
 
             _targetModel = ResolveStartingModel();
             _txtAdvancedModel.Text = _targetModel;
             UpdateConsentDiskNote();
 
-            // WPF ran this from Loaded; here it is synchronous because the stub cannot await
-            // anything, and running it now is what puts the Consent page in the render PNG.
-            StartDetect();
+            Opened += async (_, _) => await StartDetectAsync();
         }
 
         private static string ResolveStartingModel()
@@ -201,30 +213,118 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         // -------- Step 1: Detect --------
 
-        private void StartDetect()
+        // Test seams over OllamaSetupService (Core): tests swap these for fakes so no real ollama,
+        // pull or network is ever touched. Production is exactly the WPF calls.
+        internal static Func<string, CancellationToken, Task<OllamaSetupService.StatusSnapshot>> Detect =
+            (model, ct) => OllamaSetupService.DetectAsync(targetModel: model, ct: ct);
+        internal static Func<CancellationToken, Task<bool>> StartService = ct => OllamaSetupService.StartServiceAsync(ct: ct);
+        internal static Func<IProgress<OllamaSetupService.DownloadProgress>, CancellationToken, Task<string>> DownloadInstaller =
+            (p, ct) => OllamaSetupService.DownloadInstallerAsync(p, ct);
+        internal static Func<string, CancellationToken, Task<bool>> RunInstaller =
+            (path, ct) => OllamaSetupService.RunInstallerSilentAsync(path, ct: ct);
+        internal static Func<string, IProgress<OllamaSetupService.PullProgress>, CancellationToken, Task> PullModel =
+            (model, p, ct) => OllamaSetupService.PullModelAsync(model, progress: p, ct: ct);
+        internal static Func<string, CancellationToken, Task<(bool ok, TimeSpan elapsed, string reply)>> SmokeTest =
+            (model, ct) => OllamaSetupService.SmokeTestAsync(model, ct: ct);
+        /// <summary>Decision (docs/avalonia-decisions.md): off Windows the wizard never downloads or runs an
+        /// installer; the user installs Ollama, Continue re-runs detection.</summary>
+        internal static bool CanAutoInstall = OperatingSystem.IsWindows();
+
+        private CancellationTokenSource? _cts;
+
+        /// <param name="afterManualInstall">Linux Continue: still nothing found is an error, not a silent return to Consent.</param>
+        private async Task StartDetectAsync(bool afterManualInstall = false)
         {
             Show(Step.Detecting);
-            // ponytail: needs OllamaSetupService.DetectAsync / StartServiceAsync
-            // (ConditioningControlPanel/Services/AIService/OllamaSetupService.cs) - it shells out to
-            // ollama.exe and talks to the local daemon, so it is head code with no Core seam.
-            // The WPF original lands on Consent when detection throws; the stub takes that branch.
-            Show(Step.Consent);
+            _cts = new CancellationTokenSource();
+            try
+            {
+                var snap = await Detect(_targetModel, _cts.Token);
+
+                switch (snap.Status)
+                {
+                    case OllamaSetupService.InstallStatus.Ready:
+                        await StartSmokeTestAsync();
+                        return;
+
+                    case OllamaSetupService.InstallStatus.RunningNoModel:
+                        await StartPullAsync();
+                        return;
+
+                    case OllamaSetupService.InstallStatus.InstalledNotRunning:
+                        var started = await StartService(_cts.Token);
+                        if (!started)
+                        {
+                            ShowError(Loc.Get(CanAutoInstall ? "error_local_ai_start_service_failed" : "error_local_ai_start_service_failed_linux"));
+                            return;
+                        }
+                        var snap2 = await Detect(_targetModel, _cts.Token);
+                        if (snap2.TargetModelInstalled) await StartSmokeTestAsync();
+                        else await StartPullAsync();
+                        return;
+
+                    case OllamaSetupService.InstallStatus.NotInstalled:
+                    default:
+                        if (afterManualInstall) ShowError(Loc.Get("error_local_ai_not_found_linux"));
+                        else Show(Step.Consent);
+                        return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "LocalAiSetupWizard: detect failed");
+                Show(Step.Consent);
+            }
         }
 
         // -------- Step 2: Consent → Download --------
 
-        private void StartDownloadInstaller()
+        private async Task StartDownloadInstallerAsync()
         {
             Show(Step.DownloadInstaller);
             SetDownloadProgressBar(0);
             _txtDownloadProgress.Text = "";
-            // ponytail: needs OllamaSetupService.DownloadInstallerAsync, RunInstallerSilentAsync,
-            // PullModelAsync and SmokeTestAsync
-            // (ConditioningControlPanel/Services/AIService/OllamaSetupService.cs), plus the
-            // CancellationTokenSource the WPF original cancels per step - dropped here rather than
-            // kept as dead state. The installer it downloads is a Windows NSIS .exe, so this chain
-            // needs a per-platform implementation, not just a move to Core. The page shows;
-            // nothing drives it.
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+
+            var progress = new Progress<OllamaSetupService.DownloadProgress>(p =>
+            {
+                if (p.PercentComplete.HasValue) SetDownloadProgressBar(p.PercentComplete.Value);
+
+                var rate = OllamaSetupService.FormatRate(p.BytesPerSecond);
+                var bytes = OllamaSetupService.FormatBytes(p.BytesReceived);
+                if (p.TotalBytes.HasValue)
+                {
+                    var total = OllamaSetupService.FormatBytes(p.TotalBytes.Value);
+                    var pct = p.PercentComplete.HasValue ? $" ({p.PercentComplete.Value:0}%)" : "";
+                    _txtDownloadProgress.Text = string.IsNullOrEmpty(rate)
+                        ? $"{bytes} / {total}{pct}"
+                        : $"{bytes} / {total}{pct} • {rate}";
+                }
+                else
+                {
+                    _txtDownloadProgress.Text = string.IsNullOrEmpty(rate) ? bytes : $"{bytes} • {rate}";
+                }
+            });
+
+            try
+            {
+                var path = await DownloadInstaller(progress, _cts.Token);
+                await StartInstallAsync(path);
+            }
+            catch (OperationCanceledException)
+            {
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "LocalAiSetupWizard: installer download failed");
+                ShowError(Loc.GetF("error_local_ai_download_failed", ex.Message));
+            }
         }
 
         private void SetDownloadProgressBar(double percent)
@@ -234,11 +334,120 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             if (max > 0) _downloadProgressFill.Width = max * percent / 100.0;
         }
 
+        // -------- Step 3: Install --------
+
+        private async Task StartInstallAsync(string installerPath)
+        {
+            Show(Step.Installing);
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+
+            try
+            {
+                var ok = await RunInstaller(installerPath, _cts.Token);
+                if (!ok)
+                {
+                    // Leave the installer in %TEMP% on failure so a re-run can retry without a fresh download.
+                    ShowError(Loc.Get("error_local_ai_install_failed"));
+                    return;
+                }
+                try { if (File.Exists(installerPath)) File.Delete(installerPath); }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "Failed to delete OllamaSetup.exe after install"); }
+                await StartPullAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "LocalAiSetupWizard: silent install failed");
+                ShowError(Loc.GetF("error_local_ai_install_failed_detail", ex.Message));
+            }
+        }
+
+        // -------- Step 4: Pull model --------
+
+        private async Task StartPullAsync()
+        {
+            Show(Step.PullModel);
+            _txtPullHeader.Text = Loc.GetF("label_local_ai_pulling_model_named", _targetModel);
+            _txtPullStatus.Text = "";
+            _txtPullDetail.Text = "";
+            SetPullProgressBar(0);
+
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+
+            var progress = new Progress<OllamaSetupService.PullProgress>(p =>
+            {
+                _txtPullStatus.Text = p.Status;
+                if (p.PercentComplete.HasValue)
+                {
+                    SetPullProgressBar(p.PercentComplete.Value);
+                    var bytes = p.Completed.HasValue ? OllamaSetupService.FormatBytes(p.Completed.Value) : "";
+                    var total = p.Total.HasValue ? OllamaSetupService.FormatBytes(p.Total.Value) : "";
+                    _txtPullDetail.Text = string.IsNullOrEmpty(bytes)
+                        ? $"{p.PercentComplete.Value:0}%"
+                        : $"{bytes} / {total} ({p.PercentComplete.Value:0}%)";
+                }
+                else
+                {
+                    _txtPullDetail.Text = "";
+                }
+            });
+
+            try
+            {
+                await PullModel(_targetModel, progress, _cts.Token);
+                SetPullProgressBar(100);
+                await StartSmokeTestAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "LocalAiSetupWizard: pull failed (model={Model})", _targetModel);
+                ShowError(Loc.GetF("error_local_ai_pull_failed", _targetModel, ex.Message));
+            }
+        }
+
         private void SetPullProgressBar(double percent)
         {
             percent = Math.Clamp(percent, 0, 100);
             double max = _pullProgressTrack.Bounds.Width - 6;
             if (max > 0) _pullProgressFill.Width = max * percent / 100.0;
+        }
+
+        // -------- Step 5: Smoke test --------
+
+        private async Task StartSmokeTestAsync()
+        {
+            Show(Step.SmokeTest);
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+
+            try
+            {
+                var (ok, elapsed, _) = await SmokeTest(_targetModel, _cts.Token);
+                if (!ok)
+                {
+                    ShowError(Loc.Get("error_local_ai_smoke_failed"));
+                    return;
+                }
+                Finish(elapsed);
+            }
+            catch (OperationCanceledException)
+            {
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "LocalAiSetupWizard: smoke test threw");
+                ShowError(Loc.GetF("error_local_ai_smoke_threw", ex.Message));
+            }
         }
 
         // -------- Step 6: Done --------
@@ -276,7 +485,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         // -------- Footer button handlers --------
 
-        private void BtnPrimary_Click()
+        private async void BtnPrimary_Click()
         {
             switch (_step)
             {
@@ -286,14 +495,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                         var typed = (_txtAdvancedModel.Text ?? "").Trim();
                         if (!string.IsNullOrEmpty(typed)) _targetModel = typed;
                     }
-                    StartDownloadInstaller();
+                    // Off Windows Continue re-runs detection: the user installed Ollama themselves.
+                    if (CanAutoInstall) await StartDownloadInstallerAsync();
+                    else await StartDetectAsync(afterManualInstall: true);
                     break;
                 case Step.Done:
                     Close(true);
                     break;
                 case Step.Error:
                     // Retry from detect — the right next step depends on what's now true.
-                    StartDetect();
+                    await StartDetectAsync();
                     break;
             }
         }
@@ -301,6 +512,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void BtnSecondary_Click()
         {
             // Cancel current step and bail out. The Done state hides this button entirely.
+            _cts?.Cancel();
             Close(_wizardComplete);
         }
 
@@ -319,6 +531,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             {
                 Serilog.Log.Warning(ex, "LocalAiSetupWizard: failed to open manual install URL");
             }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _cts?.Cancel();
+            base.OnClosed(e);
         }
     }
 }

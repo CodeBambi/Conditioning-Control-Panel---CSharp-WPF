@@ -440,6 +440,7 @@ namespace ConditioningControlPanel.Avalonia
                     if (desktop.MainWindow is { } host) Views.Overlays.BouncingTextOverlay.Start(host);
                 };
                 CoreBouncingText.StopAction = Views.Overlays.BouncingTextOverlay.Stop;
+                Views.Overlays.CornerGifOverlay.Seed(() => desktop.MainWindow);   // the corner-GIF surface seam
                 CoreBouncingText.RefreshAction = Views.Overlays.BouncingTextOverlay.Refresh;
                 CoreBouncingText.RestartAction = Views.Overlays.BouncingTextOverlay.Restart;
                 CoreBubbles.StartAction = () =>
@@ -612,6 +613,9 @@ namespace ConditioningControlPanel.Avalonia
                 // WPF App.xaml.cs:554 / 2786 / 2816: legacy adapters route through the brain, a brain wipe also
                 // clears the legacy local transcript, and a Local user gets the model warmed up in the background.
                 ConditioningControlPanel.Services.AIService.AiServiceStrategy.BrainProvider = () => Brain;
+                // WPF App.xaml.cs:573 (#1079): warm-up may bring up `ollama serve` (PATH lookup off Windows).
+                ConditioningControlPanel.Services.AIService.LocalAiService.EnsureServerRunning =
+                    host => ConditioningControlPanel.Services.AIService.OllamaSetupService.EnsureServerRunningAsync(host);
                 ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.ClearLegacyLocalHistoryHook =
                     () => (Ai as ConditioningControlPanel.Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
                 if (Ai is ConditioningControlPanel.Services.AIService.AiServiceStrategy strategy)
@@ -762,8 +766,15 @@ namespace ConditioningControlPanel.Avalonia
                     Sessions.Stop();   // restores the pre-session settings before exit
                     CoreEngine.Stop();
                     StopDesktopOverlays();
+                    Views.Overlays.CornerGifOverlay.StopAll();   // WPF CornerGifService.OnMainWindowClosing / OnExit
                     Views.Windows.LockCardWindow.ForceCloseAll();
                 };
+                // WPF App.xaml.cs:2602: restore at ApplicationIdle, once startup has settled (#709).
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try { Views.Overlays.CornerGifOverlay.RestoreOnStartup(shell); }
+                    catch (Exception ex) { Serilog.Log.Error(ex, "Deferred corner-GIF restore failed"); }
+                }, DispatcherPriority.ApplicationIdle);
                 // Boot surface (WPF App.xaml.cs:3403-3419): the launcher, a game or the panel. A boot
                 // into the launcher shows the panel unactivated and off the taskbar only so its Opened
                 // work runs (WPF ShowHiddenForBoot), then RouteBoot tucks it away. A Lockdown in force
@@ -1028,6 +1039,9 @@ namespace ConditioningControlPanel.Avalonia
             try { (Platform.FriendsHead.Service as IDisposable)?.Dispose(); } catch { /* WPF App.OnExit: the friends poll stops */ }
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }
             try { Ai?.Dispose(); } catch { /* WPF App.OnExit:6250 (#629): unloads the local Ollama model */ }
+            // WPF App.OnExit:6336: only the `ollama serve` this app spawned; a user's own server is untouched.
+            try { ConditioningControlPanel.Services.AIService.OllamaSetupService.StopSpawnedServer(); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Failed to stop spawned Ollama server"); }
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
             try { Views.Overlays.BlinkTrainerSession.Stop(); } catch { /* WPF Application.Exit += Stop */ }

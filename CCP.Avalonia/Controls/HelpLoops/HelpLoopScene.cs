@@ -35,6 +35,10 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
 
         public static IReadOnlyCollection<string> Ids => Types.Value.Keys.ToList();
 
+        /// <summary>True when a loop exists for the id (no instance built), as WPF's Has.</summary>
+        public static bool Has(string? sectionId) =>
+            !string.IsNullOrEmpty(sectionId) && Types.Value.ContainsKey(sectionId);
+
         /// <summary>A NEW scene instance for <paramref name="sectionId"/>, or false.</summary>
         public static bool TryGet(string? sectionId, out HelpLoopScene scene)
         {
