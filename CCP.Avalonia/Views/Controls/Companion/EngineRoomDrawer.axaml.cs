@@ -50,7 +50,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
                 var dialog = new Views.Dialogs.OpenAiCompatibleSamplerSettingsDialog(
                     CoreSettings.Current.CompanionPrompt);
-                if (await dialog.ShowDialog<bool>(owner))
+                if (await dialog.ShowDialogSafe<bool>(owner))
                     CoreSettings.Save();      // the dialog writes the object; only the caller persists it
             }
             catch (Exception ex)

@@ -101,7 +101,7 @@ internal sealed class FypMetaStore
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("FypMetaStore: save failed: {E}", ex.Message);
+                Serilog.Log.Warning("FypMetaStore: save failed: {E}", ex.Message);
             }
         }
     }
@@ -115,7 +115,7 @@ internal sealed class FypMetaStore
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("FypMetaStore: load failed: {E}", ex.Message);
+            Serilog.Log.Warning("FypMetaStore: load failed: {E}", ex.Message);
         }
         return new();
     }

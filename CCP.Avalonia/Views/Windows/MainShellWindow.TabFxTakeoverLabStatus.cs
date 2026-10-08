@@ -9,11 +9,9 @@
 // not an approximation - cancelled through a CancellationTokenSource the way every other loop on
 // this head is (see MainShellWindow.DeeperFx.cs).
 //
-// NOTHING CALLS THE FOUR ENTRY POINTS YET. On WPF each status tab calls its Set*StatusPulse from
-// the state-change method it already has; on this head those live in MainShellWindow.BlinkTrainer.cs,
-// .Haptics.cs, .SheListening.cs and Views/Tabs/AwarenessTabView.axaml.cs, none of which this layer
-// owns. MainShellWindow.SheListening.cs already paints SL_StatusDot's Fill and names the missing
-// pulse in its own header, so wiring it is one line there.
+// On WPF each status tab calls its Set*StatusPulse from the state-change method it already has.
+// Here SetBlinkTrainerStatusPulse is called by BlinkTrainerTabView.RefreshStatusRow and
+// SetHapticsStatusPulse as below; check SheListening/Awareness callers before assuming they are wired.
 //
 // Deviations, each because the symbol is not on this head:
 //   * MotionFx.AllowAmbientLoops and PerformanceProfile.CurrentTier / AllowGlow / MaxGlowBlurRadius
@@ -220,7 +218,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                bool run = req.Wanted && dot.IsVisible && Pr4aAmbientAllowed;
+                bool run = req.Wanted && dot.IsEffectivelyVisible && Pr4aAmbientAllowed;
 
                 if (!run)
                 {

@@ -21,7 +21,7 @@ public sealed class AwarenessCooldownLadderTests
     {
         if (Application.Current is null)
             AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
-                .UseHeadless(new AvaloniaHeadlessPlatformOptions())
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                 .SetupWithoutStarting();
         var s = CoreSettings.Current;
         var (global, same) = (s.KeywordGlobalCooldownSeconds, s.KeywordPerKeywordCooldownSeconds);

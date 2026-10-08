@@ -15,22 +15,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    Enter ignored outside 2-20 characters), so it is a plain return here.
     /// The parameterless constructor is the real "welcome" mode and doubles as the render ctor.
     ///
-    /// <para>STILL NO CALLER ON THIS HEAD, but the reason has narrowed. The TRANSPORT now exists:
-    /// <c>CoreAccount.ChangeDisplayNameAsync</c> and <c>CoreAccount.DeleteAccountAsync</c>
-    /// (CCP.Core/CoreAccount.cs) carry both operations across, seeded from
-    /// <c>App.ProfileSync</c> on the WPF head. What is missing is the two callers:</para>
-    /// <list type="bullet">
-    /// <item><c>CCP.Avalonia/Views/Tabs/DiscordTabView.axaml.cs:155,163</c> -
-    /// <c>BtnChangeDisplayName_Click</c> and <c>BtnDeleteProfile_Click</c> are stubs there. That
-    /// file is not in this layer. Its delete path also ends in <c>MainWindow.Browser.cs</c>'s
-    /// <c>ClearProfileViewer</c> plus the local progression wipe, which is head-side.</item>
-    /// <item><c>Services/Account/AccountService.cs:PromptForRegistrationAsync</c> - AccountService
-    /// is a static WPF-head class that takes a <c>System.Windows.Window</c> owner and drives
-    /// <c>App.Patreon</c>/<c>App.Discord</c>. It has no Avalonia twin and no seam, because there is
-    /// no OAuth flow on this head to register against.</item>
-    /// </list>
-    /// <para>Opening it from anywhere else would still be a name prompt whose answer nothing can
-    /// act on, which is worse than a dialog nobody can reach.</para>
+    /// <para>Callers: the Trainer Card's rename and delete buttons (MainShellWindow.Browser.cs
+    /// ChangeDisplayNameAsync / DeleteProfileAsync, through CoreAccount). ponytail: the welcome mode's
+    /// WPF caller (MainWindow CheckPendingRegistrationAsync -> AccountService.HandlePostAuthAsync ->
+    /// PromptForRegistrationAsync, the legacy V1 lookup/register) has no twin on this head yet.</para>
     /// </summary>
     public partial class DisplayNameDialog : Window
     {

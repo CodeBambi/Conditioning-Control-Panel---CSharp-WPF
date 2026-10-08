@@ -23,6 +23,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             // Mic first (decisions "Panic ↔ mic"): the capture and command chain in flight end before
             // anything can react to them; the wake loop and push-to-talk stay armed.
+            // The intake's say-it loops end before the capture abort below reads as silence; WPF GameSurfaces
+            // 'intake' -> CloseActive. A game surface: closing it never arms the exit ladder.
+            new("intake", _ => IntakeHostWindow.CloseAllForPanic(), IntakeHostWindow.IsAnyOpen),
             new("voice-capture", sh => sh?.CancelVoicePrompt()),
             new("ai-followups", _ => MainShellWindow.CancelPendingAi()),
             // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
