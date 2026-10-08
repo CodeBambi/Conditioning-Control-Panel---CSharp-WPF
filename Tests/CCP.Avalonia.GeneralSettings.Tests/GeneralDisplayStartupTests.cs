@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
@@ -31,7 +32,7 @@ public sealed class GeneralDisplayStartupTests
     [Fact]
     public async Task DisplayCard_MonitorPickerAndCountdownWriteTheirSettings()
     {
-        await RunWithSection(async (section, _) =>
+        await RunWithSection(async (section, _, _) =>
         {
             var s = CoreSettings.Current;
             var countdown = section.FindControl<CheckBox>("ChkShowSessionCountdown")!;
@@ -64,7 +65,7 @@ public sealed class GeneralDisplayStartupTests
     [Fact]
     public async Task RunOnStartup_RegistersWarnsRevertsAndReconciles()
     {
-        await RunWithSection(async (section, asked) =>
+        await RunWithSection(async (section, asked, host) =>
         {
             var s = CoreSettings.Current;
             var win = section.FindControl<CheckBox>("ChkWinStart")!;
@@ -72,31 +73,27 @@ public sealed class GeneralDisplayStartupTests
             Assert.False(XdgAutostart.IsRegistered());
 
             // Plain enable: the entry is written with WPF's --startup argument and the flag saved.
-            win.IsChecked = true;
-            await section.ApplyWinStartAsync();
+            Click(host, win);   // a real pointer click: IsChecked flips, then the Click handler
+            Assert.True(win.IsChecked);
             Assert.True(XdgAutostart.IsRegistered());
             Assert.Contains("--startup", File.ReadAllText(XdgAutostart.EntryPath));
             Assert.True(s.RunOnStartup);
             Assert.Empty(asked);
 
             // Hidden while startup is on: warned; "No" reverts the hidden box.
-            hidden.IsChecked = true;
-            await section.ApplyStartHiddenAsync();
+            Click(host, hidden);
             Assert.Single(asked);
             Assert.Equal(Loc.Get("msg_startup_hidden_warning"), asked[0]);
             Assert.False(hidden.IsChecked);
             Assert.False(s.StartMinimized);
 
             // Disable, then enable with hidden on and decline: box reverts, nothing registered.
-            win.IsChecked = false;
-            await section.ApplyWinStartAsync();
+            Click(host, win);
             Assert.False(XdgAutostart.IsRegistered());
-            hidden.IsChecked = true;
-            await section.ApplyStartHiddenAsync();   // startup off: no warning
+            Click(host, hidden);   // startup off: no warning
             Assert.True(s.StartMinimized);
             asked.Clear();
-            win.IsChecked = true;
-            await section.ApplyWinStartAsync();
+            Click(host, win);
             Assert.Single(asked);
             Assert.False(win.IsChecked);
             Assert.False(XdgAutostart.IsRegistered());
@@ -115,7 +112,24 @@ public sealed class GeneralDisplayStartupTests
         });
     }
 
-    private static async Task RunWithSection(Func<GeneralSettingsSection, List<string>, Task> body)
+    [Fact]
+    public void AutostartEntryOutsideATestResolvesUnderTheTestSandbox()
+    {
+        Assert.Null(XdgAutostart.DirectoryOverride);
+        Assert.StartsWith(Path.GetFullPath(TestXdgConfigSandbox.Root) + Path.DirectorySeparatorChar,
+            Path.GetFullPath(XdgAutostart.EntryPath));
+    }
+
+    /// <summary>Headless pointer press+release at the control's centre - what a user's click does.</summary>
+    private static void Click(Window host, Control control)
+    {
+        var p = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), host)!.Value;
+        host.MouseDown(p, MouseButton.Left);
+        host.MouseUp(p, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static async Task RunWithSection(Func<GeneralSettingsSection, List<string>, Window, Task> body)
     {
         await AvaloniaTestDispatcher.RunAsync(async () =>
         {
@@ -150,7 +164,7 @@ public sealed class GeneralDisplayStartupTests
                 host = new Window { Width = 760, Height = 900, Content = section };
                 host.Show();
                 Dispatcher.UIThread.RunJobs();
-                await body(section, asked);
+                await body(section, asked, host);
             }
             finally
             {
