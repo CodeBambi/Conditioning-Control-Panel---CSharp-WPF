@@ -1321,3 +1321,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/spiral-overlay: +599
 - Spiral overlay on Avalonia: per-monitor click-through windows, background decode, opacity curve shared with WPF via Core SpiralFrames, engine/session/panic wiring.
+
+## avalonia-port/rows-pink-mindwipe: +592
+- Mind Wipe plays on Linux (LibVLC, WPF 120 ms overlap loop measured gapless); Core CoreMindWipe run rule shared with WPF; pink tint follows the dashboard tile.
