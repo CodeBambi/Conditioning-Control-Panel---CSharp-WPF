@@ -53,7 +53,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
-             xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
+             xmlns:hx="clr-namespace:ConditioningControlPanel.Views.Controls;assembly=CCP.Core"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.HapticsTabView"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -231,7 +231,7 @@
         <!-- One provider status chip (Lovense / Intiface / Mock).
              A provider that is not enabled for connecting is ghosted rather than hidden: the strip
              stays the same shape, and "off" reads as off instead of as "connected: no". -->
-        <DataTemplate x:Key="HapticProviderChipTemplate" x:DataType="tabs:HapticProviderChipSample">
+        <DataTemplate x:Key="HapticProviderChipTemplate" x:DataType="hx:HapticProviderChipVm">
             <Border x:Name="ChipShell" CornerRadius="9999" Padding="10,4" Margin="0,0,8,0"
                     Background="{DynamicResource PanelBgBrush}" BorderThickness="1"
                     BorderBrush="{DynamicResource TextDimBrush}"
@@ -259,7 +259,7 @@
         <!-- ============================ TOY CARD ============================
              A picker/inspector, not a dial stack: it keeps its own layout and only takes the kit's
              velvet edge and token sweep. -->
-        <DataTemplate x:Key="HapticToyCardTemplate" x:DataType="tabs:HapticToyCardSample">
+        <DataTemplate x:Key="HapticToyCardTemplate" x:DataType="hx:HapticToyCardVm">
             <Border Width="330" Margin="0,0,12,12" CornerRadius="10" Padding="14,12"
                     Background="{DynamicResource PanelBgBrush}" BorderThickness="1"
                     BorderBrush="{StaticResource TabHueBorderBrush}">
@@ -273,7 +273,7 @@
                                        FontSize="11" Margin="0,1,0,0"/>
                         </StackPanel>
                         <Border Grid.Column="1" Theme="{StaticResource HapticChip}" VerticalAlignment="Center"
-                                Margin="6,0,8,0" IsVisible="{Binding BatteryVisible}">
+                                Margin="6,0,8,0" IsVisible="{Binding HasBattery}">
                             <TextBlock Text="{Binding BatteryText}" Foreground="{DynamicResource SuccessGreenBrush}"
                                        FontSize="10" FontWeight="Bold"/>
                         </Border>
@@ -344,7 +344,7 @@
         </DataTemplate>
 
         <!-- ======================= ROUTING ROW (compact) ======================= -->
-        <DataTemplate x:Key="HapticRoutingRowTemplate" x:DataType="tabs:HapticRoutingRowSample">
+        <DataTemplate x:Key="HapticRoutingRowTemplate" x:DataType="hx:HapticRoutingRowVm">
             <StackPanel Margin="0,1">
                 <Grid ToolTip.Tip="{Binding Hint}" ColumnDefinitions="Auto,*">
                     <CheckBox Grid.Column="0" Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
@@ -394,10 +394,10 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
                             <TextBlock Text="{loc:Str haptics_col_pattern}" Theme="{StaticResource HapticTinyLabel}"
-                                       Width="74" IsVisible="{Binding ModeVisible}"/>
+                                       Width="74" IsVisible="{Binding ShowMode}"/>
                             <ComboBox Theme="{StaticResource DarkComboBoxStyle}" FontSize="11" Height="24" Width="124"
                                       Margin="6,0,0,0" VerticalAlignment="Center"
-                                      IsVisible="{Binding ModeVisible}"
+                                      IsVisible="{Binding ShowMode}"
                                       IsEnabled="{Binding RowEnabled}"
                                       SelectedIndex="{Binding ModeIndex, Mode=TwoWay}">
                                 <ComboBoxItem Content="{loc:Str btn_constant}"/>
@@ -426,7 +426,7 @@
             </StackPanel>
         </DataTemplate>
 
-        <DataTemplate x:Key="HapticRoutingGroupTemplate" x:DataType="tabs:HapticRoutingGroupSample">
+        <DataTemplate x:Key="HapticRoutingGroupTemplate" x:DataType="hx:HapticRoutingGroupVm">
             <StackPanel Margin="0,0,0,12">
                 <StackPanel Orientation="Horizontal" Margin="2,0,0,4">
                     <TextBlock Text="{Binding Icon}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>

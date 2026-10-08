@@ -54,6 +54,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF MainWindow.xaml.cs:888: Lockdown ignores every GLOBAL key, whatever LockdownDisablePanicKey
             // says. Only this listener layer: window and TextBox input (the secret phrase) are untouched.
             if (LockdownActive) { Serilog.Log.Information("Panic key ignored under Lockdown"); return; }
+            IntakeHostWindow.StopMicsForPanic();   // every press, before the lock-card stop or the capture abort reads as silence
             CancelPendingAi();   // every press, even one a lock card or the palette consumes
 
             // Same evaluation order as WPF: asking the palette closes it, so never ask with a card up.
@@ -65,24 +66,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Serilog.Log.Information("Panic key pressed ({Rung})", rung);
             if (rung == PanicPolicy.Rung.DismissLockCard) { StopLockCards(); StopCameraForPanic(); }
             if (!PanicPolicy.StopsSurfaces(rung)) return;
+            // WPF MainWindow.xaml.cs:1709: close the game surface that owns the screen, then the normal
+            // stop tail with the exit ladder NOT armed (and no grace pause), in BOTH modes: override
+            // (MainWindow.xaml.cs:1627) and ladder (:1720 RunPanicStopTail(advanceExitLadder: false)).
+            // Sampled BEFORE the stop pass closes it (intake host, Chaos descent).
+            bool gameOwnedTheScreen = PanicSurfaces.AnyOwnsTheScreen();
             // WPF #735: with PanicOverridesAll off (RunLadder), the first press over a playing mandatory
             // video grace-pauses it instead (TryGracePause refuses when panic overrides all), and the
             // window's own handling of the same keystroke is deduped there. Not a ladder rung.
-            if (rung == PanicPolicy.Rung.RunLadder && Views.Overlays.MandatoryVideoOverlay.Instance.TryGracePause(fromPanicKey: true))
+            if (!gameOwnedTheScreen && rung == PanicPolicy.Rung.RunLadder && Views.Overlays.MandatoryVideoOverlay.Instance.TryGracePause(fromPanicKey: true))
             {
                 Serilog.Log.Information("Panic press consumed as video grace pause");
                 StopCameraForPanic();
                 return;
             }
             bool wasRunning = CoreEngine.IsRunning;
-            // WPF MainWindow.xaml.cs:1621: sampled BEFORE the stop pass - a press that ends a descent
-            // must not also arm the double-press exit (PanicPolicy.AdvancesExitLadder(Rung, bool)).
-            bool gameOwnedTheScreen = PanicSurfaces.AnyOwnsTheScreen();
             PanicSurfaces.StopAll("panic key", this);
             if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop
 
             if ((now - _lastPanicTime).TotalMilliseconds > 2000) _panicPressCount = 0;
-            if (PanicPolicy.AdvancesExitLadder(rung, gameOwnedTheScreen)) { _panicPressCount++; _lastPanicTime = now; }
+            // A game surface (intake host or a Chaos descent) owned the screen: the press ends it, no exit rung.
+            if (PanicPolicy.AdvancesExitLadder(rung) && !gameOwnedTheScreen) { _panicPressCount++; _lastPanicTime = now; }
             if (_panicPressCount >= 2)
             {
                 Serilog.Log.Information("Double panic! Exiting application...");

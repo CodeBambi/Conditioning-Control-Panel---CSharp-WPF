@@ -17,9 +17,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// programmatic set exactly as WPF raised Checked, and a seed without it saves defaults over
     /// the user's file.
     ///
-    /// Still a stub, named: the motion-level change on WPF also stops the ambient loops through
-    /// MainWindow (they are FX partials, not on this head), and the DND app picker enumerates
-    /// windows through Win32.
+    /// A motion-level change re-evaluates the loaded ambient loops through
+    /// <see cref="global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.MotionGateChanged"/>, as WPF's
+    /// MainWindow.CmbMotionLevel_SelectionChanged did. Still a stub, named: the DND app picker
+    /// enumerates windows through Win32 and this head has no do-not-disturb guard yet.
     /// </summary>
     public partial class PerformanceSettingsSection : UserControl
     {
@@ -63,6 +64,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 // than trusted so a settings file from a future build cannot throw here.
                 var index = (int)s.MotionLevel;
                 CmbMotionLevel.SelectedIndex = index >= 0 && index < CmbMotionLevel.ItemCount ? index : 0;
+                // Back Room effects intensity: ordinal IS the item index (Calm=0, Normal=1, Full=2).
+                var fx = (int)s.BackRoomFxIntensity;
+                CmbBackRoomFxIntensity.SelectedIndex = fx >= 0 && fx < CmbBackRoomFxIntensity.ItemCount ? fx : 1;
                 // The textbox is a VIEW of the normalised list, repainted from settings rather than
                 // left holding whatever was last typed.
                 TxtDndProcesses.Text = DndProcessList.Format(s.DndProcessList);
@@ -115,8 +119,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             };
             CoreSettings.Current.MotionLevel = level;
             Log.Information("Motion level set to {Level}", level);
-            // ponytail: WPF also stops the ambient loops here (season shimmer, skill tree, program
-            // banner) through MainWindow's FX partials, which are not on this head.
+            CoreSettings.Save();
+            // WPF stops the running ambient loops here (Reduced/Off) and re-arms them on Full.
+            global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.RaiseMotionGateChanged();
+        }
+
+        /// <summary>No shell twin on WPF either: the Back Room reads it off settings on every fire.</summary>
+        private void CmbBackRoomFxIntensity_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            int i = CmbBackRoomFxIntensity.SelectedIndex;
+            if (i < 0) return;
+            CoreSettings.Current.BackRoomFxIntensity = (global::ConditioningControlPanel.Services.BackRoom.BackRoomFxIntensity)i;
             CoreSettings.Save();
         }
 

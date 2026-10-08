@@ -44,6 +44,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
             SliderFreq.ValueChanged += SliderFreq_Changed;
             SliderRepeats.ValueChanged += SliderRepeats_Changed;
+            ChkRandomRepeats.IsCheckedChanged += (_, _) => SaveRepeatShape();
+            ChkTargetLength.IsCheckedChanged += (_, _) => SaveRepeatShape();
+            SliderRepeatsMin.ValueChanged += (_, _) => SaveRepeatShape();
+            SliderTargetLength.ValueChanged += (_, _) => SaveRepeatShape();
+            SliderTargetVariance.ValueChanged += (_, _) => SaveRepeatShape();
             ChkStrict.IsCheckedChanged += ChkStrict_Changed;
             ChkVoiceMode.IsCheckedChanged += ChkVoiceMode_Changed;
             ChkResetOnTypo.IsCheckedChanged += ChkResetOnTypo_Changed;
@@ -89,6 +94,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 TxtFreq.Text = s.LockCardFrequency.ToString();
                 SliderRepeats.Value = s.LockCardRepeats;
                 TxtRepeats.Text = $"{s.LockCardRepeats}x";
+                ChkRandomRepeats.IsChecked = s.LockCardRandomRepeats;
+                SliderRepeatsMin.Value = s.LockCardRepeatsMin;
+                ChkTargetLength.IsChecked = s.LockCardTargetLengthEnabled;
+                SliderTargetLength.Value = s.LockCardTargetLength;
+                SliderTargetVariance.Value = s.LockCardTargetLengthVariance;
+                UpdateRepeatShapeRows();
                 ChkStrict.IsChecked = s.LockCardStrict;
                 ChkVoiceMode.IsChecked = s.LockCardVoiceMode && s.MicConsentGiven;
                 ChkResetOnTypo.IsChecked = s.LockCardResetOnTypo;
@@ -103,6 +114,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (e.PropertyName == nameof(AppSettings.LockCardEnabled) ||
                 e.PropertyName == nameof(AppSettings.LockCardFrequency) ||
                 e.PropertyName == nameof(AppSettings.LockCardRepeats) ||
+                e.PropertyName == nameof(AppSettings.LockCardRandomRepeats) ||
+                e.PropertyName == nameof(AppSettings.LockCardRepeatsMin) ||
+                e.PropertyName == nameof(AppSettings.LockCardTargetLengthEnabled) ||
+                e.PropertyName == nameof(AppSettings.LockCardTargetLength) ||
+                e.PropertyName == nameof(AppSettings.LockCardTargetLengthVariance) ||
                 e.PropertyName == nameof(AppSettings.LockCardStrict) ||
                 e.PropertyName == nameof(AppSettings.LockCardResetOnTypo) ||
                 e.PropertyName == nameof(AppSettings.LockCardVoiceMode))
@@ -159,6 +175,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (s.LockCardRepeats == v) return;
             s.LockCardRepeats = v;
             CoreSettings.Save();
+        }
+
+        /// <summary>Writes the repeat-shape switches and dials (WPF ChkRandomRepeats_Changed ..
+        /// SliderTargetVariance_Changed, LockCardFeatureControl.xaml.cs:134-184), saving only on change.</summary>
+        private void SaveRepeatShape()
+        {
+            UpdateRepeatShapeRows();
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            bool random = ChkRandomRepeats.IsChecked ?? false, byLength = ChkTargetLength.IsChecked ?? false;
+            int min = (int)SliderRepeatsMin.Value, len = (int)SliderTargetLength.Value, vary = (int)SliderTargetVariance.Value;
+            if (s.LockCardRandomRepeats == random && s.LockCardTargetLengthEnabled == byLength &&
+                s.LockCardRepeatsMin == min && s.LockCardTargetLength == len && s.LockCardTargetLengthVariance == vary) return;
+            s.LockCardRandomRepeats = random;
+            s.LockCardTargetLengthEnabled = byLength;
+            s.LockCardRepeatsMin = min;
+            s.LockCardTargetLength = len;
+            s.LockCardTargetLengthVariance = vary;
+            CoreSettings.Save();
+        }
+
+        /// <summary>WPF UpdateRepeatRowVisibility (:197-207): length mode derives the count, so it hides
+        /// the flat Repeats row and the random switch; the same precedence as
+        /// <see cref="LockCardScheduler.ResolveRepeats"/>.</summary>
+        private void UpdateRepeatShapeRows()
+        {
+            var byLength = ChkTargetLength.IsChecked ?? false;
+            var random = ChkRandomRepeats.IsChecked ?? false;
+            RowRepeats.IsVisible = !byLength;
+            RowRandomRepeats.IsVisible = !byLength;
+            RowRepeatsMin.IsVisible = !byLength && random;
+            RowTargetLength.IsVisible = byLength;
+            RowTargetVariance.IsVisible = byLength;
+            TxtRepeatsMin.Text = $"{(int)SliderRepeatsMin.Value}x";
+            TxtTargetLength.Text = ((int)SliderTargetLength.Value).ToString();
+            TxtTargetVariance.Text = $"\u00B1{(int)SliderTargetVariance.Value}";
         }
 
         /// <summary>
