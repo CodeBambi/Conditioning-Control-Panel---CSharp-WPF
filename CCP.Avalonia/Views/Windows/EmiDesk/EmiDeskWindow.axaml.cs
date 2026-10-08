@@ -2545,8 +2545,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// </summary>
         private void PetFromClick() { }
 
-        /// <summary>ponytail: needs EmiState.NotePet() - the pat counter behind her affection state.</summary>
-        private void CountPat() { }
+        /// <summary>WPF EmiDeskWindow.React.cs:198 - the pat counter behind her affection state.</summary>
+        private void CountPat()
+        {
+            try { EmiState.NotePet(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pat bookkeeping failed"); }
+        }
 
 
         /// <summary>
@@ -2569,8 +2573,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: EmiDeskWindow.Bubble.cs - drops the voice hooks.</summary>
         private void TearDownVox() { }
 
-        /// <summary>ponytail: needs EmiSfx (Services/EmiDesk/EmiSfx.cs) - the pat sound.</summary>
-        private void PlayPatSfx() { }
+        /// <summary>WPF EmiDeskWindow.xaml.cs:1832 - the pat sound.</summary>
+        private void PlayPatSfx() => EmiSfx.Pat();
 
         /// <summary>The hover x sends her away - through the service, never view-locally, so IsOut
         /// and the dock chip cannot disagree with the screen.</summary>
