@@ -638,8 +638,6 @@ namespace ConditioningControlPanel.Services.Quiz
         /// the same convention every other intake artifact (intake_subject.txt) follows.</summary>
         private static string SpiralImageFolder => Path.Combine(App.UserDataPath, "intake_spirals");
 
-        private const int MaxSpiralPngBase64Chars = 12 * 1024 * 1024;  // ~9MB decoded ceiling
-
         /// <summary>
         /// <c>loom-save { name, params, gifBase64, overwrite }</c> — byte-for-byte the message
         /// THE LOOM's own editor sends, so the intake's recap spirals land in the SAME library
@@ -674,43 +672,7 @@ namespace ConditioningControlPanel.Services.Quiz
         /// </summary>
         private static void OnSaveSpiralImage(JObject o)
         {
-            string? error = null;
-            string? path = null;
-            try
-            {
-                var b64 = (string?)o["pngBase64"];
-                if (string.IsNullOrEmpty(b64) || b64.Length > MaxSpiralPngBase64Chars)
-                {
-                    error = "too-big";
-                }
-                else
-                {
-                    byte[] bytes;
-                    try { bytes = Convert.FromBase64String(b64); }
-                    catch { bytes = Array.Empty<byte>(); }
-
-                    if (!IntakeRun.LooksLikePng(bytes))
-                    {
-                        error = "bad-image";
-                    }
-                    else
-                    {
-                        Directory.CreateDirectory(SpiralImageFolder);
-                        var index = Math.Clamp((int?)o["index"] ?? 1, 1, 99);
-                        var name = $"intake-spiral-{DateTime.Now:yyyyMMdd-HHmmss}-{index:D2}.png";
-                        var full = Path.Combine(SpiralImageFolder, name);
-                        File.WriteAllBytes(full, bytes);
-                        path = full;
-                        App.Logger?.Information("IntakeHostService: saved recap spiral -> {Path}", full);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning("IntakeHostService.OnSaveSpiralImage: {E}", ex.Message);
-                error = "io-failed";
-            }
-
+            var (path, error) = IntakeRun.SaveSpiralImage(o, SpiralImageFolder, DateTime.Now);   // moved to Core
             try { _host?.Post(new { type = "intake-save-image-result", ok = error == null, path, error }); }
             catch { }
         }
@@ -886,18 +848,12 @@ namespace ConditioningControlPanel.Services.Quiz
         // BRIGHT LINE: this machine talks to the provider directly. No CC Labs server is in
         // the path, and nothing is cached to disk.
 
-        private const string RemoteConsumerId = "intake";
-        private const int RemoteBatchCap = 24;      // per reply; the page asks again if it wants more
         private static int _remoteFetchInFlight;    // 0/1 via Interlocked
 
         /// <summary>True when remote media may appear anywhere in the app. Reads
         /// <c>HasRemoteMediaConsent</c>, never the raw consent flag - a user who accepted the
         /// For You feed's card has already agreed to exactly this.</summary>
-        private static bool RemoteMediaEnabled()
-        {
-            var s = App.Settings?.Current;
-            return s != null && s.MediaSource != "local" && s.HasRemoteMediaConsent;
-        }
+        private static bool RemoteMediaEnabled() => IntakeRun.RemoteMediaEnabled(App.Settings?.Current);   // moved to Core
 
         /// <summary>Fetch one batch of remote stills and append it to the page's pool.
         /// Single-flight; a second ask while one is in the air is dropped (the page re-asks
@@ -908,20 +864,8 @@ namespace ConditioningControlPanel.Services.Quiz
             if (Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0) return;
             try
             {
-                var coord = FypOnlineCoordinator.For(RemoteConsumerId, RemoteChannels, FeedMediaKind.Image);
-                var (entries, error) = await coord.FetchBatchAsync(CancellationToken.None).ConfigureAwait(false);
-
-                var urls = new List<string>();
-                foreach (var e in entries)
-                {
-                    if (!RemoteMediaFormats.Validate(e, FeedMediaKind.Image, out var reason))
-                    {
-                        App.Logger?.Debug("IntakeHost: rejected remote entry {Id}: {Reason}", e.Id, reason);
-                        continue;
-                    }
-                    urls.Add(e.Url);
-                    if (urls.Count >= RemoteBatchCap) break;
-                }
+                var (entries, error) = await IntakeRun.RemoteCoordinator().FetchBatchAsync(CancellationToken.None).ConfigureAwait(false);
+                var urls = IntakeRun.RemoteStills(entries);   // validation + cap moved to Core
 
                 var win = _host?.Window;
                 if (win == null) return;   // intake closed while fetching
@@ -938,15 +882,6 @@ namespace ConditioningControlPanel.Services.Quiz
             }
             catch (Exception ex) { App.Logger?.Warning("IntakeHost: remote batch failed: {E}", ex.Message); }
             finally { Interlocked.Exchange(ref _remoteFetchInFlight, 0); }
-        }
-
-        /// <summary>The intake's channel set. The niche selection is shared app-wide by design
-        /// (see the AppSettings remarks beside MediaSource) - only the rotation and dwell state
-        /// is per-consumer, which is what asking for our own tenant buys.</summary>
-        private static IReadOnlyList<string> RemoteChannels()
-        {
-            var s = App.Settings?.Current;
-            return FypOnlineCoordinator.ResolveChannels(s?.FypOnlineNiches, s?.FypOnlineCustomSubs);
         }
 
         /// <summary>The app's REAL bubble sprite (mod-aware: an active BS/sissy mod's bubble.png

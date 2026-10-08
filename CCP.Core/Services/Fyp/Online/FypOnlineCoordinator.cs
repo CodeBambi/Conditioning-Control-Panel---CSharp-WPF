@@ -169,7 +169,7 @@ internal sealed class FypOnlineCoordinator
         try { return _channelProvider() ?? (IReadOnlyList<string>)Array.Empty<string>(); }
         catch (Exception ex)
         {
-            App.Logger?.Debug("FypOnline[{Consumer}]: channel provider failed: {E}", _consumerId, ex.Message);
+            Serilog.Log.Debug("FypOnline[{Consumer}]: channel provider failed: {E}", _consumerId, ex.Message);
             return Array.Empty<string>();
         }
     }
@@ -194,7 +194,7 @@ internal sealed class FypOnlineCoordinator
     /// <summary>The For You feed's channel provider: its own niche selection and custom subs.</summary>
     private static IReadOnlyList<string> FypChannels()
     {
-        var s = App.Settings?.Current;
+        var s = CoreSettings.Current;
         return ResolveChannels(s?.FypOnlineNiches, s?.FypOnlineCustomSubs);
     }
 
@@ -247,7 +247,7 @@ internal sealed class FypOnlineCoordinator
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FypOnline[{Consumer}]: dwell save failed: {E}", _consumerId, ex.Message);
+                Serilog.Log.Debug("FypOnline[{Consumer}]: dwell save failed: {E}", _consumerId, ex.Message);
             }
         }
     }
@@ -344,7 +344,7 @@ internal sealed class FypOnlineCoordinator
             {
                 channel.NoteFailure("fetch-failed");
                 sawTransportFailure = true;
-                App.Logger?.Debug("[FYP online] r/{Sub} failed ({N}) — cooling down until {Until:HH:mm:ss}Z",
+                Serilog.Log.Debug("[FYP online] r/{Sub} failed ({N}) — cooling down until {Until:HH:mm:ss}Z",
                     channel.Name, channel.Failures, channel.NextTryAtUtc);
                 continue;
             }
@@ -368,18 +368,18 @@ internal sealed class FypOnlineCoordinator
             if (channel.DryPages >= 2 || (page.NextIterator == null && fresh.Count == 0))
             {
                 channel.NoteExhausted();
-                App.Logger?.Information(
+                Serilog.Log.Information(
                     "[FYP online] r/{Sub} exhausted after {N} unique ids ({Consumer}) — reshuffling for 10 min",
                     channel.Name, channel.ServedIds.Count, _consumerId);
             }
 
             if (fresh.Count > 0)
             {
-                App.Logger?.Information("[FYP online] +{N} entries from r/{Sub} ({Consumer})",
+                Serilog.Log.Information("[FYP online] +{N} entries from r/{Sub} ({Consumer})",
                     fresh.Count, channel.Name, _consumerId);
                 return Summarize(fresh, null);
             }
-            App.Logger?.Debug("[FYP online] r/{Sub} dealt {N} already-served ids ({Consumer}, dry page {Dry})",
+            Serilog.Log.Debug("[FYP online] r/{Sub} dealt {N} already-served ids ({Consumer}, dry page {Dry})",
                 channel.Name, page.Entries.Count, _consumerId, channel.DryPages);
         }
         return Summarize(new List<FypAssetManifest.Entry>(), sawTransportFailure ? "offline" : null);
@@ -445,7 +445,7 @@ internal sealed class FypOnlineCoordinator
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("FypOnline[{Consumer}]: dwell load failed: {E}", _consumerId, ex.Message);
+            Serilog.Log.Debug("FypOnline[{Consumer}]: dwell load failed: {E}", _consumerId, ex.Message);
         }
     }
 }
