@@ -79,6 +79,7 @@ public sealed class ProgramEnrollDialogTests
     {
         Setup();
         var program = BuiltInPrograms.All()[0];
+        // Safe to mutate: BuiltInPrograms.All() builds fresh instances on every call.
         program.Rules.StrictAvailable = false;
         var owner = new Window();
         owner.Show();
@@ -98,6 +99,24 @@ public sealed class ProgramEnrollDialogTests
             Assert.True(esc.Handled);
             Assert.False(await result);
             Assert.False(dlg.StrictMode);
+        }
+        finally { dlg.Close(); owner.Close(); }
+    });
+
+    [Fact]
+    public Task CancelRefuses() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        Setup();
+        var owner = new Window();
+        owner.Show();
+        var dlg = new ProgramEnrollDialog(BuiltInPrograms.All()[0]);
+        try
+        {
+            var result = dlg.ShowDialogSafe<bool?>(owner);
+            Pump();
+            Click(dlg, "BtnCancel");
+            Pump();
+            Assert.False(await result);
         }
         finally { dlg.Close(); owner.Close(); }
     });
