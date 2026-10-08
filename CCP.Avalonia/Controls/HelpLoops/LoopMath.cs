@@ -24,6 +24,13 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
 
         public static double Lerp(double a, double b, double k) => a + (b - a) * k;
 
+        /// <summary>Triangle wave 0..1..0 with period 2.</summary>
+        public static double Tri(double p)
+        {
+            var m = ((p % 2) + 2) % 2;
+            return m < 1 ? m : 2 - m;
+        }
+
         public static Point Path((double T, double X, double Y)[] pts, double t)
         {
             if (t <= pts[0].T) return new Point(pts[0].X, pts[0].Y);

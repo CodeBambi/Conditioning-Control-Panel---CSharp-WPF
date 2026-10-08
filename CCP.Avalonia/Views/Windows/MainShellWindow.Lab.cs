@@ -11,7 +11,8 @@
 //
 //   THE LOCKDOWN LIFECYCLE lives on this head in LockdownTabView.axaml.cs (Activate, panel swap,
 //   clock, exit phrase) and MainShellWindow.Lockdown.cs (refusals), driven by Core LockdownService.
-//   Still absent: the title-bar badge + SetLockdownBadge, Apply/RestoreLockdownTheme,
+//   The title-bar badge's visibility and clock live in MainShellWindow.Lockdown.cs.
+//   Still absent: Apply/RestoreLockdownTheme,
 //   PlayLockdownActivationAnimation and the system-key hook (Win32 WH_KEYBOARD_LL, bucket E).
 //
 //   THE POP-QUIZ AND GRADED-INTAKE EDITORS ARE NOT THIS FILE'S ANY MORE. WPF's MainWindow owned
@@ -54,7 +55,7 @@
 //   private void OnLockdownDeactivated(…)
 //   private void OnLockdownTick(…)
 //   private static string FormatLockdownClock(…)
-//   private void SetLockdownBadge(…)
+//   private void SetLockdownBadge(…)                 -> MainShellWindow.Lockdown.cs
 //   private void LockdownBadge_Click(…)                RESTORED
 //   internal void TxtLockdownTimer_Click(…)
 //   internal void TxtLockdownExit_KeyDown(…)
@@ -96,9 +97,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// inside the draggable title bar, and an unhandled press would start a window drag under
         /// the finger that just navigated.</para>
         ///
-        /// <para>ponytail: the badge's own visibility and clock still need
-        /// <c>SetLockdownBadge</c>/<c>OnLockdownTick</c>, i.e. LockdownService - see the header.
-        /// The XAML leaves it hidden, so today this handler is reachable only from a preview.</para>
+        /// <para>Visibility and clock: InitializeLockdownGreys (MainShellWindow.Lockdown.cs).</para>
         /// </summary>
         private void LockdownBadge_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e)
         {
