@@ -26,8 +26,8 @@
 //   RefreshPlayIntakeCard   - App.IntakePass.State + IntakePassService.DaysUntilNextPass
 //                             (ConditioningControlPanel/Services/Progression/IntakePassService.cs)
 //                             for the card's four pass states.
-//   StartMantraSession      - PORTED below (MantraService is in Core). As in WPF it has NO
-//                             CALLER: the 2026-08-12 relayout took the Mantras card off the page.
+//   StartMantraSession      - PORTED below (MantraService is in Core). Its one caller, as in WPF
+//                             (#1230), is the Programs Mantra-task door (ProgramsTabView).
 //   GoonPerkLockedOpacity   - the 0.42 dim for an unbought Goon perk. A constant with no reader
 //                             until RefreshPlayCards has its two entitlement answers.
 //

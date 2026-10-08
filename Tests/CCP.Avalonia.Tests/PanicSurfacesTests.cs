@@ -80,7 +80,7 @@ public sealed class PanicSurfacesTests
     /// camera last; the engine before lock cards).</summary>
     [Fact]
     public void TheSurfaceListIsExactAndOrdered() =>
-        Assert.Equal(new[] { "intake", "voice-capture", "ai-followups", "blink-trainer", "chaos", "haptics", "remote-haptics",
+        Assert.Equal(new[] { "intake", "voice-capture", "ai-followups", "blink-trainer", "mantra", "chaos", "haptics", "remote-haptics",
             "takeover", "engine", "lock-cards", "camera" }, PanicSurfaces.All.Select(x => x.Id));
 
     /// <summary>P23: comments and string literals never count as code.</summary>
