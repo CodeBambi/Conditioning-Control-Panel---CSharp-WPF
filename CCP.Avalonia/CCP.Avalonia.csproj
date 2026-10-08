@@ -183,6 +183,9 @@
 
     <AvaloniaResource Include="..\Assets\achievements\*.png"
                       Link="Resources\achievements\%(Filename)%(Extension)" />
+    <!-- Profile hero banners (Core CosmeticsPool.Banners), compiled in as WPF ConditioningControlPanel.csproj:436. -->
+    <AvaloniaResource Include="..\Assets\banners\*.png"
+                      Link="Resources\banners\%(Filename)%(Extension)" />
     <!-- Sparse folders: only what a view names. -->
     <AvaloniaResource Include="..\Assets\skills\pink_rush.png" Link="Resources\skills\pink_rush.png" />
   </ItemGroup>

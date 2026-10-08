@@ -173,7 +173,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var current = SanitizeOwnWardrobe(CoreSettings.Current.ProfileCosmetics);
                 var unlocked = (App.Achievements?.Progress?.UnlockedAchievements ?? new())
                     .Where(Achievement.All.ContainsKey)
-                    .Select(id => (id, Achievement.All[id].LocalizedName));
+                    .Select(id => (id, CoreMods.MakeModAware(Achievement.All[id].TitleName))); // WPF ResolveAchievementTitle
                 // The stage shows your avatar only while YOUR card is on screen.
                 var avatar = _profileViewingSelf ? page?.ProfileHeroAvatar.AvatarBrush.Source : null;
                 var card = page?.ProfileHeroCard.Bounds;

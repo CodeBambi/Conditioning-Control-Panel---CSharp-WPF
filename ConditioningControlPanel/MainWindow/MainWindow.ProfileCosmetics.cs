@@ -267,10 +267,7 @@ namespace ConditioningControlPanel
             if (string.IsNullOrWhiteSpace(achievementId)) return null;
             if (!Achievement.All.TryGetValue(achievementId!, out var achievement)) return null;
 
-            var localized = achievement.LocalizedName;
-            var name = string.IsNullOrWhiteSpace(localized) || localized == $"achievement_{achievement.Id}_name"
-                ? achievement.Name
-                : localized;
+            var name = achievement.TitleName;
 
             return App.Mods?.MakeModAware(name) ?? name;
         }

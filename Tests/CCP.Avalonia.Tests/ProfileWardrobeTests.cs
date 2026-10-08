@@ -6,7 +6,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
+using Avalonia.Input;
 using Avalonia.LogicalTree;
+using Avalonia.Media;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Controls;
@@ -143,6 +145,61 @@ public sealed class ProfileWardrobeTests
             Assert.All(sprites, i => Assert.NotNull(i.Source));
             var chips = editor.FindControl<WrapPanel>("ItemChips")!.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
             Assert.Contains("Plush Bunny", chips);
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>A real press/release on the middle of <paramref name="c"/> (scrolled into view first).</summary>
+    private static void Click(Window w, Control c)
+    {
+        c.BringIntoView();
+        w.UpdateLayout();
+        var p = c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), w)!.Value;
+        w.MouseDown(p, MouseButton.Left);
+        w.MouseUp(p, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    [Fact]
+    public async Task Customize_OffersSceneBannersPresetsAndPinArt_ClickEquips_EditorPaintsBanner()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            Setup();
+            var dialog = new ProfileCustomizeDialog(new ProfileCosmetics(),
+                new[] { ("plastic_initiation", "Plastic Initiation"), ("no_such_achievement", "Ghost") });
+            Border Tile(string host, string tip) => dialog.FindControl<WrapPanel>(host)!.Children.OfType<Border>()
+                .Single(b => (ToolTip.GetTip(b) as string) == tip);
+
+            // Every pool entry whose art loads is offered (WPF BuildBanners/BuildAvatars), plus "none".
+            Assert.Equal(1 + CosmeticsPool.Banners.Count, dialog.FindControl<WrapPanel>("BannerHost")!.Children.Count);
+            Assert.Equal(1 + CosmeticsPool.AvatarPresets.Count, dialog.FindControl<WrapPanel>("AvatarHost")!.Children.Count);
+            Assert.IsType<ImageBrush>(((Border)Tile("AvatarHost", "Twin Tails").Child!).Background);
+
+            // Pins draw the achievement art; an achievement without art is not offered (WPF BuildPinTile).
+            var pins = dialog.FindControl<WrapPanel>("PinHost")!.Children;
+            Assert.Single(pins);
+            Assert.NotNull(((Grid)((Border)pins[0]).Child!).Children.OfType<Image>().Single().Source);
+
+            dialog.Show();
+            try
+            {
+                Click(dialog, Tile("BannerHost", "Neon Den"));
+                Assert.Equal("bambi_neon_den", dialog.Result.BannerId);
+                Click(dialog, Tile("AvatarHost", "Twin Tails"));
+                Assert.Equal("avatar_bambi_2", dialog.Result.AvatarId);
+                // Keyboard reach: a tabbed-to tile answers Enter.
+                Assert.True(((Border)pins[0]).Focus(NavigationMethod.Tab));
+                dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+                Assert.Equal(new[] { "plastic_initiation" }, dialog.Result.PinnedAchievements);
+            }
+            finally { dialog.Close(); }
+
+            // The editor stage paints the chosen banner, cropped from the top like the hero.
+            var editor = new WardrobeEditorDialog(new ProfileCosmetics { BannerId = "bambi_neon_den", AvatarDeco = Deco }, null);
+            var stage = Assert.IsType<ImageBrush>(editor.FindControl<Border>("StageBanner")!.Background);
+            Assert.NotNull(stage.Source);
+            Assert.Equal(AlignmentY.Top, stage.AlignmentY);
             return Task.CompletedTask;
         });
     }
