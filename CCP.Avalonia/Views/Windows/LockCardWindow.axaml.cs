@@ -1137,6 +1137,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>The card that owns the keyboard, and what it has counted. Tests read these.</summary>
+        /// <summary>The CoreLockCard surface (seeded in App): draw the next phrase and resolve its repeat
+        /// count through the three modes exactly as WPF LockCardService.ShowLockCard does.</summary>
+        internal static void ShowNext(bool isTest)
+        {
+            var phrase = LockCardScheduler.Instance.PickPhrase(LockCardScheduler.EnabledPhrases());
+            if (phrase is null) return;   // no enabled phrases: nothing to lock behind
+            var s = CoreSettings.Current;
+            var repeats = LockCardScheduler.ResolveRepeats(-1, phrase,
+                s.LockCardRandomRepeats, s.LockCardRepeatsMin, s.LockCardRepeats,
+                s.LockCardTargetLengthEnabled, s.LockCardTargetLength,
+                s.LockCardTargetLengthVariance, Random.Shared.NextDouble());
+            ShowOnAllMonitors(phrase, repeats, s.LockCardStrict, isTest, s.LockCardVoiceMode);
+        }
+
+        internal int RequiredRepeats => _requiredRepeats;
+
         internal static LockCardWindow? Primary => _allWindows.FirstOrDefault(w => w._isPrimary);
         internal int TotalErrors => _totalErrors;
         internal int CompletedRepeats => _completedRepeats;
