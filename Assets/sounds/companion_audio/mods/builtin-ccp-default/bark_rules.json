@@ -2880,8 +2880,7 @@
     "chance": 0.2,
     "variant_pool": [
       {
-        "text": "the laboratory, pet. mind the instruments. some of them are for you.",
-        "audio": "nav_lab_1.mp3"
+        "text": "the games room, pet. pick one and stay a while."
       }
     ]
   },
