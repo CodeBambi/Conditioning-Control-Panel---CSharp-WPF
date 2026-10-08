@@ -176,4 +176,70 @@ public sealed class LauncherFxTests
         launcher.FindControl<Button>("BtnMinimize")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(new[] { "launcher-click" }, cues);
     });
+
+    private sealed class SteppedUtc : TimeProvider
+    {
+        public DateTimeOffset Now = DateTimeOffset.UtcNow.AddDays(1);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
+    public void Hover_ByRealPointer_PlaysTheThrottledMelody() => Run(MotionLevel.Full, (_, launcher, cues) =>
+    {
+        var clock = new SteppedUtc();
+        LauncherWindow.LauncherSfx.Clock = clock;
+        try
+        {
+            var tile = Tile(launcher);
+            var scale = ((TransformGroup)tile.RenderTransform!).Children.OfType<ScaleTransform>().Single();
+            var centre = tile.TranslatePoint(new Point(tile.Bounds.Width / 2, tile.Bounds.Height / 2), launcher)!.Value;
+            cues.Clear();
+            launcher.MouseMove(centre);
+            Step(launcher, 0.4);
+            Assert.Equal(1.02, scale.ScaleX, 3);
+            launcher.MouseMove(new Point(2, 2));
+            launcher.MouseMove(centre);                  // re-entered inside MinGapMs: no second note
+            Assert.Single(cues, c => c == "launcher-hover");
+            clock.Now += TimeSpan.FromMilliseconds(LauncherMelody.MinGapMs + 1);
+            launcher.MouseMove(new Point(2, 2));
+            launcher.MouseMove(centre);
+            Assert.Equal(2, cues.Count(c => c == "launcher-hover"));
+        }
+        finally { LauncherWindow.LauncherSfx.Clock = TimeProvider.System; }
+    });
+
+    [Fact]
+    public void Play_OffScreen_IsSilent() => Run(MotionLevel.Full, (shell, launcher, cues) =>
+    {
+        launcher.Hide();                                 // a game boot / handoff plays with the launcher off screen
+        cues.Clear();
+        launcher.Play(LauncherCards.Find("intake")!);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(cues);
+        Assert.True(shell.IsVisible);
+    });
+
+    [Fact]
+    public void Deactivated_ParksTheSpirals() => Run(MotionLevel.Full, (_, launcher, _) =>
+    {
+        Step(launcher, 0.3);
+        // Headless never moves activation between windows; drive the Deactivated/Activated handlers.
+        launcher.OnFxActivated(false);
+        double parked = launcher.SpiralTurn.Angle;
+        Step(launcher, 0.5);
+        Assert.Equal(parked, launcher.SpiralTurn.Angle);
+        launcher.OnFxActivated(true);
+        Step(launcher, 0.5);
+        Assert.NotEqual(parked, launcher.SpiralTurn.Angle);
+    });
+
+    [Fact]
+    public void Close_DropsAPendingExit() => Run(MotionLevel.Full, (shell, launcher, _) =>
+    {
+        Tile(launcher).GetVisualDescendants().OfType<Button>().First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(launcher.IsVisible);                 // held for the beat
+        launcher.Close();
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(shell.IsVisible);                   // the held step never ran
+    });
 }

@@ -43,25 +43,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // Edge.cs:31-34
         private const double EdgeGlowRest = 0.3, EdgeGlowFlare = 0.85, EdgeIdleGlint = 14, GlintSeconds = 1.5;
         private static readonly TimeSpan FocusCueGap = TimeSpan.FromSeconds(4);
-        private const double FadeInSeconds = 0.26;                   // Crossfade.cs:24
+        private const double FadeInSeconds = 0.26, FadeGuardSeconds = 0.15;   // Crossfade.cs:24-25
 
         // Choreo.cs:254-255: seven swings, five pixels down to none.
         private static readonly double[] ShakeX = { 0, 1, -0.8, 0.6, -0.4, 0.2, -0.1, 0 };
         private static readonly double[] ShakeY = { 0, -0.6, 0.5, -0.35, 0.2, -0.1, 0, 0 };
 
-        /// <summary>One eased value: WPF's DoubleAnimation(To, Duration) with a quadratic ease-out.</summary>
+        private enum Ease { QuadOut, QuadIn, Linear }
+
+        /// <summary>One eased value: WPF's DoubleAnimation(To, Duration) with its easing (quadratic out by default).</summary>
         private struct Tween
         {
             public double From, To, T, Dur;
             public bool On;
-            public void Go(double from, double to, double seconds) { From = from; To = to; T = 0; Dur = seconds; On = seconds > 0; }
+            public Ease Mode;
+            public void Go(double from, double to, double seconds, Ease mode = Ease.QuadOut)
+            { From = from; To = to; T = 0; Dur = seconds; On = seconds > 0; Mode = mode; }
             public double Step(double dt)
             {
                 if (!On) return To;
                 T += dt;
                 if (T >= Dur) { On = false; return To; }
                 double u = T / Dur;
-                return From + (To - From) * (1 - (1 - u) * (1 - u));
+                return From + (To - From) * (Mode == Ease.Linear ? u : Mode == Ease.QuadIn ? u * u : 1 - (1 - u) * (1 - u));
             }
         }
 
@@ -79,7 +83,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         private readonly DispatcherTimer _fxClock = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 30) };
+        private readonly DispatcherTimer _fadeGuard = new() { Interval = TimeSpan.FromSeconds(1) };
         private readonly List<TileFx> _tileFx = new();
+        private bool _fxActive = true;
         private TileFx _cardFx = null!;
         private readonly Ellipse[] _rings = new Ellipse[2];
         internal readonly RotateTransform SpiralTurn = new(), SpiralSmallTurn = new(), EdgeGlintSpin = new();
@@ -101,7 +107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private bool FxLive => IsVisible && WindowState != WindowState.Minimized;
         private static bool PerfLow => Env.CurrentTier == ConditioningControlPanel.Models.PerformanceTier.Performance;
         private static bool TiltAllowed => Env.AllowTransitions && !PerfLow;   // Tiles.cs:52
-        private bool SpiralsOn => Env.AllowAmbientLoops && !PerfLow;          // Backdrop.cs:183
+        private bool SpiralsOn => _fxActive && Env.AllowAmbientLoops && !PerfLow;          // Backdrop.cs:183
 
         /// <summary>Called once from the constructor, after the first BuildTiles.</summary>
         private void HookFx()
@@ -139,7 +145,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (e.Property == IsVisibleProperty) { if (IsVisible) FxOnShown(); else FxPark(); }
                 else if (e.Property == WindowStateProperty) { if (FxLive) EnsureFxClock(); else FxPark(); }
             };
-            Activated += (_, _) => OnEdgeActivated();
+            _fadeGuard.Tick += (_, _) => FinishExit();
+            // Fx.cs OnFxActivated/OnFxDeactivated: the backdrop spirals park while the launcher is not active.
+            Activated += (_, _) => OnFxActivated(true);
+            Deactivated += (_, _) => OnFxActivated(false);
+            // A real close (app exit, panel closed; not the user's X, which OnClosing turns into the host's
+            // decision): a pending exit is dropped before the hide parks the FX, never run into ShowFromTray.
+            Closing += (_, e) => { if (!e.Cancel) { _exitThen = _fadeThen = null; _fadeGuard.Stop(); } };
             Closed += (_, _) => FxPark();
         }
 
@@ -284,6 +296,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
+        internal void OnFxActivated(bool active)
+        {
+            _fxActive = active;
+            if (active) { EnsureFxClock(); OnEdgeActivated(); }
+        }
+
         /// <summary>WPF OnEdgeActivated: focus coming back runs the shimmer and the glint, at most every 4 s.</summary>
         private void OnEdgeActivated()
         {
@@ -358,7 +376,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (on) LauncherSfx.Hover();
                 bool anim = Env.AllowTransitions;
                 t.Lift.Go(t.Scale.ScaleX, on ? HoverLiftScale : 1, anim ? HoverLiftSeconds : 0);
-                t.Shine.Go(t.Glow?.Opacity ?? 0, on ? TileGlowHover : TileGlowRest, anim ? TileHoverSeconds : 0);
+                t.Shine.Go(t.Glow?.Opacity ?? 0, on ? TileGlowHover : TileGlowRest, anim ? TileHoverSeconds : 0, Ease.Linear);   // TintTile: no easing
                 if (!on) t.Lean.Go(t.Tilt.Angle, 0, anim ? TileHoverSeconds : 0);
                 if (!anim) StepTile(t, 0);
                 if (on) BleedGlow(t.Hue); else RestoreGlow();
@@ -373,7 +391,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var b = t.Tile.Bounds;
             if (!TiltAllowed || b.Width <= 0 || b.Height <= 0) return;
             double nx = Math.Clamp(at.X / b.Width * 2 - 1, -1, 1), ny = Math.Clamp(at.Y / b.Height * 2 - 1, -1, 1);
-            t.Lean.Go(t.Tilt.Angle, nx * -ny * TileTiltDegrees, TileTiltSeconds);
+            t.Lean.Go(t.Tilt.Angle, nx * -ny * TileTiltDegrees, TileTiltSeconds, Ease.Linear);   // TiltToward: no easing
             EnsureFxClock();
         }
 
@@ -438,6 +456,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
+                if (!FxLive) return;   // boot straight into a game / a handoff: silent, like WPF LaunchGame
                 if (refused) { LauncherSfx.Denied(); Shake(0.45); return; }
                 LauncherSfx.Click();
                 TileFx? t = null;
@@ -458,8 +477,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ExitBeat(TileFx pop, Color tint, double peak, Control? anchor = null)
         {
             anchor ??= pop.Tile;
-            LauncherSfx.Launch();
             if (!FxLive) return;
+            LauncherSfx.Launch();
             _beatArmed = Env.AllowTransitions;
             if (Env.AllowTransitions) { pop.PopT = 0; pop.PopPeak = peak; }
             Shockwave(anchor, tint);
@@ -562,6 +581,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!FxLive || !Env.AllowTransitions) { then(); return; }
             _exitThen = then;
             _exitIn = armed ? LauncherRules.FadeLeadMs(ExitBeatMs) / 1000.0 : 0;
+            // Crossfade.cs:71 guard: the hide happens even if the frame clock never gets there.
+            _fadeGuard.Interval = TimeSpan.FromSeconds(_exitIn + LauncherRules.FadeOutMs / 1000.0 + FadeGuardSeconds);
+            _fadeGuard.Start();
             if (_exitIn <= 0) BeginFadeOut();
             EnsureFxClock();
         }
@@ -571,11 +593,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _exitIn = -1;
             _fadeThen = _exitThen;
             _exitThen = null;
-            _fade.Go(RootGrid.Opacity, 0, LauncherRules.FadeOutMs / 1000.0);
+            _fade.Go(RootGrid.Opacity, 0, LauncherRules.FadeOutMs / 1000.0, Ease.QuadIn);   // Crossfade.cs RunFade: ease-in out
         }
 
         private void FinishFade()
         {
+            _fadeGuard.Stop();
             var then = _fadeThen;
             _fadeThen = null;
             if (then == null) return;
@@ -585,8 +608,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>Parked mid-exit: the hide still happens, at once.</summary>
-        private void FinishExit()
+        internal void FinishExit()
         {
+            _fadeGuard.Stop();
+            _fade.On = false;
+            RootGrid.Opacity = 1;
             var then = _exitThen + _fadeThen;
             _exitThen = _fadeThen = null;
             _exitIn = -1;
@@ -600,8 +626,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF LauncherSfx: one-shots through the head's CoreAudio, silent when the launcher's speaker is
         /// off, the master volume is 0 or the file is missing. ponytail: CoreAudio returns no handle, so WPF's
         /// three-voice hover cap and the IsOutputSuppressed probe have nothing to call here.</summary>
-        private static class LauncherSfx
+        internal static class LauncherSfx
         {
+            /// <summary>The hover throttle's clock (P08: tests step it).</summary>
+            internal static TimeProvider Clock = TimeProvider.System;
             private static readonly LauncherMelody Melody = new();
             private static DateTime _lastHover = DateTime.MinValue;
 
@@ -615,8 +643,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             /// <summary>The next note of the phrase LauncherMelody composes as the pointer moves; throttled.</summary>
             public static void Hover()
             {
-                var now = DateTime.UtcNow;
-                if ((now - _lastHover).TotalMilliseconds < LauncherMelody.MinGapMs) return;
+                var now = Clock.GetUtcNow().UtcDateTime;
+                var gap = (now - _lastHover).TotalMilliseconds;
+                if (gap >= 0 && gap < LauncherMelody.MinGapMs) return;   // a clock stepped back never mutes
                 _lastHover = now;
                 var cue = Melody.Next(now);
                 Play($"launcher/wood_{cue.Rung:00}.wav", (float)Math.Clamp(cue.Level, 0d, 1d) * 0.05f, "launcher-hover", "launcher/hover.wav");
