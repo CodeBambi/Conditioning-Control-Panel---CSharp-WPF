@@ -329,6 +329,23 @@ public sealed class BlinkTrainerSessionTests
         });
     }
 
+    /// <summary>Decisions 2026-10-08 (panic-surfaces): the safe word closes the camera too.</summary>
+    [Fact]
+    public void SafeWord_StopsTheCamera()
+    {
+        WithSession((_, _) =>
+        {
+            var shell = new ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+            try
+            {
+                Assert.True(WebcamTracker.Instance.Start());
+                shell.VoicePanic();
+                Assert.True(WaitUntil(() => !WebcamTracker.Instance.IsRunning));
+            }
+            finally { shell.Close(); }
+        });
+    }
+
     [Fact]
     public void AQueuedStart_CountsAsStarting_BeforeThePoolRunsIt()
     {

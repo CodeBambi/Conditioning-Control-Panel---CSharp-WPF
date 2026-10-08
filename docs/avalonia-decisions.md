@@ -602,3 +602,11 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   (Vosk, OpenCvSharp4, OnnxRuntime.Managed). Core `MandatoryVideoScheduler.KeepByLength` applies WPF's rule (a clip with
   no cached length is kept and parsed for the next refill); `DurationOf` is set by the Avalonia overlay on the shared
   LibVLC. WPF VideoService keeps its own filter and constructs the cache as before.
+## 2026-10-08: One panic registry; the safe word and the tray stop every surface (avalonia-port/panic-surfaces)
+- The panic key, the tray's Stop everything and the spoken safe word each call `PanicSurfaces.StopAll` once
+  (`CCP.Avalonia/Views/Windows/PanicSurfaces.cs`). As a result the safe word now also stops a Chaos run and the
+  camera, and the tray now also stops the lock-card scheduler and the Blink Trainer.
+- Deliberate deviation from WPF (whose routes each stop a hand-written subset): the safe word is the only exit under
+  Lockdown, so it must end everything the panic key would. Reviewer-checked (safety review, 2026-10-08).
+- Tests: `Tests/CCP.Avalonia.Tests/PanicSurfacesTests.cs` (routes call StopAll once, exact surface order, safe word
+  stops chaos and the camera, starter scan); each fail-proven.
