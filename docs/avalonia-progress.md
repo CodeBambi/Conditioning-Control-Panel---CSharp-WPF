@@ -1462,3 +1462,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-haptics-setup: +70
 - win-haptics-setup stub -> wired: a headless test drives the wizard from the Studio rack (Mock: gate refusal, connect, device list, Done, Test buzz, page re-read), fail-proven on 5 breaks; no product code changed.
 - Live sandbox run: premium veil matches WPF; with the veil lifted the gated connect is shown, and settings.json records Provider=Mock (evidence/rows-haptics-setup).
+
+## avalonia-port/help-loops-d: +686
+- Help-loop scenes ScreenOcr, RemoteControl and SessionEditor ported (17 of 23). HelpVideoWindow now shows the loop like WPF TryShowLoop, and the Session Editor ? opens it.
+- Rows stay stub: the help-loops-c scenes are pending, and the ScreenOcr/RemoteControl ? buttons are not attached (SetHelpContent not ported).
+
+## avalonia-port/rows-corner-gif: +502
+- win-corner-gif wired: standalone corner-GIF overlays (CornerGifOverlay, seeded CoreCornerGif) with stagger, crash sentinel, panic surface `corner-gif`; CornerGifOverlayTests fail-proven 4 ways; live X readback in evidence/avalonia-port/rows-corner-gif/.
+- Still missing: session-scoped corner GIF in SessionRunner, so the Presets corner-GIF option stays hidden; live panic not reproduced (headless only).

@@ -40,6 +40,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // bubbles, pink filter), pop quizzes and open lock cards.
             new("engine", _ => MainShellWindow.StopEngine()),
             new("pink-rush", _ => PinkRushHost.Stop()),                 // WPF StopEngine -> SkillTree.Stop: the 3x ends
+            // WPF :1967 "corner GIFs": the standalone Spiral-card slots close (settings untouched) and queued ones cancel.
+            new("corner-gif", _ => Overlays.CornerGifOverlay.StopAll()),
             new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
             new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
         };
