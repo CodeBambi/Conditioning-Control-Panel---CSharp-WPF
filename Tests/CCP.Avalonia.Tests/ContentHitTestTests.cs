@@ -31,44 +31,59 @@ public sealed class ContentHitTestTests
                 AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
                     .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                     .SetupWithoutStarting();
+            // Performance tier for this shell: no ambient loops (the section edge's fog/ember strips and
+            // lift run Forever at Full). Under the headless platform a repaint's commit brings the next
+            // frame round at once, so a Forever loop keeps every RunJobs rendering for hundreds of ms;
+            // the pointer then rests on a row past its 500 ms ToolTip delay and the tooltip covers the
+            // next control. This test is about hit-testing the pages, not about the FX.
+            var settings = ConditioningControlPanel.CoreSettings.Current;
+            var oldPerformance = settings.PerformanceMode;
+            settings.PerformanceMode = true;
             var w = new MainShellWindow();
-            w.Show();
-            Dispatcher.UIThread.RunJobs();
-            var misses = new List<string>();
-            foreach (var (tab, panelName) in new[] { ("studio", "StudioTab"), ("presets", "PresetsTab"), ("awareness", "AwarenessTab"), ("quests", "QuestsTab") })
+            try
             {
-                w.ShowTab(tab);
-                // The logged-out cover is WPF behaviour (MainWindow.Login.cs:378); test the tab under it.
-                if (tab == "quests") w.Named<Control>(panelName)!.FindControl<Border>("QuestsLoginOverlay")!.IsVisible = false;
-                // Same for the free-tier veil (WPF MainWindow.Patreon.cs:63 RefreshPremiumGate).
-                if (tab == "awareness") w.Named<Control>(panelName)!.FindControl<Border>("AwarenessGate")!.IsVisible = false;
+                w.Show();
                 Dispatcher.UIThread.RunJobs();
-                // Hit testing reads the compositor's last frame: a tab shown since then is not in it yet.
-                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-                Dispatcher.UIThread.RunJobs();
-                int tested = 0;
-                foreach (var b in w.Named<Control>(panelName)!.GetVisualDescendants().OfType<Button>().ToList())
+                var misses = new List<string>();
+                foreach (var (tab, panelName) in new[] { ("studio", "StudioTab"), ("presets", "PresetsTab"), ("awareness", "AwarenessTab"), ("quests", "QuestsTab") })
                 {
-                    if (!b.IsEffectivelyVisible || !b.IsEffectivelyEnabled || b.Bounds.Width < 4 || b.TemplatedParent is ScrollBar) continue;
-                    var p = b.TranslatePoint(new Point(b.Bounds.Width / 2, b.Bounds.Height / 2), w)!.Value;
-                    if (!new Rect(w.Bounds.Size).Contains(p) || b.GetVisualAncestors().OfType<ScrollViewer>().Any(s => !Inside(s, p, w))) continue;
-                    if (w.GetVisualsAt(p).OfType<Button>().FirstOrDefault(o => o != b && !b.IsVisualAncestorOf(o)) is { } over && !over.IsVisualAncestorOf(b)) continue;   // another control drawn on top, e.g. the Start footer
-                    tested++;
-                    var hit = w.InputHitTest(p) as Visual;
-                    bool pressed = false;
-                    void Swallow(object? s, PointerPressedEventArgs e) { pressed = true; e.Handled = true; }
-                    b.AddHandler(InputElement.PointerPressedEvent, Swallow, RoutingStrategies.Tunnel);
-                    w.MouseDown(p, MouseButton.Left);
-                    w.MouseUp(p, MouseButton.Left);
+                    w.ShowTab(tab);
+                    // The logged-out cover is WPF behaviour (MainWindow.Login.cs:378); test the tab under it.
+                    if (tab == "quests") w.Named<Control>(panelName)!.FindControl<Border>("QuestsLoginOverlay")!.IsVisible = false;
+                    // Same for the free-tier veil (WPF MainWindow.Patreon.cs:63 RefreshPremiumGate).
+                    if (tab == "awareness") w.Named<Control>(panelName)!.FindControl<Border>("AwarenessGate")!.IsVisible = false;
                     Dispatcher.UIThread.RunJobs();
-                    b.RemoveHandler(InputElement.PointerPressedEvent, (System.EventHandler<PointerPressedEventArgs>)Swallow);
-                    if (hit is null || (hit != b && !b.IsVisualAncestorOf(hit)) || !pressed)
-                        misses.Add($"{tab} {b.Name ?? b.GetType().Name} @{p}: hit {hit?.GetType().Name}/{(hit as Control)?.Name}, pressed {pressed}");
+                    // Hit testing reads the compositor's last frame: a tab shown since then is not in it yet.
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    Dispatcher.UIThread.RunJobs();
+                    int tested = 0;
+                    foreach (var b in w.Named<Control>(panelName)!.GetVisualDescendants().OfType<Button>().ToList())
+                    {
+                        if (!b.IsEffectivelyVisible || !b.IsEffectivelyEnabled || b.Bounds.Width < 4 || b.TemplatedParent is ScrollBar) continue;
+                        var p = b.TranslatePoint(new Point(b.Bounds.Width / 2, b.Bounds.Height / 2), w)!.Value;
+                        if (!new Rect(w.Bounds.Size).Contains(p) || b.GetVisualAncestors().OfType<ScrollViewer>().Any(s => !Inside(s, p, w))) continue;
+                        if (w.GetVisualsAt(p).OfType<Button>().FirstOrDefault(o => o != b && !b.IsVisualAncestorOf(o)) is { } over && !over.IsVisualAncestorOf(b)) continue;   // another control drawn on top, e.g. the Start footer
+                        tested++;
+                        var hit = w.InputHitTest(p) as Visual;
+                        bool pressed = false;
+                        void Swallow(object? s, PointerPressedEventArgs e) { pressed = true; e.Handled = true; }
+                        b.AddHandler(InputElement.PointerPressedEvent, Swallow, RoutingStrategies.Tunnel);
+                        w.MouseDown(p, MouseButton.Left);
+                        w.MouseUp(p, MouseButton.Left);
+                        Dispatcher.UIThread.RunJobs();
+                        b.RemoveHandler(InputElement.PointerPressedEvent, (System.EventHandler<PointerPressedEventArgs>)Swallow);
+                        if (hit is null || (hit != b && !b.IsVisualAncestorOf(hit)) || !pressed)
+                            misses.Add($"{tab} {b.Name ?? b.GetType().Name} @{p}: hit {hit?.GetType().Name}/{(hit as Control)?.Name}, pressed {pressed}");
+                    }
+                    Assert.True(tested >= 3, $"{tab}: only {tested} buttons on screen to test");
                 }
-                Assert.True(tested >= 3, $"{tab}: only {tested} buttons on screen to test");
+                Assert.True(misses.Count == 0, string.Join("\n", misses));
             }
-            w.Close();
-            Assert.True(misses.Count == 0, string.Join("\n", misses));
+            finally
+            {
+                w.Close();
+                settings.PerformanceMode = oldPerformance;
+            }
             return Task.CompletedTask;
         });
     }
