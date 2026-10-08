@@ -99,6 +99,55 @@ namespace ConditioningControlPanel.Avalonia.Helpers
             }
         }
 
+        private static readonly System.Collections.Generic.Dictionary<(string, int), Bitmap?> BannerCache = new();
+
+        /// <summary>WPF CosmeticsCatalog.GetBannerImage (1024) / GetBannerThumbnail (256) as a brush: a gradient
+        /// preset, or the scene art decoded at <paramref name="decodeWidth"/>, UniformToFill. Null for an unknown id
+        /// or art that will not load (the caller keeps its default gradient). Decodes, misses included, are cached.</summary>
+        internal static IBrush? Banner(string? id, int decodeWidth, AlignmentY alignY = AlignmentY.Center)
+        {
+            var option = ConditioningControlPanel.Services.CosmeticsPool.FindBanner(id);
+            if (option == null) return null;
+            if (option.Gradient is { } g)
+                return new LinearGradientBrush
+                {
+                    StartPoint = new global::Avalonia.RelativePoint(0, 0, global::Avalonia.RelativeUnit.Relative),
+                    EndPoint = new global::Avalonia.RelativePoint(1, 1, global::Avalonia.RelativeUnit.Relative),
+                    GradientStops = { new GradientStop(Color.Parse(g.From), 0), new GradientStop(Color.Parse(g.Via), 0.5), new GradientStop(Color.Parse(g.To), 1) }
+                };
+            Bitmap? art;
+            lock (BannerCache)
+            {
+                if (!BannerCache.TryGetValue((option.Id, decodeWidth), out art))
+                {
+                    try { using var stream = AssetLoader.Open(new Uri($"avares://CCP.Avalonia/{option.PackPath}")); art = Decode(stream, decodeWidth); }
+                    catch (Exception ex) { Log.Debug("CosmeticsCatalog: banner {Id} failed to load: {E}", option.Id, ex.Message); }
+                    BannerCache[(option.Id, decodeWidth)] = art;
+                }
+            }
+            return art == null ? null : new ImageBrush(art) { Stretch = Stretch.UniformToFill, AlignmentY = alignY };
+        }
+
+        /// <summary>WPF CosmeticsCatalog.GetAvatarImage: a preset avatar's PNG off disk at 256px, cached misses
+        /// included; null when the id or its art is absent.</summary>
+        internal static Bitmap? AvatarPreset(string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return null;
+            lock (WardrobeCache)
+            {
+                var key = "avatar:" + id;
+                if (WardrobeCache.TryGetValue(key, out var cached)) return cached;
+                Bitmap? art = null;
+                try
+                {
+                    var path = ConditioningControlPanel.Services.CosmeticsPool.AvatarPath(id);
+                    if (path != null && File.Exists(path)) { using var file = File.OpenRead(path); art = Decode(file, 256); }
+                }
+                catch (Exception ex) { Log.Debug("CosmeticsCatalog: avatar preset {Id} failed to load: {E}", id, ex.Message); }
+                return WardrobeCache[key] = art;
+            }
+        }
+
             /// <summary>WPF's DecodePixelWidth: decode straight to the width a surface shows, never larger.</summary>
         private static Bitmap Decode(Stream stream, int? width)
             => width is int w ? Bitmap.DecodeToWidth(stream, w) : new Bitmap(stream);

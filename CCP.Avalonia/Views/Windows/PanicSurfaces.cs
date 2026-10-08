@@ -30,6 +30,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("ai-followups", _ => MainShellWindow.CancelPendingAi()),
             // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
             new("blink-trainer", _ => Overlays.BlinkTrainerSession.Stop()),
+            new("mantra", _ => MantraWindow.StopForPanic()),                // WPF KillAllAudio -> Mantra?.Dispose()
             new("chaos", _ => Chaos.ChaosRunHost.ForceShutdown(), () => Chaos.ChaosRunHost.IsDescending),
             // WPF PanicStopEverySurface (:1992): the toys go to zero, bypassing throttles and gates.
             new("haptics", _ => CoreHaptics.Service?.PanicStop()),
@@ -39,6 +40,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // then ends Takeover pulses, desktop overlays (subliminal/whisper, mind wipe, spiral, video,
             // bubbles, pink filter), pop quizzes and open lock cards.
             new("engine", _ => MainShellWindow.StopEngine()),
+            new("pink-rush", _ => PinkRushHost.Stop()),                 // WPF StopEngine -> SkillTree.Stop: the 3x ends
+            // WPF :1967 "corner GIFs": the standalone Spiral-card slots close (settings untouched) and queued ones cancel.
+            new("corner-gif", _ => Overlays.CornerGifOverlay.StopAll()),
             new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
             new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
         };

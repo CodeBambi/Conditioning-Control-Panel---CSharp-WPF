@@ -133,6 +133,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e) { }
         private void BtnStartTodaySession_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProgramSubmitRitual_Click(object? sender, RoutedEventArgs e) { }
+
+        /// <summary>WPF MainWindow.ProgramsTab.cs:2174 BtnProgramOpenMantras_Click.</summary>
+        internal void BtnProgramOpenMantras_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is not Button btn) return;
+                (TopLevel.GetTopLevel(this) as MainShellWindow)?.StartMantraSession(btn.Tag is int n ? n : 1);
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Program mantra launch failed"); }
+        }
         private void BtnProgramRestart_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProgramDismissGraduated_Click(object? sender, RoutedEventArgs e) { }
 
@@ -341,6 +352,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>Ritual tasks get the photo picker; auto-verified ones never do.</summary>
         public bool SubmitVisible { get; set; }
+
+        /// <summary>WPF OpenVisibility (#1230): the Mantra task's door to the typed mantra game.</summary>
+        public bool OpenVisible { get; set; }
+
+        /// <summary>Reps to hand <c>StartMantraSession</c> when <see cref="OpenVisible"/>.</summary>
+        public int OpenReps { get; set; } = 1;
 
         public double RowOpacity { get; set; } = 1.0;
         public IBrush TextBrush { get; set; } = Brushes.White;

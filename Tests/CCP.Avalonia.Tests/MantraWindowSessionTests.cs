@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -96,6 +97,166 @@ public sealed class MantraWindowSessionTests
             (MemoryStore.SignalMirrorFactory, MemorySignalWriter.SourcesHook, CompanionBrain.UserMessageSent) = (factory, sources, sent);
             AvApp.StopMantra(Array.Empty<Window>());   // deletes ToneWav's temp folder
             Directory.Delete(dir, true);
+        }
+        return Task.CompletedTask;
+    });
+
+    private sealed class SteppedClock : TimeProvider
+    {
+        public long Now;
+        public override long GetTimestamp() => Now;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public void Ms(double ms) => Now += (long)(ms * TimeSpan.TicksPerMillisecond);
+    }
+
+    /// <summary>The five WPF Storyboards (MantraWindow.xaml:14-58) on a stepped clock: the glow breathes
+    /// 0 -> 0.3 -> 0 over 4 s, a wrong letter shakes 4 px at 30 ms, a right one pulses 1.02 at 80 ms,
+    /// a completed line pulses 1.06 at 150 ms and a broken streak shakes 8 px at 50 ms; all settle.</summary>
+    [Fact]
+    public Task StoryboardsStepOnTheClock() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<AvApp>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+
+        var (opener, clock0, play) = (MantraWindow.DroneOpener, MantraWindow.Clock, CoreAudio.PlayOneShotProvider);
+        var clock = new SteppedClock { Now = 1_000_000 };
+        MantraWindow.DroneOpener = _ => new FakeDrone();
+        MantraWindow.Clock = clock;
+        CoreAudio.PlayOneShotProvider = (_, _, _, _, done) => done?.Invoke();
+        MantraWindow? win = null;
+        try
+        {
+            AvApp.Mantra.StartSession(3);
+            var line = AvApp.Mantra.CurrentMantra!;
+            win = new MantraWindow();
+            win.Show();
+            Dispatcher.UIThread.RunJobs();
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            void Tick(double ms) { clock.Ms(ms); typeof(MantraWindow).GetMethod("FloatTimer_Tick", flags)!.Invoke(win, new object?[] { null, EventArgs.Empty }); }
+            void Call(string m) => typeof(MantraWindow).GetMethod(m, flags)!.Invoke(win, null);
+            var mantra = win.FindControl<TextBlock>("TxtMantra")!;
+            var group = (global::Avalonia.Media.TransformGroup)mantra.RenderTransform!;
+            var scale = (global::Avalonia.Media.ScaleTransform)group.Children[0];
+            var move = (global::Avalonia.Media.TranslateTransform)group.Children[1];
+            var glow = win.FindControl<Border>("GlowOverlay")!;
+
+            Tick(1000);
+            Assert.Equal(0.15, glow.Opacity, 3);
+            Tick(2000);
+            Assert.Equal(0.15, glow.Opacity, 3);   // reversing
+
+            var box = win.FindControl<TextBox>("TxtInput")!;
+            box.Text = line[0] == '#' ? "%" : "#";   // WrongShakeStoryboard
+            Dispatcher.UIThread.RunJobs();
+            Tick(30);
+            Assert.Equal(4, move.X, 3);
+            Tick(200);
+            Assert.Equal(0, move.X, 3);
+
+            box.Text = "";
+            Dispatcher.UIThread.RunJobs();
+            box.Text = line[..1];                  // LetterPulseStoryboard
+            Dispatcher.UIThread.RunJobs();
+            Tick(80);
+            Assert.Equal(1.02, scale.ScaleX, 3);
+            Tick(100);
+            Assert.Equal(1, scale.ScaleY, 3);
+
+            Call("OnMantraCompleted");             // PulseStoryboard
+            Tick(150);
+            Assert.Equal(1.06, scale.ScaleY, 3);
+            Tick(200);
+            Assert.Equal(1, scale.ScaleX, 3);
+
+            Call("OnStreakBroken");                // ShakeStoryboard
+            Tick(50);
+            Assert.Equal(8, move.X, 3);
+            Tick(25);
+            Assert.Equal(0, move.X, 3);
+            Tick(300);
+            Assert.Equal(0, move.X, 3);
+        }
+        finally
+        {
+            win?.Close();
+            (MantraWindow.DroneOpener, MantraWindow.Clock, CoreAudio.PlayOneShotProvider) = (opener, clock0, play);
+        }
+        return Task.CompletedTask;
+    });
+
+    /// <summary>WPF #1230: a Mantra task's "open" button on the Programs tab opens the typed game at the
+    /// task's rep count (BtnProgramOpenMantras_Click -> StartMantraSession); a second press re-uses it.</summary>
+    [Fact]
+    public Task ProgramTaskDoorOpensTheMantraLabAtTheTaskReps() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<AvApp>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+
+        var opener = MantraWindow.DroneOpener;
+        MantraWindow.DroneOpener = _ => new FakeDrone();
+        MainShellWindow? shell = null;
+        try
+        {
+            shell = new MainShellWindow();
+            shell.Show();
+            Dispatcher.UIThread.RunJobs();
+            var tab = shell.Named<ConditioningControlPanel.Avalonia.Views.Tabs.ProgramsTabView>("ProgramsTab")!;
+
+            tab.BtnProgramOpenMantras_Click(new Button { Tag = 4 }, new global::Avalonia.Interactivity.RoutedEventArgs());
+            Dispatcher.UIThread.RunJobs();
+
+            var lab = Assert.Single(shell.OwnedWindows.OfType<MantraWindow>());
+            Assert.True(lab.IsVisible);
+            Assert.True(AvApp.Mantra.IsActive);
+            Assert.Equal(4, AvApp.Mantra.TargetCount);
+            Assert.Equal("/4", lab.FindControl<TextBlock>("TxtTarget")!.Text);
+            lab.Close();
+            Assert.False(AvApp.Mantra.IsActive);
+        }
+        finally
+        {
+            foreach (var w in shell?.OwnedWindows.ToArray() ?? Array.Empty<Window>()) w.Close();
+            shell?.Close();
+            MantraWindow.DroneOpener = opener;
+        }
+        return Task.CompletedTask;
+    });
+
+    /// <summary>Panic (PanicSurfaces "mantra", WPF KillAllAudio -> Mantra?.Dispose()): the session ends,
+    /// the open window goes inert and its drone stops.</summary>
+    [Fact]
+    public Task PanicStopsTheDroneAndEndsTheSession() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<AvApp>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+
+        var (opener, all) = (MantraWindow.DroneOpener, PanicSurfaces.All);
+        var drone = new FakeDrone();
+        MantraWindow.DroneOpener = _ => drone;
+        MantraWindow? win = null;
+        try
+        {
+            PanicSurfaces.All = PanicSurfaces.All.Where(s => s.Id == "mantra").ToArray();
+            AvApp.Mantra.StartSession(3);
+            win = new MantraWindow();
+            win.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            PanicSurfaces.StopAll("test");
+
+            Assert.True(drone.Disposed);
+            Assert.False(AvApp.Mantra.IsActive);
+        }
+        finally
+        {
+            win?.Close();
+            (MantraWindow.DroneOpener, PanicSurfaces.All) = (opener, all);
         }
         return Task.CompletedTask;
     });

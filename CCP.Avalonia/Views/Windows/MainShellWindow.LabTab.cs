@@ -26,7 +26,7 @@
 //   half-port would cost the user's trust.
 //
 // The rest is genuinely the device: WebcamTrackingService and its debug counters, the calibration
-// and quick-recal flows, the loading splash, GazeSide/FocusGaze, the blink trainer's countdown,
+// and quick-recal flows, GazeSide/FocusGaze, the blink trainer's countdown,
 // the camera and monitor enumerations, and the two consent buttons (WebcamConsent itself IS in
 // Core, but "revoke" has to stop a running capture, which is App.Webcam again).
 //
@@ -73,10 +73,7 @@
 //   private void WebcamActivePill_Click(…)
 //   internal async void BtnWebcamDebugStart_Click(…)
 //   private async Task<bool> StartWebcamOffUiThreadAsync(…)
-//   private WebcamLoadingSplash? _webcamLoadingSplash
-//   private Action<double, string>? _onWebcamStartupProgress
-//   private Action<WebcamTrackingState>? _onWebcamStartupState
-//   private void InstallWebcamLoadingSplash(…)
+//   private void InstallWebcamLoadingSplash(…)          PORTED: MainShellWindow.WebcamSplash.cs
 //   private void EnsureWebcamDebugSubscribed(…)
 //   private void UnsubscribeWebcamDebug(…)
 //   private void UpdateWebcamDebugCounters(…)

@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Windows;
+using Point = ConditioningControlPanel.Services.Chaster.ScreenPoint;
 using ConditioningControlPanel.Services.EmiDesk;
 using Xunit;
 

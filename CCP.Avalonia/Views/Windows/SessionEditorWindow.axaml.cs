@@ -30,9 +30,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    fires the dialog without awaiting it and its two callers stay synchronous.
     ///  - Import/Export use Core's <c>SessionFileService</c> with <c>StorageProvider</c> pickers in
     ///    place of <c>OpenFileDialog</c>/<c>SaveFileDialog</c>.
-    ///  - <c>BtnHelp</c> keeps the coach-mark overlay instead of the clip on purpose; see the
-    ///    handler. The old note said the lookup and the hand-off were
-    ///    a stub; the button opens the coach-mark overlay, which was WPF's own fallback.
+    ///  - <c>BtnHelp</c> opens the drawn help loop in HelpVideoWindow like WPF; a clip alone keeps
+    ///    the coach-mark overlay (no video surface here); see the handler.
     ///  - Mouse -> pointer: <c>DragMove</c> -> <c>BeginMoveDrag</c>, <c>CaptureMouse</c> ->
     ///    <c>e.Pointer.Capture</c>, <c>MouseRightButtonDown</c> -> <c>PointerPressed</c> filtered
     ///    on <c>IsRightButtonPressed</c>, <c>Line.X1/Y1/X2/Y2</c> -> <c>StartPoint/EndPoint</c>,
@@ -171,12 +170,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnHelp_Click()
         {
-            // DELIBERATE DEVIATION, not a stub. WPF preferred the tutorial clip when the topic
-            // shipped one and fell back to this overlay. Both halves are reachable now
-            // (HelpContentService is Core's, HelpVideoWindow is this head's) and "SessionEditor"
-            // does ship a clip - but this head has no video surface, so taking the video branch
-            // would ALWAYS swap a working coach-mark walkthrough for a caption-only popup. Restore
-            // the WPF order only once a clip can actually play here.
+            // WPF SessionEditorWindow.BtnHelp_Click: prefer the help loop (or a clip) when the topic
+            // has one; otherwise the coach-mark overlay. Deviation: a clip alone does not take the
+            // video branch - this head has no video surface, so it would swap a working walkthrough
+            // for a caption-only popup.
+            var content = Services.HelpContentService.GetContent("SessionEditor");
+            if (ConditioningControlPanel.Avalonia.Controls.HelpLoops.HelpLoopRegistry.Has(content.SectionId))
+            {
+                HelpVideoWindow.Show(content, this);
+                return;
+            }
             TutorialOverlay.IsVisible = true;
         }
 

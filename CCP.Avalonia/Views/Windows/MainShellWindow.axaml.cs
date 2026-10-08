@@ -117,6 +117,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeLockdownGreys(); // MainShellWindow.Lockdown.cs (WPF Lab.cs:612/707)
             InitializeInviteTicket(); // MainShellWindow.InviteTicket.cs (WPF MainWindow.xaml.cs, main e2d4e35ef)
             InitializeInviteEnding(); // MainShellWindow.Patreon.cs (WPF MainWindow.xaml.cs:3590, main fbe161de2)
+            InitializeWebcamLoadingSplash(); // MainShellWindow.WebcamSplash.cs (WPF MainWindow.xaml.cs:3631)
+            InitializeOfflineModeUI(); // MainShellWindow.OfflineMode.cs (WPF MainWindow.Settings.cs:122)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
             Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
             Closed += (_, _) => _avatarTubeWindow?.Close();
@@ -256,7 +258,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 //   private bool _wasAutonomyRunningBeforeMinimize
 //   private bool _wasAvatarUnmutedBeforeMinimize
 //   private Dictionary<string, Image> _achievementImages
-//   private PinkRushPopup? _pinkRushPopup
+//   (_pinkRushPopup: PinkRushHost.Popup)
 //   private Window? _luckyProcPopup
 //   private DispatcherTimer? _rampTimer
 //   private DateTime _rampStartTime

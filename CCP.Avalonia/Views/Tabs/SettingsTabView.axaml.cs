@@ -24,10 +24,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// mask (it needs nothing but its own width), the advanced-audio disclosure (purely local -
     /// nothing below it owns state) and starting the one ambient canvas.</para>
     ///
-    /// <para><b>Dropped:</b> the <c>IsVisibleChanged</c> hook that told
-    /// <c>MainWindow.OnDashboardTabVisibilityChanged</c> when the Dashboard came and went. The
-    /// seam is MainWindow's, not this view's; it is a stub on the Avalonia twin
-    /// (<c>AttachedToVisualTree</c>) below.</para>
+    /// <para>The <c>IsVisibleChanged</c> hook that tells
+    /// <c>MainShellWindow.OnDashboardTabVisibilityChanged</c> when the Dashboard comes and goes is
+    /// ported (attach + IsVisible) in the constructor.</para>
     /// </summary>
     public partial class SettingsTabView : UserControl
     {
@@ -57,12 +56,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // instantiated for the app's life, so the _fxComposed guard keeps this to once.
             AttachedToVisualTree += OnDashboardAttached;
 
+            // WPF IsVisibleChanged -> MainWindow.OnDashboardTabVisibilityChanged (the ? box and
+            // One Account cards). Attach covers the launch: the app lands here with no IsVisible flip.
+            AttachedToVisualTree += (_, _) => NotifyShellVisibility();
+            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) NotifyShellVisibility(); };
+
             WireStubs();
         }
 
         // ------------------------------------------------------------------------------
         // The real ports.
         // ------------------------------------------------------------------------------
+
+        private void NotifyShellVisibility()
+        {
+            try { (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OnDashboardTabVisibilityChanged(IsVisible); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Dashboard visibility hook failed"); }
+        }
 
         private void OnDashboardAttached(object? sender, EventArgs e)
         {
@@ -81,9 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 });
 
                 // ponytail: needs MainWindow.RegisterTabFx("settings", MosaicFx) - the
-                // park/resume hook and the motion kill-switch's reach - and
-                // MainWindow.OnDashboardTabVisibilityChanged, which owns the one-shot "? box"
-                // explainer. Both are MainWindow's; wired when the ambient registry and the tab
+                // park/resume hook and the motion kill-switch's reach. It is MainWindow's; wired when the ambient registry and the tab
                 // navigation move to Core. Until then the canvas parks itself on detach
                 // (AmbientFxCanvas.Evaluate), which is why running it here is safe.
             }

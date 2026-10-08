@@ -145,6 +145,7 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static string? FindOllamaExecutable()
         {
+            if (!OperatingSystem.IsWindows()) return FindOnPath(Environment.GetEnvironmentVariable("PATH"));
             // Detection only: any of these existing means Ollama is installed.
             // Standard per-user install location (Ollama uses NSIS, installs to %LOCALAPPDATA%).
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -167,10 +168,26 @@ namespace ConditioningControlPanel.Services.AIService
         /// </summary>
         private static string? FindOllamaCli()
         {
+            if (!OperatingSystem.IsWindows()) return FindOnPath(Environment.GetEnvironmentVariable("PATH"));
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var path = Path.Combine(localAppData, "Programs", "Ollama", "ollama.exe");
             try { return File.Exists(path) ? path : null; }
             catch { return null; }
+        }
+
+        /// <summary>Linux/macOS: the `ollama` binary from PATH, then the official install script's and the
+        /// distro packages' locations. Never installs anything (decision: no auto-install off Windows).</summary>
+        internal static string? FindOnPath(string? pathVar)
+        {
+            var dirs = new List<string>((pathVar ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+            dirs.Add("/usr/local/bin");
+            dirs.Add("/usr/bin");
+            foreach (var d in dirs)
+            {
+                try { var p = Path.Combine(d, "ollama"); if (File.Exists(p)) return p; }
+                catch { /* bad PATH entry - skip */ }
+            }
+            return null;
         }
 
         private static async Task<(bool reachable, List<string> models)> TryListModelsAsync(

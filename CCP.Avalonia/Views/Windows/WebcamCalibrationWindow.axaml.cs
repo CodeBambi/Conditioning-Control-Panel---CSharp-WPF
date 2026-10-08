@@ -28,8 +28,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// (panic, revoke) or the X before the save restores the previously live calibration (WPF leaves the
     /// unsaved candidate live); the mouth prompts always time out (no MAR detector yet); the redo prompt
     /// is ConfirmAsync (Yes / Cancel); Close(bool) for DialogResult; Screens.ScreenFromWindow for the monitor.
-    /// ponytail: the verify cursor and the bubble test need GazeDebugCursorService (a WPF overlay
-    /// window), not ported: Verify runs its countdown only and the bubble test only places a bubble.
+    /// Verify's live cursor is a pink dot in this window (WPF: GazeDebugCursorService's overlay, minus its trail).
+    /// ponytail: the bubble test (WPF RunBubbleTestAsync, gaze attractor, auto-fix) is not ported: it only places a bubble.
     /// The ring pulse is a DispatcherTimer: Avalonia's Animation cannot target a Transform.
     /// </summary>
     public partial class WebcamCalibrationWindow : Window
@@ -68,10 +68,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly Border _verifyPanel;
         private readonly TextBlock _txtVerifyStatus;
         private readonly Button _btnVerifyAccuracy;
+        private readonly Ellipse _verifyCursor;
 
         private DispatcherTimer? _ringPulse;
-        private DispatcherTimer? _verifyCountdownTimer;
-        private int _verifyCountdownSecondsLeft;
+        private int _verifyCountdownSecondsLeft, _verifyToken;
+        private bool _verifyGazeSubscribed;
         private bool _completedOk;
 
         // Per-dot iris samples tagged with the head pose at that frame, and the session's poses.
@@ -119,6 +120,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _verifyPanel = this.FindControl<Border>("VerifyPanel")!;
             _txtVerifyStatus = this.FindControl<TextBlock>("TxtVerifyStatus")!;
             _btnVerifyAccuracy = this.FindControl<Button>("BtnVerifyAccuracy")!;
+            _verifyCursor = this.FindControl<Ellipse>("VerifyCursor")!;
 
             // FindControl is constrained to Control, so the named ScaleTransform is reached through
             // its owner's RenderTransform (authored in this file, so Single() is deterministic).
@@ -184,7 +186,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _collecting = false;
             _introDone.TrySetResult(false);
             StopRingPulse();
-            _verifyCountdownTimer?.Stop();
+            StopVerifyCountdown();
             if (!_subscribed) return;
             Tracker.OnRawIris -= OnRawIris;
             Tracker.OnHeadPose -= OnHeadPose;
@@ -443,7 +445,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF App.ApplyCalibrationScreenPlacement: start on the monitor the last calibration
         /// ran on (matched by pixel origin) so Maximized lands there; unknown monitor: leave it.</summary>
-        private static void PlaceOnCalibratedScreen(Window window)
+        internal static void PlaceOnCalibratedScreen(Window window)
         {
             if (Tracker.Calibration?.MonitorBounds is not { } mb || window.Screens is not { } screens) return;
             if (screens.All.FirstOrDefault(s => s.Bounds.X == mb.X && s.Bounds.Y == mb.Y) is not { } sc) return;
@@ -451,23 +453,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             window.Position = sc.Bounds.Position;
         }
 
-        private void BtnVerifyAccuracy_Click()
+        /// <summary>WPF: the live cursor for 15 s (re-click restarts the countdown), on the window's clock.</summary>
+        private async void BtnVerifyAccuracy_Click()
         {
+            int token = ++_verifyToken;
+            if (!_verifyGazeSubscribed) { Tracker.OnGazeMove += OnVerifyGaze; _verifyGazeSubscribed = true; }
             _verifyCountdownSecondsLeft = 15;
             UpdateVerifyCountdownUi();
-            if (_verifyCountdownTimer == null)
-            {
-                _verifyCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _verifyCountdownTimer.Tick += (_, _) =>
-                {
-                    _verifyCountdownSecondsLeft--;
-                    if (_verifyCountdownSecondsLeft <= 0) StopVerifyCountdown();
-                    else UpdateVerifyCountdownUi();
-                };
-            }
-            _verifyCountdownTimer.Stop();
-            _verifyCountdownTimer.Start();
             _btnVerifyAccuracy.IsEnabled = false;
+            while (true)
+            {
+                await Delay(1000);
+                if (token != _verifyToken) return;
+                if (--_verifyCountdownSecondsLeft <= 0) { StopVerifyCountdown(); return; }
+                UpdateVerifyCountdownUi();
+            }
+        }
+
+        internal void OnVerifyGaze(Point p)
+        {
+            Canvas.SetLeft(_verifyCursor, p.X - _verifyCursor.Width / 2);
+            Canvas.SetTop(_verifyCursor, p.Y - _verifyCursor.Height / 2);
+            _verifyCursor.IsVisible = true;
         }
 
         private void UpdateVerifyCountdownUi() =>
@@ -475,7 +482,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void StopVerifyCountdown()
         {
-            _verifyCountdownTimer?.Stop();
+            _verifyToken++;
+            if (_verifyGazeSubscribed) { Tracker.OnGazeMove -= OnVerifyGaze; _verifyGazeSubscribed = false; }
+            _verifyCursor.IsVisible = false;
             _btnVerifyAccuracy.IsEnabled = true;
             _txtVerifyStatus.Text = "Click Verify to preview accuracy with a live gaze cursor, or close when ready.";
         }

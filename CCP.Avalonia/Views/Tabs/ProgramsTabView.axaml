@@ -1134,6 +1134,18 @@
                                                             Click="BtnProgramSubmitRitual_Click">
                                                         <TextBlock Text="{loc:Str btn_program_submit_photo}"/>
                                                     </Button>
+
+                                                    <!-- The mantra door (#1230), WPF ProgramsTabView.xaml:1241. -->
+                                                    <Button Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                                                            MinWidth="120" Margin="0,10,0,0"
+                                                            HorizontalAlignment="Left"
+                                                            HorizontalContentAlignment="Center"
+                                                            IsVisible="{Binding OpenVisible}"
+                                                            Tag="{Binding OpenReps}"
+                                                            Theme="{StaticResource SecondaryButton}"
+                                                            Click="BtnProgramOpenMantras_Click">
+                                                        <TextBlock Text="{loc:Str btn_program_open_mantras}"/>
+                                                    </Button>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
