@@ -126,28 +126,49 @@ public sealed class TubeContentGatesTests
         var dir = Directory.CreateTempSubdirectory("ccp-mod-").FullName;
         var counter = new ModerationCounter(Path.Combine(dir, "moderation-counter.json"));
         CoreModerationLog.CounterProvider = () => counter;
-        var tube = new AvatarTubeWindow(null);
+        ContentPolicyWarningDialog? opened = null;
+        using var hook = Window.WindowOpenedEvent.AddClassHandler<ContentPolicyWarningDialog>((w, _) => opened = w);
+        var shell = new Window();
+        var tube = new AvatarTubeWindow(shell);
         try
         {
+            // Visible shell: the warning is owned by it, as WPF's Owner = _parentWindow.
+            shell.Show();
             tube.Show();
             counter.RecordHit(ProhibitedCategory.Illegal, "input");
             counter.RecordHit(ProhibitedCategory.Illegal, "input");
             Dispatcher.UIThread.RunJobs();
-            Assert.Empty(tube.OwnedWindows.OfType<ContentPolicyWarningDialog>());
+            Assert.Null(opened);
             counter.RecordHit(ProhibitedCategory.Illegal, "input");
-            var dlg = Dialog<ContentPolicyWarningDialog>(tube);
+            var dlg = Dialog<ContentPolicyWarningDialog>(shell);
             Assert.Contains("3", dlg.FindControl<TextBlock>("TxtBodyCount")!.Text);
             dlg.FindControl<Button>("BtnOk")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
-            Assert.Empty(tube.OwnedWindows.OfType<ContentPolicyWarningDialog>());
+            Assert.Empty(shell.OwnedWindows.OfType<ContentPolicyWarningDialog>());
+
+            // Shell and tube hidden in the tray: WPF still shows the warning, so must this head.
+            opened = null;
+            shell.Hide();
+            tube.Hide();
+            OnWarning(tube, counter);
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotNull(opened);
+            Assert.True(opened!.IsVisible);
+            opened.Close();
         }
         finally
         {
-            foreach (var w in tube.OwnedWindows.ToArray()) w.Close();
+            foreach (var w in shell.OwnedWindows.ToArray()) w.Close();
             tube.Close();
+            shell.Close();
             CoreModerationLog.CounterProvider = previous;
             Directory.Delete(dir, true);
         }
         await Task.CompletedTask;
     });
+
+    // The counter raises WarningTriggered once per threshold-cross; re-raise it for the tray case.
+    private static void OnWarning(AvatarTubeWindow tube, ModerationCounter counter) =>
+        typeof(AvatarTubeWindow).GetMethod("OnWarningTriggered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(tube, new object[] { counter.GetState() });
 }

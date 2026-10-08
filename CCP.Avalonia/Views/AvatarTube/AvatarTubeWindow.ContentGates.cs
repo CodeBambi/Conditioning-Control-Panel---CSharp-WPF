@@ -45,8 +45,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             try
             {
-                // WPF Owner = _parentWindow; Avalonia's ShowDialog needs an owner, so the tube stands in.
-                await new ContentPolicyWarningDialog(hits).ShowDialog<bool>(_parentWindow ?? this);
+                // WPF Owner = _parentWindow. ShowDialogSafe falls back to any visible window, or shows it
+                // unowned: with the shell and tube hidden in the tray a plain ShowDialog would throw.
+                await new ContentPolicyWarningDialog(hits).ShowDialogSafe<bool>(_parentWindow);
             }
             catch (Exception ex)
             {
