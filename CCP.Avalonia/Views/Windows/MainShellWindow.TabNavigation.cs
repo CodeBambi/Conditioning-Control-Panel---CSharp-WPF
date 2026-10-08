@@ -11,7 +11,7 @@
 //     door open/close height animation. ponytail: panels snap open (Height =
 //     NaN) and shut (0); the WPF MeasureDoorPanel + NavDoorExpandMs tween returns with the FX
 //     partials.
-//   - Per-tab side effects on the way in (RefreshPresetsList, StopPolling on leaving Available Subjects, MaybeShowFeatureIntro,
+//   - Per-tab side effects on the way in (RefreshPresetsList, StopPolling on leaving Available Subjects,
 //     UpdatePatreonUI, RefreshIntakePassTile, RefreshPremiumRail). Those reach App.* or a service.
 //     The FIVE that do not are restored in OnTabShown below:
 //       * StudioTab.OnTabShown() for "studio" and StudioTab.FocusRackEntry("haptics") for the
@@ -182,9 +182,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // three (MainWindow.TabNavigation.cs:260/476/501): the Dashboard and the rack
                     // both host real dose dials, so a lock that was latched rather than re-derived
                     // could survive a crash, an abort or an out-of-order session event.
-                    case "settings": RefreshSessionFeatureLock(); break;
+                    case "settings": RefreshSessionFeatureLock(); MaybeShowFeatureIntro("daily-free", "settings"); break;
                     case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); break;
-                    case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); break;
+                    case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("haptics"); break;
+
+                    // WPF MainWindow.TabNavigation.cs:420/457/505/527/534 - the door tour cards.
+                    case "play": case "lab": MaybeShowFeatureIntro("play-wall", "play"); break;
+                    case "awareness": MaybeShowFeatureIntro("awareness"); break;
+                    case "remotecontrol": MaybeShowFeatureIntro("studio-rack", "studio"); break;
+                    case "lockdown": MaybeShowFeatureIntro("lockdown"); break;
+                    case "blinktrainer": MaybeShowFeatureIntro("blinktrainer"); break;
+                    // WPF :581 - only once the room shows the map (its IsVisible hook re-read the gates).
+                    case "spiral":
+                        if (Named<Tabs.SpiralTabView>("SpiralTab")?.IsShowingSpiral == true)
+                            MaybeShowFeatureIntro("descent-spiral", "spiral");
+                        break;
 
                     // WPF gets here through DiscordTabView's IsVisibleChanged ->
                     // MainWindow.ProfileFx.cs:OnProfileTabVisibilityChanged, which refreshes the
@@ -196,7 +208,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // ponytail: the rest of OnProfileTabVisibilityChanged (the OG border loop, the
                     // vat poll, RefreshProfileShareButton, StaggerProfileCards) needs
                     // MainShellWindow.ProfileFx.cs / .ProfileVat.cs. EnsureProfileMeFirst is here.
-                    case "discord": UpdateProfileSharingSummary(); ProfilePage?.EnsureProfileMeFirst(); break;
+                    case "discord": UpdateProfileSharingSummary(); ProfilePage?.EnsureProfileMeFirst(); MaybeShowFeatureIntro("profile-hub", "discord"); break;
 
                     // WPF MainWindow.TabNavigation.cs:292/367: throttled share-status polls on tab open.
                     case "presets":
@@ -213,7 +225,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // WPF MainWindow.TabNavigation.cs:588-593 (AnimateTabIn is the header's ponytail).
                     case "chaster": Named<Tabs.ChasterTabView>("ChasterTab")?.OnTabShown(); break;
                     // WPF MainWindow.SheListening.cs RefreshSheListeningTab "called on tab show".
-                    case "shelistening": RefreshSheListeningTab(); break;
+                    case "shelistening": RefreshSheListeningTab(); MaybeShowFeatureIntro("shelistening"); break;
 
                     // WPF MainWindow.TabNavigation.cs:324-337: spend the tab's seen-flag on any
                     // route in, then the one-time explainer on top of the tab just shown.
@@ -229,6 +241,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
             }
             catch { /* a navigation must never throw */ }
+        }
+
+        /// <summary>WPF MaybeShowFeatureIntro (MainWindow.TabNavigation.cs:1094): through the
+        /// startup ladder, so a quiet window turns the card into an Inbox row. ponytail: no
+        /// FirstShowService on this head, so WPF's first-show early return has nothing to read.</summary>
+        private void MaybeShowFeatureIntro(string key, string? doorTab = null)
+        {
+            try { FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key)); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Feature intro hook failed for {Key}", key); }
+        }
+
+        /// <summary>Latched once the Dashboard's cards have been queued (one settle per launch).</summary>
+        private bool _dashboardIntroQueued;
+
+        /// <summary>WPF OnDashboardTabVisibilityChanged (MainWindow.TabNavigation.cs:1131): the app
+        /// LANDS on the Dashboard with no ShowTab behind it, so its two cards are queued from the
+        /// view's visibility instead. Called by SettingsTabView.</summary>
+        internal void OnDashboardTabVisibilityChanged(bool visible)
+        {
+            if (!visible || _dashboardIntroQueued) return;
+            if (CoreSession.IsSessionRunning) return; // re-shown mid-session, not a launch
+            _dashboardIntroQueued = true;
+            FeatureIntroPopup.ShowWhenStartupSettles("daily-free", this, NavDoorForTab("settings"));
+            FeatureIntroPopup.ShowWhenStartupSettles("one-account", this, NavDoorForTab("settings"));
         }
 
         private static string? NavDoorForTab(string tab)

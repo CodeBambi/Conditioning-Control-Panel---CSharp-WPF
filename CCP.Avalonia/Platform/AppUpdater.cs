@@ -43,6 +43,9 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         internal static UpdateInfo? Latest { get; private set; }
         private static bool _busy;
+
+        /// <summary>WPF App.IsUpdateDialogActive: an update offer or manual check owns the screen.</summary>
+        internal static bool IsUpdateDialogActive => _busy;
         private static string UserData => CorePaths.UserData;
 
         /// <summary>
