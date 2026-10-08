@@ -411,8 +411,31 @@ namespace ConditioningControlPanel.Services
         internal string? PickNext()
         {
             if (_queue.Count == 0)
-                _queue = new Queue<string>(_library().OrderBy(_ => _random.Next()));
+            {
+                var enabled = _library();
+                var kept = KeepByLength(enabled, CoreSettings.Current.VideoMinDurationSeconds,
+                    CoreSettings.Current.VideoMaxDurationSeconds, DurationOf);
+                LastFunnelEnabled = enabled.Count;   // WPF _lastFunnelEnabled / _lastFunnelDuration (#1352)
+                LastFunnelDuration = kept.Count;
+                _queue = new Queue<string>(kept.OrderBy(_ => _random.Next()));
+            }
             return _queue.Count > 0 ? _queue.Dequeue() : null;
+        }
+
+        /// <summary>WPF VideoService.MetadataCache: a clip's cached length, null on a miss. Null keeps
+        /// every clip (WPF without LibVLC).</summary>
+        public Func<string, double?>? DurationOf { get; set; }
+        /// <summary>The last refill's enabled clips and how many the length filter kept; -1 before the first.</summary>
+        public int LastFunnelEnabled { get; private set; } = -1;
+        public int LastFunnelDuration { get; private set; } = -1;
+
+        /// <summary>WPF RefillVideoQueues' duration filter: drop clips shorter than <paramref name="min"/> or
+        /// longer than <paramref name="max"/> seconds (0 = unset). A clip with no cached length is kept
+        /// (fall open; <paramref name="durationOf"/> starts its parse for the next refill).</summary>
+        public static List<string> KeepByLength(IReadOnlyList<string> files, int min, int max, Func<string, double?>? durationOf)
+        {
+            if ((min <= 0 && max <= 0) || durationOf == null) return files.ToList();
+            return files.Where(f => durationOf(f) is not double d || ((min <= 0 || d >= min) && (max <= 0 || d <= max))).ToList();
         }
 
         /// <summary>WPF RefillVideoQueues' local walk: assets/videos, recursive, supported extensions,

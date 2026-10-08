@@ -104,6 +104,132 @@ namespace ConditioningControlPanel.Avalonia.Platform
             return () => ThreadPool.QueueUserWorkItem(_ => { lock (player) if (done == 0) player.Stop(); });
         }
 
+        /// <summary>A clip the caller can re-volume and stop (mind wipe). A loop is WPF's overlap
+        /// (MindWipeService.cs:55): the next copy starts 120 ms before the current one ends, because
+        /// LibVLC's own <c>:input-repeat</c> reopens the input and left a measured 64 ms of silence
+        /// at every restart.</summary>
+        internal MindWipePlayer.IVoice? PlayVoice(string path, double volume, bool loop, Action onEnded)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+            if (loop)
+            {
+                var l = new LoopVoice(this, path, onEnded) { Volume = volume };
+                return l.Start() ? l : null;
+            }
+            var voice = NewVoice(path, onEnded);
+            voice.Volume = volume;
+            return voice.Play() ? voice : null;
+        }
+
+        private Voice NewVoice(string path, Action onEnded)
+        {
+            var media = new Media(_vlc, path, FromType.FromPath);
+            media.AddOption(NoVideo);
+            return new Voice(new MediaPlayer(media), media, onEnded);
+        }
+
+        private sealed class Voice(MediaPlayer player, Media media, Action onEnded) : MindWipePlayer.IVoice
+        {
+            private int _vol, _done;
+            /// <summary>Raised once with the clip length in ms (0 when unknown) when it starts playing.</summary>
+            internal Action<long>? Started;
+            internal volatile bool Failed;
+            public double Volume
+            {
+                // Cubic like PlayOneShot; applied off libvlc's thread once the output exists.
+                set { _vol = (int)Math.Round(Math.Cbrt(Math.Clamp(value, 0, 1)) * 100); Apply(); }
+            }
+            private void Apply() => ThreadPool.QueueUserWorkItem(_ => { lock (player) if (_done == 0 && player.IsPlaying) player.Volume = _vol; });
+            public bool Play()
+            {
+                var started = 0;
+                player.Playing += (_, _) =>
+                {
+                    Apply();
+                    if (Interlocked.Exchange(ref started, 1) == 0) Fire(() => Started?.Invoke(Math.Max(0, player.Length)));
+                };
+                player.EndReached += (_, _) => Dispose();
+                player.EncounteredError += (_, _) => { Failed = true; Dispose(); };
+                if (player.Play()) return true;
+                Failed = true;
+                Dispose();
+                return false;
+            }
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _done, 1) != 0) return;
+                // Never dispose a player from inside its own libvlc event: that deadlocks.
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { lock (player) { player.Stop(); player.Dispose(); } media.Dispose(); }
+                    catch (Exception ex) { Log.Debug(ex, "[Audio] mindwipe dispose"); }
+                    Fire(onEnded);
+                });
+            }
+        }
+
+        /// <summary>Copies of one clip, each started <see cref="OverlapMs"/> before the previous ends.
+        /// Ends (onEnded) when a copy fails and nothing else is playing.</summary>
+        private sealed class LoopVoice(LibVlcAudio audio, string path, Action onEnded) : MindWipePlayer.IVoice
+        {
+            private const int OverlapMs = 120;   // WPF CROSSFADE_OVERLAP_SECONDS
+            private readonly object _gate = new();
+            private readonly List<Voice> _live = new();
+            private Timer? _next;
+            private bool _done;
+            private double _vol;
+
+            public double Volume { set { lock (_gate) { _vol = value; foreach (var v in _live) v.Volume = value; } } }
+
+            public bool Start()
+            {
+                Voice v;
+                lock (_gate)
+                {
+                    if (_done) return false;
+                    v = null!;
+                    v = audio.NewVoice(path, () => Retire(v));
+                    v.Volume = _vol;
+                    v.Started = Schedule;
+                    _live.Add(v);
+                }
+                return v.Play();
+            }
+
+            /// <summary>WPF: interval = length - overlap, at least 100 ms. Unknown length: back to back.</summary>
+            private void Schedule(long lengthMs)
+            {
+                if (lengthMs <= 0) return;
+                lock (_gate)
+                {
+                    if (_done) return;
+                    _next?.Dispose();
+                    _next = new Timer(_ => Start(), null, Math.Max(100, lengthMs - OverlapMs), Timeout.Infinite);
+                }
+            }
+
+            private void Retire(Voice v)
+            {
+                bool restart = false, dead = false;
+                lock (_gate)
+                {
+                    _live.Remove(v);
+                    if (_done || _live.Count > 0) return;
+                    if (v.Failed) dead = _done = true; else restart = true;
+                }
+                if (dead) { Fire(onEnded); return; }
+                if (restart && !Start()) { lock (_gate) _done = true; Fire(onEnded); }
+            }
+
+            public void Dispose()
+            {
+                Voice[] live;
+                lock (_gate) { _done = true; _next?.Dispose(); _next = null; live = _live.ToArray(); _live.Clear(); }
+                foreach (var v in live) v.Dispose();
+                Fire(onEnded);
+            }
+        }
+
         /// <summary>Media option for audio players: skip any video track (an mp3's cover art would open a window).</summary>
         internal const string NoVideo = ":no-video";
 

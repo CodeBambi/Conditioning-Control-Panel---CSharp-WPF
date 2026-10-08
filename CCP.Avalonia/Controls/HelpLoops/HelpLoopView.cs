@@ -29,7 +29,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
         private int _generation;               // bumped on every start/stop: stale frame callbacks drop out
         private DrawingGroup? _lastGround, _lastBack, _lastFront;   // the last good frame, kept up if the scene faults
         private double _lastBlur;                                    // that frame's Back blur, stage px
-        private BlurEffect _blur = new();                            // reused while the radius holds
+        private readonly BlurEffect _blur = new();                   // one effect, radius set per frame
         private long _startTs;
         private double _base, _speed = 1, _lastT = -1;
 
@@ -181,8 +181,11 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
                     }
                     _lastGround?.Draw(context);
                     if (_lastBlur > 0.05)
-                        using (context.PushEffect(_blur.Radius == _lastBlur ? _blur : _blur = new BlurEffect { Radius = _lastBlur }, new Rect(0, 0, LoopFrame.StageWidth, LoopFrame.StageHeight)))
+                    {
+                        _blur.Radius = _lastBlur;
+                        using (context.PushEffect(_blur, new Rect(0, 0, LoopFrame.StageWidth, LoopFrame.StageHeight)))
                             _lastBack?.Draw(context);
+                    }
                     else
                         _lastBack?.Draw(context);
                     _lastFront?.Draw(context);

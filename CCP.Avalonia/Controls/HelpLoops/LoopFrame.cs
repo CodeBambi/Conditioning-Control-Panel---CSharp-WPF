@@ -421,7 +421,19 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
     /// through a RectangleGeometry, which keeps them.</summary>
     public static class LoopDrawing
     {
-        public static void DrawRoundedRectangle(this DrawingContext dc, IBrush? brush, IPen? pen, Rect r, double rx, double ry) =>
-            dc.DrawGeometry(brush, pen, new RectangleGeometry(r) { RadiusX = rx, RadiusY = ry });
+        // Most rounded shapes sit still (windows, cards, chips), so their geometry is reused across
+        // frames. Entries are never mutated (recorded frames keep referencing them); animated shapes
+        // make new keys, so the cache is dropped whole once it grows past a few hundred.
+        private static readonly System.Collections.Generic.Dictionary<(Rect, double, double), Geometry> Cache = new();
+
+        public static void DrawRoundedRectangle(this DrawingContext dc, IBrush? brush, IPen? pen, Rect r, double rx, double ry)
+        {
+            if (!Cache.TryGetValue((r, rx, ry), out var g))
+            {
+                if (Cache.Count >= 512) Cache.Clear();
+                Cache[(r, rx, ry)] = g = new RectangleGeometry(r) { RadiusX = rx, RadiusY = ry };
+            }
+            dc.DrawGeometry(brush, pen, g);
+        }
     }
 }

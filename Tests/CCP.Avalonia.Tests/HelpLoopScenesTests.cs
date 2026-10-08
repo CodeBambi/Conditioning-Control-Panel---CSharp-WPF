@@ -87,8 +87,12 @@ public sealed class HelpLoopScenesTests
     {
         EnsureAvalonia();
         uint sharp = EdgePixel(0), blurred = EdgePixel(6);
-        Assert.Equal(0u, sharp);                 // black just outside the white bar
-        Assert.NotEqual(sharp, blurred);                                         // the blur spills white over it
+        Assert.Equal(0u, sharp);                 // black just outside the white Back bar
+        Assert.NotEqual(sharp, blurred);         // the blur spills white over it
+        // Front and ground stay sharp: next to the Front bar's edge, and the ground at the stage edge
+        // (a blurred ground would pull the transparent outside in).
+        foreach (var (x, y) in new[] { (443.0, 135.0), (477.0, 135.0) })
+            Assert.Equal(Pixel(new BarScene(), x, y), Pixel(new BarScene { Blur = 6 }, x, y));
         return Task.CompletedTask;
     });
 
@@ -113,7 +117,7 @@ public sealed class HelpLoopScenesTests
         return Task.CompletedTask;
     });
 
-    /// <summary>A black Back with a white bar ending at x=240; the pixel 3 px right of its edge.</summary>
+    /// <summary>A black Back with a white bar ending at x=240 (Front bar 360..440, ground right of 280); the pixel 3 px right of its edge.</summary>
     private static uint EdgePixel(double blur) => Pixel(new BarScene { Blur = blur }, 243, 135);
 
     private static uint Pixel(HelpLoopScene scene, double x, double y)
@@ -161,8 +165,10 @@ public sealed class HelpLoopScenesTests
         public override IReadOnlyList<HelpLoopStep> Steps { get; } = Array.Empty<HelpLoopStep>();
         public override void Draw(LoopFrame f, double t)
         {
-            f.Back.DrawRectangle(Brushes.Black, null, new Rect(0, 0, LoopFrame.StageWidth, LoopFrame.StageHeight));
+            // Back covers the left of the stage; the ground shows on the right under a Front bar.
+            f.Back.DrawRectangle(Brushes.Black, null, new Rect(0, 0, 280, LoopFrame.StageHeight));
             f.Back.DrawRoundedRectangle(Brushes.White, null, new Rect(120, 60, 120, 150), Round, Round);
+            f.Front.DrawRectangle(Brushes.White, null, new Rect(360, 60, 80, 150));
             f.BackBlur = Blur;
         }
     }

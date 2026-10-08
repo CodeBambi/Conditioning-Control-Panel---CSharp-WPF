@@ -44,28 +44,34 @@ internal static class Win32Overlay
     // Per window: whether it should currently be click-through, read by the style callback.
     private static readonly ConditionalWeakTable<TopLevel, StrongBox<bool>> Wanted = new();
 
-    internal static uint Style(uint exStyle, bool clickThrough)
-        => (exStyle | OverlayBits) & ~ClickThroughBits | (clickThrough ? ClickThroughBits : 0);
+    // Passive toasts (achievement / item unlock): WS_EX_NOACTIVATE even while they take clicks, as
+    // WPF Helpers.PassiveToastWindow - click-to-dismiss must not hand them the foreground.
+    private static readonly ConditionalWeakTable<TopLevel, object> Passive = new();
+    private static bool IsPassive(TopLevel window) => Passive.TryGetValue(window, out _);
+
+    internal static uint Style(uint exStyle, bool clickThrough, bool passive = false)
+        => (exStyle | OverlayBits) & ~ClickThroughBits | (clickThrough ? ClickThroughBits : 0) | (passive ? WsExNoActivate : 0);
 
     internal static bool SetClickThrough(TopLevel window, IntPtr hwnd, bool clickThrough)
     {
         if (!OperatingSystem.IsWindows()) return false;
         Track(window).Value = clickThrough;
-        return Apply(hwnd, clickThrough);
+        return Apply(hwnd, clickThrough, IsPassive(window));
     }
 
     /// <summary>Tool/no-activate/layered + HWND_TOPMOST: the Windows form of an override-redirect overlay.</summary>
-    internal static bool SetOverrideRedirect(TopLevel window, IntPtr hwnd)
+    internal static bool SetOverrideRedirect(TopLevel window, IntPtr hwnd, bool passive = false)
     {
         if (!OperatingSystem.IsWindows()) return false;
-        return Apply(hwnd, Track(window).Value)
+        if (passive) Passive.AddOrUpdate(window, Passive);
+        return Apply(hwnd, Track(window).Value, IsPassive(window))
             && SetWindowPos(hwnd, new IntPtr(-1), 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
     }
 
     internal static bool SetOpacity(TopLevel window, IntPtr hwnd, double alpha)
     {
         if (!OperatingSystem.IsWindows()) return false;
-        return Apply(hwnd, Track(window).Value)
+        return Apply(hwnd, Track(window).Value, IsPassive(window))
             && SetLayeredWindowAttributes(hwnd, 0, (byte)Math.Round(Math.Clamp(alpha, 0, 1) * 255), LwaAlpha);
     }
 
@@ -102,13 +108,13 @@ internal static class Win32Overlay
     private static StrongBox<bool> Track(TopLevel window) => Wanted.GetValue(window, w =>
     {
         var box = new StrongBox<bool>();
-        Win32Properties.AddWindowStylesCallback(w, (style, ex) => (style, Style(ex, box.Value)));
+        Win32Properties.AddWindowStylesCallback(w, (style, ex) => (style, Style(ex, box.Value, IsPassive(w))));
         return box;
     });
 
-    private static bool Apply(IntPtr hwnd, bool clickThrough)
+    private static bool Apply(IntPtr hwnd, bool clickThrough, bool passive)
     {
-        SetWindowLong(hwnd, GwlExStyle, Style(GetWindowLong(hwnd, GwlExStyle), clickThrough));
+        SetWindowLong(hwnd, GwlExStyle, Style(GetWindowLong(hwnd, GwlExStyle), clickThrough, passive));
         // Attributes never set = invisible layered window. Checked by attributes, not by the old
         // style bit, because the style callback can make a window layered behind our back.
         return GetLayeredWindowAttributes(hwnd, out _, out _, out _) || SetLayeredWindowAttributes(hwnd, 0, 255, LwaAlpha);
