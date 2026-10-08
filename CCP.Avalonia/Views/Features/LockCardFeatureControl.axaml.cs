@@ -213,7 +213,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             {
                 var owner = TopLevel.GetTopLevel(this) as Window;
                 var dlg = new Dialogs.MicConsentDialog();
-                var ok = owner != null && await dlg.ShowDialog<bool?>(owner) == true && dlg.ConsentGiven;
+                var ok = owner != null && await dlg.ShowDialogSafe<bool?>(owner) == true && dlg.ConsentGiven;
                 if (!ok)
                 {
                     _isLoading = true;
@@ -256,7 +256,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var s = CoreSettings.Current;
 
             var editor = new Dialogs.TextEditorDialog("Lock Card Phrases", s.LockCardPhrases);
-            if (await editor.ShowDialog<bool?>(owner) != true || editor.ResultData == null) return;
+            if (await editor.ShowDialogSafe<bool?>(owner) != true || editor.ResultData == null) return;
 
             s.LockCardPhrases = editor.ResultData;
             CoreSettings.Save();
@@ -280,7 +280,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private async void BtnColorSettings_Click(object? sender, RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
-            await new Dialogs.LockCardColorDialog().ShowDialog(owner);
+            await new Dialogs.LockCardColorDialog().ShowDialogSafe(owner);
         }
     }
 }

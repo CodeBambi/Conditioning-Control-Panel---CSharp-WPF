@@ -695,7 +695,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // WPF focused before ShowDialog; Avalonia has no visual tree until the window opens.
             inputWindow.Opened += (_, _) => inputBox.Focus();
 
-            if (await inputWindow.ShowDialog<bool?>(this) != true) return;
+            if (await inputWindow.ShowDialogSafe<bool?>(this) != true) return;
 
             var text = inputBox.Text?.Trim();
             if (string.IsNullOrEmpty(text)) return;

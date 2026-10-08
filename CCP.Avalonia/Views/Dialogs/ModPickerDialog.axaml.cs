@@ -832,7 +832,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 Log.Information("[ModPicker] Showing the mod picker (preselect {Mod})", preselect ?? "(none)");
 
                 var dialog = new ModPickerDialog(preselect);
-                await dialog.ShowDialog(owner);
+                await dialog.ShowDialogSafe(owner);
 
                 // Guard 2: ended offline - count it and re-arm unless the allowance is spent.
                 if (dialog.EndedOffline)

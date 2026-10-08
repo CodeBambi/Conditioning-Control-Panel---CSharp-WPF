@@ -180,7 +180,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             if (Window is not { IsVisible: true } owner) return;
             var wizard = new Views.Dialogs.LocalAiSetupWizard();
-            if (await wizard.ShowDialog<bool>(owner) && wizard.LocalAiReady) Provider = Mode.LocalOllama;
+            if (await wizard.ShowDialogSafe<bool>(owner) && wizard.LocalAiReady) Provider = Mode.LocalOllama;
             Sync();
         }
 

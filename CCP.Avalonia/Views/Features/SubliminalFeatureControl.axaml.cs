@@ -292,7 +292,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 CoreMods.GetDefaultSubliminalPool().Keys, StringComparer.OrdinalIgnoreCase);
 
             var dialog = new Dialogs.TextEditorDialog("Subliminal Messages", s.SubliminalPool);
-            if (await dialog.ShowDialog<bool?>(owner) != true || dialog.ResultData == null) return;
+            if (await dialog.ShowDialogSafe<bool?>(owner) != true || dialog.ResultData == null) return;
 
             // Remember hand-added phrases (and forget removed ones) so the cross-mod prune
             // never silently deletes a custom phrase that collides with another mod's default.
@@ -319,7 +319,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private async void BtnAdvanced_Click(object? sender, RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
-            await new Dialogs.ColorEditorDialog().ShowDialog(owner);
+            await new Dialogs.ColorEditorDialog().ShowDialogSafe(owner);
         }
     }
 }

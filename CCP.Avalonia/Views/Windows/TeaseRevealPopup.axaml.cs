@@ -100,7 +100,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // the throw lands in the catch below and the teaser silently never opens; with
                 // IsVisible it falls through to the modeless Show(), which is the intended
                 // worst case.
-                if (owner is { IsVisible: true }) popup.ShowDialog(owner);
+                if (owner is { IsVisible: true }) popup.ShowDialogSafe(owner);
                 else popup.Show();
             }
             catch (Exception ex)

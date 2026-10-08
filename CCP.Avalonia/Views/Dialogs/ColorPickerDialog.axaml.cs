@@ -44,6 +44,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// or null if the user cancelled. Avalonia's ShowDialog has no blocking form, so callers
         /// await where WPF's ColorDialog.ShowDialog() returned inline.</summary>
         public static async Task<Color?> PickAsync(Window owner, Color initial, string? title = null)
-            => await new ColorPickerDialog(initial, title).ShowDialog<Color?>(owner);
+            => await new ColorPickerDialog(initial, title).ShowDialogSafe<Color?>(owner);
     }
 }

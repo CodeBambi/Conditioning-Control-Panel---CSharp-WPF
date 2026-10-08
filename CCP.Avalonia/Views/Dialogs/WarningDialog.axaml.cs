@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 Topmost = true
             };
 
-            return await dialog.ShowDialog<bool?>(owner) == true && dialog.Confirmed;
+            return await dialog.ShowDialogSafe<bool?>(owner) == true && dialog.Confirmed;
         }
     }
 }

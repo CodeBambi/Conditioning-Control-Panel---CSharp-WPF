@@ -2734,7 +2734,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             try
             {
                 var prompt = new UrlPromptDialog();
-                await prompt.ShowDialog(this);
+                await prompt.ShowDialogSafe(this);
                 if (string.IsNullOrEmpty(prompt.Result)) return;
                 await ApplyChangedMediaAsync(prompt.Result!, isLocal: false);
             }
@@ -3316,6 +3316,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// <summary>Asks, and answers Cancel for the window X - the safe direction, since Cancel
         /// is the only answer that keeps the unsaved work reachable.</summary>
         internal static async Task<Choice> AskAsync(Window owner, string title, string message)
-            => await new UnsavedChangesDialog(title, message).ShowDialog<Choice?>(owner) ?? Choice.Cancel;
+            => await new UnsavedChangesDialog(title, message).ShowDialogSafe<Choice?>(owner) ?? Choice.Cancel;
     }
 }

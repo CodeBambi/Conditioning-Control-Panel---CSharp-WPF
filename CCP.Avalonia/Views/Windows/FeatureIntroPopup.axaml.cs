@@ -231,7 +231,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         // and the throw would be swallowed by the catch below, so the card would
                         // silently never appear while its "seen" flag had already been spent.
                         // Without a visible owner it is shown modelessly rather than not at all.
-                        if (owner is { IsVisible: true }) await popup.ShowDialog(owner);
+                        if (owner is { IsVisible: true }) await popup.ShowDialogSafe(owner);
                         else popup.Show();
                     }
                     catch (Exception ex)

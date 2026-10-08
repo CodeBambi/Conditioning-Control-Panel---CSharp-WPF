@@ -85,7 +85,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 w.Show();
                 return null;   // ponytail: needs an owner to be modal against; callers always have one.
             }
-            if (await w.ShowDialog<bool?>(owner) != true) return null;
+            if (await w.ShowDialogSafe<bool?>(owner) != true) return null;
             // WPF's caller commits via ChaosMeta.SwitchSlot: remember the slot, reload its save.
             ChaosMeta.SwitchSlot(w.ChosenSlot);
             return ChaosMeta.ActiveSlot;

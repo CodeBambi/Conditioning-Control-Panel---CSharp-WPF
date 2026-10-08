@@ -712,7 +712,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             try
             {
                 if (!IsVisible) return;   // ShowDialog throws on an owner that is not on screen
-                await new WardrobeEditorDialog(_draft, _editorAvatar, _cardWidth, _cardHeight).ShowDialog(this);
+                await new WardrobeEditorDialog(_draft, _editorAvatar, _cardWidth, _cardHeight).ShowDialogSafe(this);
             }
             catch (Exception ex)
             {

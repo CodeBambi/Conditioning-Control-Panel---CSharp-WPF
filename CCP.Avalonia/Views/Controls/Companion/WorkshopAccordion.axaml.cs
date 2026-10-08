@@ -79,7 +79,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 if (prompt == null) return;
 
                 var dlg = new Dialogs.ChatShortcutCaptureDialog { GlobalHotkey = prompt.ChatShortcutGlobal };
-                if (!await dlg.ShowDialog<bool>(owner)) return;
+                if (!await dlg.ShowDialogSafe<bool>(owner)) return;
 
                 if (dlg.ResetToDefault)
                 {
