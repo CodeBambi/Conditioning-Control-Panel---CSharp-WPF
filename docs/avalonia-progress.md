@@ -1318,3 +1318,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/main-20261008-compat: +25
 - Retire the Avalonia descent ceremony; descent_auto golden tests; WPF scan test adapted to the typed SyncBody.
+
+## avalonia-port/spiral-overlay: +599
+- Spiral overlay on Avalonia: per-monitor click-through windows, background decode, opacity curve shared with WPF via Core SpiralFrames, engine/session/panic wiring.
