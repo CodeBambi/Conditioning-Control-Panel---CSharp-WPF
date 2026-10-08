@@ -20,9 +20,14 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
         /// <summary>The clock frames are timed by; tests step it.</summary>
         internal static TimeProvider Time = TimeProvider.System;
 
+        /// <summary>The display-frame source; tests queue the callbacks instead.</summary>
+        internal static Action<TopLevel, Action<TimeSpan>> RequestAnimationFrame = (top, cb) => top.RequestAnimationFrame(cb);
+
         private LoopPalette? _palette;
         private IDisposable? _visibilityWatch;
         private bool _running;
+        private int _generation;               // bumped on every start/stop: stale frame callbacks drop out
+        private DrawingGroup? _lastBack, _lastFront;   // the last good frame, kept up if the scene faults
         private long _startTs;
         private double _base, _speed = 1, _lastT = -1;
 
@@ -70,23 +75,32 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
                 _base = CurrentTime;
                 _startTs = Time.GetTimestamp();
                 _running = true;
+                _generation++;
                 RequestFrame();
             }
             else if (!WantsToRun && _running)
             {
                 _running = false;
+                _generation++;
             }
             if (!_running && CoreSettings.Current.MotionLevel == MotionLevel.Off) DrawStill();
         }
 
-        private void RequestFrame() => TopLevel.GetTopLevel(this)?.RequestAnimationFrame(_ => Tick());
+        /// <summary>Asks for one frame. A close and reopen inside one frame leaves the old callback
+        /// pending; its generation no longer matches, so only one chain ever runs.</summary>
+        private void RequestFrame()
+        {
+            if (TopLevel.GetTopLevel(this) is not { } top) return;
+            var generation = _generation;
+            RequestAnimationFrame(top, _ => { if (generation == _generation) Tick(); });
+        }
 
         /// <summary>One display frame: advance the loop clock and ask for the next frame, or stop if
         /// the view went away since the last one.</summary>
         internal void Tick()
         {
             if (!_running) return;
-            if (!WantsToRun) { _running = false; return; }
+            if (!WantsToRun) { _running = false; _generation++; return; }
             var ms = Time.GetElapsedTime(_startTs).TotalMilliseconds;
             RenderAt((_base + ms * _speed) % Scene.DurationMs);
             if (_running) RequestFrame();
@@ -123,7 +137,6 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
 
         public override void Render(DrawingContext context)
         {
-            if (Failed) return;
             double s = Bounds.Width / LoopFrame.StageWidth;
             if (Bounds.Height > 0) s = Math.Min(s, Bounds.Height / LoopFrame.StageHeight);
             if (s <= 0 || double.IsNaN(s)) return;
@@ -133,26 +146,42 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
                 using (context.PushTransform(Matrix.CreateScale(s, s)))
                 using (context.PushClip(new RoundedRect(new Rect(0, 0, LoopFrame.StageWidth, LoopFrame.StageHeight), 8 / s)))
                 {
-                    // Two recorded layers so Back always lands under Front, whatever order a
-                    // scene paints them in (WPF's two DrawingVisuals).
-                    var back = new DrawingGroup();
-                    var front = new DrawingGroup();
-                    using (var b = back.Open())
-                    using (var fr = front.Open())
+                    if (!Failed)
                     {
-                        var f = new LoopFrame(b, fr, _palette);
-                        f.Ground();
-                        Scene.Draw(f, CurrentTime);
+                        try
+                        {
+                            // Two recorded layers so Back always lands under Front, whatever order a
+                            // scene paints them in (WPF's two DrawingVisuals).
+                            var back = new DrawingGroup();
+                            var front = new DrawingGroup();
+                            using (var b = back.Open())
+                            using (var fr = front.Open())
+                            {
+                                var f = new LoopFrame(b, fr, _palette);
+                                f.Ground();
+                                Scene.Draw(f, CurrentTime);
+                            }
+                            (_lastBack, _lastFront) = (back, front);
+                        }
+                        catch (Exception ex)
+                        {
+                            // WPF leaves the last frame up: stop the clock, keep drawing that frame.
+                            Failed = true;
+                            _running = false;
+                            _generation++;
+                            Log.Error(ex, "HelpLoopView: scene {Scene} failed at t={T}", Scene.Id, CurrentTime);
+                        }
                     }
-                    back.Draw(context);
-                    front.Draw(context);
+                    _lastBack?.Draw(context);
+                    _lastFront?.Draw(context);
                 }
             }
             catch (Exception ex)
             {
                 Failed = true;
                 _running = false;
-                Log.Error(ex, "HelpLoopView: scene {Scene} failed at t={T}", Scene.Id, CurrentTime);
+                _generation++;
+                Log.Error(ex, "HelpLoopView: render failed for {Scene}", Scene.Id);
             }
         }
     }

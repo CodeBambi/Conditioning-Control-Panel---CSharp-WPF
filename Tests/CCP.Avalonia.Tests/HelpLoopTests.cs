@@ -98,6 +98,104 @@ public sealed class HelpLoopTests
         return Task.CompletedTask;
     });
 
+    [Fact]
+    public Task ReducedPlaysAtHalfSpeedThroughTheFrameSourceAndOneChainSurvivesAReopen() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        var oldSettings = CoreSettings.ServiceProvider;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var clock = new SteppedClock();
+        HelpLoopView.Time = clock;
+        var frames = new System.Collections.Generic.List<Action<TimeSpan>>();
+        HelpLoopView.RequestAnimationFrame = (_, cb) => frames.Add(cb);
+        var (host, button) = Host("PinkFilter");
+        try
+        {
+            CoreSettings.Current.MotionLevel = MotionLevel.Reduced;
+            Click(host, button);
+            var view = Find<HelpLoopView>(button);
+            Assert.Single(frames);
+
+            clock.Now += TimeSpan.FromMilliseconds(1000).Ticks;
+            RunFrames(frames);
+            Assert.Equal(view.Scene.StillMs + 500, view.CurrentTime, 3);   // Reduced = half speed
+            Assert.Single(frames);                                          // the frame asked for the next one
+
+            Click(host, button);    // close and reopen inside one frame
+            Click(host, button);
+            Assert.True(view.IsRunning);
+            Assert.Equal(2, frames.Count);   // the stale callback is still pending
+            RunFrames(frames);
+            Assert.Single(frames);           // ...but only one chain re-requests
+        }
+        finally
+        {
+            HelpPopover.Clear(button);
+            host.Close();
+            HelpLoopView.Time = TimeProvider.System;
+            HelpLoopView.RequestAnimationFrame = (top, cb) => top.RequestAnimationFrame(cb);
+            CoreSettings.ServiceProvider = oldSettings;
+        }
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task AFaultingSceneKeepsItsLastFrameUp() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        var scene = new WhiteScene();
+        var view = new HelpLoopView(scene);
+        var host = new Window { Width = 480, Height = 270, Content = view };
+        host.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0xFFFFFFFFu, CenterPixel(host));
+            scene.Throw = true;
+            view.InvalidateVisual();
+            Assert.Equal(0xFFFFFFFFu, CenterPixel(host));   // the faulting pass
+            Assert.True(view.Failed);
+            view.InvalidateVisual();
+            Assert.Equal(0xFFFFFFFFu, CenterPixel(host));   // and every pass after it
+        }
+        finally { host.Close(); }
+        return Task.CompletedTask;
+    });
+
+    private sealed class WhiteScene : HelpLoopScene
+    {
+        public bool Throw;
+        public override string Id => "";
+        public override double DurationMs => 1000;
+        public override double StillMs => 0;
+        public override System.Collections.Generic.IReadOnlyList<HelpLoopStep> Steps { get; } = Array.Empty<HelpLoopStep>();
+        public override void Draw(LoopFrame f, double t)
+        {
+            if (Throw) throw new InvalidOperationException("scene fault");
+            f.Front.DrawRectangle(global::Avalonia.Media.Brushes.White, null, new Rect(0, 0, LoopFrame.StageWidth, LoopFrame.StageHeight));
+        }
+    }
+
+    private static uint CenterPixel(Window host)
+    {
+        var bmp = host.CaptureRenderedFrame()!;
+        var buf = System.Runtime.InteropServices.Marshal.AllocHGlobal(4);
+        try
+        {
+            bmp.CopyPixels(new PixelRect(bmp.PixelSize.Width / 2, bmp.PixelSize.Height / 2, 1, 1), buf, 4, 4);
+            return (uint)System.Runtime.InteropServices.Marshal.ReadInt32(buf);
+        }
+        finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buf); }
+    }
+
+    private static void RunFrames(System.Collections.Generic.List<Action<TimeSpan>> frames)
+    {
+        var due = frames.ToArray();
+        frames.Clear();
+        foreach (var cb in due) cb(TimeSpan.Zero);
+    }
+
     private static (Window Host, Button Button) Host(string id)
     {
         var button = new Button { Content = "?", Width = 44, Height = 44 };

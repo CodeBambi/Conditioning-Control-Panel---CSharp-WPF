@@ -197,7 +197,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
             return SliderKnob(x, y, v);
         }
 
-        public Point SliderKnob(double x, double y, double value) => new(x + 9 + Clamp(value) * 81, y + 25);
+        public static Point SliderKnob(double x, double y, double value) => new(x + 9 + Clamp(value) * 81, y + 25);
 
         /// <summary>A flash photo: white 3px frame, rounded 4, soft shadow, one of three looks.</summary>
         public void Photo(DrawingContext dc, Rect r, PhotoLook look)

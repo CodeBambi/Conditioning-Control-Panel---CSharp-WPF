@@ -14,6 +14,15 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops.Scenes
         // Checkbox inside the default window (60,28,320,190): left 16, bottom 16, 14 square.
         private const double ChkX = 60 + 16 + 7, ChkY = 28 + 190 - 16 - 7;
 
+        // The slider knob at .12, .38 and .2 (the slider sits at 14,12), then the checkbox.
+        private static readonly Point K12 = LoopFrame.SliderKnob(14, 12, .12), K38 = LoopFrame.SliderKnob(14, 12, .38), K20 = LoopFrame.SliderKnob(14, 12, .2);
+        private static readonly (double, double, double)[] CursorPath =
+        {
+            (1800, 300, 230), (2600, K12.X, K12.Y), (2700, K12.X, K12.Y), (3600, K38.X, K38.Y), (4600, K38.X, K38.Y),
+            (5200, K20.X, K20.Y), (5400, K20.X, K20.Y), (6000, ChkX, ChkY), (6900, ChkX, ChkY),
+        };
+
+
         private static readonly IBrush PinkWash = LoopPalette.Solid("#ff4fa8");
         private static readonly IBrush ChkEdge = LoopPalette.Solid("#8f7fc4");
         private static readonly IBrush LabelBrush = LoopPalette.Solid("#d9ccff");
@@ -46,15 +55,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops.Scenes
                     f.Front.DrawRectangle(PinkWash, null, new Rect(0, 0, LoopFrame.StageWidth, LoopFrame.StageHeight));
 
             f.Slider(14, 12, "PINK OPACITY", o);
-            var a = f.SliderKnob(14, 12, .12);
-            var b = f.SliderKnob(14, 12, .38);
-            var c = f.SliderKnob(14, 12, .2);
-
-            var cur = LoopMath.Path(new (double, double, double)[]
-            {
-                (1800, 300, 230), (2600, a.X, a.Y), (2700, a.X, a.Y), (3600, b.X, b.Y), (4600, b.X, b.Y),
-                (5200, c.X, c.Y), (5400, c.X, c.Y), (6000, ChkX, ChkY), (6900, ChkX, ChkY),
-            }, t);
+            var cur = LoopMath.Path(CursorPath, t);
             f.Ripple(ChkX, ChkY, LoopMath.Seg(t, 6080, 6500));
             f.Cursor(cur.X, cur.Y, (t > 2650 && t < 3650) || (t > 4550 && t < 5250) || (t > 6050 && t < 6200));
         }
