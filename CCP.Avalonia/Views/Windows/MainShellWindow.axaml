@@ -2690,7 +2690,7 @@
                            HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-20,0,0"/>
 
                 <!-- Remember: snapshot current setup / recall it. Right-click to re-save. -->
-                <Button x:Name="BtnRemember" Grid.Column="0" Width="68" Height="50" Margin="0,0,8,0"
+                <Button x:Name="BtnRemember" fx:HudPlank.Kind="Plank" Grid.Column="0" Width="68" Height="50" Margin="0,0,8,0"
                         Theme="{StaticResource PinkButton}" FontSize="20" Click="BtnRemember_Click"
                         PointerReleased="BtnRemember_RightClick"
                         ToolTip.Tip="Remember my current setup">
@@ -2747,7 +2747,7 @@
                 <!-- StartPressScale is the ignition dip (Velvet Kit 2). It is the button's only
                      RenderTransform and nothing else may claim it - HoverPop deliberately refuses
                      named transforms, so this stays a lane-B-only surface. -->
-                <Button x:Name="BtnStart" Grid.Column="1" Theme="{StaticResource PinkButton}"
+                <Button x:Name="BtnStart" fx:HudPlank.Kind="Chunky" Grid.Column="1" Theme="{StaticResource PinkButton}"
                         Background="{DynamicResource AccentGradientBrush}"
                         Height="50" FontSize="18" Click="BtnStart_Click"
                         RenderTransformOrigin="0.5,0.5"
@@ -2798,7 +2798,7 @@
                 <!-- Start options caret (Start normally / Jump right in). Its own independent
                      button: a real width and a gap from START so it doesn't read as a split-button
                      sliver glued to it. -->
-                <Button x:Name="BtnStartMenu" Grid.Column="2" Width="68" Height="50" Margin="8,0,0,0"
+                <Button x:Name="BtnStartMenu" fx:HudPlank.Kind="Plank" Grid.Column="2" Width="68" Height="50" Margin="8,0,0,0"
                         Theme="{StaticResource PinkButton}" Background="{DynamicResource AccentGradientBrush}"
                         FontSize="22" Click="BtnStartMenu_Click"
                         ToolTip.Tip="Start options">
@@ -2839,7 +2839,7 @@
                      2026-08-11: Save was PinkButton, i.e. the same saturated mass as START sitting
                      right next to it, so the action bar had two primaries and no hierarchy. It is
                      the house SecondaryButton now; START is the only filled pink on the bar. -->
-                <Button x:Name="BtnSaveAll" Grid.Column="5" Content="{loc:Str btn_save_2}" Theme="{StaticResource SecondaryButton}"
+                <Button x:Name="BtnSaveAll" fx:HudPlank.Kind="Plank" Grid.Column="5" Content="{loc:Str btn_save_2}" Theme="{StaticResource SecondaryButton}"
                         Height="50" FontSize="16" Margin="0,0,10,0" Click="BtnSave_Click"
                         ToolTip.Tip="{loc:Str tooltip_save_all_settings_to_disk}"/>
                 <!-- Save "absorb" (Velvet Kit 2, FX lane B): one ripple ring off the button's edge and
