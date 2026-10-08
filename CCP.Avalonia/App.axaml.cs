@@ -827,7 +827,7 @@ namespace ConditioningControlPanel.Avalonia
             }
             var task = discord?.SendAchievementWebhookAsync(a,
                 discord.CustomDisplayName ?? Platform.AccountSeed.Patreon?.DisplayName ?? "Someone",
-                CoreAccount.UnifiedUserId, CoreSettings.Current.AuthToken, DiscordAccount.ModThemeId(CoreMods.ActiveModId));
+                CoreAccount.UnifiedUserId, () => CoreSettings.Current.AuthToken, DiscordAccount.ModThemeId(CoreMods.ActiveModId));
             task?.ContinueWith(t =>
             {
                 if (t.IsFaulted || t.IsCanceled || !t.Result)

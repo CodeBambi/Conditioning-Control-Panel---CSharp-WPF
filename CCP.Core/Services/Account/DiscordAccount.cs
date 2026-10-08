@@ -326,7 +326,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Send achievement announcement to community Discord via server
         /// </summary>
-        public async Task<bool> SendAchievementWebhookAsync(Achievement achievement, string name, string? unifiedId, string? authToken, string modThemeId)
+        public async Task<bool> SendAchievementWebhookAsync(Achievement achievement, string name, string? unifiedId, Func<string?> authToken, string modThemeId)
         {
             try
             {
@@ -354,8 +354,9 @@ namespace ConditioningControlPanel.Services
                 {
                     Content = JsonContent.Create(payload)
                 };
-                if (!string.IsNullOrEmpty(authToken))
-                    request.Headers.Add("X-Auth-Token", authToken);
+                var token = authToken(); // read only past the unified-id check (a keyring read), as WPF did
+                if (!string.IsNullOrEmpty(token))
+                    request.Headers.Add("X-Auth-Token", token);
 
                 var response = await Http.SendAsync(request);
                 var responseText = await response.Content.ReadAsStringAsync();

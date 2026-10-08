@@ -91,8 +91,10 @@ public sealed class AchievementUnlockAnnounceTests
         Near(wa.Right - (int)(20 * 1.79), ach.Right);
         Near(wa.Bottom - (int)(20 * 1.79), ach.Bottom);
         // Item toast #0 and #1 (WPF ItemUnlockedPopup.PositionWindow): above the 200-DIP achievement popup, 12 + 8 gaps.
-        var item0 = AchievementPopup.CornerRect(wa, 1.79, 340, 104, 200 + 12);
-        var item1 = AchievementPopup.CornerRect(wa, 1.79, 340, 104, 200 + 12 + 1 * (104 + 8));
+        Assert.Equal(200 + 12, ItemUnlockedPopup.BottomDip(0));
+        Assert.Equal(200 + 12 + 2 * (104 + 8), ItemUnlockedPopup.BottomDip(2));
+        var item0 = AchievementPopup.CornerRect(wa, 1.79, 340, ItemUnlockedPopup.ToastHeight, ItemUnlockedPopup.BottomDip(0));
+        var item1 = AchievementPopup.CornerRect(wa, 1.79, 340, ItemUnlockedPopup.ToastHeight, ItemUnlockedPopup.BottomDip(1));
         Assert.True(item0.Bottom <= wa.Bottom - (int)(200 * 1.79));
         Near(item0.Y - (int)Math.Round(8 * 1.79), item1.Bottom);
         Near(ach.Right, item0.Right);

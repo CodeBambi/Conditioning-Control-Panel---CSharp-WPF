@@ -43,6 +43,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Gap between two stacked item toasts.</summary>
         private const double SiblingGap = 8;
 
+        /// <summary>The markup Height (ItemUnlockedPopup.axaml); static so BottomDip needs no instance.</summary>
+        internal const double ToastHeight = 104;
+
         private const double FadeMs = 300;
 
         private readonly DispatcherTimer _autoCloseTimer;
@@ -90,7 +93,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // Never take the foreground - same focus-theft gap as the Pink Rush toast (ccp-bugs #1000).
             // Above the achievement popup; stackIndex pushes each extra toast a further (Height + 8) up.
-            AchievementPopup.PlacePassive(this, AchievementPopupHeight + StackGap + _stackIndex * (Height + SiblingGap));
+            AchievementPopup.PlacePassive(this, BottomDip(_stackIndex));
 
             _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _autoCloseTimer.Tick += (_, _) =>
@@ -111,6 +114,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>Mod accent for the border, glow and item name. Unknown mods fall back to bambi pink.</summary>
+        /// <summary>DIPs from the work area's bottom edge to toast #<paramref name="stackIndex"/>'s bottom
+        /// (WPF PositionWindow: above the 200-DIP achievement popup, 12 gap, then Height + 8 per toast).</summary>
+        internal static double BottomDip(int stackIndex) => AchievementPopupHeight + StackGap + Math.Max(0, stackIndex) * (ToastHeight + SiblingGap);
+
         private static Color AccentFor(string? mod)
         {
             return (mod ?? string.Empty).Trim().ToLowerInvariant() switch

@@ -234,9 +234,11 @@ internal static class X11Overlay
     /// <param name="bounds">Where the overlay goes, in screen pixels (e.g. <c>Screen.Bounds</c>).
     /// Applied on every platform; only the override-redirect part is X11-only.</param>
     /// <returns>False when the platform cannot do this (no XID, no display, not 64-bit) or the server refused it.</returns>
-    internal static bool SetOverrideRedirect(Window window, PixelRect bounds)
+    /// <param name="passive">A toast that takes clicks but never focus: Windows keeps WS_EX_NOACTIVATE
+    /// (X11 override-redirect already never takes focus).</param>
+    internal static bool SetOverrideRedirect(Window window, PixelRect bounds, bool passive = false)
     {
-        var ok = SetOverrideRedirect(window);
+        var ok = SetOverrideRedirect(window, passive);
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.Position = bounds.Position;
         window.Width = bounds.Width / window.DesktopScaling;
@@ -244,9 +246,9 @@ internal static class X11Overlay
         return ok;
     }
 
-    private static bool SetOverrideRedirect(TopLevel window)
+    private static bool SetOverrideRedirect(TopLevel window, bool passive)
     {
-        if (TryGet(window, OverlayBackend.Win32, out var hwnd)) return Win32Overlay.SetOverrideRedirect(window, hwnd);
+        if (TryGet(window, OverlayBackend.Win32, out var hwnd)) return Win32Overlay.SetOverrideRedirect(window, hwnd, passive);
         // The struct offsets below are the LP64 layout (x86_64, arm64).
         if (IntPtr.Size != 8 || !TryGetXid(window, out var xid)) return false;
 

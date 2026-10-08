@@ -105,7 +105,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // The screen's scaling, not DesktopScaling: before Show() that still reads 1 and only
                 // becomes the screen's after the move (live: a 400x200 toast shrank to 223x112).
                 if (!Platform.X11Overlay.SetOverrideRedirect(window,
-                        CornerRect(screen.WorkingArea, screen.Scaling, window.Width, window.Height, bottomDip)))
+                        CornerRect(screen.WorkingArea, screen.Scaling, window.Width, window.Height, bottomDip), passive: true))
                     Log.Debug("{Toast}: no override-redirect on this platform; placed only", window.GetType().Name);
             }
             catch (Exception ex)

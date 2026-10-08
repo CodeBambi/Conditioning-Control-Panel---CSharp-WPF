@@ -107,12 +107,12 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Send achievement announcement to community Discord via server (Core
-        /// <see cref="DiscordAccount.SendAchievementWebhookAsync"/>; this head supplies the name, id, token and theme).
+        /// <see cref="DiscordAccount.SendAchievementWebhookAsync"/>; this head supplies the name, id, token and theme; the token is read only after the unified-id check, as before).
         /// </summary>
         public Task<bool> SendAchievementWebhookAsync(Achievement achievement, string? displayName = null) =>
             _core.SendAchievementWebhookAsync(achievement,
                 displayName ?? App.Patreon?.DisplayName ?? App.Discord?.DisplayName ?? "Someone",
-                App.EffectiveUserId, App.Settings?.Current?.AuthToken, GetModThemeId());
+                App.EffectiveUserId, () => App.Settings?.Current?.AuthToken, GetModThemeId());
 
         /// <summary>
         /// Send level up announcement to community Discord via server
