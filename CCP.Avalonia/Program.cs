@@ -127,6 +127,13 @@ namespace ConditioningControlPanel.Avalonia
             if (wpc >= 0)
                 return Win32PanicCheck.Run(wpc + 1 < args.Length && !args[wpc + 1].StartsWith("--") ? args[wpc + 1] : "F24");
 
+            // --fx-bench prints ms per frame for the ambient presets (headless Skia) and exits.
+
+            if (Array.IndexOf(args, "--fx-bench") >= 0)
+
+            { RenderProof.EnsureSetUp(); Console.WriteLine(Controls.Fx.FxBench.Format(Controls.Fx.FxBench.Run())); return 0; }
+
+
             // --audio-probe plays a clip through the REAL LibVLC output and ducks/unducks other
             // apps via CoreAudio, printing pactl's view of each step. Run with another stream
             // playing (e.g. a looping pw-play) to see its volume drop and come back.

@@ -168,7 +168,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (Env.AllowAmbientLoops)
                     Ambient.StartLayers(new AmbientFxConfig
                     {
-                        Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash,
+                        Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash
+                               | AmbientFxLayers.Embers,
                         Intensity = 0.95, FogPuffs = 4, DustDensity = 1.4,
                     });
                 else Ambient.Stop();
