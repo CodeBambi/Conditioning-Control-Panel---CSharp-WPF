@@ -12,6 +12,7 @@ using ConditioningControlPanel.Avalonia.Controls.Billboard;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Billboard;
 using ConditioningControlPanel.Services.Billboard.Board;
 using ConditioningControlPanel.Services.Billboard.Providers;
@@ -27,8 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// rules are <see cref="DashboardBillboard"/> (Core), the drawing and the juice are
     /// <see cref="BillboardDeckView"/>, the provider list is <see cref="BillboardWiring"/>.
     ///
-    /// <para>Differences from 7.1.5, all because the port lacks the thing: the board takes the
-    /// wordmark's centre cell (no browser fold here); snoozes live in board/snoozes.json (no
+    /// <para>Differences from 7.1.5, all because the port lacks the thing: snoozes live in board/snoozes.json (no
     /// AppSettings.BillboardSnoozedUntil yet); there is no Live (no Lobby), no Showcase (no clips),
     /// no program day (no ProgramService), and the Back Room house card stays out of the deck (no
     /// Back Room host). The board stays silent, as 7.1.5 shipped it.</para>
@@ -49,8 +49,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// The slot's one call (<see cref="BillboardHomeSlot"/>): start the providers, make the deck
-        /// over the saved snoozes, drop the card host in, swap the wordmark for the board and show
-        /// the first card. Once per window; the host pauses itself whenever Home is off screen.
+        /// over the saved snoozes, drop the card host in, show the board if the browser is folded
+        /// (MainShellWindow.DashboardFold.cs owns that from then on) and show the first card. Once per window; the host pauses itself whenever Home is off screen.
         /// </summary>
         internal void AttachDashboardBillboard(BillboardHomeSlot slot)
         {
@@ -78,8 +78,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             slot.Children.Add(host);
             _billboardHost = host;
 
-            frame.IsVisible = true;
-            if (tab!.FindControl<Border>("LogoBrandFrame") is { } logo) logo.IsVisible = false;
+            // The board lives in the row the folded browser gives back (parity lane E3, WPF 7.1.5):
+            // shown only while the card is folded, the logo dial keeps the centre cell.
+            frame.IsVisible = BrowserFoldRule.BillboardShown(BrowserFolded);
 
             // Providers may raise from any thread; the deck only listens on the UI thread.
             EventHandler dirty = (_, _) =>
