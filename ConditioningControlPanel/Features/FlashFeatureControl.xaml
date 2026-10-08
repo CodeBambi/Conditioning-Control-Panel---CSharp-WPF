@@ -192,6 +192,10 @@
                                           Style="{DynamicResource DarkComboBoxStyle}"
                                           SelectionChanged="CmbExit_Changed"/>
                             </Grid>
+                            <!-- #1386: while an owned Shatter is on it decides the leave, so the picker greys out. -->
+                            <TextBlock x:Name="TxtExitShatterNote" Text="{loc:Str flash_exit_shatter_note}" Visibility="Collapsed"
+                                       FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"
+                                       Margin="0,-2,0,6"/>
 
                             <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}">
                                 <Grid.ColumnDefinitions>
