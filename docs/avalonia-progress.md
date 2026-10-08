@@ -1434,3 +1434,15 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-season-recap: +482
 - Season recap card follows the active mod accent (Core RecapPalette, shared with WPF) and the foil shimmer is back on WPF's curve; it runs only while visible. The recap window's backdrop and pills follow the mod too.
 - Copy card and Share on X put the PNG on the clipboard (checked live on Wayland). All 3 recap rows are now wired.
+
+## avalonia-port/help-loops-c: +812
+- Help-loop scenes LockCard, FocusGaze, IntensityRamp, Presets, Subliminals and WebcamCalibration ported (20 of 23). Each renders every step and lights its chips in order on the stepped clock.
+- New WebcamCalibration and IntensityRamp pixel tests, both fail-proven. Live: Settings Subliminals `?` plays the loop.
+
+## avalonia-port/rows-feature-intro: +219
+- win-feature-intro: cards now yield to a startup modal or update dialog; tour callers wired on 10 tab cases plus the Dashboard launch (daily-free / one-account) via StartupLadder; 4 fail-proven tests; row stays stub with the missing callers listed.
+- Test profile marks every intro key as spent, so a card no longer leaks across shell tests and holds passive surfaces in later ones.
+
+## avalonia-port/rows-content-dialogs: +332
+- Tube Personality submenu with the CCBill explicit-content acknowledgement gate; content-policy warning on the moderation counter; both rows stub -> wired.
+- TubeContentGatesTests (fail-proven x4); other acknowledgement callers still head-blocked.
