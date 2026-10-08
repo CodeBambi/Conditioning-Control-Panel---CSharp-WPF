@@ -569,8 +569,7 @@ namespace ConditioningControlPanel.Avalonia
                 // way WPF App.xaml.cs:384/:394 seeds the two unlock seams. Unlocked is raised on the
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
                 Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
-                Achievements.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
-                Achievements.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
+                WireAchievementUnlocks(Achievements);
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 // WPF App.xaml.cs: the invite ladder's badges and the invites wire (friends' proxy and
@@ -817,6 +816,39 @@ namespace ConditioningControlPanel.Avalonia
                 Summary = string.Join(", ", rewards.Select(static r => r.Name)),
                 Open = ShowAll,
             }), TimeSpan.FromMilliseconds(900)));
+        }
+
+        /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:4160-4205): popup, wardrobe item toasts,
+        /// achievement sound, opt-in community post - in that order. <paramref name="discord"/> is for tests;
+        /// startup leaves it null and the seeded account is read at unlock time.</summary>
+        internal static void WireAchievementUnlocks(AchievementEngine engine, DiscordAccount? discord = null)
+        {
+            engine.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
+            engine.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
+            engine.Unlocked += (_, a) => AnnounceAchievement(a, discord ?? Platform.AccountSeed.Discord);
+        }
+
+        /// <summary>WPF PlayAchievementSound + the DiscordShareAchievements post (App.xaml.cs:4180-4205).
+        /// WPF plays SystemSounds.Asterisk; Linux has no stock one, so a bundled chime (quests use chime1).
+        /// The name is always CustomDisplayName-first for privacy, as WPF.</summary>
+        internal static Task<bool>? AnnounceAchievement(Models.Achievement a, DiscordAccount? discord)
+        {
+            CoreAudio.PlayOneShot(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "chime2.mp3"),
+                Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), "achievement");
+            if (!CoreSettings.Current.DiscordShareAchievements)
+            {
+                Serilog.Log.Information("Achievement '{Name}' not shared to Discord: DiscordShareAchievements is off", a.Name);
+                return null;
+            }
+            var task = discord?.SendAchievementWebhookAsync(a,
+                discord.CustomDisplayName ?? Platform.AccountSeed.Patreon?.DisplayName ?? "Someone",
+                CoreAccount.UnifiedUserId, () => CoreSettings.Current.AuthToken, DiscordAccount.ModThemeId(CoreMods.ActiveModId));
+            task?.ContinueWith(t =>
+            {
+                if (t.IsFaulted || t.IsCanceled || !t.Result)
+                    Serilog.Log.Warning(t.Exception?.GetBaseException(), "Achievement '{Name}' did NOT post to Discord", a.Name);
+            }, TaskContinuationOptions.ExecuteSynchronously);
+            return task;
         }
 
         internal static void ShowAchievementPopup(Models.Achievement a)
