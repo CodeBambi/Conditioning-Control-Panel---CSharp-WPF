@@ -5043,57 +5043,15 @@ namespace ConditioningControlPanel.Services
         /// <summary>A completed migration owes the lasting XP bonus, whichever way it went (owner,
         /// 2026-10-06: migrated = bonus); a server-recorded Cycle choice also owes Cycle I. Only
         /// ever raises. Called only for an acked migration. True when it wrote.</summary>
-        internal static bool EnsureCycleBonus(AppSettings settings, string? serverChoice)
-        {
-            var changed = false;
-            if (serverChoice == DescentMigrationChoices.Cycle && settings.DescentCycle < 1)
-            {
-                settings.DescentCycle = 1;
-                changed = true;
-            }
-            if (settings.DescentCycleXpBonus < DescentMigration.CycleXpBonus)
-            {
-                settings.DescentCycleXpBonus = DescentMigration.CycleXpBonus;
-                changed = true;
-            }
-            if (changed)
-                App.Logger?.Information("[Descent] Restored the migration XP bonus from the server's record (choice={Choice}).",
-                    serverChoice ?? "unknown");
-            return changed;
-        }
+        internal static bool EnsureCycleBonus(AppSettings settings, string? serverChoice) =>
+            DescentMigrationAck.EnsureCycleBonus(settings, serverChoice);
 
+        // THE CYCLE BONUS FOLLOWS THE ACCOUNT, NOT THE PC: the ack rides every sync, so it heals the bonus
+        // before the "already settled" return (support ticket, 2026-09-24). Logic shared with the Avalonia
+        // head in Core DescentMigrationAck; an account that migrated on ANOTHER device is settled here too.
         private static void HandleDescentMigrationAck(AppSettings settings, V2DescentMigration? block)
         {
-            if (block?.Completed != true) return;
-
-            // THE CYCLE BONUS FOLLOWS THE ACCOUNT, NOT THE PC. ApplyChoice writes it on the machine
-            // that took the ceremony, and nothing else ever did: a second PC, a reinstall, or a
-            // settings file replaced by another account (support ticket, 2026-09-24) kept the
-            // choice on the server and lost the permanent +10% XP. The ack rides every sync, so
-            // it heals here, before the "already settled" return.
-            if (EnsureCycleBonus(settings, block.Choice)) App.Settings?.Save();
-
-            if (settings.DescentMigrationCompleted) return;   // already settled; idempotent
-
-            // Prefer the server's echo of the choice; fall back to what we submitted. They can
-            // only differ if the account migrated on another device, and the server's word wins.
-            var choice = DescentMigrationChoices.IsValid(block.Choice)
-                ? block.Choice
-                : settings.PendingDescentMigrationChoice;
-
-            settings.DescentMigrationCompleted = true;
-            settings.DescentMigrationChoice = choice;
-            settings.PendingDescentMigrationChoice = null;
-
-            // The withhold's memory is spent here too, and not only in ApplyChoice: an account that
-            // migrated on ANOTHER device never ran ApplyChoice locally, so this is the only place
-            // that clears the marker for it. The predicate does not depend on the clear (Completed
-            // outranks it) — it keeps the settings file from claiming a ceremony is still owed.
-            settings.DescentMigrationOffered = false;
-            App.Settings?.Save();
-
-            App.Logger?.Information("[Descent] Migration ACKNOWLEDGED by server (choice={Choice}). Curve v2 is now this account's curve, permanently.",
-                choice ?? "unknown");
+            if (DescentMigrationAck.Apply(settings, block?.Completed, block?.Choice)) App.Settings?.Save();
         }
 
         /// <summary>

@@ -198,7 +198,14 @@ namespace ConditioningControlPanel.Services
                 // Delivered (the clear included); a newer save made meanwhile stays pending.
                 if (cosmetics != null) Interlocked.CompareExchange(ref _pendingCosmetics, null, cosmetics);
                 Log.Information("V2 Profile synced successfully ({Bytes} bytes)", json.Length);
-                try { ProfileAdopt.ApplySyncResponse(s, JObject.Parse(json), UtcNow()); }
+                try
+                {
+                    var reply = JObject.Parse(json);
+                    ProfileAdopt.ApplySyncResponse(s, reply, UtcNow());
+                    // WPF HandleDescentMigrationAck: settle/heal an account migrated on any device. This head never
+                    // takes the offer (no descent_auto), so only the ack half runs here.
+                    Descent.DescentMigrationAck.Apply(s, reply);
+                }
                 catch (Exception ex) { Log.Debug("V2 Sync: Could not parse server flags: {Error}", ex.Message); }
                 // THE FUSE's cache, off the RAW body (WPF ProfileSyncService.HandleDescentCountdown).
                 if (Countdown != null && Descent.DescentCountdownService.TryReadCeremonyAt(json, out var ceremonyAt))
