@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Headless;
@@ -82,38 +83,36 @@ public sealed class IntakeBridgeTests
         return Task.CompletedTask;
     });
 
+    private static List<FypAssetManifest.Entry> Batch() => new()
+    {
+        new() { Id = "scrolller/a/1", Url = "https://cdn.example/a.jpg", Type = "image" },
+        new() { Id = "scrolller/a/2", Url = "https://cdn.example/b.mp4", Type = "video" },
+    };
+
     [Fact]
-    public Task NeedRemoteAppendsOnlyStillsAndAlwaysClearsTheLatch() => AvaloniaTestDispatcher.RunAsync(async () =>
+    public Task NeedRemoteAppendsOnlyStillsAndAlwaysClearsTheLatch() => AvaloniaTestDispatcher.RunAsync(() =>
     {
         Setup();
         var s = CoreSettings.Current;
         var (source, consent) = (s.MediaSource, s.RemoteMediaConsented);
         var asked = 0;
-        var host = new IntakeHostWindow
-        {
-            FetchRemote = () =>
-            {
-                asked++;
-                return Task.FromResult((new List<FypAssetManifest.Entry>
-                {
-                    new() { Id = "scrolller/a/1", Url = "https://cdn.example/a.jpg", Type = "image" },
-                    new() { Id = "scrolller/a/2", Url = "https://cdn.example/b.mp4", Type = "video" },
-                }, (string?)null));
-            },
-        };
+        var host = new IntakeHostWindow { FetchRemote = () => { asked++; return Task.FromResult((Batch(), (string?)null)); } };
         var sent = Capture(host);
+        void Ask() { host.HandleMessage("{\"type\":\"need-remote\"}"); Dispatcher.UIThread.RunJobs(); }
         try
         {
-            s.MediaSource = "local";
-            host.HandleMessage("{\"type\":\"need-remote\"}");
-            Assert.Equal(0, asked);   // no consent / local only: nothing is fetched
+            // Local only, or mixed without consent: nothing is fetched and init says so.
+            (s.MediaSource, s.RemoteMediaConsented) = ("local", true);
+            Ask();
+            (s.MediaSource, s.RemoteMediaConsented) = ("mixed", false);
+            Ask();
+            Assert.Equal(0, asked);
+            Assert.Empty(sent);
             Assert.False((bool)JObject.FromObject(host.InitMessage())["config"]!["remoteMedia"]!);
 
-            s.MediaSource = "mixed";
             s.RemoteMediaConsented = true;
             Assert.True((bool)JObject.FromObject(host.InitMessage())["config"]!["remoteMedia"]!);
-            await host.ServeRemoteBatchAsync();
-            Dispatcher.UIThread.RunJobs();
+            Ask();
             Assert.Equal(1, asked);
             Assert.Equal("assets-append", (string?)sent[0]["type"]);
             Assert.Equal(new[] { "https://cdn.example/a.jpg" }, sent[0]["images"]!.Values<string>());
@@ -125,54 +124,137 @@ public sealed class IntakeBridgeTests
             host.Close();
             (s.MediaSource, s.RemoteMediaConsented) = (source, consent);
         }
+        return Task.CompletedTask;
     });
 
-    [Fact]
-    public Task SpeakingThePhraseMatchesAndClosingStopsTheMic() => AvaloniaTestDispatcher.RunAsync(async () =>
+    /// <summary>The say-it beat's engine with the clock in the test's hand: each listen window stays
+    /// open until the test ends it (or the bridge cancels it, which reads as an empty timeout, as an
+    /// aborted capture does). Continuations run inline, so whether the loop listens again is known the
+    /// moment a window ends.</summary>
+    private sealed class SteppedSpeech : SpeechEngine
+    {
+        private sealed class NoMic : IMicSource
+        {
+            public bool HasDevice => true;
+            public IReadOnlyList<SpeechInputDevice> ListDevices() => Array.Empty<SpeechInputDevice>();
+            public IDisposable Start(Action<byte[], int> onPcm) => throw new InvalidOperationException("never a real mic");
+        }
+
+        public SteppedSpeech() : base(new NoMic(), Array.Empty<string>()) { }
+        public int Listens;
+        public readonly TaskCompletionSource FirstListen = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource<PhraseResult>? _window;
+        public bool MicOpen => _window is { Task.IsCompleted: false };
+        public override bool IsAvailable => true;
+
+        public override Task<PhraseResult> RecognizePhraseAsync(string target, RecognizeOptions? options = null, CancellationToken ct = default)
+        {
+            Listens++;
+            var w = _window = new TaskCompletionSource<PhraseResult>();
+            ct.Register(() => w.TrySetResult(new PhraseResult { TimedOut = true }));
+            FirstListen.TrySetResult();
+            return w.Task;
+        }
+
+        /// <summary>End the open window: an empty timeout is what an aborted capture returns.</summary>
+        public void End(PhraseResult r) => _window?.TrySetResult(r);
+    }
+
+    private static async Task WithSpeech(Func<IntakeHostWindow, SteppedSpeech, List<JObject>, Task> body)
     {
         Setup();
-        var mic = new LockCardVoiceTests.WavMicSource(LockCardVoiceTests.Wav());
-        using var engine = new SpeechEngine(mic, new[] { LockCardVoiceTests.Model() });
+        var engine = new SteppedSpeech();
         var host = new IntakeHostWindow { Speech = () => engine };
         var sent = Capture(host);
         var savedConsent = CoreSettings.Current.MicConsentGiven;
         CoreSpeech.HasCaptureDeviceProvider = () => true;
-        try
-        {
-            // No consent: refused with the wire reason, the mic never opens.
-            CoreSettings.Current.MicConsentGiven = false;
-            Assert.Equal("consent", (string?)JObject.FromObject(host.InitMessage())["config"]!["speech"]!["reason"]);
-            host.HandleMessage("{\"type\":\"speech-start\",\"id\":1,\"phrase\":\"one zero zero zero one\"}");
-            Assert.Equal("consent", (string?)sent[^1]["reason"]);
-            Assert.Equal(0, mic.Starts);
-
-            CoreSettings.Current.MicConsentGiven = true;
-            host.HandleMessage("{\"type\":\"speech-start\",\"id\":2,\"phrase\":\"one zero zero zero one\"}");
-            await LockCardVoiceTests.Until(() =>
-            {
-                Dispatcher.UIThread.RunJobs();
-                return sent.Any(f => (string?)f["kind"] == "final");
-            }, 30);
-            var final = sent.First(f => (string?)f["kind"] == "final");
-            Assert.Equal(2, (int)final["id"]!);
-            Assert.True((bool)final["matched"]!);
-            Assert.Contains(sent, f => (string?)f["kind"] == "listening");
-
-            // A closed window never leaves the mic open (WPF DisposeAll -> StopSpeechBridge).
-            // A silent mic holds its 10 s window open, so only the close can cut it inside 5 s.
-            var quiet = new LockCardVoiceTests.WavMicSource(Array.Empty<byte>());
-            using var quietEngine = new SpeechEngine(quiet, new[] { LockCardVoiceTests.Model() });
-            var quietHost = new IntakeHostWindow { Speech = () => quietEngine };
-            quietHost.HandleMessage("{\"type\":\"speech-start\",\"id\":3,\"phrase\":\"hello my darling\"}");
-            await LockCardVoiceTests.Until(() => quietEngine.IsListening, 10);
-            quietHost.Close();
-            await LockCardVoiceTests.Until(() => quiet.Starts == quiet.Stops && !quietEngine.IsListening, 5);
-        }
+        try { await body(host, engine, sent); }
         finally
         {
             host.Close();
             CoreSettings.Current.MicConsentGiven = savedConsent;
             CoreSpeech.HasCaptureDeviceProvider = null;
         }
-    });
+    }
+
+    private static Task Listen(IntakeHostWindow host, SteppedSpeech engine, int id)
+    {
+        host.HandleMessage($"{{\"type\":\"speech-start\",\"id\":{id},\"phrase\":\"good girls obey\"}}");
+        return engine.FirstListen.Task.WaitAsync(TimeSpan.FromSeconds(10));   // the loop runs off the UI thread
+    }
+
+    [Fact]
+    public Task SpeakingThePhraseMatchesAndClosingStopsTheMic() => AvaloniaTestDispatcher.RunAsync(() => WithSpeech(async (host, engine, sent) =>
+    {
+        // No consent: refused with the wire reason, the mic never opens.
+        CoreSettings.Current.MicConsentGiven = false;
+        Assert.Equal("consent", (string?)JObject.FromObject(host.InitMessage())["config"]!["speech"]!["reason"]);
+        host.HandleMessage("{\"type\":\"speech-start\",\"id\":1,\"phrase\":\"good girls obey\"}");
+        Assert.Equal("consent", (string?)sent[^1]["reason"]);
+        Assert.Equal(0, engine.Listens);
+
+        CoreSettings.Current.MicConsentGiven = true;
+        await Listen(host, engine, 2);
+        engine.End(new PhraseResult { Matched = true, Transcript = "good girls obey", Score = 1, LoudEnough = true });
+        Dispatcher.UIThread.RunJobs();
+        var final = sent.Single(f => (string?)f["kind"] == "final");
+        Assert.Equal(2, (int)final["id"]!);
+        Assert.True((bool)final["matched"]!);
+        Assert.Contains(sent, f => (string?)f["kind"] == "listening");
+        Assert.Equal(1, engine.Listens);
+
+        // A closed window never leaves the mic open (WPF DisposeAll -> StopSpeechBridge).
+        var quiet = new SteppedSpeech();
+        var quietHost = new IntakeHostWindow { Speech = () => quiet };
+        await Listen(quietHost, quiet, 3);
+        quietHost.Close();
+        Assert.False(quiet.MicOpen);
+        Assert.Equal(1, quiet.Listens);
+    }));
+
+    /// <summary>WPF GameSurfaces 'intake' -> CloseActive -> DisposeAll -> StopSpeechBridge, on every panic
+    /// route. The route's own capture abort reaches the loop as an empty timeout; without the stop it
+    /// read that as silence and reopened the mic for up to three more windows.</summary>
+    [Theory]
+    [InlineData("key")]
+    [InlineData("tray")]
+    [InlineData("voice")]
+    public Task PanicClosesTheIntakeAndTheMicNeverReopens(string route) => AvaloniaTestDispatcher.RunAsync(() => WithSpeech(async (host, engine, sent) =>
+    {
+        var s = CoreSettings.Current;
+        var (enabled, key) = (s.PanicKeyEnabled, s.PanicKey);
+        (s.PanicKeyEnabled, s.PanicKey) = (true, "F8");
+        s.MicConsentGiven = true;
+        var shell = new MainShellWindow();
+        var exited = false;
+        shell.Closed += (_, _) => exited = true;
+        try
+        {
+            host.Show();
+            await Listen(host, engine, 7);
+            Assert.True(engine.MicOpen);
+            var t0 = new DateTime(2026, 1, 1, 12, 0, 0);
+            if (route == "key") shell.HandlePanicKeyPress(t0);
+            else if (route == "tray") MainShellWindow.StopEverything();
+            else shell.VoicePanic();
+            engine.End(new PhraseResult { TimedOut = true });   // the route's abort, if it outran the stop
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(engine.MicOpen);
+            Assert.Equal(1, engine.Listens);
+            Assert.False(host.IsVisible);
+            Assert.DoesNotContain(sent, f => (string?)f["kind"] == "silence");
+            if (route == "key")
+            {
+                // Closing the intake does not arm the exit ladder (WPF, while a game owns the screen).
+                shell.HandlePanicKeyPress(t0.AddSeconds(1));
+                Assert.False(exited);
+            }
+        }
+        finally
+        {
+            if (!exited) shell.Close();
+            (s.PanicKeyEnabled, s.PanicKey) = (enabled, key);
+        }
+    }));
 }

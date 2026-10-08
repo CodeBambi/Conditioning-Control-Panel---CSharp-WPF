@@ -110,6 +110,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Debug("IntakeHost: audio-web request failed: {E}", ex.Message); }
         }
 
+        // ---------------- panic (WPF GameSurfaces 'intake' -> CloseActive -> DisposeAll) ----------------
+
+        private static readonly System.Collections.Generic.List<IntakeHostWindow> OpenWindows = new();
+
+        private static IntakeHostWindow[] Snapshot() { lock (OpenWindows) return OpenWindows.ToArray(); }
+
+        /// <summary>Every panic route, before anything aborts the capture: cancel each say-it loop so an
+        /// aborted listen is never read as silence and the mic never reopens.</summary>
+        internal static void StopMicsForPanic()
+        {
+            foreach (var w in Snapshot()) w.StopSpeechBridge("panic", notifyPage: false);
+        }
+
+        /// <summary>Panic closes the intake like WPF's GameSurfaces close pass. True when one was up
+        /// (the panic key then skips the exit ladder, as WPF does while a game owns the screen).</summary>
+        internal static bool CloseAllForPanic()
+        {
+            var open = Snapshot();
+            foreach (var w in open)
+            {
+                w.StopSpeechBridge("panic", notifyPage: false);
+                try { w.Close(); } catch (Exception ex) { Log.Warning("PANIC: closing intake failed: {E}", ex.Message); }
+            }
+            return open.Length > 0;
+        }
+
         // ---------------- speech bridge (WPF IntakeHostService.Speech.cs) ----------------
 
         private readonly object _speechGate = new();
@@ -122,7 +148,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return new { bridge = true, available = reason == null, reason };
         }
 
-        /// <summary>Null = the mic can open now. This head has no wake-word loop, so only the engine can hold it.</summary>
+        /// <summary>Null = the mic can open now. <c>IsListening</c> covers anything already holding the engine,
+        /// including the voice-command wake-word loop (MainShellWindow.VoiceCommands.cs).</summary>
         private string? SpeechUnavailability()
         {
             try

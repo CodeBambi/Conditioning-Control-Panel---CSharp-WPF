@@ -52,7 +52,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Content = Web;
             Web.WebMessage += OnPageMessage;
             // WPF DisposeAll: a closed window never leaves the mic open.
-            Closed += (_, _) => { _closed = true; StopSpeechBridge("closed", notifyPage: false); };
+            Opened += (_, _) => { lock (OpenWindows) OpenWindows.Add(this); };
+            Closed += (_, _) => { _closed = true; lock (OpenWindows) OpenWindows.Remove(this); StopSpeechBridge("closed", notifyPage: false); };
             // The page never leaves the served origin; anything else is refused before the engine loads it.
             Web.AllowNavigation = url => PageUrl != null && SameOrigin(url, PageUrl);
         }
