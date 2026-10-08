@@ -1414,3 +1414,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-mini-player: +198
 - win-mini-player: GIFs now loop (SkiaSharp decode + frame timer) and load failures show a MessageDialog notice before closing; the row stays stub because there is no opener.
 - MiniPlayerPreviewTests: 2 tests, each fail-proven.
+
+## avalonia-port/flake-layout: +24
+- Root-caused the Blink/ChasterRaffle/EmiBook shard flakes to one test setting up headless drawing without Skia (first setup wins per testhost); fixed it.
+- Added a source-scan guard that every Avalonia test platform setup uses Skia drawing; fail-proven with a fixed order seed.
