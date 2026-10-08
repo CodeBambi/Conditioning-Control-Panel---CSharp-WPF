@@ -209,11 +209,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         }
 
         /// <summary>WPF RecapTheme.ApplyForActiveMod, scoped to this card's own resources.</summary>
-        internal void ApplyModPalette()
+        internal void ApplyModPalette() => WriteModPalette(Resources);
+
+        /// <summary>The palette write shared by the card and <see cref="SeasonRecapWindow"/>.
+        /// Keys a dictionary does not declare are added and simply go unused.</summary>
+        internal static void WriteModPalette(IResourceDictionary resources)
         {
             CoreMods.TryParseHexColor(CoreMods.AccentColorHex, out var rgb); // miss = hot pink, as WPF
             foreach (var (key, a, r, g, b) in RecapPalette.For(rgb.R, rgb.G, rgb.B))
-                Resources[key] = Color.FromArgb(a, r, g, b);
+                resources[key] = Color.FromArgb(a, r, g, b);
         }
 
         private void StopAmbientLoops()

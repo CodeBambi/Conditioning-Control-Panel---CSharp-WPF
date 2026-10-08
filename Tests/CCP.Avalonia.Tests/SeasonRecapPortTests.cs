@@ -67,6 +67,33 @@ public sealed class SeasonRecapPortTests
     });
 
     [Fact]
+    public Task WindowBackdropAndContinuePillFollowTheModToo() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureApp();
+        var old = CoreMods.AccentColorHexProvider;
+        CoreMods.AccentColorHexProvider = () => "#00C850";
+        var w = new SeasonRecapWindow();
+        try
+        {
+            w.Show();
+            Dispatcher.UIThread.RunJobs();
+            var pill = (LinearGradientBrush)w.FindControl<Button>("BtnContinue")!
+                .GetVisualDescendants().OfType<Border>().First().Background!;
+            // RecapVoid = accent x0.06; the pill runs accent -> accent lightened 45%.
+            Assert.Equal(Color.FromRgb(0, 12, 4), ((SolidColorBrush)w.Background!).Color);
+            Assert.Equal(Color.FromRgb(0x00, 0xC8, 0x50), pill.GradientStops[0].Color);
+
+            CoreMods.AccentColorHexProvider = () => "#2040FF";
+            CoreMods.RaiseModChanged(null, new ModPackage(new ModManifest(), null, false));
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Color.FromRgb(0x20, 0x40, 0xFF), pill.GradientStops[0].Color);
+            Assert.Equal(Color.FromRgb(1, 3, 15), ((SolidColorBrush)w.Background!).Color);
+        }
+        finally { CoreMods.AccentColorHexProvider = old; w.Close(); }
+        return Task.CompletedTask;
+    });
+
+    [Fact]
     public Task FoilShimmerDriftsOnTheWpfCurveOnlyWhileVisible() => AvaloniaTestDispatcher.RunAsync(() =>
     {
         EnsureApp();

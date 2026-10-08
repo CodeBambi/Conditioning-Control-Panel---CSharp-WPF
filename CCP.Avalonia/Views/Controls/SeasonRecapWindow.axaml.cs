@@ -56,6 +56,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             this.FindControl<Button>("BtnContinue")!.Click += OnContinue;
             this.FindControl<TextBlock>("TxtContinue")!.Text =
                 Loc.GetF("recap_btn_continue", _vm.NextSeasonNumber.ToString("00"));
+
+            // WPF RecapTheme repaints the window's recap brushes too: same palette, same signal.
+            SeasonRecapCard.WriteModPalette(Resources);
+            Opened += (_, _) => { CoreMods.ModChanged -= OnModChanged; CoreMods.ModChanged += OnModChanged; };
+            Closed += (_, _) => CoreMods.ModChanged -= OnModChanged;
+        }
+
+        private void OnModChanged(object? sender, ConditioningControlPanel.Models.ModPackage mod)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) SeasonRecapCard.WriteModPalette(Resources);
+            else Dispatcher.UIThread.Post(() => SeasonRecapCard.WriteModPalette(Resources));
         }
 
         // ---------- share actions ----------
