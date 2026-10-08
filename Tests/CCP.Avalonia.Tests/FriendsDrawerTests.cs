@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.LogicalTree;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Platform;
@@ -37,12 +38,15 @@ public sealed class FriendsDrawerTests
         public readonly List<string> Ops = new();
         /// <summary>The bodies of every "send" (poke / invite / watch), in order.</summary>
         public readonly List<string> Sends = new();
+        /// <summary>When set, a "send" waits for it: the answer is still out while the test folds the drawer.</summary>
+        public TaskCompletionSource? HoldSends;
+        public string StateBody = State;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             var op = r.RequestUri!.AbsolutePath.Split('/').Last();
             lock (Ops) Ops.Add(op);
-            if (op == "send") Sends.Add(await r.Content!.ReadAsStringAsync(ct));
-            var body = op == "state" ? State : op == "poll" ? """{"ok":true,"online":[],"inbox":[],"receipts":[]}"""
+            if (op == "send") { Sends.Add(await r.Content!.ReadAsStringAsync(ct)); if (HoldSends != null) await HoldSends.Task; }
+            var body = op == "state" ? StateBody : op == "poll" ? """{"ok":true,"online":[],"inbox":[],"receipts":[]}"""
                 : op == "send" ? """{"ok":true,"status":"sent"}""" : """{"ok":true}""";
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
         }
@@ -114,6 +118,49 @@ public sealed class FriendsDrawerTests
         d.OpenPickerFor("u_on", "poke");
         d.Toggle("u_on");
         Assert.Null(d.OpenPicker);
+    });
+
+    /// <summary>WPF ShowResult: a send answered after the drawer folded says so outside, over the rail chip's
+    /// window (the drawer itself sits in a popup root, then detached). Driven from the rail chip's click.</summary>
+    [Fact]
+    public Task ASendAnsweredAfterTheDrawerFoldsFliesOverTheChipsWindow() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        if (global::Avalonia.Application.Current is null)
+            global::Avalonia.AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                .UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+        var (svc, wire) = Service();
+        var chip = new FriendsRailChip(svc) { Width = 200, HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Bottom };
+        var host = new Window { Width = 1000, Height = 700, Content = chip };
+        try
+        {
+            host.Show();
+            await svc.RefreshAsync();
+            var at = chip.TranslatePoint(new Point(24, 24), host)!.Value;
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseDown(host, at, MouseButton.Left);
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseUp(host, at, MouseButton.Left);
+            Assert.True(chip.IsOpen);
+            var d = chip.Drawer;
+            d.Toggle("u_on");
+            Click(d, "friends-action:poke");
+            wire.HoldSends = new TaskCompletionSource();
+            Click(d, "friends-poke:" + PokeSet.Shipped[0]);
+            await Until(() => wire.Sends.Count == 1);
+            // Esc folds the picker, then the drawer (WPF OnKey).
+            foreach (var _ in new[] { 1, 2 }) d.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+            Assert.False(chip.IsOpen);
+            wire.HoldSends.SetResult();
+            await Until(() => host.OwnedWindows.OfType<FloatingWord>().Any());
+            var word = Assert.Single(host.OwnedWindows.OfType<FloatingWord>());
+            Assert.Equal(Loc.Get(FriendsDrawerRules.SendResultKey(SendResult.Sent)), word.GetLogicalDescendants().OfType<TextBlock>().Single().Text);
+
+            // Folded, the drawer no longer redraws on every snapshot (P07).
+            var row = Tagged<Border>(d, "friends-row:u_on");
+            wire.StateBody = State.Replace("\"Zed\"", "\"Zoe\"");
+            await svc.RefreshAsync();
+            Assert.Equal("Zoe", svc.Snapshot.Friends.Single(f => f.Id == "u_off").Name);
+            Assert.Same(row, Tagged<Border>(d, "friends-row:u_on"));
+        }
+        finally { foreach (var w in host.OwnedWindows.ToArray()) w.Close(); host.Close(); }
     });
 
     /// <summary>Ticks only when the test says so; <see cref="Restarted"/> completes on the first Start after a tick.</summary>

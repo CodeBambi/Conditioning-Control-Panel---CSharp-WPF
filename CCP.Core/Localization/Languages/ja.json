@@ -731,6 +731,7 @@
   "exclusives_badge_beta": "BETA",
   "exclusives_chip_unlocked": "解放済み",
   "exclusives_chip_lab": "✨ ラボアクセス",
+  "exclusives_not_on_this_build": "このビルドではまだ利用できません。",
   "exclusives_chip_pass_ready": "今週のパス利用可",
   "exclusives_enter": "開く",
   "tab_fyp": "おすすめ",

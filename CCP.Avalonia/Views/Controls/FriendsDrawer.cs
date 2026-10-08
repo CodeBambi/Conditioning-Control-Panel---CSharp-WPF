@@ -6,7 +6,7 @@
 // ponytail: no feed, trails,
 // open tables or leash section, no lock-day chip, no once-only presence ask, no juice (.Juice.cs), no bell (the corner notices are not on this
 // head), no per-PC block list (the server's list only). A word WPF throws outside the drawer
-// (FriendsLanding.Tell) is a FloatingWord over the drawer's window.
+// (FriendsLanding.Tell) is a FloatingWord over the rail chip's window (OwnerWindow).
 using System;
 using System.Collections.Generic;
 using Avalonia.Input.Platform;
@@ -62,6 +62,7 @@ public sealed partial class FriendsDrawer : Border
     {
         _resolve = service != null ? () => service : () => FriendsHead.Service;
         _svc = _resolve();
+        OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
         (Width, MaxHeight, CornerRadius) = (DrawerWidth, DrawerMaxHeight, new CornerRadius(16));
         Background = new LinearGradientBrush
         {
@@ -138,6 +139,7 @@ public sealed partial class FriendsDrawer : Border
     public void OnClosed()
     {
         try { _svc?.SetDrawerOpen(false); } catch { }
+        Unsubscribe(); // a folded drawer redraws nothing (OnOpened re-subscribes)
         (_isOpen, _openId, _confirm, _picker, _addBox.IsVisible) = (false, null, null, null, false);
     }
     private void Rebind()
@@ -593,9 +595,12 @@ public sealed partial class FriendsDrawer : Border
         DispatcherTimer.RunOnce(() => { if (_results.TryGetValue(rowId, out var cur) && cur.Text == text) { _results.Remove(rowId); Render(); } },
             TimeSpan.FromSeconds(FriendsDrawerRules.ResultHoldSeconds));
     }
+    /// <summary>The window a word outside the drawer flies over. The drawer lives in a popup (not a Window) and is
+    /// detached once folded, so its host (the rail chip) sets this to its own window.</summary>
+    internal Func<Window?> OwnerWindow { get; set; }
     /// <summary>WPF TellOutside(always) -> FriendsLanding.Say: a floating word over the window.</summary>
     private void Say(string text, bool good) =>
-        Overlays.FloatingWord.Throw(TopLevel.GetTopLevel(this) as Window, text, pink: !good, small: true);
+        Overlays.FloatingWord.Throw(OwnerWindow(), text, pink: !good, small: true);
     internal static TextBlock Label(string text, double size, IBrush fg, FontFamily? font = null, FontWeight weight = FontWeight.Normal) => new()
     {
         Text = text, FontSize = size, Foreground = fg, FontFamily = font ?? FontFamily.Default, FontWeight = weight,

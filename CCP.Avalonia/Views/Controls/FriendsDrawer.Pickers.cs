@@ -1,7 +1,7 @@
 // PORTED from ConditioningControlPanel/Controls/Friends/FriendsDrawer.Pickers.cs (+ FriendsDrawer.cs
 // BuildCard/ActionButton/ShowResult): the card's Invite / Poke / Send a watch buttons and the picker
 // each opens inline in the card, over IFriendsService.
-// ponytail: no Pop() juice and no FriendsSfx sounds (.Juice.cs / FriendsSfx are not on this head). The Goon
+// ponytail: no Segoe MDL2 glyphs on the action buttons (no such font on Linux), no Pop() juice and no FriendsSfx sounds (.Juice.cs / FriendsSfx are not on this head). The Goon
 // and chess tiles stay shut here: GoonHostService and PieceByPieceHostService are WPF-only, so this head
 // can neither open a room nor a board (FriendsInviteCodes is the seam that lights them when they move).
 using System;
@@ -23,7 +23,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls;
 public sealed partial class FriendsDrawer
 {
     private static readonly IBrush ButtonBg = new SolidColorBrush(Color.FromRgb(0x1C, 0x12, 0x33)),
-        ButtonHover = new SolidColorBrush(Color.FromRgb(0x3A, 0x1F, 0x66)), Ground = new SolidColorBrush(Color.FromRgb(0x10, 0x0A, 0x1E));
+        ButtonHover = new SolidColorBrush(Color.FromRgb(0x3A, 0x1F, 0x66)), Ground = new SolidColorBrush(Color.FromRgb(0x10, 0x0A, 0x1E)),
+        PokeInk = new SolidColorBrush(Color.FromRgb(0x2A, 0x0A, 0x1C));
 
     /// <summary>The picker open inside the open card: "poke", "invite", "watch" or null.</summary>
     private string? _picker;
@@ -63,6 +64,9 @@ public sealed partial class FriendsDrawer
         foreach (var id in PokeSet.Shipped)
         {
             var chip = Chip(Loc.Get("friends_poke_" + id), "friends-poke:" + id);
+            // WPF hover: pink pill, dark ink (Fluent reads these per button on :pointerover / :pressed).
+            foreach (var state in new[] { "PointerOver", "Pressed" })
+                (chip.Resources["ButtonBackground" + state], chip.Resources["ButtonForeground" + state], chip.Resources["ButtonBorderBrush" + state]) = (Pink, PokeInk, Pink);
             chip.Click += async (_, _) => await PokeAsync(f.Id, id);
             wrap.Children.Add(chip);
         }
