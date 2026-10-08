@@ -1470,3 +1470,14 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-corner-gif: +502
 - win-corner-gif wired: standalone corner-GIF overlays (CornerGifOverlay, seeded CoreCornerGif) with stagger, crash sentinel, panic surface `corner-gif`; CornerGifOverlayTests fail-proven 4 ways; live X readback in evidence/avalonia-port/rows-corner-gif/.
 - Still missing: session-scoped corner GIF in SessionRunner, so the Presets corner-GIF option stays hidden; live panic not reproduced (headless only).
+
+## avalonia-port/rows-local-ai-wizard: +641
+- Local AI setup wizard wired: OllamaSetupService moved to Core; detect, start, pull, smoke test and save work like WPF; Linux has no auto-install, so the user installs Ollama and Continue re-detects (decision logged).
+- The head seeds EnsureServerRunning and stops only the `ollama serve` it spawned on exit; 5 faked tests, all fail-proven except the PATH lookup.
+
+## avalonia-port/rows-mantra-window: +277
+- win-mantra: five storyboards stepped on a clock, panic surface `mantra`, Programs mantra-task door; row stays stub (TodayTaskList unbuilt, failure MessageBox dropped).
+
+## avalonia-port/rows-webcam-windows: +230
+- Webcam loading splash wired to tracker startup progress (shell init, error/close paths); calibration Verify live gaze cursor; quick recal on calibrated monitor.
+- 4 fail-proven headless tests; live sandbox splash check (no camera opened); bubble test, mouth checks, quick-recal hotkey still stub.

@@ -626,3 +626,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   engine runs, 50% roll per 10 minutes, 60 s window; engine stop, panic and exit end it and the 3x with it. Rules are
   Core `PinkRushRules`, which WPF `SkillTreeService` now calls too. The additive skill terms (sparkle boosts, streak
   power, night shift, early bird, event boost) are still missing on this head, so owners remain under-awarded.
+## 2026-10-09: Linux has no Ollama auto-install; manual install, then Continue re-detects (avalonia-port/rows-local-ai-wizard)
+- WPF LocalAiSetupWizard downloads OllamaSetup.exe (Windows NSIS) to %TEMP% and runs it with `/S`. There is no Linux
+  equivalent that does not need root or piping a remote script into a shell.
+- Options: (A) download and run Ollama's install.sh (root, remote script); (B) manual install link, Continue re-runs
+  detection; (C) manual link only. Chosen: B, supervisor advised (P44).
+- `OllamaSetupService` moved to Core unchanged except a non-Windows branch: `ollama` is looked up on PATH, then
+  /usr/local/bin and /usr/bin. Windows behaviour is unchanged. Linux still starts `ollama serve`, pulls the model through
+  the local API and runs the smoke test like WPF. The Avalonia head now seeds `LocalAiService.EnsureServerRunning` and
+  calls `StopSpawnedServer` on exit, which stops only a server this app spawned.
+- Tests: `Tests/CCP.Avalonia.Tests/LocalAiSetupWizardTests.cs`, `Tests/CCP.Core.Tests/OllamaSetupServiceTests.cs`
+  (fake binary and loopback API; no real ollama, pull or network).
