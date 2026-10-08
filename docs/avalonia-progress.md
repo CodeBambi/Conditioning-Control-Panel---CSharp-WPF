@@ -1410,3 +1410,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-name-dialogs: +342
 - Trainer Card rename/delete wired through DisplayNameDialog -> CoreAccount -> Core V2AuthService; delete signs out without a push.
 - UsernamePickerDialog documented as unreachable on WPF too (dead BtnQuick*Login handlers); both rows stay stub with exact gaps.
+
+## avalonia-port/rows-mini-player: +198
+- win-mini-player: GIFs now loop (SkiaSharp decode + frame timer) and load failures show a MessageDialog notice before closing; the row stays stub because there is no opener.
+- MiniPlayerPreviewTests: 2 tests, each fail-proven.
