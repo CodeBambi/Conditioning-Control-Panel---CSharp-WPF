@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <summary>
     /// The achievement page, built in code as WPF MainWindow.AchievementsTab.cs builds it: one card per
     /// visible Achievement.All entry, free or patron grid, filter chips, meter, tooltip.
-    /// ponytail: no tile FX (entrance stagger, holo tilt, unlock burst - MainWindow.EventFx.cs); lands with its port.
+    /// Tile FX (entrance stagger, holo tilt, unlock reveal + burst) live in AchievementsTabView.Fx.cs.
     /// </summary>
     public partial class AchievementsTabView : UserControl
     {
@@ -48,6 +48,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             public Border Band = null!;
             public StackPanel InfoStack = null!;
             public Control? Meter;
+            // Card: settle scale + stagger rise. Badge host: hover lift + holo tilt (WPF EnsureCardTransforms).
+            public readonly ScaleTransform CardScale = new(1, 1), BadgeLift = new(1, 1);
+            public readonly TranslateTransform CardSlide = new();
+            public readonly RotateTransform BadgeTilt = new();
         }
 
         /// <summary>Decoded badges keyed by resolved path, so a mod switch re-resolves and a refresh costs a lookup.</summary>
@@ -73,7 +77,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
             AttachedToVisualTree += (_, _) => { engine.Unlocked -= OnUnlocked; engine.Unlocked += OnUnlocked; };
             DetachedFromVisualTree += (_, _) => engine.Unlocked -= OnUnlocked;
-            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty && IsVisible) RefreshAll(); };
+            DetachedFromVisualTree += (_, _) => FinishFx();
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property != IsVisibleProperty) return;
+                if (!IsVisible) { FinishFx(); return; } // P01: no FX clock on a hidden tab
+                RefreshAll();
+                StaggerTiles();
+            };
         }
 
         /// <summary>The live engine; on the headless render path a read-only load of the same file
@@ -96,6 +107,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var tile = BuildCard(a, theme);
                 tile.Reward = rewards.TryGetValue(a.Id, out var r) ? r : null;
                 _tiles[a.Id] = tile;
+                tile.Card.PointerEntered += (_, e) => TileEnter(tile, e);
+                tile.Card.PointerExited += (_, _) => TileLeave(tile);
                 (a.IsExclusive ? patron : free).Children.Add(tile.Card);
             }
             BuildFilters();
@@ -108,6 +121,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             lock (_pending) { ids = _pending.ToArray(); _pending.Clear(); _flushQueued = false; }
             foreach (var id in ids) if (_tiles.TryGetValue(id, out var t)) Apply(t);
             AfterApply();
+            foreach (var id in ids) if (_tiles.TryGetValue(id, out var t) && IsUnlocked(id)) Celebrate(t);
         }
 
         /// <summary>WPF RefreshAllAchievementTiles: in place, never a rebuild.</summary>
@@ -151,6 +165,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static Tile BuildCard(Achievement a, ControlTheme? theme)
         {
             var t = new Tile { A = a, Card = new ToggleButton { Theme = theme, Tag = a.Id, IsChecked = false } };
+            t.Card.RenderTransform = new TransformGroup { Children = { t.CardScale, t.CardSlide } };
             t.Badge = new Image { Width = 150, Height = 150, Stretch = Stretch.Uniform,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             t.Name = new TextBlock { FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Brushes.White,
@@ -168,7 +183,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Grid.SetRow(t.Name, 1);
             Grid.SetRow(t.InfoStack, 2);
             Grid.SetRow(bandChrome, 3);
-            content.Children.Add(t.Badge);
+            // The tilt lands on the badge host, the hover pop on the art inside it, so the two compose (WPF :430).
+            content.Children.Add(new Panel { Children = { t.Badge },
+                RenderTransform = new TransformGroup { Children = { t.BadgeLift, t.BadgeTilt } } });
             content.Children.Add(t.Name);
             content.Children.Add(t.InfoStack);
             content.Children.Add(bandChrome);
@@ -196,6 +213,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var art = Art(a.ImageName);
             if (art != null) t.Badge.Source = art; // missing art leaves the old source (WPF contract)
             t.Badge.Effect = unlocked ? null : new BlurEffect { Radius = 15 };
+            if (!unlocked) { Cancel(t.BadgeTilt); t.BadgeTilt.Angle = 0; } // WPF SetAchievementTileUnlocked
             t.Name.Text = unlocked ? Name(a) : Loc.Get("achv_card_locked_name");
 
             // Requirement while locked, flavor once earned (WPF ApplyAchievementInfoText).

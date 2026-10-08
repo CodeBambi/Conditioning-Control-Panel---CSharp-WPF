@@ -1306,3 +1306,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-audio-devices: +536
 - Settings Audio + dashboard card share one binder (dials, ducking with force-unduck, live volumes, sync pair, output picker routed to one-shots/layers/video, Test Audio, help card); rows wired.
+
+## avalonia-port/rows-achievements-tab: +606
+- Achievement tiles: stagger, hover tilt/lift/pop, unlock reveal + gated burst; FX timer only while moving and shown. Season Recap re-view (Core SeasonRecapStore). Rows wired.
