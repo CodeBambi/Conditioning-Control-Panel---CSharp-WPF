@@ -37,6 +37,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private bool _autonomyHooked;
 
+        // WPF AchievementService.TrackTimeBasedProgress, the Takeover half (ccp-bugs #1327): quest
+        // minutes measured on a monotonic clock between 1 s ticks, so a throttled or late tick still
+        // counts in full and a sleep-sized gap counts nothing (Core RunningTimeCredit).
+        private readonly RunningTimeCredit _takeoverCredit = new();
+        private readonly System.Diagnostics.Stopwatch _takeoverWatch = System.Diagnostics.Stopwatch.StartNew();
+        private DispatcherTimer? _takeoverQuestTick;
+        /// <summary>Monotonic clock for the Takeover quest credit; a test steps it.</summary>
+        internal Func<TimeSpan>? TakeoverClock;
+        internal bool TakeoverQuestTickRunning => _takeoverQuestTick?.IsEnabled == true;
+
+        /// <summary>One tracking tick: credit the interval since the last tick while Takeover runs.</summary>
+        internal void CreditTakeoverTime()
+        {
+            var minutes = _takeoverCredit.Sample(Autonomy.IsEnabled, TakeoverClock?.Invoke() ?? _takeoverWatch.Elapsed);
+            if (minutes > 0) App.Quests?.TrackAutonomyMinutes(minutes);
+        }
+
+        /// <summary>The tick runs only while Takeover does (WPF's ticks while off only reset the stamp).</summary>
+        private void FollowTakeoverQuestTick(bool on)
+        {
+            CreditTakeoverTime();   // opens the stamp on start, closes it on stop
+            if (!on) { _takeoverQuestTick?.Stop(); return; }
+            _takeoverQuestTick ??= new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background,
+                (_, _) => CreditTakeoverTime());
+            _takeoverQuestTick.Start();
+        }
+
         /// <summary>Seeds the scheduler once (constructor). Nothing starts here.</summary>
         private void HookAutonomy()
         {
@@ -50,13 +77,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Autonomy.EnabledChanged += (_, on) => Dispatcher.UIThread.Post(() =>
             {
                 if (!on) CancelAutonomyPulses();
+                FollowTakeoverQuestTick(on);
                 SetTakeoverActiveUi(on);
                 UpdateAutonomyButtonState(on);
             });
             // WPF AnnounceAction: the tube says it (text only; no event audio here).
             Autonomy.AnnouncementMade += (_, phrase) => Dispatcher.UIThread.Post(() =>
                 _avatarTubeWindow?.GigglePriority(phrase, false, aiGenerated: false));
-            Closed += (_, _) => { CancelAutonomyPulses(); Autonomy.Stop(); StopVoiceInput(); };
+            Closed += (_, _) => { CancelAutonomyPulses(); Autonomy.Stop(); _takeoverQuestTick?.Stop(); StopVoiceInput(); };
             Opened += (_, _) => { ResumeAutonomyOnStartup(); RefreshVoiceInputModes(); };
         }
 

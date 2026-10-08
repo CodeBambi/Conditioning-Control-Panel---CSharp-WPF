@@ -1,45 +1,81 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
+using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 {
     /// <summary>
-    /// SETTINGS · AUDIO, ported from the WPF head.
-    ///
-    /// On WPF every handler is a one-line hop to the identically named <c>MainWindow</c> method
-    /// (audio engine, NAudio device enumeration, ducking). <see cref="BtnAudioLayers_Click"/> opens the
-    /// ported LayeredAudioWindow; the rest are not on this head yet, so those handlers are stubs.
-    /// The value labels beside each slider keep their markup defaults; on WPF the host repaints
-    /// them from settings.
+    /// SETTINGS · AUDIO, ported from the WPF head. The global dials, the output picker and the
+    /// diagnostics button are bound by <see cref="AudioSettingsBinder"/>, the same binder the
+    /// dashboard's audio card uses; the audio-sync tuning pair is WPF's MainWindow.Haptics.cs:1049-1074.
     /// </summary>
     public partial class AudioSettingsSection : UserControl
     {
+        private bool _syncing;
+
         public AudioSettingsSection()
         {
-            AvaloniaXamlLoader.Load(this);
-            // ponytail: placeholder so the combo is not an empty pill. CCP.Core/CoreAudio.cs is
-            // PLAYBACK only (PlayOneShot / Duck / Unduck / DuckGeneration) - it has no device
-            // enumeration seam at all, so there is nothing in Core to ask for the real list yet.
-            var cmb = this.FindControl<ComboBox>("CmbAudioOutputDevice")!;
-            cmb.ItemsSource = new[] { "Default" };
-            cmb.SelectedIndex = 0;
+            InitializeComponent();
+            _ = new AudioSettingsBinder(this, SliderMaster, TxtMaster, SliderVideoVolume, TxtVideoVolume,
+                ChkAudioDuck, SliderDuck, TxtDuck, ChkExcludeBambiCloudDucking, CmbAudioOutputDevice,
+                BtnAudioOutputRefresh, BtnTestAudio);
+            HelpPopover.Attach(HelpBtnAudio, HelpContentService.GetContent("Audio")); // WPF MainWindow.Presets.cs:54
         }
 
-        // ponytail: needs a device seam on CCP.Core/CoreAudio.cs (it carries playback only) plus
-        // a Linux backend for it - NAudio is Windows-only, so this is a per-head implementation
-        // behind a Core interface, not a move.
-        private void SliderMaster_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderVideoVolume_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderDuck_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void ChkAudioDuck_Changed(object? sender, RoutedEventArgs e) { }
-        private void ChkExcludeBambiCloudDucking_Changed(object? sender, RoutedEventArgs e) { }
-        private void CmbAudioOutputDevice_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
-        private void BtnAudioOutputRefresh_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnTestAudio_Click(object? sender, RoutedEventArgs e) { }
-        private void SliderAudioSyncLatency_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderAudioSyncIntensity_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            AudioSettingsBinder.Changed += SyncAudioSync;
+            SyncAudioSync();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            AudioSettingsBinder.Changed -= SyncAudioSync;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        /// <summary>WPF RefreshAudioSyncCardVisibility: the pair shows only while the Haptics
+        /// audio-sync layer is on, and mirrors that layer's delay/power.</summary>
+        private void SyncAudioSync()
+        {
+            var a = CoreSettings.Current.Haptics.AudioSync;
+            _syncing = true;
+            try
+            {
+                AudioSyncLatencyPanel.IsVisible = a.Enabled;
+                SliderAudioSyncLatency.Value = a.ManualLatencyOffsetMs;
+                SliderAudioSyncIntensity.Value = a.LiveIntensity * 100;
+                PaintAudioSync();
+            }
+            finally { _syncing = false; }
+        }
+
+        private void PaintAudioSync()
+        {
+            var ms = (int)SliderAudioSyncLatency.Value;
+            TxtAudioSyncLatency.Text = $"{(ms >= 0 ? "+" : "")}{ms}ms";
+            TxtAudioSyncIntensity.Text = $"{(int)SliderAudioSyncIntensity.Value}%";
+        }
+
+        private void SliderAudioSyncLatency_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (_syncing || TxtAudioSyncLatency is null) return;
+            CoreSettings.Current.Haptics.AudioSync.ManualLatencyOffsetMs = (int)e.NewValue;
+            CoreSettings.Save();
+            PaintAudioSync();
+        }
+
+        private void SliderAudioSyncIntensity_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (_syncing || TxtAudioSyncIntensity is null) return;
+            CoreSettings.Current.Haptics.AudioSync.LiveIntensity = (int)e.NewValue / 100.0;
+            CoreSettings.Save();
+            PaintAudioSync();
+        }
 
         private void BtnAudioLayers_Click(object? sender, RoutedEventArgs e)
             => Windows.LayeredAudioWindow.Open(this);

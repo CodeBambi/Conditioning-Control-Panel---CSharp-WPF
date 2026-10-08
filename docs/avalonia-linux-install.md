@@ -43,3 +43,26 @@ libwebkit2gtk-4.1.so.0 + libjavascriptcoregtk-4.1 + libsoup-3.0/2.4); webkitgtk-
 ## Carry into the repo
 The first branch after this note that touches docs must commit this file as `docs/avalonia-linux-install.md` (it lives in
 ~/ccp-port/briefs only because every worktree had a worker writing to it when the note was made).
+
+## Package verification (avalonia-port/package-verify, 2026-10-07, 7.0.5)
+Evidence: ~/ccp-port/evidence/package-verify/.
+- **Tarball:** `packaging/linux/build-tarball.sh` (contents not listed in the evidence; includes Resources/web, libvosk,
+  libOpenCvSharpExtern, onnxruntime) then `smoke-tarball.sh`: extracted, sandboxed (`CCP_USERDATA_DIR`), `--smoke` exit 0
+  with LibVLC and the bundled Vosk model passing (`build-tarball.log`, `smoke-tarball.log`). `smoke-tarball.sh` now also
+  fails when `packaging/aur/PKGBUILD` pkgver differs from the tarball version (it was 6.11.3 under 7.0.5; fixed;
+  `smoke-tarball-pkgver-failproof.log`).
+- **AUR:** Docker on the dev box cannot start any container (overlayfs mount `invalid argument`, alpine included), so the
+  archlinux-container run was replaced by `packaging/aur/test-local.sh` on the CachyOS host: `makepkg` (no install, no sudo),
+  package extracted to a temp root, its `/opt` bound with `bwrap`, and the installed `/usr/bin/conditioning-control-panel
+  --smoke` passes with the model loading from `/opt/conditioning-control-panel` (`aur-local.log`). It fails on a pkgver
+  mismatch, a `depends=` entry the host lacks (`pacman -T`) and a missing packaged file (`aur-local-failproofs.log`).
+  `ldd` over every bundled `.so`: all owning packages are inside the `pactree` closure of `depends=` (zlib via
+  zlib-ng-compat's provide); only `liblttng-ust.so.0` (optional .NET tracing) is unresolved (`aur-native-deps.txt`).
+  A clean-container proof of `depends=` sufficiency is still owed: the host has far more than the closure installed.
+- **Flatpak:** no flatpak-builder and no org.gnome.Sdk//50 on the box and Docker is down, so the manifest is still unbuilt.
+  Substitute proof: the extracted tarball run inside the installed `org.gnome.Platform//50` runtime (`flatpak run
+  --command=...`) passes every smoke check except LibVLC (`libvlc` absent), which is exactly the module the manifest
+  bundles (`flatpak-runtime-smoke.log`). The runtime has webkit2gtk-4.1, javascriptcoregtk-4.1, soup-3, libsecret, libX11,
+  libXi, libpulse, ICU and `parec`; it lacks libvlc and the WPE trio (`flatpak-runtime-libs.txt`).
+- **Desktop/metainfo:** `desktop-file-validate` clean; `appstreamcli validate --pedantic` passes with two pedantic notes
+  (uppercase in the component id, which is the fixed app id, and no `<releases>`) (`validate.txt`).

@@ -499,6 +499,8 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   panic-stop path to test. So no entry point starts a run; the HUD only binds `ChaosRunState` (sample in the render
   proof, a stepped run in its test). Panic and mid-run saves are untouched (WPF `OnPanicKeyDuringRun` → stop; saves only
   where WPF writes them).
+
+
 ## 2026-10-02: Launcher account row, mod pill and panel-card stats (avalonia-port/launcher-account)
 - `LauncherModMenu` git-mv'd to Core (pure; WPF and its tests unchanged). `CoreEngine.StartedUtc` added so the status line
   reads "Running since HH:mm" as WPF's `MainWindow.EngineStartedUtc`; no head-side stamp.
@@ -508,3 +510,73 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   is recorded revealed and GrantsChanged comes with launcher-games. WPF's immediate EngineStopped refresh is covered by the
   1 s status tick (CoreEngine.StoppedHook is the shell's single hook).
 - Advisor: worker.
+## 2026-10-07: Lockdown veil (avalonia-port/lockdown-veil)
+- WPF veils the launcher only (`LauncherWindow.xaml:597`). MainWindow has no veil: it stays usable under Lockdown
+  because its own exits (Emergency Exit, the timer phrase, the badge) live there, and it refuses per control
+  (`MainWindow.Lab.cs:605ff` and every `App.Lockdown?.IsActive` check). So no shell veil on this head, by WPF design.
+  The structural replacement is a table test, `LockdownVeilTests.EveryShellDoorWpfShutsUnderLockdownRefuses`: one row
+  per door WPF greys or refuses; a new door belongs in that table (PLAYBOOK P05).
+- Launcher veil: same colour, text and breath as WPF; the breath is a 30 fps DispatcherTimer (P01: only while the veil
+  and the window are shown, not minimised, ambient loops allowed). Deliberately stronger than WPF: keys are swallowed at
+  the window and focus moves to the veil, so Tab/Enter/Space cannot reach a veiled control (WPF covered the pointer only).
+  No in-window exception: the panic key is global and is ignored under Lockdown on both heads. WPF has one exception
+  (`MainWindow/MainWindow.xaml.cs:864-869`): while leashed, panic still works under Lockdown. The leash is not ported
+  to this head, so neither is that exception; it comes back with the leash.
+- Gaps the table found and closed: session Stop, factory reset, Settings Exit message, no-panic box (greyed at 0.4
+  with WPF's "no escape" tooltip, given back on exit), Takeover Start/Stop button, and the shell's CC Labs button
+  (greyed as well as refused, like WPF `MainWindow.Lab.cs:611-612`).
+- Advisor: supervisor.
+
+## 2026-10-07: release closed-shell lifetime roots (fix/avalonia-window-memory)
+- A six-window headless reproduction retained all six after forced GC (595 -> 1733 MiB RSS,
+  managed heap 57 -> 243 MiB). `dotnet-dump gcroot` identified managed lifetime roots retaining
+  visual trees and their native images, not just an independently leaking native allocator.
+- Five never-loaded feature controls subscribed to settings in their constructors; they now
+  subscribe only while loaded and still repaint on every load/rebind. Badge motion likewise
+  waits for loading. Relay and language subscriptions now pair attachment with detachment.
+- Closing the shell stops banner/monitor-settle timers, unsubscribes screen changes, and releases
+  its catalogue/hotkey callbacks without removing a newer window's registration.
+- `ShellMemoryTests` repeatedly opens/closes real shells and requires all weak references to die
+  after draining rendering, dispatcher and finalizer work (no sleeps or RSS thresholds). It
+  failed against the original code. Focused validation plateaus around 17-21 MiB managed heap
+  with no retained test shells. The full suite passes 461 tests, skips 3; Core catalogue tests 7/7.
+- This is not a claim that every allocation in the app is fixed: the full unsharded suite still
+  peaked at 10.3 GiB child RSS. Keep coverage-checked sharding and bounded/serialized local gates.
+- Full local gate validation was blocked by the shared queue; `--nav-check` reports the identical
+  rail-selection failure on this fix and clean base a8304e6d0. WPF runtime validation not run.
+- Local investigation evidence: `~/ccp-port/evidence/memory-fix/`.
+## Quest card quotes the streak the completion pays at (port-misc, 2026-10-07)
+
+- Found: `QuestService.CompleteQuest` advances the quest streak on the day's first daily completion
+  (`AdvanceQuestStreak`) BEFORE it computes the payout, while both heads' cards quoted the stored streak. The day's first
+  daily therefore paid 3% more than the card said, and after a missed day it paid +3% while the card still quoted the
+  broken streak's bonus. Shared Core behaviour, so both heads had it.
+- Intent: WPF `MainWindow.QuestsTab.cs` `ComputeQuestXpDisplay` says the card "multiplies exactly what
+  QuestService.CompleteQuest multiplies" and was rewritten once already because "the cards were quoting a number the
+  payout had no intention of paying". So the card is meant to quote the real payout: a bug, fixed in Core.
+- Fix: the payout is unchanged (the streak bonus includes today). New Core `QuestService.StreakPaidOn(type, settings)`
+  returns the streak that completion will pay at (projected for the day's first daily, stored for weekly and later
+  dailies), sharing `StreakAfterFirstCompletionToday` with `AdvanceQuestStreak`; `ScaledQuestXp` gains an explicit-streak
+  overload. Both heads' cards (and the "+N%" bonus text) read it. Visible WPF change: the first daily of a day quotes 3%
+  more (or the restarted +3% after a gap) - i.e. what it already paid.
+- Streak shield: after a gap, a completion that will spend a shield pays at streak + 1, so the quote asks the new
+  `CoreQuests.HasStreakShieldProvider` (skill `good_girl_streak` and a shield left; never spends). Avalonia now seeds it
+  and `UseStreakShieldProvider` (previously unseeded, so it never spent a shield) from Core settings, as WPF
+  `SkillTreeService.UseStreakShield`. The streak header's "+N% XP" reads the same projected streak on both heads. Test:
+  `QuestServiceTests.CardQuote_IsWhatTheDaysFirstCompletionPays` (shield case included; fail-proven).
+## 2026-10-08: Panic stops the remote haptic loop, both heads (avalonia-port/port-remote)
+- Bug fix on both heads, in line with "panic stops everything" (same pattern as the getbacktome follow-ups and the
+  webcam decisions). `HapticMixer.PanicStop` mutes the toy for 400 ms; the remote haptic driver's next tick then
+  resubmitted a looping `haptic_pattern` (RemoteHapticPlayer.Tick), so a controller's loop survived panic.
+- Core `RemoteCommands.StopHaptics()` stops the driver and moves a panic generation. Avalonia calls it on the panic key,
+  the tray's Stop everything and the spoken safe word; a remote `trigger_panic` (StopEffects force) too. WPF calls
+  `RemoteControlService.StopRemoteHapticsForPanic()` from RunPanicStopTail, PanicStopEverySurface and the off-thread
+  fallback.
+- Core RemoteRelay: a command fetched before a panic or a controller leave is refused when its UI dispatch lands late
+  ("stopped by panic" / "the controller left"), so a slow haptic_level cannot restart the toy. The leave runs through the
+  same dispatch as commands, and the controller-set strict-lock flag is set inside the dispatched call, so a late
+  enable_strict_lock that lands before the leave is still released. WPF runs commands synchronously on its UI thread
+  and needs no generation check.
+- Tests: `Tests/CCP.Core.Tests/RemoteRelayTests.cs` (Remote_haptics_play_and_every_stop_path_ends_them,
+  A_command_in_flight_never_outlives_a_panic_or_a_leave), `Tests/CCP.Avalonia.Tests/RemoteHapticPanicTests.cs`;
+  each fail-proven. WPF path compile-verified only (Windows suite does not run on Linux).

@@ -54,13 +54,22 @@ namespace ConditioningControlPanel.Avalonia
         internal static MantraVoiceService MantraVoice { get; } = new();
 
         /// <summary>WPF App.xaml.cs:2527-2536 plus the CoreQuests seeds of :398-421. Seeded where this
-        /// head has the service; SkillTree (streak shield, perfect-week bonus) and Programs
-        /// (TrackVerifier) are WPF-only, so those three stay unseeded: no shield, no bonus, no
-        /// program tracking - the WPF "service is null" answers.</summary>
+        /// head has the service. The streak shield is WPF SkillTreeService.UseStreakShield (:378) over
+        /// Core settings; perfect-week bonus and Programs (TrackVerifier) stay unseeded: no bonus,
+        /// no program tracking - the WPF "service is null" answers.</summary>
         private static void StartQuests()
         {
             CoreQuests.PatreonVerifyingProvider = () => Platform.AccountSeed.Patreon?.IsVerifying;
             CoreQuests.SubscribeStarVerifyingProvider = () => Platform.AccountSeed.SubscribeStar?.IsVerifying == true;
+            CoreQuests.HasStreakShieldProvider = () => CoreSettings.Service?.Current is { } s
+                && Models.SkillTreeRules.HasSkill(s, "good_girl_streak") && s.StreakShieldsRemaining > 0;
+            CoreQuests.UseStreakShieldProvider = () =>
+            {
+                if (CoreQuests.HasStreakShieldProvider?.Invoke() != true) return false;
+                CoreSettings.Current.StreakShieldsRemaining--;
+                CoreSettings.Save();
+                return true;
+            };
             // WPF plays SystemSounds.Exclamation; Linux has no stock equivalent, so a bundled chime
             // through the head audio. ponytail: no haptic post - no haptics service on this head.
             CoreQuests.PlayCompletionEffectsProvider = () => CoreAudio.PlayOneShot(
@@ -363,7 +372,9 @@ namespace ConditioningControlPanel.Avalonia
                 CoreSubliminal.BambiFreezeProvider = Views.Overlays.SubliminalWhisperShow.Freeze;
                 CoreSubliminal.RunStateChanged = running =>
                 {
-                    if (!running) global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Overlays.SubliminalOverlay.CloseAll);
+                    if (running) return;
+                    Views.Overlays.SubliminalWhisperShow.StopAll();
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Overlays.SubliminalOverlay.CloseAll);
                 };
                 CoreBouncingText.StartAction = () =>
                 {
@@ -639,16 +650,19 @@ namespace ConditioningControlPanel.Avalonia
                     Notifications.Show(message,
                         Enum.TryParse<Helpers.NotificationType>(kind, out var t) ? t : Helpers.NotificationType.Info,
                         duration));
-                // ponytail: WPF's Reconnect-Patreon branch (PatreonReconnectRule, head-only) is absent -
-                // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
-                // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
+                // WPF App.xaml.cs:505: the Reconnect answer for gates (Core PatreonReconnectRule).
+                TierGate.ReconnectIsTheAnswerProvider = Views.Windows.MainShellWindow.ReconnectIsTheAnswerNow;
+                // Dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
                 Sessions.Ticked += shell.OnSessionTick;
                 Sessions.SessionLog.LogReady += shell.OnSessionLogReady;
+                // WPF App.xaml.cs:529 (main fbe161de2): "See tiers" opens the vault gate card at the tier this door needs.
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
-                        Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
+                    shell.ShowTierDenied(verdict, Notifications));
+                // WPF App.xaml.cs:509-511 (main 2e9080399). No Arcademy host here: unseeded, so its card stays hidden.
+                Models.ExclusiveFeature.JustDropDoorProvider = SettingsPaletteIndex.JustDropDoorAvailable;
+                Models.ExclusiveFeature.BreakoutFullProvider = () => TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
                 // WPF MainWindow.xaml.cs:484 (the ? box rolled over or its override landed) and
                 // OnPatreonTierChanged: both move the veils, the Play bands and the lapse pass.
                 // WPF MainWindow.xaml.cs:486 / UpdatePatreonUI also repaint the vault (RefreshExclusivesTab).
@@ -757,6 +771,7 @@ namespace ConditioningControlPanel.Avalonia
             CoreFlash.Stop();
             CoreSubliminal.Stop();
             Views.Overlays.FlashOverlay.CloseAll(final);
+            Views.Overlays.SubliminalWhisperShow.StopAll();
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
         }
@@ -916,6 +931,7 @@ namespace ConditioningControlPanel.Avalonia
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
             try { Views.Overlays.BlinkTrainerSession.Stop(); } catch { /* WPF Application.Exit += Stop */ }
+            try { Views.Chaos.ChaosRunHost.ForceShutdown(); } catch { /* WPF App.OnExit:6241 Chaos.ForceShutdown */ }
             try { Platform.WebcamTracker.Instance.Stop(); } catch { /* WPF App.OnExit:6185 Webcam.Dispose */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never

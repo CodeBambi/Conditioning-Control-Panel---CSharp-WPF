@@ -31,6 +31,53 @@ public sealed class QuestServiceTests : IDisposable
         Assert.NotNull(quests.GetCurrentWeeklyDefinition());
     }
 
+    /// <summary>The day's first daily completion advances the streak before it pays, so the card
+    /// quotes the streak it will be paid at (StreakPaidOn), not the stored one (3% short before).</summary>
+    [Fact]
+    public void CardQuote_IsWhatTheDaysFirstCompletionPays()
+    {
+        var (oldProvider, oldXp) = (CoreSettings.ServiceProvider, CoreProgression.AddXPProvider);
+        var (oldHas, oldUse) = (CoreQuests.HasStreakShieldProvider, CoreQuests.UseStreakShieldProvider);
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        CoreProgression.AddXPProvider = (_, _) => { };
+        try
+        {
+            var s = service.Current;
+            (s.PlayerLevel, s.DailyQuestStreak) = (1, 4);
+            using var quests = new QuestService(null, _dir);
+            quests.Progress.DailyQuests = new List<ActiveQuest> { new("pop_parade_d"), new("flash_rush_d"), new("spiral_sink_d") };
+            Assert.Equal(1, quests.StreakPaidOn(QuestType.Daily, s));      // gap: the streak restarts
+            quests.Progress.DailyQuestCompletionDates.Add(DateTime.Today.AddDays(-1));
+            Assert.Equal(5, quests.StreakPaidOn(QuestType.Daily, s));
+            quests.Progress.DailyQuestCompletionDates.Clear();
+            // Gap but a shield is owned: the completion spends it and pays at streak + 1.
+            s.LastDailyQuestDate = DateTime.Today.AddDays(-3);
+            var shields = 1;
+            CoreQuests.HasStreakShieldProvider = () => shields > 0;
+            CoreQuests.UseStreakShieldProvider = () => shields-- > 0;
+            Assert.Equal(5, quests.StreakPaidOn(QuestType.Daily, s));
+            Assert.Equal(1, shields);                                      // quoting spends nothing
+            Assert.Equal(4, quests.StreakPaidOn(QuestType.Weekly, s));     // a weekly never advances it
+            var pop = QuestDefinition.DailyQuests.Find(d => d.Id == "pop_parade_d")!;
+            var quoted = QuestService.ScaledQuestXp(pop.XPReward, s, quests.StreakPaidOn(QuestType.Daily, s));
+            QuestCompletedEventArgs? done = null;
+            quests.QuestCompleted += (_, e) => done = e;
+
+            quests.TrackBubblesPopped(pop.TargetValue);
+
+            Assert.Equal(quoted, done!.XPAwarded);
+            Assert.Equal(0, shields);
+            Assert.Equal(5, s.DailyQuestStreak);
+            Assert.Equal(5, quests.StreakPaidOn(QuestType.Daily, s));      // later dailies today
+        }
+        finally
+        {
+            (CoreSettings.ServiceProvider, CoreProgression.AddXPProvider) = (oldProvider, oldXp);
+            (CoreQuests.HasStreakShieldProvider, CoreQuests.UseStreakShieldProvider) = (oldHas, oldUse);
+        }
+    }
+
     [Fact]
     public void Reroll_SwapsTheSlotAndSpendsTheOneFreeReroll()
     {

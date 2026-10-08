@@ -155,7 +155,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 // As in LibVlcAudio: volume set before Playing, or on libvlc's own thread, is lost.
                 _player.Playing += (_, _) => ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    lock (this) { if (_disposed) return; _playing = true; ApplyVolume(); }
+                    lock (this) { if (_disposed) return; _playing = true; LibVlcAudio.ApplyPreferredDevice(_player); ApplyVolume(); }
                 });
                 // WPF's LoopingSampleProvider never ends: restart at EOF, never from libvlc's thread.
                 _player.EndReached += (_, _) => ThreadPool.QueueUserWorkItem(_ =>

@@ -16,7 +16,7 @@
       ignition. The show itself is drawn by DescentFuseStageVisual, added to StageHost from the
       code-behind; everything in this file is the room it is drawn in.
 
-      Deliberately NOT AllowsTransparency, for the same reason DescentCeremonyWindow is not: a
+      Deliberately NOT AllowsTransparency, for the same reason the retired DescentCeremonyWindow was not: a
       layered fullscreen window created while other layered surfaces are animating can wedge the
       shared WPF render thread. This window is opaque by design anyway - the whole point of the
       beat is that the room goes away.
