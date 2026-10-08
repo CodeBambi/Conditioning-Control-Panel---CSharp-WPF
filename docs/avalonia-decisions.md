@@ -580,3 +580,12 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/RemoteRelayTests.cs` (Remote_haptics_play_and_every_stop_path_ends_them,
   A_command_in_flight_never_outlives_a_panic_or_a_leave), `Tests/CCP.Avalonia.Tests/RemoteHapticPanicTests.cs`;
   each fail-proven. WPF path compile-verified only (Windows suite does not run on Linux).
+
+## 2026-10-08: One panic registry; the safe word and the tray stop every surface (avalonia-port/panic-surfaces)
+- The panic key, the tray's Stop everything and the spoken safe word each call `PanicSurfaces.StopAll` once
+  (`CCP.Avalonia/Views/Windows/PanicSurfaces.cs`). As a result the safe word now also stops a Chaos run and the
+  camera, and the tray now also stops the lock-card scheduler and the Blink Trainer.
+- Deliberate deviation from WPF (whose routes each stop a hand-written subset): the safe word is the only exit under
+  Lockdown, so it must end everything the panic key would. Reviewer-checked (safety review, 2026-10-08).
+- Tests: `Tests/CCP.Avalonia.Tests/PanicSurfacesTests.cs` (routes call StopAll once, exact surface order, safe word
+  stops chaos and the camera, starter scan); each fail-proven.
