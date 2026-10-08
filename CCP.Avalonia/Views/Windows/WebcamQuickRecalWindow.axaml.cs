@@ -62,6 +62,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // global hotkey of any kind - "runs from anywhere with Ctrl+Alt+G" would be teaching a
             // key that does nothing. An empty hint is a gap; a taught dead key is a lie.
             _txtHotkeyHint.IsVisible = false;
+            // WPF openers call App.ApplyCalibrationScreenPlacement: the dot must sit on the calibrated monitor.
+            WebcamCalibrationWindow.PlaceOnCalibratedScreen(this);
 
             this.FindControl<Button>("BtnErrorClose")!.Click += (_, _) => Close(_completedOk);
             KeyDown += (_, e) => { if (e.Key == Key.Escape) { _cancelled = true; _collecting = false; Close(false); } };

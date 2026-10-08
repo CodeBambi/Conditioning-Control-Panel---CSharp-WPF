@@ -72,6 +72,13 @@ namespace ConditioningControlPanel.Avalonia.Platform
         public event Action<GazeSide>? OnGazeSide;
         /// <summary>Gaze in DIPs of the calibrated monitor; fires only with a calibration.</summary>
         public event Action<ScreenPoint>? OnGazeMove;
+        /// <summary>Start's stage and status text, 1.0 when tracking is up (WPF OnStartupProgress, same
+        /// texts); drives the loading splash. A failed start ends with StateChanged and LastError.</summary>
+        public event Action<double, string>? OnStartupProgress;
+        /// <summary>The last start failed only because a Stop (panic, revoke) overtook it: WPF's Stopped
+        /// state, which closes the splash instead of showing an error.</summary>
+        internal bool StartWasStopped { get; private set; }
+        private void Progress(double p, string status) => Dispatcher.UIThread.Post(() => OnStartupProgress?.Invoke(p, status));
 
         /// <summary>The saved calibration (WPF's file in the profile folder), read once on first use
         /// as WPF reads it in the service constructor; revoke clears it with the file.</summary>
@@ -143,6 +150,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             try
             {
                 LastError = null;
+                StartWasStopped = false;
                 if (!WebcamConsent.IsCurrent(CoreSettings.Current)) { LastError = "Webcam consent is not current."; return false; }
                 // WPF #743: a loop a timed-out Stop gave up on may still hold the camera.
                 if (_wedged is { IsAlive: true })
@@ -150,6 +158,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     LastError = "The previous camera session is still closing. Try again in a moment, or restart the app.";
                     return false;
                 }
+                Progress(0.08, "Preparing eye-tracking engine…");
                 try { Cv2.GetVersionString(); }
                 catch (Exception ex)
                 {
@@ -157,6 +166,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     LastError = "Webcam tracking is unavailable: the OpenCV library could not be loaded on this system.";
                     return false;
                 }
+                // Models before the camera (WPF opens the camera first), so the stages swap places.
+                Progress(0.25, "Loading AI models…");
                 try
                 {
                     run.Face = new BlazeFaceDetector(Path.Combine(ModelDir, "face_detection_short_range.onnx"), Path.Combine(ModelDir, "blazeface_anchors.json"));
@@ -170,6 +181,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     run.Release();
                     return false;
                 }
+                Progress(0.55, "Opening camera…");
                 run.Source = SourceFactory();
                 bool opened;
                 try { opened = run.Source.Open(); } catch (Exception ex) { Log.Warning(ex, "[Webcam] open threw"); opened = false; }
@@ -191,10 +203,13 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 if (stale)
                 {
                     LastError = "Webcam tracking was stopped before the camera finished opening.";
+                    StartWasStopped = true;
                     run.Release();   // outside _gate: a slow driver close must not block Stop/StopAsync
                     return false;
                 }
+                Progress(0.92, "Starting capture…");
                 run.Thread.Start();
+                Progress(1.0, "Ready");
                 Log.Information("[Webcam] tracking started");
                 return true;
             }
