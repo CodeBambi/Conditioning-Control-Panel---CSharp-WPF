@@ -502,7 +502,14 @@ namespace ConditioningControlPanel.Avalonia
                 // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
                 // CoreAudio stays unseeded: every clip "finishes" at once and nothing plays.
                 // Console as well as Serilog: this head configures no Serilog sink yet.
-                try { new Platform.LibVlcAudio().Seed(); Console.WriteLine("[Audio] LibVLC seeded CoreAudio"); }
+                try
+                {
+                    var vlc = new Platform.LibVlcAudio();
+                    vlc.Seed();
+                    // Mind wipe plays through the same LibVLC (WPF App.MindWipe, App.xaml.cs:385).
+                    new Platform.MindWipePlayer(vlc.PlayVoice) { CleanSlate = secs => Achievements?.TrackMindWipeDuration(secs) }.Seed();
+                    Console.WriteLine("[Audio] LibVLC seeded CoreAudio");
+                }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[Audio] LibVLC unavailable, audio disabled: {ex.Message}");
@@ -515,14 +522,6 @@ namespace ConditioningControlPanel.Avalonia
                 // Start, which fails with a message; revoke keeps all four of the consent dialog's promises.
                 CoreWebcam.IsAvailableProvider = () => true;
                 CoreWebcam.RevokeConsentAction = Platform.WebcamTracker.RevokeConsent;
-                // CoreMindWipe stays unseeded, and it is the audio surface that is missing rather
-                // than the feature: MindWipeSchedule (Core) already decides the tick interval, the
-                // per-tick probability, the session escalation and which clips are candidates.
-                // What this head has no answer for is the playing half - a crossfading NAudio loop
-                // - so the Mind Wipe card configures correctly and plays nothing. Unseeded says
-                // exactly that: every action is a no-op, IsLooping is false and ClipCount is 0, so
-                // nothing reports a loop that is not running.
-                //
                 // The plain engine (Start/Stop) is CoreEngine; the one SessionRunner seeds
                 // IsSessionRunningProvider, so the feature lock fires for a session, not a plain Start.
                 CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;
@@ -774,6 +773,7 @@ namespace ConditioningControlPanel.Avalonia
             Views.Overlays.SubliminalWhisperShow.StopAll();
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
+            Views.Overlays.SpiralOverlay.CloseAll();   // WPF StopEngine -> App.Overlay.Stop(); panic and exit too
         }
 
         /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:3815): one popup per unlock, shown at once.
