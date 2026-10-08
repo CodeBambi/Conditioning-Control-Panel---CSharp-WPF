@@ -219,13 +219,15 @@ public sealed class IntakeBridgeTests
     /// read that as silence and reopened the mic for up to three more windows.</summary>
     [Theory]
     [InlineData("key")]
+    [InlineData("key-ladder")]
     [InlineData("tray")]
     [InlineData("voice")]
     public Task PanicClosesTheIntakeAndTheMicNeverReopens(string route) => AvaloniaTestDispatcher.RunAsync(() => WithSpeech(async (host, engine, sent) =>
     {
         var s = CoreSettings.Current;
-        var (enabled, key) = (s.PanicKeyEnabled, s.PanicKey);
+        var (enabled, key, overrides) = (s.PanicKeyEnabled, s.PanicKey, s.PanicOverridesAll);
         (s.PanicKeyEnabled, s.PanicKey) = (true, "F8");
+        s.PanicOverridesAll = route != "key-ladder";   // ladder mode = PanicOverridesAll off
         s.MicConsentGiven = true;
         var shell = new MainShellWindow();
         var exited = false;
@@ -236,7 +238,7 @@ public sealed class IntakeBridgeTests
             await Listen(host, engine, 7);
             Assert.True(engine.MicOpen);
             var t0 = new DateTime(2026, 1, 1, 12, 0, 0);
-            if (route == "key") shell.HandlePanicKeyPress(t0);
+            if (route.StartsWith("key")) shell.HandlePanicKeyPress(t0);
             else if (route == "tray") MainShellWindow.StopEverything();
             else shell.VoicePanic();
             engine.End(new PhraseResult { TimedOut = true });   // the route's abort, if it outran the stop
@@ -246,17 +248,20 @@ public sealed class IntakeBridgeTests
             Assert.Equal(1, engine.Listens);
             Assert.False(host.IsVisible);
             Assert.DoesNotContain(sent, f => (string?)f["kind"] == "silence");
-            if (route == "key")
+            if (route.StartsWith("key"))
             {
-                // Closing the intake does not arm the exit ladder (WPF, while a game owns the screen).
+                // Closing the intake does not arm the exit ladder in either mode (WPF MainWindow.xaml.cs:1627
+                // override, :1720 ladder): two more presses quit, so three in all.
                 shell.HandlePanicKeyPress(t0.AddSeconds(1));
                 Assert.False(exited);
+                shell.HandlePanicKeyPress(t0.AddSeconds(1.5));
+                Assert.True(exited);
             }
         }
         finally
         {
             if (!exited) shell.Close();
-            (s.PanicKeyEnabled, s.PanicKey) = (enabled, key);
+            (s.PanicKeyEnabled, s.PanicKey, s.PanicOverridesAll) = (enabled, key, overrides);
         }
     }));
 
