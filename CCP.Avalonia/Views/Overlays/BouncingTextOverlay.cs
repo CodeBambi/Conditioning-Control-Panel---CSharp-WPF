@@ -211,12 +211,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _last = now;
             if (dt <= 0 || DisplayChangeCoordinator.SpawnsSuppressed) return;
             if (Stats) Sample(dt);
-            Advance(Math.Min(dt, 0.1));
+            Advance(Math.Min(dt, 0.1), dt);
         }
 
         /// <summary>One frame of WPF Animate after the dt clamp: step, corner/bounce hooks, the 0.5 s
         /// topmost re-assert, then move every window's copy.</summary>
-        internal static void Advance(double dt)
+        /// <param name="realDt">Unclamped seconds since the last frame: the re-assert runs on real time
+        /// (WPF: "every ~0.5s of real time"), so slow frames (1 fps on a locked session) cannot stretch it.</param>
+        internal static void Advance(double dt, double? realDt = null)
         {
             var s = CoreSettings.Current;
             Engine.Tick(dt);
@@ -237,7 +239,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     UpdateText(i);
                 }
             }
-            _zAccum += dt;
+            _zAccum += realDt ?? dt;
             if (_zAccum >= 0.5) { _zAccum = 0; RaiseAll(); }
             for (var i = 0; i < logos.Count; i++)
             {

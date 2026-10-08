@@ -164,6 +164,8 @@ public sealed class TextOverlayTests
             Assert.Equal(1, raises);             // 0.5 s: WPF ReassertTopmost
             for (var i = 0; i < 6; i++) BouncingTextOverlay.Advance(0.1);   // float sum of 5 x 0.1 is just under 0.5
             Assert.Equal(2, raises);
+            BouncingTextOverlay.Advance(0.1, 1.0);   // a 1 s frame (dt clamped to 0.1): re-asserts at once, on real time
+            Assert.Equal(3, raises);
         }
         finally
         {
