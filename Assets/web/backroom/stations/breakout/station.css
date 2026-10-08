@@ -264,6 +264,11 @@
 .bo-run-hud b { color:#def8ec;font:700 12px/1.3 system-ui;letter-spacing:.5px; }
 .bo-run-hud span { color:#eac897;font:10px/1.3 system-ui;letter-spacing:1.2px; }
 .bo-station.is-menu .bo-run-hud { visibility:hidden; }
+/* Shows as a board lands, then gets out of the way. Back on the pause card. */
+.bo-run-hud { opacity:0; }
+.bo-run-hud.is-arriving { animation:bo-run-hud-arrive 4.2s ease-out forwards; }
+.bo-station.is-paused .bo-run-hud { animation:none;opacity:1; }
+@keyframes bo-run-hud-arrive { 0% { opacity:0; } 8% { opacity:1; } 72% { opacity:1; } 100% { opacity:0; } }
 .bo-station[data-host-back] .bo-run-hud { top:58px; }
 .bo-pause-card .bo-save-note { margin:-8px 0 0;font-size:12px;letter-spacing:0;text-shadow:none; }
 @media(max-height:650px) {

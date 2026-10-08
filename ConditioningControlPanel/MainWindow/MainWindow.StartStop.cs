@@ -518,12 +518,7 @@ namespace ConditioningControlPanel
             BubbleCountResultWindow.ForceCloseAll();
             QuizWindow.ForceCloseAll();
             PopQuizWindow.ForceCloseAll();
-            // The migration ceremony is fullscreen and topmost, so panic has to be able to clear
-            // it too. Closing it costs the user nothing: before the choice is taken nothing has
-            // been written and the server simply re-offers; after it, the choice is already on
-            // disk and riding the sync queue.
-            DescentCeremonyWindow.ForceCloseAll();
-            // Same rule for the fuse's fullscreen show (the crack at zero, the catch-up, the Year
+            // The fuse's fullscreen show (the crack at zero, the catch-up, the Year
             // One ignition). The only thing it persists is the keepsake flag, written the moment
             // the bloom starts — so panicking out of it costs a keepsake at worst and never a
             // choice, a level or an XP total.

@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Services.Descent
     /// few labels.
     ///
     /// <para><b>Hardcoded English, deliberately, and it is a debt not a decision.</b> Same call as
-    /// <see cref="DescentCeremonyCopy"/>, for the same reason and with the same repayment plan:
+    /// the retired ceremony copy made, for the same reason and with the same repayment plan:
     /// collecting it here means the localization pass is one file and one afternoon rather than an
     /// archaeology dig through XAML. CONTRACT-FUSE-0816 §4 declares it out of scope for this wave.</para>
     ///

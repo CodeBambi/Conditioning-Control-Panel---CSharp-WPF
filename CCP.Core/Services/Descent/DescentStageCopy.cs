@@ -33,5 +33,13 @@ namespace ConditioningControlPanel.Services.Descent
         /// <summary>The one line of depth imagery that sits under the name.</summary>
         public static string Flavor(int n) =>
             Loc.Get(string.Format(CultureInfo.InvariantCulture, "descent_stage_{0}_flavor", Clamp(n)));
+
+        private static readonly string[] Numerals =
+            { "0", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
+
+        /// <summary>Stage numerals for stage copy (moved from the retired ceremony copy). Falls
+        /// back to the digits past the ladder's end.</summary>
+        public static string RomanNumeral(int n) =>
+            n >= 0 && n < Numerals.Length ? Numerals[n] : n.ToString(CultureInfo.InvariantCulture);
     }
 }
