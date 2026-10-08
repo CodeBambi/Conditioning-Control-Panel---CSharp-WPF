@@ -17,19 +17,10 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class MindWipeRunRule
     {
-        public readonly record struct Plan(bool Start, bool Stop, bool StartLoop, bool StopLoop)
-        {
-            public bool IsNothing => !Start && !Stop && !StartLoop && !StopLoop;
-        }
-
-        public static Plan ForFlags(bool engineRunning, bool sessionRunning, bool enabled, bool loop,
-            bool serviceRunning, bool looping)
-        {
-            if (sessionRunning) return default;
-            if (!enabled) return new Plan(false, serviceRunning || looping, false, false);
-            if (!engineRunning) return looping ? new Plan(false, false, false, true) : default;
-            return new Plan(!serviceRunning, false, loop && !looping, !loop && looping);
-        }
+        /// <summary>The rule itself moved to Core (<see cref="CoreMindWipe.ForFlags"/>) so every head shares it.</summary>
+        public static CoreMindWipe.RunPlan ForFlags(bool engineRunning, bool sessionRunning, bool enabled, bool loop,
+            bool serviceRunning, bool looping) =>
+            CoreMindWipe.ForFlags(engineRunning, sessionRunning, enabled, loop, serviceRunning, looping);
 
         /// <summary>Reads the live flags and service and carries out <see cref="ForFlags"/>. Call it
         /// after anything writes <c>MindWipeEnabled</c> or <c>MindWipeLoop</c>.</summary>

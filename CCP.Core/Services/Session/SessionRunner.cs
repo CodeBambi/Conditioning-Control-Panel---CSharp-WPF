@@ -76,6 +76,10 @@ namespace ConditioningControlPanel.Services
         {
             if (IsRunning) throw new InvalidOperationException("A session is already running. Stop it first.");
             if (!CoreEngine.IsRunning) CoreEngine.Start();
+            // SessionEngine.cs:223 (#1304): the session owns Mind Wipe, so the global one the engine
+            // just started does not play through it. ponytail: the session's own escalating Mind Wipe
+            // (StartSession) is not ported; a session plays none.
+            CoreMindWipe.Stop();
 
             var s = CoreSettings.Current;
             CurrentSession = session;
