@@ -10,6 +10,28 @@ namespace CCP.Avalonia.Tests;
 /// seams that leaked before (PLAYBOOK P02) and really puts each one back.</summary>
 public class TestIsolationTests
 {
+    /// <summary>The first test in a testhost decides the Avalonia platform for every later one. A setup
+    /// with headless drawing (no Skia) made later text measure differently and bitmaps read garbage, so
+    /// ChasterRaffleCardLayout, BlinkTrainerSession and EmiBookDemo failed only after it (flake-layout).</summary>
+    [Fact]
+    public void EveryPlatformSetupUsesSkiaDrawing()
+    {
+        var bad = Directory.EnumerateFiles(Here(), "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .SelectMany(f =>
+            {
+                var code = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(f), @"//[^\n]*|/\*.*?\*/", "",
+                    System.Text.RegularExpressions.RegexOptions.Singleline);
+                return System.Text.RegularExpressions.Regex.Matches(code, @"\.UseHeadless\(")
+                    .Where(m => !code.Substring(m.Index, System.Math.Min(160, code.Length - m.Index)).Contains("UseHeadlessDrawing = false")
+                             || !code.Substring(System.Math.Max(0, m.Index - 160), System.Math.Min(160, m.Index)).Contains("UseSkia()"))
+                    .Select(_ => Path.GetFileName(f));
+            }).ToList();
+        Assert.Empty(bad);
+    }
+
+    private static string Here([System.Runtime.CompilerServices.CallerFilePath] string p = "") => Path.GetDirectoryName(p)!;
+
     [Fact]
     public void EveryTestRunsInsideTheHook() => Assert.NotNull(IsolateProcessStateAttribute.Current);
 
