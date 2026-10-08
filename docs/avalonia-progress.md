@@ -1333,3 +1333,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/launcher-fx: +1025
 - Launcher FX on one visibility/focus-gated frame clock: spirals and ambient, hover lift/tilt/glow, exit beat with guard, edge glint, fade, sounds and melody (Core).
+
+## avalonia-port/rows-splash-startup: +222
+- Splash fronts real launches with WPF steps/percentages; failed startup logged and exits non-zero; timing within noise of no-splash.
