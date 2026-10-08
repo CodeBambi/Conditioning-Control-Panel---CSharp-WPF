@@ -1343,3 +1343,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-lockdown-tab: +325
 - Lockdown title-bar badge wired (clock, hide mask, click/Enter -> tab); Emergency Exit breath (off under Photosafe, motion Off, minimised); quest hint + Hide-clock toggle.
 - 3 shell tests, 9 itemised fail-proofs; live evidence rows-lockdown-tab/; row stays stub (theme, Possession, Dose, Strict greying, EE games, system keys).
+
+## avalonia-port/help-loops-kit: +988
+- Help loops kit finished (Back blur, rounded corners fixed) + BouncingText, BlinkTrainer, KeywordTriggers, Audio, Scheduler scenes (7/23).
