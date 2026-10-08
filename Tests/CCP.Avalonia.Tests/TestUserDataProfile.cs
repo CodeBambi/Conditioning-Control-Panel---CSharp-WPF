@@ -17,6 +17,11 @@ internal static class TestUserDataProfile
         Directory.CreateDirectory(Root);
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", Root);
         _ = ConditioningControlPanel.CorePaths.UserData;   // installs the SandboxNet guard before any test runs
+        // Every one-shot feature card already spent: a shown shell lands on the Dashboard, whose card
+        // would otherwise open (and stay open as a passive surface) in whichever test shows a shell
+        // first. FeatureIntroWiringTests un-spends the keys it drives.
+        ConditioningControlPanel.CoreSettings.Current.SeenFeatureIntros.AddRange(
+            ConditioningControlPanel.Avalonia.Views.Windows.FeatureIntros.All.Keys);
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             try { Directory.Delete(Root, recursive: true); } catch { }
