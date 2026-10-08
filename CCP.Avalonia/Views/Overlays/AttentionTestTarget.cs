@@ -16,7 +16,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// by AttentionTargetEditorDialog.BtnTest_Click. One borderless, topmost, non-activating window
     /// sized to the target (so the rest of the desktop stays clickable), bouncing at 187.5 DIP/s
     /// (WPF 3 px per 16 ms tick) inside the primary screen's working area minus WPF's margins, alive
-    /// until clicked - no lifespan, as in WPF - then a 300 ms fade. Its timer runs only while the
+    /// until clicked - no lifespan, as in WPF - then a pop sound and a 300 ms fade. Its timer runs only while the
     /// window is open (P01); panic closes every one (P06, "attention-test" in PanicSurfaces).
     /// </summary>
     internal sealed class AttentionTestTarget
@@ -105,6 +105,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             if (_hit) return;
             _hit = true;
+            MandatoryVideoOverlay.PlayPop();   // WPF FloatingText.Hit -> AttentionTargetVisual.PlayPopSound
             Log.Debug("Test target clicked");
             Window.IsHitTestVisible = false;
             Window.Transitions = new global::Avalonia.Animation.Transitions

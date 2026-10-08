@@ -529,7 +529,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
         }
 
-        private static void PlayPop()
+        internal static void PlayPop()
         {
             var path = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", "bubbles", new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" }[Random.Shared.Next(3)]);
             CoreAudio.PlayOneShot(path, 0.6f * (CoreSettings.Current.MasterVolume / 100f), "target-pop");

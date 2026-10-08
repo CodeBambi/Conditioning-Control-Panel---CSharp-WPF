@@ -150,6 +150,9 @@ public sealed class CompanionEditorsTests
         CoreSettings.ServiceProvider = () => service;
         var clock = new SteppedClock();
         AttentionTestTarget.Clock = clock;
+        var oldPlay = CoreAudio.PlayOneShotProvider;
+        var played = new System.Collections.Generic.List<string>();
+        CoreAudio.PlayOneShotProvider = (p, _, _, _, done) => { played.Add(p); done?.Invoke(); };
         var card = new VideoFeatureControl();
         var host = new Window { Content = card };
         host.Show();
@@ -177,6 +180,9 @@ public sealed class CompanionEditorsTests
             var moved = Math.Sqrt((t.X - x) * (t.X - x) + (t.Y - y) * (t.Y - y));
             Assert.InRange(moved, 1, 18.76);                                        // 187.5 DIP/s for 0.1 s (less at a wall)
 
+            t.Hit();                                                                // WPF: a hit pops
+            Assert.Contains(played, p => System.IO.Path.GetFileName(p).StartsWith("Pop"));
+
             PanicSurfaces.All.Single(x => x.Id == "attention-test").Stop(null);   // the registered panic stop
             Dispatcher.UIThread.RunJobs();
             Assert.Empty(AttentionTestTarget.Open);
@@ -187,6 +193,7 @@ public sealed class CompanionEditorsTests
         {
             AttentionTestTarget.CloseAll();
             AttentionTestTarget.Clock = TimeProvider.System;
+            CoreAudio.PlayOneShotProvider = oldPlay;
             host.Close();
             CoreSettings.ServiceProvider = null;
         }
