@@ -163,6 +163,12 @@ namespace ConditioningControlPanel.Controls.NavRail
         internal static string? BadgeText(int count) =>
             count <= 0 ? null : count > BadgeCap ? BadgeCap + "+" : count.ToString();
 
+        /// <summary>A badge the player has already seen sits back at this opacity (7.1.5).</summary>
+        internal const double BadgeSeenOpacity = 0.45;
+
+        /// <summary>Full when the count is fresh, dimmed once seen.</summary>
+        internal static double BadgeOpacity(bool fresh) => fresh ? 1.0 : BadgeSeenOpacity;
+
         /// <summary>A row's Tag to its section key. The gear keeps Tag "appsettings" (the tab key
         /// "settings" is the dashboard), every other row carries the section key itself.</summary>
         internal static string SectionForDoorTag(string tag) =>
