@@ -741,9 +741,38 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Delete user account (GDPR)
+        /// Rename the account (WPF ProfileSyncService.ChangeDisplayNameAsync): the server checks uniqueness
+        /// and answers with the name it settled on. Errors carry the server's own text, as WPF showed it.
         /// </summary>
-        public async Task<bool> DeleteAccountAsync(string unifiedId)
+        public async Task<(bool success, string? error, string? newName)> ChangeDisplayNameAsync(string unifiedId, string newName)
+        {
+            try
+            {
+                var payload = new JObject { ["unified_id"] = unifiedId, ["new_display_name"] = newName };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/user/change-display-name");
+                AddAuthHeader(request);
+                request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+                var response = await _http.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (await TryHandleMergedAsync(response, json))
+                        return (false, Localization.Loc.Get("account_merged_retry_hint"), null);
+                    return (false, ParseErrorMessage(json, response.StatusCode), null);
+                }
+                return (true, null, JObject.Parse(json)["new_display_name"]?.ToString());
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[V2Auth] Change display name failed");
+                return (false, "Name change requires an internet connection", null);
+            }
+        }
+
+        /// <summary>
+        /// Delete user account (GDPR). The error is the server's text (WPF ProfileSyncService.DeleteAccountAsync).
+        /// </summary>
+        public async Task<(bool success, string? error)> DeleteAccountAsync(string unifiedId)
         {
             try
             {
@@ -757,14 +786,16 @@ namespace ConditioningControlPanel.Services
                 AddAuthHeader(request);
                 request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
                 var response = await _http.SendAsync(request);
+                if (response.IsSuccessStatusCode) return (true, null);
 
-                if (await TryHandleMergedAsync(response)) return false;
-                return response.IsSuccessStatusCode;
+                var json = await response.Content.ReadAsStringAsync();
+                if (await TryHandleMergedAsync(response, json)) return (false, Localization.Loc.Get("account_merged_retry_hint"));
+                return (false, ParseErrorMessage(json, response.StatusCode));
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "[V2Auth] Delete account failed");
-                return false;
+                return (false, "Account deletion requires an internet connection");
             }
         }
 
