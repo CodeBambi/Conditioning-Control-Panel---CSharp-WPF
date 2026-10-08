@@ -1136,7 +1136,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Height = b.Height / screen.Scaling;
         }
 
-        /// <summary>The card that owns the keyboard, and what it has counted. Tests read these.</summary>
         /// <summary>The CoreLockCard surface (seeded in App): draw the next phrase and resolve its repeat
         /// count through the three modes exactly as WPF LockCardService.ShowLockCard does.</summary>
         internal static void ShowNext(bool isTest)
@@ -1151,8 +1150,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ShowOnAllMonitors(phrase, repeats, s.LockCardStrict, isTest, s.LockCardVoiceMode);
         }
 
+        /// <summary>The card that owns the keyboard, and what it has counted. Tests read these.</summary>
         internal int RequiredRepeats => _requiredRepeats;
-
         internal static LockCardWindow? Primary => _allWindows.FirstOrDefault(w => w._isPrimary);
         internal int TotalErrors => _totalErrors;
         internal int CompletedRepeats => _completedRepeats;
