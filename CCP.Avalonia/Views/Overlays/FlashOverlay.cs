@@ -41,7 +41,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private const int MaxConcurrent = 30;
         private const int StaggerMs = 300;
 
-        private static readonly List<(FlashOverlayWindow Window, PixelRect Rect)> Active = new();
+        internal static readonly List<(FlashOverlayWindow Window, PixelRect Rect)> Active = new();
         private static readonly Random Rng = new();
         // #627: one shuffled walk of the folder (WPF FlashService DiskBag), so every image comes up
         // before any repeats. Not thread-safe: LoadPictures draws under the bag's own lock.
@@ -168,7 +168,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 return false;
             }
             var entry = (w, rect);
-            w.Closed += (_, _) => Active.Remove(entry);
+            w.Closed += (_, _) => Active.RemoveAll(e => e.Window == w);
             Active.Add(entry);
             w.Show();
             w.Run(alpha, fade, lifetime);
@@ -234,7 +234,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _lastDriftTick = now;
             foreach (var (w, m) in Drifting)
                 if (FlashMotion.Step(m, dt))
-                    w.Position = new PixelPoint((int)Math.Round(m.X), (int)Math.Round(m.Y));
+                {
+                    var p = new PixelPoint((int)Math.Round(m.X), (int)Math.Round(m.Y));
+                    w.Position = p;
+                    // The overlap check of later bursts reads the LIVE rect, as WPF reads MotionState X/Y.
+                    for (var i = 0; i < Active.Count; i++)   // a loop, not FindIndex: no closure per frame
+                        if (Active[i].Window == w) Active[i] = (Active[i].Window, new PixelRect(p, Active[i].Rect.Size));
+                }
         }
 
         /// <summary>Close every flash on screen and drop the spawns still queued. <paramref name="final"/>

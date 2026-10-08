@@ -115,18 +115,22 @@ public sealed class FlashDriftTests
             var clock = new SteppedClock();
             var old = FlashOverlay.Clock;
             FlashOverlay.Clock = clock;
-            var w = new Window { Position = new PixelPoint(100, 100) };
+            var w = new FlashOverlayWindow { Position = new PixelPoint(100, 100) };
             try
             {
                 w.Show();
                 var m = FlashMotion.Create(FlashMotionStyle.DriftBounce, 100, 100, 200, 100, 0, 0, 1920, 1080, MotionLevel.Full, new Random(1));
                 m.Vx = 100; m.Vy = -40;
+                FlashOverlay.Active.Add((w, new PixelRect(100, 100, 200, 100)));   // what Spawn records
+                w.Closed += (_, _) => FlashOverlay.Active.RemoveAll(e => e.Window == w);
                 FlashOverlay.StartDrift(w, m);
                 Assert.True(FlashOverlay.DriftRunning);
 
                 clock.Now += TimeSpan.TicksPerSecond / 2;
                 FlashOverlay.DriftTick();
                 Assert.Equal(new PixelPoint(150, 80), w.Position);
+                // Later bursts place around the LIVE rect, not the spawn rect.
+                Assert.Equal(new PixelRect(150, 80, 200, 100), FlashOverlay.Active.Single(e => e.Window == w).Rect);
 
                 w.Close();
                 Assert.False(FlashOverlay.DriftRunning);
