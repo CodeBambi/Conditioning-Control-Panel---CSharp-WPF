@@ -40,6 +40,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // bubbles, pink filter), pop quizzes and open lock cards.
             new("engine", _ => MainShellWindow.StopEngine()),
             new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
+            new("attention-test", _ => Overlays.AttentionTestTarget.CloseAll()),   // the style editor's Test target (P06; WPF left it up)
             new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
         };
 

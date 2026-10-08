@@ -764,6 +764,7 @@
   "panic_camera_stopped": "카메라가 중지되었습니다. 다시 시작하려면 추적을 시작하세요.",
   "btn_confirm": "확인",
   "btn_save": "저장",
+  "btn_discard": "버리기",
   "btn_close": "닫기",
   "btn_delete": "삭제",
   "btn_reset": "초기화",
