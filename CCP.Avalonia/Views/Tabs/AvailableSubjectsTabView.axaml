@@ -1,31 +1,22 @@
-<!-- PORTED from ConditioningControlPanel/Views/Tabs/AvailableSubjectsTabView.xaml.
-     Structure, ordering, spacing, every x:Name and every loc key are preserved so the two diff
-     directly. Deviations, all forced by real WPF/Avalonia differences:
+<!-- PORTED from WPF 7.1.5 ConditioningControlPanel/Views/Tabs/AvailableSubjectsTabView.xaml: THE LOBBY
+     (2026-10-02). Was the Available Subjects directory; the tab key, rail entry and palette row
+     stay "availablesubjects". Three lists by state SIDE BY SIDE: Open (Join) | Playing (no button
+     until a game can be watched) | Friends. Each column scrolls on its own. Under ~900 px of
+     content width the columns become a three-tab switcher (SetNarrow). Rows come from the Core
+     LobbyService (MainShellWindow.RegisterSocialTabs.cs); the look is the launcher's: glass
+     cards with a rim light, Fredoka figures, hover lift + sheen, press travel.
 
-       <Style x:Key TargetType>          ->  <ControlTheme x:Key TargetType>, applied with Theme=
-       ControlTemplate.Triggers          ->  ^:pointerover / ^:disabled nested selectors
-       <ContentPresenter/>               ->  Content="{TemplateBinding Content}" (trap 6: a bare
-                                             presenter draws NOTHING in Avalonia)
-       Content="{loc:Str ...}" on Button ->  a <TextBlock> child (trap 1: "_" is an access key and
-                                             every loc key here is snake_case)
-       Image + EmojiToImageSource        ->  TextBlock (Avalonia renders colour emoji natively)
-       Visibility="Collapsed"            ->  IsVisible="False"
-       BoolToVisibility                  ->  IsVisible="{Binding HasStatusText}" / "{Binding HasTags}"
-       ToolTip="..."                     ->  ToolTip.Tip="..."
-       x:FieldModifier="internal"        ->  dropped; the x:Names are kept and reached with FindControl
-       <Run Text="{Binding Level}"/>     ->  {Binding LevelDisplay}, the int pre-formatted on the row,
-                                             so the "Lv " Run pair needs no converter
-
-     Dropped, each for a reason that is not a shortcut:
-       PreviewMouseWheel on the scroller - it forwarded to MainWindow only to turn a vertical
-         wheel notch into horizontal scrolling. Avalonia's ScrollViewer already scrolls
-         horizontally when it cannot scroll vertically, so there is nothing to undo.
-       PreviewMouseLeftButtonDown/Up + MouseLeave on Connect - MotionFx.PressSquish, which lives
-         in the WPF head. See the code-behind.
-
-     The roster is placeholder data built in the code-behind (App.AvailableSubjects is a WPF-head
-     service): four rows covering every branch the template carries - status text, tags, a claimed
-     row (dimmed + disabled Connect) and a bare one. -->
+     Deviations, all forced by WPF/Avalonia differences:
+       Style x:Key TargetType=Button   ->  ControlTheme with a Template (trap 4) and a presenter
+                                           bound to Content (trap 6)
+       ControlTemplate.Triggers        ->  ^:pointerover / ^:pressed nested selectors
+       DataTemplate.Triggers           ->  Grid.lobbyCard:pointerover styles
+       Content="{loc:Str}" on Button   ->  set from code (Loc + lock glyph), or a TextBlock child
+       BoolToVisibility                ->  IsVisible="{Binding Friend}"
+       ImageBrush ImageSource=Art      ->  the row's Art bitmap (ModArt, decoded at 96 px)
+       FxGlowColor/FxParticleColor     ->  PinkColor / NeonPurpleColor (this head has no Fx colour
+                                           resources, only brushes)
+       MouseEnter/Leave HoverLift      ->  a :pointerover translate on the card -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -35,219 +26,311 @@
              xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.AvailableSubjectsTabView"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="800">
+             d:DesignHeight="640" d:DesignWidth="1100">
 
     <UserControl.Resources>
+        <LinearGradientBrush x:Key="LobbyRim" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Color="#55FFFFFF" Offset="0"/>
+            <GradientStop Color="#14FFFFFF" Offset="0.5"/>
+            <GradientStop Color="#0AFFFFFF" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="LobbyGlass" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Color="#24FFFFFF" Offset="0"/>
+            <GradientStop Color="#0CFFFFFF" Offset="1"/>
+        </LinearGradientBrush>
 
-        <!-- The CTA's WPF Button.Style, verbatim: purple plate, white text, 8px radius,
-             hover dims the plate to 0.9. -->
-        <ControlTheme x:Key="SubjectsCtaButton" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
+        <ControlTheme x:Key="LobbyPill" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{StaticResource LobbyGlass}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LobbyRim}"/>
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="Margin" Value="0,0,10,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="border" CornerRadius="8"
-                            Padding="{TemplateBinding Padding}"
-                            Background="{TemplateBinding Background}">
-                        <ContentPresenter Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
-                    </Border>
+                    <Grid x:Name="root">
+                        <Border CornerRadius="18" BorderThickness="1" Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border x:Name="sheen" CornerRadius="18" Opacity="0" IsHitTestVisible="False" Background="#1FFF5FA2"/>
+                    </Grid>
                 </ControlTemplate>
             </Setter>
-            <Style Selector="^:pointerover /template/ Border#border">
-                <Setter Property="Opacity" Value="0.9"/>
+            <Style Selector="^:pointerover /template/ Border#sheen">
+                <Setter Property="Opacity" Value="1"/>
+            </Style>
+            <Style Selector="^:pressed /template/ Grid#root">
+                <Setter Property="RenderTransform" Value="translate(0px, 2px)"/>
             </Style>
         </ControlTheme>
 
-        <!-- The card's Connect button. Same plate; disabled repaints it to the muted violet
-             the "Taken" state wears. -->
-        <ControlTheme x:Key="SubjectsConnectButton" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+        <ControlTheme x:Key="LobbyJoin" TargetType="Button">
+            <Setter Property="Foreground" Value="#2A0618"/>
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="15,5,15,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="border" CornerRadius="8"
-                            Padding="{TemplateBinding Padding}"
-                            Background="{TemplateBinding Background}">
-                        <ContentPresenter Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
-                    </Border>
+                    <Grid>
+                        <!-- the key's base: the face travels down onto it when pressed -->
+                        <Border CornerRadius="13" Background="#B23A6B" Margin="0,3,0,0"/>
+                        <Border x:Name="face" CornerRadius="13" Margin="0,0,0,3" BorderThickness="1"
+                                BorderBrush="{DynamicResource DepthRaisedBevel}">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                    <GradientStop Color="#FF8CC0" Offset="0"/>
+                                    <GradientStop Color="#FF5FA2" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <!-- the raised sheen: lit from the top like every plank -->
+                            <Border CornerRadius="12" Padding="{TemplateBinding Padding}"
+                                    Background="{DynamicResource DepthRaisedSheen}">
+                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Border>
+                    </Grid>
                 </ControlTemplate>
             </Setter>
-            <Style Selector="^:disabled /template/ Border#border">
-                <Setter Property="Background" Value="#3A2E5A"/>
+            <Style Selector="^:pointerover /template/ Border#face">
+                <Setter Property="Opacity" Value="0.92"/>
             </Style>
-            <Style Selector="^:disabled">
-                <Setter Property="Foreground" Value="White"/>
+            <Style Selector="^:pressed /template/ Border#face">
+                <Setter Property="RenderTransform" Value="translate(0px, 3px)"/>
             </Style>
         </ControlTheme>
 
+        <!-- The three columns are WELLS (the well floor under a sunken 1 px rim). The rows inside
+             float on them (LobbyRowTemplate), so the list reads as cards in a tray. -->
+        <ControlTheme x:Key="LobbyColumn" TargetType="Border">
+            <Setter Property="CornerRadius" Value="18"/>
+            <Setter Property="Padding" Value="12,12,6,8"/>
+            <Setter Property="Background" Value="{DynamicResource DepthWellFloorBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </ControlTheme>
+
+        <DataTemplate x:Key="LobbyRowTemplate" x:DataType="tabs:LobbyRowView">
+            <Grid Classes="lobbyCard" Margin="0,0,6,8" Tag="lobby-card" RenderTransformOrigin="50%,50%">
+                <!-- the pop ring a new table sends out (MotionFx-gated) -->
+                <Border Tag="lobby-ring" CornerRadius="16" BorderThickness="2" BorderBrush="#FF8CC0"
+                        Opacity="0" IsHitTestVisible="False" RenderTransformOrigin="50%,50%"/>
+                <!-- the float band under the card: Social hue at FloatAlpha, in the row's own
+                     8 px bottom margin, so the list pitch does not change -->
+                <Rectangle Tag="lobby-float" Fill="{Binding CardShadow}" Height="{Binding CardShadowPx}"
+                           RadiusX="7" RadiusY="7" VerticalAlignment="Bottom" Margin="8,0,8,-6" IsHitTestVisible="False"/>
+                <Border Classes="lobbyCardFace" CornerRadius="14" Padding="10,9,10,9"
+                        Background="{StaticResource LobbyGlass}" BorderBrush="{Binding CardRim}" BorderThickness="1">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Width="40" Height="40" CornerRadius="11" Margin="0,0,10,0" VerticalAlignment="Center"
+                                BorderBrush="#40FFFFFF" BorderThickness="1" ClipToBounds="True"
+                                Background="{Binding ArtBrush}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextLightBrush}"
+                                           FontFamily="Fredoka, Segoe UI" FontSize="15" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="190"/>
+                                <Ellipse Width="7" Height="7" Margin="7,1,0,0" VerticalAlignment="Center"
+                                         Fill="#5FFFD0" ToolTip.Tip="{loc:Str lobby_friend_tip}"
+                                         IsVisible="{Binding Friend}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Line}" Foreground="{DynamicResource TextSecondaryBrush}"
+                                       FontSize="12" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Theme="{StaticResource LobbyJoin}" MinWidth="64" Margin="8,0,0,0"
+                                VerticalAlignment="Center" Tag="lobby-row-button"
+                                Opacity="{Binding ButtonOpacity}" IsVisible="{Binding HasButton}"
+                                Click="BtnLobbyRow_Click">
+                            <TextBlock Text="{Binding ButtonText}"/>
+                        </Button>
+                    </Grid>
+                </Border>
+                <!-- hover sheen over the glass -->
+                <Border Classes="lobbySheen" CornerRadius="14" IsHitTestVisible="False" Opacity="0">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                            <GradientStop Color="#00FFFFFF" Offset="0.2"/>
+                            <GradientStop Color="#1EFFFFFF" Offset="0.5"/>
+                            <GradientStop Color="#00FFFFFF" Offset="0.8"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Grid>
+        </DataTemplate>
     </UserControl.Resources>
 
-    <Grid Margin="36,28,36,28" RowDefinitions="Auto,Auto,*">
+    <UserControl.Styles>
+        <Style Selector="TextBlock.lobbyHead">
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.lobbyCount">
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="#2A0618"/>
+        </Style>
+        <Style Selector="TextBlock.lobbyEmpty">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Margin" Value="4,6,6,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <!-- WPF LobbyCard_MouseEnter -> MotionFx.HoverLift + the DataTemplate's IsMouseOver trigger -->
+        <Style Selector="Grid.lobbyCard">
+            <Setter Property="RenderTransform" Value="translate(0px, 0px)"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.14"/>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.22"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Grid.lobbyCard:pointerover">
+            <Setter Property="RenderTransform" Value="translate(0px, -2px)"/>
+        </Style>
+        <Style Selector="Grid.lobbyCard:pointerover Border.lobbySheen">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Grid.lobbyCard:pointerover Border.lobbyCardFace">
+            <Setter Property="BorderBrush" Value="#66FF8CC0"/>
+        </Style>
+    </UserControl.Styles>
 
-        <!-- ============================================================ -->
-        <!-- AMBIENT LAYER - the one looping FX on this tab: a very sparse -->
-        <!-- fog drift behind the roster. Declared FIRST so it is the      -->
-        <!-- bottom of the grid's z-order; the cards paint their own opaque-->
-        <!-- surfaces on top, so the mist only reads through the gutters.  -->
-        <!--                                                              -->
-        <!-- Two puffs at low intensity, not the default three: this tab is-->
-        <!-- a roster you scan, and the air behind it must never compete   -->
-        <!-- with a name. The tint comes from FxTheme (the mod's mist      -->
-        <!-- colour), so it follows the active mod instead of being nailed -->
-        <!-- to one hex - see MainWindow.SubjectsFx for why that is not    -->
-        <!-- literally NeonPurple.                                        -->
-        <!--                                                              -->
-        <!-- AmbientFxCanvas is hit-test invisible by construction and runs -->
-        <!-- a self-stopping clock. MainWindow.SubjectsFx starts it and     -->
-        <!-- registers it with RegisterTabFx; on this head the code-behind  -->
-        <!-- starts it with the same tuning and stops it on unload.         -->
-        <!-- ============================================================ -->
-        <fx:AmbientFxCanvas x:Name="SubjectsAmbientFx" Grid.Row="0" Grid.RowSpan="3"/>
+    <Grid>
+        <!-- Backdrop, the launcher's recipe at page scale: a deep radial ground and two light pools. -->
+        <Border IsHitTestVisible="False">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="28%,10%" Center="28%,10%" RadiusX="90%" RadiusY="90%">
+                    <GradientStop Color="#552C1450" Offset="0"/>
+                    <GradientStop Color="#00100A1E" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border IsHitTestVisible="False" Opacity="0.30">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="82%,15%" Center="82%,15%" RadiusX="50%" RadiusY="50%">
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border IsHitTestVisible="False" Opacity="0.18">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="12%,90%" Center="12%,90%" RadiusX="45%" RadiusY="45%">
+                    <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="0"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <!-- The tab's one looping FX (MainShellWindow.SubjectsFx registers it; parks on tab switch). -->
+        <fx:AmbientFxCanvas x:Name="SubjectsAmbientFx"/>
 
-        <!-- Header -->
-        <Grid Grid.Row="0" Margin="0,0,0,18" ColumnDefinitions="Auto,*,Auto">
-            <TextBlock Grid.Column="0" Text="🛰️" FontSize="30" Width="44"
-                       TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,16,0"/>
-            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock Text="{loc:Str tab_available_subjects}"
-                           Foreground="{DynamicResource NeonPurpleBrush}"
-                           FontSize="26" FontWeight="Bold"/>
-                <TextBlock Text="{loc:Str desc_available_subjects}"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>
+        <Grid Margin="32,26,32,22" RowDefinitions="Auto,Auto,Auto,*">
+
+            <!-- Header: the title and the live count -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                <TextBlock Text="{loc:Str tab_available_subjects}" FontFamily="Fredoka, Segoe UI" FontSize="26"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}"/>
+                <TextBlock x:Name="TxtLobbyCount" Foreground="{DynamicResource PinkSoftBrush}" FontFamily="Fredoka, Segoe UI"
+                           FontSize="16" Margin="14,0,0,5" VerticalAlignment="Bottom"/>
             </StackPanel>
 
-            <!-- "Become a subject!" CTA. Free users get the button +
-                 italic subtitle pointing to Patreon; premium users get
-                 the button alone, opening the Remote Control tab. -->
-            <StackPanel Grid.Column="2" VerticalAlignment="Center"
-                        HorizontalAlignment="Right" MaxWidth="260" Margin="16,0,0,0">
-                <Button x:Name="BtnBecomeASubject"
-                        Theme="{StaticResource SubjectsCtaButton}"
-                        Click="BtnBecomeASubject_Click"
-                        ToolTip.Tip="{loc:Str tooltip_become_a_subject}"
-                        FontSize="13" FontWeight="Bold"
-                        Padding="16,9" BorderThickness="0" Cursor="Hand"
-                        HorizontalAlignment="Right">
-                    <TextBlock Text="{loc:Str btn_become_a_subject}"/>
-                </Button>
-                <TextBlock x:Name="TxtBecomeASubjectSubtitle"
-                           Text="{loc:Str desc_become_a_subject_locked}"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           FontSize="11" FontStyle="Italic"
-                           Margin="0,6,0,0" TextWrapping="Wrap"
-                           TextAlignment="Right"
-                           IsVisible="False"/>
+            <!-- Host bar. Locked pills stay visible with a lock; a click goes to the gate. -->
+            <StackPanel Grid.Row="1">
+                <WrapPanel Orientation="Horizontal">
+                    <Button x:Name="BtnHostChess" Theme="{StaticResource LobbyPill}" Click="BtnHostChess_Click"/>
+                    <Button x:Name="BtnHostGoon" Theme="{StaticResource LobbyPill}" Click="BtnHostGoon_Click"/>
+                    <Button x:Name="BtnBecomeASubject" Theme="{StaticResource LobbyPill}"
+                            ToolTip.Tip="{loc:Str desc_optin_directory_consent}" Click="BtnBecomeASubject_Click"/>
+                </WrapPanel>
+                <TextBlock x:Name="TxtBecomeASubjectSubtitle" Text="{loc:Str desc_become_a_subject_locked}"
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="4,0,0,4" IsVisible="False"/>
+                <Border x:Name="AvailableSubjectsErrorPanel" IsVisible="False" Margin="0,6,0,0" Padding="14,8"
+                        CornerRadius="12" Background="#14FFFFFF" BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1">
+                    <TextBlock Text="{loc:Str lobby_error}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13"/>
+                </Border>
             </StackPanel>
-        </Grid>
 
-        <!-- Empty state (visible iff service.IsEmpty + !HasError) -->
-        <Border Grid.Row="1" x:Name="AvailableSubjectsEmptyPanel"
-                Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource NeonPurpleBrush}" BorderThickness="1"
-                CornerRadius="10" Padding="24,18" Margin="0,0,0,12"
-                IsVisible="False">
-            <TextBlock Text="{loc:Str empty_available_subjects}"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
-        </Border>
+            <!-- Narrow window: one column at a time behind three tabs. -->
+            <StackPanel x:Name="LobbyTabStrip" Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0" IsVisible="False">
+                <Button x:Name="TabOpen" Theme="{StaticResource LobbyPill}" Tag="0" Click="LobbyTab_Click"/>
+                <Button x:Name="TabPlaying" Theme="{StaticResource LobbyPill}" Tag="1" Click="LobbyTab_Click"/>
+                <Button x:Name="TabFriends" Theme="{StaticResource LobbyPill}" Tag="2" Click="LobbyTab_Click"/>
+            </StackPanel>
 
-        <!-- Error state (visible iff service.HasError) -->
-        <Border Grid.Row="1" x:Name="AvailableSubjectsErrorPanel"
-                Background="{DynamicResource SurfaceBgBrush}"
-                BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
-                CornerRadius="10" Padding="24,18" Margin="0,0,0,12"
-                IsVisible="False">
-            <TextBlock Text="{loc:Str error_available_subjects}"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
-        </Border>
+            <!-- The three columns -->
+            <Grid x:Name="LobbyColumns" Grid.Row="3" Margin="0,10,0,0" ColumnDefinitions="*,*,*">
 
-        <!-- Side-scrollable horizontal card list. ItemsSource is bound
-             in code-behind to App.AvailableSubjects.Entries. Each card
-             gets a fixed 260px width to keep horizontal scrolling
-             intentional rather than incidental. -->
-        <ScrollViewer Grid.Row="2" x:Name="AvailableSubjectsScroller"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Disabled">
-            <ItemsControl x:Name="AvailableSubjectsList">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="tabs:SubjectRow">
-                        <Border Width="260" Margin="0,0,12,4" Opacity="{Binding CardOpacity}"
-                                Background="{DynamicResource SurfaceBgBrush}"
-                                BorderBrush="{DynamicResource NeonPurpleBrush}"
-                                BorderThickness="1" CornerRadius="10" Padding="18,14">
+                <!-- (1) Open -->
+                <Border x:Name="LobbyOpenColumn" Grid.Column="0" Theme="{StaticResource LobbyColumn}" Margin="0,0,8,0">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,0,0,10">
+                            <TextBlock Classes="lobbyHead" Text="{loc:Str lobby_list_open}"/>
+                            <Border CornerRadius="10" Background="#FF5FA2" Padding="8,1,8,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="LobbyOpenCount" Classes="lobbyCount" Text="0"/>
+                            </Border>
+                        </StackPanel>
+                        <Border x:Name="AvailableSubjectsEmptyPanel" DockPanel.Dock="Top" IsVisible="False">
+                            <!-- Empty state: one line, then the host doors right under it. -->
                             <StackPanel>
-                                <!-- Top row: name + level + tier badge -->
-                                <Grid Margin="0,0,0,8" ColumnDefinitions="*,Auto">
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{Binding DisplayName}" Foreground="White"
-                                                   FontSize="15" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}"
-                                                   FontSize="11" Margin="0,2,0,0">
-                                            <Run Text="Lv "/><Run Text="{Binding LevelDisplay}"/>
-                                        </TextBlock>
-                                    </StackPanel>
-                                    <Border Grid.Column="1" Background="{DynamicResource NeonPurpleTransparent20Brush}"
-                                            CornerRadius="9999" Padding="8,3" VerticalAlignment="Top">
-                                        <TextBlock Text="{Binding TierLabel}"
-                                                   Foreground="{DynamicResource NeonPurpleBrush}"
-                                                   FontSize="10" FontWeight="Bold"/>
-                                    </Border>
-                                </Grid>
-
-                                <!-- Status text (only when present) -->
-                                <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
-                                           IsVisible="{Binding HasStatusText}"/>
-
-                                <!-- Tags as pill badges (mirrors cclabs-web /dashboard/subjects) -->
-                                <ItemsControl ItemsSource="{Binding Tags}" Margin="0,0,0,12"
-                                              IsVisible="{Binding HasTags}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="x:String">
-                                            <Border Background="{DynamicResource NeonPurpleTransparent20Brush}"
-                                                    CornerRadius="9999" Padding="7,2" Margin="0,0,5,5">
-                                                <TextBlock Text="{Binding}"
-                                                           Foreground="{DynamicResource NeonPurpleBrush}"
-                                                           FontSize="10" FontWeight="SemiBold"/>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-
-                                <!-- Connect button (or Taken disabled) -->
-                                <Button Theme="{StaticResource SubjectsConnectButton}"
-                                        Tag="{Binding UnifiedId}"
-                                        IsEnabled="{Binding IsConnectEnabled}"
-                                        Click="BtnConnectSubject_Click"
-                                        FontSize="13" FontWeight="Bold"
-                                        Padding="0,8" BorderThickness="0" Cursor="Hand"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center">
-                                    <TextBlock Text="{Binding ConnectButtonText}"/>
-                                </Button>
+                                <TextBlock x:Name="TxtLobbyEmpty" Classes="lobbyEmpty"/>
+                                <WrapPanel x:Name="LobbyEmptyHostRow" HorizontalAlignment="Center" Margin="0,8,0,4">
+                                    <Button x:Name="BtnEmptyHostChess" Theme="{StaticResource LobbyPill}" Click="BtnHostChess_Click"/>
+                                    <Button x:Name="BtnEmptyHostGoon" Theme="{StaticResource LobbyPill}" Click="BtnHostGoon_Click"/>
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="AvailableSubjectsList" ItemTemplate="{StaticResource LobbyRowTemplate}"/>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+
+                <!-- (2) Playing -->
+                <Border x:Name="LobbyPlayingSection" Grid.Column="1" Theme="{StaticResource LobbyColumn}" Margin="4,0,4,0">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,0,0,10">
+                            <TextBlock Classes="lobbyHead" Text="{loc:Str lobby_list_playing}"/>
+                            <Border CornerRadius="10" Background="#B99CFF" Padding="8,1,8,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="LobbyPlayingCount" Classes="lobbyCount" Text="0"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="LobbyPlayingEmpty" DockPanel.Dock="Top" Classes="lobbyEmpty" Text="{loc:Str lobby_empty_playing}"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="LobbyPlayingList" ItemTemplate="{StaticResource LobbyRowTemplate}"/>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+
+                <!-- (3) Friends -->
+                <Border x:Name="LobbyFriendsSection" Grid.Column="2" Theme="{StaticResource LobbyColumn}" Margin="8,0,0,0">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,0,0,10">
+                            <TextBlock Classes="lobbyHead" Text="{loc:Str lobby_list_friends}"/>
+                            <Border CornerRadius="10" Background="#5FFFD0" Padding="8,1,8,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="LobbyFriendsCount" Classes="lobbyCount" Text="0"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="LobbyFriendsEmpty" DockPanel.Dock="Top" Classes="lobbyEmpty" Text="{loc:Str lobby_empty_friends}"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="LobbyFriendsList" ItemTemplate="{StaticResource LobbyRowTemplate}"/>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
     </Grid>
 </UserControl>

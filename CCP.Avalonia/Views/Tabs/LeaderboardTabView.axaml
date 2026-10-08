@@ -403,7 +403,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- season name + live countdown -->
+                <!-- which board this is (seasons are retired: no season name, no countdown) -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" MinWidth="180" Margin="0,0,14,0">
                     <TextBlock x:Name="TxtLeaderboardSeason"
                                FontSize="13" FontWeight="Bold"
@@ -511,10 +511,14 @@
                             ToolTip.Tip="{loc:Str btn_jump_to_me}">
                         <TextBlock Text="&#x25CE;"/>
                     </Button>
-                    <Button x:Name="BtnViewSeasonRecap" Theme="{StaticResource LbTextButton}"
-                            IsVisible="False">
-                        <TextBlock Text="{loc:Str recap_btn_view}"/>
-                    </Button>
+                    <!-- Seasons are retired (WPF 7.1.5, owner 2026-09-24): the recap button stays in the
+                         tree for its callers but its host never shows, whatever they set on the button. -->
+                    <Border x:Name="SeasonRecapHost" IsVisible="False">
+                        <Button x:Name="BtnViewSeasonRecap" Theme="{StaticResource LbTextButton}"
+                                IsVisible="False">
+                            <TextBlock Text="{loc:Str recap_btn_view}"/>
+                        </Button>
+                    </Border>
                     <Button x:Name="HelpBtnLeaderboard" Theme="{StaticResource HelpButtonStyle}"
                             VerticalAlignment="Center" Margin="6,0,0,0" Tag="Leaderboard"/>
                 </StackPanel>
