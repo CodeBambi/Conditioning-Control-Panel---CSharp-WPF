@@ -461,6 +461,7 @@
                             Margin="0,0,12,0"
                             Cursor="Hand"
                             PointerPressed="LockdownBadge_Click"
+                            Focusable="True" KeyDown="LockdownBadge_KeyDown"
                             ToolTip.Tip="{loc:Str lockdown_badge_tooltip}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Fill="#FFE3E8" Margin="0,0,7,0" VerticalAlignment="Center"/>

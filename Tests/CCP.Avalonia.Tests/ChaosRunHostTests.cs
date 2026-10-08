@@ -80,6 +80,28 @@ public sealed class ChaosRunHostTests
         });
     }
 
+    /// <summary>Decisions 2026-10-08 (panic-surfaces): the safe word, the only exit under Lockdown, ends a run.</summary>
+    [Fact]
+    public async Task The_safe_word_ends_the_run()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            Setup();
+            var shell = new MainShellWindow();
+            shell.Show();
+            try
+            {
+                ChaosRunHost.StartRun(Cfg());
+                ChaosRunHost.Overlay!.FinishCountdown();
+                Assert.True(ChaosRunHost.IsDescending);
+                shell.VoicePanic();
+                Assert.False(ChaosRunHost.IsActive || ChaosRunHost.IsDescending);
+            }
+            finally { ChaosRunHost.ForceShutdown(); shell.Close(); }
+            return Task.CompletedTask;
+        });
+    }
+
     [Fact]
     public async Task Panic_during_the_countdown_and_mid_run_ends_the_run()
     {
