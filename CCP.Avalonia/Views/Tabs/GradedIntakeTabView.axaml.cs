@@ -251,12 +251,91 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             quizWindow.Show();
         }
 
-        /// <summary>WPF MainWindow.Lab.cs:468. ponytail: WPF hides this list with BtnStartQuiz,
-        /// pending removal; port the body (trend rows + QuizReportWindow rows) if it's ever unhidden.</summary>
+        /// <summary>WPF MainWindow.Lab.cs:468. Bails while BtnStartQuiz is hidden (the classic quiz is
+        /// pending removal on both heads); unhide it and the trend rows + report rows light up.</summary>
         internal void RefreshPastQuizzes()
         {
             if (!BtnStartQuiz.IsVisible) return;
+            try
+            {
+                var history = QuizStore.LoadHistory();
+                PastQuizzesList.Children.Clear();
+                TxtPastQuizzesHeader.IsVisible = PastQuizzesPanel.IsVisible = history.Count > 0;
+                if (history.Count == 0) return;
+
+                // Trend per TrendKey, not the enum: custom categories collapse to Sissy (#518/#521).
+                foreach (var cat in history.Select(QuizStore.TrendKey).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    var trend = QuizStore.GetScoreTrend(history, cat);
+                    if (trend == null) continue;
+                    var latest = history.FirstOrDefault(h =>
+                        string.Equals(QuizStore.TrendKey(h), cat, StringComparison.OrdinalIgnoreCase));
+                    var archetype = "";
+                    if (latest != null)
+                    {
+                        var m = System.Text.RegularExpressions.Regex.Match(latest.ProfileText, @"You are a (.+?)\.");
+                        if (m.Success) archetype = m.Groups[1].Value;
+                    }
+                    var arrow = trend.Direction switch
+                    {
+                        TrendDirection.Up => "\u2191",
+                        TrendDirection.Down => "\u2193",
+                        TrendDirection.Flat => "\u2192",
+                        _ => ""
+                    };
+                    var catDisplay = latest != null ? QuizStore.DisplayName(latest) : cat;
+                    var label = trend.Direction == TrendDirection.FirstQuiz
+                        ? $"{catDisplay}: {trend.LatestPercent}%"
+                        : $"{catDisplay}: {trend.LatestPercent}% {arrow}{Math.Abs(trend.DeltaPercent)}%";
+                    if (!string.IsNullOrEmpty(archetype)) label += $" · {archetype}";
+                    PastQuizzesList.Children.Add(new TextBlock
+                    {
+                        Text = label,
+                        Foreground = new global::Avalonia.Media.SolidColorBrush(global::Avalonia.Media.Color.FromRgb(0xFF, 0x69, 0xB4)),
+                        FontSize = 11,
+                        FontWeight = global::Avalonia.Media.FontWeight.SemiBold,
+                        Margin = new Thickness(8, 3, 8, 3)
+                    });
+                }
+
+                foreach (var entry in history)
+                {
+                    var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
+                    // A Button (not WPF's mouse-only Border) so the row is keyboard-reachable (P17).
+                    var row = new Button
+                    {
+                        Cursor = new global::Avalonia.Input.Cursor(global::Avalonia.Input.StandardCursorType.Hand),
+                        Padding = new Thickness(8, 5, 8, 5),
+                        Background = global::Avalonia.Media.Brushes.Transparent,
+                        HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Stretch,
+                        HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
+                        Content = new TextBlock
+                        {
+                            Text = $"{entry.TakenAt:MMM d}  ·  {QuizStore.DisplayName(entry)}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)",
+                            Foreground = new global::Avalonia.Media.SolidColorBrush(global::Avalonia.Media.Color.FromRgb(0xA0, 0xA0, 0xB8)),
+                            FontSize = 11.5
+                        }
+                    };
+                    var captured = entry;
+                    row.Click += (_, _) => OpenReport(captured);
+                    PastQuizzesList.Children.Add(row);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "GradedIntakeTabView: Failed to refresh past quizzes");
+            }
         }
+
+        /// <summary>WPF MainWindow.Lab.cs:560: one report at a time, owned by the shell.</summary>
+        internal Windows.QuizReportWindow OpenReport(QuizHistoryEntry entry)
+        {
+            s_report?.Close();   // this is its only opener, so one static is "every open report"
+            var report = s_report = new Windows.QuizReportWindow(entry);
+            if (TopLevel.GetTopLevel(this) is Window owner) report.Show(owner); else report.Show();
+            return report;
+        }
+        private static Windows.QuizReportWindow? s_report;
 
         // WPF MainWindow.Lab.cs:600 → PopQuizService.TestPopQuiz.
         private void BtnTestPopQuiz_Click(object? sender, RoutedEventArgs e) =>
