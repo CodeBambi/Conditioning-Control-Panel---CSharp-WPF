@@ -4,8 +4,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls.Fx;
 using ConditioningControlPanel.Services;
 using Serilog;
+using SkiaSharp;
 using ModPackage = ConditioningControlPanel.Models.ModPackage;
 using MotionLevel = ConditioningControlPanel.Models.MotionLevel;
 using PerformanceTier = ConditioningControlPanel.Models.PerformanceTier;
@@ -27,6 +29,104 @@ namespace ConditioningControlPanel.Avalonia.Controls
         SheenSweep = 1 << 3,
         /// <summary>A pre-baked glow breathing 0.6 to 1.0 opacity.</summary>
         GlowBreath = 1 << 4,
+        /// <summary>
+        /// Warm motes rising from the bottom edge on a slow sine sway, budgeted by the tier and
+        /// thinned by the governor like the dust. Additive: surfaces that never ask for it pay
+        /// nothing.
+        /// </summary>
+        Embers = 1 << 5,
+        /// <summary>
+        /// Section-hued motes drifting clockwise along a thin window-edge strip (nav polish 9).
+        /// The strip's side comes from <see cref="AmbientFxConfig.EdgeSide"/>; the maths is
+        /// <see cref="EdgeDriftMath"/>. Additive like the rest: no other surface pays for it.
+        /// </summary>
+        EdgeDrift = 1 << 6,
+        /// <summary>
+        /// Soft section-hued puffs drifting and breathing along a window-edge strip (nav polish 11):
+        /// the section edge's fog. Side from <see cref="AmbientFxConfig.EdgeSide"/>, maths in
+        /// <see cref="EdgeFogMath"/>, sim and paint in AmbientFxCanvas.EdgeFog.cs. The one layer that
+        /// may also run at Reduced motion, and only when <see cref="AmbientFxConfig.EdgeFogReduced"/>
+        /// asks for it (half the puffs at half the speed).
+        /// </summary>
+        EdgeFog = 1 << 7,
+        /// <summary>
+        /// The Premium page's motes (polish 12 round 2): gold glitter rising off the Basic cards,
+        /// cyan diamonds off the Prime ones, a few loose sparkles anywhere. Zones from
+        /// <see cref="AmbientFxCanvas.SetVaultZones"/>, numbers in <see cref="VaultMoteMath"/>, sim and
+        /// paint in AmbientFxCanvas.Vault.cs. May tick at Reduced (a few slow motes) like EdgeFog.
+        /// </summary>
+        VaultMotes = 1 << 8,
+    }
+
+    /// <summary>Which window edge an <see cref="AmbientFxLayers.EdgeDrift"/> strip lines.</summary>
+    public enum EdgeSide
+    {
+        Top,
+        Right,
+        Bottom,
+        Left,
+    }
+
+    /// <summary>
+    /// The edge drift's numbers and its pure step (nav polish 9, proposal section 4). WPF
+    /// AmbientFxCanvas.cs EdgeDriftMath, numbers exact. No Avalonia, no Skia.
+    ///
+    /// <para>Coordinates: <c>along</c> runs 0 to 1 in the CLOCKWISE direction of the strip's side
+    /// (Top left to right, Right top to bottom, Bottom right to left, Left bottom to top);
+    /// <c>depth</c> runs 0 at the window's outer edge to 1 at the band's inner edge.</para>
+    /// </summary>
+    public static class EdgeDriftMath
+    {
+        /// <summary>Strip lengths per second: one full side in about 35 to 55 s.</summary>
+        public const double SpeedMin = 0.018, SpeedMax = 0.030;
+        /// <summary>Depth band across the strip, so no mote sits on the line or bleeds inward.</summary>
+        public const double DepthMin = 0.15, DepthMax = 0.85;
+        /// <summary>Mote diameter in NATIVE pixels (never min-scaled: the strip is 30 px thin).</summary>
+        public const double SizeMinPx = 1.5, SizeMaxPx = 3.0;
+        /// <summary>Life in seconds, on a sine envelope.</summary>
+        public const double LifeMin = 9.0, LifeMax = 16.0;
+        /// <summary>Peak alpha before flicker and intensity.</summary>
+        public const double BaseAlpha = 0.30;
+        /// <summary>Flicker floor; the ceiling is 1.0.</summary>
+        public const double FlickerMin = 0.85;
+        /// <summary>Share of the canvas's live particle budget one strip may spend.</summary>
+        public const double BudgetShare = 0.30;
+        /// <summary>Hard cap per strip (24 across the four sides).</summary>
+        public const int MaxPerStrip = 6;
+        /// <summary>Along-axis fade at each strip end, so a mote leaves a corner instead of popping.</summary>
+        public const double EndFade = 0.05;
+        /// <summary>Seconds between spawns while a strip is under target: fills over a few seconds.</summary>
+        public const double SpawnEverySeconds = 0.6;
+
+        /// <summary>Motes one strip may hold at this live budget: round(budget x 0.30), capped 6.</summary>
+        public static int Target(int liveBudget) =>
+            liveBudget <= 0 ? 0 : Math.Min(MaxPerStrip, (int)Math.Round(liveBudget * BudgetShare));
+
+        /// <summary>Clockwise drift: along only ever grows.</summary>
+        public static double Advance(double along, double speed, double dt) =>
+            along + Math.Max(0.0, speed) * Math.Max(0.0, dt);
+
+        /// <summary>A mote is spent when its life runs out or it reaches the strip's end.</summary>
+        public static bool IsSpent(double along, double life) => life <= 0.0 || along >= 1.0;
+
+        /// <summary>Element-normalized (x, y) of a mote on a strip of the given side.</summary>
+        public static (double X, double Y) Position(EdgeSide side, double along, double depth) => side switch
+        {
+            EdgeSide.Top => (along, depth),
+            EdgeSide.Right => (1.0 - depth, along),
+            EdgeSide.Bottom => (1.0 - along, 1.0 - depth),
+            _ => (depth, 1.0 - along),
+        };
+
+        /// <summary>Alpha: 0.30 x sine life envelope x flicker 0.85..1.0 x intensity x end fade.</summary>
+        public static double Alpha(double along, double life, double max, double flickerPhase, double intensity)
+        {
+            if (max <= 0) return 0;
+            double env = Math.Sin(Math.PI * Math.Clamp(1.0 - life / max, 0.0, 1.0));
+            double flicker = FlickerMin + (1.0 - FlickerMin) * (0.5 + 0.5 * Math.Sin(flickerPhase));
+            double ends = Math.Clamp(Math.Min(along, 1.0 - along) / EndFade, 0.0, 1.0);
+            return BaseAlpha * env * flicker * Math.Clamp(intensity, 0.0, 1.5) * ends;
+        }
     }
 
     /// <summary>Per-surface tuning for <see cref="AmbientFxCanvas.StartLayers(AmbientFxConfig)"/>.</summary>
@@ -70,46 +170,64 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// panel is already painted in.
         /// </summary>
         public Color? Tint { get; set; }
+
+        /// <summary>The window edge an <see cref="AmbientFxLayers.EdgeDrift"/> strip lines.</summary>
+        public EdgeSide EdgeSide { get; set; } = EdgeSide.Top;
+
+        /// <summary>
+        /// The depth, in DIPs, the <see cref="AmbientFxLayers.EdgeDrift"/> motes keep to on a strip
+        /// thicker than their band (the fog's strip). 0, the default, spreads them over the whole
+        /// strip exactly as before.
+        /// </summary>
+        public double EdgeDriftBandPx { get; set; }
+
+        /// <summary><see cref="AmbientFxLayers.EdgeFog"/> at Reduced: half the puffs at half the
+        /// speed, and the canvas may tick at Reduced motion for this layer.</summary>
+        public bool EdgeFogReduced { get; set; }
+
+        /// <summary>Alpha gain on the fog (the section edge balances light and dark hues), 0-1.5.</summary>
+        public double EdgeFogGain { get; set; } = 1.0;
+
+        /// <summary>
+        /// Keep ticking while the host window is NOT the active window (polish wave 13). Only for a
+        /// host that already repaints every frame on its own, so the clock adds no wake-ups: the
+        /// companion tube. Minimised, hidden, Motion below Full and the tier budget still stop it.
+        /// Never set it on a surface inside the main window (#550 idle parking).
+        /// </summary>
+        public bool RunWhileInactive { get; set; }
     }
 
     /// <summary>
-    /// PORTED from ConditioningControlPanel/Controls/AmbientFxCanvas.cs.
+    /// PORTED from ConditioningControlPanel/Controls/AmbientFxCanvas.cs (7.1.5).
     ///
-    /// <para>The one reusable in-window FX surface: a hit-test-invisible canvas running a
-    /// self-stopping ~30fps <see cref="DispatcherTimer"/>, composed from the layer vocabulary in
-    /// <see cref="AmbientFxLayers"/>. Deliberately NOT the fullscreen compositor - that is
-    /// per-monitor topmost overlay windows, and keeping its shared tick alive for ambient loops
-    /// would undo the idle-parking that fixed #550. This control spawns no window of any kind.</para>
+    /// <para>The one reusable in-window FX surface: a hit-test-invisible Skia surface
+    /// (<see cref="FxSurface"/>, half resolution, layers drawn with <see cref="SKBlendMode.Plus"/> so
+    /// overlapping glows bloom) running a self-stopping ~30fps frame-locked <see cref="FrameClock"/>,
+    /// composed from the layer vocabulary in <see cref="AmbientFxLayers"/>. Deliberately NOT the
+    /// fullscreen compositor - that is per-monitor topmost overlay windows, and keeping its shared
+    /// tick alive for ambient loops would undo the idle-parking that fixed #550. This control spawns
+    /// no window of any kind.</para>
     ///
     /// Rules it enforces for every caller:
-    ///   • the clock only runs while the control is loaded, visible, and its window is active and
-    ///     not minimized - the timer stops itself the moment any of that stops holding;
+    ///   • the clock only runs while the control is loaded, effectively visible, and its window is
+    ///     active and not minimized - the clock stops itself the moment any of that stops holding;
     ///   • colours and the performance budget are read ONCE at (re)start and cached, never per tick;
-    ///     a mod switch re-reads them via <see cref="RefreshPalette"/>;
-    ///   • nothing is allocated per frame - the radial brushes are rebuilt only when the palette
-    ///     moves, and per-particle alpha rides <c>PushOpacity</c> rather than a new brush;
+    ///     a mod switch re-reads them;
+    ///   • nothing is allocated per frame - one shared soft-dot <see cref="SKImage"/>, one glow
+    ///     image, one <see cref="SKPaint"/> and colour filters rebuilt only when the palette moves;
     ///   • every tick is wrapped, and repeated faults stop the clock instead of spamming the log.
     ///
     /// <para>All simulation state is in element-normalized (0-1) coordinates, so it is DPI- and
     /// Viewbox-agnostic, while the two one-shot entry points (<see cref="Burst"/> and
     /// <see cref="BankTokens"/>) take plain element-local coordinates.</para>
     ///
-    /// <para><b>What changed in the port.</b> The WPF original hosted a SkiaSharp <c>SKElement</c>
-    /// as its <c>Decorator.Child</c> and painted every layer as one white radial <c>SKImage</c>
-    /// re-tinted by an <c>SKColorFilter</c> under <c>SKBlendMode.Plus</c>. Avalonia's
-    /// <see cref="DrawingContext"/> draws the same shapes natively - a <see cref="RadialGradientBrush"/>
-    /// stretched over an ellipse IS the soft sprite - so the port drops SkiaSharp entirely and
-    /// overrides <see cref="Render"/> on the control itself, keeping the head free of a Skia
-    /// dependency it otherwise does not need.</para>
-    ///
-    /// <para>ponytail: Avalonia's DrawingContext has no additive blend mode, so the layers composite
-    /// source-over where WPF composited Plus. Overlapping puffs therefore read a shade flatter
-    /// instead of blooming. The upgrade path is an <c>ICustomDrawOperation</c> holding an
-    /// <c>ISkiaSharpApiLease</c>, which buys back <c>SKBlendMode.Plus</c> at the cost of pulling
-    /// SkiaSharp into this project and of only working on the Skia backend; not worth it until the
-    /// owner says the bloom is missed.</para>
+    /// <para>Port history: the first port drew the layers with Avalonia's DrawingContext
+    /// (source-over, no bloom) on a DispatcherTimer. Parity wave 1 put it back on the WPF engine:
+    /// Skia sprites under Plus on a reduced-resolution <see cref="FxSurface"/>, ticked by the
+    /// frame-locked <see cref="FrameClock"/>, plus the Embers, EdgeDrift, EdgeFog and VaultMotes
+    /// layers the first port had not carried.</para>
     /// </summary>
-    public class AmbientFxCanvas : Decorator
+    public partial class AmbientFxCanvas : Decorator
     {
         private const int MaxBurstParticles = 150;
         private const int FaultLimit = 5;
@@ -140,22 +258,25 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// <summary>Fade-in after a token's stagger delay expires, so it arrives instead of popping.</summary>
         private const float BankTokenFadeInMs = 90f;
 
-        private readonly DispatcherTimer _timer;
+        private readonly FxSurface _sk;
+        private readonly FrameClock _timer;
+
+        /// <summary>
+        /// Share of the screen's pixels the ambient layers raster at (perf pass, 2026-10-07). Fog,
+        /// aurora, dust and embers are soft sprites and read the same at half resolution for a
+        /// quarter of the CPU fill and of the per-frame upload. A live burst or token flight paints
+        /// at full resolution, because sparks and coins are crisp.
+        /// </summary>
+        public const double AmbientResolution = 0.5;
         private AmbientFxConfig _config = new();
 
         // ---- cached at (re)start: never read per tick ----
         private PerformanceTier _tier = PerformanceTier.Quality;
         private int _particleBudget;
         private int _targetFps = 30;
+        private SKColor _mist, _particle, _glow, _flash;
         private float _mistAlpha = 1f;
-
-        /// <summary>
-        /// The four palette slots, as ready-to-draw soft-dot brushes. These are the port's twin of
-        /// the WPF original's one white sprite plus four <c>SKColorFilter</c>s: a gradient brush
-        /// already carries its colour, so the tint IS the brush and no filter is needed.
-        /// </summary>
-        private IBrush? _mistDot, _particleDot, _glowDot, _flashDot, _glowSoft;
-        private IBrush? _burstDot, _tokDot;
+        private SKColorFilter? _mistTint, _particleTint, _glowTint, _flashTint;
 
         // ---- clocks ----
         private readonly System.Diagnostics.Stopwatch _clock = new();
@@ -176,9 +297,26 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private Dust[] _dust = Array.Empty<Dust>();
         private int _dustN;
 
+        /// <summary>Cap on the ember pool; the tier budget can only lower it.</summary>
+        private const int EmberMax = 40;
+        /// <summary>The share of the live particle budget embers may spend (dust keeps its own).</summary>
+        private const float EmberBudgetShare = 0.66f;
+        private struct Ember { public float X0, Y, VY, Amp, Phase, PhaseSpd, Life, Max, Size; }
+        private Ember[] _embers = Array.Empty<Ember>();
+        private int _emberN;
+        private float _emberT;
+        private SKColorFilter? _emberTint;
+
+        // Edge drift (nav polish 9): along/depth are strip-normalized (see EdgeDriftMath), size is px.
+        private struct EdgeMote { public float Along, Depth, Speed, Life, Max, SizePx, Phase, PhaseSpd; }
+        private EdgeMote[] _edge = Array.Empty<EdgeMote>();
+        private int _edgeN;
+        private float _edgeT;
+
         private struct Spark { public float X, Y, VX, VY, Life, Max, Size; }
         private Spark[]? _burst;
         private int _burstN;
+        private SKColorFilter? _burstTint;
 
         /// <summary>
         /// One banked token. It carries its whole bezier rather than a velocity because the flight
@@ -199,6 +337,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         private Tok[]? _tok;
         private int _tokN;
+        private SKColorFilter? _tokTint;
 
         /// <summary>The live flight's landing callback, plus the counters that make (index, isLast) honest.</summary>
         private Action<int, bool>? _tokOnLand;
@@ -219,30 +358,32 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private readonly Random _rng = new();
 
         /// <summary>
-        /// Subscriptions to the host window's IsActive / WindowState. WPF hooked three events
-        /// (Activated, Deactivated, StateChanged); Avalonia exposes IsActive as a DirectProperty and
-        /// WindowState as a StyledProperty, and observing the properties covers both directions of
-        /// the activation flip in one subscription instead of two half-events.
+        /// Subscriptions to the host window's IsActive / WindowState, plus the effective-visibility
+        /// watch. WPF hooked Activated, Deactivated and StateChanged; Avalonia exposes IsActive as a
+        /// DirectProperty and WindowState as a StyledProperty, and observing the properties covers
+        /// both directions of the activation flip in one subscription instead of two half-events.
         /// </summary>
         private readonly List<IDisposable> _windowHooks = new();
         private Window? _window;
         private bool _modHooked;
 
+        private readonly SKPaint _paint = FxSprites.AdditivePaint();
+
         public AmbientFxCanvas()
         {
             IsHitTestVisible = false;
 
-            // The WPF original was clipped by its SKElement surface; nothing clips a Decorator's own
-            // Render output, and fog puffs are deliberately drawn well past the bounds, so without
-            // this a canvas would paint over its siblings.
+            // Fog puffs are drawn well past the bounds; the surface clips them, and so does this.
             ClipToBounds = true;
 
-            // Background priority on purpose: ambient FX must yield to input and layout, and the
-            // frame gaps that causes are exactly what the governor reads to degrade itself.
-            _timer = new DispatcherTimer(DispatcherPriority.Background)
-            {
-                Interval = TimeSpan.FromMilliseconds(33),
-            };
+            _sk = new FxSurface { IsHitTestVisible = false, ResolutionScale = AmbientResolution };
+            _sk.PaintSurface += OnPaintSurface;
+            Child = _sk;
+
+            // Frame-locked (perf pass): the tick lands right before a frame is composed and holds
+            // the tier's rate on whole frames, so motion steps evenly. Late frames still show up
+            // as gaps, which is what the governor reads to degrade itself.
+            _timer = new FrameClock(this) { Interval = TimeSpan.FromMilliseconds(33) };
             _timer.Tick += (_, _) => Tick();
 
             // IsLoaded is a plain getter in Avalonia, not a StyledProperty, so the gate cannot be
@@ -255,11 +396,44 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// <summary>True while the frame clock runs. Tests read it; nothing else needs to.</summary>
         internal bool IsTicking => _timer.IsEnabled;
 
+        /// <summary>The surface the layers paint on (tests, bench).</summary>
+        internal FxSurface Surface => _sk;
+
         /// <summary>The layers this canvas was last asked to run.</summary>
         public AmbientFxLayers Layers => _config.Layers;
 
         /// <summary>True while the clock is actually ticking.</summary>
         public bool IsRunning => _timer.IsEnabled;
+
+        /// <summary>The tint override this canvas is painting with, if any.</summary>
+        public Color? Tint => _config.Tint;
+
+        /// <summary>The side an edge drift strip was started on.</summary>
+        public EdgeSide EdgeSide => _config.EdgeSide;
+
+        /// <summary>Edge motes alive right now (tests).</summary>
+        internal int EdgeMoteCount => _edgeN;
+
+        /// <summary>Embers alive right now (tests).</summary>
+        internal int EmberCount => _emberN;
+
+        /// <summary>
+        /// Swap the tint override without reseeding: live particles take the new colour on the
+        /// next frame. The section edge calls it on every section change, under its own fade.
+        /// </summary>
+        public void Retint(Color tint)
+        {
+            try
+            {
+                _config.Tint = tint;
+                ApplyAccent(new SKColor(tint.R, tint.G, tint.B));
+                _sk.Redraw();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("AmbientFxCanvas.Retint: {E}", ex.Message);
+            }
+        }
 
         // ================================ public API ================================
 
@@ -280,11 +454,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
             ReadEnvironment();
             Reseed();
             Evaluate();
-            // The WPF twin leaned on the first timer tick to paint the freshly composed surface.
-            // That is a hole whenever the clock is gated off - reduced motion, the Performance
-            // tier, an inactive window - which would leave the surface blank instead of showing
-            // its static first frame. Paint it here and the tick only ever moves it.
-            InvalidateVisual();
+            // WPF leaned on the first tick to paint the freshly composed surface. That is a hole
+            // whenever the clock is gated off - reduced motion, the Performance tier, an inactive
+            // window - which would leave the surface blank instead of showing its static first
+            // frame. Paint it here and the tick only ever moves it.
+            _sk.Redraw();
         }
 
         /// <summary>Park the clock and keep the composed state (tab switch, window deactivate).</summary>
@@ -313,7 +487,12 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _burst = null;
             _burstN = 0;
             _dustN = 0;
-            InvalidateVisual();
+            _emberN = 0;
+            _edgeN = 0;
+            _fogN = 0;
+            _grainN = 0;
+            _vaultN = 0;
+            _sk.Redraw();
         }
 
         /// <summary>
@@ -326,7 +505,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             try
             {
                 ReadEnvironment();
-                InvalidateVisual();
+                _sk.Redraw();
             }
             catch (Exception ex) { Log.Debug("AmbientFxCanvas.RefreshPalette: {E}", ex.Message); }
         }
@@ -347,7 +526,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 if (_particleBudget <= 0) ReadEnvironment();
                 count = Math.Clamp(count, 60, Math.Min(MaxBurstParticles, Math.Max(60, _particleBudget * 2)));
 
-                _burstDot = MakeDot(color ?? Env.ParticleColor, 0f);
+                var c = color is { } wc ? new SKColor(wc.R, wc.G, wc.B) : _particle;
+                _burstTint?.Dispose();
+                _burstTint = SKColorFilter.CreateBlendMode(c, SKBlendMode.Modulate);
 
                 _burst ??= new Spark[MaxBurstParticles];
                 _burstN = 0;
@@ -425,7 +606,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 if (plan.Length == 0) { SettleNow(count, onLand); return; }
                 count = plan.Length;
 
-                _tokDot = MakeDot(color ?? Env.ParticleColor, 0f);
+                var c = color is { } wc ? new SKColor(wc.R, wc.G, wc.B) : _particle;
+                _tokTint?.Dispose();
+                _tokTint = SKColorFilter.CreateBlendMode(c, SKBlendMode.Modulate);
 
                 // Geometry is done in element px and normalized once at the end: normalized space is
                 // anisotropic, so a perpendicular computed in it would bow the wrong way on any
@@ -488,7 +671,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _tokLanded = 0;
             _tokTotal = 0;
             _tokN = 0;
-            _tokDot = null;
+            _tokTint?.Dispose();
+            _tokTint = null;
 
             if (cb == null || total <= 0) return;
             for (int i = landed; i < total; i++) InvokeLand(cb, i, i == total - 1);
@@ -528,29 +712,19 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 _targetFps = Env.FxTargetFps(_tier);
                 _timer.Interval = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, _targetFps));
 
-                var mist = Env.MistColor;
-                var particle = Env.ParticleColor;
-                var glow = Env.GlowColor;
-                var flash = Env.FlashTintColor;
+                _mist = ToSk(Env.MistColor);
+                _particle = ToSk(Env.ParticleColor);
+                _glow = ToSk(Env.GlowColor);
+                _flash = ToSk(Env.FlashTintColor);
                 _mistAlpha = (float)Math.Clamp(Env.MistOpacity, 0.0, 1.0);
 
                 // A surface with its own authored accent overrides the mod palette for the two
                 // layers that read as "this thing's colour" - the particles and the glow. Mist and
                 // flash stay the mod's, so the surface still sits inside the app's theme rather
                 // than becoming a coloured hole in it.
-                if (_config.Tint is { } tint)
-                {
-                    particle = tint;
-                    glow = tint;
-                }
-
-                _mistDot = MakeDot(mist, 0f);
-                _particleDot = MakeDot(particle, 0f);
-                _glowDot = MakeDot(glow, 0f);
-                _flashDot = MakeDot(flash, 0f);
-                // The tighter-cored radial the glow-breath layer wants; the WPF twin baked a second
-                // 160px sprite with a 0.28 core stop for exactly this.
-                _glowSoft = MakeDot(glow, 0.28f);
+                _mistTint?.Dispose(); _mistTint = SKColorFilter.CreateBlendMode(_mist, SKBlendMode.Modulate);
+                _flashTint?.Dispose(); _flashTint = SKColorFilter.CreateBlendMode(_flash, SKBlendMode.Modulate);
+                ApplyAccent(_config.Tint is { } tint ? new SKColor(tint.R, tint.G, tint.B) : null);
 
                 _liveBudget = _particleBudget;
                 _fogOnly = false;
@@ -560,6 +734,26 @@ namespace ConditioningControlPanel.Avalonia.Controls
             {
                 Log.Debug("AmbientFxCanvas.ReadEnvironment: {E}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Rebuild the particle, glow and ember filters, optionally over an accent first. Shared by
+        /// <see cref="ReadEnvironment"/> and <see cref="Retint"/>, so a retint can never disagree
+        /// with a restart about what a tint does.
+        /// </summary>
+        private void ApplyAccent(SKColor? accent)
+        {
+            if (accent is { } a)
+            {
+                _particle = a;
+                _glow = a;
+            }
+            _particleTint?.Dispose(); _particleTint = SKColorFilter.CreateBlendMode(_particle, SKBlendMode.Modulate);
+            _glowTint?.Dispose(); _glowTint = SKColorFilter.CreateBlendMode(_glow, SKBlendMode.Modulate);
+            // Embers sit halfway between the mod's particle colour and a candle gold, so they
+            // read warm on every palette without leaving the theme.
+            var ember = new SKColor((byte)((_particle.Red + 255) / 2), (byte)((_particle.Green + 196) / 2), (byte)((_particle.Blue + 110) / 2));
+            _emberTint?.Dispose(); _emberTint = SKColorFilter.CreateBlendMode(ember, SKBlendMode.Modulate);
         }
 
         private void Reseed()
@@ -585,6 +779,17 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
             _dust = _particleBudget > 0 ? new Dust[_particleBudget] : Array.Empty<Dust>();
             _dustN = 0;
+            _embers = _particleBudget > 0 && (_config.Layers & AmbientFxLayers.Embers) != 0
+                ? new Ember[Math.Min(EmberMax, _particleBudget)]
+                : Array.Empty<Ember>();
+            _emberN = 0;
+            _emberT = 0f;
+            _edge = _particleBudget > 0 && (_config.Layers & AmbientFxLayers.EdgeDrift) != 0
+                ? new EdgeMote[Math.Min(EdgeDriftMath.MaxPerStrip, _particleBudget)]
+                : Array.Empty<EdgeMote>();
+            _edgeN = 0;
+            _edgeT = 0f;
+            ReseedFog();
             _fogT = _dustT = _sheenT = _breathT = _auroraT = 0f;
             _sheenDone = false;
             _burstN = 0;
@@ -619,7 +824,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// <summary>
         /// A mod switch re-reads the palette and repaints; it never reseeds, so the fog keeps its
         /// drift and only its colour moves. The head raises this from whatever thread its mod
-        /// service switched on, so it is marshalled before touching the brushes.
+        /// service switched on, so it is marshalled before touching the filters.
         /// </summary>
         private void OnModChanged(object? sender, ModPackage mod)
         {
@@ -685,18 +890,20 @@ namespace ConditioningControlPanel.Avalonia.Controls
             // drive somebody else's counter - stopping the clock under it would strand the display.
             bool oneShotLive = (_burst != null && _burstN > 0) || _tokN > 0;
             if (_paused || _faults >= FaultLimit) return false;
+            if (FxBisect.Off("canvas:" + (string.IsNullOrEmpty(Name) ? _config.Layers.ToString() : Name))) return false;
             if (!_running && !oneShotLive) return false;
             if (!IsLoaded || !IsEffectivelyVisible) return false;
             if (!oneShotLive)
             {
                 if (_targetFps <= 0) return false;
-                if (!Env.AllowAmbientLoops) return false;
+                if (!Env.AllowAmbientLoops && !ReducedFogMayRun() && !ReducedVaultMayRun()) return false;
             }
             var w = _window;
             if (w != null)
             {
                 if (w.WindowState == WindowState.Minimized) return false;
-                if (!w.IsActive && !oneShotLive) return false;
+                if (!w.IsActive && !oneShotLive && !_config.RunWhileInactive
+                    && !FxBisect.Off("forceactive")) return false;
             }
             return true;
         }
@@ -725,19 +932,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 double nowMs = _clock.Elapsed.TotalMilliseconds;
                 double gapMs = nowMs - _lastTickMs;
                 _lastTickMs = nowMs;
-                float dt = (float)Math.Clamp(gapMs / 1000.0, 0.001, 0.100);
-
-                Governor(gapMs);
-
-                _fogT += dt;
-                _auroraT += dt;
-                _breathT += dt;
-                if (!_sheenDone) _sheenT += dt;
-                StepDust(dt);
-                StepBurst(dt);
-                StepTokens(dt);
-
-                InvalidateVisual();
+                StepAll(gapMs);
             }
             catch (Exception ex)
             {
@@ -749,6 +944,36 @@ namespace ConditioningControlPanel.Avalonia.Controls
                     StopClock();
                 }
             }
+        }
+
+        /// <summary>One frame of sim plus the repaint, given the gap since the last one (ms).</summary>
+        private void StepAll(double gapMs)
+        {
+            float dt = (float)Math.Clamp(gapMs / 1000.0, 0.001, 0.100);
+
+            Governor(gapMs);
+
+            _fogT += dt;
+            _auroraT += dt;
+            _breathT += dt;
+            if (!_sheenDone) _sheenT += dt;
+            StepDust(dt);
+            StepEmbers(dt);
+            StepEdge(dt);
+            StepFog(dt);
+            StepVault(dt);
+            StepBurst(dt);
+            StepTokens(dt);
+
+            bool crisp = (_burst != null && _burstN > 0) || _tokN > 0;
+            _sk.ResolutionScale = crisp ? 1.0 : AmbientResolution;
+            _sk.Redraw();
+        }
+
+        /// <summary>Test and bench seam: advance <paramref name="frames"/> frames of <paramref name="frameMs"/> each, gates aside.</summary>
+        internal void StepForTests(int frames, double frameMs = 33)
+        {
+            for (int i = 0; i < frames; i++) StepAll(frameMs);
         }
 
         /// <summary>
@@ -820,6 +1045,118 @@ namespace ConditioningControlPanel.Avalonia.Controls
             }
         }
 
+        /// <summary>How many embers the governor currently allows: a share of the live budget.</summary>
+        private int EmberTarget() =>
+            _fogOnly ? 0 : Math.Min(_embers.Length, (int)Math.Round(_liveBudget * EmberBudgetShare));
+
+        private void StepEmbers(float dt)
+        {
+            if (_embers.Length == 0) return;
+            for (int i = _emberN - 1; i >= 0; i--)
+            {
+                var m = _embers[i];
+                m.Y += m.VY * dt;
+                m.Phase += m.PhaseSpd * dt;
+                m.Life -= dt;
+                if (m.Life <= 0f || m.Y < -0.06f)
+                    _embers[i] = _embers[--_emberN];
+                else
+                    _embers[i] = m;
+            }
+
+            if ((_config.Layers & AmbientFxLayers.Embers) == 0 || _fogOnly) return;
+
+            int target = EmberTarget();
+            if (_emberN > target) _emberN = Math.Max(0, target);
+
+            // One every quarter second at most, so the field fills over ten seconds rather than
+            // appearing as a curtain.
+            _emberT += dt;
+            while (_emberN < target && _emberT > 0.25f)
+            {
+                _emberT -= 0.25f;
+                float life = 10f + (float)_rng.NextDouble() * 8f;
+                _embers[_emberN++] = new Ember
+                {
+                    X0 = (float)_rng.NextDouble(),
+                    Y = 1.02f + (float)_rng.NextDouble() * 0.05f,
+                    VY = -(0.035f + (float)_rng.NextDouble() * 0.030f),
+                    Amp = 0.010f + (float)_rng.NextDouble() * 0.022f,
+                    Phase = (float)(_rng.NextDouble() * Math.PI * 2),
+                    PhaseSpd = 0.8f + (float)_rng.NextDouble() * 1.2f,
+                    Life = life, Max = life,
+                    Size = 0.0040f + (float)_rng.NextDouble() * 0.0045f,
+                };
+            }
+        }
+
+        /// <summary>
+        /// Edge drift: every mote slides clockwise along its strip at its own speed, holds its
+        /// depth, and is retired at the strip end or when its life runs out. Refills one mote per
+        /// <see cref="EdgeDriftMath.SpawnEverySeconds"/> up to the governed target.
+        /// </summary>
+        internal void StepEdge(float dt)
+        {
+            if (_edge.Length == 0) return;
+            for (int i = _edgeN - 1; i >= 0; i--)
+            {
+                var m = _edge[i];
+                m.Along = (float)EdgeDriftMath.Advance(m.Along, m.Speed, dt);
+                m.Phase += m.PhaseSpd * dt;
+                m.Life -= dt;
+                if (EdgeDriftMath.IsSpent(m.Along, m.Life))
+                    _edge[i] = _edge[--_edgeN];
+                else
+                    _edge[i] = m;
+            }
+
+            if ((_config.Layers & AmbientFxLayers.EdgeDrift) == 0 || _fogOnly) return;
+
+            int target = Math.Min(_edge.Length, EdgeDriftMath.Target(_liveBudget));
+            if (_edgeN > target) _edgeN = Math.Max(0, target);
+
+            // The spawn clock only banks while a strip is short; a full strip holds one spawn's
+            // worth, so a mote retiring after a long full spell is replaced alone, not in a burst.
+            _edgeT = _edgeN >= target
+                ? Math.Min(_edgeT + dt, (float)EdgeDriftMath.SpawnEverySeconds)
+                : _edgeT + dt;
+            while (_edgeN < target && _edgeT > EdgeDriftMath.SpawnEverySeconds)
+            {
+                _edgeT -= (float)EdgeDriftMath.SpawnEverySeconds;
+                float life = (float)(EdgeDriftMath.LifeMin + _rng.NextDouble() * (EdgeDriftMath.LifeMax - EdgeDriftMath.LifeMin));
+                _edge[_edgeN++] = new EdgeMote
+                {
+                    Along = (float)_rng.NextDouble() * 0.9f,
+                    Depth = (float)(EdgeDriftMath.DepthMin + _rng.NextDouble() * (EdgeDriftMath.DepthMax - EdgeDriftMath.DepthMin)),
+                    Speed = (float)(EdgeDriftMath.SpeedMin + _rng.NextDouble() * (EdgeDriftMath.SpeedMax - EdgeDriftMath.SpeedMin)),
+                    Life = life, Max = life,
+                    SizePx = (float)(EdgeDriftMath.SizeMinPx + _rng.NextDouble() * (EdgeDriftMath.SizeMaxPx - EdgeDriftMath.SizeMinPx)),
+                    Phase = (float)(_rng.NextDouble() * Math.PI * 2),
+                    PhaseSpd = 1.5f + (float)_rng.NextDouble() * 1.5f,
+                };
+            }
+        }
+
+        /// <summary>
+        /// Test seam: the (along, depth) of every live edge mote, so a test can step the sim and
+        /// check the band and the direction without a paint.
+        /// </summary>
+        internal (float Along, float Depth)[] EdgeMotesForTests()
+        {
+            var r = new (float, float)[_edgeN];
+            for (int i = 0; i < _edgeN; i++) r[i] = (_edge[i].Along, _edge[i].Depth);
+            return r;
+        }
+
+        /// <summary>Test seam: seed the sim as if the tier allowed <paramref name="budget"/> particles.</summary>
+        internal void PrimeEdgeForTests(int budget)
+        {
+            _particleBudget = budget;
+            _liveBudget = budget;
+            _fogOnly = false;
+            Reseed();
+        }
+
         private void StepBurst(float dt)
         {
             if (_burst == null || _burstN == 0) return;
@@ -836,9 +1173,10 @@ namespace ConditioningControlPanel.Avalonia.Controls
             }
             if (_burstN == 0)
             {
-                // Full teardown: the buffer and its brush go away until the next event moment.
+                // Full teardown: the buffer and its tint go away until the next event moment.
                 _burst = null;
-                _burstDot = null;
+                _burstTint?.Dispose();
+                _burstTint = null;
                 Evaluate();
             }
         }
@@ -898,7 +1236,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 _tokOnLand = null;
                 _tokLanded = 0;
                 _tokTotal = 0;
-                _tokDot = null;
+                _tokTint?.Dispose();
+                _tokTint = null;
             }
 
             for (int k = 0; k < landedNow; k++)
@@ -909,59 +1248,64 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         // ================================ paint ================================
 
-        /// <summary>
-        /// The Avalonia twin of the WPF original's <c>OnPaintSurface</c>. Layer order is identical,
-        /// and so are the gates: the governor's fog-only mode cuts everything but the fog, and the
-        /// two one-shot layers always draw because they are event moments, not ambience.
-        /// </summary>
-        public override void Render(DrawingContext context)
+        private void OnPaintSurface(object? sender, FxPaintEventArgs e)
         {
-            base.Render(context);
-
-            double bw = Bounds.Width, bh = Bounds.Height;
-            if (bw <= 0 || bh <= 0) return;
+            var canvas = e.Canvas;
+            var info = e.Info;
+            if (info.Width <= 0 || info.Height <= 0) return;
 
             try
             {
-                float w = (float)bw, h = (float)bh;
+                float w = info.Width, h = info.Height;
                 float min = Math.Min(w, h);
                 float intensity = (float)Math.Clamp(_config.Intensity, 0.0, 1.5);
                 var layers = _config.Layers;
 
-                if (!_fogOnly && (layers & AmbientFxLayers.AuroraWash) != 0) DrawAurora(context, w, h, intensity);
-                if ((layers & AmbientFxLayers.FogDrift) != 0) DrawFog(context, w, h, min, intensity);
-                if (!_fogOnly && (layers & AmbientFxLayers.GlowBreath) != 0) DrawGlowBreath(context, w, h, min, intensity);
-                if (!_fogOnly && (layers & AmbientFxLayers.DustField) != 0) DrawDust(context, w, h, min, intensity);
-                if (!_fogOnly && (layers & AmbientFxLayers.SheenSweep) != 0) DrawSheen(context, w, h, intensity);
-                DrawBurst(context, w, h, min);
-                DrawTokens(context, w, h, min);
+                if (!_fogOnly && (layers & AmbientFxLayers.AuroraWash) != 0) DrawAurora(canvas, w, h, intensity);
+                if ((layers & AmbientFxLayers.FogDrift) != 0) DrawFog(canvas, w, h, min, intensity);
+                if (!_fogOnly && (layers & AmbientFxLayers.GlowBreath) != 0) DrawGlowBreath(canvas, w, h, min, intensity);
+                if (!_fogOnly && (layers & AmbientFxLayers.DustField) != 0) DrawDust(canvas, w, h, min, intensity);
+                if (!_fogOnly && (layers & AmbientFxLayers.Embers) != 0) DrawEmbers(canvas, w, h, min, intensity);
+                if ((layers & AmbientFxLayers.EdgeFog) != 0) DrawEdgeFog(canvas, w, h);
+                if (!_fogOnly && (layers & AmbientFxLayers.EdgeDrift) != 0) DrawEdge(canvas, w, h, intensity);
+                if (!_fogOnly && (layers & AmbientFxLayers.SheenSweep) != 0) DrawSheen(canvas, w, h, intensity);
+                if ((layers & AmbientFxLayers.VaultMotes) != 0) DrawVault(canvas, w, h);
+                DrawBurst(canvas, w, h, min);
+                DrawTokens(canvas, w, h, min);
             }
             catch (Exception ex)
             {
                 _faults++;
-                Log.Debug("AmbientFxCanvas.Render: {E}", ex.Message);
+                Log.Debug("AmbientFxCanvas.OnPaintSurface: {E}", ex.Message);
             }
         }
 
-        private void DrawAurora(DrawingContext ctx, float w, float h, float intensity)
+        private void DrawAurora(SKCanvas canvas, float w, float h, float intensity)
         {
             // One long, slow diagonal wash: two mod colours sliding across the surface. Drawn as
-            // the tinted sprite stretched way past the bounds so nothing needs a per-frame brush.
+            // the tinted sprite stretched way past the bounds so nothing needs a per-frame shader.
             float phase = (float)((Math.Sin(_auroraT * 0.06) + 1) * 0.5);
             float bw = w * 2.4f, bh = h * 2.4f;
             float cx = -w * 0.7f + phase * w * 1.4f;
             float cy = -h * 0.7f + (1f - phase) * h * 1.4f;
 
-            DrawSprite(ctx, _mistDot, cx, cy, bw, bh, 0.13f * intensity * _mistAlpha);
-            DrawSprite(ctx, _glowDot, w - cx, h - cy, bw * 0.8f, bh * 0.8f, 0.10f * intensity * _mistAlpha);
+            _paint.ColorFilter = _mistTint;
+            _paint.Color = SKColors.White.WithAlpha(Alpha(0.13f * intensity * _mistAlpha));
+            DrawSprite(canvas, FxSprites.Dot, cx, cy, bw, bh);
+
+            _paint.ColorFilter = _glowTint;
+            _paint.Color = SKColors.White.WithAlpha(Alpha(0.10f * intensity * _mistAlpha));
+            DrawSprite(canvas, FxSprites.Dot, w - cx, h - cy, bw * 0.8f, bh * 0.8f);
+            _paint.ColorFilter = null;
         }
 
-        private void DrawFog(DrawingContext ctx, float w, float h, float min, float intensity)
+        private void DrawFog(SKCanvas canvas, float w, float h, float min, float intensity)
         {
+            _paint.ColorFilter = _mistTint;
             for (int i = 0; i < _puffs.Length; i++)
             {
                 var p = _puffs[i];
-                // Position is a pure function of the clock — no integration state to drift, and a
+                // Position is a pure function of the clock - no integration state to drift, and a
                 // paused/resumed canvas picks up exactly where the elapsed time says it should.
                 float px = Frac2(p.X + p.VX * _fogT);
                 float py = Frac2(p.Y + p.VY * _fogT);
@@ -969,22 +1313,26 @@ namespace ConditioningControlPanel.Avalonia.Controls
                           * intensity * _mistAlpha;
                 if (a <= 0.004f) continue;
                 float d = p.R * min * 2f;
-                DrawSprite(ctx, _mistDot, px * w, py * h, d, d, a);
+                _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+                DrawSprite(canvas, FxSprites.Dot, px * w, py * h, d, d);
             }
+            _paint.ColorFilter = null;
         }
 
-        private void DrawGlowBreath(DrawingContext ctx, float w, float h, float min, float intensity)
+        private void DrawGlowBreath(SKCanvas canvas, float w, float h, float min, float intensity)
         {
             float breath = 0.60f + 0.40f * (float)((Math.Sin(_breathT * 0.62) + 1) * 0.5);
             float d = (float)Math.Clamp(_config.GlowRadius, 0.05, 1.5) * min * 2f;
-            DrawSprite(ctx, _glowSoft,
-                       (float)_config.GlowCenter.X * w, (float)_config.GlowCenter.Y * h,
-                       d, d, 0.30f * breath * intensity);
+            _paint.ColorFilter = _glowTint;
+            _paint.Color = SKColors.White.WithAlpha(Alpha(0.30f * breath * intensity));
+            DrawSprite(canvas, FxSprites.GlowSprite, (float)_config.GlowCenter.X * w, (float)_config.GlowCenter.Y * h, d, d);
+            _paint.ColorFilter = null;
         }
 
-        private void DrawDust(DrawingContext ctx, float w, float h, float min, float intensity)
+        private void DrawDust(SKCanvas canvas, float w, float h, float min, float intensity)
         {
             if (_dustN == 0) return;
+            _paint.ColorFilter = _particleTint;
             for (int i = 0; i < _dustN; i++)
             {
                 var d = _dust[i];
@@ -992,11 +1340,61 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 float a = 0.55f * env * intensity;
                 if (a <= 0.004f) continue;
                 float size = d.Size * min * 2f;
-                DrawSprite(ctx, _particleDot, d.X * w, d.Y * h, size, size, a);
+                _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+                DrawSprite(canvas, FxSprites.Dot, d.X * w, d.Y * h, size, size);
             }
+            _paint.ColorFilter = null;
         }
 
-        private void DrawSheen(DrawingContext ctx, float w, float h, float intensity)
+        private void DrawEmbers(SKCanvas canvas, float w, float h, float min, float intensity)
+        {
+            if (_emberN == 0) return;
+            _paint.ColorFilter = _emberTint;
+            for (int i = 0; i < _emberN; i++)
+            {
+                var m = _embers[i];
+                // Fade in over the first stretch of the climb, fade out toward the top edge, and
+                // flicker a little on the way like a spark that is still deciding.
+                float rise = Math.Clamp((1.02f - m.Y) / 0.08f, 0f, 1f);
+                float high = Math.Clamp(m.Y / 0.30f, 0f, 1f);
+                float flicker = 0.78f + 0.22f * (float)Math.Sin(m.Phase * 2.7f);
+                float a = 0.72f * rise * high * flicker * intensity;
+                if (a <= 0.004f) continue;
+                float x = m.X0 + m.Amp * (float)Math.Sin(m.Phase);
+                float size = m.Size * min * 2f;
+                _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+                DrawSprite(canvas, FxSprites.Dot, x * w, m.Y * h, size, size);
+            }
+            _paint.ColorFilter = null;
+        }
+
+        private void DrawEdge(SKCanvas canvas, float w, float h, float intensity)
+        {
+            if (_edgeN == 0) return;
+            // Sizes are authored in native px: scale element units to the surface's device pixels once.
+            double aw = Bounds.Width;
+            float px = aw > 1 ? (float)(w / aw) : 1f;
+            var side = _config.EdgeSide;
+            // A band narrower than the strip (the fog's 56 px strip) keeps the motes in their
+            // authored 30 px; the default 0 spreads them over the whole strip as before.
+            double thick = side is EdgeSide.Top or EdgeSide.Bottom ? Bounds.Height : aw;
+            float band = _config.EdgeDriftBandPx > 0 && thick > _config.EdgeDriftBandPx
+                ? (float)(_config.EdgeDriftBandPx / thick) : 1f;
+            _paint.ColorFilter = _particleTint;
+            for (int i = 0; i < _edgeN; i++)
+            {
+                var m = _edge[i];
+                float a = (float)EdgeDriftMath.Alpha(m.Along, m.Life, m.Max, m.Phase, intensity);
+                if (a <= 0.004f) continue;
+                var (x, y) = EdgeDriftMath.Position(side, m.Along, m.Depth * band);
+                float size = m.SizePx * px;
+                _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+                DrawSprite(canvas, FxSprites.Dot, (float)x * w, (float)y * h, size, size);
+            }
+            _paint.ColorFilter = null;
+        }
+
+        private void DrawSheen(SKCanvas canvas, float w, float h, float intensity)
         {
             double period = Math.Max(8.0, _config.SheenPeriodSeconds);
             const float sweepDur = 1.5f;
@@ -1012,35 +1410,42 @@ namespace ConditioningControlPanel.Avalonia.Controls
             float band = w * 0.22f;
             float cx = -band + p * (w + band * 2f);
 
-            // Rotate THEN translate, matching the WPF canvas.Translate + RotateDegrees pair: an
-            // Avalonia Matrix product applies its left operand first.
-            var m = Matrix.CreateRotation(18.0 * Math.PI / 180.0) * Matrix.CreateTranslation(cx, h * 0.5f);
-            using (ctx.PushTransform(m))
-                DrawSprite(ctx, _flashDot, 0, 0, band, h * 2.4f, a);
+            canvas.Save();
+            canvas.Translate(cx, h * 0.5f);
+            canvas.RotateDegrees(18f);
+            _paint.ColorFilter = _flashTint;
+            _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+            DrawSprite(canvas, FxSprites.Dot, 0, 0, band, h * 2.4f);
+            _paint.ColorFilter = null;
+            canvas.Restore();
         }
 
-        private void DrawBurst(DrawingContext ctx, float w, float h, float min)
+        private void DrawBurst(SKCanvas canvas, float w, float h, float min)
         {
             if (_burst == null || _burstN == 0) return;
+            _paint.ColorFilter = _burstTint;
             for (int i = 0; i < _burstN; i++)
             {
                 var s = _burst[i];
                 float env = Math.Clamp(s.Life / s.Max, 0f, 1f);
                 float a = 0.95f * env;
                 float size = s.Size * min * 2f * (0.6f + 0.4f * env);
-                DrawSprite(ctx, _burstDot, s.X * w, s.Y * h, size, size, a);
+                _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+                DrawSprite(canvas, FxSprites.Dot, s.X * w, s.Y * h, size, size);
             }
+            _paint.ColorFilter = null;
         }
 
         /// <summary>
-        /// A token is a bright core sitting in a soft halo - two draws of the same dot at different
-        /// scales, which is how everything else on this canvas gets a glow without a second brush.
-        /// Drawn last, over the bursts: THE BANK is the thing being read.
+        /// A token is a bright core sitting in a soft halo - two draws of the shared dot at
+        /// different scales, which is how everything else on this canvas gets a glow without
+        /// allocating a shader. Drawn last, over the bursts: THE BANK is the thing being read.
         /// </summary>
-        private void DrawTokens(DrawingContext ctx, float w, float h, float min)
+        private void DrawTokens(SKCanvas canvas, float w, float h, float min)
         {
             if (_tok == null || _tokN == 0) return;
 
+            _paint.ColorFilter = _tokTint;
             for (int i = 0; i < _tokN; i++)
             {
                 var t = _tok[i];
@@ -1054,55 +1459,29 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 float core = t.Size * min * 2f;
                 float x = t.X * w, y = t.Y * h;
 
-                DrawSprite(ctx, _tokDot, x, y, core * BankTokenGlowScale, core * BankTokenGlowScale,
-                           BankTokenGlowAlpha * a);
+                _paint.Color = SKColors.White.WithAlpha(Alpha(BankTokenGlowAlpha * a));
+                DrawSprite(canvas, FxSprites.Dot, x, y, core * BankTokenGlowScale, core * BankTokenGlowScale);
 
                 // The core brightens as it closes, so the last thing the eye tracks is the arrival.
-                DrawSprite(ctx, _tokDot, x, y, core, core, (0.75f + 0.25f * p) * a);
+                _paint.Color = SKColors.White.WithAlpha(Alpha((0.75f + 0.25f * p) * a));
+                DrawSprite(canvas, FxSprites.Dot, x, y, core, core);
             }
+            _paint.ColorFilter = null;
         }
 
-        /// <summary>
-        /// One soft dot. The WPF twin drew a white <c>SKImage</c> under a Modulate colour filter at
-        /// a per-draw alpha; here the brush already carries the colour, so only the alpha varies and
-        /// it rides <c>PushOpacity</c> - which keeps the "nothing allocated per frame" rule the
-        /// class comment promises.
-        /// </summary>
-        private static void DrawSprite(DrawingContext ctx, IBrush? brush, float cx, float cy, float w, float h, float alpha)
-        {
-            if (brush == null) return;
-            double a = Math.Clamp(alpha, 0f, 1f);
-            if (a <= 0.0015) return;
-            using (ctx.PushOpacity(a))
-                ctx.DrawEllipse(brush, null, new Point(cx, cy), w / 2.0, h / 2.0);
-        }
+        private void DrawSprite(SKCanvas canvas, SKImage? img, float cx, float cy, float w, float h)
+            => FxSprites.DrawSprite(canvas, img, _paint, cx, cy, w, h);
 
         // ============================== helpers ==============================
+
+        private static byte Alpha(float a) => FxSprites.Alpha(a);
 
         private static float Frac(float v) { v -= (float)Math.Floor(v); return v; }
 
         /// <summary>Wrap into a -0.3..1.3 band so puffs drift off one edge and back on the other.</summary>
         private static float Frac2(float v) => Frac((v + 0.3f) / 1.6f) * 1.6f - 0.3f;
 
-        /// <summary>
-        /// The port's twin of <c>BakeRadial</c>: a radial gradient that is opaque out to
-        /// <paramref name="coreStop"/> and fades to nothing at the edge. Frozen with
-        /// <c>ToImmutable</c> so the render thread never walks a mutable brush's property store.
-        /// </summary>
-        private static IBrush MakeDot(Color color, float coreStop)
-        {
-            var brush = new RadialGradientBrush
-            {
-                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-                GradientOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-                RadiusX = new RelativeScalar(0.5, RelativeUnit.Relative),
-                RadiusY = new RelativeScalar(0.5, RelativeUnit.Relative),
-            };
-            brush.GradientStops.Add(new GradientStop(color, 0));
-            brush.GradientStops.Add(new GradientStop(color, Math.Clamp(coreStop, 0f, 0.9f)));
-            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
-            return brush.ToImmutable();
-        }
+        private static SKColor ToSk(Color c) => new(c.R, c.G, c.B);
 
         /// <summary>
         /// Everything the FX controls in this head ask the app about, in one place. In the WPF head
@@ -1120,10 +1499,22 @@ namespace ConditioningControlPanel.Avalonia.Controls
             /// <summary>FxTheme.Fallback, the colour every slot resolves to with no palette set.</summary>
             private static readonly Color Fallback = Color.FromRgb(0xFF, 0x69, 0xB4);
 
+            static Env()
+            {
+                // The desktop's reduced-motion flag flips on a background probe; every loop that
+                // listens to the gate re-reads it on the UI thread, as a motion-level change does.
+                OsReducedMotion.Changed += () =>
+                {
+                    try { Dispatcher.UIThread.Post(RaiseMotionGateChanged); }
+                    catch { /* no dispatcher (tests) */ }
+                };
+            }
+
             /// <summary>
             /// WPF MainWindow.UiUpdates.CmbMotionLevel_SelectionChanged stops/re-arms every running
             /// ambient loop when the level changes; here the loops subscribe while loaded and
-            /// re-read <see cref="AllowAmbientLoops"/>. Raised on the UI thread by Settings ▸ Performance.
+            /// re-read <see cref="AllowAmbientLoops"/>. Raised on the UI thread by Settings ▸ Performance
+            /// and when the desktop's reduced-motion preference flips.
             /// </summary>
             internal static event Action? MotionGateChanged;
 
@@ -1158,13 +1549,23 @@ namespace ConditioningControlPanel.Avalonia.Controls
             public static bool AllowAmbientMotion(PerformanceTier tier) => tier != PerformanceTier.Performance;
 
             /// <summary>
-            /// MotionFx.Level. WPF caps the user's setting to Reduced when Windows' animation-
-            /// effects flag is off; Avalonia exposes no cross-platform twin, and that cap can only
-            /// ever REMOVE motion, so its absence shows the user exactly what they picked rather
-            /// than more than they asked for.
-            /// ponytail: read the desktop's reduced-motion preference here when Avalonia has one.
+            /// MotionFx.ResolveLevel, verbatim: the user's setting, capped to Reduced when the
+            /// desktop's animation flag is off, so the OS preference can only ever remove motion.
             /// </summary>
-            public static MotionLevel Level => CoreSettings.Current.MotionLevel;
+            public static MotionLevel ResolveLevel(MotionLevel setting, bool osAnimationsEnabled)
+            {
+                if (setting == MotionLevel.Off) return MotionLevel.Off;
+                if (!osAnimationsEnabled) return MotionLevel.Reduced;
+                return setting;
+            }
+
+            /// <summary>
+            /// MotionFx.Level: the user's setting capped by the desktop's reduced-motion flag
+            /// (<see cref="OsReducedMotion"/>: Windows SPI_GETCLIENTAREAANIMATION, GNOME
+            /// enable-animations, KDE AnimationDurationFactor).
+            /// </summary>
+            public static MotionLevel Level =>
+                ResolveLevel(CoreSettings.Current.MotionLevel, OsReducedMotion.AnimationsEnabled);
 
             /// <summary>MotionFx.AllowAmbientLoops, now the real gate.</summary>
             public static bool AllowAmbientLoops =>
