@@ -69,7 +69,7 @@
 
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <Grid Margin="28,20,28,20" MaxWidth="1300" HorizontalAlignment="Center">
+            <Grid Margin="28,20,28,20" MaxWidth="1300" HorizontalAlignment="Stretch">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/> <!-- Hero -->
                     <RowDefinition Height="Auto"/> <!-- Capped settings column + side art -->
@@ -233,7 +233,7 @@
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
                                                            Text="Minimum delay between any two Awareness reactions, from ANY trigger. Keeps her from spamming effects when lots of trigger words end up on screen or in your typing at once."/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"
-                                                           Text="Lower = more reactive, higher = calmer pacing. 10s is the default. Max 180s."/>
+                                                           Text="Lower = more reactive, higher = calmer pacing. 10s is the default. Up to an hour."/>
                                             </StackPanel>
                                         </ToolTip.Tip>
                                         <Grid.ColumnDefinitions>
@@ -247,8 +247,8 @@
                                              loader sets both from AppSettings.KeywordTriggerGlobalCooldownSeconds. -->
                                         <Slider Grid.Column="1" x:Name="SliderAwarenessGlobalCooldown"
                                                 Theme="{StaticResource PinkSlider}"
-                                                Minimum="1" Maximum="180" TickFrequency="1" IsSnapToTickEnabled="True"
-                                                Value="10" VerticalAlignment="Center" Margin="14,0"/>
+                                                Minimum="0" Maximum="73" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Value="9" VerticalAlignment="Center" Margin="14,0"/>
                                         <TextBlock Grid.Column="2" x:Name="TxtAwarenessGlobalCooldown" Text="10s"
                                                    HorizontalAlignment="Right" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"/>
@@ -263,7 +263,7 @@
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
                                                            Text="Minimum gap before the SAME word can fire again, regardless of which trigger caught it. Stops a single word on screen from re-triggering on every OCR scan."/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"
-                                                           Text="Independent of the &quot;cooldown between effects&quot; above — a different word can still fire within this window. 15s default. Max 180s."/>
+                                                           Text="Independent of the &quot;cooldown between effects&quot; above — a different word can still fire within this window. 15s default. Up to an hour."/>
                                             </StackPanel>
                                         </ToolTip.Tip>
                                         <Grid.ColumnDefinitions>
@@ -275,8 +275,8 @@
                                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                         <Slider Grid.Column="1" x:Name="SliderAwarenessSameWordCooldown"
                                                 Theme="{StaticResource PinkSlider}"
-                                                Minimum="1" Maximum="180" TickFrequency="1" IsSnapToTickEnabled="True"
-                                                Value="15" VerticalAlignment="Center" Margin="14,0"/>
+                                                Minimum="0" Maximum="73" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                Value="14" VerticalAlignment="Center" Margin="14,0"/>
                                         <TextBlock Grid.Column="2" x:Name="TxtAwarenessSameWordCooldown" Text="15s"
                                                    HorizontalAlignment="Right" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"/>

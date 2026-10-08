@@ -286,5 +286,17 @@
                 <TextBlock Text="{loc:Str launcher_skip_to_panel}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
             </CheckBox>
         </Border>
+
+        <!-- Lockdown veil (WPF LauncherWindow.xaml:597): the launcher waits, it never argues. Over every
+             row, title bar included; LauncherWindow.Veil.cs toggles it, breathes it and swallows keys. -->
+        <Border x:Name="LockdownVeil" Grid.RowSpan="3" Background="#D9070310" IsVisible="False" Focusable="True">
+            <Panel>
+                <Border x:Name="LockdownVignette" IsHitTestVisible="False"/>
+                <TextBlock x:Name="LockdownText" Text="{loc:Str launcher_lockdown_veil}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontFamily="Fredoka, Segoe UI" FontSize="22" Foreground="{DynamicResource TextLightBrush}"
+                           TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+            </Panel>
+        </Border>
     </Grid>
 </Window>

@@ -37,10 +37,25 @@ public sealed class ExclusivesVaultTests
                 host.Show();
                 Dispatcher.UIThread.RunJobs();
 
-                // Unseeded: every premium door is veiled, Just Drop is absent, the free doors stay open.
+                // Unseeded: every premium door is veiled, Just Drop and the Arcademy (no door seeded) are
+                // absent, the free doors stay open. Main 2e9080399: Prime first, then Basic, then untiered.
                 var rows = Rows(view);
-                Assert.Equal(ExclusiveFeature.All.Where(f => f.Key != "justdrop").Select(f => f.Key),
-                             rows.Select(r => r.Feature.Key));
+                Assert.DoesNotContain(rows, r => r.Feature.Key is "justdrop" or "arcademy");
+                Assert.Equal(new[] { "dtrh", "breakout", "gazeminigame", "focusgaze", "fyp" }, rows.Take(5).Select(r => r.Feature.Key));
+                Assert.Equal(rows.Select(r => r.Feature.Tier switch { 2 => 0, 1 => 1, _ => 2 }).OrderBy(t => t),
+                             rows.Select(r => r.Feature.Tier switch { 2 => 0, 1 => 1, _ => 2 }));
+                ExclusiveFeature.ArcademyDoorProvider = () => true;
+                view.RefreshVault();
+                Assert.Contains(Rows(view), r => r.Feature.Key == "arcademy");
+                ExclusiveFeature.ArcademyDoorProvider = null;
+                view.RefreshVault();
+                rows = Rows(view);
+
+                // Main bf57cecdf: the cards stretch to fill the row at as many columns as fit.
+                var wrap = (WrapPanel)view.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsPanelRoot!;
+                var fit = ConditioningControlPanel.Services.UI.ExclusiveShelfFit.For(view.FindControl<ItemsControl>("ExclusivesShelf")!.Bounds.Width);
+                Assert.True(fit.Columns >= 3);
+                Assert.Equal(fit.Width + 16, wrap.ItemWidth);
                 Assert.True(rows.Single(r => r.Feature.Key == "fyp").IsLocked);
                 Assert.False(rows.Single(r => r.Feature.Key == "backroom").IsLocked);
                 Assert.True(rows.Single(r => r.Feature.Key == "gradedintake").IsLocked);
@@ -81,6 +96,7 @@ public sealed class ExclusivesVaultTests
                 CoreEntitlement.HasPremiumProvider = premium;
                 CoreEntitlement.IsFreeTodayProvider = free;
                 CoreEntitlement.IntakePassAvailableProvider = pass;
+                ExclusiveFeature.ArcademyDoorProvider = null;
                 host?.Close();
                 Dispatcher.UIThread.RunJobs();
             }

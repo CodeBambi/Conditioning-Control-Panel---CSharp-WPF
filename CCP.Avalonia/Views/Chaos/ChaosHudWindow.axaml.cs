@@ -1140,19 +1140,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             glow.Opacity = 0.45 + 0.45 * t;
         }
 
-        /// <summary>ponytail: needs ChaosModeService (StartRunFromSidebar / ToggleManualPause),
-        /// wired when the Chaos services move to Core. The pre-run/in-run split is kept so the
-        /// button's own two modes still read correctly.</summary>
+        /// <summary>WPF ChaosHudWindow.xaml.cs:949. In-run: pause via the run host.
+        /// ponytail: pre-run StartRunFromSidebar needs the Warren sidebar phase, not ported.</summary>
         private void BtnHero_Click(object? sender, RoutedEventArgs e)
         {
-            Log.Debug("ChaosHud hero button: {Mode}", _preRunMode ? "fall in" : "pause");
+            if (_preRunMode) { Log.Debug("ChaosHud hero button: fall in (no sidebar phase on this head)"); return; }
+            if (!ChaosRunHost.IsManuallyPaused) ChaosRunHost.ToggleManualPause();
         }
 
-        /// <summary>ponytail: needs ChaosModeService (ToggleManualPause).</summary>
-        private void BtnResume_Click(object? sender, RoutedEventArgs e) => SetPausedUi(false);
+        /// <summary>WPF ChaosHudWindow.xaml.cs:957. Outside a run (the render sample) it just
+        /// drops the paused panel.</summary>
+        private void BtnResume_Click(object? sender, RoutedEventArgs e)
+        {
+            if (ChaosRunHost.IsManuallyPaused) ChaosRunHost.ToggleManualPause();
+            else SetPausedUi(false);
+        }
 
-        /// <summary>ponytail: needs ChaosModeService (RequestStop).</summary>
-        private void BtnExit_Click(object? sender, RoutedEventArgs e) => Close();
+        /// <summary>WPF ChaosHudWindow.xaml.cs:962 (RequestStop). Outside a run it closes.</summary>
+        private void BtnExit_Click(object? sender, RoutedEventArgs e)
+        {
+            if (ChaosRunHost.Hud == this) ChaosRunHost.RequestStop();
+            else Close();
+        }
 
         /// <summary>Pre-run ✖ beside FALL IN: leave the rabbit hole entirely (Warren + sidebar).
         /// ponytail: needs ChaosModeService (CloseWarrenPhase).</summary>

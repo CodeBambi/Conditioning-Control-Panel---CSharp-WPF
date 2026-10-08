@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services
@@ -7,8 +8,8 @@ namespace ConditioningControlPanel.Services
     /// WPF RemoteControlService.ExecuteCommand's dispatch table for the features Core drives. Runs on the
     /// UI thread (RemoteRelay marshals). Returns null when the verb ran, else the refusal the controller
     /// sees: a verb with no surface on this head says so rather than reporting "ok" and doing nothing.
-    /// ponytail: pink filter, spiral, opacity, HypnoTube, autonomy, mind wipe, wallpaper and the session
-    /// verbs have no Core entry point yet; they refuse until their services move.
+    /// ponytail: pink filter, spiral, opacity, HypnoTube, autonomy, mind wipe, Melt (start/stop_brain_drain),
+    /// wallpaper and the session verbs have no Core entry point yet; they refuse until their services move.
     /// </summary>
     public static class RemoteCommands
     {
@@ -36,6 +37,23 @@ namespace ConditioningControlPanel.Services
         { "trigger_flash", "trigger_subliminal", "set_pink_opacity", "set_spiral_opacity", "duck_audio", "unduck_audio",
           // v2: hold-to-buzz sends one every second while held (main 719ed9ca5)
           "haptic_level", "haptic_stop" };
+
+        /// <summary>The remote haptic player (WPF RemoteControlService.RemoteHaptics). Easy is not on this head
+        /// (no HUD), so the scale stays 1.</summary>
+        internal static Remote.CoreRemoteHapticDriver RemoteHaptics = new(() => 1.0);   // tests swap in a stepped clock
+
+        private static int _panicGeneration;
+        /// <summary>Moves on every panic: a command fetched before it never runs after it (RemoteRelay).</summary>
+        public static int PanicGeneration => Volatile.Read(ref _panicGeneration);
+
+        /// <summary>Panic stops the remote haptic loop (decisions 2026-10-08). HapticMixer.PanicStop only
+        /// silences for 400 ms; without this the driver's next tick restarts the loop. Every panic path
+        /// on every head calls it, any thread.</summary>
+        public static void StopHaptics()
+        {
+            Interlocked.Increment(ref _panicGeneration);
+            try { RemoteHaptics.Stop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] remote haptic stop failed"); }
+        }
 
         public static string? Execute(string action, JObject? p)
         {
@@ -67,7 +85,17 @@ namespace ConditioningControlPanel.Services
                 case "trigger_bubble_count": if (CoreEngine.BubbleCount == null) return NotOnThisBuild; CoreEngine.BubbleCount.Trigger(forceTest: true); return null;
                 case "start_lock_card": s.LockCardEnabled = true; LockCardScheduler.Instance.Start(); return null;
                 case "stop_lock_card": LockCardScheduler.Instance.Stop(); return null;
-                case "trigger_haptic": if (CoreHaptics.Service == null) return NotOnThisBuild; _ = CoreHaptics.Service.TriggerAsync("remote_control", 0.7, 2000); return null;
+                case "trigger_haptic":
+                    if (CoreHaptics.Service?.IsConnected != true) return "no_device";   // WPF 7b22ece8c (ccp-bugs #1065): never a silent "ok"
+                    _ = CoreHaptics.Service!.TriggerAsync("remote_control", 0.7, 2000); return null;
+                // Remote Control v2 (main 719ed9ca5): a pattern or hold-to-buzz level replaces whatever remote haptic plays.
+                case "haptic_pattern":
+                case "haptic_level":
+                    var plan = action == "haptic_level" ? Remote.RemoteHapticPlan.FromLevel(p, out var why) : Remote.RemoteHapticPlan.FromPattern(p, out why);
+                    if (plan == null) return why ?? "bad params";
+                    RemoteHaptics.Play(plan);
+                    return null;
+                case "haptic_stop": RemoteHaptics.Stop(); return null;
                 case "duck_audio": CoreAudio.Duck(80); return null;
                 case "unduck_audio": CoreAudio.Unduck(); return null;
                 case "enable_strict_lock": s.StrictLockEnabled = true; CoreSettings.Save(); return null;
@@ -83,6 +111,7 @@ namespace ConditioningControlPanel.Services
         public static void StopEffects(bool force)
         {
             if (force) Commands.AiCommandService.CancelAll();   // a remote panic cancels pending AI follow-ups too
+            if (force) StopHaptics(); else RemoteHaptics.Stop();
             try { CoreHaptics.Service?.PanicStop(); } catch { }
             CoreAudio.Unduck();
             if (force) CoreEngine.Stop();

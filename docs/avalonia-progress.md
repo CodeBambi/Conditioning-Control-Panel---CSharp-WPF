@@ -1267,3 +1267,33 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/launcher-account: +567
 - Launcher slice 3: account chip, tier badge, SP, mod pill (Core LauncherModMenu), panel card status/Stop/stats; Lockdown refusals stand in for the missing veil.
+
+## avalonia-port/port-vault: +971
+- Vault gate card on every padlock and the "See tiers" toast; Reconnect via Core PatreonReconnectRule; doors refuse under Lockdown; VaultOffer/VaultSale to Core.
+- Exclusives: Prime-first shelf (Core ShelfOrder), IsShown hides Arcademy/Just Drop, width-fit columns.
+
+## avalonia-port/port-brain7: +251
+- Companion/awareness 7.0.3: pages widen, pop-out wakes the companion, listening bubble while the mic is open, chat stays open, cooldowns to an hour (Core AwarenessCooldownScale), Brain Drain in the preset editor.
+
+## avalonia-port/launcher-games: +109
+- Launcher slice 4: no game host on Avalonia yet, so tiles/mystery/return-poll wait for the first host; every launcher door refuses under Lockdown.
+
+## avalonia-port/lockdown-veil: +509
+- Launcher Lockdown veil (WPF look, keys too, breath only while visible); shell door table test (19 rows) closed 5 gaps; shell has no veil by WPF design.
+
+## avalonia-port/package-verify: +71
+- Tarball, AUR (host makepkg + bwrap) and GNOME 50 runtime smoke-verified for 7.0.5; stale PKGBUILD version fixed and enforced in smoke-tarball.sh; Flatpak build still blocked.
+
+## avalonia-port/window-memory: +181
+- Shell and views release their handlers on close/unload so MainShellWindow instances are collectable (user fix; ShellMemoryTests).
+
+## avalonia-port/chaos-overlays: +422
+- ChaosOverlayWindow on Core run types; ChaosRunHost runs HUD + countdown -> 4 Hz clock -> recap (no payout); panic/tray/exit end it without arming double-press exit. FALL IN not wired; rows stay stub.
+
+## avalonia-port/port-misc: +425
+- Quests: Takeover time credited while minimised; cards and streak header quote what the completion pays (Core StreakPaidOn, shield-aware).
+- Presets drop sniffing, programs active-mod-first, Deeper opacity % labels; 7 rows folded.
+
+## avalonia-port/port-remote: +505
+- Controller leave hands back the panic key and the controller's own strict lock; remote haptics play and stop on panic (both heads) or leave; late commands refused after panic/leave.
+- disable_panic refused with WPF wording; faster polling while busy; HUD pill and live preview folded into shell-remote-control.
