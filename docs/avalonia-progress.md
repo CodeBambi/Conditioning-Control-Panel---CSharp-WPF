@@ -1438,3 +1438,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/help-loops-c: +812
 - Help-loop scenes LockCard, FocusGaze, IntensityRamp, Presets, Subliminals and WebcamCalibration ported (20 of 23). Each renders every step and lights its chips in order on the stepped clock.
 - New WebcamCalibration and IntensityRamp pixel tests, both fail-proven. Live: Settings Subliminals `?` plays the loop.
+
+## avalonia-port/rows-feature-intro: +219
+- win-feature-intro: cards now yield to a startup modal or update dialog; tour callers wired on 10 tab cases plus the Dashboard launch (daily-free / one-account) via StartupLadder; 4 fail-proven tests; row stays stub with the missing callers listed.
+- Test profile marks every intro key as spent, so a card no longer leaks across shell tests and holds passive surfaces in later ones.
