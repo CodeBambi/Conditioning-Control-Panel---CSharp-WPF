@@ -1481,3 +1481,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-webcam-windows: +230
 - Webcam loading splash wired to tracker startup progress (shell init, error/close paths); calibration Verify live gaze cursor; quick recal on calibrated monitor.
 - 4 fail-proven headless tests; live sandbox splash check (no camera opened); bubble test, mouth checks, quick-recal hotkey still stub.
+
+## avalonia-port/rows-profile-dialogs: +360
+- Customize dialog: 12 scene banners + 12 preset avatars from Core CosmeticsPool, pin tiles draw achievement art (artless pins dropped, as WPF), tiles take Enter/Space; titles use Core Achievement.TitleName.
+- Wardrobe editor stage paints the chosen banner (top-aligned like the hero); both rows stub -> wired.
