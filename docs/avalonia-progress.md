@@ -1496,3 +1496,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/help-attach: +224
 - Every WPF tab ? (33 SetHelpContent buttons + Intake Pass) is now attached from shell startup through an x:Name table; all 23 help loops can be opened (ctrl-help-popover, feat-help-loops: stub -> wired).
 - New HelpButtonsTests: a WPF-source table scan, plus a shell walk that clicks every ?; fail-proven.
+
+## avalonia-port/reset-close: +105
+- The test isolation hook closes app windows a test left open and resets StartupLadder, so passive startup cards no longer leak between tests (P52).
+- Proven by a fixed-order leaky pair (LeakedWindowIsolationTests). B fails with the close commented out.
