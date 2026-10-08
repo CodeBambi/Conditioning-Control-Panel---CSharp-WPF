@@ -47,6 +47,7 @@ public sealed class HelpVideoWindowTests
             Assert.False(view.Failed);
             win.Close();
             Assert.Null(Current());
+            Assert.False(view.IsRunning);
         }
         finally { Current()?.Close(); editor.Close(); }
     });
