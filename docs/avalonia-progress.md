@@ -1327,3 +1327,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-popups-unlock: +301
 - Achievement and item-unlocked passive toasts (X11 override-redirect, device-pixel placement), chime, Discord share in Core; rows wired.
+
+## avalonia-port/rows-floating-text: +357
+- FloatingWord overlay (WPF keyframes) thrown by friends drawer actions; bouncing text corner_hit achievement and real-time topmost re-assert (measured 0.4-0.7 s).
