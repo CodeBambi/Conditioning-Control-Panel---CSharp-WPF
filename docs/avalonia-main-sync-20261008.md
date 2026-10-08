@@ -10,13 +10,12 @@ Every non-merge commit has one row. Status legend as in `avalonia-main-sync-2026
 - **needs-port (`lane`)**: WPF-only behaviour the Avalonia head lacks; the lane name is the port lane that owns it. Tick the row when that lane lands.
 - **n/a**: no Avalonia counterpart by design, reason given.
 
-Counts: 2 ported-by-merge, 3 needs-port, 0 n/a (total 5).
+Counts: 3 ported-by-merge, 2 needs-port, 0 n/a (total 5).
 
 ## needs-port lanes
 
 | lane | rows |
 |---|---|
-| `descent-ceremony-retire` | `3aa4801fb` |
 | `descent-migration` | `fc9640ff7`, `abac4fa02` |
 
 ## Rows
@@ -26,7 +25,7 @@ Counts: 2 ported-by-merge, 3 needs-port, 0 n/a (total 5).
 | 1 | `75c078465` | fix(breakout): level 8 keeps an early launch press; pendulum hint clears the prompt | assets: 2; tests: 1 | Assets/web/backroom/stations/breakout (WebAssetServer wildcard) | ported-by-merge | web-only; finale.test.js lands beside the other breakout JS tests |
 | 2 | `4d668a96d` | fix(breakout): Endless board name shows on arrival, then fades | assets: 2 | Assets/web/backroom/stations/breakout | ported-by-merge | web-only |
 | 3 | `fc9640ff7` | fix(descent): the bonus is for migrated accounts, not every curve_epoch 1 record | `DescentMigration.cs`, `DescentFuseWindow.xaml` (comment); tests: 1 | none yet (DescentMigration is head-only; Avalonia has no migration path) | needs-port (`descent-migration`) | XpBonusFor rule lives in the WPF head; Avalonia shows no cycle XP bonus yet (MainShellWindow.ProfileCard.cs ponytail). Port with the migration. |
-| 4 | `3aa4801fb` | chore(descent): delete the dead migration ceremony | `DescentCeremonyWindow.xaml(.cs)`, `DescentCeremonyCopy.cs`, `DescentStageCopy.cs`, `DescentShowDirector.cs`, `MainWindow.StartStop.cs`; tests: 2 | Core `DescentCeremonyCopy.cs` / `DescentStageCopy.cs` (merge); `CCP.Avalonia/Views/Windows/DescentCeremonyWindow.axaml(.cs)` | ported (avalonia-port/main-20261008-compat) | Core side by merge (copy deleted, RomanNumeral in DescentStageCopy). The Avalonia ceremony window (ported from the deleted WPF window, no production opener) and its CoreStandInTests check are deleted in -compat; parity row win-descent-ceremony removed. |
+| 4 | `3aa4801fb` | chore(descent): delete the dead migration ceremony | `DescentCeremonyWindow.xaml(.cs)`, `DescentCeremonyCopy.cs`, `DescentStageCopy.cs`, `DescentShowDirector.cs`, `MainWindow.StartStop.cs`; tests: 2 | Core `DescentCeremonyCopy.cs` / `DescentStageCopy.cs` (merge); `CCP.Avalonia/Views/Windows/DescentCeremonyWindow.axaml(.cs)` | ported-by-merge | Core side by merge (copy deleted, RomanNumeral in DescentStageCopy). The Avalonia ceremony window (ported from the deleted WPF window, no production opener) and its CoreStandInTests check are deleted in the -compat layer of this sync; parity row win-descent-ceremony removed. |
 | 5 | `abac4fa02` | fix(descent): retire the migration ceremony - auto-restore on offer, bonus for every migrated account | `DescentMigration.cs`, `DescentMigrationService.cs`, `DescentReceipt.cs`, `DescentShowDirector.cs`, `ProfileSyncService.cs`; tests: 1 | Core `SyncBody` (descent_auto, WPF-only flag); none yet for auto-restore | needs-port (`descent-migration`) | Merge adds `descent_auto` to Core SyncBody, sent by WPF only: Avalonia does not take offers, so it must not claim it does. Auto-restore + bonus rule port with the migration. |
 
 ## Merge notes (75b682228) and -compat
