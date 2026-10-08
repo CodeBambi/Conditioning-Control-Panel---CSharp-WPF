@@ -301,6 +301,43 @@ public sealed class WebcamCalibrationTests
         finally { tracker.OnStartupProgress -= spy; shell.Close(); }
     });
 
+    /// <summary>Opens only when the test releases it, so a Stop can land mid-start deterministically.</summary>
+    private sealed class GatedSource : IFrameSource
+    {
+        public readonly ManualResetEventSlim Entered = new(), Release = new();
+        public bool Open() { Entered.Set(); Release.Wait(TimeSpan.FromSeconds(30)); return true; }
+        public bool Read(Mat bgr) => false;
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public void PanicDuringStart_ClosesTheSplash_WithoutAnError() => WithTracker(start: false, (tracker, _) =>
+    {
+        var shell = new MainShellWindow();
+        shell.Show();
+        Dispatcher.UIThread.RunJobs();
+        var src = new GatedSource();
+        WebcamTracker.SourceFactory = () => src;
+        try
+        {
+            var start = tracker.StartAsync();
+            Assert.True(src.Entered.Wait(TimeSpan.FromSeconds(30)));
+            Dispatcher.UIThread.RunJobs();
+            var splash = shell.WebcamLoadingSplashForTests!;
+            Assert.Equal("Opening camera…", splash.FindControl<TextBlock>("TxtStatus")!.Text);
+            tracker.Stop();   // what panic calls
+            src.Release.Set();
+            Assert.False(start.Result);
+            Assert.True(tracker.StartWasStopped);
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotEqual(tracker.LastError, splash.FindControl<TextBlock>("TxtStatus")!.Text);
+            for (int i = 0; i < 200 && shell.WebcamLoadingSplashForTests != null; i++)
+            { AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Dispatcher.UIThread.RunJobs(); }
+            Assert.Null(shell.WebcamLoadingSplashForTests);   // faded at once, no 2.8 s error hold
+        }
+        finally { src.Release.Set(); shell.Close(); }
+    });
+
     [Fact]
     public void QuickRecal_OpensOnTheCalibratedMonitor() => WithTracker(start: false, (tracker, _) =>
     {
