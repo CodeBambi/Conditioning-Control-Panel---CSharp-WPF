@@ -61,7 +61,10 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
             _visibilityWatch?.Dispose();
             _visibilityWatch = null;
             base.OnDetachedFromVisualTree(e);
-            UpdateRunning();
+            // Stop outright: TopLevel.GetTopLevel still answers during this callback, so
+            // UpdateRunning would leave the loop flagged running on a detached view.
+            _running = false;
+            _generation++;
         }
 
         private bool WantsToRun =>
