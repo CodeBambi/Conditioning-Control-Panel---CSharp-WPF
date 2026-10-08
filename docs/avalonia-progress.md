@@ -1309,3 +1309,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-achievements-tab: +606
 - Achievement tiles: stagger, hover tilt/lift/pop, unlock reveal + gated burst; FX timer only while moving and shown. Season Recap re-view (Core SeasonRecapStore). Rows wired.
+
+## avalonia-port/rows-tutorial-help: +1085
+- HelpLoops kit + FlashImages/PinkFilter scenes hosted in the ? popover (visible-only frames, motion levels); 21 scenes and the tour (TutorialService) remain.
