@@ -27,7 +27,7 @@ namespace CCP.Avalonia.Tests.Fx;
 /// fog/ember strips follow the motion level and tier, the motion-level change reaches the edge at
 /// once, and the "moved here" ring plays its track and leaves with its target.
 /// </summary>
-public sealed class SectionEdgeTests
+public sealed class SectionEdgeTests(ITestOutputHelper output)
 {
     private static void Setup()
     {
@@ -290,6 +290,42 @@ public sealed class SectionEdgeTests
                 Assert.False(NavGlow.Once(w.FindControl<Control>("GlassWindowEdge"), NavStripRules.Pink, MotionLevel.Off));
             }
             finally { w.Close(); }
+        });
+        return Task.CompletedTask;
+    });
+
+    /// <summary>FxBench for the whole edge: the four strips of a 1661x1002 window at Full (fog +
+    /// embers), sim + Skia paint per frame, summed. Prints the rows; fails only if pathological.</summary>
+    [Fact]
+    public Task WholeEdgeBench() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        Setup();
+        AtFull(() =>
+        {
+            var edge = new EdgeParticles { MotionOverride = MotionLevel.Full, TierAllowsParticlesOverride = true };
+            var w = new Window { Width = 1661, Height = 1002, Content = edge, ShowActivated = false };
+            w.Show();
+            try
+            {
+                Dispatcher.UIThread.RunJobs();
+                edge.Mount(NavStripRules.Sky);
+                Dispatcher.UIThread.RunJobs();
+                double total = 0;
+                foreach (var strip in edge.Strips)
+                {
+                    strip.StepForTests(30);
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    strip.StepForTests(120);
+                    sw.Stop();
+                    double ms = sw.Elapsed.TotalMilliseconds / 120;
+                    total += ms;
+                    var (bw, bh) = strip.Surface.BackingSize;
+                    output.WriteLine(FormattableString.Invariant($"section edge {strip.EdgeSide,-6} fog+drift {ms,7:0.000} ms/frame  backing {bw}x{bh}"));
+                }
+                output.WriteLine(FormattableString.Invariant($"section edge all four strips   {total,7:0.000} ms/frame"));
+                Assert.True(total < 16, $"the edge costs {total:0.00} ms/frame");
+            }
+            finally { edge.Mount(NavStripRules.Sky); w.Close(); }
         });
         return Task.CompletedTask;
     });
