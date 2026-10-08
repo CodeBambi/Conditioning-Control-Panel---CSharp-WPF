@@ -578,7 +578,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             if (_hovered == on) return;
             _hovered = on;
-            // WPF: no lift on a dashboard (depth) card; Motion Off snaps the rim and skips the lift.
+            // WPF: no lift on a dashboard (depth) card; Motion Off snaps the rim and the lift.
             double lift = on && !DashboardDepth ? HoverLiftScale : 1;
             if (Env.AllowTransitions)
             {
@@ -586,7 +586,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 _rimLight.Opacity = on ? RimLightOpacity : 0;
                 return;
             }
-            Snap(_rootScale, () => _rootScale.ScaleX = _rootScale.ScaleY = 1);
+            Snap(_rootScale, () => _rootScale.ScaleX = _rootScale.ScaleY = lift); // WPF HoverLift snaps to the lift
             Snap(_rimLight, () => _rimLight.Opacity = on ? RimLightOpacity : 0);
         }
     }
