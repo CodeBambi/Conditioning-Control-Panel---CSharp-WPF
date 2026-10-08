@@ -5,11 +5,15 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Headless;
 using Avalonia.Controls;
 using Avalonia.LogicalTree;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Avalonia.Views.Overlays;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
 using Xunit;
@@ -166,5 +170,76 @@ public sealed class FriendsDrawerTests
         Assert.NotNull(Tagged<Button>(d, "friends-sign-in"));
         Assert.Null(Tagged<TextBlock>(d, "friends-my-code"));
         return Task.CompletedTask;
+    });
+
+    /// <summary>WPF FriendsDrawer.Honesty TellOutside(always) -> FriendsLanding.Say -> FloatingWord.Throw:
+    /// the removed row is gone, so the word flies over the window, owned and unfocusable, and closes itself.</summary>
+    [Fact]
+    public Task RemovingAFriendThrowsAFloatingWordOverTheWindowThatClosesItself() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        if (global::Avalonia.Application.Current is null)
+            global::Avalonia.AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                .UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+        var (svc, _) = Service();
+        var d = new FriendsDrawer(svc);
+        var host = new Window { Width = 1000, Height = 700, Content = d };
+        try
+        {
+            host.Show();
+            await svc.RefreshAsync();
+            var zed = svc.Snapshot.Friends.First(f => f.Id == "u_off");
+            Assert.Equal(ActResult.Done, await d.ConfirmAsync(zed.Id, zed.Name, "remove"));
+
+            var word = Assert.Single(host.OwnedWindows.OfType<FloatingWord>());
+            Assert.Equal(Loc.GetF("friends_removed_done", "Zed"), word.GetLogicalDescendants().OfType<TextBlock>().Single().Text);
+            Assert.True(word.Topmost);
+            Assert.False(word.ShowActivated);
+            Assert.False(word.IsHitTestVisible);
+            word.Step(800);
+            Assert.Contains(word, host.OwnedWindows);
+            word.Step(FloatingWord.TotalMs);
+            Assert.True(word.IsDone);
+            Assert.DoesNotContain(word, host.OwnedWindows);
+        }
+        finally { foreach (var w in host.OwnedWindows.ToArray()) w.Close(); host.Close(); }
+    });
+
+    /// <summary>WPF FloatingWord's keyframes at the stepped times they name (FloatingWord.cs:67-103).</summary>
+    [Fact]
+    public void TheFloatingWordPoseFollowsWpfsKeyframes()
+    {
+        const double th = 40;
+        var start = FloatingWord.Pose(0, MotionLevel.Full, th);
+        Assert.Equal((0.6, -6.0, 10.0, 0.0), (Round(start.Scale), Round(start.Angle), Round(start.Y), Round(start.Opacity)));
+        var pop = FloatingWord.Pose(240, MotionLevel.Full, th);   // 15%
+        Assert.Equal((1.15, 2.0, 0.0, 1.0), (Round(pop.Scale), Round(pop.Angle), Round(pop.Y), Round(pop.Opacity)));
+        Assert.True(FloatingWord.Pose(100, MotionLevel.Full, th).Scale > 1.15 - 0.55 * 0.4167);   // BackEase overshoots linear
+        Assert.Equal(1.0, FloatingWord.Pose(960, MotionLevel.Full, th).Opacity);                    // held to 60%
+        var end = FloatingWord.Pose(1600, MotionLevel.Full, th);
+        Assert.Equal((1.0, 0.0, -64.0, 0.0), (Round(end.Scale), Round(end.Angle), Round(end.Y), Round(end.Opacity)));
+        Assert.Equal(-32.0, Round(FloatingWord.Pose(1600, MotionLevel.Reduced, th).Y));            // half the travel
+        Assert.Equal((1.0, 0.0, 0.0, 1.0), FloatingWord.Pose(1100, MotionLevel.Off, th));            // still
+        Assert.Equal(0.5, Round(FloatingWord.Pose(1300, MotionLevel.Off, th).Opacity));
+        Assert.Equal((0.0, 0.0, 0.0), FloatingWord.Spark(180, 0, 100, 600));                         // waits 180 ms
+        Assert.Equal(100.0, Round(FloatingWord.Spark(780 - 0.0001, 0, 100, 600).X));
+        static double Round(double v) => Math.Round(v, 3) + 0.0;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public Task TheAddBoxOffersSubscribersTheInviteLink(bool subscriber) => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var (svc, _) = Service();
+        var d = new FriendsRailChip(svc).Drawer;
+        await svc.RefreshAsync();
+        d.OffersInviteLink = () => subscriber;
+        d.Render();
+        var asked = 0;
+        d.InvitesRequested += () => asked++;
+        Tagged<Button>(d, "friends-add-open")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(subscriber, Tagged<WrapPanel>(d, "friends-invite-line")!.IsVisible);
+        Tagged<Button>(d, "friends-invite-link")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(1, asked);
     });
 }

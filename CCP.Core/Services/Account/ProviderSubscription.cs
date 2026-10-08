@@ -41,6 +41,9 @@ namespace ConditioningControlPanel.Services
 
         public event EventHandler<PatreonTier>? TierChanged;
 
+        /// <summary>Entitlement rose from outside the provider (an invite week): repaint gates (WPF PatreonService).</summary>
+        public void NotifyEntitlementRaised(PatreonTier tier) => TierChanged?.Invoke(this, tier);
+
         public PatreonTier CurrentTier { get; private set; } = PatreonTier.None;
         public bool IsActive { get; private set; }
         public bool IsWhitelisted { get; private set; }

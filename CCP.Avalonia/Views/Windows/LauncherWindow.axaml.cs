@@ -1,6 +1,7 @@
 // PORTED (slice 1) from WPF LauncherWindow.xaml.cs/.Tiles.cs and LauncherHost.cs; rules are Core's
 // LauncherCards/LauncherRules; slice 2 adds the boot surface and the second-instance handoff (WPF App.xaml.cs
-// RouteBootSurface/RouteSurfaceHandoff, LauncherHost.OnBareRelaunch). ponytail: games, account row, FX = later slices.
+// RouteBootSurface/RouteSurfaceHandoff, LauncherHost.OnBareRelaunch). Slice 3 adds the account chip, mod pill and panel-card status/stats (WPF LauncherWindow.xaml.cs:220-606).
+// Slice 5 (FX) lives in LauncherWindow.Fx.cs. ponytail: no game host exists on this head yet (slice 4 found none); game tiles land with their hosts.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +16,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Launcher;
 using Serilog;
 
@@ -44,12 +46,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The launcher, if it has been built this run.</summary>
         internal static LauncherWindow? Instance => _window;
 
+        /// <summary>WPF _statusTimer: the status line and the stats, every second while shown.</summary>
+        private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+
+        /// <summary>Each tile's reveal as drawn (WPF _revealedAtBuild); every card here is revealed.</summary>
+        private readonly Dictionary<string, bool> _revealedAtBuild = new(StringComparer.OrdinalIgnoreCase);
+
         public LauncherWindow()
         {
             InitializeComponent();
             GamesColumn.SizeChanged += (_, _) => SeatGrid();
-            Closed += (_, _) => { if (ReferenceEquals(_window, this)) _window = null; };
+            XpTrack.SizeChanged += (_, _) => RefreshStats();
+            _statusTimer.Tick += (_, _) => { RefreshStatus(); RefreshStats(); RefreshSpReadout(); };
+            CoreMods.ModChanged += OnModChanged;
+            Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_window, this)) _window = null;
+                _statusTimer.Stop();
+                CoreMods.ModChanged -= OnModChanged;
+            };
+            // WPF OnIsVisibleChanged -> OnShown / OnHidden.
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property != IsVisibleProperty) return;
+                if (IsVisible) OnShown();
+                else _statusTimer.Stop();
+            };
             BuildTiles();
+            HookVeil();
+            HookFx();
+        }
+
+        /// <summary>WPF OnShown; its FX half is FxOnShown (LauncherWindow.Fx.cs).</summary>
+        private void OnShown()
+        {
+            try
+            {
+                BuildTiles();
+                RefreshAccount();
+                RefreshMod();
+                RefreshStatus();
+                RefreshStats();
+                _statusTimer.Start();
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] OnShown failed"); }
         }
 
         /// <summary>WPF LauncherHost.Show: bring the launcher up, creating it on first use.</summary>
@@ -175,10 +215,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var panel = Panel;
             if (panel == null) { Log.Warning("[Launcher] OpenPanel with no main window"); return; }
-            Hide();
-            panel.ShowFromTray();
-            try { then?.Invoke(panel); }
-            catch (Exception ex) { Log.Debug(ex, "[Launcher] step after OpenPanel failed"); }
+            AfterExitBeat(() =>
+            {
+                Hide();
+                panel.ShowFromTray();
+                try { then?.Invoke(panel); }
+                catch (Exception ex) { Log.Debug(ex, "[Launcher] step after OpenPanel failed"); }
+            });
         }
 
         /// <summary>WPF LauncherHost.RequestClose, decided by Core's LauncherRules.Close.</summary>
@@ -226,7 +269,199 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnClose_Click(object? sender, RoutedEventArgs e) => RequestClose();
 
-        private void PanelCta_Click(object? sender, RoutedEventArgs e) => OpenPanel();
+        // Lockdown: the launcher veil (LauncherWindow.Veil.cs) covers these doors; these refusals are the belt-and-braces layer (P05).
+        private void PanelCta_Click(object? sender, RoutedEventArgs e) { if (MainShellWindow.LockdownActive) return; FxPanelLaunchBeat(); OpenPanel(); }
+
+        /// <summary>WPF AccountChip_Click: the panel's account settings.</summary>
+        private void AccountChip_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!MainShellWindow.LockdownActive) OpenPanel(p => p.ShowTab("appsettings"));
+        }
+
+        private void SignIn_Click(object? sender, RoutedEventArgs e) { if (!MainShellWindow.LockdownActive) OpenSignIn(); }
+
+        /// <summary>WPF StopLink_Click.</summary>
+        private void StopLink_Click(object? sender, RoutedEventArgs e)
+        {
+            // ponytail: no LockdownVeil on this head yet; this refusal stands in for it.
+            if (MainShellWindow.RefuseStopUnderLockdown()) return;
+            try { MainShellWindow.StopEngine(); }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] StopEngine failed"); }
+            RefreshStatus();
+        }
+
+        /// <summary>WPF RefreshStatus: running since HH:mm + Stop, or idle; the CTA reads Open or Launch.
+        /// ponytail: WPF also refreshes at once on EngineStopped; here the 1 s tick catches it.</summary>
+        private bool? _ctaRunning;
+
+        internal void RefreshStatus()
+        {
+            try
+            {
+                bool running = CoreEngine.IsRunning;
+                StatusText.Text = running
+                    ? Loc.GetF("launcher_panel_running", (CoreEngine.StartedUtc ?? DateTime.UtcNow).ToLocalTime().ToString("HH:mm"))
+                    : Loc.Get("launcher_panel_idle");
+                StopLink.IsVisible = running;
+                if (_ctaRunning == running) return;
+                _ctaRunning = running;
+                PanelCtaText.Bind(TextBlock.TextProperty,
+                    (global::Avalonia.Data.Binding)new Localization.StrExtension(running ? "launcher_panel_open" : "launcher_panel_launch")
+                        .ProvideValue(null!));
+            }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshStatus failed"); }
+        }
+
+        /// <summary>WPF RefreshAccount: the chip (name, initial, tier badge) when signed in, else the pill.</summary>
+        internal void RefreshAccount()
+        {
+            try
+            {
+                var name = CoreSettings.Current.UserDisplayName;
+                bool loggedIn = CoreAccount.IsLoggedIn;
+                bool signedIn = loggedIn && !string.IsNullOrWhiteSpace(name);
+                AccountName.Text = signedIn ? name!.Trim() : "-";
+                AvatarInitial.Text = signedIn ? name!.Trim()[..1].ToUpperInvariant() : "-";
+                AccountChipButton.IsVisible = loggedIn;
+                SignInPill.IsVisible = !loggedIn;
+
+                var tier = Platform.AccountSeed.Patreon?.CurrentTier ?? PatreonTier.None;
+                string? badge = tier switch
+                {
+                    PatreonTier.Level1 => "features/tier_badge_t1.png",
+                    PatreonTier.Level2 => "features/tier_badge_t2.png",
+                    _ => null,
+                };
+                TierBadge.Source = badge == null ? null : ModArt.TryLoad(badge, 64);
+                TierBadge.IsVisible = TierBadge.Source != null;
+                if (TierBadge.Source == null) TierBadgePopup.IsOpen = false;
+                RefreshSpReadout();
+            }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshAccount failed"); }
+        }
+
+        /// <summary>WPF RefreshSpReadout: the chip's Sparkle Points while signed in.
+        /// ponytail: WPF odometers the number up; it snaps here until the launcher-fx slice.</summary>
+        private void RefreshSpReadout()
+        {
+            int sp = CoreSettings.Current.SkillPoints;
+            SpChip.IsVisible = sp >= 0 && CoreAccount.IsLoggedIn;
+            if (SpChip.IsVisible) SpReadout.Text = sp.ToString("N0");
+        }
+
+        /// <summary>WPF TierBadge_MouseEnter/Leave: the big copy in a popup under the badge.
+        /// ponytail: WPF's 8 s wobble and the popup's pop-in scale are launcher-fx.</summary>
+        private void TierBadge_PointerEntered(object? sender, PointerEventArgs e)
+        {
+            if (TierBadge.Source is not { } src) return;
+            TierBadgeBig.Source = src;
+            double bigWidth = src.Size.Height > 0 ? TierBadgeBig.Height * src.Size.Width / src.Size.Height : TierBadgeBig.Height;
+            TierBadgePopup.HorizontalOffset = (TierBadge.Bounds.Width - bigWidth) / 2 - TierBadgeBig.Margin.Left;
+            TierBadgePopup.IsOpen = true;
+        }
+
+        private void TierBadge_PointerExited(object? sender, PointerEventArgs e) => TierBadgePopup.IsOpen = false;
+
+        /// <summary>WPF RefreshStats: level, Sparkle Points, time under and the XP bar.
+        /// ponytail: WPF odometers the numbers and tweens the bar; they snap here until launcher-fx.</summary>
+        internal void RefreshStats()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                int level = Math.Max(1, s.PlayerLevel);
+                double xp = Math.Max(0, s.PlayerXP);
+                double need = 0;
+                try { need = ConditioningControlPanel.Services.XpCurve.GetXPForLevel(level, ConditioningControlPanel.Services.XpCurve.EpochOf(s)); } catch { }
+                double minutes = Math.Max(0, s.TotalConditioningMinutes);
+
+                StatLevel.Text = level.ToString("0");
+                StatSparkles.Text = Math.Max(0, s.SkillPoints).ToString("N0");
+                int hours = (int)(minutes / 60), mins = (int)(minutes % 60);
+                StatTime.Text = hours > 0 ? $"{hours}h {mins:00}m" : $"{mins}m";
+
+                double ratio = need > 0 ? Math.Clamp(xp / need, 0, 1) : 0;
+                XpFill.Width = XpTrack.Bounds.Width * ratio;
+                XpCaption.Text = Loc.GetF("launcher_stat_xp", ((int)xp).ToString("N0"), ((int)need).ToString("N0"));
+            }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshStats failed"); }
+        }
+
+        /// <summary>WPF RefreshMod: the pill reads the active mod's name.</summary>
+        internal void RefreshMod()
+        {
+            try { ModPillText.Text = LauncherModMenu.Label(Loc.Get("launcher_mod_label"), App.Mods?.ActiveMod?.Name, "-"); }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshMod failed"); }
+        }
+
+        /// <summary>WPF OnModChanged: the pill at once, the tiles a dispatcher turn later (ccp-bugs #1292).
+        /// ponytail: WPF also redraws on PrizeGrants.GrantsChanged; no grant service or grant-revealed
+        /// card exists on this head yet (launcher-games slice).</summary>
+        private void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(() =>
+        {
+            RefreshMod();
+            RefreshTiles(LauncherTileTrigger.ModChanged);
+        });
+
+        /// <summary>WPF RefreshTiles: redraw when Core's LauncherTileRefresh says the event changed a tile.</summary>
+        internal void RefreshTiles(LauncherTileTrigger trigger)
+        {
+            try
+            {
+                var now = VisibleCards.Select(c => new KeyValuePair<string, bool>(c.Id, true));
+                if (!LauncherTileRefresh.ShouldRebuild(trigger, IsVisible, _revealedAtBuild, now)) return;
+                Log.Information("[Launcher] {Trigger} redrawing tiles", trigger);
+                BuildTiles();
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] tile refresh on {Trigger} failed", trigger); }
+        }
+
+        /// <summary>WPF ModPill_Click: installed mods in stock order, the active one ticked, then Manage mods.</summary>
+        private void ModPill_Click(object? sender, RoutedEventArgs e)
+        {
+            // ponytail: no LockdownVeil on this head yet; this refusal stands in for it.
+            if (MainShellWindow.LockdownActive) return;
+            try
+            {
+                var mods = App.Mods;
+                var menu = new ContextMenu { Placement = PlacementMode.Bottom, MaxHeight = 420 };
+                if (mods != null)
+                {
+                    var rows = mods.InstalledMods.Values.Select(m => new LauncherModRow(m.Id, m.Name, m.IsBuiltIn));
+                    foreach (var row in LauncherModMenu.Order(rows))
+                    {
+                        var item = new MenuItem
+                        {
+                            Header = row.Name, ToggleType = MenuItemToggleType.CheckBox,
+                            IsChecked = string.Equals(row.Id, mods.ActiveModId, StringComparison.OrdinalIgnoreCase),
+                        };
+                        var id = row.Id;
+                        item.Click += (_, _) => SwitchMod(id);
+                        menu.Items.Add(item);
+                    }
+                    menu.Items.Add(new Separator());
+                }
+                var manage = new MenuItem { Header = Loc.Get("launcher_mod_manage") };
+                manage.Click += (_, _) => OpenPanel(p => p.OpenModManagerFromLauncher());
+                menu.Items.Add(manage);
+                ModPill.ContextMenu = menu;
+                menu.Open(ModPill);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] mod menu failed"); }
+        }
+
+        internal void SwitchMod(string modId)
+        {
+            if (MainShellWindow.LockdownActive) { Log.Information("[Launcher] mod switch refused under Lockdown"); return; }
+            try
+            {
+                var panel = Panel;
+                if (panel == null) { Log.Warning("[Launcher] mod switch with no main window"); return; }
+                panel.SwitchActiveModFromLauncher(modId);
+                RefreshMod();
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Launcher] mod switch to {Id} failed", modId); }
+        }
 
         /// <summary>WPF LauncherHost.LaunchGame for the destinations this head has.</summary>
         internal void Play(LauncherCard card)
@@ -235,7 +470,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             bool needsAccount = card.RequiresAccount && !CoreAccount.IsLoggedIn;
             // No leash gate on this head yet, and every destination here is a panel tab: a locked
             // one still opens it (its own gate paints the refusal), as WPF's does.
-            if (LauncherRules.Game(needsAccount, Locked(dest), leashBlocks: false) == LauncherGameStep.SignIn)
+            bool locked = Locked(dest);
+            FxPlayBeat(card.Id, needsAccount || locked);
+            if (LauncherRules.Game(needsAccount, locked, leashBlocks: false) == LauncherGameStep.SignIn)
             {
                 OpenSignIn();
                 return;
@@ -256,13 +493,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (panel == null) { Log.Warning("[Launcher] sign-in with no main window"); return; }
             try { await panel.OpenUnifiedLoginDialog(this); }
             catch (Exception ex) { Log.Warning(ex, "[Launcher] sign-in dialog failed"); }
+            RefreshAccount();
+            RefreshStats();
             BuildTiles();
         }
 
         internal void BuildTiles()
         {
             GamesGrid.Children.Clear();
-            foreach (var card in VisibleCards) GamesGrid.Children.Add(CreateTile(card));
+            _revealedAtBuild.Clear();
+            foreach (var card in VisibleCards) { GamesGrid.Children.Add(CreateTile(card)); _revealedAtBuild[card.Id] = true; }
             SeatGrid();
         }
 
@@ -354,14 +594,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 TextTrimming = TextTrimming.CharacterEllipsis, Height = LauncherGridLayout.BlurbHeight,
             });
             var play = PlayButton(hue, locked, needsAccount);
-            play.Click += (_, _) => Play(card);
+            // ponytail: no LockdownVeil on this head yet (WPF's swallows every tile click); this refusal stands in for it.
+            play.Click += (_, _) => { if (!MainShellWindow.LockdownActive) Play(card); };
             text.Children.Add(play);
             body.Children.Add(text);
 
             // A signed-out card is the ask as a whole, not only its button (WPF Tiles.cs:218).
-            if (needsAccount) tile.PointerReleased += (_, _) => OpenSignIn();
+            if (needsAccount) tile.PointerReleased += (_, _) => { if (MainShellWindow.LockdownActive) return; FxPlayBeat(card.Id, true); OpenSignIn(); };
 
             tile.Child = body;
+            DecorateTileFx(tile, hue);
             return tile;
         }
 

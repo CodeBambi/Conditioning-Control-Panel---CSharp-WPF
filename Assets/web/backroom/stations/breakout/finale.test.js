@@ -173,3 +173,19 @@ test('galaxy hinges use three hits and release spiral payload without a pendulum
  game.breakBrick(i);assert.equal(hinge.hp,1);assert.equal(hinge.alive,true);
  game.breakBrick(i);assert.equal(hinge.alive,false);assert.ok(s.pops.some(p=>p.spiral));
 });
+test('a launch pressed while the finale ring is still forming is kept, and the ball leaves once it is ready',()=>{
+ const game=createGame({rng:()=>.5});game.jumpToFinaleBeat('opening');
+ game.step(.05,{launch:true});advance(game,.4);
+ assert.equal(game.snapshot().finale.phase,'forming');assert.equal(game.snapshot().balls[0].stuck,true);
+ advance(game,1.8);
+ const s=game.snapshot();assert.equal(s.finale.phase,'approach');assert.equal(s.balls[0].stuck,false);assert.ok(s.balls[0].vy<0);
+});
+test('the finale still never serves on its own',()=>{
+ const game=createGame({rng:()=>.5});game.jumpToFinaleBeat('opening');advance(game,6);
+ const s=game.snapshot();assert.equal(s.finale.phase,'ready');assert.equal(s.balls[0].stuck,true);
+});
+test('after a lost ball in the finale, a press during the wall-age gate is kept too',()=>{
+ const game=createGame({rng:()=>.5});game.jumpToFinaleBeat('words');const s=game.snapshot();
+ s.wallAge=0;game.step(.05,{launch:true});assert.equal(s.balls[0].stuck,true);
+ advance(game,2.2);assert.equal(game.snapshot().balls[0].stuck,false);
+});

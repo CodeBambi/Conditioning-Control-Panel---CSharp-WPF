@@ -3,6 +3,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.LauncherWindow"
         Title="CC Labs"
         Icon="avares://CCP.Avalonia/Resources/app.ico"
@@ -65,6 +66,62 @@
             <Style Selector="^:pointerover /template/ Border#Rim"><Setter Property="Opacity" Value="0.35"/></Style>
             <Style Selector="^:pointerover /template/ ContentPresenter#Cp"><Setter Property="Foreground" Value="White"/></Style>
         </ControlTheme>
+        <!-- WPF LauncherSignInPill / LauncherBarPill / LauncherLink (LauncherWindow.xaml:31-190). -->
+        <ControlTheme x:Key="LauncherBarPill" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="17" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="Cp" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bg">
+                <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="LauncherSignInPill" TargetType="Button" BasedOn="{StaticResource LauncherBarPill}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentGradientBrush}"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Style Selector="^:pointerover /template/ Border#Bg">
+                <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ ContentPresenter#Cp">
+                <Setter Property="Foreground" Value="White"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="LauncherLink" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="Cp" Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ ContentPresenter#Cp">
+                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            </Style>
+        </ControlTheme>
     </Window.Resources>
 
     <Window.Styles>
@@ -73,7 +130,78 @@
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
+        <!-- LauncherLink's underline on hover (a ControlTheme may not hold a descendant selector). -->
+        <Style Selector="Button#StopLink:pointerover TextBlock">
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
+        <Style Selector="TextBlock.stat">
+            <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+            <Setter Property="FontSize" Value="30"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+        </Style>
     </Window.Styles>
+
+    <!-- Backdrop, event layers and edge: WPF LauncherWindow.xaml:235-334 and 590-635; LauncherWindow.Fx.cs drives them. -->
+    <Panel x:Name="RootGrid">
+    <Border IsHitTestVisible="False">
+        <Border.Background>
+            <RadialGradientBrush GradientOrigin="28%,22%" Center="28%,22%" RadiusX="98%" RadiusY="92%">
+                <GradientStop Color="#FF2C1450" Offset="0"/>
+                <GradientStop Color="#FF1C1233" Offset="0.42"/>
+                <GradientStop Color="#FF100A1E" Offset="0.72"/>
+                <GradientStop Color="#FF06030E" Offset="1"/>
+            </RadialGradientBrush>
+        </Border.Background>
+    </Border>
+    <Panel x:Name="SpiralLayer" Width="900" Height="900" HorizontalAlignment="Left" VerticalAlignment="Center"
+           Margin="-230,0,0,0" Opacity="0.11" IsHitTestVisible="False" RenderTransformOrigin="50%,50%">
+        <Path x:Name="SpiralPath" StrokeThickness="2.4" StrokeLineCap="Round">
+            <Path.Stroke>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource FxParticleColor}" Offset="1"/>
+                </LinearGradientBrush>
+            </Path.Stroke>
+        </Path>
+    </Panel>
+    <Panel x:Name="SpiralSmall" Width="560" Height="560" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+           Margin="0,0,-120,-170" Opacity="0.065" IsHitTestVisible="False" RenderTransformOrigin="50%,50%">
+        <Path x:Name="SpiralSmallPath" StrokeThickness="2" StrokeLineCap="Round">
+            <Path.Stroke>
+                <LinearGradientBrush StartPoint="100%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="{DynamicResource FxParticleColor}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource FxGlowColor}" Offset="1"/>
+                </LinearGradientBrush>
+            </Path.Stroke>
+        </Path>
+    </Panel>
+    <Border x:Name="GlowLayer" Opacity="0.36" Margin="-28" IsHitTestVisible="False">
+        <Border.Background>
+            <RadialGradientBrush GradientOrigin="72%,18%" Center="72%,18%" RadiusX="58%" RadiusY="52%">
+                <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                <GradientStop Color="#00000000" Offset="1"/>
+            </RadialGradientBrush>
+        </Border.Background>
+    </Border>
+    <Border Opacity="0.22" Margin="-28" IsHitTestVisible="False">
+        <Border.Background>
+            <RadialGradientBrush GradientOrigin="16%,82%" Center="16%,82%" RadiusX="48%" RadiusY="46%">
+                <GradientStop Color="{DynamicResource FxParticleColor}" Offset="0"/>
+                <GradientStop Color="#00000000" Offset="1"/>
+            </RadialGradientBrush>
+        </Border.Background>
+    </Border>
+    <Border IsHitTestVisible="False">
+        <Border.Background>
+            <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="82%" RadiusY="82%">
+                <GradientStop Color="#00000000" Offset="0.42"/>
+                <GradientStop Color="#66000000" Offset="0.78"/>
+                <GradientStop Color="#C4000000" Offset="1"/>
+            </RadialGradientBrush>
+        </Border.Background>
+    </Border>
+    <fx:AmbientFxCanvas x:Name="Ambient" Margin="-12"/>
 
     <Grid x:Name="ContentRoot" RowDefinitions="48,*,52">
 
@@ -86,7 +214,47 @@
                                FontFamily="Fredoka, Segoe UI" FontSize="18" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- signed out: a sign-in pill where the chip would be -->
+                    <Button x:Name="SignInPill" Theme="{StaticResource LauncherSignInPill}" Margin="0,0,6,0"
+                            IsVisible="False" Click="SignIn_Click">
+                        <TextBlock Text="{loc:Str launcher_sign_in}"/>
+                    </Button>
+                    <!-- account chip: a click opens the panel's account settings -->
+                    <Button x:Name="AccountChipButton" Theme="{StaticResource LauncherBarPill}" Padding="4,0,12,0"
+                            Margin="0,0,6,0" Click="AccountChip_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="26" Height="26" CornerRadius="13" Background="{DynamicResource AccentGradientBrush}">
+                                <TextBlock x:Name="AvatarInitial" Text="-" Foreground="White" FontFamily="Fredoka, Segoe UI"
+                                           FontSize="13" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock x:Name="AccountName" Text="-" Margin="8,0,0,0" FontSize="13" FontWeight="Normal"
+                                       VerticalAlignment="Center" MaxWidth="180" TextTrimming="CharacterEllipsis"/>
+                            <Image x:Name="TierBadge" Height="20" Margin="6,0,0,0" IsVisible="False"
+                                   PointerEntered="TierBadge_PointerEntered" PointerExited="TierBadge_PointerExited"/>
+                            <Popup x:Name="TierBadgePopup" PlacementTarget="TierBadge" Placement="Bottom"
+                                   IsHitTestVisible="False">
+                                <Image x:Name="TierBadgeBig" Height="72" Margin="12" IsHitTestVisible="False"/>
+                            </Popup>
+                            <StackPanel x:Name="SpChip" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="False">
+                                <Border Width="1" Height="14" Margin="10,0,8,0" Background="{DynamicResource GlassBorderBrush}"/>
+                                <TextBlock Text="&#x25C6;" FontSize="10" Foreground="{DynamicResource PanelAccentBrush}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SpReadout" Text="0" Margin="5,0,0,0" FontSize="13" FontWeight="SemiBold"
+                                           FontFamily="Fredoka, Segoe UI" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Button>
+                    <!-- the active mod: a click lists the installed mods and "Manage mods" -->
+                    <Button x:Name="ModPill" Theme="{StaticResource LauncherBarPill}" Margin="0,0,6,0"
+                            ToolTip.Tip="{loc:Str launcher_mod_tooltip}" Click="ModPill_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ModPillText" Text="Mod" VerticalAlignment="Center"
+                                       MaxWidth="170" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="&#x25BE;" FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
                             Click="BtnMinimize_Click" Theme="{StaticResource WindowControlButton}"/>
                     <Button x:Name="BtnClose" Content="✕" Width="46" Height="36"
@@ -121,10 +289,43 @@
                                    LineHeight="34" Foreground="{DynamicResource TextLightBrush}"/>
                         <TextBlock Text="{loc:Str launcher_panel_blurb}" Margin="0,14,0,0" TextWrapping="Wrap"
                                    FontSize="14" LineHeight="21" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,22,0,0">
+                            <Ellipse x:Name="RunningDot" Width="8" Height="8" Fill="#4CAF50" Opacity="0.35" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="StatusText" Margin="10,0,0,0" FontSize="13"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            <Button x:Name="StopLink" Theme="{StaticResource LauncherLink}" Margin="6,0,0,0"
+                                    IsVisible="False" Click="StopLink_Click">
+                                <TextBlock Text="{loc:Str launcher_panel_stop}"/>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                    <!-- Three live numbers and a slim XP bar, read from the settings the panel's chips use. -->
+                    <StackPanel Grid.Row="2" VerticalAlignment="Center" Margin="32,18,32,18">
+                        <UniformGrid Columns="3">
+                            <StackPanel>
+                                <TextBlock x:Name="StatLevel" Text="1" Classes="stat"/>
+                                <TextBlock Text="{loc:Str launcher_stat_level}" Classes="eyebrow" Margin="1,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Margin="12,0,0,0">
+                                <TextBlock x:Name="StatSparkles" Text="0" Classes="stat"/>
+                                <TextBlock Text="{loc:Str launcher_stat_sparkles}" Classes="eyebrow" Margin="1,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Margin="12,0,0,0">
+                                <TextBlock x:Name="StatTime" Text="0m" Classes="stat"/>
+                                <TextBlock Text="{loc:Str launcher_stat_time}" Classes="eyebrow" Margin="1,2,0,0"/>
+                            </StackPanel>
+                        </UniformGrid>
+                        <Border x:Name="XpTrack" Height="6" CornerRadius="3" Margin="0,22,0,0"
+                                Background="{DynamicResource GlassBorderBrush}">
+                            <Border x:Name="XpFill" Width="0" HorizontalAlignment="Left" CornerRadius="3"
+                                    Background="{DynamicResource AccentGradientBrush}"/>
+                        </Border>
+                        <TextBlock x:Name="XpCaption" Margin="0,8,0,0" FontSize="11" HorizontalAlignment="Right"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
                     </StackPanel>
                     <StackPanel Grid.Row="3" Margin="32,0,32,26">
                         <Button x:Name="PanelCta" Theme="{StaticResource LauncherCta}" Click="PanelCta_Click">
-                            <TextBlock Text="{loc:Str launcher_panel_launch}"/>
+                            <TextBlock x:Name="PanelCtaText" Text="{loc:Str launcher_panel_launch}"/>
                         </Button>
                     </StackPanel>
                 </Grid>
@@ -147,5 +348,37 @@
                 <TextBlock Text="{loc:Str launcher_skip_to_panel}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
             </CheckBox>
         </Border>
+
+        <!-- Lockdown veil (WPF LauncherWindow.xaml:597): the launcher waits, it never argues. Over every
+             row, title bar included; LauncherWindow.Veil.cs toggles it, breathes it and swallows keys. -->
+        <Border x:Name="LockdownVeil" Grid.RowSpan="3" Background="#D9070310" IsVisible="False" Focusable="True">
+            <Panel>
+                <Border x:Name="LockdownVignette" IsHitTestVisible="False"/>
+                <TextBlock x:Name="LockdownText" Text="{loc:Str launcher_lockdown_veil}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontFamily="Fredoka, Segoe UI" FontSize="22" Foreground="{DynamicResource TextLightBrush}"
+                           TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+            </Panel>
+        </Border>
     </Grid>
+
+    <Canvas x:Name="ShockwaveCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
+    <fx:AmbientFxCanvas x:Name="BurstLayer" IsHitTestVisible="False"/>
+
+    <Panel x:Name="EdgeHost" IsHitTestVisible="False">
+        <Border x:Name="EdgeGlow" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="10" CornerRadius="8" Opacity="0.3">
+            <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
+        </Border>
+        <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="4" CornerRadius="8" Opacity="0.85"/>
+        <Border x:Name="EdgeGlint" BorderThickness="4" CornerRadius="8" Opacity="0">
+            <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%" TransformOrigin="50%,50%">
+                    <GradientStop Color="#00FFFFFF" Offset="0.40"/>
+                    <GradientStop Color="#F0FFFFFF" Offset="0.50"/>
+                    <GradientStop Color="#00FFFFFF" Offset="0.60"/>
+                </LinearGradientBrush>
+            </Border.BorderBrush>
+        </Border>
+    </Panel>
+    </Panel>
 </Window>

@@ -5,7 +5,7 @@
 // ponytail: no send pickers (poke / invite / watch, FriendsDrawer.Pickers.cs), no feed, trails,
 // open tables or leash section, no lock-day chip, no once-only presence ask, no juice (.Juice.cs), no bell (the corner notices are not on this
 // head), no per-PC block list (the server's list only). A word WPF throws outside the drawer
-// (FriendsLanding.Tell) lands on the foot's status line.
+// (FriendsLanding.Tell) is a FloatingWord over the drawer's window.
 using System;
 using System.Collections.Generic;
 using Avalonia.Input.Platform;
@@ -46,10 +46,16 @@ public sealed class FriendsDrawer : Border
     private readonly StackPanel _list = new();
     private readonly TextBox _codeBox = new();
     private readonly Button _addGo;
-    private readonly TextBlock _addResult = Label("", 11.5, Muted, Display), _said = Label("", 11.5, Mint, Display);
+    private readonly TextBlock _addResult = Label("", 11.5, Muted, Display);
     public event Action? CloseRequested;
     public event Action? SettingsRequested;
     public event Action? SignInRequested;
+    /// <summary>The "Invite them" link: the host opens the invites card (WPF LauncherHost.OpenPanelInvites).</summary>
+    public event Action? InvitesRequested;
+    private readonly WrapPanel _inviteLine;
+    /// <summary>WPF RefreshInviteLine: subscribers only (an invite week holds no codes).</summary>
+    internal Func<bool> OffersInviteLink { get; set; } = () => ConditioningControlPanel.Services.Invites.InviteTicketRule.OffersInviteLink(
+        CoreAccount.HasPremiumAccess, ConditioningControlPanel.Services.ProviderSubscription.IsInviteWeekOnly(AccountSeed.Patreon, AccountSeed.SubscribeStar, CoreSettings.Current));
     public FriendsDrawer() : this(null) { }
     internal FriendsDrawer(IFriendsService? service)
     {
@@ -95,7 +101,14 @@ public sealed class FriendsDrawer : Border
         addRow.Children.AddRange(new Control[] { prefix, _codeBox, _addGo });
         _addResult.Margin = new Thickness(2, 5, 0, 0);
         _addResult.Tag = "friends-add-result";
-        _addBox.Child = new StackPanel { Children = { addRow, _addResult } };
+        // No account yet? A subscriber has an invite code for that (WPF main e2d4e35ef): the link opens
+        // the invites card. Shown only to subscribers; a button, so it is keyboard-reachable.
+        var inviteLink = Pill(Loc.Get("friends_invite_link"), Brushes.Transparent, Pink, "friends-invite-link");
+        inviteLink.Padding = new Thickness(0);
+        inviteLink.Click += (_, _) => InvitesRequested?.Invoke();
+        _inviteLine = new WrapPanel { Margin = new Thickness(2, 6, 0, 0), Tag = "friends-invite-line",
+            Children = { Label(Loc.Get("friends_invite_line") + " ", 11.5, Muted, Display), inviteLink } };
+        _addBox.Child = new StackPanel { Children = { addRow, _addResult, _inviteLine } };
         // Esc closes the add box, then the drawer (WPF OnKey).
         KeyDown += (_, e) =>
         {
@@ -515,7 +528,7 @@ public sealed class FriendsDrawer : Border
         add.Click += (_, _) =>
         {
             _addBox.IsVisible = !_addBox.IsVisible;
-            if (_addBox.IsVisible) { _addResult.Text = ""; _codeBox.Focus(); }
+            if (_addBox.IsVisible) { _addResult.Text = ""; _inviteLine.IsVisible = OffersInviteLink(); _codeBox.Focus(); }
         };
         Grid.SetColumn(add, 1);
         var buttons = new Grid
@@ -544,11 +557,6 @@ public sealed class FriendsDrawer : Border
             foot.Children.Add(new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(8, 0, 2, 4), Children = { copied, mine } });
         }
         foot.Children.Add(buttons);
-        _said.IsVisible = !string.IsNullOrEmpty(_said.Text);
-        _said.Margin = new Thickness(8, 4, 8, 0);
-        _said.Tag = "friends-said";
-        (_said.Parent as Panel)?.Children.Remove(_said);
-        foot.Children.Add(_said);
         _foot.Child = foot;
     }
 
@@ -576,11 +584,9 @@ public sealed class FriendsDrawer : Border
         DispatcherTimer.RunOnce(() => { if (_results.TryGetValue(rowId, out var cur) && cur.Text == text) { _results.Remove(rowId); Render(); } },
             TimeSpan.FromSeconds(FriendsDrawerRules.ResultHoldSeconds));
     }
-    private void Say(string text, bool good)
-    {
-        _said.Text = text;
-        _said.Foreground = good ? Mint : Gold;
-    }
+    /// <summary>WPF TellOutside(always) -> FriendsLanding.Say: a floating word over the window.</summary>
+    private void Say(string text, bool good) =>
+        Overlays.FloatingWord.Throw(TopLevel.GetTopLevel(this) as Window, text, pink: !good, small: true);
     internal static TextBlock Label(string text, double size, IBrush fg, FontFamily? font = null, FontWeight weight = FontWeight.Normal) => new()
     {
         Text = text, FontSize = size, Foreground = fg, FontFamily = font ?? FontFamily.Default, FontWeight = weight,

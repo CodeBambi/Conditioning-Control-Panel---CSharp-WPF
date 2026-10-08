@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Invites;
 
@@ -39,24 +40,26 @@ public static class InviteRewards
     /// which a lapsed inviter's refusal carries too). Idempotent (TryUnlock is), so it is safe on
     /// every read. Returns how many badges were newly unlocked.
     /// </summary>
+    /// <summary>The head's achievements (WPF/Avalonia App.Achievements). Unseeded: nothing unlocks.</summary>
+    public static Func<ICollection<string>?>? UnlockedProvider { get; set; }
+    public static Func<string, bool>? TryUnlockProvider { get; set; }
+
     public static int Apply(int convertedTotal)
     {
         if (convertedTotal <= 0) return 0;
         try
         {
-            var achievements = App.Achievements;
-            if (achievements == null) return 0;
-            var unlocked = achievements.Progress?.UnlockedAchievements;
+            var unlocked = UnlockedProvider?.Invoke();
             var count = 0;
             foreach (var id in Due(convertedTotal, unlocked))
-                if (achievements.TryUnlock(id)) count++;
+                if (TryUnlockProvider?.Invoke(id) == true) count++;
             if (count > 0)
-                App.Logger?.Information("[Invites] {Count} invite reward(s) unlocked at {Converted} converted", count, convertedTotal);
+                Log.Information("[Invites] {Count} invite reward(s) unlocked at {Converted} converted", count, convertedTotal);
             return count;
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning(ex, "[Invites] reward apply failed");
+            Log.Warning(ex, "[Invites] reward apply failed");
             return 0;
         }
     }

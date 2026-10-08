@@ -3,7 +3,7 @@
 // UpdateStartButton (:944), for the features Core drives (CoreEngine). The session half of
 // BtnStart_Click (stop-session dialog) is ConfirmStopSession (MainShellWindow.SessionRun.cs).
 // ponytail: still missing, each with no service on this head: the remote-control gate,
-// Relapse/TotalSessions achievements, the bubble/mind-wipe/brain-drain/pop-quiz/autonomy/
+// Relapse/TotalSessions achievements, the bubble/brain-drain/pop-quiz/autonomy/
 // ramp starts, the scheduler, the Presets "running" label, the hero FX and Jump right in
 // (RandomizeAndStart).
 
@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (gen != _engineGen || CoreEngine.IsRunning) return;
                 CoreEngine.Start();
                 PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Start()
+                SpiralOverlay.Refresh(this);
                 UpdateStartButton();
             });
         }

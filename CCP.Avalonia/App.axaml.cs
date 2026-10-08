@@ -54,13 +54,22 @@ namespace ConditioningControlPanel.Avalonia
         internal static MantraVoiceService MantraVoice { get; } = new();
 
         /// <summary>WPF App.xaml.cs:2527-2536 plus the CoreQuests seeds of :398-421. Seeded where this
-        /// head has the service; SkillTree (streak shield, perfect-week bonus) and Programs
-        /// (TrackVerifier) are WPF-only, so those three stay unseeded: no shield, no bonus, no
-        /// program tracking - the WPF "service is null" answers.</summary>
+        /// head has the service. The streak shield is WPF SkillTreeService.UseStreakShield (:378) over
+        /// Core settings; perfect-week bonus and Programs (TrackVerifier) stay unseeded: no bonus,
+        /// no program tracking - the WPF "service is null" answers.</summary>
         private static void StartQuests()
         {
             CoreQuests.PatreonVerifyingProvider = () => Platform.AccountSeed.Patreon?.IsVerifying;
             CoreQuests.SubscribeStarVerifyingProvider = () => Platform.AccountSeed.SubscribeStar?.IsVerifying == true;
+            CoreQuests.HasStreakShieldProvider = () => CoreSettings.Service?.Current is { } s
+                && Models.SkillTreeRules.HasSkill(s, "good_girl_streak") && s.StreakShieldsRemaining > 0;
+            CoreQuests.UseStreakShieldProvider = () =>
+            {
+                if (CoreQuests.HasStreakShieldProvider?.Invoke() != true) return false;
+                CoreSettings.Current.StreakShieldsRemaining--;
+                CoreSettings.Save();
+                return true;
+            };
             // WPF plays SystemSounds.Exclamation; Linux has no stock equivalent, so a bundled chime
             // through the head audio. ponytail: no haptic post - no haptics service on this head.
             CoreQuests.PlayCompletionEffectsProvider = () => CoreAudio.PlayOneShot(
@@ -279,9 +288,59 @@ namespace ConditioningControlPanel.Avalonia
                 LocalizationManager.Instance.SetLanguage("en");
         }
 
+        /// <summary>Set by Program.Main: a real launch shows the splash. Every other desktop setup
+        /// (tests, PanicCheck, VideoCheck) starts synchronously without one, as before.</summary>
+        internal static bool SplashOnStartup;
+
         public override void OnFrameworkInitializationCompleted()
         {
+            // WPF App.xaml.cs:1949 shows the splash before anything else and threads SetProgress
+            // through startup. One UI thread here, so startup yields a frame per step instead.
+            var splash = SplashOnStartup && ApplicationLifetime is IClassicDesktopStyleApplicationLifetime
+                ? Views.Windows.SplashScreen.ShowOnOwnThread() : null;
+            var start = StartBehindSplash(splash, StartDesktop,
+                () => (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow);
+            // Without a splash every step completed inline, so a startup failure throws here as before;
+            // behind one it is rethrown on the UI thread.
+            if (start.IsCompleted) start.GetAwaiter().GetResult();
+            // Behind one, end the loop with a failure code; Program.Main rethrows StartupFailure.
+            else start.ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+                    (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown(1)),
+                TaskContinuationOptions.OnlyOnFaulted);
+            base.OnFrameworkInitializationCompleted();
+        }
 
+        /// <summary>Runs <paramref name="start"/>, painting each step on the splash; then shows the
+        /// shell (the lifetime found no MainWindow to show yet) and fades the splash out (WPF
+        /// App.xaml.cs:3837-3867). No splash: the steps are no-ops and everything runs inline.</summary>
+        /// <summary>A startup failure behind the splash; Program.Main rethrows it after the loop ends.</summary>
+        internal static System.Runtime.ExceptionServices.ExceptionDispatchInfo? StartupFailure;
+
+        internal static async Task StartBehindSplash(Views.Windows.SplashScreen? splash,
+            Func<Func<double, string, Task>, Task> start, Func<global::Avalonia.Controls.Window?> shell)
+        {
+            if (splash is null) { await start(static (_, _) => Task.CompletedTask); return; }
+            try
+            {
+                await start((progress, status) => { splash.ShowStep(progress, status); return splash.NextFrame(); });
+            }
+            catch (Exception ex)
+            {
+                // Recorded before the splash closes: closing the last window ends the loop with code 0.
+                Serilog.Log.Fatal(ex, "Startup failed");
+                StartupFailure = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+                splash.CloseImmediate();
+                throw;
+            }
+            var window = shell();
+            window?.Show();
+            splash.SetProgress(1.0, "Ready!");
+            splash.FadeOutAndClose(() => { if (window is { IsVisible: true }) window.Activate(); });
+        }
+
+        private async Task StartDesktop(Func<double, string, Task> step)
+        {
+            await step(0.0, "Starting...");
             // The app shell is the startup window. Until now this head opened the diagnostics
             // MainWindow, which was right while the shell did not exist and is wrong now that it
             // does. The diagnostics window is still reachable, from Settings, and RenderProof
@@ -300,6 +359,7 @@ namespace ConditioningControlPanel.Avalonia
                 // not in Initialize() on purpose: the headless render path never reaches this
                 // callback, so a CI render cannot touch a user's profile. Unseeded, Core hands
                 // out one default instance, which is what the renders bind against.
+                await step(0.2, "Loading settings...");
                 // Secrets first: SettingsService's auth-token migration asks CoreSecrets.HasStore on load.
                 Platform.SecretStore.Seed();
                 Settings = new SettingsService();
@@ -342,6 +402,7 @@ namespace ConditioningControlPanel.Avalonia
                 CoreEngine.Video = Views.Overlays.MandatoryVideoOverlay.Instance.Scheduler;
                 CoreEngine.BubbleCount = Views.Windows.BubbleCountHost.Instance.Scheduler;
 
+                await step(0.4, "Initializing flash service...");
                 // The ambient flash surface. CoreFlash owns the rhythm; a burst needs any attached
                 // visual to reach Screens, and the main window is the one that always is.
                 CoreFlash.IsBusyProvider = () => Views.Overlays.FlashOverlay.IsBusy;
@@ -363,7 +424,9 @@ namespace ConditioningControlPanel.Avalonia
                 CoreSubliminal.BambiFreezeProvider = Views.Overlays.SubliminalWhisperShow.Freeze;
                 CoreSubliminal.RunStateChanged = running =>
                 {
-                    if (!running) global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Overlays.SubliminalOverlay.CloseAll);
+                    if (running) return;
+                    Views.Overlays.SubliminalWhisperShow.StopAll();
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Overlays.SubliminalOverlay.CloseAll);
                 };
                 CoreBouncingText.StartAction = () =>
                 {
@@ -488,10 +551,18 @@ namespace ConditioningControlPanel.Avalonia
                 {
                     Serilog.Log.Error(ex, "Failed to initialize ReleaseContentService - downloaded content unavailable this session");
                 }
+                await step(0.3, "Initializing audio...");
                 // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
                 // CoreAudio stays unseeded: every clip "finishes" at once and nothing plays.
                 // Console as well as Serilog: this head configures no Serilog sink yet.
-                try { new Platform.LibVlcAudio().Seed(); Console.WriteLine("[Audio] LibVLC seeded CoreAudio"); }
+                try
+                {
+                    var vlc = new Platform.LibVlcAudio();
+                    vlc.Seed();
+                    // Mind wipe plays through the same LibVLC (WPF App.MindWipe, App.xaml.cs:385).
+                    new Platform.MindWipePlayer(vlc.PlayVoice) { CleanSlate = secs => Achievements?.TrackMindWipeDuration(secs) }.Seed();
+                    Console.WriteLine("[Audio] LibVLC seeded CoreAudio");
+                }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[Audio] LibVLC unavailable, audio disabled: {ex.Message}");
@@ -504,14 +575,6 @@ namespace ConditioningControlPanel.Avalonia
                 // Start, which fails with a message; revoke keeps all four of the consent dialog's promises.
                 CoreWebcam.IsAvailableProvider = () => true;
                 CoreWebcam.RevokeConsentAction = Platform.WebcamTracker.RevokeConsent;
-                // CoreMindWipe stays unseeded, and it is the audio surface that is missing rather
-                // than the feature: MindWipeSchedule (Core) already decides the tick interval, the
-                // per-tick probability, the session escalation and which clips are candidates.
-                // What this head has no answer for is the playing half - a crossfading NAudio loop
-                // - so the Mind Wipe card configures correctly and plays nothing. Unseeded says
-                // exactly that: every action is a no-op, IsLooping is false and ClipCount is 0, so
-                // nothing reports a loop that is not running.
-                //
                 // The plain engine (Start/Stop) is CoreEngine; the one SessionRunner seeds
                 // IsSessionRunningProvider, so the feature lock fires for a session, not a plain Start.
                 CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;
@@ -525,6 +588,7 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Debug("ModerationCounter.LoadFromDisk failed: {Error}", ex.Message); }
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
+                await step(0.85, "Initializing companion...");
                 // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
                 // echo stays unseeded (no bark engine here: CoreBark is a doorbell); command executor and
                 // activities are CompanionEffects (seeded below). SeedMemorySignals seeds UserMessageSent for the memory
@@ -555,14 +619,20 @@ namespace ConditioningControlPanel.Avalonia
                 // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
                 // open. Seeding it with anything would put a tour on screen that nothing drives.
 
+                await step(0.75, "Loading achievements...");
                 // Achievements: the Core engine over the same achievements.json WPF uses, seeded the
                 // way WPF App.xaml.cs:384/:394 seeds the two unlock seams. Unlocked is raised on the
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
                 Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
-                Achievements.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
-                Achievements.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
+                WireAchievementUnlocks(Achievements);
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
+                // WPF App.xaml.cs: the invite ladder's badges and the invites wire (friends' proxy and
+                // door; a sandbox reaches only a loopback CCP_FRIENDS_API_URL, else nothing is sent).
+                Services.Invites.InviteRewards.UnlockedProvider = () => Achievements?.Progress?.UnlockedAchievements;
+                Services.Invites.InviteRewards.TryUnlockProvider = id => Achievements?.TryUnlock(id) == true;
+                Platform.FriendsHead.SeedInvites(
+                    Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"), Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
                 CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
                 CoreProgression.TrackBubbleCountGameStartedProvider = () => Achievements?.TrackBubbleCountGameStarted();
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
@@ -620,6 +690,7 @@ namespace ConditioningControlPanel.Avalonia
                     Serilog.Log.Warning(ex, "Session catalogue could not be loaded; showing built-in fallback");
                 }
 
+                await step(0.95, "Opening main window...");
                 // WPF decides with `Welcomed && !FirstRunClaimedThisLaunch`: the shell's constructor
                 // claims Welcomed on a fresh install, so read it before the shell exists.
                 bool welcomed = Settings.Current.Welcomed;
@@ -634,16 +705,19 @@ namespace ConditioningControlPanel.Avalonia
                     Notifications.Show(message,
                         Enum.TryParse<Helpers.NotificationType>(kind, out var t) ? t : Helpers.NotificationType.Info,
                         duration));
-                // ponytail: WPF's Reconnect-Patreon branch (PatreonReconnectRule, head-only) is absent -
-                // this head has no Patreon sign-in to repair, so every refusal takes the "See tiers" branch.
-                // Also dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
+                // WPF App.xaml.cs:505: the Reconnect answer for gates (Core PatreonReconnectRule).
+                TierGate.ReconnectIsTheAnswerProvider = Views.Windows.MainShellWindow.ReconnectIsTheAnswerNow;
+                // Dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
                 Sessions.Ticked += shell.OnSessionTick;
                 Sessions.SessionLog.LogReady += shell.OnSessionLogReady;
+                // WPF App.xaml.cs:529 (main fbe161de2): "See tiers" opens the vault gate card at the tier this door needs.
                 CoreEntitlement.ShowDeniedHandler = verdict => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    Notifications.Show(verdict.Reason, Helpers.NotificationType.Warning, TimeSpan.FromSeconds(8),
-                        Loc.Get("tiergate_see_tiers"), () => shell.OpenAppSettingsSection("account")));
+                    shell.ShowTierDenied(verdict, Notifications));
+                // WPF App.xaml.cs:509-511 (main 2e9080399). No Arcademy host here: unseeded, so its card stays hidden.
+                Models.ExclusiveFeature.JustDropDoorProvider = SettingsPaletteIndex.JustDropDoorAvailable;
+                Models.ExclusiveFeature.BreakoutFullProvider = () => TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
                 // WPF MainWindow.xaml.cs:484 (the ? box rolled over or its override landed) and
                 // OnPatreonTierChanged: both move the veils, the Play bands and the lapse pass.
                 // WPF MainWindow.xaml.cs:486 / UpdatePatreonUI also repaint the vault (RefreshExclusivesTab).
@@ -663,6 +737,7 @@ namespace ConditioningControlPanel.Avalonia
                 });
                 if (Platform.AccountSeed.Patreon is { } patreonSub) patreonSub.TierChanged += (_, _) => RepaintVeils();
                 if (Platform.AccountSeed.SubscribeStar is { } substarSub) substarSub.TierChanged += (_, _) => RepaintVeils();
+                Views.Controls.Invites.InvitePanel.ArmExpiry(); // WPF MainWindow.Patreon.cs: a running invite week's end repaints
                 // OnLastWindowClose counts overlay windows too: closing the shell must take the
                 // desktop overlays and their schedules down, or the process lives on UI-less.
                 // WPF RequestExit (MainWindow.Launcher.cs:126) stops the engine first: the lock-card
@@ -741,7 +816,6 @@ namespace ConditioningControlPanel.Avalonia
                 // WPF App.xaml.cs:4858: pending-outcome report + background update check.
                 Dispatcher.UIThread.Post(async () => await Platform.AppUpdater.StartupAsync(shell));
             }
-            base.OnFrameworkInitializationCompleted();
         }
 
         /// <summary>Stops every desktop overlay and its schedule. <paramref name="final"/> is the shell
@@ -751,8 +825,10 @@ namespace ConditioningControlPanel.Avalonia
             CoreFlash.Stop();
             CoreSubliminal.Stop();
             Views.Overlays.FlashOverlay.CloseAll(final);
+            Views.Overlays.SubliminalWhisperShow.StopAll();
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
+            Views.Overlays.SpiralOverlay.CloseAll();   // WPF StopEngine -> App.Overlay.Stop(); panic and exit too
         }
 
         /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:3815): one popup per unlock, shown at once.
@@ -795,6 +871,39 @@ namespace ConditioningControlPanel.Avalonia
                 Summary = string.Join(", ", rewards.Select(static r => r.Name)),
                 Open = ShowAll,
             }), TimeSpan.FromMilliseconds(900)));
+        }
+
+        /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:4160-4205): popup, wardrobe item toasts,
+        /// achievement sound, opt-in community post - in that order. <paramref name="discord"/> is for tests;
+        /// startup leaves it null and the seeded account is read at unlock time.</summary>
+        internal static void WireAchievementUnlocks(AchievementEngine engine, DiscordAccount? discord = null)
+        {
+            engine.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
+            engine.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
+            engine.Unlocked += (_, a) => AnnounceAchievement(a, discord ?? Platform.AccountSeed.Discord);
+        }
+
+        /// <summary>WPF PlayAchievementSound + the DiscordShareAchievements post (App.xaml.cs:4180-4205).
+        /// WPF plays SystemSounds.Asterisk; Linux has no stock one, so a bundled chime (quests use chime1).
+        /// The name is always CustomDisplayName-first for privacy, as WPF.</summary>
+        internal static Task<bool>? AnnounceAchievement(Models.Achievement a, DiscordAccount? discord)
+        {
+            CoreAudio.PlayOneShot(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "chime2.mp3"),
+                Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), "achievement");
+            if (!CoreSettings.Current.DiscordShareAchievements)
+            {
+                Serilog.Log.Information("Achievement '{Name}' not shared to Discord: DiscordShareAchievements is off", a.Name);
+                return null;
+            }
+            var task = discord?.SendAchievementWebhookAsync(a,
+                discord.CustomDisplayName ?? Platform.AccountSeed.Patreon?.DisplayName ?? "Someone",
+                CoreAccount.UnifiedUserId, () => CoreSettings.Current.AuthToken, DiscordAccount.ModThemeId(CoreMods.ActiveModId));
+            task?.ContinueWith(t =>
+            {
+                if (t.IsFaulted || t.IsCanceled || !t.Result)
+                    Serilog.Log.Warning(t.Exception?.GetBaseException(), "Achievement '{Name}' did NOT post to Discord", a.Name);
+            }, TaskContinuationOptions.ExecuteSynchronously);
+            return task;
         }
 
         internal static void ShowAchievementPopup(Models.Achievement a)
@@ -910,6 +1019,7 @@ namespace ConditioningControlPanel.Avalonia
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
             try { Views.Overlays.BlinkTrainerSession.Stop(); } catch { /* WPF Application.Exit += Stop */ }
+            try { Views.Chaos.ChaosRunHost.ForceShutdown(); } catch { /* WPF App.OnExit:6241 Chaos.ForceShutdown */ }
             try { Platform.WebcamTracker.Instance.Stop(); } catch { /* WPF App.OnExit:6185 Webcam.Dispose */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never

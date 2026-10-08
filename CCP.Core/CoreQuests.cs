@@ -27,6 +27,10 @@ namespace ConditioningControlPanel
         /// <summary>WPF <c>App.SkillTree?.UseStreakShield() == true</c>.</summary>
         public static volatile Func<bool>? UseStreakShieldProvider;
 
+        /// <summary>Whether <see cref="UseStreakShieldProvider"/> would succeed, without spending:
+        /// WPF <c>SkillTree.HasSkill("good_girl_streak") &amp;&amp; StreakShieldsRemaining &gt; 0</c>.</summary>
+        public static volatile Func<bool>? HasStreakShieldProvider;
+
         /// <summary>WPF <c>App.SkillTree?.CheckPerfectWeekBonus() ?? 0</c>.</summary>
         public static volatile Func<int>? CheckPerfectWeekBonusProvider;
 

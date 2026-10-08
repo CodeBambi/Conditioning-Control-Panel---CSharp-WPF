@@ -1829,10 +1829,14 @@ public class QuestService : IDisposable
     /// the number on a card is the number that lands. Null settings = level 1, no bonuses.
     /// </summary>
     public static int ScaledQuestXp(int baseXp, AppSettings? settings)
+        => ScaledQuestXp(baseXp, settings, settings?.DailyQuestStreak ?? 0);
+
+    /// <summary><see cref="ScaledQuestXp(int, AppSettings?)"/> at an explicit quest streak.</summary>
+    public static int ScaledQuestXp(int baseXp, AppSettings? settings, int questStreak)
     {
         var playerLevel = settings?.PlayerLevel ?? 1;
         var betterQuestsMultiplier = settings is { } s ? SkillTreeRules.GetRerollBonusMultiplier(s) : 1.0;
-        var streakMultiplier = 1.0 + ((settings?.DailyQuestStreak ?? 0) * 0.03);
+        var streakMultiplier = 1.0 + (questStreak * 0.03);
         return (int)Math.Round(baseXp * XpCurve.QuestLevelScale(playerLevel, XpCurve.EpochOf(settings)) * betterQuestsMultiplier * streakMultiplier);
     }
 
@@ -1923,23 +1927,47 @@ public class QuestService : IDisposable
         var settings = CoreSettings.Service?.Current;
         if (settings == null) return;
 
-        var yesterday = DateTime.Today.AddDays(-1);
-        bool continuesStreak =
-            Progress.DailyQuestCompletionDates.Any(d => d.Date == yesterday)
-            || (settings.StreakShieldUsedDates?.Any(d => d.Date == yesterday) ?? false);
-
-        if (continuesStreak || settings.DailyQuestStreak <= 0)
-        {
-            // Yesterday completed/shielded (chain continues) — or first streak ever.
-            settings.DailyQuestStreak++;
-        }
-        else
+        var next = StreakAfterFirstCompletionToday(settings);
+        if (next == 1 && settings.DailyQuestStreak > 0)
         {
             // Gap with no shield: the streak broke; today is day 1 of a new streak.
             Log.Information("Quest streak reset to 1 — gap before {Today} (was {Prev})",
                 DateTime.Today.ToString("yyyy-MM-dd"), settings.DailyQuestStreak);
-            settings.DailyQuestStreak = 1;
         }
+        settings.DailyQuestStreak = next;
+    }
+
+    /// <summary>Yesterday completed/shielded (chain continues) or first streak ever: +1; else 1.</summary>
+    private int StreakAfterFirstCompletionToday(AppSettings settings)
+    {
+        var yesterday = DateTime.Today.AddDays(-1);
+        bool continuesStreak =
+            Progress.DailyQuestCompletionDates.Any(d => d.Date == yesterday)
+            || (settings.StreakShieldUsedDates?.Any(d => d.Date == yesterday) ?? false);
+        return continuesStreak || settings.DailyQuestStreak <= 0 ? settings.DailyQuestStreak + 1 : 1;
+    }
+
+    /// <summary>
+    /// The quest streak a completion of <paramref name="type"/> is paid at. CompleteQuest advances
+    /// the streak on the day's first daily completion BEFORE it pays, so a card quoting the stored
+    /// streak under-quoted that quest by 3% (or over-quoted a broken streak). Weekly quests and
+    /// later dailies pay at the stored streak. A streak shield that completion would spend is
+    /// foreseen via <see cref="CoreQuests.HasStreakShieldProvider"/> (asked, never spent).
+    /// </summary>
+    public int StreakPaidOn(QuestType type, AppSettings? settings)
+    {
+        if (settings == null) return 0;
+        // No settings service: AdvanceQuestStreak does nothing, so nothing advances.
+        if (type != QuestType.Daily || CoreSettings.Service == null
+            || Progress.DailyQuestCompletionDates.Any(d => d.Date == DateTime.Today))
+            return settings.DailyQuestStreak;
+        var next = StreakAfterFirstCompletionToday(settings);
+        // CompleteQuest's shield fill (same condition): yesterday becomes completed, so the chain continues.
+        if (next == 1 && settings.DailyQuestStreak > 0
+            && settings.LastDailyQuestDate?.Date < DateTime.Today.AddDays(-1)
+            && CoreQuests.HasStreakShieldProvider?.Invoke() == true)
+            return settings.DailyQuestStreak + 1;
+        return next;
     }
 
     /// <summary>

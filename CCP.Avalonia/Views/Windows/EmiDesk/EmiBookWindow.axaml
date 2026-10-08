@@ -203,6 +203,16 @@
                                 Background="#FF0E0E1C"/>
                     </Grid>
 
+                    <!-- WPF EmiBookWindow.xaml:236-241. BtnFirstShow is not ported: FirstShowService has no
+                         surface on this head (ponytail, listed in docs/avalonia-parity.md win-emi-book). -->
+                    <StackPanel DockPanel.Dock="Top" Margin="8,8,8,4">
+                        <Button x:Name="BtnCompleteGuide" Padding="8,6" Background="#FF1E1D34"
+                                Foreground="#FFF5F0E1" BorderBrush="#FF6B6890" Cursor="Hand"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                            <TextBlock Text="{loc:Str first_show_completeGuide}"/>
+                        </Button>
+                    </StackPanel>
+
                     <!-- the pager -->
                     <Grid DockPanel.Dock="Bottom" Height="44" Background="#FF1E1D34">
                         <Grid.ColumnDefinitions>

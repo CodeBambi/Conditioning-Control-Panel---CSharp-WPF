@@ -407,6 +407,8 @@ namespace ConditioningControlPanel
             CoreQuests.PatreonVerifyingProvider = () => Patreon?.IsVerifying;
             CoreQuests.SubscribeStarVerifyingProvider = () => SubscribeStar?.IsVerifying == true;
             CoreQuests.UseStreakShieldProvider = () => SkillTree?.UseStreakShield() == true;
+            CoreQuests.HasStreakShieldProvider = () => SkillTree?.HasSkill("good_girl_streak") == true
+                && Settings?.Current?.StreakShieldsRemaining > 0;
             CoreQuests.CheckPerfectWeekBonusProvider = () => SkillTree?.CheckPerfectWeekBonus() ?? 0;
             CoreQuests.TrackProgramVerifierProvider = (category, amount) => Programs?.TrackVerifier(category, amount);
             CoreQuests.PlayCompletionEffectsProvider = () =>
@@ -436,6 +438,10 @@ namespace ConditioningControlPanel
                 Enum.TryParse<Services.NotificationType>(kind, out var t) ? t : Services.NotificationType.Info,
                 duration);
             CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
+            Services.Invites.InviteRewards.UnlockedProvider = () => Achievements?.Progress?.UnlockedAchievements;
+            Services.Invites.InviteRewards.TryUnlockProvider = id => Achievements?.TryUnlock(id) == true;
+            Services.Invites.InviteApi.DefaultIdentity = Services.BackRoom.BackRoomApi.AppIdentity;
+            Services.Invites.InviteApi.DefaultBaseUrl = () => Services.BackRoom.BackRoomApi.BaseUrl;
             Services.WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
             CoreProgram.ActivePackVideoCountProvider = () => ContentPacks?.GetAllActivePackVideos().Count ?? 0;
             CoreProgram.RoadmapProvider = () => Roadmap;
