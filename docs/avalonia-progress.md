@@ -1442,3 +1442,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-feature-intro: +219
 - win-feature-intro: cards now yield to a startup modal or update dialog; tour callers wired on 10 tab cases plus the Dashboard launch (daily-free / one-account) via StartupLadder; 4 fail-proven tests; row stays stub with the missing callers listed.
 - Test profile marks every intro key as spent, so a card no longer leaks across shell tests and holds passive surfaces in later ones.
+
+## avalonia-port/rows-content-dialogs: +332
+- Tube Personality submenu with the CCBill explicit-content acknowledgement gate; content-policy warning on the moderation counter; both rows stub -> wired.
+- TubeContentGatesTests (fail-proven x4); other acknowledgement callers still head-blocked.
