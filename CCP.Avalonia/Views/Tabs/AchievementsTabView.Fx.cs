@@ -4,7 +4,6 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Controls.Primitives;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Controls;
@@ -22,7 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     public partial class AchievementsTabView
     {
         // WPF AchievementTiltDegrees/Ms, MotionFx HoverLiftScale/HoverMs/StaggerMs/StaggerCap, EventFx Achievement*.
-        private const double TiltDegrees = 0.8, LiftScale = 1.02, RevealScale = 1.08, RevealBlur = 15, BurstBox = 560;
+        private const double TiltDegrees = 0.8, LiftScale = 1.02, RevealScale = 1.08, RevealBlur = 15;
         private const int TiltMs = 160, HoverMs = 150, StaggerMs = 40, StaggerCap = 6, RevealMs = 320, BurstCount = 95;
 
         internal static TimeProvider Time = TimeProvider.System;
@@ -39,11 +38,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private readonly List<Tween> _tweens = new();
         private DispatcherTimer? _fxTimer;
-        private AmbientFxCanvas? _burstLayer;
+        private readonly EventBurstLayer _burst = new();
 
         /// <summary>Test hooks: the clock is live, and how many unlock bursts were emitted.</summary>
         internal bool FxRunning => _fxTimer?.IsEnabled == true;
-        internal int Bursts { get; private set; }
+        internal int Bursts => _burst.Count;
 
         private static double QuadOut(double t) => 1 - (1 - t) * (1 - t);
 
@@ -148,26 +147,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Animate(t.CardScale, RevealScale, 1, RevealMs, v => t.CardScale.ScaleX = t.CardScale.ScaleY = v, BackOut);
         }
 
-        /// <summary>WPF FireBurstAt: a fixed 560 px canvas moved so its centre sits on the tile, on a window-wide
-        /// layer (the window's overlay layer, as WPF's EventFxHost spans the window). Refused like WPF EventFxAllowed
-        /// (EventFx.cs:118-126): particles allowed, anchor shown, window visible, not minimised and active.</summary>
-        private void Burst(Control anchor)
-        {
-            if (!Env.AllowParticles || !anchor.IsEffectivelyVisible || anchor.Bounds.Width <= 0) return;
-            if (TopLevel.GetTopLevel(this) is not Window { IsVisible: true, IsActive: true } w || w.WindowState == WindowState.Minimized) return;
-            if (OverlayLayer.GetOverlayLayer(anchor) is not { } host) return;
-            if (anchor.TranslatePoint(new Point(anchor.Bounds.Width / 2, anchor.Bounds.Height / 2), host) is not { } at) return;
-            if (_burstLayer == null || _burstLayer.Parent != host)
-            {
-                (_burstLayer?.Parent as Panel)?.Children.Remove(_burstLayer!);
-                _burstLayer ??= new AmbientFxCanvas { Width = BurstBox, Height = BurstBox, IsHitTestVisible = false };
-                host.Children.Add(_burstLayer);
-            }
-            Canvas.SetLeft(_burstLayer, at.X - BurstBox / 2);
-            Canvas.SetTop(_burstLayer, at.Y - BurstBox / 2);
-            _burstLayer.UpdateLayout();
-            _burstLayer.Burst(BurstBox / 2, BurstBox / 2, Env.GlowColor, BurstCount);
-            Bursts++;
-        }
+        /// <summary>WPF FireBurstAt on the tile centre (see <see cref="EventBurstLayer"/>).</summary>
+        private void Burst(Control anchor) => _burst.Fire(anchor, BurstCount);
     }
 }
