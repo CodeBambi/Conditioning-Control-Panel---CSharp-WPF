@@ -1446,3 +1446,19 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-content-dialogs: +332
 - Tube Personality submenu with the CCBill explicit-content acknowledgement gate; content-policy warning on the moderation counter; both rows stub -> wired.
 - TubeContentGatesTests (fail-proven x4); other acknowledgement callers still head-blocked.
+
+## avalonia-port/rows-settings-data: +296
+- Settings · Data offline mode stops the heartbeat and greys the login and browser controls like WPF, including at startup; views-settings-data stub→wired.
+- Phrase import uses WPF's Import/Cancel confirm, with Enter on Cancel (supervisor decision).
+
+## avalonia-port/rows-grace-pause: +117
+- win-grace-pause-overlay stub -> wired: Resume is a keyboard-reachable Button pill (0.85/0.7), the countdown/auto-resume run on a TimeProvider, and the panic key is tunnel-routed so it beats a focused Resume (supervisor-approved)
+- Headless test covers Esc -> card -> Tab+Enter, mouse hover/press/click, 60 s auto-resume, and panic key Enter beating Resume, each check fail-proven
+
+## avalonia-port/rows-emi-windows: +325
+- EmiDesk ring: Core EmiRingLayout (git mv, tests now on Linux), card art plus icon plates, shipped pixel font, ring sounds on open/close; click/hover pat sound and pat count.
+- Options/ring live Keincheck run recorded; rows still stub with exact remaining lists.
+
+## avalonia-port/rows-haptics-setup: +70
+- win-haptics-setup stub -> wired: a headless test drives the wizard from the Studio rack (Mock: gate refusal, connect, device list, Done, Test buzz, page re-read), fail-proven on 5 breaks; no product code changed.
+- Live sandbox run: premium veil matches WPF; with the veil lifted the gated connect is shown, and settings.json records Provider=Mock (evidence/rows-haptics-setup).
