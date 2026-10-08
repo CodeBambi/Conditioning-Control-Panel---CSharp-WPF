@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Controls.AppSettings;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
@@ -40,6 +41,7 @@ public sealed class AudioSettingsTests
             s.AudioDuckingEnabled = true; s.ExcludeBambiCloudFromDucking = true;
             s.AudioOutputDeviceId = "stale-id"; s.AudioOutputDeviceName = "usb headset";   // WPF falls back to the name
             s.Haptics.AudioSync.Enabled = true; s.Haptics.AudioSync.ManualLatencyOffsetMs = -40;
+            var (oldEnumerate, oldShow, oldPlay) = (AudioSettingsBinder.Enumerate, AudioSettingsBinder.ShowDiagnostics, CoreAudio.PlayOneShotProvider);
             AudioSettingsBinder.Enumerate = () => new[] { Default, Headset };
             string? shown = null;
             var dialog = new TaskCompletionSource();
@@ -105,15 +107,66 @@ public sealed class AudioSettingsTests
                 Assert.StartsWith("=== Audio Diagnostics ===", shown);
                 Assert.Contains("Audio device: OK (USB Headset)", shown);
                 Assert.Contains("Master Volume: 64%", shown);
+                Assert.NotEmpty(played);
                 Assert.All(played, p => Assert.Equal(0.5f, p.Volume));
+
+                // The "?" opens the Audio help card, as WPF MainWindow.Presets.cs:54.
+                var help = A<Button>("HelpBtnAudio");
+                Click(help);
+                Assert.True(HelpPopover.IsPinned(help));
+                Assert.Contains(Descendants(HelpPopover.PopupContent(help)!).OfType<TextBlock>(),
+                    t => t.Text == HelpContentService.GetContent("Audio").Title);
+                HelpPopover.CloseActive();
             }
             finally
             {
                 shell.Close();
                 CoreSettings.ServiceProvider = null;
+                (AudioSettingsBinder.Enumerate, AudioSettingsBinder.ShowDiagnostics, CoreAudio.PlayOneShotProvider) = (oldEnumerate, oldShow, oldPlay);
             }
         });
     }
+
+    [Fact]
+    public void UntickingDashboardDuckRestoresDuckedAppsNow()
+    {
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var service = new SettingsService();
+            CoreSettings.ServiceProvider = () => service;
+            CoreSettings.Current.AudioDuckingEnabled = true;
+            CoreSettings.Current.MasterVolume = 50;
+            var oldInstance = LibVlcAudio.Instance;
+            var audio = new LibVlcAudio(_ => "[]");   // pactl stubbed: no sink-inputs, no real mixer
+            LibVlcAudio.Instance = audio;
+            var shell = new MainShellWindow();
+            try
+            {
+                shell.Show();
+                Dispatcher.UIThread.RunJobs();
+                var duck = shell.Named<SettingsTabView>("SettingsTab")!.FindControl<CheckBox>("HomeChkAudioDuck")!;
+                Assert.True(duck.IsChecked);
+                audio.Duck(80);
+                Assert.True(audio.IsDucked);
+                duck.IsChecked = false;
+                Assert.False(audio.IsDucked);
+                audio.Drain();
+            }
+            finally
+            {
+                shell.Close();
+                LibVlcAudio.Instance = oldInstance;
+                CoreSettings.ServiceProvider = null;
+            }
+        });
+    }
+
+    private static IEnumerable<global::Avalonia.Visual> Descendants(global::Avalonia.Visual v) =>
+        global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(v);
 
     [Fact]
     public void SinksEnumerateAfterTheSystemDefaultAndOnlyALiveSavedDeviceIsApplied()

@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         private readonly Func<string, string> _pactl = Pactl;
 
         /// <summary>The seeded instance, so App can restore ducked apps on exit.</summary>
-        internal static LibVlcAudio? Instance { get; private set; }
+        internal static LibVlcAudio? Instance { get; set; }
 
         /// <summary>The process's one LibVLC, shared with video (MiniPlayerWindow), as WPF shares
         /// VideoService.SharedLibVLC. Null when libvlc did not load.</summary>
