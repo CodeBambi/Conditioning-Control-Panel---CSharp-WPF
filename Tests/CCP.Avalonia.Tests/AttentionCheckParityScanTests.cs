@@ -17,22 +17,32 @@ public sealed class AttentionCheckParityScanTests
     public void WpfNeverStartsTheAttentionCheck()
     {
         var start = new Regex(@"AttentionCheck\??\.(Start|FireNow)\s*\(");
-        var hits = Code("ConditioningControlPanel").Where(f => start.IsMatch(f.code)).Select(f => f.path).ToList();
-        Assert.True(hits.Count == 0, "WPF now starts AttentionCheckService; port it to Avalonia: " + string.Join(", ", hits));
+        // An alias (var ac = App.AttentionCheck; ac.Start()) would dodge the call pattern, so also pin
+        // WHO may touch the service at all: its own file, App (constructs it) and BarkService (events).
+        var touch = new Regex(@"App\.AttentionCheck\b|\bAttentionCheckService\b");
+        string[] allowed = { "AttentionCheckService.cs", "App.xaml.cs", "BarkService.cs" };
+        var hits = Code("ConditioningControlPanel")
+            .Where(f => !f.path.EndsWith("AttentionCheckService.cs") && start.IsMatch(f.code)
+                     || touch.IsMatch(f.code) && !allowed.Contains(Path.GetFileName(f.path)))
+            .Select(f => f.path).ToList();
+        Assert.True(hits.Count == 0, "WPF may now start AttentionCheckService; port it to Avalonia: " + string.Join(", ", hits));
     }
 
     [Fact]
     public void AvaloniaNeverShowsTheAttentionCheckRing()
     {
-        var hits = Code("CCP.Avalonia").Where(f => f.code.Contains("new AttentionCheckControl")).Select(f => f.path).ToList();
+        // Any construction (new X(), X x = new(), or an .axaml element) outside the control's own files.
+        var use = new Regex(@"new\s+AttentionCheckControl\b|AttentionCheckControl\s+\w+\s*=\s*new\s*\(|<\w+:AttentionCheckControl\b");
+        var hits = Code("CCP.Avalonia", "*.cs").Concat(Code("CCP.Avalonia", "*.axaml"))
+            .Where(f => use.IsMatch(f.code)).Select(f => f.path).ToList();
         Assert.True(hits.Count == 0, "WPF never shows the attention-check ring: " + string.Join(", ", hits));
     }
 
     private static readonly Regex CommentsAndStrings =
-        new(@"//[^\n]*|/\*.*?\*/|@""(?:""""|[^""])*""|""(?:\\.|[^""\\\n])*""", RegexOptions.Singleline);
+        new(@"//[^\n]*|/\*.*?\*/|@""(?:""""|[^""])*""|""(?:\\.|[^""\\\n])*""|'(?:\\.|[^'\\\n])'", RegexOptions.Singleline);
 
-    private static (string path, string code)[] Code(string project) =>
-        Directory.EnumerateFiles(Path.Combine(RepoRoot(), project), "*.cs", SearchOption.AllDirectories)
+    private static (string path, string code)[] Code(string project, string glob = "*.cs") =>
+        Directory.EnumerateFiles(Path.Combine(RepoRoot(), project), glob, SearchOption.AllDirectories)
             .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                      && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
             .Select(p => (p, CommentsAndStrings.Replace(File.ReadAllText(p), "")))
