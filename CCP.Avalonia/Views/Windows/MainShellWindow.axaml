@@ -209,6 +209,59 @@
     </Window.Resources>
 
     <Grid x:Name="RootGrid">
+    <!-- THE SECTION EDGE (WPF 7.1.5 nav polish 9 + 11; MainShellWindow.SectionEdge.cs paints it).
+         Outside the Viewbox, so it lives in native window pixels like WPF's SectionEdgeHost.
+         The 3 px frame (GlassWindowEdge, CornerRadius 8 = the DWMWCP_ROUND corner) and a faint
+         band fading 28 px into the window wear the SECTION hue (Core NavStripRules.Accent via
+         SectionEdgeRules), never the mod accent. Authored in Home's Lilac so the first frame never
+         flashes another hue. EdgeParticles = four fog/ember strips on AmbientFxCanvas (only when
+         the motion level and tier allow); SectionEdgeLift = the travelling lift on four separate
+         3 px strips (never a transform on the full-window border). ZIndex 9997: under EventFxHost
+         (9998) and the fullscreen browser overlay (9999). No Effect anywhere: plain gradients. -->
+    <Grid x:Name="SectionEdgeHost" ZIndex="9997" IsHitTestVisible="False" Loaded="SectionEdgeHost_Loaded">
+        <Grid x:Name="SectionEdgeGlow" IsHitTestVisible="False">
+            <Rectangle x:Name="SectionEdgeBandTop" Height="28" VerticalAlignment="Top" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0" Color="#32B79CFF"/>
+                        <GradientStop Offset="0.45" Color="#15B79CFF"/>
+                        <GradientStop Offset="1" Color="#00B79CFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle x:Name="SectionEdgeBandBottom" Height="28" VerticalAlignment="Bottom" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                        <GradientStop Offset="0" Color="#32B79CFF"/>
+                        <GradientStop Offset="0.45" Color="#15B79CFF"/>
+                        <GradientStop Offset="1" Color="#00B79CFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle x:Name="SectionEdgeBandLeft" Width="28" HorizontalAlignment="Left" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                        <GradientStop Offset="0" Color="#32B79CFF"/>
+                        <GradientStop Offset="0.45" Color="#15B79CFF"/>
+                        <GradientStop Offset="1" Color="#00B79CFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle x:Name="SectionEdgeBandRight" Width="28" HorizontalAlignment="Right" IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="100%,0%" EndPoint="0%,0%">
+                        <GradientStop Offset="0" Color="#32B79CFF"/>
+                        <GradientStop Offset="0.45" Color="#15B79CFF"/>
+                        <GradientStop Offset="1" Color="#00B79CFF"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+        </Grid>
+        <nav:EdgeParticles x:Name="SectionEdgeParticles"/>
+        <Border x:Name="GlassWindowEdge" BorderThickness="3" CornerRadius="8" IsHitTestVisible="False"
+                BorderBrush="#E6B79CFF"/>
+        <nav:SectionEdgeLift x:Name="SectionEdgeLift"/>
+    </Grid>
     <!-- Viewbox scales all content with window size. WPF is always Fill; here Fill holds only
          while the window is within 15% of the 1585:901 canvas aspect (every 16:10-16:9
          landscape screen), and Uniform - centred, top-aligned, DarkerBgBrush bands - outside it,
@@ -2801,14 +2854,8 @@
         </Border>
     </Grid>
 
-    <!-- 2026-08-13: accent window frame. A 3px edge so the app pops off the desktop instead
-         of melting into whatever sits behind it. Rides PinkBrush = the mod accent, so it
-         re-tints with the mod. CornerRadius matches the DWMWCP_ROUND corner DWM already
-         clips the window to. Below EventFxHost (9998) and the fullscreen browser overlay
-         (9999) on purpose. -->
-    <Border x:Name="GlassWindowEdge" Grid.RowSpan="6" Grid.ColumnSpan="2" ZIndex="9997"
-            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3" CornerRadius="8"
-            IsHitTestVisible="False"/>
+    <!-- The accent window frame (GlassWindowEdge) moved into SectionEdgeHost at the top of
+         RootGrid: WPF 7.1.5 nav polish 9, it wears the SECTION hue, not the mod accent. -->
 
     <!-- THE FUSE's corner readout (CONTRACT-FUSE-0816 2.2). From T-1h the T-minus stops being a
          hover reward and becomes a thing in the room: a small clock in the corner that does not go
