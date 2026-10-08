@@ -477,10 +477,12 @@ namespace ConditioningControlPanel.Avalonia.Controls
             if (_visibilityHost != null) return;
             _visibilityHost = _adorned;
             _visibilityWatch = EffectiveVisibility.Watch(_adorned, OnAdornedVisibilityChanged);
+            AmbientFxCanvas.Env.MotionGateChanged += OnAdornedVisibilityChanged;   // live motion kill-switch
         }
 
         private void UnhookVisibility()
         {
+            if (_visibilityHost != null) AmbientFxCanvas.Env.MotionGateChanged -= OnAdornedVisibilityChanged;
             _visibilityHost = null;
             _visibilityWatch?.Dispose();
             _visibilityWatch = null;
