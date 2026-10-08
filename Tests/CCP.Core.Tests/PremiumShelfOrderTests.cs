@@ -57,12 +57,13 @@ public class PremiumShelfOrderTests
         Assert.Equal(PremiumGroup.Prime, groups[0].Group);
     }
 
-    [Theory]
-    [InlineData(true, null, RemoteSubAddOutcome.Added)]
-    [InlineData(false, null, RemoteSubAddOutcome.NotCarried)]
-    [InlineData(false, "offline", RemoteSubAddOutcome.Unreachable)]
-    [InlineData(false, "invalid", RemoteSubAddOutcome.NotAName)]
-    [InlineData(false, "timeout", RemoteSubAddOutcome.Unreachable)]
-    public void A_sub_probe_reads_as_one_outcome(bool ok, string? error, RemoteSubAddOutcome expected)
-        => Assert.Equal(expected, RemoteSubAddMessages.Classify(ok, error));
+    [Fact]
+    public void A_sub_probe_reads_as_one_outcome()
+    {
+        Assert.Equal(RemoteSubAddOutcome.Added, RemoteSubAddMessages.Classify(true, null));
+        Assert.Equal(RemoteSubAddOutcome.NotCarried, RemoteSubAddMessages.Classify(false, null));
+        Assert.Equal(RemoteSubAddOutcome.Unreachable, RemoteSubAddMessages.Classify(false, "offline"));
+        Assert.Equal(RemoteSubAddOutcome.NotAName, RemoteSubAddMessages.Classify(false, "invalid"));
+        Assert.Equal(RemoteSubAddOutcome.Unreachable, RemoteSubAddMessages.Classify(false, "timeout"));
+    }
 }
