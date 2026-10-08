@@ -364,12 +364,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ApplyLive(int index = -1)
         {
             CoreSettings.Save();
-            // Where the overlay goes is CornerGifPlanner's answer now, and it is the same on every
-            // head. Raising the window is not: CoreCornerGif is the surface seam, seeded by the WPF
-            // head to App.CornerGif and UNSEEDED here until this head's overlay surface lands
-            // (CCP.Avalonia/Views/Overlays/), so this call is a deliberate no-op on Linux. The save
-            // above is the live part - the slot is correct on disk and shows the moment a surface
-            // exists.
+            // CoreCornerGif is seeded to Views/Overlays/CornerGifOverlay (App startup).
             CoreCornerGif.Refresh(index);
         }
     }

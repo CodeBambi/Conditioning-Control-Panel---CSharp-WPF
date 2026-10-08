@@ -238,11 +238,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 counter.CooldownStarted += end => Dispatcher.UIThread.Post(() => OnCooldownStarted(end));
                 counter.CooldownEnded += () => Dispatcher.UIThread.Post(OnCooldownEnded);
             }
+            WireContentPolicyWarning();   // the warning half (AvatarTubeWindow.ContentGates.cs)
 
             _avatarBorder.PointerPressed += OnAvatarPointerPressed;
             this.FindControl<Border>("BtnPrevAvatar")!.PointerPressed += (_, _) => SelectAvatarSet(-1);
             this.FindControl<Border>("BtnNextAvatar")!.PointerPressed += (_, _) => SelectAvatarSet(+1);
-            this.FindControl<ContextMenu>("AvatarContextMenu")!.Opened += (_, _) => UpdateQuickMenuState();
+            this.FindControl<ContextMenu>("AvatarContextMenu")!.Opened += (_, _) => { UpdateQuickMenuState(); PopulatePersonalityMenu(); };
 
             // Pose switching for static avatars. ApplyAvatarSet below starts it only when more than
             // one pose actually loaded - a set that ships one PNG has nothing to rotate between.
@@ -330,6 +331,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (OpenChatSink == (Action)OpenChatInput) OpenChatSink = null;
             ReleaseWindowing();
             DetachAwareness();
+            UnwireContentPolicyWarning();
 
             // Every timer this window starts is stopped here. --render-all constructs ~180 windows
             // in one process, and a tick against a torn-down visual tree is exactly the flaky
@@ -1606,7 +1608,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             //
             // What is missing is the OTHER half: not one of these MenuItems has a Click handler on
             // this head, because every action behind them - MainWindow's engine start/stop, the
-            // Takeover gate, the personality submenu, the browser pause, App.RemoteControl's emote
+            // Takeover gate, the browser pause, App.RemoteControl's emote
             // send - is head-side. Retitling an item to "STOP ENGINE" in red while clicking it does
             // nothing is strictly worse than the static label it carries now: the menu would report
             // live state it cannot act on. Restore the labels WITH their handlers, not before.
@@ -1614,7 +1616,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // ponytail: needs MainWindow.StartEngine / StopEngine with ChatInput.cs's #479 guards
             // (IsEngineStopLocked plus App.Lockdown.NotifyEscapeAttempt - the tube's Stop is the
             // same escape as main's and must count the same), App.Patreon.HasPremiumAccess,
-            // App.RemoteControl.ControllerConnected, and ChatInput.cs's PopulatePersonalityMenu.
+            // App.RemoteControl.ControllerConnected. (The personality submenu is live: AvatarTubeWindow.ContentGates.cs.)
             //
             // The Mute item is the one that LOOKS free - IsMuted already reads
             // CoreSettings.Current.AvatarMuted and GigglePriority honours it, so a two-line flip

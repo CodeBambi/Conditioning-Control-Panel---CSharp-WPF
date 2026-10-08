@@ -28,9 +28,7 @@
 
     <!-- Wizard v2: this used to be a read-only slideshow. It now WRITES the v2 provider
          flags + the Lovense address and runs the real Connect, with live progress, the
-         resulting device list and an actionable error. On this head the writing and the
-         connecting are stubs (see the code-behind); the three pages, the chrome and the
-         device list are what is proved here. -->
+         resulting device list and an actionable error. -->
     <Border CornerRadius="12" Background="{DynamicResource DarkerBgBrush}"
             BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="2">
         <Grid RowDefinitions="Auto,*,Auto">

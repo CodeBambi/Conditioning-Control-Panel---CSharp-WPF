@@ -327,7 +327,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // title, glyph and the topic blurb). LaunchTutorial is the other branch and is wired
             // now, so the fallback is live rather than a dead button.
             var content = Services.HelpContentService.GetContent("Modding");
-            if (content.HasClip)
+            if (content.HasClip || ConditioningControlPanel.Avalonia.Controls.HelpLoops.HelpLoopRegistry.Has(content.SectionId))
             {
                 HelpVideoWindow.Show(content, this);
                 return;
