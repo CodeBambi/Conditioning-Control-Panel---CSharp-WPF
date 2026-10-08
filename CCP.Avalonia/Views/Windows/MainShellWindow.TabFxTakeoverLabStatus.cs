@@ -218,7 +218,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                bool run = req.Wanted && dot.IsVisible && Pr4aAmbientAllowed;
+                bool run = req.Wanted && dot.IsEffectivelyVisible && Pr4aAmbientAllowed;
 
                 if (!run)
                 {

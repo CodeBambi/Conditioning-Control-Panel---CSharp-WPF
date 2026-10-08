@@ -407,9 +407,11 @@ public sealed class BlinkTrainerSessionTests
                 shell.ShowTab("settings");
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(tab.CountdownTicking);
+                Assert.Null(dot.Effect);   // a hidden tab's dot does not breathe (IsEffectivelyVisible)
                 shell.ShowTab("blinktrainer");
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(tab.CountdownTicking);
+                Assert.IsType<global::Avalonia.Media.DropShadowEffect>(dot.Effect);
 
                 BlinkTrainerSession.Stop();
                 Dispatcher.UIThread.RunJobs();
