@@ -77,7 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF MainWindow.UiUpdates.cs:1730. Its punch-card tip is gated on
-        /// IntakePunchCardService.UiEnabled, a const false, so it is left out.</summary>
+        /// IntakePunchCardService.UiEnabled, a static readonly false, so it is left out.</summary>
         private static HelpContent BuildIntakePassHelpContent() => new()
         {
             SectionId = "IntakePass",

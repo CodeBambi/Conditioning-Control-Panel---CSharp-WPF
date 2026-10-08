@@ -22,7 +22,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             _ = new AudioSettingsBinder(this, SliderMaster, TxtMaster, SliderVideoVolume, TxtVideoVolume,
                 ChkAudioDuck, SliderDuck, TxtDuck, ChkExcludeBambiCloudDucking, CmbAudioOutputDevice,
                 BtnAudioOutputRefresh, BtnTestAudio);
-            HelpPopover.Attach(HelpBtnAudio, HelpContentService.GetContent("Audio")); // WPF MainWindow.Presets.cs:54
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
