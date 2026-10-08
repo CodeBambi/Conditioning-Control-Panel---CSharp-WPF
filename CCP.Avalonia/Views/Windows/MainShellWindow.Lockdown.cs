@@ -31,14 +31,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             void Refresh() => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 if (Named<global::Avalonia.Controls.Button>("BtnBackToLauncher") is { } door) door.IsEnabled = !LockdownActive;
+                // WPF SetLockdownBadge (Lab.cs:672/753/794): the badge shows for the whole run, seeded.
+                if (Named<global::Avalonia.Controls.Border>("LockdownBadge") is { } badge) badge.IsVisible = LockdownActive;
+                PaintLockdownBadge();
             });
+            // WPF OnLockdownTick (Lab.cs:771) and OnLockdownTimerRestarted (Lab.cs:1039): the badge
+            // clock follows the page clock, through the same HideLockdownTimer mask.
+            void Tick(System.TimeSpan _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(PaintLockdownBadge);
+            void Restarted(string _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(PaintLockdownBadge);
             if (LockdownService.Current is { } ld)
             {
                 ld.LockdownActivated += Refresh;
                 ld.LockdownDeactivated += Refresh;
-                Closed += (_, _) => { ld.LockdownActivated -= Refresh; ld.LockdownDeactivated -= Refresh; };
+                ld.CountdownTick += Tick;
+                ld.TimerRestarted += Restarted;
+                Closed += (_, _) =>
+                {
+                    ld.LockdownActivated -= Refresh; ld.LockdownDeactivated -= Refresh;
+                    ld.CountdownTick -= Tick; ld.TimerRestarted -= Restarted;
+                };
             }
             Refresh();
+        }
+
+        /// <summary>WPF FormatLockdownClock for the badge: only while a lockdown runs (WPF seeds it on
+        /// activate and leaves it alone once hidden).</summary>
+        private void PaintLockdownBadge()
+        {
+            if (LockdownService.Current is not { IsActive: true } ld) return;
+            if (Named<global::Avalonia.Controls.TextBlock>("TxtLockdownBadgeTime") is { } t)
+                t.Text = SessionClockLabel.LockdownClock(ld.Remaining, CoreSettings.Current.HideLockdownTimer);
+        }
+
+        /// <summary>P17: the badge is a Border (as on WPF), so Enter/Space give it the click.</summary>
+        private void LockdownBadge_KeyDown(object? sender, global::Avalonia.Input.KeyEventArgs e)
+        {
+            if (e.Key is not (global::Avalonia.Input.Key.Enter or global::Avalonia.Input.Key.Space)) return;
+            e.Handled = true;
+            ShowTab("lockdown");
         }
 
         /// <summary>WPF StartStop.cs:45: under Lockdown a Stop (button, tray Stop everything) is
