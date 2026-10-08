@@ -1489,3 +1489,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-pink-rush: +341
 - win-pink-rush stub -> wired: engine- or session-armed 10-min roll, 60 s 3x XP (Core PinkRushRules shared with WPF), popup + wash; panic/engine stop end it.
 - PinkRushTests, 8 fail-proofs (logged); no live rush (random 10-min trigger).
+
+## avalonia-port/rows-attention-check: +60
+- ctrl-attention-check: WPF never starts AttentionCheckService, so the ring stays unshown on both heads. A parity scan test (fail-proven both ways) pins this. Row stays stub with corrected notes.
