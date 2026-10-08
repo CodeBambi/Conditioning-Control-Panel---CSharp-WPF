@@ -148,6 +148,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>WPF FireBurstAt on the tile centre (see <see cref="EventBurstLayer"/>).</summary>
-        private void Burst(Control anchor) => _burst.Fire(anchor, BurstCount);
+        private void Burst(Control anchor) => _burst.Fire(anchor, BurstCount, color: Env.GlowColor);
     }
 }

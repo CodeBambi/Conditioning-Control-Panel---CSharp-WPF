@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Media;
 using Env = ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env;
 
 namespace ConditioningControlPanel.Avalonia.Controls
@@ -20,10 +21,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
         internal int Count { get; private set; }
 
         /// <summary>Bursts <paramref name="count"/> sparks on <paramref name="anchor"/>'s centre, or on its right
-        /// edge (FxBurstSpot.RightEdge: the cap of a bar that just filled). False when refused.</summary>
-        internal bool Fire(Control anchor, int count, bool rightEdge = false)
+        /// edge (FxBurstSpot.RightEdge: the cap of a bar that just filled), in <paramref name="color"/> (null: the
+        /// theme particle colour, as WPF FireBurstAt(color: null)). False when refused.</summary>
+        internal bool Fire(Control anchor, int count, bool rightEdge = false, Color? color = null)
         {
-            if (!Env.AllowParticles || !anchor.IsEffectivelyVisible || anchor.Bounds.Width <= 0) return false;
+            if (!Env.AllowParticles || !anchor.IsEffectivelyVisible || anchor.Bounds.Width <= 0 || anchor.Bounds.Height <= 0) return false;
             if (TopLevel.GetTopLevel(anchor) is not Window { IsVisible: true, IsActive: true } w || w.WindowState == WindowState.Minimized) return false;
             if (OverlayLayer.GetOverlayLayer(anchor) is not { } host) return false;
             var spot = new Point(rightEdge ? anchor.Bounds.Width : anchor.Bounds.Width / 2, anchor.Bounds.Height / 2);
@@ -37,7 +39,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             Canvas.SetLeft(_layer, at.X - Box / 2);
             Canvas.SetTop(_layer, at.Y - Box / 2);
             _layer.UpdateLayout();
-            _layer.Burst(Box / 2, Box / 2, Env.GlowColor, count);
+            _layer.Burst(Box / 2, Box / 2, color, count); // null = Env.ParticleColor, as WPF
             Count++;
             return true;
         }

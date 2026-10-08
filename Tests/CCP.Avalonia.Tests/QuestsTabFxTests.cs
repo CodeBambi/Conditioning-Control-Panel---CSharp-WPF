@@ -79,6 +79,19 @@ public sealed class QuestsTabFxTests
             Assert.Equal(-45, drift.Y, 3);
             At(7);                                              // t=17: leg over, held at 0 until the 24 s repeat
             Assert.Equal(0, drift.Y, 3);
+            Assert.Equal(1, view.ParticleScans);                // the tree is walked once, not every tick (P07)
+
+            // The roadmap's wide panel is templated only when its sub-tab opens; its particles join then.
+            view.FindControl<Button>("BtnQuestSubRoadmap")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            var wide = view.GetVisualDescendants().OfType<Canvas>().Single(c => Equals(c.Tag, "wide"))
+                .Children.OfType<Ellipse>().First();
+            At(4);                                              // t=21: wide particle 1 X (15 over 6 s) leg over -> 0; Y (-40 over 8 s) too
+            At(4);                                              // t=25 -> 1 s into the repeat: Y = -5
+            Assert.Equal(-5, Assert.IsType<TranslateTransform>(wide.RenderTransform).Y, 3);
+            Assert.Equal(2, view.ParticleScans);
+            view.FindControl<Button>("BtnQuestSubDaily")!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
 
             // Hidden: the clock stops and everything returns to the static look (P01).
             view.IsVisible = false;

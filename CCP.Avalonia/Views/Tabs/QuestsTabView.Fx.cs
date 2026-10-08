@@ -40,10 +40,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private DispatcherTimer? _ambient;
         private long _ambientStart;
         private bool _shimmering;
+        private bool _rescanParticles = true;
 
         /// <summary>Test hooks: the ambient clock is live; quest bursts fired.</summary>
         internal bool AmbientRunning => _ambient?.IsEnabled == true;
         internal int Bursts => _burst.Count;
+        internal int ParticleScans { get; private set; }
 
         /// <summary>Starts the clock when the tab is shown and attached, stops and resets it otherwise
         /// (WPF StopSeasonTitleShimmer / StopStoryboard revert to the base values).</summary>
@@ -53,7 +55,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (run == AmbientRunning) return;
             if (run)
             {
-                _particleCanvases.Clear();
+                _rescanParticles = true;
                 _ambientStart = Time.GetTimestamp();
                 _ambient ??= new DispatcherTimer(TimeSpan.FromMilliseconds(1000.0 / 24), DispatcherPriority.Render, (_, _) => StepAmbient());
                 _ambient.Start();
@@ -70,11 +72,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal void StepAmbient()
         {
             double t = Time.GetElapsedTime(_ambientStart).TotalSeconds;
-            // Templates apply on first measure, so the roadmap's panel appears only once that sub-tab is shown.
-            if (_particleCanvases.Count < 3)
+            // Templates apply on first measure, so the roadmap's panel appears only once that sub-tab is shown:
+            // rescan on start and when that panel's template lands (QuestsTabView ctor), never per tick (P07).
+            if (_rescanParticles)
             {
+                ParticleScans++;
                 _particleCanvases.Clear();
                 _particleCanvases.AddRange(this.GetVisualDescendants().OfType<Canvas>().Where(c => c.Classes.Contains("qparticles")));
+                _rescanParticles = _particleCanvases.Count == 0; // a tick before the first layout looks again
             }
             foreach (var c in _particleCanvases)
             {

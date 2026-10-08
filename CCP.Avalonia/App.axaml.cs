@@ -89,9 +89,13 @@ namespace ConditioningControlPanel.Avalonia
         /// the Haptics tab's "Quest complete" routing row decides how it feels.</summary>
         internal static void PlayQuestCompletionEffects()
         {
-            CoreAudio.PlayOneShot(
-                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "chime1.mp3"),
-                Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), "quest-complete");
+            try
+            {
+                CoreAudio.PlayOneShot(
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "chime1.mp3"),
+                    Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), "quest-complete");
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Quest chime failed: {E}", ex.Message); } // the haptic still posts
             _ = CoreHaptics.Service?.PostEvent(ConditioningControlPanel.Services.Haptics.Core.HapticEventKind.QuestComplete);
         }
 
