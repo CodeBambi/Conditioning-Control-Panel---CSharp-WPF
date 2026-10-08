@@ -468,7 +468,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 MainShellWindow.IsStartupDialogShowing = true;
                 wizard = new FirstRunWizard { ShellOwner = owner };
-                await wizard.ShowDialog(owner);
+                await wizard.ShowDialogSafe(owner);
             }
             catch (Exception ex)
             {

@@ -407,7 +407,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             e.Handled = true;
             var editor = new QuizCategoryEditorWindow(null);
-            if (await editor.ShowDialog<bool>(this) && editor.Result != null)
+            if (await editor.ShowDialogSafe<bool>(this) && editor.Result != null)
             {
                 QuizStore.SaveCustomCategory(editor.Result);
                 BuildCategoryButtons();
@@ -420,7 +420,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (sender is not Control el || el.Tag is not QuizCategoryDefinition catDef) return;
 
             var editor = new QuizCategoryEditorWindow(catDef);
-            if (await editor.ShowDialog<bool>(this))
+            if (await editor.ShowDialogSafe<bool>(this))
             {
                 if (editor.Result != null)
                     QuizStore.SaveCustomCategory(editor.Result);

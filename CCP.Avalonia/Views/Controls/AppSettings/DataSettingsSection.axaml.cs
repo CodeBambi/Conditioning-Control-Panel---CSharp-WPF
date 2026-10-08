@@ -86,7 +86,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     }
 
                     var dialog = new Dialogs.OfflineUsernameDialog();
-                    var ok = await dialog.ShowDialog<bool?>(owner);
+                    var ok = await dialog.ShowDialogSafe<bool?>(owner);
                     if (ok == true && !string.IsNullOrWhiteSpace(dialog.Username))
                     {
                         s.OfflineUsername = dialog.Username;
@@ -236,7 +236,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 Loc.Get("set2_reset_dialog1_title"),
                 Loc.Get("set2_reset_dialog1_body"),
                 Loc.Get("set2_reset_dialog1_confirm"));
-            await warning.ShowDialog(owner);
+            await warning.ShowDialogSafe(owner);
             if (!warning.Confirmed)
             {
                 Log.Information("[RESET] Factory reset cancelled at the warning dialog");
@@ -251,7 +251,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             var input = new Dialogs.InputDialog(
                 Loc.Get("set2_reset_dialog2_title"),
                 Loc.GetF("set2_reset_dialog2_prompt", keyword));
-            var accepted = await input.ShowDialog<bool?>(owner);
+            var accepted = await input.ShowDialogSafe<bool?>(owner);
             if (accepted != true ||
                 !string.Equals(input.ResultText?.Trim(), keyword, StringComparison.OrdinalIgnoreCase))
             {

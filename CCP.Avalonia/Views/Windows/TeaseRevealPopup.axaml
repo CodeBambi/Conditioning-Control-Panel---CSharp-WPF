@@ -5,7 +5,9 @@
        ResizeMode="NoResize"                    -> CanResize="False"
        Visibility="Collapsed"                   -> IsVisible="False"
        DropShadowEffect ShadowDepth="0"         -> dropped; Avalonia's effect has OffsetX/Y, both 0
-       DynamicResource on the shadow Color      -> StaticResource (SeasonRecapCard precedent)
+       DynamicResource on the shadow Color      -> StaticResource (old SeasonRecapCard precedent is gone:
+                                                   it repaints GradientStops dynamically, proven by
+                                                   SeasonRecapPortTests; effect colour untested)
        LinearGradient 0,0 -> 1,0                -> 0%,0% -> 100%,0%: bare numbers are ABSOLUTE
                                                    pixels in Avalonia, so the sheen would smear
        Button.Style + IsMouseOver/IsPressed     -> the TeaseDismiss ControlTheme below, with

@@ -23,12 +23,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// The page is served by <see cref="WebAssetServer"/> (WPF's https://ccp.game virtual host) and the
     /// user's asset library under its <see cref="WebAssetServer.AssetsPrefix"/> (WPF's ccp.assets).
     ///
+    /// loom-save, intake-save-image, need-remote, the speech bridge and the audio-web pack request
+    /// are in IntakeHostWindow.Bridge.cs.
     /// ponytail: not ported yet - heartbeat watchdog/relaunch, fullscreen-set, duck/restore main,
-    /// loom-save, intake-save-image, need-remote (remoteMedia=false), the speech bridge, the
-    /// bubble sprite / subliminal pool in init, ccp.content packs (no audio ships on this head), the
-    /// punch card. Next slices in ~/ccp-port/briefs/intake-plan.md.
+    /// the bubble sprite / subliminal pool in init, serving ccp.content (the pack is requested but
+    /// WebAssetServer has no content root), the EmiDesk intakeRunning hold (this head's
+    /// EmiDeskService has no Fire/ReleaseHold director), the punch card. Next slices in
+    /// ~/ccp-port/briefs/intake-plan.md.
     /// </summary>
-    internal sealed class IntakeHostWindow : Window
+    internal sealed partial class IntakeHostWindow : Window
     {
         private static readonly TimeSpan ExitWatchdog = TimeSpan.FromMilliseconds(1200);   // WPF ArmExitWatchdog
         private const int Protocol = 1;                                                     // WPF IntakeHostService.Protocol
@@ -48,6 +51,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Height = 800;
             Content = Web;
             Web.WebMessage += OnPageMessage;
+            // WPF DisposeAll: a closed window never leaves the mic open.
+            Opened += (_, _) => { lock (OpenWindows) OpenWindows.Add(this); };
+            Closed += (_, _) => { _closed = true; lock (OpenWindows) OpenWindows.Remove(this); StopSpeechBridge("closed", notifyPage: false); };
             // The page never leaves the served origin; anything else is refused before the engine loads it.
             Web.AllowNavigation = url => PageUrl != null && SameOrigin(url, PageUrl);
         }
@@ -55,6 +61,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF StartUrl https://ccp.game/intake/index.html, here on the loopback server.</summary>
         internal void Load(WebAssetServer server)
         {
+            RequestAudioPack(App.ReleaseContent);   // WPF Launch: kicked, never awaited
             PageUrl = new Uri(server.Url("intake/index.html"));
             AssetsBase = $"{PageUrl.GetLeftPart(UriPartial.Authority)}/{WebAssetServer.AssetsPrefix}";
             Web.Navigate(PageUrl);
@@ -114,6 +121,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     break;
                 case "exit-done":
                     Close();
+                    break;
+                case "loom-save":           // outro recap "Keep it" -> the Spirals library
+                    OnLoomSave(o);
+                    break;
+                case "intake-save-image":   // outro recap "Save PNG" -> intake_spirals/
+                    Post(SaveSpiralImage(o, SpiralImageFolder));
+                    break;
+                case "need-remote":         // the page's remote still pool is running low
+                    _ = ServeRemoteBatchAsync();
+                    break;
+                case "speech-start":
+                    OnSpeechStart(o);
+                    break;
+                case "speech-stop":
+                    OnSpeechStop(o);
                     break;
             }
         }
@@ -182,8 +204,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     priorRun = (object?)null,
                     m2Test = false,
                     micEnabled = settings.MicConsentGiven,
+                    speech = SpeechCaps(),
                     media,
-                    remoteMedia = false,
+                    remoteMedia = IntakeRun.RemoteMediaEnabled(settings),
                     subjectId = IntakeRun.SubjectId(CorePaths.UserData),
                     subliminals = (object?)null,
                 },
@@ -191,10 +214,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
         }
 
+        /// <summary>Every host -&gt; page frame, as sent (tests read the bridge from here).</summary>
+        internal event Action<string>? Posted;
+
         /// <summary>Host -&gt; page (WPF ChaosWebViewHost.Post): the page's string carrier entry point.</summary>
         internal void Post(object message)
         {
-            var literal = JsonConvert.SerializeObject(JsonConvert.SerializeObject(message));
+            var json = JsonConvert.SerializeObject(message);
+            Posted?.Invoke(json);
+            var literal = JsonConvert.SerializeObject(json);
             _ = Web.InvokeScriptAsync($"window.__ccpRnPush && window.__ccpRnPush({literal})");
         }
     }

@@ -77,7 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             try
             {
-                _ = new SessionCompleteWindow(row.Log, playSound: false).ShowDialog(this);
+                _ = new SessionCompleteWindow(row.Log, playSound: false).ShowDialogSafe(this);
             }
             catch (Exception ex)
             {

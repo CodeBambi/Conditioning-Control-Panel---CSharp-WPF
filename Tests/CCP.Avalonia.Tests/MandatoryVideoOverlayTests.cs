@@ -203,6 +203,18 @@ public sealed class MandatoryVideoOverlayTests
                     await Task.Delay(300);
                     shell.HandlePanicKeyPress(t0.AddSeconds(10));
                     Assert.False(v.IsPlaying, "override off: the second press stops it");
+                    // A game owns the screen (WPF MainWindow.xaml.cs:1710: closed before the #735 rung):
+                    // the press ends the game and stops the clip, never a grace pause.
+                    var surfaces = global::ConditioningControlPanel.Avalonia.Views.Windows.PanicSurfaces.All;
+                    global::ConditioningControlPanel.Avalonia.Views.Windows.PanicSurfaces.All = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Append(surfaces,
+                        new global::ConditioningControlPanel.Avalonia.Views.Windows.PanicSurfaces.Surface("test-game", _ => { }, () => true)));
+                    try
+                    {
+                        w = await Open(strict: false);
+                        shell.HandlePanicKeyPress(t0.AddSeconds(15));
+                        Assert.False(v.IsPlaying || o.GracePaused, "override off, game on screen: no grace pause");
+                    }
+                    finally { global::ConditioningControlPanel.Avalonia.Views.Windows.PanicSurfaces.All = surfaces; }
                     s.PanicOverridesAll = true;
                     w = await Open(strict: false);
                     shell.HandlePanicKeyPress(t0.AddSeconds(20));

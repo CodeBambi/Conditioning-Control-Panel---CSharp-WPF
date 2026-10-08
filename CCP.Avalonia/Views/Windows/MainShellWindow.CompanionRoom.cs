@@ -233,7 +233,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Loc.Get("label_daily_request_limit_hint"),
                 current);
 
-            if (await dialog.ShowDialog<bool>(this) != true) return;
+            if (await dialog.ShowDialogSafe<bool>(this) != true) return;
 
             var text = (dialog.ResultText ?? string.Empty).Trim();
             s.DailyRequestLimit = int.TryParse(text, out var value) && value > 0 ? value : 0;

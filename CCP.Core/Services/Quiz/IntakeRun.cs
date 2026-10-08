@@ -245,5 +245,77 @@ namespace ConditioningControlPanel.Services.Quiz
         public static bool LooksLikePng(byte[] b) =>
             b.Length > 8 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47
             && b[4] == 0x0D && b[5] == 0x0A && b[6] == 0x1A && b[7] == 0x0A;
+
+        // ---- remote media (WPF IntakeHostService "remote media (Phase 2, Contract 3)") ----
+        //   page -> host { type:'need-remote' }; host -> page { type:'assets-append', images } (when any)
+        //   then always { type:'online-status', ok, error, added } so the page clears its in-flight latch.
+
+        public const string RemoteConsumerId = "intake";
+        public const int RemoteBatchCap = 24;   // per reply; the page asks again if it wants more
+
+        /// <summary>True when remote media may appear anywhere in the app: <c>HasRemoteMediaConsent</c>,
+        /// never the raw consent flag.</summary>
+        public static bool RemoteMediaEnabled(AppSettings? s) =>
+            s != null && s.MediaSource != "local" && s.HasRemoteMediaConsent;
+
+        /// <summary>The intake's own tenant over the app-wide niche selection, stills only.</summary>
+        internal static Fyp.Online.FypOnlineCoordinator RemoteCoordinator() =>
+            Fyp.Online.FypOnlineCoordinator.For(RemoteConsumerId,
+                () => Fyp.Online.FypOnlineCoordinator.ResolveChannels(
+                    CoreSettings.Current.FypOnlineNiches, CoreSettings.Current.FypOnlineCustomSubs),
+                Fyp.Online.FeedMediaKind.Image);
+
+        /// <summary>Every entry re-checked as a still before it reaches the page, capped at
+        /// <see cref="RemoteBatchCap"/>.</summary>
+        internal static List<string> RemoteStills(IEnumerable<Fyp.FypAssetManifest.Entry> entries)
+        {
+            var urls = new List<string>();
+            foreach (var e in entries)
+            {
+                if (!Fyp.Online.RemoteMediaFormats.Validate(e, Fyp.Online.FeedMediaKind.Image, out var reason))
+                {
+                    Log.Debug("IntakeHost: rejected remote entry {Id}: {Reason}", e.Id, reason);
+                    continue;
+                }
+                urls.Add(e.Url);
+                if (urls.Count >= RemoteBatchCap) break;
+            }
+            return urls;
+        }
+
+        private const int MaxSpiralPngBase64Chars = 12 * 1024 * 1024;  // ~9MB decoded ceiling
+
+        /// <summary>
+        /// <c>intake-save-image { pngBase64, index }</c> - write one recap spiral as a PNG under
+        /// <paramref name="folder"/> (moved from WPF IntakeHostService.OnSaveSpiralImage). Validation is
+        /// authoritative here: base64 ceiling, PNG magic, and a filename built entirely here (the page
+        /// contributes only a clamped index), so nothing the page sends can steer the write out of the folder.
+        /// Error is one of the page-known codes too-big / bad-image / io-failed.
+        /// </summary>
+        public static (string? Path, string? Error) SaveSpiralImage(JObject o, string folder, DateTime now)
+        {
+            try
+            {
+                var b64 = (string?)o["pngBase64"];
+                if (string.IsNullOrEmpty(b64) || b64.Length > MaxSpiralPngBase64Chars) return (null, "too-big");
+
+                byte[] bytes;
+                try { bytes = Convert.FromBase64String(b64); }
+                catch { bytes = Array.Empty<byte>(); }
+                if (!LooksLikePng(bytes)) return (null, "bad-image");
+
+                Directory.CreateDirectory(folder);
+                var index = Math.Clamp((int?)o["index"] ?? 1, 1, 99);
+                var full = Path.Combine(folder, $"intake-spiral-{now:yyyyMMdd-HHmmss}-{index:D2}.png");
+                File.WriteAllBytes(full, bytes);
+                Log.Information("IntakeHostService: saved recap spiral -> {Path}", full);
+                return (full, null);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("IntakeHostService.OnSaveSpiralImage: {E}", ex.Message);
+                return (null, "io-failed");
+            }
+        }
     }
 }
