@@ -25,8 +25,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// and SubliminalLayer draws the most recent card only).</para>
     ///
     /// <para>Whisper audio, ducking, XP and the Bambi Freeze/Reset pair: <see cref="SubliminalWhisperShow"/>.
-    /// ponytail: not here yet - the haptic anticipation delay, SubliminalStealsFocus (always
-    /// no-activate here), the solid-mode shared host (same look, separate windows here).</para>
+    /// ponytail: not here yet - SubliminalStealsFocus (always no-activate here), the solid-mode
+    /// shared host (same look, separate windows here).</para>
     /// </summary>
     internal static class SubliminalOverlay
     {

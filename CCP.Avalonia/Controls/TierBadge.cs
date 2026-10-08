@@ -558,7 +558,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             try
             {
                 if (Tier <= 0 || !IsVisible) return;
-                if (IsLoaded && !IsEffectivelyVisible) return;
+                if (!IsLoaded || !IsEffectivelyVisible) return;
                 if (!AmbientAllowed) return;
 
                 _motionRunning = true;

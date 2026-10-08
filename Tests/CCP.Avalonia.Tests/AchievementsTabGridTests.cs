@@ -58,7 +58,8 @@ public sealed class AchievementsTabGridTests
                 string[] Texts(Control c) => c.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
                 var earned = Card("plastic_initiation");
                 Assert.Contains(Loc.Get("achievement_plastic_initiation_name"), Texts(earned));
-                Assert.Null(earned.GetVisualDescendants().OfType<Image>().First().Effect);
+                // The lock blur gives way to the reveal dissolve, which drops the effect as it lands (AchievementsTabFxTests).
+                Assert.True(earned.GetVisualDescendants().OfType<Image>().First().Effect is null || view.FxRunning);
                 Assert.DoesNotContain(earned.GetVisualDescendants().OfType<StackPanel>(), p => p.Name == "Meter");
                 var locked = Card("dumb_bimbo");
                 Assert.Contains(Loc.Get("achv_card_locked_name"), Texts(locked));

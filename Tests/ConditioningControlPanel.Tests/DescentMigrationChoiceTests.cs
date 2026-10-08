@@ -245,82 +245,12 @@ public class DescentMigrationChoiceTests
 
     // ------------------------------------------------------------- the tunable
 
-    /// <summary>
-    /// The Cycle XP bonus is UNBLESSED (CONTRACTS §3: the owner has signed off on "there is a
-    /// lasting bonus", not on 1.10). This test does not defend the number — it defends the shape:
-    /// a bonus, above 1.0, sane, and reflected verbatim in the ceremony copy so tuning the
-    /// constant tunes what the user is promised.
-    /// </summary>
+    /// <summary>The XP bonus is a bonus, above 1.0 and sane. The number is the owner's to tune.</summary>
     [Fact]
-    public void CycleXpBonus_IsABonusAndTheCopyQuotesIt()
+    public void CycleXpBonus_IsABonus()
     {
         Assert.True(DescentMigration.CycleXpBonus > 1.0);
         Assert.True(DescentMigration.CycleXpBonus <= 1.5);
-
-        var expectedPct = $"{(DescentMigration.CycleXpBonus - 1.0) * 100:0.#}%";
-        Assert.Contains(expectedPct, DescentCeremonyCopy.CycleBonusLine());
-    }
-
-    // ------------------------------------------------------- the ceremony's mouth
-
-    /// <summary>
-    /// CONTRACTS §0.6: no offers, no popups, no upsell anywhere near this flow. Cheap to assert,
-    /// and the failure mode it guards against — someone dropping a "go Tier 2 to keep your level"
-    /// line onto the most emotionally loaded screen in the app — is expensive.
-    /// </summary>
-    [Theory]
-    [InlineData("patreon")]
-    [InlineData("subscribe")]
-    [InlineData("upgrade")]
-    [InlineData("tier")]
-    [InlineData("$")]
-    [InlineData("purchase")]
-    [InlineData("premium")]
-    [InlineData("discount")]
-    [InlineData("limited time")]
-    public void CeremonyCopy_ContainsNoOffer(string forbidden)
-    {
-        var everything = string.Join("\n",
-            DescentCeremonyCopy.IntroHeadline,
-            DescentCeremonyCopy.IntroBody,
-            DescentCeremonyCopy.IntroContinue,
-            DescentCeremonyCopy.IntroStanding(150, 515750, 300),
-            DescentCeremonyCopy.ChoiceHeadline,
-            DescentCeremonyCopy.RestoreTitle,
-            DescentCeremonyCopy.RestoreKicker,
-            DescentCeremonyCopy.RestoreBody(150, 117),
-            DescentCeremonyCopy.RestoreDelta(150, 117),
-            DescentCeremonyCopy.CycleTitle,
-            DescentCeremonyCopy.CycleKicker,
-            DescentCeremonyCopy.CycleBody(),
-            DescentCeremonyCopy.CycleBonusLine(),
-            DescentCeremonyCopy.BothDoorsFooter,
-            DescentCeremonyCopy.ConfirmHeadline,
-            DescentCeremonyCopy.ConfirmBody(DescentMigrationChoices.Restore),
-            DescentCeremonyCopy.ConfirmBody(DescentMigrationChoices.Cycle),
-            DescentCeremonyCopy.ConfirmYes(DescentMigrationChoices.Restore),
-            DescentCeremonyCopy.ConfirmYes(DescentMigrationChoices.Cycle),
-            DescentCeremonyCopy.ConfirmBack,
-            DescentCeremonyCopy.DoneHeadline,
-            DescentCeremonyCopy.DoneBody(DescentMigrationChoices.Restore, 117),
-            DescentCeremonyCopy.DoneBody(DescentMigrationChoices.Cycle, 1),
-            DescentCeremonyCopy.DoneClose,
-            DescentCeremonyCopy.Later,
-            DescentCeremonyCopy.LaterHint,
-            DescentCeremonyCopy.CompanionIntro,
-            DescentCeremonyCopy.CompanionDone(DescentMigrationChoices.Restore),
-            DescentCeremonyCopy.CompanionDone(DescentMigrationChoices.Cycle));
-
-        Assert.DoesNotContain(forbidden, everything, System.StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>The confirm step must say the one-way part in words, not imply it (§4).</summary>
-    [Theory]
-    [InlineData(DescentMigrationChoices.Restore)]
-    [InlineData(DescentMigrationChoices.Cycle)]
-    public void ConfirmCopy_StatesThatThereIsNoUndo(string choice)
-    {
-        Assert.Contains("no undo", DescentCeremonyCopy.ConfirmBody(choice), System.StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -331,6 +261,6 @@ public class DescentMigrationChoiceTests
     [InlineData(42, "42")]
     public void RomanNumeral_CoversTheLadderAndFallsBackPastIt(int n, string expected)
     {
-        Assert.Equal(expected, DescentCeremonyCopy.RomanNumeral(n));
+        Assert.Equal(expected, DescentStageCopy.RomanNumeral(n));
     }
 }

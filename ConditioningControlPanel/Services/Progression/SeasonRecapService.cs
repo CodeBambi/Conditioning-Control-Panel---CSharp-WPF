@@ -17,11 +17,6 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public static class SeasonRecapService
     {
-        private static string SnapshotDir => Path.Combine(CorePaths.UserData, "season-recaps");
-
-        private static string PathFor(string seasonKey) =>
-            Path.Combine(SnapshotDir, $"{seasonKey}.json");
-
         /// <summary>
         /// Current season key, "yyyy-MM". The season boundary is SERVER-authoritative: the
         /// server rotates the season (and fires the level_reset) on its own schedule, which is
@@ -331,63 +326,13 @@ namespace ConditioningControlPanel.Services
 
         // ---------- persistence / re-view ----------
 
-        public static void Save(SeasonRecapSnapshot snapshot)
-        {
-            try
-            {
-                Directory.CreateDirectory(SnapshotDir);
-                var json = JsonConvert.SerializeObject(snapshot, Formatting.Indented);
-                File.WriteAllText(PathFor(snapshot.SeasonKey), json);
-                App.Logger?.Information("SeasonRecap: saved snapshot for {Season}", snapshot.SeasonKey);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "SeasonRecap: failed to save snapshot for {Season}", snapshot.SeasonKey);
-            }
-        }
-
-        public static SeasonRecapSnapshot? Load(string seasonKey)
-        {
-            try
-            {
-                var path = PathFor(seasonKey);
-                if (!File.Exists(path)) return null;
-                return JsonConvert.DeserializeObject<SeasonRecapSnapshot>(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "SeasonRecap: failed to load snapshot {Season}", seasonKey);
-                return null;
-            }
-        }
-
+        // Persistence lives in Core (SeasonRecapStore) so both heads read the same snapshots.
+        public static void Save(SeasonRecapSnapshot snapshot) => SeasonRecapStore.Save(snapshot);
+        public static SeasonRecapSnapshot? Load(string seasonKey) => SeasonRecapStore.Load(seasonKey);
         /// <summary>Most recently completed season's snapshot, or null if none exist yet.</summary>
-        public static SeasonRecapSnapshot? LoadLatest()
-        {
-            var keys = ListSeasonKeys();
-            return keys.Count == 0 ? null : Load(keys[0]);
-        }
-
+        public static SeasonRecapSnapshot? LoadLatest() => SeasonRecapStore.LoadLatest();
         /// <summary>Available snapshot season keys, newest first.</summary>
-        public static List<string> ListSeasonKeys()
-        {
-            try
-            {
-                if (!Directory.Exists(SnapshotDir)) return new List<string>();
-                return Directory.GetFiles(SnapshotDir, "*.json")
-                    .Select(Path.GetFileNameWithoutExtension)
-                    .Where(k => !string.IsNullOrEmpty(k))
-                    .OrderByDescending(k => k, StringComparer.Ordinal)
-                    .Cast<string>()
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "SeasonRecap: failed to list snapshots");
-                return new List<string>();
-            }
-        }
-
-        public static bool HasAnySnapshot() => ListSeasonKeys().Count > 0;
+        public static List<string> ListSeasonKeys() => SeasonRecapStore.ListSeasonKeys();
+        public static bool HasAnySnapshot() => SeasonRecapStore.HasAnySnapshot();
     }
 }
