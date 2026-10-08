@@ -1379,3 +1379,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-feat-flash: +411
 - Flash Drift & Bounce plus the speed slider (#1265): picker on the card, windows moved on one shared tick. Core gets FlashMotion, FlashDrag and FlashPendulumRig by `git mv`. FlashDriftTests: 4 tests, each seen to fail when broken.
 - Ownership seam PrizeOwnership: unowned in Release, CCP_PRIZE_GRANTS override in Debug only. New row svc-prize-ownership. feat-flash stays stub; the missing list is in the row.
+
+## avalonia-port/rows-spiral-tab: +285
+- SpiralRoom moved to Core; the Avalonia Spiral tab and rail row now read the real fuse and settings (live fog T-minus, phase pulse and flare, gold-ellipsis rail row). SpiralRoomShellTests is fail-proven 3 ways and checked live in Keincheck.
+- Both rows stay stub: the block and withhold services (DescentService, DescentMigrationService) are still WPF-only, so the Spiral/embed state, FIRST LIGHT, SFX and the bark are still missing.
