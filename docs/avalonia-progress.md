@@ -1395,3 +1395,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-lock-card: +303
 - feat-lock-card wired: repeat-shape rows (random / match by length) on the panel; Core `LockCardScheduler.ResolveRepeats` (moved from WPF) sizes the Avalonia card.
 - Test fail-proven 3 ways; live: length-mode card shows 29 repeats and ESC closes it.
+
+## avalonia-port/intake-bridge: +747
+- Graded Intake slice 3: loom-save, save-image, need-remote, speech bridge, audio-web pack request on Avalonia (8 files to Core); panic closes the intake and its mic.
