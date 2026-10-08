@@ -1324,3 +1324,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-pink-mindwipe: +592
 - Mind Wipe plays on Linux (LibVLC, WPF 120 ms overlap loop measured gapless); Core CoreMindWipe run rule shared with WPF; pink tint follows the dashboard tile.
+
+## avalonia-port/rows-popups-unlock: +301
+- Achievement and item-unlocked passive toasts (X11 override-redirect, device-pixel placement), chime, Discord share in Core; rows wired.
