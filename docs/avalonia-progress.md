@@ -1450,3 +1450,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-settings-data: +296
 - Settings · Data offline mode stops the heartbeat and greys the login and browser controls like WPF, including at startup; views-settings-data stub→wired.
 - Phrase import uses WPF's Import/Cancel confirm, with Enter on Cancel (supervisor decision).
+
+## avalonia-port/rows-grace-pause: +117
+- win-grace-pause-overlay stub -> wired: Resume is a keyboard-reachable Button pill (0.85/0.7), the countdown/auto-resume run on a TimeProvider, and the panic key is tunnel-routed so it beats a focused Resume (supervisor-approved)
+- Headless test covers Esc -> card -> Tab+Enter, mouse hover/press/click, 60 s auto-resume, and panic key Enter beating Resume, each check fail-proven
