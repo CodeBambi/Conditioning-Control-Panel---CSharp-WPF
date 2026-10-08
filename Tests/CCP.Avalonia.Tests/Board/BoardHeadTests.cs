@@ -233,7 +233,7 @@ public sealed class BoardHeadTests
             p.Cards.Add(Card("waiting.quests", BillboardCardKind.Waiting));
             p.Cards.Add(Card("house.discord", BillboardCardKind.House));
             var deck = new BillboardDeck(() => new IBillboardProvider[] { p }, () => new BillboardContext(BillboardTier.Free, DateTime.UtcNow, DateTime.Now));
-            var host = new BillboardCardHost(deck);
+            var host = new BillboardDeckView(deck);
             host.Tweens.NowForTests = 0;
             var w = new Window { Width = 900, Height = 420, Content = host };
             w.Show();
@@ -278,7 +278,7 @@ public sealed class BoardHeadTests
             int saved = 0;
             var deck = new BillboardDeck(() => new IBillboardProvider[] { p },
                 () => new BillboardContext(BillboardTier.Free, DateTime.UtcNow, DateTime.Now), snoozes, () => saved++);
-            var host = new BillboardCardHost(deck);
+            var host = new BillboardDeckView(deck);
             var w = new Window { Width = 900, Height = 420, Content = host };
             w.Show();
             host.Begin();

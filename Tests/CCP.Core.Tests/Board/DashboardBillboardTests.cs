@@ -12,7 +12,7 @@ namespace CCP.Core.Tests.Board;
 /// <summary>
 /// The Tonight Board's deck (2026-10-07): ranking, the one showcase-or-tip slot, the house filler,
 /// the 7-day snooze, the hold, the sounds, the action rules and the walk. All pure; the card host's
-/// drawing is in <see cref="BillboardCardHostRenderTests"/>.
+/// drawing is in <see cref="BillboardDeckViewRenderTests"/>.
 /// </summary>
 public class DashboardBillboardTests
 {
@@ -171,6 +171,45 @@ public class DashboardBillboardTests
             Assert.True(DashboardBillboard.IsActionAllowed(c.Action, true), c.Id + " " + c.Action.Target);
         });
         Assert.Equal(DiscordLinks.Invite, free.Single(c => c.Id == "house.discord").Action.Target);
+    }
+
+    [Fact]
+    public void The_back_room_card_needs_a_door()
+    {
+        var house = new HouseProvider(k => k);
+        var ctx = new BillboardContext(BillboardTier.Free, Now, Now);
+        var before = HouseProvider.OpenBackRoom;
+        try
+        {
+            HouseProvider.OpenBackRoom = null;
+            Assert.DoesNotContain(house.Current(ctx), c => c.Id == "house.backroom");
+            int opened = 0;
+            HouseProvider.OpenBackRoom = () => opened++;
+            Assert.Contains(house.Current(ctx), c => c.Id == "house.backroom");
+            house.Invoke(HouseProvider.BackRoomCallback);
+            house.Invoke("elsewhere");
+            Assert.Equal(1, opened);
+        }
+        finally { HouseProvider.OpenBackRoom = before; }
+    }
+
+    [Fact]
+    public void Snoozes_round_trip_through_their_file_and_a_bad_file_reads_empty()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-board-snooze-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new BillboardSnoozeStore(Path.Combine(dir, "board", "snoozes.json"));
+            Assert.Empty(store.Load());
+            var until = DashboardBillboard.SnoozeUntil(Now);
+            store.Save(new Dictionary<string, DateTime> { ["waiting.quests"] = until });
+            var back = store.Load();
+            Assert.Equal(until, back["waiting.quests"]);
+            Assert.Equal(DateTimeKind.Utc, back["waiting.quests"].Kind);
+            File.WriteAllText(store.FilePath, "{ not json");
+            Assert.Empty(store.Load());
+        }
+        finally { try { Directory.Delete(dir, true); } catch { } }
     }
 
     // ---- snooze ------------------------------------------------------------------------------

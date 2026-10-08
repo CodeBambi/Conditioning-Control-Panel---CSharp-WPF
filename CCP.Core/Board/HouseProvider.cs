@@ -45,7 +45,7 @@ namespace ConditioningControlPanel.Services.Billboard
 
         /// <summary>
         /// What opening the Back Room runs (sign-in first, then the room). The head sets it: WPF
-        /// 7.1.5 called MainWindow.LaunchPlayBackRoom here. Null = the card's button does nothing.
+        /// 7.1.5 called MainWindow.LaunchPlayBackRoom here. Null = the Back Room card stays out of the deck.
         /// </summary>
         public static Action? OpenBackRoom { get; set; }
 
@@ -66,6 +66,9 @@ namespace ConditioningControlPanel.Services.Billboard
             {
                 var c = Cards[i];
                 if (c.HiddenForPrime && context.Tier == BillboardTier.Prime) continue;
+                // A head with no Back Room door (the Avalonia port today) never shows the seat card:
+                // a button that does nothing is worse than the next house card.
+                if (c.Callback && OpenBackRoom == null) continue;
                 yield return new BillboardCardSpec(
                     Id: c.Id,
                     Kind: BillboardCardKind.House,

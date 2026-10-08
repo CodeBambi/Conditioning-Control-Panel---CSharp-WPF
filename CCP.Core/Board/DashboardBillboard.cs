@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Services.Billboard
     /// The Tonight Board's rules (2026-10-07): which cards make the deck, in what order, how long
     /// each holds, what a snooze means and which note a change plays. Pure, so every rule is pinned
     /// by a test without a window. <see cref="BillboardDeck"/> is the walk built on these rules;
-    /// <c>Controls/Billboard/BillboardCardHost</c> draws it and <c>MainWindow.DashboardBillboard.cs</c>
+    /// <c>Controls/Billboard/BillboardDeckView</c> draws it and <c>MainWindow.DashboardBillboard.cs</c>
     /// runs the buttons. Design page: https://claude.ai/artifact/HjF7nno2cxiG6Bopjg8KWr
     /// </summary>
     public static class DashboardBillboard

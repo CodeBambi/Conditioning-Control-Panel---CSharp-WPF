@@ -12,12 +12,12 @@ using SkiaSharp;
 namespace ConditioningControlPanel.Avalonia.Controls.Billboard
 {
     /// <summary>
-    /// The juice (WPF 7.1.5 BillboardCardHost.Fx), ported from the mockup and Breakout's rules: every
+    /// The juice (WPF 7.1.5 BillboardDeckView.Fx), ported from the mockup and Breakout's rules: every
     /// move has an in and an out, nothing flashes white, nothing animates an effect. Pushes and rises
     /// are transform and opacity tweens; sparks and motes paint into one half-resolution
     /// <see cref="FxSurface"/> on a <see cref="FrameClock"/> that runs only while a particle lives.
     /// </summary>
-    public sealed partial class BillboardCardHost
+    public sealed partial class BillboardDeckView
     {
         private const int MaxParticles = 160;
 

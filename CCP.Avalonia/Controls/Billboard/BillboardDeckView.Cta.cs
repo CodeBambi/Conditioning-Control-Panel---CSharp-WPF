@@ -9,7 +9,7 @@ using ConditioningControlPanel.Motion;
 namespace ConditioningControlPanel.Avalonia.Controls.Billboard
 {
     /// <summary>
-    /// The card button's pop (WPF 7.1.5 BillboardCardHost.Cta; owner, 2026-10-07: "make the buttons
+    /// The card button's pop (WPF 7.1.5 BillboardDeckView.Cta; owner, 2026-10-07: "make the buttons
     /// pop there too"): a glow in the card's hue that breathes under the plank, a shine that crosses
     /// the face now and then, a bigger hover (scale, glow up, a shine and a few glints) and a squash
     /// on press. FX PERF RULES: the glow is a sibling layer whose Opacity tweens, never an effect;
@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
     /// PressDown / PressUp; this only adds to it. Ambient loops off = a still glow and no shine;
     /// Motion Off = nothing moves.
     /// </summary>
-    public sealed partial class BillboardCardHost
+    public sealed partial class BillboardDeckView
     {
         internal const double CtaGlowIdle = 0.32, CtaGlowBreath = 0.62, CtaGlowHover = 0.95;
         internal const double CtaHoverScale = 1.05;

@@ -13,14 +13,14 @@ using ConditioningControlPanel.Services.Billboard;
 namespace ConditioningControlPanel.Avalonia.Controls.Billboard
 {
     /// <summary>
-    /// The dot row and the hold (WPF 7.1.5 BillboardCardHost.Chips; owner, 2026-10-07: "the pills
+    /// The dot row and the hold (WPF 7.1.5 BillboardDeckView.Chips; owner, 2026-10-07: "the pills
     /// under the slideshow should just be dots"). One small round dot per card in the cycle, raised
     /// by the depth law and tinted with the card's hue; the current one sits pressed in, widens into
     /// a short capsule and fills left to right as its hold runs. The fill IS the clock: its tween
     /// ending is what moves the deck on, so the bar and the change can never disagree, and pausing
     /// the bar pauses the deck. A dot's tooltip and automation name are the card's name.
     /// </summary>
-    public sealed partial class BillboardCardHost
+    public sealed partial class BillboardDeckView
     {
         private static readonly Color ChipPlate = Color.FromRgb(0x12, 0x13, 0x27);
 

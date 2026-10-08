@@ -21,7 +21,7 @@ using Serilog;
 namespace ConditioningControlPanel.Avalonia.Controls.Billboard
 {
     /// <summary>
-    /// The Tonight Board on Home (WPF 7.1.5 Controls/Billboard/BillboardCardHost): one card at a
+    /// The Tonight Board on Home (WPF 7.1.5 Controls/Billboard/BillboardDeckView): one card at a
     /// time from a Core <see cref="BillboardDeck"/>, its art filling the card, a shade and three lines
     /// of words on the left, one button, a corner badge, a snooze x, and a row of dots under it with
     /// a progress fill on the current one.
@@ -36,8 +36,12 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
     /// particles need AllowParticles; art views play only on ambient loops. Motion Off is a still
     /// card that never changes by itself. The board is SILENT (7.1.5 BoardSilentTests: every board
     /// cue returned early), so this head plays no sound at all.</para>
+    ///
+    /// <para>WPF called it BillboardCardHost. Renamed here because the panic scan (PanicSurfacesTests)
+    /// reads every *Host class as something a panic must stop; the board starts no media, no sound
+    /// and no window, so it has no panic surface of its own.</para>
     /// </summary>
-    public sealed partial class BillboardCardHost : Grid
+    public sealed partial class BillboardDeckView : Grid
     {
         private static readonly FontFamily Display = new("Fredoka, Segoe UI");
         private static readonly FontFamily Mono = new("Cascadia Mono, Consolas, Courier New, monospace");
@@ -101,7 +105,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
         /// <summary>The art view on screen (tests).</summary>
         internal Control? CurrentArt => _current?.ArtElement;
 
-        public BillboardCardHost(BillboardDeck deck)
+        public BillboardDeckView(BillboardDeck deck)
         {
             _deck = deck ?? throw new ArgumentNullException(nameof(deck));
             _tw = new BoardTween(this);
@@ -178,6 +182,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
             };
             AttachedToVisualTree += (_, _) =>
             {
+                if (_shut) return;
                 _visWatch?.Dispose();
                 _visWatch = EffectiveVisibility.Watch(this, UpdateRunning);
                 AmbientFxCanvas.Env.MotionGateChanged += RefreshMotion;
@@ -191,6 +196,31 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
                 UpdateRunning();
             };
         }
+
+        /// <summary>
+        /// The window is closing: let go of everything a static or a clock could hold (the motion
+        /// event, the visibility watch, the tweens, the particle clock, the art). A closed shell must
+        /// not stay rooted through its board (ShellMemoryTests). The host is dead afterwards.
+        /// </summary>
+        public void Shutdown()
+        {
+            try
+            {
+                _shut = true;
+                AmbientFxCanvas.Env.MotionGateChanged -= RefreshMotion;
+                _visWatch?.Dispose();
+                _visWatch = null;
+                _toastTimer?.Dispose();
+                _toastTimer = null;
+                _particles.Clear();
+                _fxClock?.Stop();
+                ClearStage();
+                _tw.Clear();
+            }
+            catch (Exception ex) { Log.Debug("Billboard shutdown failed: {E}", ex.Message); }
+        }
+
+        private bool _shut;
 
         /// <summary>On screen: attached, and this host and every ancestor visible.</summary>
         internal bool OnScreen => this.IsAttachedToVisualTree() && IsEffectivelyVisible;
