@@ -51,10 +51,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    seam and is wired at both WPF sites. <c>App.IsUpdateDialogActive</c> and
     ///    <c>MainWindow.IsStartupDialogShowing</c> have no seam in Core and are still missing, each
     ///    marked where it belongs, so a card can still land on top of a startup modal.
-    ///  - <c>popup.ShowDialog()</c> needs a VISIBLE owner on Avalonia (not merely a loaded one -
-    ///    a shell minimised to tray is loaded and not visible, and ShowDialog throws on it), so
-    ///    without one the card is shown modelessly - which also means <c>_opening</c> clears when
-    ///    Show() returns rather than when the card closes.
+    ///  - Shown through <c>ShowDialogSafe</c>, so a tray-hidden shell does not throw and
+    ///    <c>_opening</c> clears when the card closes.
     ///  - The One Account card's CTA is live: <c>Launcher.LaunchUriAsync</c> stands in for
     ///    <c>Helpers.BrowserLauncher</c> and <c>MainShellWindow.RetireWebBannerBeat</c> is the
     ///    ported twin, so acting on the card still retires the banner beat.
@@ -225,14 +223,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         // queue time so a card that never opened cannot spend its sibling's turn.
                         if (doorKey != null) _doorSlotsSpentThisLaunch.Add(doorKey);
 
-                        // Avalonia's ShowDialog needs a VISIBLE owner, not merely a loaded one -
-                        // it throws on a parent that is not visible, and a shell minimised to tray
-                        // is loaded-and-not-visible. That is the exact state a paced card lands in,
-                        // and the throw would be swallowed by the catch below, so the card would
-                        // silently never appear while its "seen" flag had already been spent.
-                        // Without a visible owner it is shown modelessly rather than not at all.
-                        if (owner is { IsVisible: true }) await popup.ShowDialog(owner);
-                        else popup.Show();
+                        // ShowDialogSafe: a tray-hidden shell no longer throws (the "seen" flag is already spent).
+                        await popup.ShowDialogSafe(owner);
                     }
                     catch (Exception ex)
                     {

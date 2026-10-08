@@ -6,7 +6,9 @@
          RadiusX="0.8" GradientOrigin="0.5,0.4"    bare numbers are ABSOLUTE pixels in Avalonia,
                                                    so both washes would render as a dot
        DropShadowEffect ShadowDepth="0"         -> dropped; Avalonia's effect has OffsetX/Y, both 0
-       DynamicResource on a shadow Color        -> StaticResource (SeasonRecapCard precedent)
+       DynamicResource on a shadow Color        -> StaticResource (old SeasonRecapCard precedent is gone:
+                                                   it repaints GradientStops dynamically, proven by
+                                                   SeasonRecapPortTests; effect colour untested)
        Button.Resources <Style TargetType=      -> CornerRadius="10" on the Button itself; the WPF
          "Border"> CornerRadius hack               hack existed because WPF's Button has no such
                                                    property, Avalonia's does

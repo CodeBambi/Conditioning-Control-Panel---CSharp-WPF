@@ -311,7 +311,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 row.Children.Add(button);
             }
 
-            return dialog.ShowDialog<bool?>(this);
+            return dialog.ShowDialogSafe<bool?>(this);
         }
     }
 

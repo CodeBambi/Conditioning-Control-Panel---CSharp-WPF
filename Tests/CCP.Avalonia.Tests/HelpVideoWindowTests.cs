@@ -53,6 +53,23 @@ public sealed class HelpVideoWindowTests
     });
 
     [Fact]
+    public Task WebcamCalibrationTopicHostsItsSliceCLoop() => Run(() =>
+    {
+        // What WebcamCalibrationWindow's ? passes (WebcamCalibrationWindow.axaml.cs:239).
+        HelpVideoWindow.Show(HelpContentService.GetContent("WebcamCalibration"), null, topmost: true);
+        var win = Current()!;
+        try
+        {
+            var view = win.GetVisualDescendants().OfType<HelpLoopView>().Single();
+            Assert.Equal("WebcamCalibration", view.Scene.Id);
+            Assert.False(win.FindControl<TextBlock>("TxtCaption")!.IsVisible);
+            win.CaptureRenderedFrame();
+            Assert.False(view.Failed);
+        }
+        finally { win.Close(); }
+    });
+
+    [Fact]
     public Task TopicWithoutLoopKeepsTheCaptionFallback() => Run(() =>
     {
         var content = HelpContentService.GetContent("Modding");

@@ -70,14 +70,15 @@ public sealed class MandatoryVideoSchedulerTests
     [Fact]   // WPF VideoStarted (VideoService.cs:3370): once the clip is on screen, not at the trigger
     public void VideoStarted_fires_when_the_clip_is_shown() => With(20, false, () =>
     {
-        var clock = new FakeClock(); var host = new Host(); var started = 0;
+        var clock = new FakeClock(); var host = new Host(); var started = 0; string? announced = null;
         var v = new MandatoryVideoScheduler(host, clock, () => Clips);
-        v.VideoStarted += () => started++;
+        v.VideoStarted += () => { started++; announced = v.LastVideoPath; };
         Assert.True(v.Trigger());
         Assert.Equal(0, started);                           // still in the pre-roll
         clock.Advance(TimeSpan.FromSeconds(1.3));
         Assert.Single(host.Shown);
         Assert.Equal(1, started);
+        Assert.Equal(host.Shown[0].Path, announced);        // what the media log records (WPF LastVideoPath)
         v.ForceCleanup();
     });
 

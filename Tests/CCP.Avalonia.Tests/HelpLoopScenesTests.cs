@@ -37,6 +37,12 @@ public sealed class HelpLoopScenesTests
     [InlineData("ScreenOcr")]
     [InlineData("RemoteControl")]
     [InlineData("SessionEditor")]
+    [InlineData("LockCard")]
+    [InlineData("FocusGaze")]
+    [InlineData("IntensityRamp")]
+    [InlineData("Presets")]
+    [InlineData("Subliminals")]
+    [InlineData("WebcamCalibration")]
     public Task SceneRendersEveryStepAndLightsItsChipsInOrder(string id) => AvaloniaTestDispatcher.RunAsync(() =>
     {
         EnsureAvalonia();
@@ -117,6 +123,34 @@ public sealed class HelpLoopScenesTests
         // t=5000: the "7" button (245,120 40x40) has been picked and fills Mint #5fffd0 (WPF BubbleCountLoop);
         // the frame is RGBA, so the little-endian read gives 0xBBGGRR.
         Assert.Equal(0xD0FF5Fu, Pixel(new FixedAt(scene, 5000), 280, 135));
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task WebcamCalibrationTicksTheGridPointsAlreadyRead() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        Assert.True(HelpLoopRegistry.TryGet("WebcamCalibration", out var scene));
+        // Grid point 7 sits at (60,94) on the snake walk (WPF WebcamCalibrationLoop). At t=5000 the dot is on
+        // hop 8, so points 0..7 carry a Mint #5fffd0 tick; at t=2000 nothing has been read yet. RGBA -> 0xBBGGRR.
+        Assert.Equal(0xD0FF5Fu, Pixel(new FixedAt(scene, 5000), 60, 94));
+        Assert.NotEqual(0xD0FF5Fu, Pixel(new FixedAt(scene, 2000), 60, 94));
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task IntensityRampCurveStopsAtItsHead() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        // A point on the full climb curve (WPF IntensityRampLoop: plot 332,132 118x74, y = .12 + .78 * EaseInOut(u)),
+        // well right of the head at t=1500 (u ~ .23). Before the curve starts (t=300) and at t=1500 it shows the
+        // same card; once the curve has reached it (t=4800) it does not.
+        const double x = 420;
+        double u = (x - 332) / 118.0, y = 206 - 74 * (.12 + .78 * LoopMath.EaseInOut(u));
+        uint Px(double at) { Assert.True(HelpLoopRegistry.TryGet("IntensityRamp", out var s)); return Pixel(new FixedAt(s, at), x, y); }
+        var empty = Px(300);
+        Assert.Equal(empty, Px(1500));
+        Assert.NotEqual(empty, Px(4800));
         return Task.CompletedTask;
     });
 

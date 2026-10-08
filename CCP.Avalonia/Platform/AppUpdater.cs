@@ -198,7 +198,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     Topmost = true,
                     WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 };
-                await dialog.ShowDialog<bool?>(owner);
+                await dialog.ShowDialogSafe<bool?>(owner);
                 OpenDialog = null;
                 if (dialog.InstallRequested) await InstallAsync(owner);
                 else ReleaseFeed.SetSkippedUpdateVersion(UserData, info.Version);

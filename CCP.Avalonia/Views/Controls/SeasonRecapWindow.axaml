@@ -4,7 +4,8 @@
        <Style x:Key TargetType="Button">   -> <ControlTheme> with the same Template; the
                                               IsMouseOver trigger is a ^:pointerover selector
        <ContentPresenter/>                 -> ContentPresenter Content="{TemplateBinding Content}"
-       Recap* StaticResources              -> local copies (they live on the card's resources now)
+       Recap* StaticResources              -> local copies, DynamicResource; the mod palette is
+                                              written into them like the card (WPF RecapTheme)
        ResizeMode="NoResize"               -> CanResize="False"
        Content set from code (Loc.Get)     -> a TextBlock child with {loc:Str}; the formatted
                                               continue label stays Loc.GetF in the code-behind
@@ -17,7 +18,7 @@
         SizeToContent="WidthAndHeight"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource RecapVoidBrush}"
+        Background="{DynamicResource RecapVoidBrush}"
         FontFamily="Segoe UI, Liberation Sans, sans-serif">
     <Window.Resources>
         <!-- ponytail: local copy of Resources/Theme/SeasonRecapCard.xaml: RecapVoid, RecapInk,
@@ -29,19 +30,19 @@
         <Color x:Key="RecapLine">#2EB18CFF</Color>
         <Color x:Key="RecapVioletLite">#FFB18CFF</Color>
         <Color x:Key="RecapMagenta">#FFE84CF2</Color>
-        <SolidColorBrush x:Key="RecapVoidBrush" Color="{StaticResource RecapVoid}"/>
-        <SolidColorBrush x:Key="RecapInkBrush" Color="{StaticResource RecapInk}"/>
-        <SolidColorBrush x:Key="RecapInkDimBrush" Color="{StaticResource RecapInkDim}"/>
-        <SolidColorBrush x:Key="RecapLineBrush" Color="{StaticResource RecapLine}"/>
-        <SolidColorBrush x:Key="RecapVioletLiteBrush" Color="{StaticResource RecapVioletLite}"/>
+        <SolidColorBrush x:Key="RecapVoidBrush" Color="{DynamicResource RecapVoid}"/>
+        <SolidColorBrush x:Key="RecapInkBrush" Color="{DynamicResource RecapInk}"/>
+        <SolidColorBrush x:Key="RecapInkDimBrush" Color="{DynamicResource RecapInkDim}"/>
+        <SolidColorBrush x:Key="RecapLineBrush" Color="{DynamicResource RecapLine}"/>
+        <SolidColorBrush x:Key="RecapVioletLiteBrush" Color="{DynamicResource RecapVioletLite}"/>
         <LinearGradientBrush x:Key="RecapStatusPillBrush" StartPoint="0%,0%" EndPoint="100%,100%">
-            <GradientStop Color="{StaticResource RecapMagenta}" Offset="0"/>
-            <GradientStop Color="{StaticResource RecapVioletLite}" Offset="1"/>
+            <GradientStop Color="{DynamicResource RecapMagenta}" Offset="0"/>
+            <GradientStop Color="{DynamicResource RecapVioletLite}" Offset="1"/>
         </LinearGradientBrush>
 
         <!-- Share pill button -->
         <ControlTheme x:Key="SharePill" TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource RecapInkBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource RecapInkBrush}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -50,7 +51,7 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd" CornerRadius="13" Padding="14,9"
                             Background="#14B18CFF"
-                            BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                            BorderBrush="{DynamicResource RecapLineBrush}" BorderThickness="1">
                         <ContentPresenter Content="{TemplateBinding Content}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -58,7 +59,7 @@
             </Setter>
             <Style Selector="^:pointerover /template/ Border#bd">
                 <Setter Property="Background" Value="#29B18CFF"/>
-                <Setter Property="BorderBrush" Value="{StaticResource RecapVioletLiteBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource RecapVioletLiteBrush}"/>
             </Style>
         </ControlTheme>
 
@@ -71,7 +72,7 @@
             <Setter Property="Template">
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd" CornerRadius="13" Padding="22,11"
-                            Background="{StaticResource RecapStatusPillBrush}">
+                            Background="{DynamicResource RecapStatusPillBrush}">
                         <ContentPresenter Content="{TemplateBinding Content}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -107,7 +108,7 @@
         <!-- in-window status line (the recap window sits above the MainWindow toast host, so
              share confirmations surface here instead) -->
         <TextBlock x:Name="PART_Status" FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap"
-                   Foreground="{StaticResource RecapInkDimBrush}" Margin="0,12,0,0"
+                   Foreground="{DynamicResource RecapInkDimBrush}" Margin="0,12,0,0"
                    MaxWidth="420" IsVisible="False"/>
 
         <!-- continue to next season -->
@@ -118,7 +119,7 @@
 
         <TextBlock x:Name="PART_Note" Text="{loc:Str recap_share_note}"
                    FontSize="10.5" TextAlignment="Center" TextWrapping="Wrap"
-                   Foreground="{StaticResource RecapInkDimBrush}" Margin="0,12,0,0" MaxWidth="420"/>
+                   Foreground="{DynamicResource RecapInkDimBrush}" Margin="0,12,0,0" MaxWidth="420"/>
       </StackPanel>
     </Panel>
 </Window>

@@ -182,7 +182,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             var listed = vm.TitleAllowList.Select(c => c.Label).ToList();
             var candidates = vm.SeenApps.Select(c => c.Label).ToList();
             var dialog = new AwarenessAppPickerDialog(AwarenessListKind.TitleAllow, listed, candidates);
-            await dialog.ShowDialog(owner);
+            await dialog.ShowDialogSafe(owner);
             if (dialog.Result is { } picked) vm.SetTitleAllowList(picked);
         }
     }

@@ -30,18 +30,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// ponytail: the display-name endpoint is hardcoded here exactly as in WPF. It belongs behind a
     /// Core API client; hoist it when a second view needs the same call.
     ///
-    /// <para>NO CALLER ON THIS HEAD. The one WPF call site is
-    /// <c>Services/Account/AccountService.cs:AuthenticateV2Async</c>, inside its
-    /// <c>authResponse.NeedsRegistration</c> branch: it opens this picker, re-authenticates with
-    /// the chosen name, and - this is the load-bearing half - LOGS THE PROVIDER OUT when the user
-    /// cancels, so a half-registered account cannot be left orphaned. AccountService is a static
-    /// class in the WPF head with no Avalonia twin and nothing in Core, and neither
-    /// <c>V2AuthService</c> nor <c>App.Patreon</c> / <c>App.Discord</c> has a seam. There is no
-    /// authentication flow on this head to hang the picker off; opening it from anywhere else
-    /// would collect a name with no registration behind it and no logout to undo it.
-    /// <c>CoreAccount</c> does not change that: it reports an identity and can rename or delete
-    /// one, but it deliberately carries no way to CREATE one, so this dialog's blocker is
-    /// unchanged.</para>
+    /// <para>NO CALLER ON EITHER HEAD. The one WPF call site,
+    /// <c>Services/Account/AccountService.cs:HandlePostAuthV2Async</c>, is reached only from
+    /// <c>MainWindow.AccountShell.cs</c> BtnQuickPatreonLogin_Click / BtnQuickDiscordLogin_Click, and no
+    /// XAML or code subscribes either handler, so WPF never shows this dialog. The live registration
+    /// name prompt on both heads is LoginDialog's username panel (re-auth with the name, provider
+    /// logout on cancel).</para>
     /// </summary>
     public partial class UsernamePickerDialog : Window
     {

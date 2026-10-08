@@ -152,7 +152,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (!IsVisible) return;
 
                 var dialog = new Views.Deeper.NewEnhancementDialog();
-                if (!await dialog.ShowDialog<bool>(this)) return;
+                if (!await dialog.ShowDialogSafe<bool>(this)) return;
 
                 // CreateBlank, inlined. Name is deliberately left empty: the editor's header falls
                 // back to the localized "Untitled" until the user (or HT auto-fill) sets one.
@@ -244,7 +244,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 var dlg = new Dialogs.CataloguePickerDialog(entries, videoId);
-                await dlg.ShowDialog<bool>(this);
+                await dlg.ShowDialogSafe<bool>(this);
                 if (dlg.SelectedEntry != null) await DownloadAndOpenCatalogueEntryAsync(dlg.SelectedEntry);
             }
             catch (Exception ex) { Log.Warning(ex, "[Catalogue] Picker dialog threw"); }
