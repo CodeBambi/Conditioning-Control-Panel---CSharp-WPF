@@ -21,5 +21,20 @@ namespace ConditioningControlPanel.Services.Descent
         /// back") it is every migrated account's. Changing it is a one-line edit here.
         /// </summary>
         public const double CycleXpBonus = 1.10;
+
+        /// <summary>
+        /// ONE RULE: migrated = bonus (moved from WPF DescentMigration.XpBonusFor, fc9640ff7). Migrated means
+        /// the server has acked the migration, or a valid choice is on disk waiting to land. NOT
+        /// <c>DescentEpoch</c> alone: the server stamps curve_epoch 1 on every record born after the Descent,
+        /// and a fresh signup never came back from anything. The persisted <c>DescentCycleXpBonus</c> is not
+        /// an input, so a hand-edited settings file can never buy more than the constant.
+        /// </summary>
+        public static double XpBonusFor(Models.AppSettings? settings)
+        {
+            if (settings is null) return 1.0;
+            var migrated = settings.DescentMigrationCompleted
+                           || DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice);
+            return migrated ? CycleXpBonus : 1.0;
+        }
     }
 }

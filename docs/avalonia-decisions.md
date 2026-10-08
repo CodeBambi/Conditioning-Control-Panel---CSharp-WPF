@@ -580,3 +580,15 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/RemoteRelayTests.cs` (Remote_haptics_play_and_every_stop_path_ends_them,
   A_command_in_flight_never_outlives_a_panic_or_a_leave), `Tests/CCP.Avalonia.Tests/RemoteHapticPanicTests.cs`;
   each fail-proven. WPF path compile-verified only (Windows suite does not run on Linux).
+
+## 2026-10-08: Descent migration offer is WPF-only; the bonus and the ack are shared (avalonia-port/rows-descent-migration)
+- Rows: main sync #5 `fc9640ff7`, `abac4fa02` (`docs/avalonia-main-sync-20261008.md`).
+- Decision: the Avalonia head never takes the migration offer. It does not send `descent_auto`, and the server offers only
+  to builds that do, so the silent relevel (`DescentMigrationService.ApplyChoice`: ledger rewrite, keepsakes, stage drip,
+  watermark clear) stays in the WPF head. Rewriting level/XP from a server offer is the one progression-destroying path in
+  this area; porting it buys only Linux-first legacy accounts, which migrate on their next WPF sync anyway.
+- Shared in Core instead: the bonus rule `DescentCycleXp.XpBonusFor` (migrated = ack or valid pending choice; never a bare
+  curve_epoch 1 stamp), applied by `ProgressionBank.Add`; and `DescentMigrationAck` (settle + heal the lasting bonus on any
+  device), called by `SyncPush` after each successful sync and by WPF `ProfileSyncService.HandleDescentMigrationAck`. The ack
+  never touches level or XP. `DescentReceipt` moved to Core (git mv) for the own-card receipt and "(+N%)" readout.
+- Revisit if the server ever offers without `descent_auto`, or if a Linux-only legacy cohort appears.
