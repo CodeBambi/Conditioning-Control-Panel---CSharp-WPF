@@ -109,6 +109,14 @@
                     </Transitions>
                 </Border.Transitions>
             </Border>
+
+            <!-- Per-half "?" (WPF SplitFeatureCard.xaml:171-178); hidden without help content. -->
+            <Button x:Name="BtnHelpA" Theme="{StaticResource HelpButtonStyle}"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="8,32,0,0" ZIndex="10" IsVisible="False"/>
+            <Button x:Name="BtnHelpB" Theme="{StaticResource HelpButtonStyle}"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,8,32" ZIndex="10" IsVisible="False"/>
         </Grid>
     </Border>
 </UserControl>
