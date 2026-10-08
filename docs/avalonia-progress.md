@@ -1426,3 +1426,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-blink-trainer: +208
 - Blink Trainer stage plays video picks (VLC), status dot breathes while running, help popover attached, hidden page parks all work.
 - Duplicate parity rows merged; both rows stay stub with the remaining list.
+
+## avalonia-port/rows-quiz-report: +162
+- win-quiz-report: past-quizzes list (trends + runs -> QuizReportWindow, one at a time) ported; still stub because both heads hide BtnStartQuiz.
+- QuizPastRunsReportTests, fail-proven x3.
