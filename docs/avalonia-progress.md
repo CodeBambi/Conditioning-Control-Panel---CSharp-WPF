@@ -1303,3 +1303,15 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-emi-codex-book: +357
 - EmiBook deck/demos/pixel canvas to Core (WPF blits via EmiPixelBitmap); Avalonia book: real deck, demo clock only while open, reduced-motion still, Complete Guide; codex door opens at the bookmark.
+
+## avalonia-port/rows-audio-devices: +536
+- Settings Audio + dashboard card share one binder (dials, ducking with force-unduck, live volumes, sync pair, output picker routed to one-shots/layers/video, Test Audio, help card); rows wired.
+
+## avalonia-port/rows-achievements-tab: +606
+- Achievement tiles: stagger, hover tilt/lift/pop, unlock reveal + gated burst; FX timer only while moving and shown. Season Recap re-view (Core SeasonRecapStore). Rows wired.
+
+## avalonia-port/rows-tutorial-help: +1085
+- HelpLoops kit + FlashImages/PinkFilter scenes hosted in the ? popover (visible-only frames, motion levels); 21 scenes and the tour (TutorialService) remain.
+
+## avalonia-port/main-20261008: +513
+- Main sync #5: WPF main 0d9e83383 merged (breakout web fixes, descent ceremony retirement, descent_auto); delta ledger docs/avalonia-main-sync-20261008.md.

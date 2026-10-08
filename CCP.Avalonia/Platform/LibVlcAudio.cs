@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ConditioningControlPanel.Localization;
 using LibVLCSharp.Shared;
 using Serilog;
 
@@ -23,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         private readonly Func<string, string> _pactl = Pactl;
 
         /// <summary>The seeded instance, so App can restore ducked apps on exit.</summary>
-        internal static LibVlcAudio? Instance { get; private set; }
+        internal static LibVlcAudio? Instance { get; set; }
 
         /// <summary>The process's one LibVLC, shared with video (MiniPlayerWindow), as WPF shares
         /// VideoService.SharedLibVLC. Null when libvlc did not load.</summary>
@@ -90,7 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             {
                 // Setting volume before Play, or inside this libvlc event, is lost: the pulse
                 // output only takes it once it exists, from a thread that is not libvlc's own.
-                ThreadPool.QueueUserWorkItem(_ => { lock (player) if (done == 0) player.Volume = vol; });
+                ThreadPool.QueueUserWorkItem(_ => { lock (player) if (done == 0) { ApplyPreferredDevice(player); player.Volume = vol; } });
                 if (onStarted is null) return;
                 try { onStarted(TimeSpan.FromMilliseconds(Math.Max(0, player.Length))); }
                 catch (Exception ex) { Log.Debug(ex, "[Audio] {Tag}: onStarted threw", tag); }
@@ -211,6 +212,53 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 try { _pactl($"set-sink-input-volume {index} {string.Join(' ', raw)}"); }
                 catch { } // the stream ended while ducked - nothing to restore
             }
+        }
+
+        // ---- output device (WPF AudioService.EnumerateOutputDevices / ApplyPreferredDevice) ----
+
+        /// <summary>One picker entry. Id is the PulseAudio sink name, which is also what LibVLC's
+        /// pulse output takes in SetOutputDevice; empty Id is the system default.</summary>
+        internal sealed record OutputDevice(string Id, string Name)
+        {
+            public override string ToString() => Name;
+        }
+
+        /// <summary>As WPF: the first entry is always the synthetic system default.</summary>
+        internal static List<OutputDevice> EnumerateOutputDevices(Func<string, string>? pactl = null)
+        {
+            var list = new List<OutputDevice> { new("", Loc.Get("set2_mic_system_default")) };
+            if (pactl is null && !OperatingSystem.IsLinux()) return list;
+            try
+            {
+                using var doc = JsonDocument.Parse((pactl ?? Pactl)("-f json list sinks"));
+                foreach (var sink in doc.RootElement.EnumerateArray())
+                {
+                    var id = sink.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                    if (id.Length == 0) continue;
+                    var name = sink.TryGetProperty("description", out var d) ? d.GetString() : null;
+                    list.Add(new(id, string.IsNullOrWhiteSpace(name) ? id : name));
+                }
+            }
+            catch (Exception ex) { Log.Warning("EnumerateOutputDevices failed: {Error}", ex.Message); }
+            return list;
+        }
+
+        /// <summary>WPF's ApplyPreferredDevice rule: the saved device, only when the live player
+        /// lists it (a stale id routes audio to nowhere), and not again when already there.</summary>
+        internal static string? PreferredDevice(string? saved, string? current, IEnumerable<string> available)
+            => string.IsNullOrEmpty(saved) || saved == current || !available.Contains(saved) ? null : saved;
+
+        /// <summary>Call once the player is live (its Playing event), never before: like WPF's
+        /// mmdevice, the output's device list is only meaningful once it exists.</summary>
+        internal static void ApplyPreferredDevice(MediaPlayer player)
+        {
+            try
+            {
+                var id = PreferredDevice(CoreSettings.Current.AudioOutputDeviceId, player.OutputDevice,
+                    player.AudioOutputDeviceEnum.Select(d => d.DeviceIdentifier));
+                if (id != null) player.SetOutputDevice(id);
+            }
+            catch (Exception ex) { Log.Debug("ApplyPreferredDevice: {Error}", ex.Message); }
         }
 
         internal static string Pactl(string args)
