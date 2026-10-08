@@ -618,6 +618,8 @@ namespace ConditioningControlPanel
                 row.Painted = true;
                 PaintNavRowActive(row);
             }
+            // 7.1.5: being on the section is seeing its count; the badge dims (NavBadges.IsFresh).
+            try { NavBadges.MarkSeen(section); } catch { }
         }
 
         private static void PaintNavRowActive(NavSectionRow row)
@@ -776,17 +778,36 @@ namespace ConditioningControlPanel
                     return;
                 }
                 foreach (var row in _navSectionRows)
-                    if (row.Section == section) PaintNavBadge(row, count);
+                {
+                    if (row.Section != section) continue;
+                    // A count that rises while the player is looking at its section is seen.
+                    if (row.Active && LobbyBadgeWanted(IsVisible, WindowState)) NavBadges.MarkSeen(section);
+                    PaintNavBadge(row, count);
+                }
             }
             catch (Exception ex) { App.Logger?.Debug("OnNavBadgeChanged: {E}", ex.Message); }
         }
 
+        /// <summary>
+        /// 7.1.5 (tier-2: a red "7" read as seven unread messages): the pill wears the SECTION hue
+        /// (never the mod accent, which is pink-red on most mods) with contrast-picked ink, and once
+        /// the player has seen the count it dims and drops its shadow. It brightens again only when
+        /// the count rises past what they saw (<see cref="NavBadges.IsFresh(int, int)"/>).
+        /// </summary>
         private static void PaintNavBadge(NavSectionRow row, int count)
         {
             if (row.Badge == null) return;
             var text = NavRailRules.BadgeText(count);
             if (row.BadgeText != null) row.BadgeText.Text = text ?? "";
             row.Badge.Visibility = text == null ? Visibility.Collapsed : Visibility.Visible;
+            if (text == null) return;
+            var hue = NavStripRules.Accent(row.Section);
+            row.Badge.Background = NavFrozen(hue);
+            if (row.BadgeText != null) row.BadgeText.Foreground = NavFrozen(NavStripRules.ActiveTextOn(hue));
+            bool fresh = NavBadges.IsFresh(count, NavBadges.Seen(row.Section));
+            row.Badge.Opacity = NavRailRules.BadgeOpacity(fresh);
+            if (fresh) row.Badge.ClearValue(UIElement.EffectProperty);
+            else row.Badge.Effect = null;
         }
 
         // ============================== art and labels ==============================
