@@ -68,6 +68,7 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
                 CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
                 SpiralOverlay.SkipPlatformChecksForTests = true;
+                await Settle();   // P02: an earlier test's decode still in flight would swallow this test's first one
                 (s.SpiralEnabled, s.SpiralPath, s.SpiralOpacity, s.SpiralTargetMonitor) = (true, gif, 40, -1);
                 (s.PanicKeyEnabled, s.PanicKey) = (true, "F8");
 
@@ -77,9 +78,9 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
 
                 // Start: the decode lands off-thread, then the windows come up and the clock runs.
                 shell.StartEngine();
-                if (SpiralOverlay.Decoding is { } d) await d;
-                Assert.True(SpiralOverlay.IsShowing);
-                Assert.True(SpiralOverlay.IsAnimating);
+                await Settle();
+                Assert.True(SpiralOverlay.IsShowing, Why());
+                Assert.True(SpiralOverlay.IsAnimating, Why());
                 Assert.Equal(TimeSpan.FromMilliseconds(30), SpiralOverlay.FrameDelay);
                 Assert.Equal(SpiralFrames.Paint(0.4), SpiralOverlay.Shown[0].Spiral.Opacity, 10);
                 var first = SpiralOverlay.Shown[0].Spiral.Source;
@@ -186,8 +187,8 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
             {
                 s.SkipPauseXpWarning = true;
                 shell.StartSession(new Session { Id = "spiral_test", Name = "Spiral Test", DurationMinutes = 1 });
-                if (SpiralOverlay.Decoding is { } d) await d;
-                Assert.True(runner.IsRunning && SpiralOverlay.IsShowing && SpiralOverlay.IsAnimating);
+                await Settle();
+                Assert.True(runner.IsRunning && SpiralOverlay.IsShowing && SpiralOverlay.IsAnimating, Why());
                 var pause = shell.Named<Button>("BtnPauseSession")!;
                 pause.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));   // Pause
                 await Task.Yield();
@@ -204,6 +205,20 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
                 global::ConditioningControlPanel.Avalonia.App.Sessions = null;
             }
         });
+
+    /// <summary>Waits out every in-flight decode, including one a landing decode starts for a newer path.</summary>
+    private static async Task Settle()
+    {
+        while (SpiralOverlay.Decoding is { IsCompleted: false } d) await d;
+    }
+
+    private static string Why()
+    {
+        var sessions = global::ConditioningControlPanel.Avalonia.App.Sessions;
+        return $"windows={SpiralOverlay.Shown.Count} decoding={SpiralOverlay.Decoding?.Status} engine={CoreEngine.IsRunning} " +
+        $"sessions={sessions?.IsRunning}/{sessions?.IsPaused} " +
+        $"enabled={CoreSettings.Current.SpiralEnabled} path={CoreSettings.Current.SpiralPath} exists={File.Exists(CoreSettings.Current.SpiralPath)}";
+    }
 
     private static async Task WithShell(Func<MainShellWindow, AppSettings, string, Task> body)
     {
@@ -226,6 +241,7 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
                 CoreSession.IsEngineRunningProvider = () => CoreEngine.IsRunning;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
                 SpiralOverlay.SkipPlatformChecksForTests = true;
+                await Settle();   // P02: an earlier test's decode still in flight would swallow this test's first one
                 (s.SpiralEnabled, s.SpiralPath, s.SpiralOpacity, s.SpiralTargetMonitor) = (true, gif, 40, -1);
                 await body(shell, s, gif);
             }
