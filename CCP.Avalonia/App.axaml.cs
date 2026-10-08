@@ -440,6 +440,7 @@ namespace ConditioningControlPanel.Avalonia
                     if (desktop.MainWindow is { } host) Views.Overlays.BouncingTextOverlay.Start(host);
                 };
                 CoreBouncingText.StopAction = Views.Overlays.BouncingTextOverlay.Stop;
+                Views.Overlays.CornerGifOverlay.Seed(() => desktop.MainWindow);   // the corner-GIF surface seam
                 CoreBouncingText.RefreshAction = Views.Overlays.BouncingTextOverlay.Refresh;
                 CoreBouncingText.RestartAction = Views.Overlays.BouncingTextOverlay.Restart;
                 CoreBubbles.StartAction = () =>
@@ -762,8 +763,15 @@ namespace ConditioningControlPanel.Avalonia
                     Sessions.Stop();   // restores the pre-session settings before exit
                     CoreEngine.Stop();
                     StopDesktopOverlays();
+                    Views.Overlays.CornerGifOverlay.StopAll();   // WPF CornerGifService.OnMainWindowClosing / OnExit
                     Views.Windows.LockCardWindow.ForceCloseAll();
                 };
+                // WPF App.xaml.cs:2602: restore at ApplicationIdle, once startup has settled (#709).
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try { Views.Overlays.CornerGifOverlay.RestoreOnStartup(shell); }
+                    catch (Exception ex) { Serilog.Log.Error(ex, "Deferred corner-GIF restore failed"); }
+                }, DispatcherPriority.ApplicationIdle);
                 // Boot surface (WPF App.xaml.cs:3403-3419): the launcher, a game or the panel. A boot
                 // into the launcher shows the panel unactivated and off the taskbar only so its Opened
                 // work runs (WPF ShowHiddenForBoot), then RouteBoot tucks it away. A Lockdown in force

@@ -1237,6 +1237,7 @@
   "label_easy_2": "⭐ Facile",
   "label_let_the_morning_carry_you_away": "Laisse le matin t'emporter...",
   "label_corner_gif": "🖼 GIF de Coin",
+  "corner_gif_force_disabled": "Les GIF de coin ont été désactivés : la dernière session s'est terminée avec l'un d'eux à l'écran. Réactive-les depuis la carte Spirale.",
   "label_place_a_subtle_gif_in_a_screen_corner": "Place un GIF subtil dans un coin de l'écran",
   "btn_select_gif": "📁 Sélectionner GIF",
   "label_position": "Position :",

@@ -85,6 +85,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- WPF CornerGifMedia's built-in corner asset (pre-scaled), CornerGifOverlay's fallback. -->
+    <Content Include="..\Assets\spiral_corner.gif" Link="Resources\spiral_corner.gif">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- The shipped spiral (WPF Resources\spiral.gif): SpiralOverlay's default and the card's Default thumbnail. -->
     <Content Include="..\Assets\spiral.gif" Link="Resources\spiral.gif">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
