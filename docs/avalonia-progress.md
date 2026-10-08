@@ -1371,3 +1371,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-gate-fx: +1010
 - PremiumGateFx (fog/padlock glow/sheen on 8 gates), row sweep, perimeter comet, card sheen adorners; effects park off-screen; host gaps listed.
+
+## avalonia-port/rows-split-card: +305
+- feat-split-card (stays stub): breath, glow, sweep, title and hover now follow the MotionFx/PerformanceProfile/window-focus gates; off halves dim; each half has its own "?" (HelpPopover); rings are rounded. `SplitFeatureCardFxTests` fail-proven per gate.
+- Still missing: DashboardCardDepth, greyscale HalfMute, live re-gate on a settings change (shell-dashboard-fx caller).
