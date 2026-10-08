@@ -44,7 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// WPF MainWindow.PlayTab.cs StartMantraSession: focus a running MantraWindow rather than
         /// restart it (a second StartSession would wipe the run), else start the session THEN open the
-        /// window, whose Loaded reads CurrentMantra and TargetCount. No caller, as in WPF.
+        /// window, whose Loaded reads CurrentMantra and TargetCount.
         /// </summary>
         internal void StartMantraSession(int targetReps)
         {
