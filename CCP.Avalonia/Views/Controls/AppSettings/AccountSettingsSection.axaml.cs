@@ -236,7 +236,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             link.BorderBrush = PatreonRedBrush;
             link.BorderThickness = new Thickness(row.Filled ? 0 : 1);
             Find<TextBlock>("TxtPatreonReconnectHint").IsVisible = row.ShowsHint;
-            Find<Button>("BtnLinkDiscord").IsVisible = hasUnifiedId && !hasLinkedDiscord;
+            var linkDiscord = Find<Button>("BtnLinkDiscord");
+            linkDiscord.IsVisible = hasUnifiedId && !hasLinkedDiscord;
+            // WPF BtnLinkDiscord_Click finally: the label comes back after a failed/cancelled link.
+            if (linkDiscord.IsEnabled) Find<TextBlock>("TxtBtnLinkDiscord").Text = Loc.Get("btn_link_discord");
             // ponytail: CloudSettingsBackupSection stays hidden and BtnExportData collapsed until
             // ProfileSync's backup/restore/export calls reach this head (MainShellWindow.CloudBackup.cs).
             Find<Border>("DataPrivacySection").IsVisible = hasUnifiedId;
@@ -256,6 +259,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             };
             if (authed)
             {
+                if (provider == "patreon") AccountSeed.Sync?.StopHeartbeat(); // WPF MainWindow.Patreon.cs:462
                 AccountSeed.LogoutProvider(provider);
                 var anyLeft = AccountSeed.Patreon?.IsAuthenticated == true || AccountSeed.Discord?.IsAuthenticated == true
                               || AccountSeed.SubscribeStar?.IsAuthenticated == true;
@@ -424,8 +428,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             {
                 var svc = FriendsHead.Service;
                 bool shared;
+                // WPF FriendsPresenceSetting.Read: a throwing service falls back to the saved setting.
                 try { shared = svc != null ? svc.PresenceShared : CoreSettings.Current.FriendsPresenceShared; }
-                catch { shared = false; }
+                catch { shared = CoreSettings.Current.FriendsPresenceShared; }
                 Find<CheckBox>("ChkFriendsPresence").IsChecked = shared;
             }
             finally { _refreshingPresence = false; }

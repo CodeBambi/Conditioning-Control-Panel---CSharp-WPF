@@ -57,6 +57,11 @@ public sealed class AccountSettingsSectionTests
             {
                 shell?.Close();
                 Dispatcher.UIThread.RunJobs();
+                CoreSecrets.RetrieveProvider = oldGet;
+                CoreSecrets.StoreProvider = oldSet;
+                CoreSettings.ServiceProvider = oldSettings;
+                // P02: providers that read the process settings again, not this test's thrown-away ones.
+                AccountSeed.Seed(p => new ProviderSubscription(p));
                 CoreAccount.IsLoggedInProvider = CoreAccount.HasPremiumAccessProvider = CoreAccount.HasLabAccessProvider = CoreAccount.IsWhitelistedProvider = null;
                 CoreAccount.DisplayNameProvider = null;
                 CoreAccount.ChangeDisplayNameProvider = null;
@@ -64,9 +69,6 @@ public sealed class AccountSettingsSectionTests
                 CoreAccount.UnifiedUserId = null;
                 CoreEntitlement.HasPremiumProvider = CoreEntitlement.HasLabProvider = null;
                 CoreProgram.HasPremiumProvider = null;
-                CoreSecrets.RetrieveProvider = oldGet;
-                CoreSecrets.StoreProvider = oldSet;
-                CoreSettings.ServiceProvider = oldSettings;
                 if (settingsBefore != null) File.WriteAllBytes(settingsPath, settingsBefore); else File.Delete(settingsPath);
             }
         });
@@ -140,6 +142,26 @@ public sealed class AccountSettingsSectionTests
             Assert.Equal(Loc.Get("btn_reconnect_patreon"), Text(section, "TxtBtnLinkPatreon"));
             Assert.True(Shown(section, "TxtPatreonReconnectHint"));
             Assert.False(Shown(section, "BtnLinkDiscord"));
+        });
+    }
+
+    [Fact]
+    public void AFailedDiscordLinkGivesTheButtonItsLabelBack()
+    {
+        Run((shell, section, s, secrets) =>
+        {
+            s.UnifiedId = "u-test";
+            s.HasLinkedDiscord = false;
+            section.OnSectionShown();
+            var discord = AccountSeed.Discord!;
+            discord.IsVerifying = true;            // SignInAsync returns at once: no token, the link fails
+            try
+            {
+                Click(section, "BtnLinkDiscord");
+                Assert.True(section.FindControl<Button>("BtnLinkDiscord")!.IsEnabled);
+                Assert.Equal(Loc.Get("btn_link_discord"), Text(section, "TxtBtnLinkDiscord"));
+            }
+            finally { discord.IsVerifying = false; }
         });
     }
 
