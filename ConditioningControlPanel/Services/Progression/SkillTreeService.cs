@@ -219,10 +219,7 @@ public class SkillTreeService : IDisposable
         multiplier += LiveEventService.ClampXpBoost(App.LiveEvent?.XpBoost ?? 0.0);
 
         // Pink Rush (active window)
-        if (settings.PinkRushActive && HasSkill("pink_rush"))
-        {
-            multiplier *= 3.0; // 3x during Pink Rush
-        }
+        multiplier *= PinkRushRules.XpFactor(settings); // 3x during Pink Rush
 
         return multiplier;
     }
@@ -315,11 +312,8 @@ public class SkillTreeService : IDisposable
         var settings = App.Settings?.Current;
         if (settings == null || !HasSkill("pink_rush")) return;
 
-        // Don't trigger if already active
-        if (settings.PinkRushActive) return;
-
-        // 50% chance every 5 minutes (~once per 10 min)
-        if (_random.NextDouble() < 0.50)
+        // Owned, not already active, 50% chance per check (~once per 20 min)
+        if (PinkRushRules.ShouldStart(settings, _random.NextDouble()))
         {
             StartPinkRush();
         }
@@ -333,8 +327,7 @@ public class SkillTreeService : IDisposable
         var settings = App.Settings?.Current;
         if (settings == null) return;
 
-        settings.PinkRushActive = true;
-        settings.PinkRushEndTime = DateTime.Now.AddSeconds(60);
+        PinkRushRules.Begin(settings, DateTime.Now);
 
         _pinkRushTimer.Start();
         PinkRushStarted?.Invoke(this, EventArgs.Empty);
@@ -347,7 +340,7 @@ public class SkillTreeService : IDisposable
         var settings = App.Settings?.Current;
         if (settings == null) return;
 
-        if (settings.PinkRushEndTime.HasValue && DateTime.Now >= settings.PinkRushEndTime.Value)
+        if (PinkRushRules.IsDue(settings, DateTime.Now))
         {
             EndPinkRush();
         }
@@ -358,8 +351,7 @@ public class SkillTreeService : IDisposable
         var settings = App.Settings?.Current;
         if (settings == null) return;
 
-        settings.PinkRushActive = false;
-        settings.PinkRushEndTime = null;
+        PinkRushRules.Clear(settings);
 
         _pinkRushTimer.Stop();
         PinkRushEnded?.Invoke(this, EventArgs.Empty);
