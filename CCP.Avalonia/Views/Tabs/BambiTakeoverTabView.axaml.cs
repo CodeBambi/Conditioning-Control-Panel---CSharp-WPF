@@ -504,7 +504,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 var owner = TopLevel.GetTopLevel(this) as Window;
                 var dlg = new Dialogs.MicConsentDialog();
-                var ok = owner != null && await dlg.ShowDialog<bool?>(owner) == true && dlg.ConsentGiven;
+                var ok = owner != null && await dlg.ShowDialogSafe<bool?>(owner) == true && dlg.ConsentGiven;
                 if (!ok)
                 {
                     _isLoading = true;

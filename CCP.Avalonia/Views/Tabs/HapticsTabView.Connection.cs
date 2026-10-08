@@ -12,6 +12,7 @@ using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Haptics;
 using ConditioningControlPanel.Services.Haptics.Core;
+using ConditioningControlPanel.Views.Controls;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
@@ -59,9 +60,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 SliderHapticMaxPower.Value = cap;
                 TxtHapticMaxPower.Text = $"{cap}%";
                 HapticMaxPowerWarning.IsVisible = cap > (int)Math.Round(HapticMixer.DefaultMasterCap * 100);
+                LoadDialsToUi(s);
             }
             finally { _loading = false; }
-            RefreshHapticConnectionUi();
+            RefreshAudioSyncCardVisibility();
+            foreach (var group in _routingGroups)
+                foreach (var row in group.Rows) row.Refresh();
+            RefreshHapticToys(force: true);   // settings/wizard may have rewritten per-toy config behind the cards
+            RefreshHapticLiveStatus();
+            UpdateHapticPatternPreview();
         }
 
         /// <summary>WPF RefreshHapticConnectionUi: status text + dot, button label, device line.</summary>
@@ -78,6 +85,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var count = haptics?.DeviceManager.Devices.Count ?? 0;
             if (count == 0) SetKey(TxtHapticDevices, "label_no_devices");
             else SetText(TxtHapticDevices, Loc.GetF("haptics_devices_merged", count, haptics?.ProviderName ?? ""));
+            foreach (var chip in _providerChips) chip.Sync(Cfg, haptics);
 
             (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.SetHapticsStatusPulse(connected);
         }
@@ -93,7 +101,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (Haptics is not { } h) return;
             h.ConnectionChanged -= OnHapticConnectionChanged;
             h.HapticTriggered -= OnHapticActivity;
+            h.DeviceManager.DevicesChanged -= OnHapticDevicesChanged;
             if (!on) return;
+            h.DeviceManager.DevicesChanged += OnHapticDevicesChanged;
             h.ConnectionChanged += OnHapticConnectionChanged;
             h.HapticTriggered += OnHapticActivity;
         }
@@ -147,7 +157,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (haptics.IsConnected)
             {
                 await haptics.DisconnectAsync();
-                RefreshHapticConnectionUi();
+                RefreshHapticToys();
                 return;
             }
             if (!new[] { "lovense", "buttplug", "mock" }.Any(k => Cfg.V2.Provider(k).Enabled))
@@ -181,6 +191,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             try
             {
                 if (!await haptics.ConnectAsync()) Log.Information("Haptics connect failed");
+                RefreshHapticToys();
             }
             catch (Exception ex) { Log.Warning(ex, "Haptics connect error"); }
             finally

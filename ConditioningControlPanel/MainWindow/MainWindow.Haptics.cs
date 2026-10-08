@@ -37,7 +37,7 @@ namespace ConditioningControlPanel
         private readonly ObservableCollection<HapticRoutingGroupVm> _hapticRoutingGroups = new();
         private readonly ObservableCollection<HapticToyCardVm> _hapticToyCards = new();
         /// <summary>Shape of the device list the current cards were built from — see
-        /// <see cref="BuildHapticToyShapeSignature"/>. Guards the #977 mid-drag container teardown.</summary>
+        /// <see cref="HapticToyCardVm.ShapeSignature"/>. Guards the #977 mid-drag container teardown.</summary>
         private string _hapticToyCardsShape = "";
         /// <summary>One open routing row at a time, across every group.</summary>
         private readonly HapticRowExpansionScope _hapticRowScope = new();
@@ -68,69 +68,13 @@ namespace ConditioningControlPanel
 
             // ---- provider chips -------------------------------------------------
             _hapticProviderChips.Clear();
-            _hapticProviderChips.Add(new HapticProviderChipVm("lovense", "Lovense"));
-            _hapticProviderChips.Add(new HapticProviderChipVm("buttplug", "Intiface"));
-            _hapticProviderChips.Add(new HapticProviderChipVm("mock", Loc.Get("haptics_provider_mock")));
+            foreach (var chip in HapticProviderChipVm.BuildDefault()) _hapticProviderChips.Add(chip);
             HapticsTab.ProviderChipsList.ItemsSource = _hapticProviderChips;
 
-            // ---- routing matrix -------------------------------------------------
-            // Design pass: rows are compact at rest and open one at a time, so every row
-            // shares ONE expansion scope regardless of which group it sits in.
-            HapticRoutingRowVm Ev(HapticEventKind kind, string icon, string labelKey, string hintKey,
-                                  HapticRowLegacyBinding legacy = HapticRowLegacyBinding.None)
-            {
-                var row = HapticRoutingRowVm.ForEvent(s, kind, icon, labelKey, hintKey, legacy);
-                row.Scope = _hapticRowScope;
-                row.Changed += OnHapticRoutingRowChanged;
-                return row;
-            }
-            HapticRoutingRowVm Ly(HapticLayer layer, string icon, string labelKey, string hintKey,
-                                  HapticRowLegacyBinding legacy)
-            {
-                var row = HapticRoutingRowVm.ForLayer(s, layer, icon, labelKey, hintKey, legacy);
-                row.Scope = _hapticRowScope;
-                row.Changed += OnHapticRoutingRowChanged;
-                return row;
-            }
-
+            // ---- routing matrix (built in Core, shared with the Avalonia head) ---
             _hapticRoutingGroups.Clear();
-            _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🌀", Loc.Get("haptics_group_core"), new[]
-            {
-                Ev(HapticEventKind.FlashClick, "⚡", "label_flash_click", "haptics_hint_flash_click"),
-                Ev(HapticEventKind.FlashDecay, "💥", "label_flash_show", "haptics_hint_flash_decay"),
-                Ev(HapticEventKind.SubliminalTrigger, "💬", "tab_subliminals", "haptics_hint_subliminal"),
-                Ev(HapticEventKind.KeywordTrigger, "🔑", "haptics_row_keyword", "haptics_hint_keyword"),
-                // Blink has had settings since v6.4 and never had a row until now.
-                Ev(HapticEventKind.BlinkPulse, "👁", "haptics_row_blink", "haptics_hint_blink"),
-            }));
-            _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🏆", Loc.Get("haptics_group_rewards"), new[]
-            {
-                Ev(HapticEventKind.Achievement, "🏆", "tab_achievements", "haptics_hint_achievement"),
-                Ev(HapticEventKind.QuestComplete, "📋", "haptics_row_quest", "haptics_hint_quest"),
-                Ev(HapticEventKind.LevelUp, "⭐", "label_level_up", "haptics_hint_levelup"),
-                Ev(HapticEventKind.GazeReward, "👀", "haptics_row_gaze", "haptics_hint_gaze"),
-            }));
-            _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🎬", Loc.Get("haptics_group_media"), new[]
-            {
-                Ly(HapticLayer.Video, "🎬", "haptics_row_video_bg", "haptics_hint_video_bg", HapticRowLegacyBinding.VideoLevel),
-                Ev(HapticEventKind.VideoTargetHit, "🎯", "label_target_hit", "haptics_hint_target_hit"),
-                Ly(HapticLayer.AudioSync, "🎵", "haptics_row_audio_sync", "haptics_hint_audio_sync", HapticRowLegacyBinding.AudioSync),
-                Ev(HapticEventKind.BouncingTextBounce, "🔤", "label_bounce_text", "haptics_hint_bouncing_text"),
-            }));
-            _hapticRoutingGroups.Add(new HapticRoutingGroupVm("🎮", Loc.Get("haptics_group_games"), new[]
-            {
-                Ev(HapticEventKind.BubblePop, "🫧", "label_bubbles", "haptics_hint_bubble"),
-                // DtRH is the one EVENT row with live legacy readers: DtrhHapticDirector reads the
-                // v2 rule, but DtrhEnabled/DtrhIntensity are still mirrored (see the enum's docs).
-                Ev(HapticEventKind.DtrhAccent, "🐇", "label_dtrh_haptics", "haptics_hint_dtrh",
-                   HapticRowLegacyBinding.Dtrh),
-                // Deeper enhancements play authored keyframe envelopes through the Pattern LAYER
-                // (HapticService.SetSyncPatternAsync). Its rule has always been persisted and read;
-                // it just never had a row, so the enable/scale/role were unreachable. No legacy
-                // twin exists for this layer, so None is correct.
-                Ly(HapticLayer.Pattern, "🌊", "haptics_row_deeper", "haptics_hint_deeper",
-                   HapticRowLegacyBinding.None),
-            }));
+            foreach (var group in HapticRoutingGroupVm.BuildDefault(s, _hapticRowScope, OnHapticRoutingRowChanged))
+                _hapticRoutingGroups.Add(group);
             HapticsTab.RoutingGroupsList.ItemsSource = _hapticRoutingGroups;
 
             // ---- toy cards ------------------------------------------------------
@@ -220,7 +164,7 @@ namespace ConditioningControlPanel
             var manager = App.Haptics?.DeviceManager;
             var devices = manager?.Devices ?? (IReadOnlyList<HapticDevice>)Array.Empty<HapticDevice>();
 
-            var signature = BuildHapticToyShapeSignature(devices);
+            var signature = HapticToyCardVm.ShapeSignature(devices);
             if (force || !string.Equals(signature, _hapticToyCardsShape, StringComparison.Ordinal))
             {
                 _hapticToyCardsShape = signature;
@@ -247,32 +191,6 @@ namespace ConditioningControlPanel
             RefreshHapticConnectionUi();
         }
 
-        /// <summary>
-        /// Identity + layout of the current device list: which toys, in which order, under which
-        /// names, with which actuators. Deliberately EXCLUDES everything the user edits from a
-        /// card (trim / role / enabled / nickname) — those are what made this refresh fire mid-drag
-        /// (#977) — and also excludes the battery reading, which is pushed in place instead so a
-        /// routine battery poll can never tear a card down under the mouse.
-        /// </summary>
-        private static string BuildHapticToyShapeSignature(IReadOnlyList<HapticDevice> devices)
-        {
-            if (devices == null || devices.Count == 0) return "";
-            const string Sep = "|~|";        // separators, not data: a toy name can contain anything
-            const string EndOfDevice = "|;|";
-            var sb = new System.Text.StringBuilder();
-            foreach (var d in devices)
-            {
-                if (d == null) continue;
-                sb.Append(d.DeviceKey).Append(Sep)
-                  .Append(d.Name).Append(Sep)
-                  .Append(d.IsConnected ? '1' : '0').Append(Sep);
-                foreach (var a in d.Actuators)
-                    sb.Append((int)a.Type).Append(':').Append(a.Index).Append(':').Append(a.Steps).Append(',');
-                sb.Append(EndOfDevice);
-            }
-            return sb.ToString();
-        }
-
         /// <summary>Status dot, status text, device summary, connect button and provider chips.</summary>
         internal void RefreshHapticConnectionUi()
         {
@@ -292,13 +210,7 @@ namespace ConditioningControlPanel
                 ? Loc.Get("label_no_devices")
                 : Loc.GetF("haptics_devices_merged", count, haptics?.ProviderName ?? "");
 
-            var v2 = HapticCfg.V2;
-            foreach (var chip in _hapticProviderChips)
-            {
-                chip.IsEnabledForConnect = v2.Provider(chip.Key).Enabled;
-                chip.IsConnected = haptics?.DeviceManager.Providers
-                    .Any(p => string.Equals(p.Key, chip.Key, StringComparison.OrdinalIgnoreCase) && p.IsConnected) == true;
-            }
+            foreach (var chip in _hapticProviderChips) chip.Sync(HapticCfg, haptics);
 
             SetHapticsStatusPulse(connected);
         }

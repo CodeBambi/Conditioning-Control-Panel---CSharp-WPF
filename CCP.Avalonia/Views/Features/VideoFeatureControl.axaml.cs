@@ -396,7 +396,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
             var s = CoreSettings.Current;
             var dialog = new TextEditorDialog("Attention Targets", s.AttentionPool);
-            if (await dialog.ShowDialog<bool?>(owner) == true && dialog.ResultData != null)
+            if (await dialog.ShowDialogSafe<bool?>(owner) == true && dialog.ResultData != null)
             {
                 s.AttentionPool = dialog.ResultData;
                 CoreSettings.Save();
@@ -407,7 +407,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private async void BtnAttentionStyle_Click(object? sender, RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
-            await new AttentionTargetEditorDialog().ShowDialog(owner);
+            await new AttentionTargetEditorDialog().ShowDialogSafe(owner);
         }
 
         private async void BtnTestVideo_Click(object? sender, RoutedEventArgs e)

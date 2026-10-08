@@ -179,7 +179,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var card = page?.ProfileHeroCard.Bounds;
 
                 var dialog = new ProfileCustomizeDialog(current, unlocked, avatar, card?.Width ?? 0, card?.Height ?? 0);
-                if (await dialog.ShowDialog<bool>(this) != true) return;
+                if (await dialog.ShowDialogSafe<bool>(this) != true) return;
 
                 PersistOwnCosmetics(SanitizeOwnWardrobe(dialog.Result));
             }

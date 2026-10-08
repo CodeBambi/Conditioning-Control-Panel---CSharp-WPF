@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -71,7 +72,7 @@ internal static class DtrhLoomStore
                 outp.Add((slug, gif, pjson));
             }
         }
-        catch (Exception ex) { App.Logger?.Debug("DtrhLoomStore.List: {E}", ex.Message); }
+        catch (Exception ex) { Log.Debug("DtrhLoomStore.List: {E}", ex.Message); }
         return outp;
     }
 
@@ -113,13 +114,13 @@ internal static class DtrhLoomStore
                     (parameters ?? new JObject()).ToString());
             }
             catch { /* sidecar is a convenience (re-edit); the gif is the artifact */ }
-            App.Logger?.Information("DtrhLoomStore: saved spiral {Slug} ({Bytes} bytes)", slug, bytes.Length);
+            Log.Information("DtrhLoomStore: saved spiral {Slug} ({Bytes} bytes)", slug, bytes.Length);
             try { Changed?.Invoke(); } catch { /* a broken subscriber must not fail the save */ }
             return (true, slug, null);
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("DtrhLoomStore.Save({Slug}) failed: {E}", slug, ex.Message);
+            Log.Warning("DtrhLoomStore.Save({Slug}) failed: {E}", slug, ex.Message);
             return (false, slug, "io-failed");
         }
     }
@@ -156,7 +157,7 @@ internal static class DtrhLoomStore
             // back to the built-in (a failed delete must not reset the setting)
             try
             {
-                var s = App.Settings?.Current;
+                var s = CoreSettings.Current;
                 if (s != null && !string.IsNullOrEmpty(s.SpiralPath)
                     && string.Equals(Path.GetFullPath(s.SpiralPath), Path.GetFullPath(gifPath), StringComparison.OrdinalIgnoreCase))
                 {
@@ -167,13 +168,13 @@ internal static class DtrhLoomStore
 
             var sidecar = Path.Combine(SpiralsFolder, Prefix + slug + ".json");
             try { if (File.Exists(sidecar)) File.Delete(sidecar); } catch { }
-            App.Logger?.Information("DtrhLoomStore: deleted spiral {Slug}", slug);
+            Log.Information("DtrhLoomStore: deleted spiral {Slug}", slug);
             try { Changed?.Invoke(); } catch { /* a broken subscriber must not fail the delete */ }
             return (true, null);
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning("DtrhLoomStore.Delete({Slug}) failed: {E}", slug, ex.Message);
+            Log.Warning("DtrhLoomStore.Delete({Slug}) failed: {E}", slug, ex.Message);
             return (false, "io-failed");
         }
     }
