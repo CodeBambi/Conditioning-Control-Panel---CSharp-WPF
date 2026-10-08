@@ -27,8 +27,8 @@ namespace ConditioningControlPanel.Services
             ShareProfilePicture = 1L << 11, PublicShareAvatar = 1L << 12, GoonShareAvatar = 1L << 13,
             GoonShareDm = 1L << 14, Cosmetics = 1L << 15, WebXpClaimAck = 1L << 16, InstallDate = 1L << 17,
             DescentEpoch = 1L << 18, ResetWeeklyQuest = 1L << 19, ResetDailyQuest = 1L << 20,
-            ForceStreakOverride = 1L << 21, ForceSkillsReset = 1L << 22,
-            All = (1L << 23) - 1,
+            ForceStreakOverride = 1L << 21, ForceSkillsReset = 1L << 22, DescentAuto = 1L << 23,
+            All = (1L << 24) - 1,
         }
 
         [JsonIgnore] public Field Known { get; set; }
@@ -53,6 +53,9 @@ namespace ConditioningControlPanel.Services
         [JsonProperty("web_xp_claim_ack")] public string? WebXpClaimAck { get; set; }
         [JsonProperty("install_date")] public string? InstallDate { get; set; }
         [JsonProperty("descent_epoch")] public int DescentEpoch { get; set; }
+        // "This build takes a migration offer silently" (main 2026-10-06). Only a head that does
+        // sets it: one without the migration must never claim it, or the server offers to it.
+        [JsonProperty("descent_auto")] public bool DescentAuto { get; set; }
         [JsonProperty("reset_weekly_quest")] public bool ResetWeeklyQuest { get; set; }
         [JsonProperty("reset_daily_quest")] public bool ResetDailyQuest { get; set; }
         [JsonProperty("force_streak_override")] public bool ForceStreakOverride { get; set; }
@@ -77,6 +80,7 @@ namespace ConditioningControlPanel.Services
         public bool ShouldSerializeWebXpClaimAck() => Has(Field.WebXpClaimAck);
         public bool ShouldSerializeInstallDate() => Has(Field.InstallDate);
         public bool ShouldSerializeDescentEpoch() => Has(Field.DescentEpoch);
+        public bool ShouldSerializeDescentAuto() => Has(Field.DescentAuto);
         public bool ShouldSerializeResetWeeklyQuest() => Has(Field.ResetWeeklyQuest);
         public bool ShouldSerializeResetDailyQuest() => Has(Field.ResetDailyQuest);
         public bool ShouldSerializeForceStreakOverride() => Has(Field.ForceStreakOverride);

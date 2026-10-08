@@ -16,9 +16,9 @@ namespace ConditioningControlPanel.Services.Descent
     public static class DescentCycleXp
     {
         /// <summary>
-        /// The Cycle XP bonus. TUNABLE AND UNBLESSED — CONTRACTS §3 records that the owner has
-        /// not signed off on 1.10, only on "there is a lasting bonus". It ships dark with the
-        /// ceremony; changing it is a one-line edit here and nowhere else.
+        /// The lasting XP bonus a migrated account earns. Originally the Cycle door's alone; since
+        /// the ceremony's retirement (owner, 2026-10-06: "give the 10% boost to anyone that comes
+        /// back") it is every migrated account's. Changing it is a one-line edit here.
         /// </summary>
         public const double CycleXpBonus = 1.10;
     }

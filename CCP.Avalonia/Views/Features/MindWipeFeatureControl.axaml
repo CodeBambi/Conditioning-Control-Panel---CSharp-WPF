@@ -148,9 +148,11 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" x:Name="BtnSelectAudio" Content="Select audio…"
+                                    <Button Grid.Column="0" x:Name="BtnSelectAudio"
                                             Theme="{DynamicResource OutlineButton}" Padding="12,6"
-                                            Margin="0,0,6,0"/>
+                                            Margin="0,0,6,0">
+                                        <TextBlock Text="{loc:Str btn_select_audio}"/>
+                                    </Button>
                                     <Button Grid.Column="1" x:Name="BtnClearAudio" Content="Reset"
                                             Theme="{DynamicResource OutlineButton}" Padding="12,6"/>
                                 </Grid>

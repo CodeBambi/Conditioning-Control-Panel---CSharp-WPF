@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -29,18 +30,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - The named <c>ScaleTransform</c> became a field: Avalonia generates fields only for
     ///    named Controls, so the transform is built here and assigned to ProgressFill.
     ///
-    /// <para>NO CALLER ON THIS HEAD, and the call site is not missing - it is out of reach. WPF
-    /// owns the splash entirely from <c>ConditioningControlPanel/App.xaml.cs</c>: the field
-    /// <c>_splash</c> (line 83), <c>_splash = SplashScreen.ShowOnOwnThread()</c> in OnStartup
-    /// (line 1539), the <c>SetProgress</c> calls threaded through service initialisation, and
-    /// <c>FadeOutAndClose</c> when the main window appears. The Avalonia twin of that file is
-    /// <c>CCP.Avalonia/App.axaml.cs</c>, and the splash belongs in
-    /// <c>OnFrameworkInitializationCompleted</c> immediately before
-    /// <c>desktop.MainWindow = new MainShellWindow()</c> - not on MainShellWindow, which by
-    /// definition exists only after the startup this window is meant to cover. That file is
-    /// off-limits to this layer, so the call is named here rather than put somewhere it would be
-    /// a defect. There is also nothing yet for <c>SetProgress</c> to report: this head's startup
-    /// is one settings service and five seam assignments, all synchronous.</para>
+    /// <para>Caller: <c>App.OnFrameworkInitializationCompleted</c> via <c>App.StartBehindSplash</c>,
+    /// on a real launch only (<c>App.SplashOnStartup</c>, set by Program.Main). Startup yields one
+    /// frame per <see cref="SetProgress"/> step (<see cref="NextFrame"/>) so the bar paints between
+    /// steps; that is this head's stand-in for WPF's own splash thread.</para>
     /// </summary>
     public partial class SplashScreen : Window
     {
@@ -68,15 +61,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // version - so the splash reports the build that is actually running. Unseeded the
             // seam answers "0.0.0", which is honest rather than a stale literal.
             this.FindControl<TextBlock>("TxtVersion")!.Text = $"v{CoreReleaseContent.AppVersion}";
-
-            // ponytail: placeholder progress. App.OnStartup is the only caller of SetProgress and
-            // it is still in the WPF head, so nothing drives the bar in this head yet. Seeding a
-            // mid-load value keeps the gradient visible in the render proof; delete this whole
-            // four-line block when startup calls SetProgress.
-            _targetProgress = 0.62;
-            _displayedProgress = 0.62;
-            _progressScale.ScaleX = 0.62;
-            _txtStatus.Text = "Loading services...";
 
             // Let impatient clicks do something harmless: drag the splash around.
             PointerPressed += (_, e) => { try { BeginMoveDrag(e); } catch { } };
@@ -195,7 +179,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try { Close(); } catch { }
         }
 
-        private void CreepTick()
+        /// <summary>Completes once the next frame has been rendered (or after 100 ms, so a window
+        /// that never renders cannot stall startup).</summary>
+        internal Task NextFrame()
+        {
+            var frame = new TaskCompletionSource();
+            try { RequestAnimationFrame(_ => frame.TrySetResult()); } catch { frame.TrySetResult(); }
+            return Task.WhenAny(frame.Task, Task.Delay(100));
+        }
+
+        internal double DisplayedProgress => _displayedProgress;
+
+        /// <summary>A startup step: status plus the bar jumped to (never back from) its value, since
+        /// on one UI thread the creep cannot run while the step works.</summary>
+        internal void ShowStep(double progress, string status)
+        {
+            SetProgress(progress, status);
+            _displayedProgress = Math.Max(_displayedProgress, _targetProgress);
+            _progressScale.ScaleX = _displayedProgress;
+        }
+
+        internal void CreepTick()
         {
             if (_closing) return;
 
@@ -217,7 +221,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _progressScale.ScaleX = _displayedProgress;
         }
 
-        private void ReassureTick()
+        internal void ReassureTick()
         {
             if (_closing) return;
             _reassureStage++;
