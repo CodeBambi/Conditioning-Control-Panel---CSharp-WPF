@@ -294,7 +294,9 @@ namespace ConditioningControlPanel.Avalonia
             // Without a splash every step completed inline, so a startup failure throws here as before;
             // behind one it is rethrown on the UI thread.
             if (start.IsCompleted) start.GetAwaiter().GetResult();
-            else start.ContinueWith(t => Dispatcher.UIThread.Post(() => t.GetAwaiter().GetResult()),
+            // Behind one, end the loop with a failure code; Program.Main rethrows StartupFailure.
+            else start.ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+                    (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown(1)),
                 TaskContinuationOptions.OnlyOnFaulted);
             base.OnFrameworkInitializationCompleted();
         }
@@ -302,15 +304,25 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>Runs <paramref name="start"/>, painting each step on the splash; then shows the
         /// shell (the lifetime found no MainWindow to show yet) and fades the splash out (WPF
         /// App.xaml.cs:3837-3867). No splash: the steps are no-ops and everything runs inline.</summary>
+        /// <summary>A startup failure behind the splash; Program.Main rethrows it after the loop ends.</summary>
+        internal static System.Runtime.ExceptionServices.ExceptionDispatchInfo? StartupFailure;
+
         internal static async Task StartBehindSplash(Views.Windows.SplashScreen? splash,
             Func<Func<double, string, Task>, Task> start, Func<global::Avalonia.Controls.Window?> shell)
         {
             if (splash is null) { await start(static (_, _) => Task.CompletedTask); return; }
             try
             {
-                await start((progress, status) => { splash.SetProgress(progress, status); return splash.NextFrame(); });
+                await start((progress, status) => { splash.ShowStep(progress, status); return splash.NextFrame(); });
             }
-            catch { splash.CloseImmediate(); throw; }
+            catch (Exception ex)
+            {
+                // Recorded before the splash closes: closing the last window ends the loop with code 0.
+                Serilog.Log.Fatal(ex, "Startup failed");
+                StartupFailure = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+                splash.CloseImmediate();
+                throw;
+            }
             var window = shell();
             window?.Show();
             splash.SetProgress(1.0, "Ready!");
@@ -528,7 +540,7 @@ namespace ConditioningControlPanel.Avalonia
                 {
                     Serilog.Log.Error(ex, "Failed to initialize ReleaseContentService - downloaded content unavailable this session");
                 }
-                await step(0.6, "Initializing audio...");
+                await step(0.3, "Initializing audio...");
                 // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
                 // CoreAudio stays unseeded: every clip "finishes" at once and nothing plays.
                 // Console as well as Serilog: this head configures no Serilog sink yet.
@@ -566,7 +578,7 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Debug("ModerationCounter.LoadFromDisk failed: {Error}", ex.Message); }
                 CoreModerationLog.CounterProvider = () => moderationCounter;
                 CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;   // WPF App.xaml.cs:380
-                await step(0.7, "Initializing companion...");
+                await step(0.85, "Initializing companion...");
                 // WPF App.xaml.cs:2690: built unconditionally, UseCompanionBrain decides per send. The bark
                 // echo stays unseeded (no bark engine here: CoreBark is a doorbell); command executor and
                 // activities are CompanionEffects (seeded below). SeedMemorySignals seeds UserMessageSent for the memory
@@ -597,7 +609,7 @@ namespace ConditioningControlPanel.Avalonia
                 // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
                 // open. Seeding it with anything would put a tour on screen that nothing drives.
 
-                await step(0.85, "Loading achievements...");
+                await step(0.75, "Loading achievements...");
                 // Achievements: the Core engine over the same achievements.json WPF uses, seeded the
                 // way WPF App.xaml.cs:384/:394 seeds the two unlock seams. Unlocked is raised on the
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.

@@ -25,6 +25,9 @@ public sealed class SplashStartupTests
                 .SetupWithoutStarting();
     }
 
+    private static double Bar(SplashScreen s) =>
+        ((ScaleTransform)s.FindControl<Border>("ProgressFill")!.RenderTransform!).ScaleX;
+
     private static string Status(SplashScreen s) => s.FindControl<TextBlock>("TxtStatus")!.Text!;
 
     [Fact]
@@ -48,6 +51,7 @@ public sealed class SplashStartupTests
             // The first step waits for a frame: nothing after it has run, its status is up.
             Assert.Equal(new[] { "settings" }, ran);
             Assert.Equal("Loading settings...", Status(splash));
+            Assert.Equal(0.2, Bar(splash), 3);   // jumped to WPF's value, not left creeping
             Assert.False(shell.IsVisible);
 
             for (int i = 0; i < 10 && !start.IsCompleted; i++)
@@ -94,8 +98,14 @@ public sealed class SplashStartupTests
         }, () => null);
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         Dispatcher.UIThread.RunJobs();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => start);
-        Assert.False(splash.IsVisible);
+        try
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => start);
+            Assert.False(splash.IsVisible);
+            // Recorded for Program.Main to rethrow once the loop ends (closing the splash ends it with 0).
+            Assert.Equal("boom", Assert.Throws<InvalidOperationException>(() => App.StartupFailure!.Throw()).Message);
+        }
+        finally { App.StartupFailure = null; }
     });
 
     [Fact]

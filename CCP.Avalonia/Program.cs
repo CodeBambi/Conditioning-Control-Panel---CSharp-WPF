@@ -208,6 +208,7 @@ namespace ConditioningControlPanel.Avalonia
                 });
             App.SplashOnStartup = true;
             app.StartWithClassicDesktopLifetime(args);
+            App.StartupFailure?.Throw();   // a failed startup crashes non-zero, as it did before the splash
             return 0;
         }
 

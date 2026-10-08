@@ -190,6 +190,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         internal double DisplayedProgress => _displayedProgress;
 
+        /// <summary>A startup step: status plus the bar jumped to (never back from) its value, since
+        /// on one UI thread the creep cannot run while the step works.</summary>
+        internal void ShowStep(double progress, string status)
+        {
+            SetProgress(progress, status);
+            _displayedProgress = Math.Max(_displayedProgress, _targetProgress);
+            _progressScale.ScaleX = _displayedProgress;
+        }
+
         internal void CreepTick()
         {
             if (_closing) return;
