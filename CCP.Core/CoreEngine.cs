@@ -60,6 +60,11 @@ namespace ConditioningControlPanel
             if (!audioOnly && s.PopQuizEnabled) PopQuiz?.Start();   // WPF StartStop.cs:393
             if (!audioOnly && s.BouncingTextEnabled) CoreBouncingText.Start();
             else CoreBouncingText.Stop();   // WPF: clean up any leftover state
+            if (!audioOnly && s.MindWipeEnabled)   // WPF StartStop.cs:366
+            {
+                CoreMindWipe.Start(s.MindWipeFrequency, s.MindWipeVolume / 100.0);
+                if (s.MindWipeLoop) CoreMindWipe.StartLoop(s.MindWipeVolume / 100.0);
+            }
 
             _running = true;
             StartedUtc = DateTime.UtcNow;
@@ -84,6 +89,7 @@ namespace ConditioningControlPanel
                 CoreSubliminal.Stop();
                 LockCardScheduler.Instance.Stop();
                 PopQuiz?.Stop();   // closes an open quiz (WPF StartStop.cs:492)
+                CoreMindWipe.Stop();   // WPF StartStop.cs:489, also ends the loop
                 _running = false;
                 StartedUtc = null;
                 try { StoppedHook?.Invoke(); }
@@ -105,12 +111,15 @@ namespace ConditioningControlPanel
             if (!s.BubblesEnabled) ApplyLive("bubbles", false);
             if (!s.MandatoryVideosEnabled) ApplyLive("video", false);
             if (!s.BubbleCountEnabled) ApplyLive("bubblecount", false);   // WPF Presets.cs:2261
+            CoreMindWipe.ApplyRunRule();   // WPF Presets.cs:2265 (#1304)
         }
 
         /// <summary>A card or wall toggle already wrote its flag; start or stop the matching
         /// service only while running (WPF FlashFeatureControl.xaml.cs:268, SetWallFeature).</summary>
         public static void ApplyLive(string key, bool on)
         {
+            // WPF SetWallFeature "mindwipe": the run rule also stops a loop with the engine off (#1304).
+            if (key == "mindwipe") { CoreMindWipe.ApplyRunRule(); return; }
             if (!_running) return;
             switch (key)
             {
