@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
@@ -75,6 +76,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// something to lay out.</summary>
         public WardrobeEditorDialog() : this(new ProfileCosmetics
         {
+            BannerId = "bambi_neon_den",
             AvatarDeco = "bambi_silk_bow",
             Charms = { "bambi_plush_bunny", "bambi_bubble_wand" },
             CharmTransforms = new Dictionary<string, CosmeticTransform>(StringComparer.Ordinal)
@@ -138,8 +140,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void BuildStageBackdrop(IImageBrushSource? avatar)
         {
-            // ponytail: needs CosmeticsCatalog.GetBannerImage (WPF head) for the banner; wired when
-            // the catalogue moves to Core. The default gradient in the XAML shows through meanwhile.
+            // Stretch AND alignment match the hero's banner: UniformToFill cropped from the TOP, so the
+            // stage previews the same slice of the banner the card shows (WPF BuildStageBackdrop).
+            if (ModArt.Banner(_draft.BannerId, 1024, AlignmentY.Top) is { } banner)
+                this.FindControl<Border>("StageBanner")!.Background = banner;
 
             // The avatar bubble: the hero's 104px circle + pink ring, at stage scale.
             IBrush avatarBrush = avatar != null
