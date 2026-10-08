@@ -1,58 +1,62 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using LibVLCSharp.Shared;
+using MediaType = ConditioningControlPanel.Models.MediaType;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     /// <summary>
     /// "Media Log" recap window (opened from the Assets tab). Shows the app-lifetime history
-    /// of flashed images and played videos in a virtualized master list, with a single live
-    /// preview pane on the right.
+    /// of flashed images, played videos and Brain Drain audio in a virtualized master list, with
+    /// a single live preview pane on the right.
     ///
-    /// PORTED from ConditioningControlPanel/Windows/MediaHistoryWindow.xaml.cs. Deviations:
-    ///  - <c>App.MediaHistory</c> / <c>MediaLogEntry</c> / <c>MediaHistoryService</c> live in the
-    ///    WPF head, so <see cref="LoadRows"/> returns placeholder rows and the EntryAdded /
-    ///    Cleared subscriptions and the Clear button are stubs. The filter, search, count and
-    ///    preview logic are ported verbatim and run against those rows.
-    ///  - Reveal-in-folder and open-file ARE live: WPF's Win32 <c>ExplorerLauncher</c> becomes
-    ///    <c>UseShellExecute</c>, which is ShellExecute on Windows and xdg-open on Linux. Only the
-    ///    SELECT-the-file half of Explorer's behaviour is lost.
-    ///  - <see cref="MediaHistoryRow"/> takes the fields it formats rather than a
-    ///    <c>MediaLogEntry</c>, for the same reason. Restoring the model constructor when it
-    ///    reaches Core is a one-liner.
-    ///  - <c>Visibility</c> -> <c>IsVisible</c>; <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>;
-    ///    <c>Application.Current.TryFindResource</c> -> <c>this.TryFindResource</c>.
-    ///  - The video preview (WPF's <c>MediaElement</c>) and the animated-GIF branch
-    ///    (XamlAnimatedGif) have no Avalonia equivalent and no package may be added; both fall
-    ///    through to the still-image path.
-    ///  - <c>DisplayPath</c> normalised to backslashes; here it normalises to the platform
-    ///    separator, or the same call would mangle every Linux path.
-    ///  - The row's open-in-folder Click moves out of the DataTemplate onto the ListBox: template
-    ///    content has no name scope to bind a markup handler through. The Tag still carries the row.
+    /// PORTED from ConditioningControlPanel/Windows/MediaHistoryWindow.xaml.cs, reading the same
+    /// <see cref="MediaHistoryService"/> (now in CCP.Core, <see cref="App.MediaHistory"/>) and the
+    /// same <see cref="MediaHistoryPreviewRules"/>. Deviations:
+    ///  - Video preview plays through LibVLC into an <c>Image</c> (<see cref="VlcFrameSink"/>), muted
+    ///    and looping like WPF's MediaElement; a GIF animates from the spiral's bounded SkiaSharp decoder
+    ///    (WPF XamlAnimatedGif), showing its first frame until the frames are ready.
+    ///  - This head has no RemoteMediaCache, so an online entry is never "cached": it gets the
+    ///    streamed-only card with Copy link / Open source, and no Load preview button.
+    ///  - Reveal-in-folder opens the containing folder (Explorer's select-the-file is Win32).
     /// </summary>
     public partial class MediaHistoryWindow : Window
     {
         private readonly List<MediaHistoryRow> _allRows = new();          // newest first, unfiltered
         private readonly ObservableCollection<MediaHistoryRow> _view = new();
-        private string _filter = "all";       // all | image | video
+        private string _filter = "all";       // all | image | video | audio
         private string _search = "";
+        private MediaHistoryService? _history;
 
         private readonly ListBox _mediaList;
         private readonly TextBox _txtSearch;
-        private readonly TextBlock _txtCount, _txtEmpty, _searchPlaceholder;
+        private readonly TextBlock _txtCount, _txtEmpty, _searchPlaceholder, _copyLinkText;
         private readonly TextBlock _previewHint, _previewMissing, _previewName, _previewPath;
         private readonly Image _previewImage;
-        private readonly Button _btnFilterAll, _btnFilterImages, _btnFilterVideos;
-        private readonly Button _btnPreviewOpenFolder, _btnPreviewOpenFile;
+        private readonly Button _btnFilterAll, _btnFilterImages, _btnFilterVideos, _btnFilterAudio;
+        private readonly Button _btnPreviewOpenFolder, _btnPreviewOpenFile, _btnPreviewCopyLink, _btnPreviewOpenSource;
+
+        private MediaPlayer? _player;
+        private Media? _media;
+        private VlcFrameSink? _sink;
+        private int _copyGeneration, _previewGeneration;
+        private DispatcherTimer? _gifTimer;
+        private List<Bitmap> _gifFrames = new();
 
         public MediaHistoryWindow()
         {
@@ -63,6 +67,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtCount = this.FindControl<TextBlock>("TxtCount")!;
             _txtEmpty = this.FindControl<TextBlock>("TxtEmpty")!;
             _searchPlaceholder = this.FindControl<TextBlock>("SearchPlaceholder")!;
+            _copyLinkText = this.FindControl<TextBlock>("CopyLinkText")!;
             _previewHint = this.FindControl<TextBlock>("PreviewHint")!;
             _previewMissing = this.FindControl<TextBlock>("PreviewMissing")!;
             _previewName = this.FindControl<TextBlock>("PreviewName")!;
@@ -71,68 +76,105 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _btnFilterAll = this.FindControl<Button>("BtnFilterAll")!;
             _btnFilterImages = this.FindControl<Button>("BtnFilterImages")!;
             _btnFilterVideos = this.FindControl<Button>("BtnFilterVideos")!;
+            _btnFilterAudio = this.FindControl<Button>("BtnFilterAudio")!;
             _btnPreviewOpenFolder = this.FindControl<Button>("BtnPreviewOpenFolder")!;
             _btnPreviewOpenFile = this.FindControl<Button>("BtnPreviewOpenFile")!;
+            _btnPreviewCopyLink = this.FindControl<Button>("BtnPreviewCopyLink")!;
+            _btnPreviewOpenSource = this.FindControl<Button>("BtnPreviewOpenSource")!;
 
             _mediaList.ItemsSource = _view;
             _mediaList.SelectionChanged += MediaList_SelectionChanged;
             _txtSearch.TextChanged += Search_TextChanged;
 
-            // Handlers live here rather than in markup, per the porting convention.
             _btnFilterAll.Click += Filter_Click;
             _btnFilterImages.Click += Filter_Click;
             _btnFilterVideos.Click += Filter_Click;
+            _btnFilterAudio.Click += Filter_Click;
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
-            this.FindControl<Button>("BtnClear")!.Click += (_, _) => BtnClear_Click();
-            _btnPreviewOpenFolder.Click += (_, _) => RevealSelected();
+            this.FindControl<Button>("BtnClear")!.Click += async (_, _) => await ClearAsync();
+            _btnPreviewOpenFolder.Click += (_, _) => { if (_mediaList.SelectedItem is MediaHistoryRow r) RevealInExplorer(r.Entry.FilePath); };
             _btnPreviewOpenFile.Click += (_, _) => OpenSelectedFile();
+            _btnPreviewCopyLink.Click += async (_, _) => await CopyLinkAsync();
+            _btnPreviewOpenSource.Click += async (_, _) => await OpenSourceAsync();
 
             // One handler on the list instead of one inside the DataTemplate; Click bubbles.
             _mediaList.AddHandler(Button.ClickEvent, OpenFolder_Click);
             this.FindControl<DockPanel>("HeaderBar")!.PointerPressed += Header_PointerPressed;
 
             Loaded += OnLoaded;
+            Closed += OnClosed;
         }
 
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
-            foreach (var row in LoadRows())
-                _allRows.Add(row);
+            _history = App.MediaHistory;
+            foreach (var entry in _history?.GetSnapshot() ?? new List<MediaLogEntry>())
+                _allRows.Add(new MediaHistoryRow(entry));
 
             RebuildView();
             UpdateFilterButtons();
 
-            // Show the populated preview state rather than the hint; WPF got here on the first
-            // click, and the render proof only ever sees the loaded window.
-            if (_view.Count > 0) _mediaList.SelectedIndex = 0;
+            if (_history != null)
+            {
+                _history.EntryAdded += OnEntryAdded;
+                _history.Cleared += OnHistoryCleared;
+            }
         }
 
-        /// <summary>
-        /// WPF read <c>App.MediaHistory.GetSnapshot()</c> and subscribed to EntryAdded / Cleared.
-        /// ponytail: needs ConditioningControlPanel/Services/Media/MediaHistoryService.cs. Until
-        /// then these placeholder rows let the list, the filters and the preview all draw their
-        /// real states.
-        /// </summary>
-        private static List<MediaHistoryRow> LoadRows()
+        private void OnClosed(object? sender, EventArgs e)
         {
-            var now = DateTime.Now;
-            return new List<MediaHistoryRow>
+            if (_history != null)
             {
-                new("/home/user/Assets/images/soft-pink-01.gif", "soft-pink-01.gif", now.AddMinutes(-2), isVideo: false),
-                new("/home/user/Assets/videos/deep-spiral.mp4", "deep-spiral.mp4", now.AddMinutes(-9), isVideo: true),
-                new("/home/user/Assets/images/mantra-card-04.png", "mantra-card-04.png", now.AddMinutes(-21), isVideo: false),
-                new("/home/user/Assets/videos/loop-trance.webm", "loop-trance.webm", now.AddHours(-3), isVideo: true),
-                new("/home/user/Assets/images/glow-07.jpg", "glow-07.jpg", now.AddDays(-1), isVideo: false),
-                new("/home/user/Assets/images/sink-deeper.png", "sink-deeper.png", now.AddDays(-4), isVideo: false),
-            };
+                _history.EntryAdded -= OnEntryAdded;
+                _history.Cleared -= OnHistoryCleared;
+                _history = null;
+            }
+            StopPreview();
+        }
+
+        // ---- Live updates -------------------------------------------------
+
+        private void OnEntryAdded(object? sender, MediaLogEntry entry)
+        {
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(() => OnEntryAdded(sender, entry));
+                return;
+            }
+            if (_history == null) return;   // closed while the post was queued
+            var row = new MediaHistoryRow(entry);
+            _allRows.Insert(0, row);
+            if (_allRows.Count > MediaHistoryService.MaxEntries)
+                _allRows.RemoveAt(_allRows.Count - 1);
+
+            if (PassesFilter(row))
+                _view.Insert(0, row);
+
+            _txtEmpty.IsVisible = _view.Count == 0;
+            _mediaList.IsVisible = _view.Count > 0;
+            UpdateCount();
+        }
+
+        private void OnHistoryCleared(object? sender, EventArgs e)
+        {
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(() => OnHistoryCleared(sender, e));
+                return;
+            }
+            _allRows.Clear();
+            RebuildView();
+            StopPreview();
+            ShowPreviewNone();
         }
 
         // ---- Filtering / search ------------------------------------------
 
         private bool PassesFilter(MediaHistoryRow row)
         {
-            if (_filter == "image" && row.IsVideo) return false;
-            if (_filter == "video" && !row.IsVideo) return false;
+            if (_filter == "image" && row.Entry.Type != MediaType.Image) return false;
+            if (_filter == "video" && row.Entry.Type != MediaType.Video) return false;
+            if (_filter == "audio" && row.Entry.Type != MediaType.Audio) return false;
             if (!string.IsNullOrEmpty(_search) &&
                 row.DisplayName.IndexOf(_search, StringComparison.OrdinalIgnoreCase) < 0)
                 return false;
@@ -175,6 +217,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             SetActive(_btnFilterAll, _filter == "all");
             SetActive(_btnFilterImages, _filter == "image");
             SetActive(_btnFilterVideos, _filter == "video");
+            SetActive(_btnFilterAudio, _filter == "audio");
         }
 
         private void SetActive(Button btn, bool active)
@@ -209,50 +252,110 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             StopPreview();
             _previewHint.IsVisible = false;
             _previewName.Text = row.DisplayName;
-            _previewPath.Text = DisplayPath(row.FilePath);
 
-            bool exists = row.FileExists;
-            _btnPreviewOpenFolder.IsEnabled = exists;
-            _btnPreviewOpenFile.IsEnabled = exists;
+            // No RemoteMediaCache on this head: an online entry is never cached here.
+            var plan = MediaHistoryPreviewRules.Plan(row.Entry.FilePath, row.Entry.Type, row.FileExists,
+                remoteCached: false, remoteConsent: false);
 
-            if (!exists)
+            _previewPath.Text = plan.SourceText;
+            _btnPreviewOpenFolder.IsEnabled = plan.CanOpenFolder;
+            _btnPreviewOpenFile.IsEnabled = plan.CanOpenFile;
+            _btnPreviewOpenFolder.IsVisible = !plan.IsRemote;
+            _btnPreviewOpenFile.IsVisible = !plan.IsRemote;
+            _btnPreviewCopyLink.IsVisible = plan.CanCopyLink;
+            _btnPreviewOpenSource.IsVisible = plan.CanOpenSource;
+
+            if (plan.Kind == MediaPreviewKind.LocalMissing || plan.Kind == MediaPreviewKind.RemoteUncached)
             {
-                _previewImage.IsVisible = false;
-                _previewMissing.IsVisible = true;
+                ShowMissing(plan.IsRemote ? "label_media_streamed_only" : "label_file_not_found");
+                return;
+            }
+            // An audio clip has no picture: never hand an mp3 to the image decoder (ccp-bugs #1098).
+            if (row.Entry.Type == MediaType.Audio)
+            {
+                ShowMissing("label_media_audio_preview");
                 return;
             }
             _previewMissing.IsVisible = false;
 
-            // ponytail: the video and animated-GIF branches need a media stack. WPF used
-            // MediaElement and XamlAnimatedGif, both WPF-only; the Avalonia head has picked no
-            // replacement yet and adding one is a CCP.Avalonia.csproj change, which no view layer
-            // owns. A still Bitmap of frame 1 is deliberately NOT drawn for the GIF case - a frozen
-            // frame in a preview pane labelled "preview" reads as a broken animation, and the
-            // missing-media plate says the truth.
-            if (row.IsVideo)
+            bool gif = string.Equals(Path.GetExtension(row.Entry.FilePath), ".gif", StringComparison.OrdinalIgnoreCase);
+            if (row.Entry.Type != MediaType.Video)
             {
-                _previewImage.IsVisible = false;
-                _previewMissing.IsVisible = true;
+                try
+                {
+                    using var stream = File.OpenRead(row.Entry.FilePath);
+                    // WPF capped the single preview with DecodePixelWidth=720; never full-res.
+                    _previewImage.Source = Bitmap.DecodeToWidth(stream, 720);
+                    _previewImage.IsVisible = true;
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("MediaHistoryWindow: preview failed for {Path}: {Error}", row.Entry.FilePath, ex.Message);
+                    ShowMissing("label_file_not_found");
+                    return;
+                }
+            }
+            if (row.Entry.Type == MediaType.Video) PlayLoop(row.Entry.FilePath);
+            else if (gif) _ = AnimateGifAsync(row.Entry.FilePath, _previewGeneration);
+        }
+
+        /// <summary>WPF XamlAnimatedGif (RepeatBehavior Forever) on the spiral's bounded SkiaSharp
+        /// decoder, off the UI thread; the still stays up until the frames are ready. The frame timer
+        /// runs only while this preview is the selected one and the window is open.</summary>
+        private async System.Threading.Tasks.Task AnimateGifAsync(string path, int generation)
+        {
+            var (frames, delay) = await System.Threading.Tasks.Task.Run(() => Views.Overlays.SpiralOverlay.Decode(path));
+            if (generation != _previewGeneration || frames.Count < 2)
+            {
+                foreach (var f in frames) f.Dispose();
                 return;
             }
+            _gifFrames = frames;
+            var i = 0;
+            _previewImage.Source = frames[0];
+            _gifTimer = new DispatcherTimer { Interval = delay };
+            _gifTimer.Tick += (_, _) => { i = (i + 1) % frames.Count; _previewImage.Source = frames[i]; };
+            _gifTimer.Start();
+        }
 
-            try
+        /// <summary>WPF MediaElement (muted, looped by MediaEnded) and XamlAnimatedGif (RepeatBehavior
+        /// Forever): one LibVLC decoder feeding the preview Image.</summary>
+        private void PlayLoop(string path)
+        {
+            var vlc = LibVlcAudio.Shared;
+            if (vlc == null)
             {
-                _previewImage.IsVisible = true;
-                using var stream = File.OpenRead(row.FilePath);
-                // WPF capped the single preview with DecodePixelWidth=720; never full-res.
-                _previewImage.Source = global::Avalonia.Media.Imaging.Bitmap.DecodeToWidth(stream, 720);
+                ShowMissing("label_file_not_found");
+                return;
             }
-            catch (Exception ex)
+            var player = new MediaPlayer(vlc) { EnableHardwareDecoding = true, Mute = true };
+            _player = player;
+            _sink = new VlcFrameSink(player, () => _media,
+                bmp => { if (ReferenceEquals(player, _player)) { _previewImage.Source = bmp; _previewImage.IsVisible = true; } },
+                () => { if (ReferenceEquals(player, _player)) _previewImage.InvalidateVisual(); });
+            // WPF PreviewVideo_MediaFailed: the plate instead of a dead pane.
+            player.EncounteredError += (_, _) => Dispatcher.UIThread.Post(() =>
             {
-                Serilog.Log.Debug("MediaHistoryWindow: preview failed for {Path}: {Error}", row.FilePath, ex.Message);
+                if (!ReferenceEquals(player, _player)) return;
                 _previewImage.IsVisible = false;
-                _previewMissing.IsVisible = true;
-            }
+                ShowMissing("label_file_not_found");
+            });
+            _media = new Media(vlc, path, FromType.FromPath);
+            _media.AddOption(":input-repeat=65535");   // WPF PreviewVideo_MediaEnded: loop
+            _media.AddOption(":no-audio");
+            player.Play(_media);
+        }
+
+        private void ShowMissing(string key)
+        {
+            _previewImage.IsVisible = false;
+            _previewMissing.Text = Loc.Get(key);
+            _previewMissing.IsVisible = true;
         }
 
         private void ShowPreviewNone()
         {
+            StopPreview();
             _previewHint.IsVisible = true;
             _previewImage.IsVisible = false;
             _previewMissing.IsVisible = false;
@@ -260,11 +363,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _previewPath.Text = "";
             _btnPreviewOpenFolder.IsEnabled = false;
             _btnPreviewOpenFile.IsEnabled = false;
+            _btnPreviewOpenFolder.IsVisible = true;
+            _btnPreviewOpenFile.IsVisible = true;
+            _btnPreviewCopyLink.IsVisible = false;
+            _btnPreviewOpenSource.IsVisible = false;
         }
 
+        /// <summary>Stop joins the decoder thread, so after it no callback touches the frame buffer.</summary>
         private void StopPreview()
         {
-            try { _previewImage.Source = null; } catch { }
+            _previewGeneration++;   // retires a GIF decode still in flight
+            _gifTimer?.Stop();
+            _gifTimer = null;
+            var player = _player;
+            _player = null;
+            if (player != null)
+            {
+                try { player.Stop(); } catch { }
+                try { player.Dispose(); } catch { }
+            }
+            try { _media?.Dispose(); } catch { }
+            _media = null;
+            _previewImage.Source = null;
+            foreach (var f in _gifFrames) f.Dispose();
+            _gifFrames = new();
+            _sink?.Free();
+            _sink = null;
         }
 
         // ---- Open in the file manager -------------------------------------
@@ -272,66 +396,71 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void OpenFolder_Click(object? sender, RoutedEventArgs e)
         {
             if ((e.Source as Control)?.Tag is MediaHistoryRow row)
-                RevealInExplorer(row.FilePath);
+                RevealInExplorer(row.Entry.FilePath);
         }
 
-        private void RevealSelected()
-        {
-            if (_mediaList.SelectedItem is MediaHistoryRow row)
-                RevealInExplorer(row.FilePath);
-        }
-
-        /// <summary>
-        /// WPF's <c>Helpers.ExplorerLauncher.RevealInExplorer</c> SELECTS the file in Explorer,
-        /// which is a Win32 shell call and stays in that head. The portable half is opening the
-        /// containing folder through the desktop's own handler - the same thing
-        /// <see cref="SessionCompleteWindow"/> does, and the same #998 fallback: when the file is
-        /// gone the folder is still worth opening.
-        /// </summary>
+        /// <summary>WPF ExplorerLauncher.RevealInExplorer: the containing folder, also when the file
+        /// is gone (#998). Nothing to reveal for an online item.</summary>
         private static void RevealInExplorer(string path)
         {
-            if (string.IsNullOrEmpty(path)) return;
+            if (string.IsNullOrEmpty(path) || MediaHistoryPreviewRules.IsRemote(path)) return;
             try
             {
                 var dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
-                    Platform.ExternalOpener.Open(dir);
+                    ExternalOpener.Open(dir);
             }
             catch (Exception ex) { Log.Warning(ex, "MediaHistoryWindow: failed to open folder for {Path}", path); }
         }
 
-        /// <summary>Opens the selected file in whatever the desktop associates with it -
-        /// <c>UseShellExecute</c> is ShellExecute on Windows and xdg-open on Linux, so this needs no
-        /// per-head helper. A missing file is silently ignored, as the WPF shell call was.</summary>
         private void OpenSelectedFile()
         {
             if (_mediaList.SelectedItem is not MediaHistoryRow row) return;
-            if (string.IsNullOrEmpty(row.FilePath) || !File.Exists(row.FilePath)) return;
-            try { Platform.ExternalOpener.Open(row.FilePath); }
-            catch (Exception ex) { Log.Warning(ex, "MediaHistoryWindow: failed to open {Path}", row.FilePath); }
+            if (!File.Exists(row.Entry.FilePath)) return;
+            try { ExternalOpener.Open(row.Entry.FilePath); }
+            catch (Exception ex) { Log.Warning(ex, "MediaHistoryWindow: failed to open {Path}", row.Entry.FilePath); }
         }
 
-        /// <summary>ponytail: the confirm half is available now - Dialogs.MessageDialog.ConfirmAsync
-        /// with confirm_clear_media_log - but there is nothing to clear: the log itself is
-        /// MediaHistoryService, still in the WPF head (ConditioningControlPanel/Services/Media/),
-        /// so this view's rows come from a local placeholder. Asking "clear the log?" and then
-        /// clearing nothing would be a button that lies, so the whole handler stays a no-op until
-        /// the service reaches Core.</summary>
-        private void BtnClear_Click() { }
+        // ---- Online source ------------------------------------------------
 
-        /// <summary>
-        /// Paths reach the log from a mix of sources, so a stored path can carry the wrong
-        /// separator and read back as "D:/Assets/images\personal\x.gif" (#1108). Display only -
-        /// the stored path is left alone. WPF hardcoded '\\'; this normalises to whatever the
-        /// platform uses, or the same line would mangle every Linux path.
-        /// </summary>
-        private static string DisplayPath(string path)
+        private async System.Threading.Tasks.Task CopyLinkAsync()
         {
-            if (string.IsNullOrEmpty(path)) return path;
-            return Path.DirectorySeparatorChar == '\\' ? path.Replace('/', '\\') : path.Replace('\\', '/');
+            if (_mediaList.SelectedItem is not MediaHistoryRow row) return;
+            try
+            {
+                if (Clipboard is { } c) await c.SetTextAsync(row.Entry.FilePath);
+                // WPF FlashCopyConfirmation: two seconds of "Copied" on the button, then back.
+                var generation = ++_copyGeneration;
+                _copyLinkText.Text = Loc.Get("btn_copied");
+                DispatcherTimer.RunOnce(() =>
+                {
+                    if (generation == _copyGeneration) _copyLinkText.Text = Loc.Get("btn_copy_link");
+                }, TimeSpan.FromSeconds(2));
+            }
+            catch (Exception ex) { Log.Debug("MediaHistoryWindow: copy link failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>WPF PreviewOpenSource_Click: the PARSED url re-derived from the selected row,
+        /// never the logged text.</summary>
+        private async System.Threading.Tasks.Task OpenSourceAsync()
+        {
+            if (_mediaList.SelectedItem is not MediaHistoryRow row) return;
+            var url = MediaHistoryPreviewRules.BrowsableUrl(row.Entry.FilePath);
+            if (url == null) return;
+            // WPF BrowserLauncher.OpenUrlOrPrompt: on failure the link goes to the clipboard.
+            if (await ExternalOpener.OpenAsync(this, url)) return;
+            try { if (Clipboard is { } c) await c.SetTextAsync(url); } catch { }
         }
 
         // ---- Chrome -------------------------------------------------------
+
+        /// <summary>WPF BtnClear_Click: confirm, then clear the shared log (the window empties
+        /// through the Cleared event, as WPF's does).</summary>
+        internal async System.Threading.Tasks.Task ClearAsync()
+        {
+            if (await Dialogs.MessageDialog.ConfirmAsync(this, Loc.Get("dialog_media_log"), Loc.Get("confirm_clear_media_log")))
+                App.MediaHistory?.Clear();
+        }
 
         private void Header_PointerPressed(object? sender, PointerPressedEventArgs e)
         {
@@ -344,38 +473,74 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
     /// <summary>
     /// Lightweight view-model for one history row. All display fields are precomputed once (rows
-    /// are immutable), keeping the virtualized list cheap. Top-level rather than nested so
-    /// <c>x:DataType</c> can name it.
+    /// are immutable), keeping the virtualized list cheap. Top-level so <c>x:DataType</c> can name it.
     /// </summary>
     public sealed class MediaHistoryRow
     {
-        public string FilePath { get; }
-        public bool IsVideo { get; }
+        private const int ThumbSize = 96, ThumbCacheCap = 128;   // WPF MediaThumbnailConverter
+        private static readonly Dictionary<string, Bitmap?> ThumbCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly LinkedList<string> ThumbLru = new();
+
+        public MediaLogEntry Entry { get; }
         public string DisplayName { get; }
         public string TimeText { get; }
         public string TypeBadge { get; }
         public string PlaceholderGlyph { get; }
         public IBrush BadgeBrush { get; }
-        public bool FileExists => SafeExists(FilePath);
+        public bool FileExists => SafeExists(Entry.FilePath);
+        /// <summary>Hidden for online entries: there is no folder of theirs to reveal.</summary>
+        public bool FolderButtonVisible { get; }
 
-        public MediaHistoryRow(string filePath, string? displayName, DateTime timestamp, bool isVideo)
+        public MediaHistoryRow(MediaLogEntry entry)
         {
-            FilePath = filePath;
-            IsVideo = isVideo;
-            DisplayName = string.IsNullOrEmpty(displayName) ? SafeName(filePath) : displayName!;
-            TimeText = FormatTime(timestamp);
+            Entry = entry;
+            DisplayName = string.IsNullOrEmpty(entry.DisplayName) ? SafeName(entry.FilePath) : entry.DisplayName;
+            TimeText = FormatTime(entry.Timestamp);
+            FolderButtonVisible = !MediaHistoryPreviewRules.IsRemote(entry.FilePath);
 
-            if (isVideo)
+            if (entry.Type == MediaType.Video)
             {
                 TypeBadge = Loc.Get("badge_video");
                 PlaceholderGlyph = "🎬";
                 BadgeBrush = new SolidColorBrush(Color.FromRgb(0x4A, 0x6C, 0xD0));
+            }
+            else if (entry.Type == MediaType.Audio)
+            {
+                TypeBadge = Loc.Get("badge_audio");
+                PlaceholderGlyph = "🎵";
+                BadgeBrush = new SolidColorBrush(Color.FromRgb(0x3A, 0x9A, 0x86));
             }
             else
             {
                 TypeBadge = Loc.Get("badge_image");
                 PlaceholderGlyph = "🖼";
                 BadgeBrush = new SolidColorBrush(Color.FromRgb(0xB0, 0x50, 0x9C));
+            }
+        }
+
+        /// <summary>WPF MediaThumbnailConverter: images only, decoded small, in a bounded LRU; read only
+        /// by realized (on-screen) rows, so a 500-entry log decodes what is visible.</summary>
+        public Bitmap? Thumb
+        {
+            get
+            {
+                if (Entry.Type != MediaType.Image || string.IsNullOrEmpty(Entry.FilePath)) return null;
+                var path = Entry.FilePath;
+                if (ThumbCache.TryGetValue(path, out var cached)) { ThumbLru.Remove(path); ThumbLru.AddLast(path); return cached; }
+                Bitmap? thumb = null;
+                try
+                {
+                    if (File.Exists(path)) { using var s = File.OpenRead(path); thumb = Bitmap.DecodeToWidth(s, ThumbSize); }
+                }
+                catch (Exception ex) { Log.Debug("MediaHistoryRow: thumbnail failed: {Error}", ex.Message); }
+                ThumbCache[path] = thumb;
+                ThumbLru.AddLast(path);
+                while (ThumbLru.Count > ThumbCacheCap)
+                {
+                    ThumbCache.Remove(ThumbLru.First!.Value);   // not disposed: a realized row may still show it
+                    ThumbLru.RemoveFirst();
+                }
+                return thumb;
             }
         }
 

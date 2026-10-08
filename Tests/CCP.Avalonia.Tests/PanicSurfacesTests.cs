@@ -107,6 +107,7 @@ public sealed class PanicSurfacesTests
         ["WebHost"] = "a control, not a surface: the window hosting it registers",
         ["LayeredAudio"] = "WPF parity (#668: only stopped when the master switch is off)",
         ["MiniPlayerWindow"] = "only --video-check (a CLI diagnostic) opens it",
+        ["MediaHistoryWindow"] = "WPF parity: the Media Log's muted preview of a user-picked row; WPF panic leaves that window alone",
     };
 
     [Fact]

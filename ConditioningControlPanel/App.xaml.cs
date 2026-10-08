@@ -2564,6 +2564,9 @@ namespace ConditioningControlPanel
             // App-lifetime media recap (Assets tab -> "Media Log"). Also subscribes to Flash/Video,
             // so likewise must come after both are constructed.
             MediaHistory = new MediaHistoryService();
+            // The service moved to CCP.Core; the head feeds it what it used to subscribe to itself.
+            if (Flash != null) Flash.FlashDisplayed += (_, _) => MediaHistory?.RecordImages(Flash?.LastDisplayedImagePaths);
+            if (Video != null) Video.VideoStarted += (_, _) => MediaHistory?.RecordVideo(Video?.LastVideoPath);
 
             splash?.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
