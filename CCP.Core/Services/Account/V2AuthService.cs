@@ -57,6 +57,13 @@ namespace ConditioningControlPanel.Services
             return json;
         }
 
+        /// <summary>WPF ProfileSyncService's fallback: the server's error text, else "Server error: {StatusCode}".</summary>
+        private static string ServerError(string body, System.Net.HttpStatusCode statusCode)
+        {
+            try { if (JObject.Parse(body)["error"]?.ToString() is { } e) return e; } catch { }
+            return $"Server error: {statusCode}";
+        }
+
         /// <summary>Safely extract error message from a response body that may not be JSON.</summary>
         private static string ParseErrorMessage(string body, System.Net.HttpStatusCode statusCode)
         {
@@ -758,7 +765,7 @@ namespace ConditioningControlPanel.Services
                 {
                     if (await TryHandleMergedAsync(response, json))
                         return (false, Localization.Loc.Get("account_merged_retry_hint"), null);
-                    return (false, ParseErrorMessage(json, response.StatusCode), null);
+                    return (false, ServerError(json, response.StatusCode), null);
                 }
                 return (true, null, JObject.Parse(json)["new_display_name"]?.ToString());
             }
@@ -790,7 +797,7 @@ namespace ConditioningControlPanel.Services
 
                 var json = await response.Content.ReadAsStringAsync();
                 if (await TryHandleMergedAsync(response, json)) return (false, Localization.Loc.Get("account_merged_retry_hint"));
-                return (false, ParseErrorMessage(json, response.StatusCode));
+                return (false, ServerError(json, response.StatusCode));
             }
             catch (Exception ex)
             {

@@ -98,6 +98,8 @@ public sealed partial class AccountSeedTests
                 var box = dlg.FindControl<TextBox>("TxtDisplayName")!;
                 Assert.Equal("Old", box.Text);
                 box.Text = "Bambi";
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(dlg.FindControl<Button>("BtnConfirm")!.IsEnabled);
                 Click(dlg.FindControl<Button>("BtnConfirm")!);
                 await Until(() => s.UserDisplayName == "BAMBI");
                 var (path, body, token) = wire.Seen.Single();
