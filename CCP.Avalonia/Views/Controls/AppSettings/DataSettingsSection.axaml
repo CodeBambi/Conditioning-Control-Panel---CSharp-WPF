@@ -105,6 +105,29 @@
             </Grid>
         </Border>
 
+        <!-- ====================== logs (WPF 7.1.5 nav rework) ====================== -->
+        <!-- BtnViewLog_Click had lost its button in an older settings pass; support asks for
+             these files, so it gets a row here. -->
+        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueDataBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDataBrush}"/>
+                <Grid Margin="15,12,15,12" MinHeight="34" ColumnDefinitions="*,Auto"
+                      ToolTip.Tip="{loc:Str settings_data_logs_tip}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                               Text="{loc:Str settings_data_logs_label}"
+                               Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                    <Button Grid.Column="1" x:Name="BtnOpenLogsFolder"
+                            Theme="{StaticResource OutlineButton}" Padding="12,5" VerticalAlignment="Center"
+                            Click="BtnOpenLogsFolder_Click">
+                        <TextBlock Text="{loc:Str settings_data_logs_open}"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
         <!-- ============================ danger zone =========================== -->
         <!-- Crimson on purpose: the warning colour outranks the section hue, and both
              descriptions stay visible (load-bearing consequence text). -->

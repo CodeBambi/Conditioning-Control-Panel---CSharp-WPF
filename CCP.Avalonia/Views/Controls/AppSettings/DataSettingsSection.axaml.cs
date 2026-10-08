@@ -423,5 +423,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 return false;
             }
         }
+
+        /// <summary>WPF 7.1.5 BtnViewLog_Click: opens UserData/logs (Program.cs writes the rolling
+        /// file there), or says there are none yet.</summary>
+        private async void BtnOpenLogsFolder_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var logs = Path.Combine(CorePaths.UserData, "logs");
+                var top = TopLevel.GetTopLevel(this);
+                if (Directory.Exists(logs))
+                    await Platform.ExternalOpener.OpenAsync(top, logs);
+                else if (top is Window owner)
+                    await Dialogs.MessageDialog.ShowAsync(owner, "Info", Loc.Get("msg_no_logs_found"));
+            }
+            catch (Exception ex) { Log.Warning(ex, "Opening the logs folder failed"); }
+        }
     }
 }

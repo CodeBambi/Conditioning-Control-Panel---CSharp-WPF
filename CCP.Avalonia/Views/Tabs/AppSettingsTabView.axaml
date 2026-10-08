@@ -25,7 +25,7 @@
     <!-- ========================================================================
          THE SETTINGS DOOR (UX restructure, Phase 2 · tab key "appsettings")
 
-         One vertical page, nine sections, one editor per setting. The left
+         One vertical page, ten sections, one editor per setting. The left
          mini-rail is a table of contents, not a tab strip: every section is
          always instantiated and always in the scroll, so Ctrl+F-style hunting
          works and a pill click is a scroll, never a swap. That is why nothing
@@ -148,6 +148,19 @@
                         </Grid>
                     </RadioButton>
 
+                    <!-- MONITORS (WPF 7.1.5 nav rework, REHOME lane): the one home for the content
+                         screen and the four video rows the retired Home System popup carried. -->
+                    <RadioButton x:Name="SectionPillMonitors" Tag="monitors"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueDevicesBrush}"/>
+                            <TextBlock Grid.Column="1" Text="🖥" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str settings_section_monitors}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
                     <RadioButton x:Name="SectionPillPerformance" Tag="performance"
                                  Theme="{StaticResource SectionPill}">
                         <Grid ColumnDefinitions="Auto,Auto,*">
@@ -193,7 +206,7 @@
                             <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
                                      Fill="{StaticResource SectionHueAccountBrush}"/>
                             <TextBlock Grid.Column="1" Text="💖" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_account}" VerticalAlignment="Center"
+                            <TextBlock Grid.Column="2" Text="{loc:Str settings_section_plans}" VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis"/>
                         </Grid>
                     </RadioButton>
@@ -231,6 +244,7 @@
                     <appset:GeneralSettingsSection       x:Name="SectionGeneral"       Margin="0,0,0,10"/>
                     <appset:AudioSettingsSection         x:Name="SectionAudio"         Margin="0,0,0,10"/>
                     <appset:DevicesSettingsSection       x:Name="SectionDevices"       Margin="0,0,0,10"/>
+                    <appset:MonitorsSettingsSection      x:Name="SectionMonitors"      Margin="0,0,0,10"/>
                     <appset:PerformanceSettingsSection   x:Name="SectionPerformance"   Margin="0,0,0,10"/>
                     <appset:NotificationsSettingsSection x:Name="SectionNotifications" Margin="0,0,0,10"/>
                     <appset:EmiDeskSettingsSection       x:Name="SectionEmidesk"       Margin="0,0,0,10"/>

@@ -29,7 +29,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// <c>IAppSettingsSection</c> lives in the WPF head's AppSettingsTabView; <see cref="OnSectionShown"/>
     /// keeps the shape so the host can pick it up when it is ported.
     /// </summary>
-    public partial class GeneralSettingsSection : UserControl
+    public partial class GeneralSettingsSection : UserControl, IAppSettingsSection
     {
         public GeneralSettingsSection()
         {

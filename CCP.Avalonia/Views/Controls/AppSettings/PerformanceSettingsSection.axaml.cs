@@ -38,17 +38,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
+            HookSettings();
             SyncFromSettings();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            UnhookSettings();
             base.OnDetachedFromVisualTree(e);
         }
 
         // A cloud restore or a factory reset swaps the instance; repaint from it, on the UI thread.
-        private void OnCurrentReplaced() => Dispatcher.UIThread.Post(SyncFromSettings);
+        private void OnCurrentReplaced() => Dispatcher.UIThread.Post(() => { HookSettings(); SyncFromSettings(); });
+
+        private Models.AppSettings? _hooked;
+
+        private void HookSettings()
+        {
+            UnhookSettings();
+            _hooked = CoreSettings.Current;
+            _hooked.PropertyChanged += OnSettingsPropertyChanged;
+        }
+
+        private void UnhookSettings()
+        {
+            if (_hooked != null) _hooked.PropertyChanged -= OnSettingsPropertyChanged;
+            _hooked = null;
+        }
+
+        /// <summary>WPF 7.1.5 review fix: Settings is one scrolling page, and
+        /// VideoForceHardwareDecoding has a second live editor on it (Monitors). This box follows
+        /// that one the way Monitors follows this box.</summary>
+        private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Models.AppSettings.VideoForceHardwareDecoding))
+                Dispatcher.UIThread.Post(SyncFromSettings);
+        }
 
         internal void SyncFromSettings()
         {

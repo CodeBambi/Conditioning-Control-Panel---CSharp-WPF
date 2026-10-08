@@ -80,10 +80,10 @@
                                    FontSize="13" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
-                    <feat:MonitorTargetPicker x:Name="ContentMonitorPicker"/>
+                    <!-- Nav rework (WPF 7.1.5): the monitor picker lives in Settings > Monitors only. -->
 
                     <!-- The START button's MM:SS while a session runs. Default on; AppSettings.ShowSessionCountdown. -->
-                    <Border Theme="{StaticResource SettingChip}" Margin="0,8,0,0"
+                    <Border Theme="{StaticResource SettingChip}" Margin="0"
                             ToolTip.Tip="{loc:Str set2_general_show_countdown_tip}">
                         <Grid MinHeight="22" ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Text="{loc:Str set2_general_show_countdown}"
