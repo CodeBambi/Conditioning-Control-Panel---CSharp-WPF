@@ -48,8 +48,25 @@ public sealed class PinkRushTests
                 Assert.False(s.PinkRushActive);
                 MainShellWindow.StopEngine();
 
-                // Owned: armed by StartEngine; a 0.50 roll loses, 0.49 wins.
+                // Owned: a session start with the engine off arms it too (WPF BtnStart -> StartEngine).
                 s.UnlockedSkills = new() { PinkRushRules.SkillId };
+                var runner = global::ConditioningControlPanel.Avalonia.App.Sessions =
+                    new ConditioningControlPanel.Services.SessionRunner(new ConditioningControlPanel.Services.SessionLogService());
+                try
+                {
+                    shell.StartSession(new ConditioningControlPanel.Models.Session { Id = "pink_rush_test", Name = "Pink Rush Test", Icon = "🧪", DurationMinutes = 5 });
+                    Assert.True(PinkRushHost.IsChecking);
+                }
+                finally
+                {
+                    runner.Stop();
+                    global::ConditioningControlPanel.Avalonia.App.Sessions = null;
+                    CoreSession.IsSessionRunningProvider = null;
+                }
+                MainShellWindow.StopEngine();
+                Assert.False(PinkRushHost.IsChecking);
+
+                // Owned: armed by StartEngine; a 0.50 roll loses, 0.49 wins.
                 shell.StartEngine();
                 Assert.True(PinkRushHost.IsChecking);
                 PinkRushHost.Roll = () => 0.50;
