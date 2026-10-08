@@ -200,7 +200,12 @@ namespace ConditioningControlPanel.Avalonia
         {
             int fails = 0;
             Directory.CreateDirectory(dir);
-            foreach (var (tab, file) in new[] { ("settings", "d1-home.png"), ("studio", "d1-studio.png"), ("availablesubjects", "d1-social.png") })
+            var pairs = new[] { ("settings", "d1-home.png"), ("studio", "d1-studio.png"), ("availablesubjects", "d1-social.png") };
+            // CCP_NAV_SHOTS_ALL=1: one PNG per visible page, for the side-by-side with WPF.
+            if (Environment.GetEnvironmentVariable("CCP_NAV_SHOTS_ALL") == "1")
+                pairs = "settings premium studio presets companion personality permissions companionlinks companionai play deeper availablesubjects friends leaderboard remotecontrol leash discord quests achievements enhancements programs chaster assets appsettings"
+                    .Split(' ').Select(k => (k, "par-" + k + ".png")).ToArray();
+            foreach (var (tab, file) in pairs)
             {
                 w.ShowTab(tab);
                 for (int i = 0; i < 4; i++) global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();

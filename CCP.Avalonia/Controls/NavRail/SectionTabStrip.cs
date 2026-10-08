@@ -245,7 +245,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                 PaintFor(hue);
                 FixCrumbWidth(section!);
                 BuildPills(section!);
-                AccentLine.Background = NavPaint.Horizontal(new[] { (hue, 0.0), (Fx.Argb.WithAlpha(hue, (byte)0), 1.0) });
+                AccentLine.Background = NavPaint.Horizontal(new[] { (hue, 0.0), (global::ConditioningControlPanel.Fx.Argb.WithAlpha(hue, (byte)0), 1.0) });
                 ActiveFill.Background = NavPaint.Solid(hue);
                 CrumbSectionText.Foreground = NavPaint.Solid(hue);
             }
