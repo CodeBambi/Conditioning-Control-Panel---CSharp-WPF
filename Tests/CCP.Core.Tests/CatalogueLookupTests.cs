@@ -94,6 +94,23 @@ public sealed class CatalogueLookupTests : IDisposable
         Assert.IsType<DownloadResult.OpenError>(await failing.DownloadAndOpenAsync(Entry("https://x/e1"), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ClosingAnOldHostKeepsTheNewOpenerAndClosingTheNewHostReleasesIt()
+    {
+        var f = new Fake { Respond = _ => Body("{\"v\":1}") };
+        var opened = 0;
+        Func<string, bool> oldHost = _ => throw new InvalidOperationException("old host called");
+        Func<string, bool> newHost = _ => { opened++; return true; };
+        var lookup = Lookup(f, oldHost);
+        lookup.SetOpener(newHost);
+        lookup.ClearOpener(oldHost);
+        Assert.IsType<DownloadResult.Success>(await lookup.DownloadAndOpenAsync(Entry("https://x/e1"), CancellationToken.None));
+        Assert.Equal(1, opened);
+        lookup.ClearOpener(newHost);
+        Assert.IsType<DownloadResult.Success>(await lookup.DownloadAndOpenAsync(Entry("https://x/e1"), CancellationToken.None));
+        Assert.Equal(1, opened);
+    }
+
     /// <summary>The sandbox rule (CatalogueClient.ResolveBaseUrl): a CCP_USERDATA_DIR sandbox with no loopback
     /// override never sends, lookup or download; a loopback override is where both go, and a non-loopback
     /// bundle URL is refused under it.</summary>
