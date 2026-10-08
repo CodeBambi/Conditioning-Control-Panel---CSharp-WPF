@@ -352,11 +352,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return true;
         }
 
-        /// <summary>How many "Moved" notes this run has shown. ponytail: WPF keeps the count in
-        /// AppSettings.NavMovedToastHits across the app's life; Core AppSettings has no such field
-        /// yet (seam request), so the budget is per run here.</summary>
-        private int _navMovedNoteHits;
-
         /// <summary>An old ShowTab key with a new home: navigate there and, the first few times,
         /// say so. True when the key was a redirect and has been handled.</summary>
         private bool TryRedirectMovedTab(string tab)
@@ -369,9 +364,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             try
             {
-                if (_navMovedNoteHits < SectionChromeRules.NavMovedNoteLimit)
+                // AppSettings.NavMovedToastHits counts across the app's life, as WPF 7.1.5 does.
+                var s = CoreSettings.Current;
+                if (s.NavMovedToastHits < SectionChromeRules.NavMovedNoteLimit)
                 {
-                    _navMovedNoteHits++;
+                    s.NavMovedToastHits++;
+                    CoreSettings.Save();
                     var section = SafeNavLoc(NavSections.Find(to.Section)?.LabelKey ?? string.Empty, to.Section);
                     var page = to.Section == NavSections.Settings
                         ? SafeNavLoc(SettingsSectionLabelKey(to.Tab) ?? string.Empty, to.Tab)
@@ -388,11 +386,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // ============================== section chrome ==============================
 
         /// <summary>
-        /// Last-tab memory, section -> tab as JSON (NavStripRules.WithLastTab). ponytail: WPF
-        /// persists it in AppSettings.NavLastTabBySection; Core AppSettings has no such field yet
-        /// (seam request), so it lives for the run here. One property, so the swap is one line.
+        /// Last-tab memory, section -> tab as JSON (NavStripRules.WithLastTab), persisted in
+        /// AppSettings.NavLastTabBySection as WPF 7.1.5 does; saved only when it changes.
         /// </summary>
-        internal string? NavLastTabJson { get; set; }
+        internal string? NavLastTabJson
+        {
+            get => CoreSettings.Current.NavLastTabBySection;
+            set
+            {
+                var s = CoreSettings.Current;
+                if (string.Equals(s.NavLastTabBySection, value ?? "", StringComparison.Ordinal)) return;
+                s.NavLastTabBySection = value ?? "";
+                CoreSettings.Save();
+            }
+        }
 
         /// <summary>The tab a section returns to (its remembered tab, else its default).</summary>
         internal string NavLastTabFor(string section) =>
