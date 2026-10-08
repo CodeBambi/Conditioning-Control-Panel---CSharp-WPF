@@ -364,12 +364,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             try
             {
-                // AppSettings.NavMovedToastHits counts across the app's life, as WPF 7.1.5 does.
+                // AppSettings.NavMovedToastHits counts across the app's life, as WPF 7.1.5 does; like
+                // the last-tab memory it rides the next save (navigation writes no settings here).
                 var s = CoreSettings.Current;
                 if (s.NavMovedToastHits < SectionChromeRules.NavMovedNoteLimit)
                 {
                     s.NavMovedToastHits++;
-                    CoreSettings.Save();
                     var section = SafeNavLoc(NavSections.Find(to.Section)?.LabelKey ?? string.Empty, to.Section);
                     var page = to.Section == NavSections.Settings
                         ? SafeNavLoc(SettingsSectionLabelKey(to.Tab) ?? string.Empty, to.Tab)
@@ -386,19 +386,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // ============================== section chrome ==============================
 
         /// <summary>
-        /// Last-tab memory, section -> tab as JSON (NavStripRules.WithLastTab), persisted in
-        /// AppSettings.NavLastTabBySection as WPF 7.1.5 does; saved only when it changes.
+        /// Last-tab memory, section -> tab as JSON (NavStripRules.WithLastTab), kept in
+        /// AppSettings.NavLastTabBySection as WPF 7.1.5 does. WPF also saves on the spot; here it rides
+        /// the next save (any settings write, and the exit save in App.SaveSettingsOnExit), because
+        /// navigation must never write settings.json on this head (the deferred entitlement-lapse
+        /// write, PremiumGatesTests.LapsePass_ClearsInMemory_AndOnlyAnEntitlementEventWrites).
         /// </summary>
         internal string? NavLastTabJson
         {
             get => CoreSettings.Current.NavLastTabBySection;
-            set
-            {
-                var s = CoreSettings.Current;
-                if (string.Equals(s.NavLastTabBySection, value ?? "", StringComparison.Ordinal)) return;
-                s.NavLastTabBySection = value ?? "";
-                CoreSettings.Save();
-            }
+            set => CoreSettings.Current.NavLastTabBySection = value ?? "";
         }
 
         /// <summary>The tab a section returns to (its remembered tab, else its default).</summary>
