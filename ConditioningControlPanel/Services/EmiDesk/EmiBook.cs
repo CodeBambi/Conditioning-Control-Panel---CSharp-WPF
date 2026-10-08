@@ -88,34 +88,11 @@ public static class EmiBook
     public static bool HasContent => EmiBookCards.All.Count > 0;
 
     /// <summary>The card she last had open, or null.</summary>
-    public static string? Bookmark
-    {
-        get
-        {
-            try
-            {
-                var id = EmiState.Current.BookCard;
-                return string.IsNullOrWhiteSpace(id) ? null : id;
-            }
-            catch (Exception ex) { Log.Debug(ex, "[{Tag}] book bookmark read failed", LogTag); return null; }
-        }
-    }
+    public static string? Bookmark => EmiState.BookBookmark;
 
     /// <summary>Remember the open card. Ignores blanks and a repeat of what is already stored, so
     /// flipping back to where you started cannot churn the state file.</summary>
-    public static void NoteCard(string? cardId)
-    {
-        if (string.IsNullOrWhiteSpace(cardId)) return;
-        try
-        {
-            var id = cardId!.Trim();
-            var s = EmiState.Current;
-            if (string.Equals(s.BookCard, id, StringComparison.Ordinal)) return;
-            s.BookCard = id;
-            EmiState.SaveSoon();
-        }
-        catch (Exception ex) { Log.Debug(ex, "[{Tag}] book bookmark write failed", LogTag); }
-    }
+    public static void NoteCard(string? cardId) => EmiState.NoteBookCard(cardId);
 
     // =====================================================================================
     //  open / close

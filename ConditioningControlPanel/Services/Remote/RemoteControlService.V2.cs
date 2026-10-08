@@ -141,6 +141,14 @@ namespace ConditioningControlPanel.Services
         /// <summary>Stops the remote haptic at once. Safe to call when nothing plays.</summary>
         private void StopRemoteHaptics() => _remoteHaptics?.Stop();
 
+        /// <summary>Panic stops the remote haptic loop (decisions 2026-10-08): HapticMixer.PanicStop only
+        /// silences for 400 ms, then the driver's next tick would restart a looping pattern.</summary>
+        public void StopRemoteHapticsForPanic()
+        {
+            try { StopRemoteHaptics(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "[RemoteControl] Panic: remote haptic stop failed"); }
+        }
+
         /// <summary>Every controller command counts as activity (the loop idle cap reads it).</summary>
         private void NoteControllerActivity()
         {
