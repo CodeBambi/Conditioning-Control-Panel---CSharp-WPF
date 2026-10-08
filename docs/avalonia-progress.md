@@ -1474,3 +1474,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-local-ai-wizard: +641
 - Local AI setup wizard wired: OllamaSetupService moved to Core; detect, start, pull, smoke test and save work like WPF; Linux has no auto-install, so the user installs Ollama and Continue re-detects (decision logged).
 - The head seeds EnsureServerRunning and stops only the `ollama serve` it spawned on exit; 5 faked tests, all fail-proven except the PATH lookup.
+
+## avalonia-port/rows-mantra-window: +277
+- win-mantra: five storyboards stepped on a clock, panic surface `mantra`, Programs mantra-task door; row stays stub (TodayTaskList unbuilt, failure MessageBox dropped).
