@@ -79,12 +79,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         public static async Task<int?> Pick(Window? owner)
         {
             var w = new ChaosSlotPickerWindow();
-            if (owner == null || !owner.IsVisible)
-            {
-                w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-                w.Show();
-                return null;   // ponytail: needs an owner to be modal against; callers always have one.
-            }
+            if (owner is not { IsVisible: true }) w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             if (await w.ShowDialogSafe<bool?>(owner) != true) return null;
             // WPF's caller commits via ChaosMeta.SwitchSlot: remember the slot, reload its save.
             ChaosMeta.SwitchSlot(w.ChosenSlot);
