@@ -1445,6 +1445,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private EmiBookWindow? _book;
 
+        /// <summary>The live book, or null (tests).</summary>
+        internal EmiBookWindow? Book => _book;
+
         /// <summary>
         /// HER MANUAL. Open the book beside her, at <paramref name="cardId"/> or at the first card.
         ///
@@ -1456,23 +1459,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <para>Single instance, the router's own rule: a second open on a live book NAVIGATES it
         /// rather than building a second panel.</para>
         ///
-        /// <para>ponytail: three of the router's jobs are still blocked and none of them is view
-        /// work. <c>EmiBook.Bookmark</c> / <c>NoteCard</c> (the card she last had open) and
-        /// <c>EmiState.NoteCodexOpened()</c> need
-        /// ConditioningControlPanel/Services/EmiDesk/EmiState.cs; <c>NoteSideChanged</c> needs the
-        /// bubble dodge in EmiDeskWindow.Bubble.cs. So the book opens at the first card every time
-        /// until EmiState lands.</para>
+        /// <para>Bookmark and the lifetime open count are the router's own (EmiBook.cs Open):
+        /// <c>EmiState.BookBookmark</c> / <c>NoteCodexOpened</c> in Core. ponytail: still missing
+        /// <c>NoteSideChanged</c> (the bubble dodge in EmiDeskWindow.Bubble.cs).</para>
         /// </summary>
         internal void OpenBook(string? cardId = null)
         {
             try
             {
+                cardId ??= EmiState.BookBookmark;
                 if (_book != null)
                 {
                     _book.GoTo(cardId);
                     return;
                 }
 
+                EmiState.NoteCodexOpened();
                 var win = new EmiBookWindow(this);
                 // The window can go away without anybody calling CloseBook - the fold finishing, or
                 // the app shutting down - so the reference is dropped from the window's own Closed.

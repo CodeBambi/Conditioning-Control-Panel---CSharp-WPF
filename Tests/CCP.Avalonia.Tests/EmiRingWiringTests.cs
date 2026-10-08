@@ -22,6 +22,7 @@ public sealed class EmiRingWiringTests
         var score = new Dictionary<string, double>(st.OpenScore);
         var at = new Dictionary<string, long>(st.UsageAt);
         int streak = st.RingIgnoreStreak;
+        string? bookmark = st.BookCard;
         try
         {
             st.Pins.Clear(); st.OpenScore.Clear(); st.UsageAt.Clear(); st.RingIgnoreStreak = 0;
@@ -33,6 +34,7 @@ public sealed class EmiRingWiringTests
             st.OpenScore.Clear(); foreach (var kv in score) st.OpenScore[kv.Key] = kv.Value;
             st.UsageAt.Clear(); foreach (var kv in at) st.UsageAt[kv.Key] = kv.Value;
             st.RingIgnoreStreak = streak;
+            st.BookCard = bookmark;
         }
         await Task.CompletedTask;
     }
