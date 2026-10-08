@@ -352,11 +352,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return true;
         }
 
-        /// <summary>How many "Moved" notes this run has shown. ponytail: WPF keeps the count in
-        /// AppSettings.NavMovedToastHits across the app's life; Core AppSettings has no such field
-        /// yet (seam request), so the budget is per run here.</summary>
-        private int _navMovedNoteHits;
-
         /// <summary>An old ShowTab key with a new home: navigate there and, the first few times,
         /// say so. True when the key was a redirect and has been handled.</summary>
         private bool TryRedirectMovedTab(string tab)
@@ -369,9 +364,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             try
             {
-                if (_navMovedNoteHits < SectionChromeRules.NavMovedNoteLimit)
+                // AppSettings.NavMovedToastHits counts across the app's life, as WPF 7.1.5 does; like
+                // the last-tab memory it rides the next save (navigation writes no settings here).
+                var s = CoreSettings.Current;
+                if (s.NavMovedToastHits < SectionChromeRules.NavMovedNoteLimit)
                 {
-                    _navMovedNoteHits++;
+                    s.NavMovedToastHits++;
                     var section = SafeNavLoc(NavSections.Find(to.Section)?.LabelKey ?? string.Empty, to.Section);
                     var page = to.Section == NavSections.Settings
                         ? SafeNavLoc(SettingsSectionLabelKey(to.Tab) ?? string.Empty, to.Tab)
@@ -388,11 +386,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // ============================== section chrome ==============================
 
         /// <summary>
-        /// Last-tab memory, section -> tab as JSON (NavStripRules.WithLastTab). ponytail: WPF
-        /// persists it in AppSettings.NavLastTabBySection; Core AppSettings has no such field yet
-        /// (seam request), so it lives for the run here. One property, so the swap is one line.
+        /// Last-tab memory, section -> tab as JSON (NavStripRules.WithLastTab), kept in
+        /// AppSettings.NavLastTabBySection as WPF 7.1.5 does. WPF also saves on the spot; here it rides
+        /// the next save (any settings write, and the exit save in App.SaveSettingsOnExit), because
+        /// navigation must never write settings.json on this head (the deferred entitlement-lapse
+        /// write, PremiumGatesTests.LapsePass_ClearsInMemory_AndOnlyAnEntitlementEventWrites).
         /// </summary>
-        internal string? NavLastTabJson { get; set; }
+        internal string? NavLastTabJson
+        {
+            get => CoreSettings.Current.NavLastTabBySection;
+            set => CoreSettings.Current.NavLastTabBySection = value ?? "";
+        }
 
         /// <summary>The tab a section returns to (its remembered tab, else its default).</summary>
         internal string NavLastTabFor(string section) =>

@@ -13,6 +13,10 @@ using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Controls.Fx;
 using ConditioningControlPanel.Models;
 using SkiaSharp;
+using EdgeDriftMath = ConditioningControlPanel.Fx.EdgeDriftMath;
+using EdgeSide = ConditioningControlPanel.Fx.EdgeSide;
+using EdgeFogMath = ConditioningControlPanel.Fx.EdgeFogMath;
+using VaultMoteMath = ConditioningControlPanel.Fx.VaultMoteMath;
 using Xunit;
 
 namespace CCP.Avalonia.Tests.Fx;

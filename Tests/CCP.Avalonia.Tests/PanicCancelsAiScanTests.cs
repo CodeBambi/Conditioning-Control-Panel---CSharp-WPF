@@ -18,10 +18,12 @@ public sealed class PanicCancelsAiScanTests
     [InlineData("ConditioningControlPanel/Services/RemoteControlService.cs", "private void StopAllRemoteEffects(bool force)", "if (force) MainWindow.CancelPendingAi();")]
     public void PanicRouteCancelsPendingAi(string file, string signature, string call)
     {
-        var src = File.ReadAllText(Path.Combine(RepoRoot(), file));
+        // A Windows checkout (core.autocrlf) has CRLF; the method-end scan below is written in LF.
+        var src = File.ReadAllText(Path.Combine(RepoRoot(), file)).Replace("\r\n", "\n");
         var start = src.IndexOf(signature, System.StringComparison.Ordinal);
         Assert.True(start >= 0, $"{signature} not found in {file}");
         var end = src.IndexOf("\n        }\n", start, System.StringComparison.Ordinal);
+        Assert.True(end > start, $"the end of {signature} not found in {file}");
         Assert.Contains(call, src.Substring(start, end - start));
     }
 

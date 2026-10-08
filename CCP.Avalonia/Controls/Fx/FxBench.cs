@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using ConditioningControlPanel.Fx;
 
 namespace ConditioningControlPanel.Avalonia.Controls.Fx
 {

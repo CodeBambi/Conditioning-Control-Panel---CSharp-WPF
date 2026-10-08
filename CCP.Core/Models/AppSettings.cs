@@ -9187,6 +9187,17 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        /// <summary>
+        /// Nav rework (2026-10-06): the last tab opened in each rail section, as a JSON object
+        /// {"section": "tabKey"}. Empty = every section opens on its default tab
+        /// (<see cref="ConditioningControlPanel.Nav.NavSections.DefaultTab"/>). Machine-local view state.
+        /// </summary>
+        public string NavLastTabBySection { get; set; } = "";
+
+        /// <summary>Old tab keys followed to their new home. The "Moved: Section > Page" toast
+        /// shows for the first three hits, then retires itself.</summary>
+        public int NavMovedToastHits { get; set; }
+
         /// <summary>Swap open and toggle gestures on Home feature tiles only.</summary>
         public bool DashboardInvertClicks { get; set; }
 

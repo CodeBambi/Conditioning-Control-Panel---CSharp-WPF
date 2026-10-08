@@ -89,17 +89,21 @@ public sealed class FirstRunGateDeadClickTests
         dash.FindControl<SplitFeatureCard>("ComboSpiralPink")!.RaiseEvent(new RoutedEventArgs(SplitFeatureCard.ToggleBEvent));
         Assert.NotEqual(pink, MainShellWindow.IsWallFeatureOn("pinkfilter"));
 
+        // 7.1.5: "exclusives" redirects silently to the hidden Home page "premium" (polish 12).
         shell.ShowTab("settings");
         Card("CardVault").RaiseEvent(new RoutedEventArgs(FeatureCard.ClickEvent));
-        Assert.Equal("exclusives", shell.CurrentTab);
+        Assert.Equal("premium", shell.CurrentTab);
 
+        // The rail's BtnPatreonExclusives row is retired (7.1.5: the header Premium spark is the
+        // door); the old key still lands on the Premium page, silently.
         shell.ShowTab("settings");
-        shell.FindControl<Button>("BtnPatreonExclusives")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal("exclusives", shell.CurrentTab);
+        shell.ShowTab("exclusives");
+        Assert.Equal("premium", shell.CurrentTab);
 
-        shell.ShowTab("settings");
-        shell.FindControl<Button>("BtnNavMediaLog")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal("settings", shell.CurrentTab);   // a window, not the Assets tab
+        // The media log is a Library launcher pill now (the rail's BtnNavMediaLog row is retired).
+        shell.ShowTab("assets");
+        shell.NavStrip!.ChooseForTests("medialog");
+        Assert.Equal("assets", shell.CurrentTab);   // a window, not a tab
         Assert.Contains(shell.OwnedWindows, w => w is MediaHistoryWindow);
         return Task.CompletedTask;
     });

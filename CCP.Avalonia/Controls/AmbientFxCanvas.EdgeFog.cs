@@ -1,209 +1,16 @@
 using System;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Controls.Fx;
+using ConditioningControlPanel.Fx;
 using Serilog;
 using SkiaSharp;
 using MotionLevel = ConditioningControlPanel.Models.MotionLevel;
 
 namespace ConditioningControlPanel.Avalonia.Controls
 {
-    /// <summary>
-    /// PORTED from ConditioningControlPanel/Controls/AmbientFxCanvas.EdgeFog.cs (nav polish wave
-    /// 11, 2026-10-07), numbers exact. The section edge's fog: soft round puffs in the section hue
-    /// that drift along a window-edge strip and breathe gently inward and outward, each fading in,
-    /// living a few seconds and fading out. Two layers per strip give the depth: a slow layer of
-    /// big faint puffs and a quicker layer of small brighter ones. Pure numbers and steps.
-    ///
-    /// <para>Units: every distance is in the strip's own DIPs. <c>along</c> runs clockwise along
-    /// the side like <see cref="EdgeDriftMath"/>; <c>depth</c> is the puff centre's distance in from
-    /// the window's outer edge (it may sit a few px outside, so the puff reads as light leaking in).</para>
-    /// </summary>
-    public static class EdgeFogMath
-    {
-        /// <summary>Strip thickness the fog is authored for: the deepest puff edge stays inside it.</summary>
-        public const double StripPx = 56;
-
-        /// <summary>Big slow layer: size across the edge (px), along speed (px/s), peak alpha, life (s).</summary>
-        public const double BigSizeMinPx = 34, BigSizeMaxPx = 60;
-        public const double BigSpeedMinPx = 4, BigSpeedMaxPx = 9;
-        public const double BigAlphaMin = 0.12, BigAlphaMax = 0.22;
-        public const double BigLifeMin = 5.0, BigLifeMax = 9.0;
-
-        /// <summary>Small quick layer: diameter, along speed (px/s), peak alpha, life (s).</summary>
-        public const double SmallSizeMinPx = 18, SmallSizeMaxPx = 32;
-        public const double SmallSpeedMinPx = 10, SmallSpeedMaxPx = 20;
-        public const double SmallAlphaMin = 0.14, SmallAlphaMax = 0.22;
-        public const double SmallLifeMin = 3.0, SmallLifeMax = 5.5;
-
-        /// <summary>Puffs are soft ellipses drawn out ALONG the edge (a band of fog, not a row of
-        /// dots): big ones 4 to 7 times longer than deep, small ones 1.4 to 2.4 times.</summary>
-        public const double BigStretchMin = 4.0, BigStretchMax = 7.0;
-        public const double SmallStretchMin = 1.4, SmallStretchMax = 2.4;
-
-        /// <summary>Inward / outward breathing: amplitude (px) and rate (radians per second).</summary>
-        public const double BreathePxMin = 3, BreathePxMax = 8;
-        public const double BreatheRateMin = 0.5, BreatheRateMax = 1.1;
-
-        /// <summary>How far outside the window a puff centre may sit (negative depth).</summary>
-        public const double DepthOutPx = 6;
-        /// <summary>The shallowest a puff centre rests, as a share of its size.</summary>
-        public const double MinDepthShare = 0.22;
-        /// <summary>A puff's inner edge keeps this much clear of the strip's inner edge.</summary>
-        public const double InnerClearPx = 2;
-
-        /// <summary>Share of each life spent fading in, and the same share fading out.</summary>
-        public const double FadeShare = 0.35;
-        /// <summary>Share of puffs that drift anticlockwise, so the fog shifts instead of marching.</summary>
-        public const double CounterShare = 0.3;
-        /// <summary>Share of spawns placed in the corner zones (the first and last tenth of a side).</summary>
-        public const double CornerShare = 0.35, CornerZone = 0.10;
-
-        /// <summary>Full counts per strip: a long side (top, bottom) and a short side (left, right).</summary>
-        public const int BigLong = 5, SmallLong = 5, BigShort = 4, SmallShort = 3;
-        /// <summary>Reduced motion: half the puffs at half the speed.</summary>
-        public const double ReducedCount = 0.5, ReducedSpeed = 0.5;
-        /// <summary>The share of the full counts a canvas keeps when its live budget is under 60.</summary>
-        public const double LeanShare = 0.6;
-        /// <summary>The live budget at and above which the full counts hold.</summary>
-        public const int FullBudget = 60;
-        /// <summary>Seconds between spawns while a layer is under its target.</summary>
-        public const double SpawnEverySeconds = 0.35;
-
-        /// <summary>Dust specks drifting through the fog. Diameter, along speed (px/s), peak alpha, life (s).</summary>
-        public const double DustSizeMinPx = 1.2, DustSizeMaxPx = 3.0;
-        public const double DustSpeedMinPx = 5, DustSpeedMaxPx = 16;
-        public const double DustAlphaMin = 0.55, DustAlphaMax = 1.0;
-        public const double DustLifeMin = 2.5, DustLifeMax = 6.5;
-        /// <summary>Sideways wander across the strip: amplitude (px) and rate (radians per second).</summary>
-        public const double DustWanderPxMin = 1.5, DustWanderPxMax = 5;
-        public const double DustWanderRateMin = 0.6, DustWanderRateMax = 1.8;
-        /// <summary>Twinkle: the alpha swings this share around its envelope, at this rate (rad/s).</summary>
-        public const double DustTwinkleShare = 0.45, DustTwinkleRateMin = 2.0, DustTwinkleRateMax = 6.0;
-        /// <summary>Depth bias toward the frame: depth = strip x u^power.</summary>
-        public const double DustDepthPower = 2.6;
-        /// <summary>The deepest band dust rests in (px from the frame).</summary>
-        public const double DustDepthSpanPx = 22;
-        /// <summary>Specks wear the vivid section colour lifted only this far toward white.</summary>
-        public const double DustLift = 0.12;
-        /// <summary>Full dust counts per strip (long side, short side).</summary>
-        public const int DustLong = 90, DustShort = 56;
-        /// <summary>Seconds between dust spawns while under target.</summary>
-        public const double DustSpawnEverySeconds = 0.04;
-
-        /// <summary>Dust alpha: peak x envelope x twinkle x gain, capped at 0.95.</summary>
-        public static double DustAlpha(double peak, double age, double life, double twinkle, double gain)
-        {
-            double tw = 1.0 - DustTwinkleShare * 0.5 * (1.0 - Math.Sin(twinkle));
-            return Math.Min(0.95, Math.Max(0, peak) * Envelope(age, life) * tw * Math.Clamp(gain, 0, 1.5));
-        }
-
-        /// <summary>A speck's resting depth: biased toward the frame, always inside the strip.</summary>
-        public static double DustDepth(double u, double wanderPx) =>
-            1 + wanderPx + Math.Pow(Math.Clamp(u, 0, 1), DustDepthPower) * Math.Min(DustDepthSpanPx, Math.Max(0, StripPx - 2 - 2 * wanderPx - 1));
-
-        /// <summary>Puffs one layer may hold. Zero budget = zero puffs; under 60 the lean share;
-        /// Reduced halves it (never below one while anything is allowed).</summary>
-        public static int Target(int fullCount, int liveBudget, bool reduced)
-        {
-            if (fullCount <= 0 || liveBudget <= 0) return 0;
-            double n = fullCount * (liveBudget >= FullBudget ? 1.0 : LeanShare);
-            if (reduced) n *= ReducedCount;
-            return Math.Max(1, (int)Math.Round(n, MidpointRounding.ToEven));
-        }
-
-        /// <summary>The full count for one layer on one side.</summary>
-        public static int FullCount(bool big, bool longSide) =>
-            big ? (longSide ? BigLong : BigShort) : (longSide ? SmallLong : SmallShort);
-
-        /// <summary>Fade in over the first 35% of the life, hold, fade out over the last 35%
-        /// (smoothstep on both ends, so a puff never pops). 0 outside the life.</summary>
-        public static double Envelope(double age, double life)
-        {
-            if (life <= 0 || age <= 0 || age >= life) return 0;
-            double t = age / life;
-            double edge = Math.Min(t, 1.0 - t) / FadeShare;
-            if (edge >= 1) return 1;
-            return edge * edge * (3 - 2 * edge);
-        }
-
-        /// <summary>A puff's alpha: its peak x the envelope x the strip's gain, capped at 0.22.</summary>
-        public static double Alpha(double peak, double age, double life, double gain) =>
-            Math.Min(SmallAlphaMax, Math.Max(0, peak) * Envelope(age, life) * Math.Clamp(gain, 0, 1.5));
-
-        /// <summary>The deepest a puff centre may sit before its inner edge leaves the strip.</summary>
-        public static double MaxDepth(double sizePx, double breathePx) =>
-            StripPx - sizePx / 2 - breathePx - InnerClearPx;
-
-        /// <summary>The breathing centre depth at a phase.</summary>
-        public static double Depth(double baseDepth, double breathePx, double phase) =>
-            baseDepth + breathePx * Math.Sin(phase);
-
-        /// <summary>Along distance after <paramref name="dt"/> at a signed speed.</summary>
-        public static double Advance(double along, double speedPx, double dt) =>
-            along + speedPx * Math.Max(0.0, dt);
-
-        /// <summary>A puff is spent when its life is over or it has drifted a whole puff past
-        /// either end of its side.</summary>
-        public static bool IsSpent(double age, double life, double along, double length, double spanPx) =>
-            age >= life || along < -spanPx || along > length + spanPx;
-
-        /// <summary>Element px of a puff on a strip of the given side (strip w by h DIPs).</summary>
-        public static (double X, double Y) Position(EdgeSide side, double along, double depth, double w, double h) => side switch
-        {
-            EdgeSide.Top => (along, depth),
-            EdgeSide.Right => (w - depth, along),
-            EdgeSide.Bottom => (w - along, h - depth),
-            _ => (depth, h - along),
-        };
-
-        /// <summary>The side's length along the edge, from the strip's size.</summary>
-        public static double Length(EdgeSide side, double w, double h) =>
-            side is EdgeSide.Top or EdgeSide.Bottom ? w : h;
-
-        /// <summary>Where a new puff starts: <paramref name="corner"/> &lt; CornerShare puts it in a
-        /// corner zone (end chosen by <paramref name="u"/>), otherwise anywhere along the side.</summary>
-        public static double SpawnAlong(double u, double corner, double length)
-        {
-            if (corner < CornerShare)
-            {
-                double zone = CornerZone * length;
-                return u < 0.5 ? (u * 2) * zone : length - ((u - 0.5) * 2) * zone;
-            }
-            return u * length;
-        }
-
-        /// <summary>
-        /// NavRailRules.Vivid (WPF, nav polish): the section hue at neon strength, same angle,
-        /// lightness pulled down to 0.58, saturation raised to at least 0.80. Copied here so the
-        /// fog dust matches WPF; drop it for the Core twin once the nav rules land in Core.
-        /// </summary>
-        public static (byte R, byte G, byte B) Vivid(byte r8, byte g8, byte b8)
-        {
-            const double vividL = 0.58, vividS = 0.80;
-            double r = r8 / 255.0, g = g8 / 255.0, b = b8 / 255.0;
-            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
-            double l = (max + min) / 2, d = max - min, h = 0, s = 0;
-            if (d >= 1e-9)
-            {
-                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-                h = (max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4) * 60;
-            }
-            s = Math.Max(s, vividS);
-            l = Math.Min(l, vividL);
-            double q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q, k = h / 360.0;
-            static double Ch(double p, double q, double t)
-            {
-                if (t < 0) t += 1;
-                if (t > 1) t -= 1;
-                if (t < 1 / 6.0) return p + (q - p) * 6 * t;
-                if (t < 0.5) return q;
-                if (t < 2 / 3.0) return p + (q - p) * (2 / 3.0 - t) * 6;
-                return p;
-            }
-            static byte B(double v) => (byte)Math.Round(Math.Clamp(v, 0, 1) * 255);
-            return (B(Ch(p, q, k + 1 / 3.0)), B(Ch(p, q, k)), B(Ch(p, q, k - 1 / 3.0)));
-        }
-    }
+    // PORTED from ConditioningControlPanel/Controls/AmbientFxCanvas.EdgeFog.cs (nav polish wave
+    // 11, 2026-10-07): the sim and paint of the section edge's fog. The numbers are Core
+    // EdgeFogMath (ConditioningControlPanel.Fx), the dust colour Core NavRailRules.Vivid.
 
     public partial class AmbientFxCanvas
     {
@@ -281,7 +88,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             _fogTint?.Dispose();
             _fogTint = SKColorFilter.CreateBlendMode(_fogNow, SKBlendMode.Modulate);
-            var (vr, vg, vb) = EdgeFogMath.Vivid(_fogNow.Red, _fogNow.Green, _fogNow.Blue);
+            var vivid = global::ConditioningControlPanel.Nav.NavRailRules.Vivid(Argb.FromRgb(_fogNow.Red, _fogNow.Green, _fogNow.Blue));
+            var (vr, vg, vb) = (Argb.R(vivid), Argb.G(vivid), Argb.B(vivid));
             float k = (float)EdgeFogMath.DustLift;
             var lifted = new SKColor(
                 (byte)(vr + (255 - vr) * k),
