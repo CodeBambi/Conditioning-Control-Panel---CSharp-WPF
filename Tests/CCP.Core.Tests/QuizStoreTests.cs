@@ -111,7 +111,7 @@ public sealed class QuizStoreTests : IDisposable
         foreach (var c in builtIns)
         {
             sb.AppendLine($"cat {c.Id}|{c.Name}|{c.Description}|{c.Color}|{c.IsBuiltIn}|{c.EnumCategory}|{string.Join(",", c.Archetypes.Select(x => $"{x.Name}:{x.MinPercentage}-{x.MaxPercentage}:{x.Description}"))}");
-            foreach (var pct in new[] { 0, 25.5, 26, 70.9, 71, 85, 86, 120 }) sb.AppendLine($"arch {c.Id} {pct} {c.GetArchetypeName(pct)}");
+            foreach (var pct in new[] { 0, 25.5, 26, 70.9, 71, 85, 86, 120 }) sb.AppendLine(FormattableString.Invariant($"arch {c.Id} {pct} {c.GetArchetypeName(pct)}"));
             foreach (var s in new[] { 10, 11, 28, 35 }) sb.AppendLine($"fbp {c.Id} {s} {c.GetFallbackProfile(s, 40)}");
         }
         sb.AppendLine($"arch empty {new QuizCategoryDefinition().GetArchetypeName(50)}");

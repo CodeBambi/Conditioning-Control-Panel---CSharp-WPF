@@ -585,7 +585,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>MainWindow.Leaderboard.cs:1412.</summary>
         private static string FormatCompact(double value) =>
-            value >= 1_000_000 ? $"{value / 1_000_000.0:F1}M" : value >= 1_000 ? $"{value / 1_000.0:F1}k" : ((int)value).ToString();
+            value >= 1_000_000 ? FormattableString.Invariant($"{value / 1_000_000.0:F1}M")
+            : value >= 1_000 ? FormattableString.Invariant($"{value / 1_000.0:F1}k") : ((int)value).ToString();
 
         /// <summary>0 = 1-3, 1 = 4-10, 2 = 11-25, 3 = 26-50, 4 = 51-100, 5 = 101-200, 6 = 201+.</summary>
         private static int TierIndexForRank(int rank)

@@ -1039,7 +1039,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtSessionDuration.Text = Loc.GetF("label_0_minutes", session.DurationMinutes);
             var multiplier = SessionXp.Multiplier(CoreSettings.Current?.PlayerLevel ?? 1);
             var xp = Loc.GetF("rack_xp", (int)Math.Round(session.BonusXP * multiplier));
-            TxtSessionXP.Text = multiplier > 1.0 ? $"{xp} ({multiplier:F1}x)" : xp;
+            TxtSessionXP.Text = multiplier > 1.0 ? $"{xp} ({multiplier.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}x)" : xp;
             TxtSessionXP.Foreground = new SolidColorBrush(session.Difficulty switch
             {
                 SessionDifficulty.Medium => Color.FromRgb(255, 215, 0),
