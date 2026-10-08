@@ -56,6 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     runner.Start(session);
                     PinkFilterOverlay.Refresh(this);
+                    SpiralOverlay.Refresh(this);
                     Log.Information("Started session: {Name} ({Difficulty}, +{XP} XP)", session.Name, session.Difficulty, session.BonusXP);
                 }
                 catch (Exception ex)
@@ -108,6 +109,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     if (App.Sessions is not { IsPaused: true } r) return;
                     r.Resume();
                     PinkFilterOverlay.Refresh(this);
+                    SpiralOverlay.Refresh(this);
                     SetPauseButton(false);
                     OnSessionTick();
                 });
@@ -119,6 +121,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!confirmed || !runner.IsRunning) return;
             runner.Pause();
             PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Stop()
+            SpiralOverlay.Refresh(this);
             SetPauseButton(true);
         }
 
