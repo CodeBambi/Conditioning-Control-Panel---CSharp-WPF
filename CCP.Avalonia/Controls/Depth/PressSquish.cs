@@ -24,9 +24,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
     /// </summary>
     public static class PressSquish
     {
-        /// <summary>The template's own numbers (Controls.xaml SecondaryButton storyboards).</summary>
-        public const int DownMs = 80, ReleaseMs = 150;
-        public const double ReleaseAmplitude = 0.3;
+        /// <summary>The template's own numbers (Controls.xaml SecondaryButton storyboards), from Core.</summary>
+        public const int DownMs = MotionTimings.PressMs, ReleaseMs = MotionTimings.PressReleaseMs;
+        public const double ReleaseAmplitude = MotionTimings.PressReleaseAmplitude;
 
         /// <summary>The pressed scale; 0 or 1 = off.</summary>
         public static readonly AttachedProperty<double> ScaleProperty =

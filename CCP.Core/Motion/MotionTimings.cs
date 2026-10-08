@@ -20,6 +20,12 @@ namespace ConditioningControlPanel.Motion
         public const double PressSquishScale = 0.97;
         public const int PressMs = 80;
 
+        /// <summary>The SecondaryButton press spring (Theme/Controls.xaml): down to
+        /// <see cref="PressSquishScale"/> over <see cref="PressMs"/> linear, back to 1.0 over
+        /// 150 ms on a BackEase EaseOut with amplitude 0.3 (the overshoot is the spring).</summary>
+        public const int PressReleaseMs = 150;
+        public const double PressReleaseAmplitude = 0.3;
+
         /// <summary>Entrance stagger: 40 ms apart, capped at 6 slots; each item fades 0 -> 1 over
         /// 220 ms and rises 10 px -> 0 over 260 ms, both quad out.</summary>
         public const int StaggerMs = 40;
