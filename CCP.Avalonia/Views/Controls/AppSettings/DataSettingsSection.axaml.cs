@@ -4,6 +4,7 @@ using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -98,10 +99,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 }
 
                 s.OfflineMode = true;
-                // ponytail: WPF also disconnects the live network services and greys the online
-                // rows (MainWindow.DisconnectNetworkServices / UpdateOfflineModeUI); those are the
-                // shell's, wired when its network partials exist on this head.
-                Log.Information("Offline mode enabled with username '{Username}'", s.OfflineUsername);
+                Log.Information("Offline mode enabled with a local username ({Chars} chars)",
+                    s.OfflineUsername?.Length ?? 0);
             }
             else
             {
@@ -109,6 +108,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 Log.Information("Offline mode disabled");
             }
 
+            // WPF DisconnectNetworkServices + UpdateOfflineModeUI (MainWindow.UiUpdates.cs:2612/2625).
+            this.FindLogicalAncestorOfType<Windows.MainShellWindow>()?.SyncOfflineModeState();
             CoreSettings.Save();
 
             void Revert(bool value)
@@ -178,16 +179,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 return;
             }
 
-            // Importing replaces the current phrase pools — confirm first. WPF uses a two-button
-            // styled confirm; the ported WarningDialog (acknowledge-gated) is the closest
-            // equivalent on this head and errs stricter, never looser.
-            var confirm = new Dialogs.WarningDialog(
-                "Import Phrases?",
-                "This replaces your current lock-card phrases, subliminals, mantras and other " +
-                "custom text with the ones in the backup file. Continue?",
-                "Replace my phrases with the backup");
-            await confirm.ShowDialogSafe(owner);
-            if (!confirm.Confirmed) return;
+            // Importing replaces the current phrase pools — confirm first. WPF's two-button styled
+            // confirm (MainWindow.PresetIO.cs:115); Enter lands on Cancel (docs/avalonia-decisions.md).
+            if (!await Dialogs.MessageDialog.ConfirmAsync(owner, "Import Phrases?",
+                    "This replaces your current lock-card phrases, subliminals, mantras and other " +
+                    "custom text with the ones in the backup file. Continue?",
+                    defaultToCancel: true, okText: "Import", cancelText: "Cancel"))
+                return;
 
             try
             {
@@ -382,6 +380,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// have the new process ack against the old one and exit. Returns false if it could not be
         /// scheduled - the reset still proceeds, the user just starts the app themselves.
         /// </summary>
+        /// <summary>The detached delayed relaunch. Off Windows the exe goes in as "$1" through
+        /// ArgumentList: .NET splits a single Arguments string by Windows rules, which do not
+        /// honour single quotes, so <c>-c 'sleep 4; ...'</c> reached sh as a syntax error.</summary>
+        internal static ProcessStartInfo RelaunchStartInfo(string exe, int delaySeconds = 4)
+        {
+            var psi = OperatingSystem.IsWindows()
+                ? new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c timeout /t {delaySeconds} /nobreak >nul & start \"\" \"{exe}\"",
+                }
+                : new ProcessStartInfo
+                {
+                    FileName = "/bin/sh",
+                    ArgumentList = { "-c", $"sleep {delaySeconds}; exec \"$1\"", "sh", exe },
+                };
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            psi.WorkingDirectory = Path.GetDirectoryName(exe) ?? Environment.CurrentDirectory;
+            return psi;
+        }
+
         private static bool TryScheduleRelaunch()
         {
             try
@@ -393,22 +413,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     return false;
                 }
 
-                var psi = OperatingSystem.IsWindows()
-                    ? new ProcessStartInfo
-                    {
-                        FileName = "cmd.exe",
-                        Arguments = $"/c timeout /t 4 /nobreak >nul & start \"\" \"{exe}\"",
-                    }
-                    : new ProcessStartInfo
-                    {
-                        FileName = "/bin/sh",
-                        Arguments = $"-c 'sleep 4; exec \"{exe}\"'",
-                    };
-                psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
-                psi.WorkingDirectory = Path.GetDirectoryName(exe) ?? Environment.CurrentDirectory;
-
-                Process.Start(psi);
+                Process.Start(RelaunchStartInfo(exe));
                 Log.Information("[RESET] relaunch scheduled for {Exe}", exe);
                 return true;
             }

@@ -1237,6 +1237,7 @@
   "label_easy_2": "⭐ Fácil",
   "label_let_the_morning_carry_you_away": "Deja que la mañana te lleve lejos...",
   "label_corner_gif": "🖼 GIF de Esquina",
+  "corner_gif_force_disabled": "Los GIF de esquina se desactivaron: la última sesión terminó con uno en pantalla. Vuelve a activarlos desde la tarjeta Espiral.",
   "label_place_a_subtle_gif_in_a_screen_corner": "Coloca un GIF sutil en una esquina de la pantalla",
   "btn_select_gif": "📁 Seleccionar GIF",
   "label_position": "Posición:",

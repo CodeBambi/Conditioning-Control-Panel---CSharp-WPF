@@ -48,9 +48,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///
     /// PORTED from ConditioningControlPanel/Windows/FeatureIntroPopup.xaml.cs. Deviations:
     ///  - The show gate is ported. <c>App.Tutorial.IsActive</c> is the <see cref="CoreTutorial"/>
-    ///    seam and is wired at both WPF sites. <c>App.IsUpdateDialogActive</c> and
-    ///    <c>MainWindow.IsStartupDialogShowing</c> have no seam in Core and are still missing, each
-    ///    marked where it belongs, so a card can still land on top of a startup modal.
+    ///    seam; <c>App.IsUpdateDialogActive</c> is <see cref="Platform.AppUpdater.IsUpdateDialogActive"/>
+    ///    and <c>MainWindow.IsStartupDialogShowing</c> is the shell's twin (set by the first-run wizard).
     ///  - Shown through <c>ShowDialogSafe</c>, so a tray-hidden shell does not throw and
     ///    <c>_opening</c> clears when the card closes.
     ///  - The One Account card's CTA is live: <c>Launcher.LaunchUriAsync</c> stands in for
@@ -122,6 +121,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Keys with a settle timer already running, so a tab that is shown twice during
         /// startup arms one clock and not two.</summary>
         private static readonly HashSet<string> _settling = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Test seam: forget the pacing clock, the door budget and the latches.</summary>
+        internal static void ResetForTests()
+        {
+            _opening = false;
+            _lastShownUtc = DateTime.MinValue;
+            _doorSlotsSpentThisLaunch.Clear();
+            _settling.Clear();
+        }
 
         /// <summary>
         /// Shows the intro for <paramref name="key"/> once per install, then never again.
@@ -207,10 +215,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         var live = CoreSettings.Current;
                         if (live.SeenFeatureIntros.Contains(key)) return;
 
-                        // ponytail: WPF yields here on App.IsUpdateDialogActive ||
-                        // MainWindow.IsStartupDialogShowing, so a card never stacks on a modal.
-                        // Both live in the WPF head; the flag is spent below this line, so a
-                        // suppressed card is retried on a later visit.
+                        // Never stack a modal on a modal (WPF FeatureIntroPopup.xaml.cs:211). The
+                        // flag is spent below this line, so a suppressed card is retried later.
+                        if (Platform.AppUpdater.IsUpdateDialogActive || MainShellWindow.IsStartupDialogShowing) return;
 
                         var popup = new FeatureIntroPopup(content);
 

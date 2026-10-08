@@ -1237,6 +1237,7 @@
   "label_easy_2": "⭐ Fácil",
   "label_let_the_morning_carry_you_away": "Deixe a manhã levar você embora...",
   "label_corner_gif": "🖼 GIF de Canto",
+  "corner_gif_force_disabled": "Os GIFs de canto foram desligados: a última sessão terminou com um na tela. Reative-os no cartão Espiral.",
   "label_place_a_subtle_gif_in_a_screen_corner": "Colocar um GIF sutil em um canto da tela",
   "btn_select_gif": "📁 Selecionar GIF",
   "label_position": "Posição:",

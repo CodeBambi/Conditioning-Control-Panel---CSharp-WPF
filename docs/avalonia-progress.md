@@ -1434,3 +1434,39 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-season-recap: +482
 - Season recap card follows the active mod accent (Core RecapPalette, shared with WPF) and the foil shimmer is back on WPF's curve; it runs only while visible. The recap window's backdrop and pills follow the mod too.
 - Copy card and Share on X put the PNG on the clipboard (checked live on Wayland). All 3 recap rows are now wired.
+
+## avalonia-port/help-loops-c: +812
+- Help-loop scenes LockCard, FocusGaze, IntensityRamp, Presets, Subliminals and WebcamCalibration ported (20 of 23). Each renders every step and lights its chips in order on the stepped clock.
+- New WebcamCalibration and IntensityRamp pixel tests, both fail-proven. Live: Settings Subliminals `?` plays the loop.
+
+## avalonia-port/rows-feature-intro: +219
+- win-feature-intro: cards now yield to a startup modal or update dialog; tour callers wired on 10 tab cases plus the Dashboard launch (daily-free / one-account) via StartupLadder; 4 fail-proven tests; row stays stub with the missing callers listed.
+- Test profile marks every intro key as spent, so a card no longer leaks across shell tests and holds passive surfaces in later ones.
+
+## avalonia-port/rows-content-dialogs: +332
+- Tube Personality submenu with the CCBill explicit-content acknowledgement gate; content-policy warning on the moderation counter; both rows stub -> wired.
+- TubeContentGatesTests (fail-proven x4); other acknowledgement callers still head-blocked.
+
+## avalonia-port/rows-settings-data: +296
+- Settings · Data offline mode stops the heartbeat and greys the login and browser controls like WPF, including at startup; views-settings-data stub→wired.
+- Phrase import uses WPF's Import/Cancel confirm, with Enter on Cancel (supervisor decision).
+
+## avalonia-port/rows-grace-pause: +117
+- win-grace-pause-overlay stub -> wired: Resume is a keyboard-reachable Button pill (0.85/0.7), the countdown/auto-resume run on a TimeProvider, and the panic key is tunnel-routed so it beats a focused Resume (supervisor-approved)
+- Headless test covers Esc -> card -> Tab+Enter, mouse hover/press/click, 60 s auto-resume, and panic key Enter beating Resume, each check fail-proven
+
+## avalonia-port/rows-emi-windows: +325
+- EmiDesk ring: Core EmiRingLayout (git mv, tests now on Linux), card art plus icon plates, shipped pixel font, ring sounds on open/close; click/hover pat sound and pat count.
+- Options/ring live Keincheck run recorded; rows still stub with exact remaining lists.
+
+## avalonia-port/rows-haptics-setup: +70
+- win-haptics-setup stub -> wired: a headless test drives the wizard from the Studio rack (Mock: gate refusal, connect, device list, Done, Test buzz, page re-read), fail-proven on 5 breaks; no product code changed.
+- Live sandbox run: premium veil matches WPF; with the veil lifted the gated connect is shown, and settings.json records Provider=Mock (evidence/rows-haptics-setup).
+
+## avalonia-port/help-loops-d: +686
+- Help-loop scenes ScreenOcr, RemoteControl and SessionEditor ported (17 of 23). HelpVideoWindow now shows the loop like WPF TryShowLoop, and the Session Editor ? opens it.
+- Rows stay stub: the help-loops-c scenes are pending, and the ScreenOcr/RemoteControl ? buttons are not attached (SetHelpContent not ported).
+
+## avalonia-port/rows-corner-gif: +502
+- win-corner-gif wired: standalone corner-GIF overlays (CornerGifOverlay, seeded CoreCornerGif) with stagger, crash sentinel, panic surface `corner-gif`; CornerGifOverlayTests fail-proven 4 ways; live X readback in evidence/avalonia-port/rows-corner-gif/.
+- Still missing: session-scoped corner GIF in SessionRunner, so the Presets corner-GIF option stays hidden; live panic not reproduced (headless only).

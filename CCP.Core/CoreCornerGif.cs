@@ -9,8 +9,7 @@ namespace ConditioningControlPanel
     /// <para><see cref="Services.CornerGifPlanner"/> decides everything about a corner GIF except
     /// the one thing a head must do: create a transparent, click-through, always-on-top window and
     /// play an animation in it. This is that handback. The WPF head seeds it to
-    /// <c>App.CornerGif</c>; the Avalonia head does not seed it yet, because its overlay surface is
-    /// still being built.</para>
+    /// <c>App.CornerGif</c>; the Avalonia head to <c>CornerGifOverlay</c>.</para>
     ///
     /// <para>One entry point rather than three, matching what the config UI actually asks for: a
     /// negative index means "rebuild every slot" (a corner pick or an enable toggle shifts the

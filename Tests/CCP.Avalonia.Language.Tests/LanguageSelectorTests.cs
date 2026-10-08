@@ -434,6 +434,9 @@ public sealed class LanguageSelectorTests
         settings.Current.Language = "ja";
         settings.Current.SessionRackSourceFilter = "all";
         settings.Current.Welcomed = true;
+        // The Dashboard's launch cards spend their seen-flag (a real save) when they open, like WPF;
+        // spent here so the no-startup-save assertion keeps measuring startup itself.
+        settings.Current.SeenFeatureIntros.AddRange(new[] { "daily-free", "one-account" });
         settings.SaveImmediate();
         return File.ReadAllText(settingsPath);
     }

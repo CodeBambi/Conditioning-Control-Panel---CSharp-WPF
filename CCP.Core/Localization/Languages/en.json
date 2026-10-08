@@ -2078,6 +2078,7 @@
   "label_easy_2": "⭐ Easy",
   "label_let_the_morning_carry_you_away": "Let the morning carry you away...",
   "label_corner_gif": "🖼 Corner GIF",
+  "corner_gif_force_disabled": "Corner GIFs were turned off - the last session ended while one was on screen. Re-enable them from the Spiral card.",
   "label_place_a_subtle_gif_in_a_screen_corner": "Place a subtle GIF in a screen corner",
   "btn_select_gif": "📁 Select GIF",
   "label_position": "Position:",
