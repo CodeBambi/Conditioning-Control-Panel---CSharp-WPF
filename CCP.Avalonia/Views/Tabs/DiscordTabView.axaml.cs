@@ -165,6 +165,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ShowCard(s.IsSeason0Og);
             ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
             TxtProfileViewerName.Text = s.UserDisplayName ?? "You";
+            ShowOwnActions(true);
             SetOnline(true, Loc.Get("label_online"));
             TxtProfileViewerLevel.Text = s.PlayerLevel.ToString();
             // WPF Browser.cs:1963-1981: the server rank, else your row by unified id, else by display name.
@@ -197,6 +198,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var isOwn = string.Equals(entry.DisplayName, s.UserDisplayName, StringComparison.OrdinalIgnoreCase);
             ApplyIdentityBadges(false, null, isOwn && CoreAccount.IsWhitelisted);
             TxtProfileViewerName.Text = entry.DisplayName;
+            ShowOwnActions(isOwn);
             SetOnline(entry.IsOnline, entry.IsOnline ? "Online" : "Offline"); // WPF's literals
             TxtProfileViewerLevel.Text = entry.Level.ToString();
             TxtProfileViewerRank.Text = TrainerCardText.Rank(entry.Rank);
@@ -322,7 +324,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // Handlers — every one forwards to MainWindow on WPF, and to Host here.
         // ------------------------------------------------------------------
 
-        private void BtnChangeDisplayName_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnChangeDisplayName_Click(object? sender, RoutedEventArgs e) => _ = Host?.ChangeDisplayNameAsync();
 
         /// <summary>WPF forwards to MainWindow.Browser.cs:ClearProfileViewer; a search still in flight is dropped.</summary>
         private void BtnClearProfile_Click(object? sender, RoutedEventArgs e)
@@ -331,7 +333,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Host?.BtnClearProfile_Click(sender, e);
         }
 
-        private void BtnDeleteProfile_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnDeleteProfile_Click(object? sender, RoutedEventArgs e) => _ = Host?.DeleteProfileAsync();
+
+        /// <summary>WPF Browser.cs:1934-1942 / 2215-2223: rename and delete show on your own card only, and only
+        /// with a unified id to act on.</summary>
+        private void ShowOwnActions(bool own)
+        {
+            var show = own && !string.IsNullOrEmpty(CoreSettings.Current.UnifiedId);
+            BtnChangeDisplayName.IsVisible = show;
+            BtnDeleteProfile.IsVisible = show;
+        }
         private void BtnProfileDiscord_Click(object? sender, RoutedEventArgs e) { }
 
         private void BtnProfileSearch_Click(object? sender, RoutedEventArgs e) => _ = SearchAsync(TxtProfileSearch.Text);
