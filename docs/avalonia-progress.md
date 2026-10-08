@@ -1383,3 +1383,42 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-spiral-tab: +285
 - SpiralRoom moved to Core; the Avalonia Spiral tab and rail row now read the real fuse and settings (live fog T-minus, phase pulse and flare, gold-ellipsis rail row). SpiralRoomShellTests is fail-proven 3 ways and checked live in Keincheck.
 - Both rows stay stub: the block and withhold services (DescentService, DescentMigrationService) are still WPF-only, so the Spiral/embed state, FIRST LIGHT, SFX and the bark are still missing.
+
+## avalonia-port/rows-haptics-tab: +713
+- Haptics VMs and their builders moved to Core and are shared with WPF. The Avalonia Haptics page now uses real chips, routing rows and toy cards, plus every Phase F/DSP/DtRH/sync dial and the pattern lab.
+- views-tab-haptics and shell-haptics move from stub to wired. One fail-proven headless test (mock toys only) and a sandbox live check.
+
+## avalonia-port/rows-settings-general: +803
+- Settings General: display card (monitor picker, countdown), XDG autostart run-on-startup with start-hidden warning, Deeper switch hides the rail button; views-settings-general stub->wired.
+- Settings Performance: Back Room FX combo; changing motion level updates loops already showing (5 controls); DND picker/guard still missing, row stays stub.
+
+## avalonia-port/rows-lock-card: +303
+- feat-lock-card wired: repeat-shape rows (random / match by length) on the panel; Core `LockCardScheduler.ResolveRepeats` (moved from WPF) sizes the Avalonia card.
+- Test fail-proven 3 ways; live: length-mode card shows 29 repeats and ESC closes it.
+
+## avalonia-port/intake-bridge: +747
+- Graded Intake slice 3: loom-save, save-image, need-remote, speech bridge, audio-web pack request on Avalonia (8 files to Core); panic closes the intake and its mic.
+
+## avalonia-port/help-loops-b: +744
+- Help-loop scenes SpiralOverlay, GazeMinigame, Video, BubblePop, BrainDrain, MindWipe and BubbleCount ported line-for-line from WPF (14 of 23 done). Headless frames are saved per step, and the live BubblePop `?` shows the loop.
+- Six of these scenes still have no Avalonia entry point: the SplitFeatureCard help ids and the GazeMinigame help attach.
+
+## avalonia-port/lockdown-hidden-fix: +176
+- Dialogs no longer crash with a hidden shell owner (ShowDialogSafe, ownerless fallback like WPF); Lockdown activate from tray works.
+- Headless test hides the shell and activates via the real button; fail-proven.
+
+## avalonia-port/rows-name-dialogs: +342
+- Trainer Card rename/delete wired through DisplayNameDialog -> CoreAccount -> Core V2AuthService; delete signs out without a push.
+- UsernamePickerDialog documented as unreachable on WPF too (dead BtnQuick*Login handlers); both rows stay stub with exact gaps.
+
+## avalonia-port/rows-mini-player: +198
+- win-mini-player: GIFs now loop (SkiaSharp decode + frame timer) and load failures show a MessageDialog notice before closing; the row stays stub because there is no opener.
+- MiniPlayerPreviewTests: 2 tests, each fail-proven.
+
+## avalonia-port/flake-layout: +24
+- Root-caused the Blink/ChasterRaffle/EmiBook shard flakes to one test setting up headless drawing without Skia (first setup wins per testhost); fixed it.
+- Added a source-scan guard that every Avalonia test platform setup uses Skia drawing; fail-proven with a fixed order seed.
+
+## avalonia-port/rows-media-history: +547
+- win-media-history: the Media Log reads the shared MediaHistoryService, now in Core and fed by both heads. Added audio filter, thumbnails, remote Copy link / Go to Source, LibVLC video and SkiaSharp GIF preview, and Clear behind a confirm. Row stays stub: Load preview, Brain Drain producer and the MediaFailed card are still missing.
+- Tests fail-proven (window, service, scheduler LastVideoPath); live evidence in evidence/rows-media-history.

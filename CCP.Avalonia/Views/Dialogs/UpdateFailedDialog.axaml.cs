@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 if (owner is { IsLoaded: true, IsVisible: true })
                 {
                     dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                    _ = dialog.ShowDialog(owner);
+                    _ = dialog.ShowDialogSafe(owner);
                 }
                 else
                 {

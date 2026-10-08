@@ -55,7 +55,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     CoreReleaseContent.PatchNotes,
                     tourAction: () => CoreTutorial.Start("UpgradeTour"),
                     tourButtonText: "Show me around (60s)");
-                await dialog.ShowDialog(owner);
+                await dialog.ShowDialogSafe(owner);
             }
             catch (Exception ex)
             {

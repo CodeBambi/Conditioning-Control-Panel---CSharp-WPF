@@ -25,7 +25,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         public static async Task<bool> AskAsync(Window owner, KeywordTriggerChasterImport.Summary summary)
         {
             if (!summary.Any) return false;
-            return await new ChasterImportConfirmDialog(summary).ShowDialog<bool?>(owner) == true;
+            return await new ChasterImportConfirmDialog(summary).ShowDialogSafe<bool?>(owner) == true;
         }
 
         private void BtnSkip_Click(object? sender, RoutedEventArgs e) => Close(false);

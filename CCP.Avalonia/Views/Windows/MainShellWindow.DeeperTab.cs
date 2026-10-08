@@ -65,6 +65,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class MainShellWindow
     {
         /// <summary>
+        /// The Deeper master switch's shell half (WPF MainWindow.Settings.cs:119 on load,
+        /// MainWindow.DeeperTab.cs:132 on toggle): the rail entry follows EnableDeeper, and turning
+        /// it off while Deeper is the open tab falls back to Settings.
+        /// </summary>
+        internal void ApplyEnableDeeper()
+        {
+            var enabled = CoreSettings.Current.EnableDeeper;
+            if (Named<Button>("BtnDeeper") is { } door) door.IsVisible = enabled;
+            if (!enabled && Named<Control>("DeeperTab") is { IsVisible: true }) ShowTab("settings");
+        }
+
+        /// <summary>
         /// The rail's Deeper entry. Navigates, then retires the "you have not opened this yet"
         /// pulse flag exactly where WPF does - on the first open, not on install - so the rail
         /// stops nagging even though the pulse animation itself is not on this head.
@@ -140,7 +152,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (!IsVisible) return;
 
                 var dialog = new Views.Deeper.NewEnhancementDialog();
-                if (!await dialog.ShowDialog<bool>(this)) return;
+                if (!await dialog.ShowDialogSafe<bool>(this)) return;
 
                 // CreateBlank, inlined. Name is deliberately left empty: the editor's header falls
                 // back to the localized "Untitled" until the user (or HT auto-fill) sets one.
@@ -232,7 +244,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 var dlg = new Dialogs.CataloguePickerDialog(entries, videoId);
-                await dlg.ShowDialog<bool>(this);
+                await dlg.ShowDialogSafe<bool>(this);
                 if (dlg.SelectedEntry != null) await DownloadAndOpenCatalogueEntryAsync(dlg.SelectedEntry);
             }
             catch (Exception ex) { Log.Warning(ex, "[Catalogue] Picker dialog threw"); }

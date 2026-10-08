@@ -71,7 +71,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     Log.Warning("Awareness consent needs an owner window — treating as declined");
                     return false;
                 }
-                accepted = await dialog.ShowDialog<bool>(owner);
+                accepted = await dialog.ShowDialogSafe<bool>(owner);
             }
             catch (Exception ex)
             {

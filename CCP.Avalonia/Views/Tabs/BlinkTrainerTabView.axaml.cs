@@ -396,7 +396,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private async void GrantConsent()
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
-            await new Dialogs.WebcamConsentDialog().ShowDialog(owner);
+            await new Dialogs.WebcamConsentDialog().ShowDialogSafe(owner);
             Refresh();
         }
 
@@ -639,7 +639,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var tracker = Platform.WebcamTracker.Instance;
                 if (!WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
-                    await new Dialogs.WebcamConsentDialog().ShowDialog(owner);
+                    await new Dialogs.WebcamConsentDialog().ShowDialogSafe(owner);
                     if (!WebcamConsent.IsCurrent(CoreSettings.Current)) { Refresh(); return; }
                 }
                 if (tracker.Calibration == null)
@@ -660,7 +660,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     }
                     startedHere = true;
                 }
-                await new Windows.WebcamQuickRecalWindow().ShowDialog<bool?>(owner);
+                await new Windows.WebcamQuickRecalWindow().ShowDialogSafe<bool?>(owner);
                 if (startedHere) await tracker.StopAsync();
                 Refresh();
             }
@@ -702,7 +702,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (!WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
                     var dlg = new Dialogs.WebcamConsentDialog();
-                    await dlg.ShowDialog(owner);
+                    await dlg.ShowDialogSafe(owner);
                     Refresh();
                     if (!WebcamConsent.IsCurrent(CoreSettings.Current)) return;
                 }

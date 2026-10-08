@@ -58,7 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <summary>Tells the user something. One OK button, so the result is true unless they
         /// dismissed the window with the X; a caller of this form normally ignores it.</summary>
         public static async Task<bool> ShowAsync(Window owner, string title, string message)
-            => await new MessageDialog(title, message, showCancel: false).ShowDialog<bool?>(owner) == true;
+            => await new MessageDialog(title, message, showCancel: false).ShowDialogSafe<bool?>(owner) == true;
 
         /// <summary>Asks the user something. True only on OK - Cancel and the X both answer false.</summary>
         /// <param name="defaultToCancel">
@@ -70,6 +70,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                                                     bool defaultToCancel = false, string? okText = null,
                                                     string? cancelText = null)
             => await new MessageDialog(title, message, showCancel: true, defaultToCancel, okText, cancelText)
-                .ShowDialog<bool?>(owner) == true;
+                .ShowDialogSafe<bool?>(owner) == true;
     }
 }

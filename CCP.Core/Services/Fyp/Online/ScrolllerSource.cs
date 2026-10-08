@@ -121,7 +121,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             // channel cools on the usual ladder and resumes the same walk on the next try.
             if (channel.Iterator != null)
             {
-                App.Logger?.Debug("[FYP online] r/{Sub}: null answer mid-walk, retrying", channel.Name);
+                Serilog.Log.Debug("[FYP online] r/{Sub}: null answer mid-walk, retrying", channel.Name);
                 return null;
             }
 
@@ -129,7 +129,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             // caller's own backoff ladder cools the channel and brings it back by itself.
             if (++channel.NullStrikes < NullStrikesBeforeDead)
             {
-                App.Logger?.Debug("[FYP online] r/{Sub}: null answer, strike {N}/{Max}",
+                Serilog.Log.Debug("[FYP online] r/{Sub}: null answer, strike {N}/{Max}",
                     channel.Name, channel.NullStrikes, NullStrikesBeforeDead);
                 return null;
             }
@@ -205,7 +205,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             node = data["getSubreddit"];
             if (node == null || node.Type == JTokenType.Null)
             {
-                App.Logger?.Debug("[FYP online] probe r/{Sub}: not on scrolller (null twice)", sub);
+                Serilog.Log.Debug("[FYP online] probe r/{Sub}: not on scrolller (null twice)", sub);
                 return new SubProbe { Ok = false };
             }
         }
@@ -392,7 +392,7 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             var text = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
-                App.Logger?.Warning("[FYP online] scrolller API HTTP {Code} (body {Bytes} bytes)",
+                Serilog.Log.Warning("[FYP online] scrolller API HTTP {Code} (body {Bytes} bytes)",
                     (int)resp.StatusCode, text?.Length ?? 0);
                 return null;
             }

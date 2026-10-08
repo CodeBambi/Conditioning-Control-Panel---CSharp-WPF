@@ -114,6 +114,94 @@ public sealed class HapticsHeadTests
         finally { shell.Close(); (s.PanicKeyEnabled, s.PanicKey) = (enabled, key); }
     });
 
+    /// <summary>WPF MainWindow.Haptics.cs InitializeHapticsTab/RefreshHapticToys/Phase F handlers: the page
+    /// shows the real (virtual) toys, provider chips and routing rows, follows DevicesChanged, writes the
+    /// dials through to settings, gates the sync card on the audio-sync row, and ticks its live status
+    /// only while visible (P01).</summary>
+    [Fact]
+    public void TabShowsRealToysRowsAndWritesDialsThrough()
+    {
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            WithHaptics(premium: true, mock: true, (h, _) =>
+            {
+                var s = h.Settings;
+                var a = s.AudioSync;
+                var old = (s.V2.Temperament, s.DtrhDensity, a.Enabled, s.V2.Rule(HapticLayer.AudioSync).Enabled);
+                var oldDsp = (a.Sensitivity, a.Smoothing, a.BassWeight, a.RmsWeight, a.OnsetWeight, a.MaxIntensity, a.LiveIntensity);
+                var mirrored = 0;
+                Action bump = () => mirrored++;
+                ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.AudioSettingsBinder.Changed += bump;
+                s.Enabled = true;
+                Assert.True(h.ConnectAsync().Result);
+                var tab = new HapticsTabView();
+                var host = new Window { Content = tab };
+                host.Show();
+                try
+                {
+                    // toys: one card per device, picker = All + each toy, mock chip lit
+                    var cards = tab.ToyCardsList.ItemsSource!.Cast<ConditioningControlPanel.Views.Controls.HapticToyCardVm>().ToList();
+                    Assert.Equal(h.DeviceManager.Devices.Select(d => d.DeviceKey), cards.Select(c => c.DeviceKey));
+                    Assert.NotEmpty(cards);
+                    Assert.False(tab.ToysEmptyState.IsVisible);
+                    Assert.Equal(cards.Count + 1, tab.CmbPatternToy.Items.Count);
+                    var chips = tab.ProviderChipsList.ItemsSource!.Cast<ConditioningControlPanel.Views.Controls.HapticProviderChipVm>().ToList();
+                    Assert.True(chips.Single(c => c.Key == "mock").IsConnected);
+
+                    // routing rows are the real four groups; the audio-sync row gates the tuning card
+                    var groups = tab.RoutingGroupsList.ItemsSource!.Cast<ConditioningControlPanel.Views.Controls.HapticRoutingGroupVm>().ToList();
+                    Assert.Equal(4, groups.Count);
+                    var sync = groups[2].Rows[2];
+                    sync.RowEnabled = false;
+                    Assert.False(tab.VideoHapticSyncSliders.IsVisible);
+                    sync.RowEnabled = true;
+                    Assert.True(a.Enabled);
+                    Assert.True(tab.VideoHapticSyncSliders.IsVisible);
+
+                    // dials write through; reset restores the model's defaults
+                    tab.SliderDspBass.Value = 33;
+                    Assert.Equal(0.33, a.BassWeight, 3);
+                    Assert.Equal("33%", tab.TxtDspBass.Text);
+                    tab.BtnDspReset.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.Equal(new AudioSyncSettings().BassWeight, a.BassWeight, 3);
+                    // sync power writes through and tells Settings · Audio's twin slider (WPF :958 mirror)
+                    mirrored = 0;
+                    tab.SliderVideoHapticPower.Value = 42;
+                    Assert.Equal(0.42, a.LiveIntensity, 3);
+                    Assert.True(mirrored > 0);
+                    tab.RbTemperCruel.IsChecked = true;
+                    Assert.Equal("cruel", s.V2.Temperament);
+                    tab.CmbHapticDtrhDensity.SelectedIndex = 2;
+                    Assert.Equal(2, s.DtrhDensity);
+
+                    // live status ticks only while the tab is visible
+                    Assert.NotNull(tab.LiveStatusTimer);
+                    tab.IsVisible = false;
+                    Assert.Null(tab.LiveStatusTimer);
+                    tab.IsVisible = true;
+                    Assert.NotNull(tab.LiveStatusTimer);
+
+                    // a disconnect behind the page (DevicesChanged) empties the cards
+                    h.DisconnectAsync().Wait();
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.Empty(tab.ToyCardsList.ItemsSource!.Cast<object>());
+                    Assert.True(tab.ToysEmptyState.IsVisible);
+                }
+                finally
+                {
+                    host.Close();
+                    (s.V2.Temperament, s.DtrhDensity, a.Enabled, s.V2.Rule(HapticLayer.AudioSync).Enabled) = old;
+                    (a.Sensitivity, a.Smoothing, a.BassWeight, a.RmsWeight, a.OnsetWeight, a.MaxIntensity, a.LiveIntensity) = oldDsp;
+                    ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.AudioSettingsBinder.Changed -= bump;
+                }
+            });
+        });
+    }
+
     /// <summary>The page loads real settings, gates Enable behind premium as WPF (#1917), and a connect
     /// with Intiface not running ends "Disconnected" with the button usable again.</summary>
     [Fact]
