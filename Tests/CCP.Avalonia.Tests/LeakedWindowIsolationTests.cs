@@ -38,7 +38,9 @@ public sealed class LeakedWindowIsolationTests
     {
         _leaked = new FeatureIntroPopup();
         _leaked.Show();
+        StartupLadder.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10));   // ladder state only the hook's reset clears
         Assert.True(StartupLadder.PassiveWindowUp());
+        Assert.True(StartupLadder.IsQuiet);
     });
 
     [Fact]
@@ -46,6 +48,7 @@ public sealed class LeakedWindowIsolationTests
     {
         Assert.False(_leaked?.IsVisible ?? false);
         Assert.False(StartupLadder.PassiveWindowUp());
+        Assert.False(StartupLadder.IsQuiet);
     });
 }
 

@@ -89,8 +89,13 @@ internal static class OpenWindows
     internal static void CloseLeftovers()
     {
         var head = typeof(ConditioningControlPanel.Avalonia.App).Assembly;
-        foreach (var w in Open.Where(w => !_before.Contains(w) && w.GetType().Assembly == head).ToArray())
+        foreach (var w in Open.Where(w => !_before.Contains(w)).ToArray())
+        {
+            if (w.GetType().Assembly != head) { Open.Remove(w); continue; }   // the test's own; don't pin it
+            // Logged so a product window leak stays visible even though the hook cleans it up.
+            Serilog.Log.Warning("[TestIsolation] closing leftover {Window}", w.GetType().Name);
             try { w.Close(); } catch (Exception) { /* a window that refuses to close must not fail the next test */ }
+        }
     }
 }
 
