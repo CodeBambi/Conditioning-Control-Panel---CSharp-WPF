@@ -143,6 +143,12 @@ namespace ConditioningControlPanel.Services
 
         // ---- tile gestures --------------------------------------------------------------------
 
+        /// <summary>The "right-click a tile to switch it on or off" caption on the logo face retires
+        /// after this many toggles (WPF 7.1.5 DashboardToggleHintRule).</summary>
+        public const int ToggleHintMaxUses = 3;
+
+        public static bool ShowToggleHint(int usesSoFar) => usesSoFar < ToggleHintMaxUses;
+
         /// <summary>
         /// Home tile gesture: by default left-click opens and right-click switches the feature on
         /// or off. "Left or right?" (AppSettings.DashboardInvertClicks) swaps them on Home tiles

@@ -14,13 +14,13 @@ namespace CCP.Avalonia.Tests.Board;
 
 /// <summary>
 /// The Tonight Board on the real Home page: the slot asks the shell to host the deck the first
-/// time it joins the window, the board takes the wordmark's cell, and with no network and no
+/// time it joins the window, the board fills the row the folded browser gives back, and with no network and no
 /// account the deck still has cards (Tip and House carry it offline).
 /// </summary>
 public sealed class BoardShellTests
 {
     [Fact]
-    public Task Home_hosts_the_board_in_the_centre_cell_and_it_carries_the_deck_offline() => AvaloniaTestDispatcher.RunAsync(() =>
+    public Task Home_hosts_the_board_in_the_fold_row_and_it_carries_the_deck_offline() => AvaloniaTestDispatcher.RunAsync(() =>
     {
         BoardHeadTests.EnsureApp();
         BoardHeadTests.Pin();
@@ -37,7 +37,10 @@ public sealed class BoardShellTests
             Assert.NotNull(host);
             var tab = shell.Named<SettingsTabView>("SettingsTab")!;
             Assert.True(tab.FindControl<Border>("DashBillboard")!.IsVisible);
-            Assert.False(tab.FindControl<Border>("LogoBrandFrame")!.IsVisible);
+            // Parity lane E3 (WPF 7.1.5): the board sits in the row the folded browser gives back
+            // (the default), the logo dial keeps the centre cell.
+            Assert.Same(tab.FindControl<Grid>("HomeRightColumn"), tab.FindControl<Border>("DashBillboard")!.Parent);
+            Assert.True(tab.FindControl<Border>("LogoBrandFrame")!.IsVisible);
 
             var card = host!.CurrentCard;
             Assert.NotNull(card);

@@ -111,4 +111,12 @@ public class HomeDashboardRulesTests
     [InlineData(true, true, false)]   // swapped: right opens
     public void Tiles_RightClickTogglesLeftClickOpens_UnlessSwapped(bool right, bool invert, bool toggles) =>
         Assert.Equal(toggles, HomeDashboardRules.GestureToggles(right, invert));
+
+    [Fact]
+    public void ToggleHint_RetiresAfterThreeToggles()
+    {
+        Assert.True(HomeDashboardRules.ShowToggleHint(0));
+        Assert.True(HomeDashboardRules.ShowToggleHint(2));
+        Assert.False(HomeDashboardRules.ShowToggleHint(3));
+    }
 }
