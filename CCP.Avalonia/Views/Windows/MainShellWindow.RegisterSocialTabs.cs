@@ -64,7 +64,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     var url = FriendsHead.BaseUrl(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"),
                         Environment.GetEnvironmentVariable(FriendsHead.EnvVar));
                     LobbyWire.DefaultIdentity = FriendsHead.Identity;
-                    LobbyWire.DefaultBaseUrl = () => url;
+                    // Same rule as the friends service it rides with: no friends service built (a
+                    // sandbox without a loopback url, a test host) means no proxy, nothing sent.
+                    LobbyWire.DefaultBaseUrl = () => FriendsHead.Service != null ? url : null;
                     _lobby = new LobbyService(() => new FriendsHead.Timer())
                     {
                         ReadFriends = () => FriendsHead.Service?.Snapshot?.Friends ?? (IReadOnlyList<Friend>)Array.Empty<Friend>(),
@@ -117,6 +119,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             PaintLobby(Lobby.Snapshot, animate: false);
             _lobbyLease ??= Lobby.Watch();
         }
+
+        /// <summary>True while the Lobby page holds its poll lease (tests).</summary>
+        internal bool HoldsLobbyPageLease => _lobbyLease != null;
 
         /// <summary>WPF LeaveLobbyTab: drop the lease (the last lease stops the poll).</summary>
         internal void LeaveLobbyTab()
