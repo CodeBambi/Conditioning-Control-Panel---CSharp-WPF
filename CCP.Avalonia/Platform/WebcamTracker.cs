@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +18,36 @@ namespace ConditioningControlPanel.Avalonia.Platform
     {
         bool Open();
         bool Read(Mat bgr);
+    }
+
+    /// <summary>The Linux twin of WPF WebcamDeviceEnumerator: one entry per V4L2 capture node read from sysfs,
+    /// never opening a camera. Nodes whose <c>index</c> is not 0 are the metadata twins a UVC camera also
+    /// exposes; listing them would offer a "camera" that yields no frames.</summary>
+    internal static class V4l2Cameras
+    {
+        /// <summary>sysfs root; tests point it at a fake tree.</summary>
+        internal static string Root = "/sys/class/video4linux";
+
+        public static IReadOnlyList<(int Index, string Name)> Enumerate()
+        {
+            var list = new List<(int, string)>();
+            try
+            {
+                if (!Directory.Exists(Root)) return list;
+                foreach (var dir in Directory.GetDirectories(Root, "video*"))
+                {
+                    if (!int.TryParse(Path.GetFileName(dir)["video".Length..], out int n)) continue;
+                    var idx = Path.Combine(dir, "index");
+                    if (File.Exists(idx) && File.ReadAllText(idx).Trim() != "0") continue;
+                    var nameFile = Path.Combine(dir, "name");
+                    var name = File.Exists(nameFile) ? File.ReadAllText(nameFile).Trim() : "";
+                    list.Add((n, name.Length > 0 ? name : $"video{n}"));
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "Webcam: camera enumeration failed"); }
+            list.Sort((a, b) => a.Item1.CompareTo(b.Item1));
+            return list;
+        }
     }
 
     /// <summary>V4L2 capture through OpenCV. <c>CCP_WEBCAM_DEVICE</c> (an index) overrides the saved camera
