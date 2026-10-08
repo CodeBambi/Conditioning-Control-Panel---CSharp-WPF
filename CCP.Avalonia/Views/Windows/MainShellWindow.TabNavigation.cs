@@ -1,67 +1,41 @@
-// PORTED from ConditioningControlPanel/MainWindow/MainWindow.TabNavigation.cs (1,174 lines),
-// the part of it that is navigation.
+// PORTED from WPF 7.1.5 ConditioningControlPanel/MainWindow/MainWindow.TabNavigation.cs (1,133
+// lines) + MainWindow.SectionChrome.cs (379 lines): ShowTab, the tab registry (NavTabHost /
+// RegisterNavTab), old keys that resolve to their new home (silent and "Moved" redirects), and
+// the section page chrome ShowTab syncs on every navigation (strip, breadcrumb, window title,
+// last-tab memory, page wash). Core NavSections is the one table.
 //
-// What is REAL here: ShowTab (hide every tab panel, show one), the door accordion (one door's
-// entry panel open at a time, the door that owns the tab), and every rail/door click handler
-// the XAML names, each of which is now one ShowTab call - exactly what it is in WPF. SwitchTabFx
-// is real too, and runs inside ShowTab (MainShellWindow.AmbientFx.cs).
+// What is REAL here: ShowTab (hide every tab panel, show one), the per-tab side effects that
+// resolve on this head (OnTabShown), the registry, the redirects, the zone keys (Play > Eyes /
+// Sessions, Studio > Scheduler & Ramp, Library > Folders), the Library launcher pills, the strip
+// wiring and the section wash.
 //
-// What is NOT, on purpose, each named so it is not lost silently:
-//   - The transition choreography (AnimateTabIn, the Stop*Shimmer/Pulse/Motion calls) and the
-//     door open/close height animation. ponytail: panels snap open (Height =
-//     NaN) and shut (0); the WPF MeasureDoorPanel + NavDoorExpandMs tween returns with the FX
-//     partials.
-//   - Per-tab side effects on the way in (RefreshPresetsList, StopPolling on leaving Available Subjects,
-//     UpdatePatreonUI, RefreshIntakePassTile, RefreshPremiumRail). Those reach App.* or a service.
-//     The FIVE that do not are restored in OnTabShown below:
-//       * StudioTab.OnTabShown() for "studio" and StudioTab.FocusRackEntry("haptics") for the
-//         haptics alias - ported view state on StudioTabView. Without the second, ShowTab("haptics")
-//         landed on the rack's last selection instead of the Haptics module, and OpenStudioModule
-//         routes haptics through it.
-//       * RefreshSessionFeatureLock() on "settings", "studio" and "haptics" - the same three cases
-//         WPF calls it from (MainWindow.TabNavigation.cs:260/476/501). It is real and idempotent on
-//         this head (MainShellWindow.SessionFeatureLock.cs) and is re-derived, never latched, so
-//         arriving at a tab cannot find a stale lock.
-//       * UpdateProfileSharingSummary() on "discord" - see the case itself for why it lands here
-//         and not in the FX partial WPF reaches it through.
-//       * HasSeenProgramsTab and ProgramsIntroPopup.ShowIfFirstTime on "programs".
-//   - EmiDesk (EmiTargets.NoteTabOpened). The Bark hook is REAL now, through CoreBark, and fires
-//     in the same place WPF fires it - see ShowTab.
-//   - The three keys that are WINDOWS, not tabs, and the one launcher door: "patreon" (opens
-//     Settings · Account via ShowAppInfoPopup), "fyp" (OpenFypFeed), "justdrop" (the shop host)
-//     Each is a documented no-op below until its service exists here. The "webapp" door is
-//     wired (DoorWebApp_Click opens it through the Launcher).
-//   - An "active" state on the rail. NavDoorButton has no :checked/.active selector on this
-//     head, so nothing is highlighted yet.
+// Stand-ins, each named so it is not lost silently (7.1.5 pages this head has no view for yet;
+// a lane that ports one calls RegisterNavTab and the stand-in stops answering):
+//   - "personality", "permissions", "companionlinks", "companionai" land on the Companion room,
+//     which still carries those cells on this head;
+//   - "friends" opens the rail's Friends drawer (the full Social > Friends page is not ported);
+//   - "leash" has no surface here: ShowTab logs and stays.
+// Zones scroll in WPF (PlayTab.ScrollToZone, AssetsTab.ScrollToZone); those helpers are not on
+// this head's views, so a zone pill lands on the page's top.
 //
-// Every panel and door is resolved by x:Name through FindControl, never by generated field, so
-// a panel this head does not carry is skipped rather than a compile error.
-//
-// THAT IS NOT OPTIONAL ON THIS WINDOW. MainShellWindow.axaml.cs:87 loads with
-// AvaloniaXamlLoader.Load(this), which - unlike the generated InitializeComponent - never assigns
-// the x:Name fields. So `AppSettingsTab`, `StudioTab`, `SettingsTab` and `MainTutorialOverlay`
-// COMPILE and are always null at runtime: a `?.` on one is a silent no-op, not a safe guard.
-// Named<T>() below is the only way to reach a control of this window from any of its partials.
-//
-// AND THE HAZARD IS NOT CONFINED TO THIS WINDOW. An earlier revision of this header claimed "the
-// tab views themselves do call InitializeComponent, so THEIR fields are real once found". That was
-// never true of all of them: DiscordTabView, PlayTabView, QuestsTabView and PresetsTabView loaded
-// the same way, so their named fields were null too and anything reaching in through a field of
-// theirs was the same silent no-op one level down. DiscordTabView is fixed at the source (its ctor
-// now calls InitializeComponent). The other three are NOT this layer's to touch and are still on
-// AvaloniaXamlLoader.Load - reach into them with FindControl, never with a field, until they are.
-// The general rule for any file: grep the view's ctor before you trust one of its x:Name fields.
+// Every panel is resolved by x:Name through FindControl, never by generated field:
+// MainShellWindow.axaml.cs loads with AvaloniaXamlLoader.Load(this), which never assigns the
+// x:Name fields. Named<T>() below is the only way to reach a control of this window.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Avalonia.Animation;
-using Avalonia.Animation.Easings;
+using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Layout;
-using Avalonia.Threading;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls.NavRail;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Nav;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -76,13 +50,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal Tabs.AppSettingsTabView? AppSettingsPage => Named<Tabs.AppSettingsTabView>("AppSettingsTab");
         internal Tabs.StudioTabView? StudioRack => Named<Tabs.StudioTabView>("StudioTab");
 
+        /// <summary>The section page header (breadcrumb + pills).</summary>
+        internal SectionTabStrip? NavStrip => Named<SectionTabStrip>("SectionStrip");
+
         /// <summary>The tab key currently shown, lower-case. "settings" until the first switch,
         /// which is the panel the XAML leaves visible.</summary>
         internal string CurrentTab { get; private set; } = "settings";
 
-        /// <summary>Tab key -> the x:Name of the panel it shows. Aliases point at one panel:
-        /// "lab" is the old name for the Play card wall, "haptics" is a module inside Studio,
-        /// "progression" is a section of Settings. Same table as the WPF switch.</summary>
+        /// <summary>Tab key -> the x:Name of the panel it shows. Aliases and zones point at one
+        /// panel: "lab" is the old name for the Play wall, "playsessions"/"playeyes" are places on
+        /// it, "haptics"/"ramp" are modules of the Studio rack, "progression" is the dashboard,
+        /// "folders" is a zone of the Assets page, "premium" is the full vault (7.1.5 Home page).</summary>
         private static readonly Dictionary<string, string> TabPanels = new(StringComparer.Ordinal)
         {
             ["settings"] = "SettingsTab",        ["progression"] = "SettingsTab",
@@ -90,14 +68,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["programs"] = "ProgramsTab",        ["enhancements"] = "EnhancementsTab",
             ["deeper"] = "DeeperTab",            ["achievements"] = "AchievementsTab",
             ["companion"] = "CompanionTab",      ["play"] = "PlayTab",  ["lab"] = "PlayTab",
-            ["leaderboard"] = "LeaderboardTab",  ["assets"] = "AssetsTab",
+            ["playsessions"] = "PlayTab",        ["playeyes"] = "PlayTab",
+            ["leaderboard"] = "LeaderboardTab",  ["assets"] = "AssetsTab", ["folders"] = "AssetsTab",
             ["discord"] = "DiscordTab",          ["awareness"] = "AwarenessTab",
             ["remotecontrol"] = "RemoteControlTab", ["availablesubjects"] = "AvailableSubjectsTab",
             ["bambitakeover"] = "BambiTakeoverTab", ["studio"] = "StudioTab", ["haptics"] = "StudioTab",
+            ["ramp"] = "StudioTab",
             ["lockdown"] = "LockdownTab",        ["blinktrainer"] = "BlinkTrainerTab",
             ["shelistening"] = "SheListeningTab", ["gradedintake"] = "GradedIntakeTab",
             ["appsettings"] = "AppSettingsTab",  ["spiral"] = "SpiralTab",
-            ["exclusives"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
+            ["premium"] = "ExclusivesTab",       ["chaster"] = "ChasterTab",
+        };
+
+        /// <summary>7.1.5 pages with no view on this head yet, landing on the panel that still
+        /// carries their content (see the header). A registered page always wins.</summary>
+        private static readonly Dictionary<string, string> PendingPageStandIns = new(StringComparer.Ordinal)
+        {
+            ["personality"] = "CompanionTab",
+            ["permissions"] = "CompanionTab",
+            ["companionlinks"] = "CompanionTab",
+            ["companionai"] = "CompanionTab",
         };
 
         /// <summary>Keys that open a window or a service rather than a tab. ShowTab leaves the
@@ -106,65 +96,157 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             { "patreon", "fyp", "justdrop", "webapp" };
 
         /// <summary>
-        /// A live tab key mapped onto the BARK key it must keep announcing itself with. Copied from
-        /// WPF's <c>BarkTabAliases</c> (MainWindow.TabNavigation.cs:83) and it is head-side by
-        /// nature: Phase 6 retired the Lab page into the Play door, every built-in mod has a
-        /// `nav_lab` rule keyed `tab_eq: "lab"`, and every third-party .ccpmod on disk carries its
-        /// own copy we can never edit. Deriving the bark key from the live key would fire nothing.
-        /// <para>ShowTab("lab") still works as a permanent alias and fires "lab" directly, so it is
-        /// deliberately NOT an entry here.</para>
+        /// A live tab key mapped onto the BARK key it must keep announcing itself with (WPF
+        /// <c>BarkTabAliases</c>): every built-in mod has a `nav_lab` rule keyed `tab_eq: "lab"`,
+        /// and a .ccpmod on disk may say `tab_eq: "exclusives"` for the vault. The KEY is the live
+        /// key, the VALUE the old one the rules are written against.
         /// </summary>
         private static readonly Dictionary<string, string> BarkTabAliases =
-            new(StringComparer.OrdinalIgnoreCase) { ["play"] = "lab" };
+            new(StringComparer.OrdinalIgnoreCase) { ["play"] = "lab", ["premium"] = "exclusives" };
 
-        /// <summary>The rail's doors: Tag on the door button, the tab it opens, the tabs it owns,
-        /// and the entry panel that unfolds under it (null for the two doors that have none).
-        /// Copied from WPF's NavDoorMap.</summary>
-        private static readonly (string Door, string DefaultTab, string[] Tabs, string? Panel)[] NavDoorMap =
+        /// <summary>A retired or zone key mapped onto the live key of the VIEW that shows it, for
+        /// anything keyed to a view (the ambient-FX registry, the lit rail row). The inverse
+        /// direction of <see cref="BarkTabAliases"/>; never applied to the key ShowTab records.</summary>
+        private static string CanonicalTabKey(string tab) =>
+            string.Equals(tab, "lab", StringComparison.OrdinalIgnoreCase) ? "play" : tab;
+
+        private static string ViewKeyFor(string tab) => tab switch
         {
-            ("home",        "settings",    new[] { "settings", "progression" },                                   null),
-            ("studio",      "studio",      new[] { "studio", "presets", "haptics" },                              "DoorPanelStudio"),
-            ("companion",   "companion",   new[] { "companion", "bambitakeover", "shelistening", "awareness" },   "DoorPanelCompanion"),
-            ("play",        "play",        new[] { "play", "lab", "deeper", "exclusives", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects" }, "DoorPanelPlay"),
-            ("you",         "discord",     new[] { "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard" }, "DoorPanelYou"),
-            ("library",     "assets",      new[] { "assets" },                                                    "DoorPanelLibrary"),
-            ("appsettings", "appsettings", new[] { "appsettings" },                                               null),
+            "lab" or "playsessions" or "playeyes" => "play",
+            "ramp" => "studio",
+            "folders" => "assets",
+            "progression" => "settings",
+            _ => tab,
         };
 
+        // ============================== the tab registry ==============================
+        // Nav rework (WPF 7.1.5 BRIEF contract 1). New section pages (Friends, Leash,
+        // Personality, Permissions, Links...) are not XAML children of this window: each lane
+        // registers a host from its own partial file and ShowTab falls through to it. The view is
+        // created on its first show, into the LaneTabHost cell (same cell as every other view).
+
+        /// <summary>One lane-owned page. <paramref name="Create"/> runs once, on the first ShowTab(key).</summary>
+        internal sealed record NavTabHost(string Key, Func<Control> Create,
+            Action<Control>? OnShown = null, Action<Control>? OnHidden = null);
+
+        private readonly Dictionary<string, NavTabHost> _navTabHosts = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Control> _navTabViews = new(StringComparer.OrdinalIgnoreCase);
+        private string? _shownLaneTab;
+
+        /// <summary>Register a lane page. A second registration of the same key replaces the
+        /// first only while the view has not been created yet.</summary>
+        internal void RegisterNavTab(NavTabHost host)
+        {
+            if (host == null || string.IsNullOrWhiteSpace(host.Key)) return;
+            var key = host.Key.ToLowerInvariant();
+            if (_navTabViews.ContainsKey(key))
+            {
+                Log.Warning("RegisterNavTab({Key}) ignored: the view already exists", key);
+                return;
+            }
+            _navTabHosts[key] = host with { Key = key };
+        }
+
+        /// <summary>True when a lane registered this key.</summary>
+        internal bool IsRegisteredNavTab(string key) => _navTabHosts.ContainsKey(key ?? string.Empty);
+
+        /// <summary>Collapse the shown lane page (part of ShowTab's collapse-all).</summary>
+        private void HideLaneTabs()
+        {
+            foreach (var view in _navTabViews.Values) view.IsVisible = false;
+            if (_shownLaneTab != null && _navTabHosts.TryGetValue(_shownLaneTab, out var host)
+                && _navTabViews.TryGetValue(_shownLaneTab, out var shown))
+            {
+                try { host.OnHidden?.Invoke(shown); }
+                catch (Exception ex) { Log.Warning(ex, "NavTab {Key} OnHidden failed", _shownLaneTab); }
+            }
+            _shownLaneTab = null;
+        }
+
+        /// <summary>Show a registered lane page, creating it on first use. False when the key
+        /// is not registered or its view could not be built.</summary>
+        private bool ShowLaneTab(string key)
+        {
+            if (!_navTabHosts.TryGetValue(key, out var host)) return false;
+            if (!_navTabViews.TryGetValue(key, out var view))
+            {
+                try { view = host.Create(); }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "NavTab {Key} failed to build", key);
+                    return false;
+                }
+                if (view == null) return false;
+                if (view.Margin == default) view.Margin = new Thickness(10, 5, 10, 10);
+                var hostCell = Named<Grid>("LaneTabHost");
+                if (hostCell == null) return false;
+                _navTabViews[key] = view;
+                hostCell.Children.Add(view);
+            }
+            view.IsVisible = true;
+            _shownLaneTab = key;
+            try { host.OnShown?.Invoke(view); }
+            catch (Exception ex) { Log.Warning(ex, "NavTab {Key} OnShown failed", key); }
+            return true;
+        }
+
         /// <summary>
-        /// Shows one tab and hides the rest, and unfolds the door that owns it. Case-insensitive
-        /// at the door for the same reason WPF is: a deep link or a mod that says "Settings" must
-        /// not land on a blank page. An unknown key is a no-op that keeps the current tab, never a
-        /// page with nothing on it.
+        /// Shows one tab and hides the rest, lights the section row and syncs the page header.
+        /// Case-insensitive at the door: a deep link or a mod that says "Settings" must not land
+        /// on a blank page. An unknown key logs and keeps the current tab, never a blank page.
         /// </summary>
         internal void ShowTab(string? tab)
         {
             tab = (tab ?? string.Empty).ToLowerInvariant();
-            if (WindowKeys.Contains(tab)) return;                 // a window, not a tab - see header
 
-            // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy).
-            // Routed through BarkTabAliases so renamed tabs keep answering to their old bark key.
-            // Placed exactly where WPF places it (MainWindow.TabNavigation.cs:158) - AFTER the
-            // window-key intercepts and BEFORE the panel lookup, so an unknown key announces
-            // itself here too, as it does there.
+            // Nav rework: old keys with a new home ("exclusives" -> Home > Premium, silent;
+            // "together" -> Social > Lobby) land there and say "Moved" the first three times.
+            if (TryRedirectSilentTab(tab)) return;
+            if (TryRedirectMovedTab(tab)) return;
+
+            if (WindowKeys.Contains(tab)) return;                 // a window, not a tab - see header
+            if (tab == "friends" && !_navTabHosts.ContainsKey(tab))
+            {
+                // Stand-in (header): the drawer, until a Friends page registers.
+                try { Named<Views.Controls.FriendsRailChip>("FriendsChip")?.Toggle(); }
+                catch (Exception ex) { Log.Debug("Friends stand-in failed: {E}", ex.Message); }
+                return;
+            }
+
+            // Unknown key: log and stay. Checked before anything is collapsed.
+            bool lane = _navTabHosts.ContainsKey(tab);
+            string? target = null;
+            if (!lane && !TabPanels.TryGetValue(tab, out target) && !PendingPageStandIns.TryGetValue(tab, out target))
+            {
+                Log.Warning("ShowTab({Tab}) ignored: no such tab on this head", tab);
+                return;
+            }
+
+            // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy),
+            // routed through BarkTabAliases so renamed tabs keep answering to their old bark key.
             CoreBark.NotifyTabNavigated(BarkTabAliases.TryGetValue(tab, out var barkTab) ? barkTab : tab);
 
-            if (!TabPanels.TryGetValue(tab, out var target)) return;
-
-            foreach (var name in new HashSet<string>(TabPanels.Values))
+            foreach (var name in TabPanels.Values.Distinct())
             {
                 var panel = this.FindControl<Control>(name);
                 if (panel is not null) panel.IsVisible = name == target;
             }
-            NoteTabHistory(tab); // back/forward (MainShellWindow.TabHistory.cs); unknown keys never reach it
+            HideLaneTabs();
+            if (lane && !ShowLaneTab(tab))
+                Log.Warning("ShowTab({Tab}): the registered page could not be shown", tab);
+
+            NoteTabHistory(tab); // back/forward (MainShellWindow.TabHistory.cs)
             CurrentTab = tab;
-            SetExpandedDoor(NavDoorForTab(tab));
-            SwitchTabFx(tab);
-            // A tooltip opened by a stationary pointer outlives the tab it belongs to, because
-            // nothing ever moved the pointer off its owner. Same call, same place, as WPF's
-            // MainWindow.TabNavigation.cs:186 (MainShellWindow.ToolTipHygiene.cs).
+            SwitchTabFx(ViewKeyFor(tab));
+            // A tooltip opened by a stationary pointer outlives the tab it belongs to
+            // (MainShellWindow.ToolTipHygiene.cs).
             CloseStaleToolTip();
             OnTabShown(tab);
+
+            // Nav rework: the strip, the breadcrumb, the window title and last-tab memory, then
+            // the lit section row. Last, so they run whatever OnTabShown did.
+            SyncSectionChrome(tab);
+            RefreshSectionRail(tab);
         }
 
         /// <summary>
@@ -178,57 +260,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 RefreshEntitlementVeils();
                 switch (tab)
                 {
-                    // WPF re-derives the session feature lock on the way into each of these
-                    // three (MainWindow.TabNavigation.cs:260/476/501): the Dashboard and the rack
-                    // both host real dose dials, so a lock that was latched rather than re-derived
-                    // could survive a crash, an abort or an out-of-order session event.
+                    // WPF re-derives the session feature lock on the way into the dashboard and the
+                    // rack: both host real dose dials.
                     case "settings": RefreshSessionFeatureLock(); MaybeShowFeatureIntro("daily-free", "settings"); break;
                     case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("studio-rack", "studio"); break;
                     case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("haptics"); break;
+                    // Nav rework zone pill "Scheduler & Ramp": the Studio rack's scheduler module.
+                    case "ramp": StudioRack?.FocusRackEntry("scheduler"); RefreshSessionFeatureLock(); break;
 
-                    // WPF MainWindow.TabNavigation.cs:420/457/527/534 - the door tour cards (studio-rack: :505, case "studio").
-                    case "play": case "lab": MaybeShowFeatureIntro("play-wall", "play"); break;
+                    case "play": case "lab": case "playsessions": case "playeyes": MaybeShowFeatureIntro("play-wall", "play"); break;
                     case "awareness": MaybeShowFeatureIntro("awareness"); break;
                     case "lockdown": MaybeShowFeatureIntro("lockdown"); break;
                     case "blinktrainer": MaybeShowFeatureIntro("blinktrainer"); break;
-                    // WPF :581 - only once the room shows the map (its IsVisible hook re-read the gates).
                     case "spiral":
                         if (Named<Tabs.SpiralTabView>("SpiralTab")?.IsShowingSpiral == true)
                             MaybeShowFeatureIntro("descent-spiral", "spiral");
                         break;
 
-                    // WPF gets here through DiscordTabView's IsVisibleChanged ->
-                    // MainWindow.ProfileFx.cs:OnProfileTabVisibilityChanged, which refreshes the
-                    // community rail's sharing footer on every show because a toggle can be
-                    // flipped from Settings or the Goon tab in between. That FX partial is a stub
-                    // on this head, so the one line of it that resolves lands here instead - this
-                    // is the head's home for per-tab entry side effects, and "the Profile tab
-                    // became visible" is exactly the event WPF is reacting to.
-                    // ponytail: the rest of OnProfileTabVisibilityChanged (the OG border loop, the
-                    // vat poll, RefreshProfileShareButton, StaggerProfileCards) needs
-                    // MainShellWindow.ProfileFx.cs / .ProfileVat.cs. EnsureProfileMeFirst is here.
+                    // WPF reaches this through DiscordTabView's visibility hook; the one line of
+                    // it that resolves on this head lands here (see ProfileFx).
                     case "discord": UpdateProfileSharingSummary(); ProfilePage?.EnsureProfileMeFirst(); MaybeShowFeatureIntro("profile-hub", "discord"); break;
 
-                    // WPF MainWindow.TabNavigation.cs:292/367: throttled share-status polls on tab open.
                     case "presets":
                         _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindPresets);
                         _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindSessions);
                         break;
                     case "deeper": _ = CheckDeeperSubmissionStatusesAsync(); break;
 
-                    // WPF MainWindow.TabNavigation.cs:429: every show re-fetches the board (read-only).
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
 
-                    // WPF MainWindow.Exclusives.cs RefreshExclusivesTab "on tab show": gates can move between visits.
-                    case "exclusives": RefreshExclusivesTab(); break;
-                    // WPF MainWindow.TabNavigation.cs:588-593 (AnimateTabIn is the header's ponytail).
+                    // The vault re-reads its gates on every show (they can move between visits).
+                    case "premium": RefreshExclusivesTab(); break;
                     case "chaster": Named<Tabs.ChasterTabView>("ChasterTab")?.OnTabShown(); break;
-                    // WPF MainWindow.SheListening.cs RefreshSheListeningTab "called on tab show".
                     case "shelistening": RefreshSheListeningTab(); MaybeShowFeatureIntro("shelistening"); break;
 
-                    // WPF MainWindow.TabNavigation.cs:324-337: spend the tab's seen-flag on any
-                    // route in, then the one-time explainer on top of the tab just shown.
-                    // ponytail: no rail pulse to stop on this head (StopProgramsTabPulse).
                     case "programs":
                         if (!CoreSettings.Current.HasSeenProgramsTab)
                         {
@@ -242,21 +307,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch { /* a navigation must never throw */ }
         }
 
-        /// <summary>WPF MaybeShowFeatureIntro (MainWindow.TabNavigation.cs:1094): through the
-        /// startup ladder, so a quiet window turns the card into an Inbox row. ponytail: no
-        /// FirstShowService on this head, so WPF's first-show early return has nothing to read.</summary>
+        /// <summary>WPF MaybeShowFeatureIntro: through the startup ladder, so a quiet window turns
+        /// the card into an Inbox row. The door is the owning section's rail Tag.</summary>
         private void MaybeShowFeatureIntro(string key, string? doorTab = null)
         {
             try { FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key)); }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "Feature intro hook failed for {Key}", key); }
+            catch (Exception ex) { Log.Warning(ex, "Feature intro hook failed for {Key}", key); }
         }
 
         /// <summary>Latched once the Dashboard's cards have been queued (one settle per launch).</summary>
         private bool _dashboardIntroQueued;
 
-        /// <summary>WPF OnDashboardTabVisibilityChanged (MainWindow.TabNavigation.cs:1131): the app
-        /// LANDS on the Dashboard with no ShowTab behind it, so its two cards are queued from the
-        /// view's visibility instead. Called by SettingsTabView.</summary>
+        /// <summary>WPF OnDashboardTabVisibilityChanged: the app LANDS on the Dashboard with no
+        /// ShowTab behind it, so its two cards are queued from the view's visibility instead.
+        /// Called by SettingsTabView.</summary>
         internal void OnDashboardTabVisibilityChanged(bool visible)
         {
             if (!visible || _dashboardIntroQueued) return;
@@ -266,118 +330,246 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             FeatureIntroPopup.ShowWhenStartupSettles("one-account", this, NavDoorForTab("settings"));
         }
 
-        private static string? NavDoorForTab(string tab)
+        /// <summary>The rail row Tag that owns a tab key ("appsettings" for Settings), or null.
+        /// Feature intros use this as their per-door budget key, so it stays a string.</summary>
+        private static string? NavDoorForTab(string? tabKey)
         {
-            foreach (var d in NavDoorMap)
-                if (Array.IndexOf(d.Tabs, tab) >= 0) return d.Door;
-            return null;
+            if (string.IsNullOrEmpty(tabKey)) return null;
+            var section = NavSections.SectionForTab(CanonicalTabKey(tabKey!));
+            return section == null ? null : NavRailRules.DoorTagForSection(section);
         }
 
-        /// <summary>One door open at a time. ponytail: snaps, no height tween.</summary>
-        private const int NavDoorExpandMs = 160;      // WPF MainWindow.TabNavigation.cs:653
-        private const double NavEntryRowHeight = 32;  // WPF MainWindow.TabNavigation.cs:651
+        // ============================== redirects ==============================
 
-        private string? _expandedDoor;
-
-        /// <summary>Which door the accordion currently holds open. The panel's Height cannot answer
-        /// this: an Avalonia transition animates the property itself, so mid-tween it reads back the
-        /// in-flight value rather than the intent.</summary>
-        internal string? ExpandedDoor => _expandedDoor;
-
-        private void SetExpandedDoor(string? door)
+        /// <summary>An old key that lands on its new home without a word
+        /// (SectionChromeRules.SilentRedirectKeys). True when handled.</summary>
+        private bool TryRedirectSilentTab(string tab)
         {
-            _expandedDoor = door;
-            foreach (var d in NavDoorMap)
+            if (Array.IndexOf(SectionChromeRules.SilentRedirectKeys, tab) < 0) return false;
+            if (!NavSections.Redirects.TryGetValue(tab, out var to)) return false;
+            if (to.Section == NavSections.Settings) OpenAppSettingsSection(to.Tab);
+            else ShowTab(to.Tab);
+            return true;
+        }
+
+        /// <summary>How many "Moved" notes this run has shown. ponytail: WPF keeps the count in
+        /// AppSettings.NavMovedToastHits across the app's life; Core AppSettings has no such field
+        /// yet (seam request), so the budget is per run here.</summary>
+        private int _navMovedNoteHits;
+
+        /// <summary>An old ShowTab key with a new home: navigate there and, the first few times,
+        /// say so. True when the key was a redirect and has been handled.</summary>
+        private bool TryRedirectMovedTab(string tab)
+        {
+            if (Array.IndexOf(SectionChromeRules.MovedRedirectKeys, tab) < 0) return false;
+            if (!NavSections.Redirects.TryGetValue(tab, out var to)) return false;
+
+            if (to.Section == NavSections.Settings) OpenAppSettingsSection(to.Tab);
+            else ShowTab(to.Tab);
+
+            try
             {
-                if (d.Panel is null) continue;
-                var panel = this.FindControl<Border>(d.Panel);
-                if (panel is not null) SetDoorPanelExpanded(d.Door, panel, d.Door == door);
+                if (_navMovedNoteHits < SectionChromeRules.NavMovedNoteLimit)
+                {
+                    _navMovedNoteHits++;
+                    var section = SafeNavLoc(NavSections.Find(to.Section)?.LabelKey ?? string.Empty, to.Section);
+                    var page = to.Section == NavSections.Settings
+                        ? SafeNavLoc(SettingsSectionLabelKey(to.Tab) ?? string.Empty, to.Tab)
+                        : SafeNavLoc(NavStripRules.PageLabelKey(to.Tab) ?? string.Empty, to.Tab);
+                    var note = SafeNavLoc("nav_moved_toast", string.Empty);
+                    if (!string.IsNullOrEmpty(note))
+                        NavStrip?.ShowMovedNote(string.Format(note, section, page));
+                }
+            }
+            catch (Exception ex) { Log.Debug("Moved note failed: {E}", ex.Message); }
+            return true;
+        }
+
+        // ============================== section chrome ==============================
+
+        /// <summary>
+        /// Last-tab memory, section -> tab as JSON (NavStripRules.WithLastTab). ponytail: WPF
+        /// persists it in AppSettings.NavLastTabBySection; Core AppSettings has no such field yet
+        /// (seam request), so it lives for the run here. One property, so the swap is one line.
+        /// </summary>
+        internal string? NavLastTabJson { get; set; }
+
+        /// <summary>The tab a section returns to (its remembered tab, else its default).</summary>
+        internal string NavLastTabFor(string section) =>
+            NavStripRules.LastTabFor(NavLastTabJson, section) ?? NavSections.DefaultTab(section) ?? "settings";
+
+        private bool _sectionStripWired;
+
+        /// <summary>Sync the strip, breadcrumb, title and last-tab memory to the tab on screen.</summary>
+        private void SyncSectionChrome(string tab)
+        {
+            if (!_navRailReady) return;
+            try
+            {
+                WireSectionStrip();
+                var section = NavSections.SectionForTab(tab);
+
+                string? pageLabel = null;
+                if (section == NavSections.Settings) pageLabel = CurrentSettingsSectionLabel();
+                NavStrip?.Show(section, tab, pageLabel);
+                PaintSectionWash(section);
+                UpdateNavTitle(section, tab, pageLabel);
+
+                // Last tab per section. Old keys are not remembered (their new home is).
+                var memo = tab == "lab" ? "play" : tab;
+                if (section != null && !NavSections.Redirects.ContainsKey(memo))
+                    NavLastTabJson = NavStripRules.WithLastTab(NavLastTabJson, section, memo);
+            }
+            catch (Exception ex) { Log.Debug("SyncSectionChrome({Tab}) failed: {E}", tab, ex.Message); }
+        }
+
+        private void WireSectionStrip()
+        {
+            if (_sectionStripWired || NavStrip is not { } strip) return;
+            _sectionStripWired = true;
+
+            strip.AccessProvider = NavAccess;
+            strip.TabRequested += OnSectionPillChosen;
+            strip.SectionRequested += section =>
+            {
+                if (section == NavSections.Settings) ShowTab("appsettings");
+                else ShowTab(NavLastTabFor(section));
+            };
+
+            // Settings keeps its own left pill column; the breadcrumb follows it.
+            AppSettingsPage?.AddHandler(ToggleButton.IsCheckedChangedEvent, (_, e) =>
+            {
+                if (e.Source is RadioButton { IsChecked: true } rb && (rb.Name ?? string.Empty).StartsWith("SectionPill", StringComparison.Ordinal)
+                    && AppSettingsPage?.IsVisible == true)
+                {
+                    var label = CurrentSettingsSectionLabel();
+                    strip.Show(NavSections.Settings, "appsettings", label);
+                    UpdateNavTitle(NavSections.Settings, "appsettings", label);
+                }
+            }, RoutingStrategies.Bubble, handledEventsToo: true);
+        }
+
+        private void OnSectionPillChosen(NavTab tab)
+        {
+            switch (tab.Kind)
+            {
+                case NavTabKind.Launcher:
+                    // The Library's dialogs and sites: the same handlers the old rail rows called.
+                    if (!OpenLibraryLauncher(tab.Key)) Log.Debug("Launcher pill {Key} has no handler", tab.Key);
+                    break;
+                default:
+                    // Pages, zones and the Just Drop window all go through ShowTab.
+                    ShowTab(tab.Key);
+                    break;
             }
         }
 
         /// <summary>
-        /// The accordion, ported from WPF's SetDoorPanelExpanded (MainWindow.TabNavigation.cs:872).
-        ///
-        /// The first cut of this file set Height alone. That was a real defect, not a missing
-        /// flourish: the markup parks every closed door at <c>Height="0" IsHitTestVisible="False"</c>,
-        /// and nothing ever set hit-testing back, so an opened door drew its entries and NONE of them
-        /// could be clicked. Only the Home door worked, because it is the one panel the markup does
-        /// not park. WPF line 874 is <c>panel.IsHitTestVisible = expand;</c> and it is restored here.
-        ///
-        /// The tween is WPF's too - 160ms, quadratic ease-out - as an Avalonia
-        /// <see cref="DoubleTransition"/> on Height rather than a storyboard. A transition cannot
-        /// land on <c>NaN</c>, so it runs to a measured pixel height and the panel is handed back to
-        /// layout afterwards, exactly as WPF's Completed handler does, so that a later visibility
-        /// change on one entry still resizes the door. The completion guard asks the same question
-        /// WPF asks: a faster click may already own the panel, and a tween that started on a door
-        /// the user has since left must not write its height back.
+        /// Opens one of the Library's launchers (mods, catalogue, phrases, media log) through the
+        /// handler its rail row used to call. The strip pills and the Ctrl+K rows share this.
+        /// False for an unknown key.
         /// </summary>
-        private void SetDoorPanelExpanded(string door, Border panel, bool expand)
+        internal bool OpenLibraryLauncher(string key)
         {
-            panel.IsHitTestVisible = expand;
-
-            var entries = this.FindControl<StackPanel>(panel.Name!.Replace("DoorPanel", "DoorEntries"));
-            var to = expand ? MeasureDoorPanel(entries) : 0d;
-
-            // Snap when there is nothing to travel - first layout, or a door already where it
-            // belongs. Clearing Transitions first stops the assignment animating to NaN.
-            if (Math.Abs(panel.Bounds.Height - to) < 0.5)
+            var e = new RoutedEventArgs();
+            switch (key)
             {
-                panel.Transitions = null;
-                panel.Height = expand ? double.NaN : 0;
-                return;
+                case "mods": BtnManageMods_Click(this, e); return true;
+                case "catalogue": BtnCatalogue_Click(this, e); return true;
+                case "phrases": BtnManagePhrases_Click(this, e); return true;
+                case "medialog": BtnNavMediaLog_Click(this, e); return true;
+                default: return false;
             }
-
-            panel.Transitions ??= new Transitions
-            {
-                new DoubleTransition
-                {
-                    Property = Layoutable.HeightProperty,
-                    Duration = TimeSpan.FromMilliseconds(NavDoorExpandMs),
-                    Easing = new QuadraticEaseOut(),
-                },
-            };
-            panel.Height = to;
-
-            DispatcherTimer.RunOnce(() =>
-            {
-                var stillOwnsThePanel = string.Equals(_expandedDoor, door, StringComparison.Ordinal);
-                if (stillOwnsThePanel != expand) return;
-                panel.Transitions = null;
-                panel.Height = expand ? double.NaN : 0;
-            }, TimeSpan.FromMilliseconds(NavDoorExpandMs + 20));
         }
 
-        /// <summary>WPF MeasureDoorPanel: one row per visible entry, nothing cleverer.</summary>
-        private static double MeasureDoorPanel(StackPanel? entries)
-            => entries is null ? 0 : entries.Children.OfType<Control>().Count(c => c.IsVisible) * NavEntryRowHeight;
+        private string? _washSection;
 
-        private void NavDoor_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        /// <summary>Tints the page ground in the section hue (NavStripRules.Accent, the one table)
+        /// and repaints the rail's shadow to match. A tab no section owns keeps the current wash.
+        /// ponytail: WPF eases the colour over SectionChromeRules.SectionWashMs; Avalonia has no
+        /// gradient-stop colour transition, so the wash swaps at once (as WPF's Motion Off).</summary>
+        private void PaintSectionWash(string? section)
         {
-            if (sender is not Button btn || btn.Tag is not string door) return;
-            foreach (var d in NavDoorMap)
-                if (string.Equals(d.Door, door, StringComparison.Ordinal)) { ShowTab(d.DefaultTab); return; }
-            // "webapp" and any unmapped door: a launcher, not a tab. No-op here, as in WPF.
+            try
+            {
+                if (section == null || section == _washSection) return;
+                _washSection = section;
+                var hue = NavStripRules.Accent(section);
+                PaintSectionInk(section);
+                if (Named<Border>("SectionPageWash") is { } wash)
+                {
+                    wash.Background = NavPaint.Diagonal(new[]
+                    {
+                        (NavRailRules.WithAlpha(hue, SectionChromeRules.SectionWashAlpha), 0.0),
+                        (NavRailRules.WithAlpha(hue, 0), 0.66),
+                    });
+                }
+                if (Named<Border>("SectionWashLine") is { } line)
+                    line.Background = NavPaint.Solid(NavRailRules.WithAlpha(hue, SectionChromeRules.SectionWashLineAlpha));
+                PaintDepthRail(hue);
+            }
+            catch (Exception ex) { Log.Debug("PaintSectionWash failed: {E}", ex.Message); }
         }
 
-        private void BtnSettings_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("settings");
-        private void BtnPresets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("presets");
-        private void BtnQuests_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("quests");
-        private void BtnPrograms_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("programs");
-        private void BtnEnhancements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("enhancements");
-        private void BtnNavStudio_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("studio");
-        private void BtnNavHaptics_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("haptics");
-        private void BtnNavPlay_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("play");
-        private void BtnNavBambiTakeover_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("bambitakeover");
-        private void BtnNavSheListening_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("shelistening");
-        private void BtnNavGradedIntake_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("gradedintake");
-        private void BtnNavLockdown_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("lockdown");
-        private void BtnNavBlinkTrainer_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("blinktrainer");
-        private void BtnNavRemoteControl_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("remotecontrol");
+        /// <summary>The section ink resources (SectionInk / Tint / Rule / Outline, colour and brush)
+        /// pages bind with DynamicResource, swapped at once the way mod theming swaps its keys.</summary>
+        internal static void PaintSectionInk(string? section)
+        {
+            var res = Application.Current?.Resources;
+            if (res == null) return;
+            res["SectionInk"] = NavPaint.C(NavStripRules.Ink(section));
+            res["SectionTint"] = NavPaint.C(NavStripRules.Tint(section));
+            res["SectionRule"] = NavPaint.C(NavStripRules.Rule(section));
+            res["SectionOutline"] = NavPaint.C(NavStripRules.Outline(section));
+            res["SectionInkBrush"] = NavPaint.Solid(NavStripRules.Ink(section));
+            res["SectionTintBrush"] = NavPaint.Solid(NavStripRules.Tint(section));
+            res["SectionRuleBrush"] = NavPaint.Solid(NavStripRules.Rule(section));
+            res["SectionOutlineBrush"] = NavPaint.Solid(NavStripRules.Outline(section));
+        }
 
-        // WPF MainWindow.TabNavigation.cs:986-994: open the web app, retire the banner beat.
+        private static string? SettingsSectionLabelKey(string sectionKey)
+        {
+            foreach (var t in NavSections.Find(NavSections.Settings)?.Tabs ?? Array.Empty<NavTab>())
+                if (string.Equals(t.Key, sectionKey, StringComparison.OrdinalIgnoreCase)) return t.LabelKey;
+            return null;
+        }
+
+        /// <summary>The label of the Settings section whose pill is checked (null if none).</summary>
+        private string? CurrentSettingsSectionLabel()
+        {
+            var page = AppSettingsPage;
+            if (page == null) return null;
+            foreach (var t in NavSections.Find(NavSections.Settings)?.Tabs ?? Array.Empty<NavTab>())
+            {
+                var pillName = "SectionPill" + char.ToUpperInvariant(t.Key[0]) + t.Key.Substring(1);
+                if (page.FindControl<RadioButton>(pillName) is { IsChecked: true })
+                    return SafeNavLoc(t.LabelKey, t.Key);
+            }
+            return null;
+        }
+
+        private string? _navBaseTitle;
+
+        /// <summary>"Conditioning Control Panel - Play > Lobby": the fourth "you are here" cue.</summary>
+        private void UpdateNavTitle(string? section, string tab, string? pageLabel)
+        {
+            _navBaseTitle ??= Title;
+            var sectionLabel = section == null ? null : SafeNavLoc(NavSections.Find(section)?.LabelKey ?? string.Empty, section);
+            // Home's pages: the dashboard names only the section; Premium (a hidden tab) names itself.
+            var page = pageLabel ?? (section == NavSections.Home && (string.IsNullOrEmpty(tab) || tab == "settings")
+                ? null : SafeNavLoc(NavStripRules.PageLabelKey(tab) ?? string.Empty, string.Empty));
+            Title = string.IsNullOrEmpty(sectionLabel) ? _navBaseTitle
+                : string.IsNullOrEmpty(page)
+                    ? $"{_navBaseTitle} - {sectionLabel}"
+                    : $"{_navBaseTitle} - {sectionLabel} {SafeNavLoc("nav_crumb_sep", ">")} {page}";
+        }
+
+        // ============================== launchers ==============================
+
+        // WPF MainWindow.TabNavigation.cs: open the web app, retire the banner beat. 7.1.5 moved
+        // the door from the rail into Play > Games; the handler stays for that card.
         // No browser -> show the URL, as WPF's BrowserLauncher.OpenUrlOrPrompt does.
-        private async void DoorWebApp_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        private async void DoorWebApp_Click(object? sender, RoutedEventArgs e)
         {
             const string url = "https://app.cclabs.app";
             try
@@ -390,14 +582,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 RetireWebBannerBeat();
             }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "DoorWebApp_Click failed"); }
+            catch (Exception ex) { Log.Warning(ex, "DoorWebApp_Click failed"); }
         }
 
-        // WPF MainWindow.TabNavigation.cs:1066: the Media Log is a window, deliberately no ShowTab.
-        private void BtnNavMediaLog_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        // WPF: the Media Log is a window, deliberately no ShowTab.
+        private void BtnNavMediaLog_Click(object? sender, RoutedEventArgs e)
         {
             try { new MediaHistoryWindow().Show(this); }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "BtnNavMediaLog_Click failed"); }
+            catch (Exception ex) { Log.Warning(ex, "BtnNavMediaLog_Click failed"); }
         }
     }
 }
