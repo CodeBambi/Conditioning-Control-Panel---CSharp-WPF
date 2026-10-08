@@ -1150,6 +1150,34 @@
         </Grid>
       </Border>
 
+      <!-- ============================================================ -->
+      <!-- THE TONIGHT BOARD (WPF 7.1.5, 2026-10-07; parity lane F). The  -->
+      <!-- deck of cards ranked Live, Board, Waiting, Resume, Event,     -->
+      <!-- Showcase/Tip, House, one at a time, dots under it. It takes   -->
+      <!-- the centre cell the wordmark held (7.1.5 put it in the row    -->
+      <!-- the folded browser gives back; this head has no fold). The    -->
+      <!-- card view is code (Controls/Billboard/BillboardDeckView). The  -->
+      <!-- slot (BillboardHomeSlot) asks its window to host the deck:    -->
+      <!-- MainShellWindow.DashboardBillboard.cs drops the host in and   -->
+      <!-- hides                                                         -->
+      <!-- LogoBrandFrame while the board shows. A SUNKEN well: the     -->
+      <!-- bands lie over the rim, under nothing that is pressed.        -->
+      <!-- ============================================================ -->
+      <Border x:Name="DashBillboard"
+              Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
+              IsVisible="False" Margin="6"
+              CornerRadius="12" ClipToBounds="True"
+              Background="{DynamicResource DepthWellFloorBrush}"
+              BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
+        <Grid>
+          <fx:BillboardHomeSlot x:Name="BillboardHostSlot" Margin="8,8,8,4"/>
+          <Rectangle x:Name="BillboardWellTop" Fill="{DynamicResource DepthWellTop}"
+                     Height="9" VerticalAlignment="Top" IsHitTestVisible="False"/>
+          <Rectangle Fill="{DynamicResource DepthWellLeft}" Width="6" HorizontalAlignment="Left" IsHitTestVisible="False"/>
+          <Rectangle Fill="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
+        </Grid>
+      </Border>
+
       <features:SplitFeatureCard Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" IconB="/Resources/features/Pink_filter.png" IconA="/Resources/features/spiral_overlay.png"
                                  TitleA="Spiral Overlay" TitleB="Pink Filter" DashboardDepth="True" HelpSectionIdA="SpiralOverlay" HelpSectionIdB="PinkFilter"/>
 
