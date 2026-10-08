@@ -37,9 +37,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// <para><b>What is stubbed, and why each one is a stub:</b></para>
     /// <list type="bullet">
-    ///   <item><c>SpiralRoom.StateFor</c> and the four gates it reads (<c>App.Settings</c>,
-    ///     <c>App.DescentCountdown</c>, <c>App.DescentMigration</c>, <c>App.Descent</c>) are all in
-    ///     the WPF head, so <see cref="Refresh"/> cannot ask the world anything — see the
+    ///   <item><c>SpiralRoom.StateFor</c> (Core) reads the real settings and fuse, but
+    ///     <c>App.DescentMigration</c> (the withhold) and <c>App.Descent</c> (the block) are WPF-head
+    ///     services, so <see cref="Refresh"/> passes false for both and Spiral is unreachable — see the
     ///     placeholder there.</item>
     ///   <item><c>SpiralFirstLightVisual</c> is a WPF <c>DrawingVisual</c>, so <c>FogHost</c> stays
     ///     empty and FIRST LIGHT hands straight back rather than holding a black room for its three
@@ -58,20 +58,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// </summary>
     public partial class SpiralTabView : UserControl
     {
-        /// <summary>ponytail: mirrors <c>SpiralRoomState</c> (WPF head, Services/Descent/SpiralRoom.cs).
-        /// Delete this and use the real enum when that file moves to Core — the values are its.</summary>
-        private enum RoomState
-        {
-            /// <summary>A ceremony is owed or scheduled: weather and a countdown, no spiral.</summary>
-            Fog = 0,
-
-            /// <summary>The gate is open but there is nothing to draw yet. A held promise.</summary>
-            Waiting = 1,
-
-            /// <summary>The spiral itself: the /embed/spiral canvas at ?mode=map.</summary>
-            Spiral = 2,
-        }
-
         // ============================== the copy ==============================
         //
         // Every fog/waiting sentence is Core's DescentFuseCopy; only the splash line is this view's.
@@ -99,14 +85,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The pulse's whole amplitude. Two percent is the ceiling the owner named.</summary>
         private const double PulseScale = 1.022;
-
-        /// <summary>
-        /// The pulse's HALF cycle. ponytail: needs <c>SpiralRoom.FogPulseSecondsFor(phase)</c>, whose
-        /// tempo ladder runs 2.8s → 0.52s as the phase closes in. <c>SpiralRoom</c> and
-        /// <c>App.DescentCountdown</c> are still WPF-head, so this head cannot know the phase and takes that function's own default rung
-        /// (the <c>_ =&gt; 3.0</c> arm, which is where a dark fuse lands anyway).
-        /// </summary>
-        private const double FogPulseSeconds = 3.0;
 
         /// <summary>The glow's resting opacity, and the top of its one-shot flare.</summary>
         private const double GlowRest = 0.42;
@@ -210,6 +188,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- clocks ----
         private CancellationTokenSource? _fogFx;
+        private CancellationTokenSource? _emberFx;
         private CancellationTokenSource? _splashFx;
         private CancellationTokenSource? _waitFx;
         private DispatcherTimer? _splashWatchdog;
@@ -221,7 +200,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>The embed, for as long as this tab is the one on screen in the spiral state.</summary>
         private WebHost? _embed;
 
-        private RoomState _state = RoomState.Waiting;
+        private SpiralRoomState _state = SpiralRoomState.Waiting;
+
+        /// <summary>The fuse subscriptions are held only while the tab is on screen (P01).</summary>
+        private DescentCountdownService? _wiredFuse;
+
+        /// <summary>The phase the fog's pulse is keeping time to (WPF _pulsePhase); null = no loops.</summary>
+        private DescentFusePhase? _pulsePhase;
 
         public SpiralTabView()
         {
@@ -293,9 +278,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal void OnTabShown() => Refresh();
 
+        /// <summary>WPF Wire: the fuse's phase and tick drive the fog. BlockChanged has no twin
+        /// (DescentService is WPF-only).</summary>
+        private void Wire()
+        {
+            if (_wiredFuse != null || App.DescentCountdown is not { } fuse) return;
+            _wiredFuse = fuse;
+            fuse.PhaseChanged += OnPhaseChanged;
+            fuse.Tick += OnFuseTick;
+        }
+
+        /// <summary>Unwire from the fuse that was wired, even if the static has been swapped since.</summary>
+        private void Unwire()
+        {
+            if (_wiredFuse is not { } fuse) return;
+            _wiredFuse = null;
+            fuse.PhaseChanged -= OnPhaseChanged;
+            fuse.Tick -= OnFuseTick;
+        }
+
+        /// <summary>WPF OnPhaseChanged: repaint, then flare only if the room is still the fog.</summary>
+        private void OnPhaseChanged(object? sender, DescentFusePhaseChangedEventArgs e)
+        {
+            if (!IsVisible) return;
+            Refresh();
+            if (_state == SpiralRoomState.Fog) FlarePhaseChange();
+        }
+
+        /// <summary>WPF OnFuseTick: the hero digits, once a second, only in the fog.</summary>
+        private void OnFuseTick(object? sender, TimeSpan remaining)
+        {
+            if (!IsVisible || _state != SpiralRoomState.Fog) return;
+            ApplyReadout(DescentFuseCopy.TMinus(remaining), hero: true);
+        }
+
         /// <summary>Park everything: no clocks, no browser, nothing holding a frame.</summary>
         private void Suspend()
         {
+            Unwire();
             ApplyHelpChip(false);
             StopFogFx();
             HideSplash(fade: false);
@@ -312,16 +332,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         private void Refresh()
         {
-            // ponytail: needs SpiralRoom.StateFor(settings, phase, fuseArmed, spiralWithheld,
-            // hasBlock) plus App.Settings / App.DescentCountdown / App.DescentMigration /
-            // App.Descent — all WPF head, wired when Services/Descent moves to Core. WPF's own
-            // "the predicate threw" fallback is Waiting; this head has no world to read at all, so
-            // the state below is a PLACEHOLDER FOR THE RENDER PROOF and Spiral is the choice that
-            // exercises the embed seam. Delete this line and call StateFor the moment it lands.
-            ApplyState(RoomState.Spiral);
+            if (!IsVisible) return;   // a hidden tab paints nothing and holds no subscriptions
+            Wire();
+            try
+            {
+                var fuse = App.DescentCountdown;
+                ApplyState(SpiralRoom.StateFor(
+                    CoreSettings.Current,
+                    fuse?.LastAnnouncedPhase ?? DescentFusePhase.Dark,
+                    fuse?.IsArmed == true,
+                    // ponytail: DescentMigrationService.SpiralWithheld and DescentService.Current
+                    // (the block) are WPF-head network services, so this head can reach Fog and
+                    // Waiting but never Spiral; the embed seam below waits for them.
+                    spiralWithheld: false,
+                    hasBlock: false));
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Spiral] room refresh failed: {E}", ex.Message);
+                // WPF: a predicate that threw lands on the state with the fewest promises.
+                try { ApplyState(SpiralRoomState.Waiting); } catch { /* nothing left to do */ }
+            }
         }
 
-        private void ApplyState(RoomState state)
+        private void ApplyState(SpiralRoomState state)
         {
             _state = state;
 
@@ -329,11 +363,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // asked to make sense of, and to neither of the two that are a ceremony: the fog says
             // nothing is clickable and means it, and the reveal is a one-shot the user should not be
             // able to interrupt with a help card.
-            ApplyHelpChip(state != RoomState.Fog);
+            ApplyHelpChip(state != SpiralRoomState.Fog);
 
             switch (state)
             {
-                case RoomState.Fog:
+                case SpiralRoomState.Fog:
                     // AIRSPACE: the browser must not exist while the fog is up.
                     TeardownEmbed();
                     _embedHost.IsVisible = false;
@@ -349,7 +383,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     // entry. Audio is decoration; the room paints without it.
                     break;
 
-                case RoomState.Spiral:
+                case SpiralRoomState.Spiral:
                     StopFogFx();
                     _fogHost.IsVisible = false;
                     _fogCopy.IsVisible = false;
@@ -412,7 +446,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// a card that explained banked days over a fog layer would be describing a map the user
         /// has not been given yet.
         /// </summary>
-        internal bool IsShowingSpiral => _state == RoomState.Spiral;
+        internal bool IsShowingSpiral => _state == SpiralRoomState.Spiral;
 
         /// <summary>
         /// THE FIRST LIGHT — the one-shot reveal the original plays inside this tab the moment the
@@ -488,12 +522,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// and kept showing 00:00 would read as broken; "any moment now" is what is actually true,
         /// because the server re-offers on every sync until a choice is taken.
         ///
-        /// <para>ponytail: needs App.DescentCountdown (WPF head) for the remaining time and
-        /// <c>DescentFuseCopy.TMinus</c> to format it. With no fuse to ask, this lands on exactly
-        /// the branch the original takes for a fuse that is null or spent — which is the honest one
-        /// for a head that cannot see the clock.</para>
         /// </summary>
-        private void ApplyFogReadout() => ApplyReadout(DescentFuseCopy.FogImminent, hero: false);
+        private void ApplyFogReadout()
+        {
+            var remaining = App.DescentCountdown?.Remaining;
+            if (remaining is null || remaining.Value <= TimeSpan.Zero)
+                ApplyReadout(DescentFuseCopy.FogImminent, hero: false);
+            else
+                ApplyReadout(DescentFuseCopy.TMinus(remaining.Value), hero: true);
+        }
 
         /// <summary>
         /// Type the readout and size it for what it actually is.
@@ -555,7 +592,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// gates still say "spiral", and the next entry retries.</summary>
         private void ShowWaitingUnderSpiral()
         {
-            if (_state != RoomState.Spiral) return;
+            if (_state != SpiralRoomState.Spiral) return;
             StopSplashWatchdog();
             // No fade here, unlike the successful path: the splash is handing over to another
             // held-promise panel rather than to a finished spiral, and cross-fading one apology
@@ -609,7 +646,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnSplashDeadline(object? sender, EventArgs e)
         {
             StopSplashWatchdog();
-            if (_state != RoomState.Spiral || _embed is null) return;
+            if (_state != SpiralRoomState.Spiral || _embed is null) return;
 
             Log.Information(
                 "[Spiral] the embed said nothing within {Seconds}s - revealing it behind the splash anyway.",
@@ -628,17 +665,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// Light the fog's own clocks: the hero's heartbeat, the hairline's breath, the embers.
         ///
-        /// <para>Unlike the original this is NOT idempotent-by-phase, because there is no phase on
-        /// this head to compare against (see <see cref="FogPulseSeconds"/>). It restarts the loops,
-        /// so it must only be called on entering the fog rather than on every repaint — which is
-        /// what <see cref="ApplyState"/> does.</para>
+        /// <para>Idempotent per PHASE like the original: a repaint that did not move the phase leaves
+        /// the loops alone, so they do not jump back to the top of their cycles. A new phase restarts
+        /// them at that phase's tempo (<see cref="SpiralRoom.FogPulseSecondsFor"/>); the embers
+        /// keep their own token and run on, as in WPF.</para>
         /// </summary>
         private void StartFogFx()
         {
-            StopFogFx();
+            var phase = App.DescentCountdown?.LastAnnouncedPhase ?? DescentFusePhase.Dark;
+            if (_fogFx != null && _pulsePhase == phase) return;
 
             if (!AllowAmbientLoops)
             {
+                StopFogFx();
                 // Reduced motion gets the LOOK and none of the clocks: the layered glow, the
                 // hairline and the bold digits are all still there, simply held still. The hero is
                 // information; only its heartbeat is decoration.
@@ -647,18 +686,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
 
+            // A new phase restarts only the pulse and the hairline; the embers keep their own clock
+            // and run on across phases, as WPF's idempotent _embers.Start() does.
+            Cancel(ref _fogFx);
+            _fogDigitsHost.RenderTransform = null;
             _emberHost.IsVisible = true;
+            _emberFx ??= new CancellationTokenSource();
+            _embers.Start(_emberFx.Token);   // idempotent; a running field is left running
+
+            _pulsePhase = phase;
             _fogFx = new CancellationTokenSource();
             var token = _fogFx.Token;
 
-            _embers.Start(token);
             Breathe(_fogHairline, OpacityProperty, HairlineLo, HairlineHi, HairlineSeconds, token);
 
             // Half a breath in, half a breath out, on the host's whole RenderTransform.
             //
             // Both scales ride one animation so they cannot drift apart. It targets the HOST, not
             // a transform - see Pulse for why, and for why the XAML declares no transform at all.
-            Pulse(_fogDigitsHost, FogPulseSeconds, PulseScale, token);
+            Pulse(_fogDigitsHost, SpiralRoom.FogPulseSecondsFor(phase), PulseScale, token);
         }
 
         /// <summary>
@@ -671,6 +717,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             try
             {
                 Cancel(ref _fogFx);
+                Cancel(ref _emberFx);
+                _pulsePhase = null;
 
                 _fogDigitsHost.RenderTransform = null;
                 _fogDigitsGlow.Opacity = GlowRest;
@@ -691,8 +739,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// themselves never move, so a glance away and back does not find the readout a different
         /// shape.</para>
         ///
-        /// <para>ponytail: its one caller is the fuse's <c>PhaseChanged</c> handler, which needs
-        /// App.DescentCountdown (WPF head). The flare itself is ported and ready for it.</para>
+        /// <para>Its one caller is <see cref="OnPhaseChanged"/>.</para>
         /// </summary>
         private void FlarePhaseChange()
         {

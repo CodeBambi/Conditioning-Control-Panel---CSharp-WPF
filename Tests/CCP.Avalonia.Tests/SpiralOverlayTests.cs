@@ -130,13 +130,9 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
     }
 
     [Fact]
-    // Bitmap needs the Skia render platform: run alone or first in a shard, a bare [Fact] has none.
-    public Task The_shipped_spiral_is_linked_and_decodes_to_the_planned_frames() => AvaloniaTestDispatcher.RunAsync(() =>
+    public async Task The_shipped_spiral_is_linked_and_decodes_to_the_planned_frames()
     {
-        if (Application.Current is null)
-            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
-                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-                .SetupWithoutStarting();
+        await EnsurePlatform();   // Bitmap needs the render platform; do not rely on test order (P02)
         var path = Path.Combine(AppContext.BaseDirectory, "Resources", "spiral.gif");
         var sw = Stopwatch.StartNew();
         var (frames, delay) = SpiralOverlay.Decode(path);
@@ -148,6 +144,14 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
             Assert.Equal(TimeSpan.FromMilliseconds(30), delay);
         }
         finally { foreach (var f in frames) f.Dispose(); }
+    }
+
+    private static Task EnsurePlatform() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
         return Task.CompletedTask;
     });
 
@@ -156,8 +160,9 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
         "R0lGODlhCAAIAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQEAwAAACwAAAAACAAIAAAIDwABCBxIsKDBgwgTKkwYEAAh+QQNAwACACwAAAAAAgACAIEA/wD/AAAAAAAAAAAIBgABCAQQEAAh+QQFAwACACwAAAAAAgACAIH/AAAAAP8AAAAAAAAIBgADABgYEAA7";
 
     [Fact]
-    public void A_restore_previous_frame_does_not_cut_the_gif_short()
+    public async Task A_restore_previous_frame_does_not_cut_the_gif_short()
     {
+        await EnsurePlatform();
         var dir = Directory.CreateTempSubdirectory("ccp-spiral-").FullName;
         var gif = Path.Combine(dir, "restore.gif");
         File.WriteAllBytes(gif, Convert.FromBase64String(RestorePreviousGif));
