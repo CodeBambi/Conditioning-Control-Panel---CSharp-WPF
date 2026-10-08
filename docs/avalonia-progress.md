@@ -1368,3 +1368,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-quests-tab: +444
 - Quests: QuestComplete haptic post + on-tab completion burst (shared EventBurstLayer, Achievements reuses it); season title shimmer + gradient-panel particle drift on a 24 fps clock that runs only while shown. Rows stay stub (voice line, off-tab burst, stamps, art/punch card missing).
+
+## avalonia-port/rows-gate-fx: +1010
+- PremiumGateFx (fog/padlock glow/sheen on 8 gates), row sweep, perimeter comet, card sheen adorners; effects park off-screen; host gaps listed.
