@@ -1295,7 +1295,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             var owner = Owner as Window;
             Close();
             var dlg = new AwarenessPresetDetailDialog(copy);
-            if (owner != null) await dlg.ShowDialog(owner);
+            if (owner != null) await dlg.ShowDialogSafe(owner);
             else dlg.Show();
         }
 

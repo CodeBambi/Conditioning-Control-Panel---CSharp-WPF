@@ -682,7 +682,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void BtnTubeFit_Click()
         {
             var dialog = new TubeFitDialog();
-            dialog.ShowDialog(this);
+            dialog.ShowDialogSafe(this);
         }
 
         /// <summary>
@@ -701,7 +701,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             try
             {
                 if (!IsVisible) return;
-                await new ModCreatorWindow().ShowDialog(this);
+                await new ModCreatorWindow().ShowDialogSafe(this);
             }
             catch (Exception ex)
             {

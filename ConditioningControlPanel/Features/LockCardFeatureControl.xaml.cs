@@ -191,7 +191,7 @@ namespace ConditioningControlPanel.Features
         /// Progressive disclosure for the three repeat modes. Length mode owns the card outright -
         /// it derives the count - so it hides the flat Repeats slider AND the random switch rather
         /// than leaving two controls on screen that no longer decide anything. This mirrors the
-        /// precedence in <c>LockCardService.ResolveRepeats</c>; if one of the two ever changes,
+        /// precedence in <c>LockCardScheduler.ResolveRepeats</c>; if one of the two ever changes,
         /// change both or the panel starts lying about what the next card will do.
         /// </summary>
         private void UpdateRepeatRowVisibility()

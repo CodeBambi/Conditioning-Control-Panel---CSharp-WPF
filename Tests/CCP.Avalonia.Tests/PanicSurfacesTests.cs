@@ -80,7 +80,7 @@ public sealed class PanicSurfacesTests
     /// camera last; the engine before lock cards).</summary>
     [Fact]
     public void TheSurfaceListIsExactAndOrdered() =>
-        Assert.Equal(new[] { "voice-capture", "ai-followups", "blink-trainer", "chaos", "haptics", "remote-haptics",
+        Assert.Equal(new[] { "intake", "voice-capture", "ai-followups", "blink-trainer", "chaos", "haptics", "remote-haptics",
             "takeover", "engine", "lock-cards", "camera" }, PanicSurfaces.All.Select(x => x.Id));
 
     /// <summary>P23: comments and string literals never count as code.</summary>
@@ -107,6 +107,7 @@ public sealed class PanicSurfacesTests
         ["WebHost"] = "a control, not a surface: the window hosting it registers",
         ["LayeredAudio"] = "WPF parity (#668: only stopped when the master switch is off)",
         ["MiniPlayerWindow"] = "only --video-check (a CLI diagnostic) opens it",
+        ["MediaHistoryWindow"] = "WPF parity: the Media Log's muted preview of a user-picked row; WPF panic leaves that window alone",
     };
 
     [Fact]

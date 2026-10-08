@@ -271,7 +271,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 HookWindow(TopLevel.GetTopLevel(this) as Window);
                 _visibilityWatch?.Dispose();
                 _visibilityWatch = EffectiveVisibility.Watch(this, Evaluate);
-                if (!_modHooked) { CoreMods.ModChanged += OnModChanged; _modHooked = true; }
+                if (!_modHooked) { CoreMods.ModChanged += OnModChanged; AmbientFxCanvas.Env.MotionGateChanged += Evaluate; _modHooked = true; }
                 Evaluate();
             }
             catch (Exception ex) { Log("TakeoverOrb.OnLoaded: " + ex.Message); }
@@ -285,7 +285,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 UnhookWindow();
                 _visibilityWatch?.Dispose();
                 _visibilityWatch = null;
-                if (_modHooked) { CoreMods.ModChanged -= OnModChanged; _modHooked = false; }
+                if (_modHooked) { CoreMods.ModChanged -= OnModChanged; AmbientFxCanvas.Env.MotionGateChanged -= Evaluate; _modHooked = false; }
             }
             catch (Exception ex) { Log("TakeoverOrb.OnUnloaded: " + ex.Message); }
         }

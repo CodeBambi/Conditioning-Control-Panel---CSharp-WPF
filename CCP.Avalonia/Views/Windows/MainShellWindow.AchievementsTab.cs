@@ -44,7 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     return;
                 }
                 LastSeasonRecap = new SeasonRecapWindow(new SeasonRecapCardViewModel(snapshot));
-                _ = LastSeasonRecap.ShowDialog(this);
+                _ = LastSeasonRecap.ShowDialogSafe(this);
             }
             catch (Exception ex) { Log.Warning(ex, "SeasonRecap: failed to open re-view window"); }
         }

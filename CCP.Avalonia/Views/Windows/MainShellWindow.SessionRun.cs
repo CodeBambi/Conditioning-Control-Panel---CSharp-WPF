@@ -187,7 +187,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         dialog.ShowActivated = false;
                         if (IsVisible) dialog.Show(this); else dialog.Show();
                     }
-                    else if (IsVisible) _ = dialog.ShowDialog(this);
+                    else if (IsVisible) _ = dialog.ShowDialogSafe(this);
                     else dialog.Show();   // shell in the tray: an owned modal needs a visible owner
                 }
                 catch (Exception ex) { Log.Error(ex, "Failed to show post-session log dialog"); }

@@ -488,7 +488,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (Shell is not { } owner) return;
             var dialog = new Dialogs.InputDialog(Loc.Get("title_new_preset"),
                 Loc.Get("msg_enter_a_name_for_your_preset"), Loc.Get("label_my_custom_preset"));
-            if (await dialog.ShowDialog<bool?>(owner) != true || string.IsNullOrWhiteSpace(dialog.ResultText)) return;
+            if (await dialog.ShowDialogSafe<bool?>(owner) != true || string.IsNullOrWhiteSpace(dialog.ResultText)) return;
             var name = dialog.ResultText.Trim();
             if (SaveNewPreset(name) == null)
                 await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_name_taken"), Loc.Get("msg_a_preset_with_this_name_already_exists"));
@@ -1134,7 +1134,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnSessionHistory_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
-            try { _ = new Windows.SessionLogHistoryWindow().ShowDialog(owner); }
+            try { _ = new Windows.SessionLogHistoryWindow().ShowDialogSafe(owner); }
             catch (Exception ex) { Serilog.Log.Error(ex, "Failed to open session history dialog"); }
         }
 
@@ -1144,7 +1144,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
             var editor = new Windows.SessionEditorWindow((TimelineSession?)null);
-            if (await editor.ShowDialog<bool?>(owner) != true || editor.ResultSession is not { } session) return;
+            if (await editor.ShowDialogSafe<bool?>(owner) != true || editor.ResultSession is not { } session) return;
             if (await PickSessionSavePath(owner, "title_save_new_session", session) is not { } path) return;
 
             try
@@ -1169,7 +1169,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
             var editor = new Windows.SessionEditorWindow(TimelineSession.FromSession(session));
-            if (await editor.ShowDialog<bool?>(owner) != true || editor.ResultSession is not { } edited) return;
+            if (await editor.ShowDialogSafe<bool?>(owner) != true || editor.ResultSession is not { } edited) return;
 
             if (session.Source == SessionSource.BuiltIn)
             {
