@@ -9,12 +9,11 @@
        x:FieldModifier="internal"    ->  dropped; the MainWindow partials that poke these fields
                                          are not ported. x:Names are kept.
 
-     The tier card is painted by RefreshTierBadge() in the code-behind, which reads the CoreAccount
-     seam. This head seeds no account provider, so the seam answers signed out and not entitled and
-     the card paints "sign in" - the truth for a head with no OAuth flow, not a placeholder. -->
+     Every card is painted from code (Refresh() in the code-behind) from AccountSeed/CoreAccount. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.AccountSettingsSection">
 
     <StackPanel>
@@ -86,7 +85,7 @@
                             VerticalAlignment="Center"
                             Cursor="Hand"
                             Click="BtnPatreonLogin_Click">
-                        <TextBlock Text="{loc:Str btn_login}"/>
+                        <TextBlock x:Name="TxtBtnPatreonLogin" Text="{loc:Str btn_login}"/>
                     </Button>
                 </Grid>
             </Grid>
@@ -116,7 +115,7 @@
                             VerticalAlignment="Center"
                             Cursor="Hand"
                             Click="BtnSubscribeStarLogin_Click">
-                        <TextBlock Text="{loc:Str btn_login}"/>
+                        <TextBlock x:Name="TxtBtnSubscribeStarLogin" Text="{loc:Str btn_login}"/>
                     </Button>
                 </Grid>
             </Grid>
@@ -146,8 +145,43 @@
                             VerticalAlignment="Center"
                             Cursor="Hand"
                             Click="BtnDiscordLogin_Click">
-                        <TextBlock Text="{loc:Str btn_login}"/>
+                        <TextBlock x:Name="TxtBtnDiscordLogin" Text="{loc:Str btn_login}"/>
                     </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Chaster: linked or not, which lock, and the way in or out. Painted by RefreshChaster(). -->
+        <Border x:Name="ChasterLoginCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="#FF6B8A" BorderThickness="1">
+            <Grid>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="#FF6B8A"/>
+                <Grid Margin="15,12,15,12" ColumnDefinitions="Auto,*,Auto">
+                    <fx:ChasterAccountBadge x:Name="ChasterBadge" AvatarSize="30" ShowName="False"
+                                            IsVisible="False" Margin="0,0,10,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtChasterStatus" Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtChasterInfo" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnChasterOpen"
+                                Background="Transparent" Foreground="{DynamicResource TextLightBrush}"
+                                BorderBrush="#FF6B8A" BorderThickness="1" Padding="12,7" Margin="0,0,8,0"
+                                FontWeight="Bold" FontSize="12" Cursor="Hand"
+                                Click="BtnChasterOpen_Click">
+                            <TextBlock Text="{loc:Str chaster_account_open}"/>
+                        </Button>
+                        <Button x:Name="BtnChasterLink"
+                                Background="#FF6B8A" Foreground="White"
+                                BorderThickness="0" Padding="15,8"
+                                FontWeight="Bold" FontSize="12" Cursor="Hand"
+                                Click="BtnChasterLink_Click">
+                            <TextBlock x:Name="TxtBtnChasterLink" Text="{loc:Str chaster_link}"/>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Grid>
         </Border>
@@ -166,6 +200,12 @@
                     <TextBlock Text="{loc:Str label_link_both_providers_to_access_your_account_fr}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
+                    <!-- Only the prominent Reconnect state shows this (PatreonReconnectRule). -->
+                    <TextBlock x:Name="TxtPatreonReconnectHint"
+                               Text="{loc:Str label_patreon_reconnect_hint}"
+                               Foreground="#FFFF424D" FontSize="11" TextWrapping="Wrap"
+                               Margin="0,0,0,10" IsVisible="False"/>
+
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button x:Name="BtnLinkPatreon"
                                 Background="#FF424D" Foreground="White"
@@ -173,7 +213,7 @@
                                 FontWeight="Bold" FontSize="12"
                                 Cursor="Hand" IsVisible="False"
                                 Click="BtnLinkPatreon_Click">
-                            <TextBlock Text="{loc:Str btn_link_patreon}"/>
+                            <TextBlock x:Name="TxtBtnLinkPatreon" Text="{loc:Str btn_link_patreon}"/>
                         </Button>
                         <Button x:Name="BtnLinkDiscord"
                                 Background="#5865F2" Foreground="White"
@@ -181,7 +221,7 @@
                                 FontWeight="Bold" FontSize="12"
                                 Cursor="Hand" IsVisible="False"
                                 Click="BtnLinkDiscord_Click">
-                            <TextBlock Text="{loc:Str btn_link_discord}"/>
+                            <TextBlock x:Name="TxtBtnLinkDiscord" Text="{loc:Str btn_link_discord}"/>
                         </Button>
                     </StackPanel>
                 </StackPanel>
@@ -238,8 +278,25 @@
                     <TextBlock Text="{loc:Str label_export_your_cloud_data_or_view_our_privacy_po}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
+                    <!-- The same switch as the friends drawer header (WPF FRIENDS PRESENCE row). -->
+                    <Grid MinHeight="34" ColumnDefinitions="*,Auto" ToolTip.Tip="{loc:Str friends_presence_toggle_tip}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueAccountBrush}"
+                                   Text="{loc:Str friends_presence_setting}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkFriendsPresence"
+                                  Theme="{StaticResource ToggleStyle}" IsChecked="False"
+                                  VerticalAlignment="Center"
+                                  IsCheckedChanged="ChkFriendsPresence_Changed"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str friends_presence_setting_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,12"/>
+
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button x:Name="BtnExportData"
+                        <!-- Hidden until GDPR export is ported (needs ProfileSync's export call): a
+                             visible button that does nothing is worse than none. -->
+                        <Button x:Name="BtnExportData" IsVisible="False"
                                 Background="#555" Foreground="White"
                                 BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
                                 FontWeight="Bold" FontSize="12"
