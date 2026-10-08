@@ -19,7 +19,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         /// <summary>One playing clip; volume is 0..1 and can change while it plays.</summary>
         internal interface IVoice : IDisposable { double Volume { set; } }
 
-        private readonly Func<string, double, bool, IVoice?> _play;
+        private readonly Func<string, double, bool, Action, IVoice?> _play;
         private readonly TimeProvider _time;
         private readonly Func<double> _roll;
         private readonly Random _random = new();
@@ -33,8 +33,9 @@ namespace ConditioningControlPanel.Avalonia.Platform
         /// <summary>Raised with the loop's length in seconds once it has played 60 s (WPF Clean Slate).</summary>
         internal Action<double>? CleanSlate;
 
-        /// <param name="play">Starts a clip (path, 0..1 volume, loop) or returns null when it cannot.</param>
-        internal MindWipePlayer(Func<string, double, bool, IVoice?> play, TimeProvider? time = null, Func<double>? roll = null)
+        /// <param name="play">Starts a clip (path, 0..1 volume, loop, called once when it ends or errors)
+        /// or returns null when it cannot.</param>
+        internal MindWipePlayer(Func<string, double, bool, Action, IVoice?> play, TimeProvider? time = null, Func<double>? roll = null)
         {
             _play = play;
             _time = time ?? TimeProvider.System;
@@ -138,7 +139,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 clip = _clips[_random.Next(_clips.Length)];
                 volume = _volume;
             }
-            var voice = _play(clip, volume, false);
+            IVoice? voice = null;
+            voice = _play(clip, volume, false, () => { lock (_lock) if (ReferenceEquals(_oneShot, voice)) _oneShot = null; });
             IVoice? displaced;
             lock (_lock) { displaced = _oneShot; _oneShot = voice; }
             displaced?.Dispose();
@@ -155,7 +157,14 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 clip = _clips[_random.Next(_clips.Length)];
                 _volume = MindWipeSchedule.ClampVolume(volume);
             }
-            var voice = _play(clip, _volume, true);
+            IVoice? voice = null;
+            // A loop that dies (decode error, device gone) is no longer looping: IsLooping says so.
+            voice = _play(clip, _volume, true, () =>
+            {
+                ITimer? dead = null;
+                lock (_lock) if (ReferenceEquals(_loop, voice)) { _loop = null; dead = _cleanSlate; _cleanSlate = null; }
+                dead?.Dispose();
+            });
             if (voice == null) return;
             var started = _time.GetTimestamp();
             var check = _time.CreateTimer(_ =>

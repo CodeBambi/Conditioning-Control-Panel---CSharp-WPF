@@ -25,6 +25,7 @@ public sealed class MindWipeTests
     {
         public bool Loop, Disposed;
         public double Vol;
+        public Action Ended = () => { };
         public double Volume { set => Vol = value; }
         public void Dispose() => Disposed = true;
     }
@@ -76,10 +77,10 @@ public sealed class MindWipeTests
             (s.MindWipeEnabled, s.MindWipeLoop, s.MindWipeAudioPath, s.MindWipeVolume, s.MindWipeFrequency) = (false, false, clip, 40, 180);
             var voices = new List<Voice>();
             var clock = new Clock();
-            var player = new MindWipePlayer((path, vol, loop) =>
+            var player = new MindWipePlayer((path, vol, loop, ended) =>
             {
                 Assert.Equal(clip, path);
-                var v = new Voice { Loop = loop, Vol = vol };
+                var v = new Voice { Loop = loop, Vol = vol, Ended = ended };
                 voices.Add(v);
                 return v;
             }, clock, roll: () => 0.4);   // under 180/h's 0.5 per tick: every tick fires
@@ -138,6 +139,19 @@ public sealed class MindWipeTests
             Assert.Equal(3, voices.Count);
         }
         finally { host.Close(); }
+    });
+
+    [Fact]
+    public void A_loop_that_dies_stops_reporting_looping_and_pays_no_clean_slate() => Run((player, voices, clock) =>
+    {
+        double? cleanSlate = null;
+        player.CleanSlate = secs => cleanSlate = secs;
+        player.StartLoop(0.5);
+        Assert.True(player.IsLooping);
+        voices.Single().Ended();                                      // decode error / device gone
+        Assert.False(player.IsLooping);
+        clock.Advance(TimeSpan.FromSeconds(61));
+        Assert.Null(cleanSlate);
     });
 
     [Fact]
