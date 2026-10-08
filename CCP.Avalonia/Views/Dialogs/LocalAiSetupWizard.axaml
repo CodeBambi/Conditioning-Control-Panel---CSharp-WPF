@@ -115,25 +115,25 @@
                                    FontWeight="SemiBold"
                                    Text="{loc:Str label_local_ai_consent_will_do}"/>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                        <DockPanel Margin="0,8,0,0">
+                            <TextBlock DockPanel.Dock="Left" Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
                             <TextBlock x:Name="TxtConsentLine1" Theme="{StaticResource WizardBody}"
                                        Text="{loc:Str label_local_ai_consent_install_ollama}"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                        </DockPanel>
+                        <DockPanel Margin="0,4,0,0">
+                            <TextBlock DockPanel.Dock="Left" Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
                             <TextBlock x:Name="TxtConsentLine2" Theme="{StaticResource WizardBody}"
                                        Text="{loc:Str label_local_ai_consent_pull_model}"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
-                            <TextBlock Theme="{StaticResource WizardBody}"
+                        </DockPanel>
+                        <DockPanel Margin="0,4,0,0">
+                            <TextBlock DockPanel.Dock="Left" Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtConsentLine3" Theme="{StaticResource WizardBody}"
                                        Text="{loc:Str label_local_ai_consent_runs_local}"/>
-                        </StackPanel>
+                        </DockPanel>
                     </StackPanel>
                 </Border>
 
-                <TextBlock Margin="0,14,0,0" Theme="{StaticResource WizardSub}"
+                <TextBlock x:Name="TxtConsentDiskNote" Margin="0,14,0,0" Theme="{StaticResource WizardSub}"
                            Text="{loc:Str label_local_ai_consent_disk_note}"/>
 
                 <CheckBox x:Name="ChkAdvanced" Margin="0,14,0,0"
@@ -154,7 +154,7 @@
                              Padding="6,4" FontSize="13"/>
                 </Grid>
 
-                <TextBlock x:Name="LinkManualInstall" Margin="0,14,0,0" Cursor="Hand"
+                <TextBlock x:Name="LinkManualInstall" Focusable="True" Margin="0,14,0,0" Cursor="Hand"
                            Foreground="#B084DC" TextDecorations="Underline"
                            Text="{loc:Str link_local_ai_manual_install}"/>
             </StackPanel>
@@ -242,7 +242,7 @@
                          Padding="8" FontFamily="Consolas, Courier New, monospace" FontSize="11"
                          IsReadOnly="True" TextWrapping="Wrap"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"/>
-                <TextBlock x:Name="LinkManualInstallError" Margin="0,12,0,0" Cursor="Hand"
+                <TextBlock x:Name="LinkManualInstallError" Focusable="True" Margin="0,12,0,0" Cursor="Hand"
                            Foreground="#B084DC" TextDecorations="Underline"
                            Text="{loc:Str link_local_ai_manual_install}"/>
             </StackPanel>
