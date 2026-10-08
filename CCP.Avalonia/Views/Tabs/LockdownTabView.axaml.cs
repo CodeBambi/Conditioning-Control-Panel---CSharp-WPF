@@ -302,17 +302,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ld.Activate(TimeSpan.FromMinutes(minutes));
         }
 
-        /// <summary>WPF's consent text, minus the lines this head would be lying about (system keys,
-        /// Dose keeper, Possession: none run here) and with the Linux safety valve.</summary>
-        internal static string LockdownWarning(int minutes, Models.AppSettings cfg)
+        /// <summary>WPF's consent text, minus the lines this head would be lying about (Dose keeper,
+        /// Possession: none run here; system keys off Windows, where nothing blocks them) and with the
+        /// platform's safety valve.</summary>
+        internal static string LockdownWarning(int minutes, Models.AppSettings cfg) => LockdownWarning(minutes, cfg, OperatingSystem.IsWindows());
+
+        internal static string LockdownWarning(int minutes, Models.AppSettings cfg, bool windows)
         {
             var warn = new System.Text.StringBuilder();
             warn.Append("- You will be LOCKED IN for ").Append(minutes).Append(" minutes\n");
             if (cfg.LockdownForceStrictLock) warn.Append("- Strict Lock will be FORCED ON\n");
             if (cfg.LockdownDisablePanicKey) warn.Append("- Panic Key will be DISABLED\n");
+            // WPF MainWindow.Lab.cs:80; Platform/Win32PanicKey enforces it on Windows only.
+            if (windows && cfg.LockdownBlockSystemKeys) warn.Append("- Alt+F4, Alt+Tab, the Windows key and Ctrl+Esc will be BLOCKED\n");
             warn.Append("- You CANNOT close the application (minimizing still works)\n");
             warn.Append("- The only escape is waiting for the timer to expire\n");
-            warn.Append("  (or ending the app from a system monitor / terminal as a safety valve)");
+            warn.Append(windows
+                ? "  (or Ctrl+Alt+Del → Task Manager as a safety valve)"   // WPF's line verbatim
+                : "  (or ending the app from a system monitor / terminal as a safety valve)");
             return warn.ToString();
         }
 

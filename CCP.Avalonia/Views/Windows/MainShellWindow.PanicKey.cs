@@ -5,8 +5,7 @@
 // The stop pass is PanicSurfaces.StopAll (one registry shared with the tray and the safe word); a new
 // surface registers there, never here. ponytail: no bark on this head yet. The #919b off-thread watchdog is omitted: the listener is its own thread,
 // so a wedged UI thread cannot drop the hook, but the queued stop still waits for the UI thread.
-// ponytail: Windows has no panic listener on this head yet (WPF's WH_KEYBOARD_LL hook is not ported);
-// X11PanicKey.Start returns false there and the tray's Stop everything is the only panic control.
+// Windows: Platform/Win32PanicKey (WH_KEYBOARD_LL on its own thread) feeds the same HandlePanicKeyPress.
 // ponytail: a rebind while a portal session is open keeps the OLD trigger until the effects stop and
 // the next effect re-binds; re-bind on PanicKey change if that matters.
 
@@ -37,6 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal bool StartPanicKey()
         {
             _portalAllowed = true;
+            if (OperatingSystem.IsWindows()) return Win32Input.Start(() => HandlePanicKeyPress(DateTime.Now));   // WH_KEYBOARD_LL twin
             return X11PanicKey.Start(() => CoreSettings.Current.PanicKey,
                 () =>
                 {

@@ -34,6 +34,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // WPF SetLockdownBadge (Lab.cs:672/753/794): the badge shows for the whole run, seeded.
                 if (Named<global::Avalonia.Controls.Border>("LockdownBadge") is { } badge) badge.IsVisible = LockdownActive;
                 PaintLockdownBadge();
+                Platform.Win32Input.ApplyLockdown(LockdownActive, CoreSettings.Current.LockdownBlockSystemKeys);   // WPF Lab.cs:621/714
             });
             // WPF OnLockdownTick (Lab.cs:771) and OnLockdownTimerRestarted (Lab.cs:1039): the badge
             // clock follows the page clock, through the same HideLockdownTimer mask.
