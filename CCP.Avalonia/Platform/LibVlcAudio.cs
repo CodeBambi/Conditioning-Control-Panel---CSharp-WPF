@@ -53,7 +53,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             Instance = this;
             LayeredAudio.Instance = new LayeredAudio(path => new LayeredAudio.VlcLayerPlayer(_vlc, path));
-            CoreAudio.PlayOneShotProvider = PlayOneShot;
+            CoreAudio.PlayOneShotProvider = (path, volume, tag, started, finished) => PlayOneShot(path, volume, tag, started, finished);
+            CoreAudio.PlayStoppableProvider = PlayOneShot;
             // ponytail: Windows ducking stays unseeded (no-op) until AudioService's WASAPI sweep is ported.
             if (!OperatingSystem.IsLinux()) return;
             CoreAudio.DuckProvider = Duck;
@@ -63,10 +64,11 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         /// <summary>Same contract as WPF's AudioService.PlayOneShot: onStarted gets the clip length
         /// once playing; onFinished fires exactly once - off the UI thread when the clip ends or
-        /// errors, synchronously on the caller's thread when it is refused (muted, missing file).</summary>
-        public void PlayOneShot(string path, float volume, string tag, Action<TimeSpan>? onStarted, Action? onFinished)
+        /// errors, synchronously on the caller's thread when it is refused (muted, missing file).
+        /// Returns the clip's stop (WPF handle.Stop): it ends the clip early, and onFinished still fires once.</summary>
+        public Action PlayOneShot(string path, float volume, string tag, Action<TimeSpan>? onStarted, Action? onFinished)
         {
-            if (volume <= 0f || string.IsNullOrWhiteSpace(path) || !File.Exists(path)) { Fire(onFinished); return; }
+            if (volume <= 0f || string.IsNullOrWhiteSpace(path) || !File.Exists(path)) { Fire(onFinished); return static () => { }; }
 
             var media = new Media(_vlc, path, FromType.FromPath);
             media.AddOption(NoVideo);
@@ -97,6 +99,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
             player.EncounteredError += (_, _) => Finish();
             player.Stopped += (_, _) => Finish();
             if (!player.Play()) Finish();
+            // Off the caller's thread: libvlc's Stop must never run inside one of its own events.
+            return () => ThreadPool.QueueUserWorkItem(_ => { lock (player) if (done == 0) player.Stop(); });
         }
 
         /// <summary>Media option for audio players: skip any video track (an mp3's cover art would open a window).</summary>

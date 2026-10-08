@@ -1,9 +1,9 @@
 # Consumes the CI-built linux-x64 tarball (packaging/linux/build-tarball.sh); docs/avalonia-linux-install.md.
 # Not submitted to the AUR from this repo. A release pins sha256sums with `updpkgsums` against the uploaded asset.
 # pkgver follows Version.props; bump both together (update step: sed -i "s/^pkgver=.*/pkgver=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' ../../Version.props)/" PKGBUILD).
-# Local test: copy the tarball next to this file; makepkg uses it instead of downloading.
+# Local test: bash packaging/aur/test-local.sh <tarball> (makepkg + the installed launcher's --smoke, no sudo).
 pkgname=conditioning-control-panel-bin
-pkgver=6.11.3
+pkgver=7.0.5
 pkgrel=1
 pkgdesc="A visual conditioning application with gamification features"
 arch=('x86_64')
