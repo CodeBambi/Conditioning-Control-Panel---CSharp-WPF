@@ -1504,3 +1504,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-settings-account: +659
 - Settings · Account: provider cards, login/logout/link, Patreon reconnect, Chaster card and presence switch are wired. Backup/restore/export are still hidden (row stays stub).
 - 4 fail-proven shell tests on fake providers; ProviderLinkResponseRules moved to Core.
+
+## avalonia-port/rows-settings-devices: +196
+- Settings → Devices camera picker and ↻ live over V4L2 sysfs (metadata nodes skipped, WPF log lines verbatim); row stays stub
+- WebcamDevicePickerTests (fake sysfs, fail-proven); live props in evidence/rows-settings-devices
