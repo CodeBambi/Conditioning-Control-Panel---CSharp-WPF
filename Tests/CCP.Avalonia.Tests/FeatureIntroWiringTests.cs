@@ -64,13 +64,15 @@ public sealed class FeatureIntroWiringTests
         return Task.CompletedTask;
     });
 
-    private static void ClickLockdown(MainShellWindow shell)
+    private static void ClickLockdown(MainShellWindow shell) => ClickNav(shell, "BtnNavLockdown");
+
+    private static void ClickNav(MainShellWindow shell, string button)
     {
         // Each click is a fresh offer: forget the ladder's one-passive-at-a-time settle and the
         // card's pacing, so only the gate under test can refuse it.
         StartupLadder.ResetForTests();
         FeatureIntroPopup.ResetForTests();
-        shell.Named<Button>("BtnNavLockdown")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        shell.Named<Button>(button)!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
     }
 
@@ -116,4 +118,18 @@ public sealed class FeatureIntroWiringTests
         Assert.Contains("daily-free", CoreSettings.Current.SeenFeatureIntros);
         Assert.DoesNotContain("one-account", CoreSettings.Current.SeenFeatureIntros);
     }, "daily-free", "one-account");
+
+    [Fact]
+    public Task StudioDoorOpensStudioRackAndRemoteControlOpensNothing() => Run((opened, shell) =>
+    {
+        // WPF MainWindow.TabNavigation.cs:505: the rack card rides case "studio"; case
+        // "remotecontrol" (a Play-door tab) calls nothing.
+        ClickNav(shell, "BtnNavRemoteControl");
+        Assert.Empty(opened.OfType<FeatureIntroPopup>());
+        Assert.DoesNotContain("studio-rack", CoreSettings.Current.SeenFeatureIntros);
+
+        ClickNav(shell, "BtnNavStudio");
+        Assert.Equal(FeatureIntros.All["studio-rack"].Title, CardTitle(opened));
+        Assert.Contains("studio-rack", CoreSettings.Current.SeenFeatureIntros);
+    }, "studio-rack");
 }

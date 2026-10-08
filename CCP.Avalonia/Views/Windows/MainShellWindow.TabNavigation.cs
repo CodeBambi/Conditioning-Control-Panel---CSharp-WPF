@@ -183,13 +183,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // both host real dose dials, so a lock that was latched rather than re-derived
                     // could survive a crash, an abort or an out-of-order session event.
                     case "settings": RefreshSessionFeatureLock(); MaybeShowFeatureIntro("daily-free", "settings"); break;
-                    case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); break;
+                    case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("studio-rack", "studio"); break;
                     case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("haptics"); break;
 
-                    // WPF MainWindow.TabNavigation.cs:420/457/505/527/534 - the door tour cards.
+                    // WPF MainWindow.TabNavigation.cs:420/457/527/534 - the door tour cards (studio-rack: :505, case "studio").
                     case "play": case "lab": MaybeShowFeatureIntro("play-wall", "play"); break;
                     case "awareness": MaybeShowFeatureIntro("awareness"); break;
-                    case "remotecontrol": MaybeShowFeatureIntro("studio-rack", "studio"); break;
                     case "lockdown": MaybeShowFeatureIntro("lockdown"); break;
                     case "blinktrainer": MaybeShowFeatureIntro("blinktrainer"); break;
                     // WPF :581 - only once the room shows the map (its IsVisible hook re-read the gates).
