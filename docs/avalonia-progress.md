@@ -1485,3 +1485,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-profile-dialogs: +360
 - Customize dialog: 12 scene banners + 12 preset avatars from Core CosmeticsPool, pin tiles draw achievement art (artless pins dropped, as WPF), tiles take Enter/Space; titles use Core Achievement.TitleName.
 - Wardrobe editor stage paints the chosen banner (top-aligned like the hero); both rows stub -> wired.
+
+## avalonia-port/rows-pink-rush: +341
+- win-pink-rush stub -> wired: engine- or session-armed 10-min roll, 60 s 3x XP (Core PinkRushRules shared with WPF), popup + wash; panic/engine stop end it.
+- PinkRushTests, 8 fail-proofs (logged); no live rush (random 10-min trigger).
