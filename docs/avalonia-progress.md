@@ -1358,3 +1358,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-takeover-ui: +165
 - Takeover tab: WPF copy restored, Open-models-folder button, Configure-in-Settings -> Devices, no-voiced-mantras chant hint; shell-takeover-ui -> wired.
 - TakeoverTabUiTests (6 fail-proofs) + Keincheck live run; still stub: Mantra Chant playback, wallpaper hooks.
+
+## avalonia-port/rows-feat-video: +141
+- Length filter (min/max) at selection via Core MandatoryVideoScheduler.KeepByLength; VideoMetadataCache + NoVideosReason git-mv'd to Core (managed LibVLCSharp 3.8.5).
+- Folded 854ac954a: the no-videos dialog names the length filter and range when it emptied the library; tests fail-proven, live evidence in rows-feat-video/.
