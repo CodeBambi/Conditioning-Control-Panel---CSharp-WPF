@@ -246,6 +246,8 @@ namespace ConditioningControlPanel.Services
             Log.Information("Heartbeat started (every {Seconds}s)", HeartbeatInterval.TotalSeconds);
         }
 
+        internal bool HeartbeatRunning => Volatile.Read(ref _heartbeat) != null;
+
         public void StopHeartbeat()
         {
             Interlocked.Exchange(ref _heartbeat, null)?.Dispose();
