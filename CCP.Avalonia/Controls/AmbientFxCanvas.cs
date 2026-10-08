@@ -598,7 +598,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             try
             {
                 HookWindow(TopLevel.GetTopLevel(this) as Window);
-                if (!_modHooked) { CoreMods.ModChanged += OnModChanged; _modHooked = true; }
+                if (!_modHooked) { CoreMods.ModChanged += OnModChanged; Env.MotionGateChanged += Evaluate; _modHooked = true; }
                 Evaluate();
             }
             catch (Exception ex) { Log.Debug("AmbientFxCanvas.OnAttachedToVisualTree: {E}", ex.Message); }
@@ -610,7 +610,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             {
                 StopClock();
                 UnhookWindow();
-                if (_modHooked) { CoreMods.ModChanged -= OnModChanged; _modHooked = false; }
+                if (_modHooked) { CoreMods.ModChanged -= OnModChanged; Env.MotionGateChanged -= Evaluate; _modHooked = false; }
             }
             catch (Exception ex) { Log.Debug("AmbientFxCanvas.OnDetachedFromVisualTree: {E}", ex.Message); }
             base.OnDetachedFromVisualTree(e);
@@ -1119,6 +1119,15 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             /// <summary>FxTheme.Fallback, the colour every slot resolves to with no palette set.</summary>
             private static readonly Color Fallback = Color.FromRgb(0xFF, 0x69, 0xB4);
+
+            /// <summary>
+            /// WPF MainWindow.UiUpdates.CmbMotionLevel_SelectionChanged stops/re-arms every running
+            /// ambient loop when the level changes; here the loops subscribe while loaded and
+            /// re-read <see cref="AllowAmbientLoops"/>. Raised on the UI thread by Settings ▸ Performance.
+            /// </summary>
+            internal static event Action? MotionGateChanged;
+
+            internal static void RaiseMotionGateChanged() => MotionGateChanged?.Invoke();
 
             /// <summary>
             /// PerformanceProfile.CurrentTier. Its automatic escalation counts live flash windows

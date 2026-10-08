@@ -48,7 +48,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
             var dlg = new AwarenessPresetDetailDialog(preset, isNew);
-            await dlg.ShowDialog(owner);
+            await dlg.ShowDialogSafe(owner);
             if (dlg.Changed) RefreshAwarenessPresetCards();
         }
 

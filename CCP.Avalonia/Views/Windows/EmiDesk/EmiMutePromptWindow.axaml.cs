@@ -66,7 +66,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <see cref="EmiMuteChoice.Keep"/>.
         /// </summary>
         public static Task<EmiMuteChoice> Ask(Window owner) =>
-            new EmiMutePromptWindow().ShowDialog<EmiMuteChoice>(owner);
+            new EmiMutePromptWindow().ShowDialogSafe<EmiMuteChoice>(owner);
 
         /// <summary>
         /// Ask with no owner in hand - WPF's own call shape (<c>EmiMutePromptWindow.Ask()</c> from
