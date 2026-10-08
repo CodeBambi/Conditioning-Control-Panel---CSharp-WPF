@@ -27,6 +27,13 @@ public sealed class HelpLoopScenesTests
     [InlineData("KeywordTriggers")]
     [InlineData("Audio")]
     [InlineData("Scheduler")]
+    [InlineData("SpiralOverlay")]
+    [InlineData("GazeMinigame")]
+    [InlineData("Video")]
+    [InlineData("BubblePop")]
+    [InlineData("BrainDrain")]
+    [InlineData("MindWipe")]
+    [InlineData("BubbleCount")]
     public Task SceneRendersEveryStepAndLightsItsChipsInOrder(string id) => AvaloniaTestDispatcher.RunAsync(() =>
     {
         EnsureAvalonia();
