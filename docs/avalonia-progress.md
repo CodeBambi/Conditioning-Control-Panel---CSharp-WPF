@@ -1391,3 +1391,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-settings-general: +803
 - Settings General: display card (monitor picker, countdown), XDG autostart run-on-startup with start-hidden warning, Deeper switch hides the rail button; views-settings-general stub->wired.
 - Settings Performance: Back Room FX combo; changing motion level updates loops already showing (5 controls); DND picker/guard still missing, row stays stub.
+
+## avalonia-port/rows-lock-card: +303
+- feat-lock-card wired: repeat-shape rows (random / match by length) on the panel; Core `LockCardScheduler.ResolveRepeats` (moved from WPF) sizes the Avalonia card.
+- Test fail-proven 3 ways; live: length-mode card shows 29 repeats and ESC closes it.
