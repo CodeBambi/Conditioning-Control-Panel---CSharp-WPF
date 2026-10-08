@@ -239,6 +239,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             // NOT in the WPF original, where OpenBook is always what fills the panel. Here the
             // render harness constructs the window and screenshots it, so an unpopulated book is an
             // empty pink box that passes. It does not move the bookmark: nothing was opened.
+            _canvas.Committed += OnCommitted;
             _stage.Source = _bitmap;
             SelectCard(0, speak: false, note: false);
         }
@@ -338,9 +339,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static readonly FontFamily FaceFont =
             new("Noto Sans Mono, DejaVu Sans Mono, Consolas, monospace");
 
+        /// <summary>WPF BtnCompleteGuide: the website manual (EmiCodex.OpenManualInBrowser). Test seam.</summary>
+        internal static Action OpenManual = ConditioningControlPanel.Avalonia.Views.Windows.Codex.OpenManualInBrowser;
+
         private void WireControls()
         {
             _btnClose.Click += (_, _) => CloseBook();
+            this.FindControl<Button>("BtnCompleteGuide")!.Click += (_, _) => OpenManual();
             _btnPrev.Click += (_, _) => Step(-1);
             _btnNext.Click += (_, _) => Step(+1);
             _btnGo.Click += (_, _) => Go();
@@ -586,7 +591,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>The demo buffer every painter repaints; blitted into <see cref="_bitmap"/> on Commit.</summary>
         private readonly EmiPixelCanvas _canvas = new(BufW, BufH);
         private readonly WriteableBitmap _bitmap = new(new PixelSize(BufW, BufH), new Vector(96, 96), PixelFormats.Bgra8888, AlphaFormat.Opaque);
-        private readonly int[] _rowCopy = new int[BufW * BufH];
         private EmiDemoPainter? _painter;
         private DispatcherTimer? _clock;
         private long _since = -1;
@@ -653,15 +657,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book still frame failed"); }
         }
 
-        /// <summary>Commit the buffer and copy it into the stage bitmap (Bgra32 == Bgra8888 little-endian).</summary>
-        private void Blit()
+        /// <summary>Commit the buffer; <see cref="OnCommitted"/> blits it, the way WPF's EmiPixelBitmap does.</summary>
+        private void Blit() => _canvas.Commit();
+
+        /// <summary>One copy per frame, straight from the cells into the stage bitmap (Bgra32 == Bgra8888 little-endian).</summary>
+        private void OnCommitted(EmiPixelCanvas c)
         {
-            _canvas.Commit();
             using (var fb = _bitmap.Lock())
             {
-                Buffer.BlockCopy(_canvas.Pixels, 0, _rowCopy, 0, _rowCopy.Length * 4);
-                for (int y = 0; y < BufH; y++)
-                    Marshal.Copy(_rowCopy, y * BufW, fb.Address + y * fb.RowBytes, BufW);
+                // The CLR lets a uint[] be read as int[] (same element size), so Marshal.Copy takes the
+                // cells as they are: no staging array, no unsafe.
+                var src = (int[])(object)c.Pixels;
+                for (int y = 0; y < c.H; y++)
+                    Marshal.Copy(src, y * c.W, fb.Address + y * fb.RowBytes, c.W);
             }
             _stage.InvalidateVisual();
         }

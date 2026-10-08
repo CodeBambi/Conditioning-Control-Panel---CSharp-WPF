@@ -94,4 +94,62 @@ public sealed class EmiBookDemoTests
         }
         return Task.CompletedTask;
     });
+
+    private static void EnsureApp()
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+    }
+
+    /// <summary>Reduced motion (WPF MotionFx.AllowAmbientLoops false): the painter's still frame, and no clock.</summary>
+    [Fact]
+    public Task ReducedMotionShowsAStillFrameWithNoClock() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureApp();
+        var st = EmiState.Current;
+        string? bookmark = st.BookCard;
+        var motion = CoreSettings.Current.MotionLevel;
+        EmiBookWindow? book = null;
+        try
+        {
+            CoreSettings.Current.MotionLevel = MotionLevel.Reduced;
+            book = new EmiBookWindow();
+            book.OpenBook("flashes");
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(book.ClockRunning);
+            var still = Frame(book);
+            Assert.Contains(still, p => p != still[0]);                    // a drawn frame, not a blank stage
+            var expected = new EmiPixelCanvas(96, 72);
+            book.Painter!.Draw(expected, book.Painter.StillMs);
+            Assert.Equal((int[])(object)expected.Pixels, still);           // exactly the painter's still frame
+        }
+        finally
+        {
+            book?.Close();
+            CoreSettings.Current.MotionLevel = motion;
+            st.BookCard = bookmark;
+        }
+        return Task.CompletedTask;
+    });
+
+    /// <summary>WPF BtnCompleteGuide opens the website manual.</summary>
+    [Fact]
+    public Task CompleteGuideOpensTheManual() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureApp();
+        var previous = EmiBookWindow.OpenManual;
+        int opened = 0;
+        var book = new EmiBookWindow();
+        try
+        {
+            EmiBookWindow.OpenManual = () => opened++;
+            book.FindControl<Button>("BtnCompleteGuide")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(1, opened);
+            Assert.Equal("Complete CCP guides", ((TextBlock)book.FindControl<Button>("BtnCompleteGuide")!.Content!).Text);
+        }
+        finally { EmiBookWindow.OpenManual = previous; book.Close(); }
+        return Task.CompletedTask;
+    });
 }
