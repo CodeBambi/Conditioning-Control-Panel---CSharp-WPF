@@ -21,6 +21,8 @@ public sealed class BubbleCountSchedulerTests
         public void Show(string path, int difficulty, bool strict, Action<bool> onComplete) => Shown.Add((path, difficulty, strict, onComplete));
         public void ShowMessage(string text, int ms, Action then) => Messages.Add((text, then));
         public void CloseAll() => Closes++;
+        public bool Other;
+        public bool OtherInteractionActive => Other;
     }
 
     private static void With(bool enabled, bool strict, bool mercy, Action body)
@@ -173,5 +175,36 @@ public sealed class BubbleCountSchedulerTests
             Assert.Single(host.Shown);
         }
         finally { CoreEngine.BubbleCount = prev; }
+    });
+
+    /// <summary>WPF TriggerGame :321: a game due over a video / lock card queues and plays once it
+    /// ends; panic drops the queued game.</summary>
+    [Fact]
+    public void Game_waits_for_another_interaction_and_panic_drops_it() => With(true, false, true, () =>
+    {
+        var clock = new FakeClock(); var host = new Host { Other = true };
+        var b = new BubbleCountScheduler(host, clock, () => Clips);
+        b.Start();
+        clock.Advance(TimeSpan.FromSeconds(721));              // scheduled game falls due
+        Assert.True(b.IsQueued);
+        Assert.False(b.IsBusy);
+        clock.Advance(TimeSpan.FromSeconds(30));               // the video is still playing
+        Assert.Empty(host.Shown);
+        host.Other = false;                                    // the video ends
+        clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.True(b.IsBusy);
+        clock.Advance(BubbleCountScheduler.LeadIn);
+        Assert.Single(host.Shown);
+        host.Shown[0].Done(true);
+
+        host.Other = true;
+        b.Trigger(forceTest: true);
+        Assert.True(b.IsQueued);
+        b.ForceCleanup();                                      // panic
+        host.Other = false;
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.False(b.IsQueued);
+        Assert.Single(host.Shown);
+        b.Stop();
     });
 }
