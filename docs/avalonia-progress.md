@@ -1365,3 +1365,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/panic-surfaces: +265
 - One PanicSurfaces registry: panic key, tray and safe word call StopAll once (WPF order); id/order test and source-scan guard so new starters register.
+
+## avalonia-port/rows-quests-tab: +444
+- Quests: QuestComplete haptic post + on-tab completion burst (shared EventBurstLayer, Achievements reuses it); season title shimmer + gradient-panel particle drift on a 24 fps clock that runs only while shown. Rows stay stub (voice line, off-tab burst, stamps, art/punch card missing).
