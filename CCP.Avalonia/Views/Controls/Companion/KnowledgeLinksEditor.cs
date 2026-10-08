@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 ItemTemplate = new FuncDataTemplate<KnowledgeBaseLink>((link, _) => Row(link)),
             };
             ScrollViewer.SetHorizontalScrollBarVisibility(LstKnowledgeLinks, global::Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled);
-            TxtKnowledgeLinksEmpty = CompanionPageHost.Loc(new TextBlock
+            TxtKnowledgeLinksEmpty = CompanionPageKit.Loc(new TextBlock
             {
                 Name = "TxtKnowledgeLinksEmpty", FontSize = 12, Foreground = new SolidColorBrush(Color.FromRgb(0x90, 0x90, 0x90)),
                 VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, IsHitTestVisible = false,
@@ -146,7 +146,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         private static Button KbButton(string key, string name) => new()
         {
             Name = name,
-            Content = CompanionPageHost.Loc(new TextBlock(), key),
+            Content = CompanionPageKit.Loc(new TextBlock(), key),
             Foreground = Brushes.White,
             Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
             BorderThickness = new Thickness(0),

@@ -109,7 +109,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_lobbyHooked) return;
             _lobbyHooked = true;
             Lobby.Changed += OnLobbyChanged;
-            Closed += (_, _) => { try { Lobby.Changed -= OnLobbyChanged; } catch { } };
+            Closed += (_, _) => { try { Lobby.Changed -= OnLobbyChanged; } catch { } LeaveLobbyTab(); };
         }
 
         /// <summary>WPF EnterLobbyTab: hook once, take a lease, paint what we have.</summary>

@@ -2,7 +2,7 @@
 // PermissionsPage,LinksPage,AiPage}.xaml(.cs): the Companion section's own pages, each the visible
 // home of options the v2 conversation page collapsed away with the old room. Code only on this head
 // (each WPF XAML is a ScrollViewer, a capped StackPanel, a title and a few cards); the chrome is
-// CompanionPageHost's.
+// CompanionPageKit's.
 //
 // Deviations:
 //   - Personality: WPF's CompanionPickerCard (avatar look + personality preset with a live preview)
@@ -21,7 +21,7 @@ using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Views.Controls.Companion.V2;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using Serilog;
-using static ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages.CompanionPageHost;
+using static ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages.CompanionPageKit;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
 {

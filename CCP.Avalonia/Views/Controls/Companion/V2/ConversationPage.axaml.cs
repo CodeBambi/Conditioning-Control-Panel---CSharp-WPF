@@ -53,7 +53,8 @@ public partial class ConversationPage : UserControl
         DataContext = _vm;
         _vm.Turns.CollectionChanged += TurnsChanged;
         _vm.PropertyChanged += VmChanged;
-        CompanionAskService.Instance.FocusChatRequested += FocusComposer;
+        // FocusChatRequested is a static singleton's event: subscribed only while the page is in
+        // a visual tree (OnAttached/OnDetached below), or it roots a closed shell.
         Composer.AddHandler(KeyDownEvent, Composer_KeyDown, RoutingStrategies.Tunnel);
         Transcript.ScrollChanged += Transcript_ScrollChanged;
         Unloaded += (_, _) => { _vm.Stop(); _vm.Detach(); };
@@ -69,6 +70,16 @@ public partial class ConversationPage : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        if (_vm != null && !_askHooked)
+        {
+            _askHooked = true;
+            CompanionAskService.Instance.FocusChatRequested += FocusComposer;
+            if (TopLevel.GetTopLevel(this) is Window window)
+            {
+                _closedWindow = window;
+                window.Closed += WindowClosed;
+            }
+        }
         foreach (var v in this.GetSelfAndVisualAncestors())
             _visibilityWatch.Add(v.GetObservable(IsVisibleProperty).Subscribe(new VisibilityObserver(this)));
         SyncShown();
@@ -78,7 +89,27 @@ public partial class ConversationPage : UserControl
     {
         foreach (var d in _visibilityWatch) d.Dispose();
         _visibilityWatch.Clear();
+        Unhook();
         base.OnDetachedFromVisualTree(e);
+    }
+
+    private bool _askHooked;
+    private Window? _closedWindow;
+
+    private void WindowClosed(object? sender, EventArgs e)
+    {
+        Unhook();
+        _vm?.Stop();
+        _vm?.Detach();
+    }
+
+    private void Unhook()
+    {
+        if (!_askHooked) return;
+        _askHooked = false;
+        CompanionAskService.Instance.FocusChatRequested -= FocusComposer;
+        if (_closedWindow != null) _closedWindow.Closed -= WindowClosed;
+        _closedWindow = null;
     }
 
     private void SyncShown()

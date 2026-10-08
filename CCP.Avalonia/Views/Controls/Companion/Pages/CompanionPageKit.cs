@@ -1,4 +1,4 @@
-// PORTED from WPF 7.1.5 ConditioningControlPanel/Views/Controls/Companion/Pages/CompanionPageHost.cs, plus
+// PORTED from WPF 7.1.5 ConditioningControlPanel/Views/Controls/Companion/Pages/CompanionPageKit.cs, plus
 // the page chrome every Companion section page shares (WPF Type.PageTitle / Type.PageSubtitle and the
 // #14FFFFFF card the four page XAML files repeat). This head has no Type.* scale, so the numbers are
 // the WPF style setters, kept in one place.
@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
     /// v2 conversation page collapsed away with the old room: the room's zones and Workshop cells,
     /// never copies, so there is one instance of every control on screen.
     /// </summary>
-    internal static class CompanionPageHost
+    internal static class CompanionPageKit
     {
         /// <summary>Takes <paramref name="element"/> off whatever holds it and puts it in <paramref name="host"/>.</summary>
         public static void Adopt(Control element, ContentControl host)
