@@ -188,6 +188,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- clocks ----
         private CancellationTokenSource? _fogFx;
+        private CancellationTokenSource? _emberFx;
         private CancellationTokenSource? _splashFx;
         private CancellationTokenSource? _waitFx;
         private DispatcherTimer? _splashWatchdog;
@@ -202,7 +203,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private SpiralRoomState _state = SpiralRoomState.Waiting;
 
         /// <summary>The fuse subscriptions are held only while the tab is on screen (P01).</summary>
-        private bool _wired;
+        private DescentCountdownService? _wiredFuse;
 
         /// <summary>The phase the fog's pulse is keeping time to (WPF _pulsePhase); null = no loops.</summary>
         private DescentFusePhase? _pulsePhase;
@@ -281,17 +282,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// (DescentService is WPF-only).</summary>
         private void Wire()
         {
-            if (_wired || App.DescentCountdown is not { } fuse) return;
-            _wired = true;
+            if (_wiredFuse != null || App.DescentCountdown is not { } fuse) return;
+            _wiredFuse = fuse;
             fuse.PhaseChanged += OnPhaseChanged;
             fuse.Tick += OnFuseTick;
         }
 
+        /// <summary>Unwire from the fuse that was wired, even if the static has been swapped since.</summary>
         private void Unwire()
         {
-            if (!_wired) return;
-            _wired = false;
-            if (App.DescentCountdown is not { } fuse) return;
+            if (_wiredFuse is not { } fuse) return;
+            _wiredFuse = null;
             fuse.PhaseChanged -= OnPhaseChanged;
             fuse.Tick -= OnFuseTick;
         }
@@ -667,16 +668,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <para>Idempotent per PHASE like the original: a repaint that did not move the phase leaves
         /// the loops alone, so they do not jump back to the top of their cycles. A new phase restarts
         /// them at that phase's tempo (<see cref="SpiralRoom.FogPulseSecondsFor"/>); the embers
-        /// restart with them, where WPF keeps them running - one shared token here.</para>
+        /// keep their own token and run on, as in WPF.</para>
         /// </summary>
         private void StartFogFx()
         {
             var phase = App.DescentCountdown?.LastAnnouncedPhase ?? DescentFusePhase.Dark;
             if (_fogFx != null && _pulsePhase == phase) return;
-            StopFogFx();
 
             if (!AllowAmbientLoops)
             {
+                StopFogFx();
                 // Reduced motion gets the LOOK and none of the clocks: the layered glow, the
                 // hairline and the bold digits are all still there, simply held still. The hero is
                 // information; only its heartbeat is decoration.
@@ -685,12 +686,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
 
+            // A new phase restarts only the pulse and the hairline; the embers keep their own clock
+            // and run on across phases, as WPF's idempotent _embers.Start() does.
+            Cancel(ref _fogFx);
+            _fogDigitsHost.RenderTransform = null;
             _emberHost.IsVisible = true;
+            _emberFx ??= new CancellationTokenSource();
+            _embers.Start(_emberFx.Token);   // idempotent; a running field is left running
+
             _pulsePhase = phase;
             _fogFx = new CancellationTokenSource();
             var token = _fogFx.Token;
 
-            _embers.Start(token);
             Breathe(_fogHairline, OpacityProperty, HairlineLo, HairlineHi, HairlineSeconds, token);
 
             // Half a breath in, half a breath out, on the host's whole RenderTransform.
@@ -710,6 +717,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             try
             {
                 Cancel(ref _fogFx);
+                Cancel(ref _emberFx);
                 _pulsePhase = null;
 
                 _fogDigitsHost.RenderTransform = null;
