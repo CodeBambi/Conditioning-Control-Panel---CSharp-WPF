@@ -609,6 +609,9 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
         {
             // Launchers and windows open something else; the page on screen keeps its pill.
             if (tab.Kind is NavTabKind.Tab or NavTabKind.Zone) SetActive(tab.Key, animate: true);
+            // WPF SectionTabStrip.Fx: the chosen pill rings once in the section hue.
+            if (tab.Kind is NavTabKind.Tab or NavTabKind.Zone && _section != null)
+                NavGlow.Once(PillFor(tab.Key), NavStripRules.Accent(_section), null, "pill-choose");
             if (focus) PillFor(tab.Key)?.Focus();
             TabRequested?.Invoke(tab);
         }

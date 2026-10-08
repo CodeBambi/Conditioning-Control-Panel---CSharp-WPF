@@ -380,6 +380,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
             }
             catch (Exception ex) { Log.Debug("Moved note failed: {E}", ex.Message); }
+            // Ring the place it moved to, after the page has laid out (WPF SectionChrome GlowNavTarget).
+            Dispatcher.UIThread.Post(() => GlowNavTarget(to.Tab), DispatcherPriority.Normal);
             return true;
         }
 
@@ -511,6 +513,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (Named<Border>("SectionWashLine") is { } line)
                     line.Background = NavPaint.Solid(NavRailRules.WithAlpha(hue, SectionChromeRules.SectionWashLineAlpha));
                 PaintDepthRail(hue);
+                PaintDepthHud(hue);
+                PaintSectionEdge(hue, NavRailRules.Ms(SectionChromeRules.SectionWashMs, global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.Level));
             }
             catch (Exception ex) { Log.Debug("PaintSectionWash failed: {E}", ex.Message); }
         }

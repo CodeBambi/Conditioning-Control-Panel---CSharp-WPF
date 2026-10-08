@@ -135,7 +135,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                 {
                     Layers = layers,
                     // Same order and values on both enums; the cast survives the Core dedupe.
-                    EdgeSide = (EdgeSide)(int)side,
+                    EdgeSide = side,
                     Tint = tint,
                     Intensity = CoreFx.EdgeParticleRules.StripIntensity,
                     DustDensity = CoreFx.EdgeParticleRules.StripDustDensity,
