@@ -298,6 +298,89 @@ namespace ConditioningControlPanel.Services
             Log.Information("Discord logout completed");
         }
 
+        /// <summary>
+        /// Map the active mod to the theme id the community bot uses to pick a voice for the post.
+        /// Community/custom mods (and anything we can't resolve) fall back to "default".
+        /// </summary>
+        public static string ModThemeId(string? activeModId)
+        {
+            try
+            {
+                return activeModId switch
+                {
+                    BuiltInMods.CCPDefaultId => "default",
+                    BuiltInMods.BambiSleepId => "bambi",
+                    BuiltInMods.SissyHypnoId => "sissy",
+                    BuiltInMods.DronificationId => "drone",
+                    BuiltInMods.LockedId => "circe",
+                    _ => "default"
+                };
+            }
+            catch
+            {
+                // Never throw: this runs inside the fire-and-forget share path.
+                return "default";
+            }
+        }
+
+        /// <summary>
+        /// Send achievement announcement to community Discord via server
+        /// </summary>
+        public async Task<bool> SendAchievementWebhookAsync(Achievement achievement, string name, string? unifiedId, Func<string?> authToken, string modThemeId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(unifiedId))
+                {
+                    Log.Warning("Achievement share skipped: no unified user id (sharing is on but the account isn't fully linked)");
+                    return false;
+                }
+
+                var payload = new
+                {
+                    type = "achievement",
+                    display_name = name,
+                    unified_id = unifiedId,
+                    achievement_name = achievement.Name,
+                    achievement_requirement = achievement.Requirement,
+                    image_name = achievement.ImageName,
+                    // New fields the bot composes mod-themed posts from; the legacy fields above
+                    // stay so servers that haven't rolled out yet keep working.
+                    achievement_id = achievement.Id,
+                    mod_id = modThemeId
+                };
+
+                var request = new HttpRequestMessage(HttpMethod.Post, "/discord/community-webhook")
+                {
+                    Content = JsonContent.Create(payload)
+                };
+                var token = authToken(); // read only past the unified-id check (a keyring read), as WPF did
+                if (!string.IsNullOrEmpty(token))
+                    request.Headers.Add("X-Auth-Token", token);
+
+                var response = await Http.SendAsync(request);
+                var responseText = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    Log.Information("Achievement shared to community: {Achievement} ({Status}, {Bytes} bytes)",
+                        achievement.Id, (int)response.StatusCode, responseText?.Length ?? 0);
+                    return true;
+                }
+                else
+                {
+                    Log.Warning("Achievement share failed: {Status} (body {Bytes} bytes)",
+                        (int)response.StatusCode, responseText?.Length ?? 0);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to share achievement to community");
+                return false;
+            }
+        }
+
         public void Dispose() => Http.Dispose();
 
         // ---- token + cache store (CoreSecrets) ----

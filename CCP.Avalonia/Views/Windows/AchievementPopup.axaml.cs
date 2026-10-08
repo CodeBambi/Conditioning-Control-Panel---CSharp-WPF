@@ -20,8 +20,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    reference it. Call shape is <c>new AchievementPopup(a.Name, a.FlavorText, a.ImageName)</c>.
     ///  - <c>DoubleAnimation</c> on Opacity becomes a <see cref="DoubleTransition"/> plus a plain
     ///    Opacity assignment - Avalonia animates through the property system, not a Storyboard.
-    ///  - <c>SystemParameters.WorkArea</c> becomes <c>Screens.Primary.WorkingArea</c>, which is only
-    ///    populated once the window has a platform handle, so placement moves to OnOpened.
+    ///  - <c>SystemParameters.WorkArea</c> + PassiveToastWindow become <see cref="PlacePassive"/>:
+    ///    Screens.Primary.WorkingArea in device pixels, then X11 override-redirect before Show().
     ///  - <c>MouseLeftButtonDown</c> becomes PointerPressed, wired in the constructor.
     ///  - <c>App.Logger</c> becomes Serilog's static <c>Log</c>.
     /// </summary>
@@ -61,9 +61,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             LoadAchievementImage(imageName);
 
-            // Never take the foreground - same focus-theft gap as the Pink Rush toast (ccp-bugs
-            // #1000). ponytail: needs Helpers.PassiveToastWindow (Win32 WS_EX_NOACTIVATE), wired
-            // when the per-platform equivalent lands. ShowActivated="False" is the portable half.
+            // Never take the foreground - same focus-theft gap as the Pink Rush toast (ccp-bugs #1000).
+            PlacePassive(this, 20);
 
             // Auto-close after 6 seconds
             _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
@@ -91,29 +90,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// Position the window in the bottom-right corner of the primary screen.
-        /// Screens is null until the window has a handle, so this runs on open rather than in the
-        /// constructor as WPF's SystemParameters.WorkArea allowed.
+        /// WPF PositionWindow + Helpers.PassiveToastWindow.Apply: bottom-right of the primary work area,
+        /// 20 DIP from its right edge and <paramref name="bottomDip"/> above its bottom, then
+        /// override-redirect - the X11 form of WS_EX_NOACTIVATE|TOOLWINDOW + HWND_TOPMOST: never takes
+        /// focus (clicks still arrive), no taskbar entry, above a fullscreen game. Must run before
+        /// Show(), so it is called from the constructor. Where the platform refuses (Wayland,
+        /// headless) the window is still placed and ShowActivated="False" is the remaining half.
         /// </summary>
-        protected override void OnOpened(EventArgs e)
+        internal static void PlacePassive(Window window, double bottomDip)
         {
-            base.OnOpened(e);
             try
             {
-                var workArea = Screens.Primary?.WorkingArea
-                    ?? throw new InvalidOperationException("no primary screen");
-
-                // Position in bottom-right corner with 20px margin
-                Position = new PixelPoint(
-                    workArea.Right - (int)Width - 20,
-                    workArea.Bottom - (int)Height - 20);
+                var screen = window.Screens.Primary ?? throw new InvalidOperationException("no primary screen");
+                // The screen's scaling, not DesktopScaling: before Show() that still reads 1 and only
+                // becomes the screen's after the move (live: a 400x200 toast shrank to 223x112).
+                if (!Platform.X11Overlay.SetOverrideRedirect(window,
+                        CornerRect(screen.WorkingArea, screen.Scaling, window.Width, window.Height, bottomDip), passive: true))
+                    Log.Debug("{Toast}: no override-redirect on this platform; placed only", window.GetType().Name);
             }
-            catch
+            catch (Exception ex)
             {
                 // Fallback: centre on screen, as the WPF original did.
-                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                Log.Debug("{Toast}: placement failed, centring: {E}", window.GetType().Name, ex.Message);
+                window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
         }
+
+        /// <summary>The toast's rect in device pixels: WorkingArea is pixels, Width/Height are DIPs, so
+        /// both are scaled (a raw subtraction pushed the toast off the right edge on a 1.79 screen).</summary>
+        internal static PixelRect CornerRect(PixelRect workArea, double scaling, double width, double height, double bottomDip)
+            => new((int)(workArea.Right - (width + 20) * scaling), (int)(workArea.Bottom - (height + bottomDip) * scaling),
+                   (int)Math.Round(width * scaling), (int)Math.Round(height * scaling));
 
         /// <summary>
         /// The WPF chain, step for step: the mod's override first (probing the shipped copy first
@@ -126,13 +133,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var image = this.FindControl<Image>("AchievementImage");
             if (image == null || string.IsNullOrWhiteSpace(imageName)) return;
 
-            var art = Helpers.ModArt.TryLoad($"achievements/{imageName}");
+            // A name with a folder in it ("skills/milestone_rewards.png") is resolved as given (WPF :91).
+            var relative = imageName.Contains('/') ? imageName : $"achievements/{imageName}";
+            var art = Helpers.ModArt.TryLoad(relative);
             if (art != null) { image.Source = art; return; }
 
             try
             {
                 var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
-                                        "Resources", "achievements", imageName);
+                                        "Resources", relative.Replace('/', Path.DirectorySeparatorChar));
                 if (File.Exists(path)) image.Source = new Bitmap(path);
                 else Log.Warning("Achievement image not found: {Name}", imageName);
             }

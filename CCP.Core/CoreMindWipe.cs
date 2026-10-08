@@ -49,6 +49,55 @@ namespace ConditioningControlPanel
         /// <summary>How many clips the service currently has to choose from.</summary>
         public static volatile Func<int>? ClipCountProvider;
 
+        /// <summary>Start the timed service (frequency per hour, 0..1 volume): WPF MindWipeService.Start.</summary>
+        public static volatile Action<double, double>? StartProvider;
+
+        /// <summary>Stop the service, any clip still playing and the loop: WPF MindWipeService.Stop (panic relies on it).</summary>
+        public static volatile Action? StopProvider;
+
+        /// <summary>True while the timed service runs.</summary>
+        public static volatile Func<bool>? IsRunningProvider;
+
+        public static void Start(double frequencyPerHour, double volume)
+        {
+            try { StartProvider?.Invoke(frequencyPerHour, volume); } catch { }
+        }
+        public static void Stop() { try { StopProvider?.Invoke(); } catch { } }
+        public static bool IsRunning
+        {
+            get { try { return IsRunningProvider?.Invoke() ?? false; } catch { return false; } }
+        }
+
+        /// <summary>What the service should do when its GLOBAL flags change (ccp-bugs #1304). Moved
+        /// unchanged from WPF <c>MindWipeRunRule</c>, which now delegates here. PURE.</summary>
+        public readonly record struct RunPlan(bool Start, bool Stop, bool StartLoop, bool StopLoop)
+        {
+            public bool IsNothing => !Start && !Stop && !StartLoop && !StopLoop;
+        }
+
+        public static RunPlan ForFlags(bool engineRunning, bool sessionRunning, bool enabled, bool loop,
+            bool serviceRunning, bool looping)
+        {
+            if (sessionRunning) return default;
+            if (!enabled) return new RunPlan(false, serviceRunning || looping, false, false);
+            if (!engineRunning) return looping ? new RunPlan(false, false, false, true) : default;
+            return new RunPlan(!serviceRunning, false, loop && !looping, !loop && looping);
+        }
+
+        /// <summary>WPF <c>MindWipeRunRule.ApplyToService</c> over the seams: call after anything writes
+        /// <c>MindWipeEnabled</c> or <c>MindWipeLoop</c>.</summary>
+        public static void ApplyRunRule()
+        {
+            var s = CoreSettings.Current;
+            var plan = ForFlags(CoreSession.IsEngineRunning, CoreSession.IsSessionRunning, s.MindWipeEnabled,
+                s.MindWipeLoop, IsRunning, IsLooping);
+            var volume = s.MindWipeVolume / 100.0;
+            if (plan.Stop) Stop();
+            if (plan.StopLoop) StopLoop();
+            if (plan.Start) Start(s.MindWipeFrequency, volume);
+            if (plan.StartLoop) StartLoop(volume);
+        }
+
         public static void TriggerOnce() { try { TriggerOnceProvider?.Invoke(); } catch { } }
         public static void StartLoop(double volume) { try { StartLoopProvider?.Invoke(volume); } catch { } }
         public static void StopLoop() { try { StopLoopProvider?.Invoke(); } catch { } }

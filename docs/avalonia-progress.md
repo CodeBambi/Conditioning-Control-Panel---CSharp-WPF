@@ -1321,3 +1321,21 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/spiral-overlay: +599
 - Spiral overlay on Avalonia: per-monitor click-through windows, background decode, opacity curve shared with WPF via Core SpiralFrames, engine/session/panic wiring.
+
+## avalonia-port/rows-pink-mindwipe: +592
+- Mind Wipe plays on Linux (LibVLC, WPF 120 ms overlap loop measured gapless); Core CoreMindWipe run rule shared with WPF; pink tint follows the dashboard tile.
+
+## avalonia-port/rows-popups-unlock: +301
+- Achievement and item-unlocked passive toasts (X11 override-redirect, device-pixel placement), chime, Discord share in Core; rows wired.
+
+## avalonia-port/rows-floating-text: +357
+- FloatingWord overlay (WPF keyframes) thrown by friends drawer actions; bouncing text corner_hit achievement and real-time topmost re-assert (measured 0.4-0.7 s).
+
+## avalonia-port/launcher-fx: +1025
+- Launcher FX on one visibility/focus-gated frame clock: spirals and ambient, hover lift/tilt/glow, exit beat with guard, edge glint, fade, sounds and melody (Core).
+
+## avalonia-port/rows-splash-startup: +222
+- Splash fronts real launches with WPF steps/percentages; failed startup logged and exits non-zero; timing within noise of no-splash.
+
+## avalonia-port/rows-feat-bubble-count: +200
+- Bubble Count waits behind video / lock card / quiz like WPF TriggerGame; panic and stop drop the waiting game.
