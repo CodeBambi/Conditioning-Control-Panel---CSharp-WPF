@@ -40,6 +40,7 @@ public sealed partial class AccountSeedTests
 
         // The ack rides a sync: settled, bonus healed, and the ledger is not touched by it.
         wire.SyncReply = """{"success":true,"descent_migration":{"completed":true,"choice":"cycle"}}""";
+        var ledgerBefore = (s.PlayerLevel, s.PlayerXP, s.HighestLevelEver);
         sync.UtcNow = () => T0.AddMinutes(1);                  // past the cooldown
         Assert.True(await sync.PushAsync("test"));
         Assert.True(s.DescentMigrationCompleted);
@@ -47,6 +48,7 @@ public sealed partial class AccountSeedTests
         Assert.Equal(DescentCycleXp.CycleXpBonus, s.DescentCycleXpBonus);
         Assert.Equal(1, s.DescentCycle);
         Assert.Equal(level, s.PlayerLevel);
+        Assert.Equal(ledgerBefore, (s.PlayerLevel, s.PlayerXP, s.HighestLevelEver));   // the ack never moves the ledger
 
         before = s.PlayerXP;
         ProgressionBank.Add(100, "Session");
