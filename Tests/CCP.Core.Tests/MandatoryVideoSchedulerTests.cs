@@ -266,6 +266,41 @@ public sealed class MandatoryVideoSchedulerTests
     }
 
     [Fact]
+    public void Length_filter_picks_inside_the_range_and_counts_what_it_emptied()
+    {
+        // WPF RefillVideoQueues' duration filter + #1352 funnel counts; a clip with no cached length is kept.
+        var s = CoreSettings.Current;
+        var (min, max) = (s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds);
+        var lengths = new Dictionary<string, double> { ["/v/short.mp4"] = 20, ["/v/mid.mp4"] = 90, ["/v/long.mp4"] = 400 };
+        var files = new[] { "/v/short.mp4", "/v/mid.mp4", "/v/long.mp4", "/v/unparsed.mp4" };
+        try
+        {
+            (s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds) = (52, 170);
+            var host = new Host();
+            var v = new MandatoryVideoScheduler(host, new FakeClock(), () => files)
+                { DurationOf = p => lengths.TryGetValue(p, out var d) ? d : null };
+            var picks = new HashSet<string> { v.PickNext()!, v.PickNext()! };
+            Assert.Equal(new HashSet<string> { "/v/mid.mp4", "/v/unparsed.mp4" }, picks);
+            Assert.Equal((4, 2), (v.LastFunnelEnabled, v.LastFunnelDuration));
+
+            // The filter keeps none of the enabled clips: no pick, and the dialog can blame the filter.
+            lengths["/v/unparsed.mp4"] = 30;
+            (s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds) = (500, 0);
+            var w = new MandatoryVideoScheduler(host, new FakeClock(), () => files) { DurationOf = v.DurationOf };
+            var raised = 0;
+            w.NoVideos += () => raised++;
+            Assert.False(w.Trigger());
+            Assert.Equal(1, raised);
+            Assert.True(NoVideosReason.LengthFilterEmptied(w.LastFunnelEnabled, w.LastFunnelDuration));
+            Assert.Equal("8m 20s - ∞", NoVideosReason.FormatRange(s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds));
+
+            (s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds) = (0, 0);   // unset keeps everything
+            Assert.Equal(4, MandatoryVideoScheduler.KeepByLength(files, 0, 0, v.DurationOf).Count);
+        }
+        finally { (s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds) = (min, max); }
+    }
+
+    [Fact]
     public void Watch_credit_goes_to_progression_from_one_second()
     {
         var credited = new List<double>();

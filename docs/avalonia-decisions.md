@@ -580,3 +580,18 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/RemoteRelayTests.cs` (Remote_haptics_play_and_every_stop_path_ends_them,
   A_command_in_flight_never_outlives_a_panic_or_a_leave), `Tests/CCP.Avalonia.Tests/RemoteHapticPanicTests.cs`;
   each fail-proven. WPF path compile-verified only (Windows suite does not run on Linux).
+
+## 2026-10-08: VideoMetadataCache moves to Core with a managed LibVLCSharp reference (rows-feat-video)
+- Need: the mandatory-video length filter (min/max) at selection time and the #1352 "length filter emptied the library"
+  dialog (854ac954a) need clip lengths. WPF reads them from `VideoMetadataCache` (LibVLC parse, #750 dispose-grace
+  reaper, `video_metadata.json` keyed on path+size+mtime).
+- Option A (chosen): git mv `VideoMetadataCache` (and `NoVideosReason`) to `CCP.Core/Services/Video/`, edits limited to
+  `App.UserDataPath` -> `CorePaths.UserData` (the same path) and `App.Logger` -> Serilog `Log`; Core gains the managed
+  `LibVLCSharp` package only, pinned at 3.8.5 = what `LibVLCSharp.WPF` 3.8.5 resolves in the WPF head, so WPF ships the
+  same assembly; the Avalonia head's direct 3.10.1 wins there. No native VideoLAN package in Core.
+- Option B (rejected): a Core `Func<string,double?>` seam fed only by lengths of clips already played; the minimum would
+  only apply after a clip had played once, and a second parse path would drift from WPF's crash fixes.
+- Why A: one copy of the crash-sensitive parse code; Core already carries managed-only wrappers for native libraries
+  (Vosk, OpenCvSharp4, OnnxRuntime.Managed). Core `MandatoryVideoScheduler.KeepByLength` applies WPF's rule (a clip with
+  no cached length is kept and parsed for the next refill); `DurationOf` is set by the Avalonia overlay on the shared
+  LibVLC. WPF VideoService keeps its own filter and constructs the cache as before.

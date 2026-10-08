@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using LibVLCSharp.Shared;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -20,7 +21,7 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class VideoMetadataCache
     {
-        private static string CacheFilePath => Path.Combine(App.UserDataPath, "video_metadata.json");
+        private static string CacheFilePath => Path.Combine(CorePaths.UserData, "video_metadata.json");
 
         private const int ParseTimeoutMs = 5000;
         /// <summary>
@@ -115,7 +116,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("VideoMetadataCache: parse failed for {Path}: {Error}", path, ex.Message);
+                Log.Debug("VideoMetadataCache: parse failed for {Path}: {Error}", path, ex.Message);
                 return null;
             }
             finally
@@ -144,7 +145,7 @@ namespace ConditioningControlPanel.Services
                 _dirty = true;
                 ScheduleSave();
             }
-            catch (Exception ex) { App.Logger?.Debug("VideoMetadataCache: StoreDuration failed for {Path}: {Error}", path, ex.Message); }
+            catch (Exception ex) { Log.Debug("VideoMetadataCache: StoreDuration failed for {Path}: {Error}", path, ex.Message); }
         }
 
         private async Task<double?> ParseDurationAsync(string path, string key)
@@ -174,7 +175,7 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 _unparseable[key] = 0;
-                App.Logger?.Debug("VideoMetadataCache: parse failed for {Path}: {Error}", path, ex.Message);
+                Log.Debug("VideoMetadataCache: parse failed for {Path}: {Error}", path, ex.Message);
             }
             finally
             {
@@ -200,7 +201,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("VideoMetadataCache: ParseStop failed: {Error}", ex.Message);
+                Log.Debug("VideoMetadataCache: ParseStop failed: {Error}", ex.Message);
             }
 
             _condemned.Enqueue(new CondemnedMedia(media, DateTime.UtcNow.AddMilliseconds(DisposeGraceMs)));
@@ -234,7 +235,7 @@ namespace ConditioningControlPanel.Services
                     {
                         if (++item.Deferrals >= MaxDisposeDeferrals)
                         {
-                            App.Logger?.Debug("VideoMetadataCache: leaking a media whose parse never settled");
+                            Log.Debug("VideoMetadataCache: leaking a media whose parse never settled");
                             continue;
                         }
                         item.NotBeforeUtc = now.AddMilliseconds(DisposeGraceMs);
@@ -242,7 +243,7 @@ namespace ConditioningControlPanel.Services
                         continue;
                     }
                     try { item.Media.Dispose(); }
-                    catch (Exception ex) { App.Logger?.Debug("VideoMetadataCache: media dispose failed: {Error}", ex.Message); }
+                    catch (Exception ex) { Log.Debug("VideoMetadataCache: media dispose failed: {Error}", ex.Message); }
                 }
                 foreach (var c in carry) _condemned.Enqueue(c);
             }
@@ -288,7 +289,7 @@ namespace ConditioningControlPanel.Services
                 _reaper ??= new Timer(_ =>
                 {
                     try { ReapCondemned(); }
-                    catch (Exception ex) { App.Logger?.Debug("VideoMetadataCache: reaper failed: {Error}", ex.Message); }
+                    catch (Exception ex) { Log.Debug("VideoMetadataCache: reaper failed: {Error}", ex.Message); }
                 }, null, ReaperPeriodMs, ReaperPeriodMs);
             }
         }
@@ -303,7 +304,7 @@ namespace ConditioningControlPanel.Services
                     _saveTimer = new Timer(_ =>
                     {
                         try { Save(); }
-                        catch (Exception ex) { App.Logger?.Debug("VideoMetadataCache: deferred save failed: {Error}", ex.Message); }
+                        catch (Exception ex) { Log.Debug("VideoMetadataCache: deferred save failed: {Error}", ex.Message); }
                     }, null, SaveDebounceMs, Timeout.Infinite);
                 }
                 else
@@ -335,7 +336,7 @@ namespace ConditioningControlPanel.Services
                 if (!_dirty) return;
                 try
                 {
-                    Directory.CreateDirectory(App.UserDataPath);
+                    Directory.CreateDirectory(CorePaths.UserData);
                     var snapshot = _byKey.ToDictionary(kv => kv.Key, kv => kv.Value);
                     var json = JsonConvert.SerializeObject(snapshot, Formatting.Indented);
                     File.WriteAllText(CacheFilePath, json);
@@ -343,7 +344,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "VideoMetadataCache: save failed");
+                    Log.Warning(ex, "VideoMetadataCache: save failed");
                 }
             }
         }
@@ -360,7 +361,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "VideoMetadataCache: load failed");
+                Log.Warning(ex, "VideoMetadataCache: load failed");
             }
         }
 
