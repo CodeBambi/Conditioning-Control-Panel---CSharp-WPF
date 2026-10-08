@@ -1333,3 +1333,13 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/launcher-fx: +1025
 - Launcher FX on one visibility/focus-gated frame clock: spirals and ambient, hover lift/tilt/glow, exit beat with guard, edge glint, fade, sounds and melody (Core).
+
+## avalonia-port/rows-splash-startup: +222
+- Splash fronts real launches with WPF steps/percentages; failed startup logged and exits non-zero; timing within noise of no-splash.
+
+## avalonia-port/rows-feat-bubble-count: +200
+- Bubble Count waits behind video / lock card / quiz like WPF TriggerGame; panic and stop drop the waiting game.
+
+## avalonia-port/rows-lockdown-tab: +325
+- Lockdown title-bar badge wired (clock, hide mask, click/Enter -> tab); Emergency Exit breath (off under Photosafe, motion Off, minimised); quest hint + Hide-clock toggle.
+- 3 shell tests, 9 itemised fail-proofs; live evidence rows-lockdown-tab/; row stays stub (theme, Possession, Dose, Strict greying, EE games, system keys).
