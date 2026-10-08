@@ -1300,3 +1300,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-subliminal: +112
 - feat-subliminal whisper: new whisper cuts the last; Stop/panic silence it and drop pending card/Reset (Core CoreAudio.PlayStoppable).
+
+## avalonia-port/rows-emi-codex-book: +357
+- EmiBook deck/demos/pixel canvas to Core (WPF blits via EmiPixelBitmap); Avalonia book: real deck, demo clock only while open, reduced-motion still, Complete Guide; codex door opens at the bookmark.
