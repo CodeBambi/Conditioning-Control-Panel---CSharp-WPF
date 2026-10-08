@@ -242,6 +242,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // (MainShellWindow.ToolTipHygiene.cs).
             CloseStaleToolTip();
             OnTabShown(tab);
+            // Home's RECENT row fills from every destination, not only chip clicks (WPF 7.1.5).
+            NoteDestinationOpened(tab);
 
             // Nav rework: the strip, the breadcrumb, the window title and last-tab memory, then
             // the lit section row. Last, so they run whatever OnTabShown did.
