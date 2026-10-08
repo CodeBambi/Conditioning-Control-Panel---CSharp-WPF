@@ -256,7 +256,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 //   private bool _wasAutonomyRunningBeforeMinimize
 //   private bool _wasAvatarUnmutedBeforeMinimize
 //   private Dictionary<string, Image> _achievementImages
-//   private PinkRushPopup? _pinkRushPopup
+//   (_pinkRushPopup: PinkRushHost.Popup)
 //   private Window? _luckyProcPopup
 //   private DispatcherTimer? _rampTimer
 //   private DateTime _rampStartTime
