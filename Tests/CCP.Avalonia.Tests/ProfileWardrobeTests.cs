@@ -192,8 +192,18 @@ public sealed class ProfileWardrobeTests
                 Assert.True(((Border)pins[0]).Focus(NavigationMethod.Tab));
                 dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
                 Assert.Equal(new[] { "plastic_initiation" }, dialog.Result.PinnedAchievements);
+                var accent = (Border)dialog.FindControl<WrapPanel>("AccentHost")!.Children[1];
+                Assert.True(accent.Focus(NavigationMethod.Tab));
+                dialog.KeyPress(Key.Space, RawInputModifiers.None, PhysicalKey.Space, null);
+                Assert.Equal(ProfileCosmetics.AccentSwatches[0], dialog.Result.Accent);
             }
             finally { dialog.Close(); }
+
+            // Save sanitizes like WPF SanitizeOwn: an id this build does not ship is not saved or pushed.
+            var clean = MainShellWindow.SanitizeOwnWardrobe(new ProfileCosmetics { BannerId = "gone_banner", AvatarId = "gone_avatar" });
+            Assert.Null(clean.BannerId);
+            Assert.Null(clean.AvatarId);
+            Assert.Equal("bambi_neon_den", MainShellWindow.SanitizeOwnWardrobe(new ProfileCosmetics { BannerId = "bambi_neon_den" }).BannerId);
 
             // The editor stage paints the chosen banner, cropped from the top like the hero.
             var editor = new WardrobeEditorDialog(new ProfileCosmetics { BannerId = "bambi_neon_den", AvatarDeco = Deco }, null);

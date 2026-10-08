@@ -299,7 +299,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 Child = swatch
             };
             ToolTip.SetTip(tile, hex ?? Loc.Get("profile_customize_none"));
-            tile.PointerReleased += (_, _) => SelectAccent(key);
+            Clickable(tile, () => SelectAccent(key));
 
             _accentTiles[key] = tile;
             return tile;
@@ -352,7 +352,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     TextTrimming = TextTrimming.CharacterEllipsis
                 }
             };
-            row.PointerReleased += (_, _) => SelectTitle(key);
+            Clickable(row, () => SelectTitle(key));
 
             _titleRows[key] = row;
             return row;
@@ -537,7 +537,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     Foreground = Brushes.White, FontSize = 11, FontWeight = FontWeight.SemiBold
                 }
             };
-            tab.PointerReleased += (_, _) => SelectMod(mod);
+            Clickable(tab, () => SelectMod(mod));
             _modTabs[mod] = tab;
             return tab;
         }
@@ -624,7 +624,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // Item names are plain English proper nouns in the registry - not localized.
             // A locked tile teases the gate instead of naming the item.
             ToolTip.SetTip(tile, locked ? Loc.GetF("profile_customize_wardrobe_locked_tip", GateName(item)) : item.Name);
-            tile.PointerReleased += (_, _) => ToggleWardrobeItem(item);
+            Clickable(tile, () => ToggleWardrobeItem(item));
 
             _wardrobeTiles[item.Id] = tile;
             return tile;
