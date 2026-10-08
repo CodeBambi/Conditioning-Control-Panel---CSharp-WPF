@@ -3,6 +3,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.LauncherWindow"
         Title="CC Labs"
         Icon="avares://CCP.Avalonia/Resources/app.ico"
@@ -140,6 +141,67 @@
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
         </Style>
     </Window.Styles>
+
+    <!-- Backdrop, event layers and edge: WPF LauncherWindow.xaml:235-334 and 590-635; LauncherWindow.Fx.cs drives them. -->
+    <Panel x:Name="RootGrid">
+    <Border IsHitTestVisible="False">
+        <Border.Background>
+            <RadialGradientBrush GradientOrigin="28%,22%" Center="28%,22%" RadiusX="98%" RadiusY="92%">
+                <GradientStop Color="#FF2C1450" Offset="0"/>
+                <GradientStop Color="#FF1C1233" Offset="0.42"/>
+                <GradientStop Color="#FF100A1E" Offset="0.72"/>
+                <GradientStop Color="#FF06030E" Offset="1"/>
+            </RadialGradientBrush>
+        </Border.Background>
+    </Border>
+    <Panel x:Name="SpiralLayer" Width="900" Height="900" HorizontalAlignment="Left" VerticalAlignment="Center"
+           Margin="-230,0,0,0" Opacity="0.11" IsHitTestVisible="False" RenderTransformOrigin="50%,50%">
+        <Path x:Name="SpiralPath" StrokeThickness="2.4" StrokeLineCap="Round">
+            <Path.Stroke>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource FxParticleColor}" Offset="1"/>
+                </LinearGradientBrush>
+            </Path.Stroke>
+        </Path>
+    </Panel>
+    <Panel x:Name="SpiralSmall" Width="560" Height="560" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+           Margin="0,0,-120,-170" Opacity="0.065" IsHitTestVisible="False" RenderTransformOrigin="50%,50%">
+        <Path x:Name="SpiralSmallPath" StrokeThickness="2" StrokeLineCap="Round">
+            <Path.Stroke>
+                <LinearGradientBrush StartPoint="100%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="{DynamicResource FxParticleColor}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource FxGlowColor}" Offset="1"/>
+                </LinearGradientBrush>
+            </Path.Stroke>
+        </Path>
+    </Panel>
+    <Border x:Name="GlowLayer" Opacity="0.36" Margin="-28" IsHitTestVisible="False">
+        <Border.Background>
+            <RadialGradientBrush GradientOrigin="72%,18%" Center="72%,18%" RadiusX="58%" RadiusY="52%">
+                <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                <GradientStop Color="#00000000" Offset="1"/>
+            </RadialGradientBrush>
+        </Border.Background>
+    </Border>
+    <Border Opacity="0.22" Margin="-28" IsHitTestVisible="False">
+        <Border.Background>
+            <RadialGradientBrush GradientOrigin="16%,82%" Center="16%,82%" RadiusX="48%" RadiusY="46%">
+                <GradientStop Color="{DynamicResource FxParticleColor}" Offset="0"/>
+                <GradientStop Color="#00000000" Offset="1"/>
+            </RadialGradientBrush>
+        </Border.Background>
+    </Border>
+    <Border IsHitTestVisible="False">
+        <Border.Background>
+            <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="82%" RadiusY="82%">
+                <GradientStop Color="#00000000" Offset="0.42"/>
+                <GradientStop Color="#66000000" Offset="0.78"/>
+                <GradientStop Color="#C4000000" Offset="1"/>
+            </RadialGradientBrush>
+        </Border.Background>
+    </Border>
+    <fx:AmbientFxCanvas x:Name="Ambient" Margin="-12"/>
 
     <Grid x:Name="ContentRoot" RowDefinitions="48,*,52">
 
@@ -286,5 +348,37 @@
                 <TextBlock Text="{loc:Str launcher_skip_to_panel}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
             </CheckBox>
         </Border>
+
+        <!-- Lockdown veil (WPF LauncherWindow.xaml:597): the launcher waits, it never argues. Over every
+             row, title bar included; LauncherWindow.Veil.cs toggles it, breathes it and swallows keys. -->
+        <Border x:Name="LockdownVeil" Grid.RowSpan="3" Background="#D9070310" IsVisible="False" Focusable="True">
+            <Panel>
+                <Border x:Name="LockdownVignette" IsHitTestVisible="False"/>
+                <TextBlock x:Name="LockdownText" Text="{loc:Str launcher_lockdown_veil}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontFamily="Fredoka, Segoe UI" FontSize="22" Foreground="{DynamicResource TextLightBrush}"
+                           TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center"/>
+            </Panel>
+        </Border>
     </Grid>
+
+    <Canvas x:Name="ShockwaveCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
+    <fx:AmbientFxCanvas x:Name="BurstLayer" IsHitTestVisible="False"/>
+
+    <Panel x:Name="EdgeHost" IsHitTestVisible="False">
+        <Border x:Name="EdgeGlow" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="10" CornerRadius="8" Opacity="0.3">
+            <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
+        </Border>
+        <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="4" CornerRadius="8" Opacity="0.85"/>
+        <Border x:Name="EdgeGlint" BorderThickness="4" CornerRadius="8" Opacity="0">
+            <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%" TransformOrigin="50%,50%">
+                    <GradientStop Color="#00FFFFFF" Offset="0.40"/>
+                    <GradientStop Color="#F0FFFFFF" Offset="0.50"/>
+                    <GradientStop Color="#00FFFFFF" Offset="0.60"/>
+                </LinearGradientBrush>
+            </Border.BorderBrush>
+        </Border>
+    </Panel>
+    </Panel>
 </Window>

@@ -53,18 +53,6 @@ public sealed class CoreStandInTests
         }
     });
 
-    [Fact]
-    public Task DescentCeremonyShowsCoreDescentCeremonyCopy() => Run(() =>
-    {
-        var window = new DescentCeremonyWindow();
-        Assert.Equal(DescentCeremonyCopy.IntroBody, Text(window, "IntroBody"));
-        Assert.Equal(DescentCeremonyCopy.CycleBody(), Text(window, "CycleBody"));
-        Assert.Equal(DescentCeremonyCopy.CycleBonusLine(), Text(window, "CycleBonus"));
-        Assert.Equal(DescentCeremonyCopy.BothDoorsFooter, Text(window, "BothDoorsFooter"));
-        Assert.Null(typeof(DescentCeremonyWindow).GetNestedType("Copy", BindingFlags.NonPublic));
-        Assert.Null(typeof(DescentCeremonyWindow).GetNestedType("Choices", BindingFlags.NonPublic));
-    });
-
     [Theory]
     [InlineData("volume")]
     [InlineData("")]

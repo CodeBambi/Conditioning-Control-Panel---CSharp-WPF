@@ -129,6 +129,11 @@ export async function mount(ctx) {
     lastBoardLabel = label; ui['run-hud'].hidden = !label;
     ui['run-hud'].querySelector('b').textContent = label;
     ui['run-hud'].querySelector('span').textContent = board ? (board.breather ? 'A LITTLE BREATHER' : (board.mechanics || []).join(' + ').toUpperCase()) : '';
+    // The board's name is an arrival card, not chrome: it shows as the board
+    // lands and fades out (station.css bo-run-hud-arrive). Restarting the
+    // animation needs the class off for one style pass.
+    ui['run-hud'].classList.remove('is-arriving'); void ui['run-hud'].offsetWidth;
+    if (label) ui['run-hud'].classList.add('is-arriving');
   }
   function makeGame(run = null) {
     game?.dispose(); constructingGame = true;

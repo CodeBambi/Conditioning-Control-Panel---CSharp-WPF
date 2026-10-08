@@ -52,10 +52,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///     explains at length why it could not - so nothing here touches <c>controls:WebHost</c>.</item>
     ///   <item><b>No X11Overlay call.</b> Nothing in this window was click-through or restacked
     ///     against a sibling; <c>Topmost</c> in the markup is the whole z-order story.</item>
-    ///   <item><b>The deck, the demos, the glyphs and the fonts are stubs</b>, each marked
-    ///     <c>ponytail:</c> below. <see cref="Book"/> carries six real cards' worth of placeholder
-    ///     data keyed on the REAL loc stems, so every string on screen is the shipped English (or
-    ///     the reader's language), never a raw key.</item>
+    ///   <item><b>The deck and the demos are the real ones</b>: <c>EmiBookCards</c>,
+    ///     <c>EmiBookDemos</c> and <c>EmiPixelCanvas</c> live in Core; this window blits the buffer
+    ///     into its own <c>WriteableBitmap</c>. The glyphs and the fonts are still stubs, each marked
+    ///     <c>ponytail:</c> below.</item>
     ///   <item><b>The emphasis parser is the real one.</b> <c>EmiBookText.Parse</c> is already in
     ///     Core, so the <c>*asterisk*</c> runs are ported rather than approximated.
     ///     <c>EmiBookLayout.Place</c> makes the side/width decision.</item>
@@ -238,9 +238,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
             // NOT in the WPF original, where OpenBook is always what fills the panel. Here the
             // render harness constructs the window and screenshots it, so an unpopulated book is an
-            // empty pink box that passes.
-            SelectCard(0, speak: false);
-            PaintStill();
+            // empty pink box that passes. It does not move the bookmark: nothing was opened.
+            _canvas.Committed += OnCommitted;
+            _stage.Source = _bitmap;
+            SelectCard(0, speak: false, note: false);
         }
 
         private void OnOwnerMoved(object? sender, EventArgs e)
@@ -338,9 +339,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static readonly FontFamily FaceFont =
             new("Noto Sans Mono, DejaVu Sans Mono, Consolas, monospace");
 
+        /// <summary>WPF BtnCompleteGuide: the website manual (EmiCodex.OpenManualInBrowser). Test seam.</summary>
+        internal static Action OpenManual = ConditioningControlPanel.Avalonia.Views.Windows.Codex.OpenManualInBrowser;
+
         private void WireControls()
         {
             _btnClose.Click += (_, _) => CloseBook();
+            this.FindControl<Button>("BtnCompleteGuide")!.Click += (_, _) => OpenManual();
             _btnPrev.Click += (_, _) => Step(-1);
             _btnNext.Click += (_, _) => Step(+1);
             _btnGo.Click += (_, _) => Go();
@@ -367,10 +372,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// bare <see cref="Kill"/> here would fold the window and leave the desk holding a closed
         /// one, and the next <c>?</c> click would then re-open a dead panel.
         ///
-        /// <para>ponytail: the WPF button calls <c>EmiBook.Close()</c>, whose two remaining halves
-        /// are still blocked - <c>EmiState.BookCard</c> (the bookmark) and <c>EmiBook.SideChanged</c>
-        /// (her bubble dodging away from the panel). Both live in
-        /// ConditioningControlPanel/Services/EmiDesk/EmiState.cs and EmiBook.cs.</para>
+        /// <para>ponytail: the WPF button calls <c>EmiBook.Close()</c>; the bookmark half is
+        /// <c>EmiState.NoteBookCard</c> (Core, written on every card). Still missing:
+        /// <c>EmiBook.SideChanged</c> (her bubble dodging away from the panel, EmiBook.cs).</para>
         /// </summary>
         private void CloseBook()
         {
@@ -391,7 +395,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             if (_closingForGood) return;
             try
             {
-                SelectCard(Book.IndexOf(cardId) is var i and >= 0 ? i : 0, speak: false);
+                SelectCard(EmiBookCards.IndexOf(cardId) is var i and >= 0 ? i : 0, speak: false);
 
                 PlaceWindow();
                 if (!IsVisible)
@@ -420,7 +424,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             try
             {
-                int i = Book.IndexOf(cardId);
+                int i = EmiBookCards.IndexOf(cardId);
                 if (i < 0) return;
                 SelectCard(i, speak: true);
             }
@@ -584,90 +588,107 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         // ---------------------------------------------------------------- the clock
 
+        /// <summary>The demo buffer every painter repaints; blitted into <see cref="_bitmap"/> on Commit.</summary>
+        private readonly EmiPixelCanvas _canvas = new(BufW, BufH);
+        private readonly WriteableBitmap _bitmap = new(new PixelSize(BufW, BufH), new Vector(96, 96), PixelFormats.Bgra8888, AlphaFormat.Opaque);
+        private EmiDemoPainter? _painter;
+        private DispatcherTimer? _clock;
+        private long _since = -1;
+
+        /// <summary>The clock the loop reads. Tests step it; WPF's Stopwatch in effect.</summary>
+        internal static TimeProvider Time { get; set; } = TimeProvider.System;
+
+        /// <summary>True while the 30 fps clock is running (tests and P01 checks).</summary>
+        internal bool ClockRunning => _clock?.IsEnabled == true;
+
+        /// <summary>The card's painter, or null when its loop was dropped.</summary>
+        internal EmiDemoPainter? Painter => _painter;
+
         /// <summary>
-        /// ponytail: needs EmiBookDemos / EmiDemoPainter / EmiPixelCanvas (WPF head,
-        /// Services/EmiDesk/), wired when they move to Core.
-        ///
-        /// <para>AUDITED 2026-09-04, and the blocker is THREE MEMBERS, not seven files.
-        /// EmiBookDemos.cs and its six partials (1,879 lines) name no head type at all, and
-        /// EmiPixelCanvas is a <c>uint[]</c> buffer with Clear / Px / Rect / RectA / Line and the
-        /// 200-line EmiPix helper on top of it - all pure. Its whole head coupling is the
-        /// <c>WriteableBitmap</c> field, the <c>Source</c> property and <c>Commit()</c>'s
-        /// <c>WritePixels(Int32Rect ...)</c>. Leave the buffer in Core and let each head wrap it in
-        /// its own bitmap - this window already builds an Avalonia WriteableBitmap and blows it up
-        /// in <see cref="PaintStill"/>, so the wrapper is written.</para>
-        ///
-        /// <para>The original owns ONE 30 fps DispatcherTimer driving whichever painter the current
-        /// card holds; with no painter on this head there is nothing for a clock to drive, so the
-        /// stage gets the one placeholder still frame <see cref="PaintStill"/> draws and no timer
-        /// is created at all.</para>
+        /// One 30 fps timer for the whole book (WPF EmiBookWindow.xaml.cs:453). It drives whichever
+        /// painter the current card owns; under reduced motion the painter's still frame and no clock.
         /// </summary>
         private void StartClock()
         {
-            if (!AllowAmbientLoops)
-            {
-                PaintStill();
-                return;
-            }
-            PaintStill();
-        }
-
-        /// <inheritdoc cref="StartClock"/>
-        private void StopClock() { }
-
-        /// <summary>
-        /// The stage's still frame. ponytail: needs EmiPixelCanvas plus the card's own
-        /// EmiDemoPainter; until then this is a deterministic 96 x 72 stand-in in the panel's own
-        /// palette, which is what the demo buffer is, and it proves the integer blow-up - 288 = 3 x
-        /// 96 with BitmapInterpolationMode None - lands with no seam and no filtering.
-        /// </summary>
-        private void PaintStill()
-        {
             try
             {
-                var bmp = new WriteableBitmap(new PixelSize(BufW, BufH), new Vector(96, 96), PixelFormats.Bgra8888, AlphaFormat.Opaque);
-                using (var fb = bmp.Lock())
+                if (!AllowAmbientLoops) { PaintStill(); return; }
+                if (_clock == null)
                 {
-                    var row = new byte[fb.RowBytes];
-                    for (var y = 0; y < BufH; y++)
-                    {
-                        for (var x = 0; x < BufW; x++)
-                        {
-                            // A framed field with a scanline wash and a pink bar across the middle:
-                            // enough shape that a blank stage is obvious, seeded off the card index
-                            // so flipping a page visibly changes the picture.
-                            bool edge = x < 2 || y < 2 || x >= BufW - 2 || y >= BufH - 2;
-                            bool bar = y >= 33 && y < 39 && x >= 8 + _index * 4 && x < BufW - 8;
-                            bool wash = (y % 4) == 0;
-                            row[x * 4 + 0] = edge ? (byte)0x62 : bar ? (byte)0xB4 : wash ? (byte)0x2A : (byte)0x1C; // B
-                            row[x * 4 + 1] = edge ? (byte)0x39 : bar ? (byte)0x69 : wash ? (byte)0x1E : (byte)0x0E; // G
-                            row[x * 4 + 2] = edge ? (byte)0x3B : bar ? (byte)0xFF : wash ? (byte)0x1E : (byte)0x0E; // R
-                            row[x * 4 + 3] = 0xFF;
-                        }
-                        Marshal.Copy(row, 0, fb.Address + y * fb.RowBytes, fb.RowBytes);
-                    }
+                    _clock = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
+                    _clock.Tick += (_, _) => Tick();
                 }
-                _stage.Source = bmp;
+                _since = Time.GetTimestamp();
+                _clock.Start();
             }
+            catch (Exception ex) { Log.Warning(ex, "[EmiDesk] book clock failed to start"); }
+        }
+
+        private void StopClock()
+        {
+            try { _clock?.Stop(); _since = -1; }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book clock stop failed"); }
+        }
+
+        /// <summary>One frame: the loop position off the shared elapsed time, so a card flipped back to is mid-loop.</summary>
+        internal void Tick()
+        {
+            var p = _painter;
+            if (p == null || _since < 0) return;
+            try
+            {
+                double t = Time.GetElapsedTime(_since).TotalMilliseconds % Math.Max(1, p.LoopMs);
+                p.Draw(_canvas, t);
+                Blit();
+            }
+            catch (Exception ex)
+            {
+                // A painter that throws takes itself off the clock; the card keeps its words.
+                Log.Warning(ex, "[EmiDesk] book demo {Demo} threw, dropped", p.Id);
+                _painter = null;
+            }
+        }
+
+        private void PaintStill()
+        {
+            var p = _painter;
+            if (p == null) return;
+            try { p.Draw(_canvas, p.StillMs); Blit(); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book still frame failed"); }
+        }
+
+        /// <summary>Commit the buffer; <see cref="OnCommitted"/> blits it, the way WPF's EmiPixelBitmap does.</summary>
+        private void Blit() => _canvas.Commit();
+
+        /// <summary>One copy per frame, straight from the cells into the stage bitmap (Bgra32 == Bgra8888 little-endian).</summary>
+        private void OnCommitted(EmiPixelCanvas c)
+        {
+            using (var fb = _bitmap.Lock())
+            {
+                // The CLR lets a uint[] be read as int[] (same element size), so Marshal.Copy takes the
+                // cells as they are: no staging array, no unsafe.
+                var src = (int[])(object)c.Pixels;
+                for (int y = 0; y < c.H; y++)
+                    Marshal.Copy(src, y * c.W, fb.Address + y * fb.RowBytes, c.W);
+            }
+            _stage.InvalidateVisual();
         }
 
         /// <summary>
         /// Freeze the stage on one exact frame. FOR THE OFFSCREEN SHOT RIG ONLY: a review of a 30
-        /// fps loop needs a determinate frame.
-        ///
-        /// <para>ponytail: needs EmiDemoPainter for <paramref name="tMs"/> to mean anything. The
-        /// card selection half is real, so a rig that walks the deck already works.</para>
+        /// fps loop needs a determinate frame. Stops the clock so it cannot race the capture.
         /// </summary>
         internal void ShootFrame(string? cardId, double tMs)
         {
             try
             {
-                _ = tMs;
                 StopClock();
-                int i = Book.IndexOf(cardId);
+                int i = EmiBookCards.IndexOf(cardId);
                 if (i >= 0) SelectCard(i, speak: false);
-                PaintStill();
+                var p = _painter;
+                if (p == null) return;
+                p.Draw(_canvas, Math.Max(0, Math.Min(p.LoopMs - 1, tMs)));
+                Blit();
             }
             catch (Exception ex) { Log.Warning(ex, "[EmiDesk] book shot frame failed"); }
         }
@@ -675,29 +696,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // ---------------------------------------------------------------- the cards
 
         /// <summary>Move to a card by index, redraw everything, and remember where we are.</summary>
-        private void SelectCard(int index, bool speak)
+        private void SelectCard(int index, bool speak, bool note = true)
         {
-            var cards = Book.All;
+            var cards = EmiBookCards.All;
             if (cards.Count == 0) return;
 
             _index = Math.Max(0, Math.Min(cards.Count - 1, index));
             var card = cards[_index];
             _tab = card.Tab;
 
-            PaintStill();
+            // The clock is not restarted between cards: a card flipped back to is already mid-loop.
+            _painter = EmiBookDemos.For(card.Id);
+            _stage.Source = _painter == null ? null : _bitmap;
+            if (_since < 0) PaintStill();
 
             RenderCard(card);
             RenderTabs();
             RenderRail();
             RenderDots();
 
-            // ponytail: needs EmiBook.NoteCard (the read ledger), wired when it moves to Core.
+            if (note) EmiState.NoteBookCard(card.Id);
             if (speak) SpeakMargin();
         }
 
         private void Step(int delta)
         {
-            var cards = Book.All;
+            var cards = EmiBookCards.All;
             if (cards.Count == 0) return;
             int next = _index + delta;
             if (next < 0 || next >= cards.Count) return;
@@ -706,7 +730,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private void PickTab(int tab)
         {
-            int first = Book.FirstOnTab(tab);
+            int first = EmiBookCards.FirstOnTab(tab);
             if (first < 0) return;
             if (first == _index && _tab == tab) return;
             SelectCard(first, speak: true);
@@ -737,7 +761,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static IBrush Frozen(byte r, byte g, byte b) =>
             new ImmutableSolidColorBrush(Color.FromRgb(r, g, b));
 
-        private void RenderCard(BookCard card)
+        private void RenderCard(EmiBookCard card)
         {
             try
             {
@@ -850,7 +874,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// card whose detour cannot run right now keeps the button but ghosts it, so the shape of
         /// the card does not change under the reader between one launch and the next.
         /// </summary>
-        private void RenderButton(BookCard card)
+        private void RenderButton(EmiBookCard card)
         {
             if (card.Target == null && card.Tour == null)
             {
@@ -864,12 +888,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             {
                 // A door this head hides (no surface) is dark here, as an unavailable one is in WPF.
                 var t = EmiTargets.Find(card.Target);
-                _btnGo.Content = new TextBlock { Text = Book.L("emi_book_go", "TAKE ME THERE") };
+                _btnGo.Content = new TextBlock { Text = EmiBookCards.L("emi_book_go", "TAKE ME THERE") };
                 _btnGo.IsEnabled = t != null && t.Available;
                 return;
             }
 
-            _btnGo.Content = new TextBlock { Text = Book.L("emi_book_walk", "WALK ME THROUGH IT") };
+            _btnGo.Content = new TextBlock { Text = EmiBookCards.L("emi_book_walk", "WALK ME THROUGH IT") };
             _btnGo.IsEnabled = TourReady();
         }
 
@@ -911,7 +935,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <c>effectFired</c> moment WPF fires after it has no <c>App.EmiDesk.Fire</c> here.
         private void Go()
         {
-            var cards = Book.All;
+            var cards = EmiBookCards.All;
             if (_index < 0 || _index >= cards.Count) return;
             var card = cards[_index];
             if (card.Target != null) { EmiTargets.Find(card.Target)?.Open(); return; }
@@ -927,10 +951,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 {
                     // A TextBlock rather than a bare string: Avalonia reads "_" in Content as an
                     // access key, and a localized label is not ours to guarantee is free of one.
-                    tabs[i].Content = new TextBlock { Text = Book.TabName(i) };
+                    tabs[i].Content = new TextBlock { Text = EmiBookCards.TabName(i) };
                     // A tab with nothing behind it is drawn and dead, not hidden: the shape of the
                     // book is honest from day one.
-                    tabs[i].IsEnabled = Book.TabHasCards(i);
+                    tabs[i].IsEnabled = EmiBookCards.TabHasCards(i);
                     tabs[i].Classes.Set("on", i == _tab);
                 }
                 catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book tab {Tab} render failed", i); }
@@ -950,7 +974,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
                 Resources.TryGetResource("RailChip", null, out var themeRes);
                 var chipTheme = themeRes as ControlTheme;
-                var cards = Book.All;
+                var cards = EmiBookCards.All;
                 for (int i = 0; i < cards.Count; i++)
                 {
                     if (cards[i].Tab != _tab) continue;
@@ -996,7 +1020,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _dotsPanel.Children.Clear();
                 _dots.Clear();
 
-                var cards = Book.All;
+                var cards = EmiBookCards.All;
                 for (int i = 0; i < cards.Count; i++)
                 {
                     if (cards[i].Tab != _tab) continue;
@@ -1046,7 +1070,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             try
             {
-                var cards = Book.All;
+                var cards = EmiBookCards.All;
                 if (_index < 0 || _index >= cards.Count) return;
                 var card = cards[_index];
                 if (string.IsNullOrWhiteSpace(card.MarginEn)) return;
@@ -1193,183 +1217,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _stage.Height = hh;
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book stage scale failed"); }
-        }
-
-        // ---------------------------------------------------------------- the stub deck
-
-        /// <summary>One card, exactly as the WPF <c>EmiBookCard</c> record shapes it.</summary>
-        internal sealed record BookCard(
-            string Id,
-            int Tab,
-            string KeyStem,
-            string TitleEn,
-            string GistEn,
-            IReadOnlyList<string> NudgesEn,
-            string CatchEn,
-            string? Target,
-            string? Tour,
-            string MarginEn,
-            string MarginFace)
-        {
-            /// <summary>The card's visible title.</summary>
-            public string Title => Book.L(KeyStem + "_title", TitleEn);
-
-            /// <summary>The pink line.</summary>
-            public string Gist => Book.L(KeyStem + "_gist", GistEn);
-
-            /// <summary>The catch, already carrying its label.</summary>
-            public string Catch =>
-                Book.L("emi_book_catch_label", "the catch:") + " " + Book.L(KeyStem + "_catch", CatchEn);
-
-            /// <summary>The plain nudges, localized, in order.</summary>
-            public IReadOnlyList<string> Nudges =>
-                NudgesEn.Select((n, i) => Book.L($"{KeyStem}_nudge{i + 1}", n)).ToList();
-        }
-
-        /// <summary>
-        /// ponytail: needs EmiBookCards and the six EmiBookDeck.* partials (WPF head,
-        /// Services/EmiDesk/), wired when they move to Core - they are pure data and pure
-        /// localization, so nothing but the move is in the way.
-        ///
-        /// <para>RE-AUDITED 2026-09-04 with the comments stripped, because a name-scan of those
-        /// seven files hits App.GetAllScreensCached, MainWindow.Lab.cs and LockdownService: every
-        /// one of those is PROSE inside the card copy's own citations. Strip <c>//</c> and
-        /// <c>///</c> lines and the head-name count over all 1,165 lines is ZERO; the only call
-        /// they make is Localization.Loc.Get, which is already in Core. Confirmed PURE - a git mv,
-        /// and still the largest single win left in the book.</para>
-        ///
-        /// <para>Six of the shipped cards, copied verbatim including their real key stems, so every
-        /// string on screen is the shipped English or the reader's own language rather than a
-        /// placeholder sentence. Tab 2 (DEEPER) is left empty on purpose: that is the shipped state
-        /// in wave A, and it is what draws the greyed, dead-but-visible tab chip.</para>
-        /// </summary>
-        internal static class Book
-        {
-            /// <summary>Tab labels, left to right. Index matches <see cref="BookCard.Tab"/>.</summary>
-            private static readonly string[] TabKeys = { "start", "tools", "deeper" };
-
-            /// <summary>English tab labels, and the fallback when a key is missing.</summary>
-            private static readonly string[] TabNamesEn = { "START", "TOOLS", "DEEPER" };
-
-            /// <summary>Localized tab label for a tab index.</summary>
-            internal static string TabName(int tab)
-            {
-                if (tab < 0 || tab >= TabKeys.Length) return string.Empty;
-                return L("emi_book_tab_" + TabKeys[tab], TabNamesEn[tab]);
-            }
-
-            /// <summary>The cards, in reading order, grouped by tab.</summary>
-            internal static readonly IReadOnlyList<BookCard> All = new[]
-            {
-                new BookCard(
-                    "the-ccp", 0, "emi_book_the_ccp",
-                    "THE CCP",
-                    "*flashes*, *videos*, whispers and overlays, over your normal desktop.",
-                    new[] { "every tool gets its own *tab* and its own switches",
-                            "press *Start* and it runs over whatever you are doing",
-                            "a *session* drives the whole set and ramps it over time",
-                            "using it pays *XP*, and every *level* pays a *skill point*" },
-                    "with an empty assets folder nothing shows. add media, or go online.",
-                    null, "GettingStarted",
-                    "my desk, your switches. flip something.", "(¬‿¬)"),
-
-                new BookCard(
-                    "the-panic-key", 0, "emi_book_the_panic_key",
-                    "THE PANIC KEY",
-                    "one press and *everything on screen stops* at once.",
-                    new[] { "it is *Esc* until you click the box and *rebind* it",
-                            "one press kills *flashes, videos, overlays, games*",
-                            "during a *strict lock* video it is the only way out",
-                            "press it again with *nothing running* and the app quits" },
-                    "No Panic and Lockdown can switch it off. you choose those yourself.",
-                    "settings", null,
-                    "the one key i never joke about.", "._."),
-
-                new BookCard(
-                    "the-desk", 0, "emi_book_the_desk",
-                    "THE DESK",
-                    "your *desktop companion*, and the one holding *this book*.",
-                    new[] { "the *chip* in the rail calls her out, and *Ctrl+Alt+E*",
-                            "*right-click* her for *her cards*: six shortcuts you can *pin*",
-                            "the *gear* holds *her size*, *how daring*, *let her ask*",
-                            "*drag* her anywhere. the *x* on her sends her away" },
-                    "every line she says is dealt from a written file, not an AI.",
-                    null, null,
-                    "a whole card about me. i had nothing to do with it.", "^_~"),
-
-                new BookCard(
-                    "flashes", 1, "emi_book_flashes",
-                    "FLASHES",
-                    "your *gifs and images*, thrown at the screen on a timer.",
-                    new[] { "pick *how often* they land, up to 180 an hour",
-                            "sliders for *size*, *opacity* and how long each one stays",
-                            "*click* one to pop it. *hydra* mode spawns two more",
-                            "*online* mode pulls fresh stills from your *subreddits*" },
-                    "they show up in a screen recording or a stream.",
-                    "flashes", null,
-                    "i get the best seat in the house for these.", "(｡♥‿♥｡)"),
-
-                new BookCard(
-                    "subliminals", 1, "emi_book_subliminals",
-                    "SUBLIMINALS",
-                    "your *trigger phrases*, flashed a couple of frames at a time.",
-                    new[] { "a stock pool ships. open the *editor* to write your own",
-                            "tune the *rate*, the *frame count* and the opacity",
-                            "pick your *colors* in the visual settings",
-                            "a *whisper* can speak each phrase as it flashes" },
-                    "they show up in a screen recording, same as flashes.",
-                    "subliminals", null,
-                    "two frames is plenty when you read as fast as me.", "(⌐■_■)"),
-
-                new BookCard(
-                    "videos", 1, "emi_book_videos",
-                    "MANDATORY VIDEOS",
-                    "*full screen* video, on its own *schedule*, over everything else.",
-                    new[] { "*1 to 20* an hour, pulled from your *videos* folder",
-                            "*strict lock* removes *skip* and *close* until the clip ends",
-                            "*attention checks* drop up to *10* targets you must *click*",
-                            "*miss one* and it makes you watch a *different video*" },
-                    "even a clean pass has a one in ten chance of a replay.",
-                    "videos", null,
-                    "click the little words. i am counting.", "0_0"),
-            };
-
-            /// <summary>Index of a card id, or -1.</summary>
-            internal static int IndexOf(string? id)
-            {
-                if (string.IsNullOrWhiteSpace(id)) return -1;
-                for (int i = 0; i < All.Count; i++)
-                    if (string.Equals(All[i].Id, id, StringComparison.Ordinal)) return i;
-                return -1;
-            }
-
-            /// <summary>The first card on a tab, or -1 when that tab is empty (DEEPER, in wave A).</summary>
-            internal static int FirstOnTab(int tab)
-            {
-                for (int i = 0; i < All.Count; i++)
-                    if (All[i].Tab == tab) return i;
-                return -1;
-            }
-
-            /// <summary>True when a tab has at least one card behind it.</summary>
-            internal static bool TabHasCards(int tab) => FirstOnTab(tab) >= 0;
-
-            /// <summary>
-            /// Localization with an English fallback baked in, copied from <c>EmiBookCards.L</c>:
-            /// the book must render on a build whose language file predates it, so a missing key
-            /// shows the English string and never the raw key.
-            /// </summary>
-            internal static string L(string key, string fallback)
-            {
-                try
-                {
-                    var s = Loc.Get(key);
-                    if (string.IsNullOrWhiteSpace(s) || string.Equals(s, key, StringComparison.Ordinal))
-                        return fallback;
-                    return s;
-                }
-                catch { return fallback; }
-            }
         }
     }
 }

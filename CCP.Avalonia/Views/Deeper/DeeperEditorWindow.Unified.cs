@@ -783,6 +783,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void SliderOverlayOpacity_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
         {
+            RefreshOverlayOpacityLabels();
             if (_suppressEffectFieldSync || _selectedEffect == null) return;
             var v = Math.Clamp(e.NewValue, 0, 1);
             // Flat opacity always tracks this slider; when ramping it's also the start.
@@ -794,6 +795,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void SliderOverlayOpacityEnd_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
         {
+            RefreshOverlayOpacityLabels();
             if (_suppressEffectFieldSync || _selectedEffect == null) return;
             if (ChkOverlayRamp.IsChecked == true)
                 _selectedEffect.EffectOpacityEnd = Math.Clamp(e.NewValue, 0, 1);
@@ -824,8 +826,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         {
             LblOverlayOpacityEnd.IsVisible = ramp;
             SliderOverlayOpacityEnd.IsVisible = ramp;
-            LblOverlayOpacity.Text = ramp ? "Start opacity" : "Opacity";
+            RefreshOverlayOpacityLabels();
         }
+
+        /// <summary>WPF 04807471a (ccp-bugs #936): the overlay opacity labels carry the slider's value.</summary>
+        private void RefreshOverlayOpacityLabels()
+        {
+            bool ramp = ChkOverlayRamp.IsChecked == true;
+            LblOverlayOpacity.Text = $"{(ramp ? "Start opacity" : "Opacity")}  {OpacityPercent(SliderOverlayOpacity.Value)}";
+            LblOverlayOpacityEnd.Text = $"End opacity  {OpacityPercent(SliderOverlayOpacityEnd.Value)}";
+        }
+
+        private static string OpacityPercent(double value) =>
+            Math.Round(Math.Clamp(value, 0, 1) * 100).ToString("0", CultureInfo.InvariantCulture) + "%";
 
         private void CmbOverlayKind_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
