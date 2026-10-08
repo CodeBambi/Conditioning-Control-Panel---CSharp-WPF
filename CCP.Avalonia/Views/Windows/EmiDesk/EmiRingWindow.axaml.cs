@@ -31,7 +31,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// <param name="Hue">The flat tile colour behind the label when there is no art.</param>
     /// <param name="Locked">Paints the padlock and dims the face.</param>
     /// <param name="Pinned">Thicker, solid-pink frame.</param>
-    public sealed record EmiRingCard(string Id, string LabelKey, Color Hue, bool Locked, bool Pinned);
+    /// <param name="ThumbPath">Resources-relative art (Core EmiDoors), through ModArt so mod art wins.</param>
+    /// <param name="ThumbIsIcon">Square nav icon: drawn as a medallion plate, not a cover.</param>
+    public sealed record EmiRingCard(string Id, string LabelKey, Color Hue, bool Locked, bool Pinned,
+                                     string? ThumbPath = null, bool ThumbIsIcon = false);
 
     /// <summary>
     /// The ring: six feature cards fanned around EMI, in their own sibling window.
@@ -90,9 +93,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///    because <c>EmiDeskWindow.Ring.cs</c> subscribes for the pin-nudge latch and the pin is
     ///    made from her options menu. Neither end of that exists on this head yet, so it would be
     ///    an unraised member with no subscriber; take it back with EmiDeskWindow.
-    ///  - <b>The services.</b> <c>EmiSuggester.Compose</c> is Core and wired. <c>EmiRingLayout.Solve</c>,
-    ///    <c>EmiSfx</c>, <c>EmiFace.PixelFont</c> and <c>ModResourceResolver</c> are all still in
-    ///    the WPF head; each is a stub or a named placeholder below.
+    ///  - <b>The services.</b> <c>EmiSuggester.Compose</c> and <c>EmiRingLayout.Solve</c> are Core;
+    ///    the sfx are this head's <c>EmiSfx</c>, the pixel font is the shipped TTF, art is ModArt.
     /// </summary>
     public partial class EmiRingWindow : Window
     {
@@ -207,19 +209,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static readonly Color FramePink = Color.FromRgb(0xFF, 0x69, 0xB4);
         private static readonly Color FrameRest = Color.FromArgb(0x88, 0xFF, 0x69, 0xB4);
 
-        /// <summary>
-        /// ponytail: needs EmiFace.PixelFont (WPF head, Services/EmiDesk/EmiFace.cs), the resolver
-        /// that loads the SHIPPED Press Start 2P rather than looking it up by name. Until it moves
-        /// to Core this head does what EmiDock.axaml already does - names the family and accepts the
-        /// fallback - which on Linux means the label draws in the fallback monospace face, not in
-        /// the pixel font. Legibility is unaffected; the look is not the same.
-        /// </summary>
-        private static readonly FontFamily PixelFont = new FontFamily("Press Start 2P, Consolas, monospace");
+        /// <summary>WPF EmiFace.PixelFont: the SHIPPED Press Start 2P, system monospace behind it.</summary>
+        private static readonly FontFamily PixelFont =
+            new FontFamily("avares://CCP.Avalonia/Resources/emi/fonts#Press Start 2P, Consolas, monospace");
 
         // ---------------------------------------------------------------- state
 
         private readonly Canvas _field;
         private readonly List<Border> _cards = new();
+
+        /// <summary>The cards on the field, in slot order (tests read placement and face).</summary>
+        internal IReadOnlyList<Border> Cards => _cards;
         private IReadOnlyList<EmiRingCard> _slots = Array.Empty<EmiRingCard>();
 
         /// <summary>Her silhouette and the point the fan orbits, both in PHYSICAL pixels, handed in
@@ -296,19 +296,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// </summary>
         internal EmiRingWindow() : this(new PixelRect(590, 290, 220, 420), new PixelPoint(700, 500))
         {
-            // The six a brand new user sees, in catalogue order, with EmiTargets' own hues. No art:
-            // LoadThumb is a stub on this head, which is the flat-hue-tile road the WPF ring takes
-            // for a target with no PNG (the book) and the only one it can take here.
-            _slots = new[]
-            {
-                new EmiRingCard("arcademy", "emi_desk_target_arcademy", Color.FromRgb(0xFF, 0x69, 0xB4), false, true),
-                new EmiRingCard("loom",     "emi_desk_target_loom",     Color.FromRgb(0x6F, 0xD3, 0xFF), false, false),
-                new EmiRingCard("fyp",      "emi_desk_target_fyp",      Color.FromRgb(0xB9, 0x80, 0xFF), true,  false),
-                new EmiRingCard("sessions", "emi_desk_target_sessions", Color.FromRgb(0x8C, 0x9E, 0xFF), false, false),
-                new EmiRingCard("flashes",  "emi_desk_target_flashes",  Color.FromRgb(0xFF, 0x8F, 0xA3), false, false),
-                new EmiRingCard("codex",    "emi_desk_target_codex",    Color.FromRgb(0xE6, 0xD3, 0xA8), false, false),
-            };
-
+            // The six a brand new user sees, in catalogue order, with EmiDoors' own hues and art.
+            _slots = EmiDoors.All.Take(6).Select(d => new EmiRingCard(d.Id, "emi_desk_target_" + d.Id,
+                Color.FromRgb((byte)(d.Hue >> 16), (byte)(d.Hue >> 8), (byte)d.Hue),
+                Locked: d.Id == "fyp", Pinned: d.Id == "arcademy", d.ThumbPath, d.ThumbIsIcon)).ToList();
             BuildCards();
             Layout();
             SettleCards();
@@ -385,7 +376,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 // (no slots, a throw before here) must not leave a dismissal owed to the ignore streak.
                 _closeAnnounced = false;
 
-                // ponytail: needs EmiSfx.RingOpen() (WPF head, Services/EmiDesk/EmiSfx.cs).
+                EmiSfx.RingOpen();
                 Log.Information("[EmiDesk] ring open with {Count} cards, visible={Visible}", _slots.Count, IsVisible);
             }
             catch (Exception ex)
@@ -438,7 +429,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     return;
                 }
 
-                // ponytail: needs EmiSfx.RingClose() (WPF head, Services/EmiDesk/EmiSfx.cs).
+                EmiSfx.RingClose();
                 PlayFold();
             }
             catch (Exception ex)
@@ -554,7 +545,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static IReadOnlyList<EmiRingCard> Compose() =>
             EmiSuggester.Compose(EmiTargets.All).Select(s => new EmiRingCard(s.Target.Id, s.Target.LabelKey,
                 Color.FromRgb((byte)(s.Target.Hue >> 16), (byte)(s.Target.Hue >> 8), (byte)s.Target.Hue),
-                s.Locked, s.Pinned)).ToList();
+                s.Locked, s.Pinned, s.Target.ThumbPath, s.Target.ThumbIsIcon)).ToList();
 
         // ---------------------------------------------------------------- placement
 
@@ -609,8 +600,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             double ay = (_anchorPx.Y - work.Y) / s;
 
             double bodyW = _bodyPx.Width / s;
+            double bodyH = _bodyPx.Height / s;
 
-            var plan = SolveFan(ax, ay, bodyW, _cards.Count);
+            // Core EmiRingLayout (WPF EmiRingWindow.xaml.cs:640): full circle when it fits, else the
+            // on-screen arc, else columns - never a clamp, so a corner park cannot stack cards.
+            var plan = EmiRingLayout.Solve(ax, ay, bodyW, bodyH, workW, workH,
+                                           _cards.Count, CardW, CardH, BodyGap).Cards;
 
             double minX = ax, maxX = ax, minY = ay, maxY = ay;
             foreach (var p in plan)
@@ -655,34 +650,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                             _bodyPx.X, _bodyPx.Y, _bodyPx.Width, _bodyPx.Height,
                             work.X, work.Y, work.Width, work.Height, s,
                             Width, Height, Position.X, Position.Y);
-        }
-
-        /// <summary>
-        /// Where the cards go, in work-area DIPs (top-left of each card).
-        ///
-        /// <para>ponytail: needs EmiRingLayout.Solve (WPF head, Services/EmiDesk/EmiRingLayout.cs),
-        /// which is pure geometry and unit-tested. This is its FULL-CIRCLE branch only, copied
-        /// arithmetic for arithmetic - the same base radius, the same -90 degree start and the same
-        /// even spacing. What is missing is the part that earns the solver its tests: the radius
-        /// search, the feasible-arc half fan pushed away from a screen edge, and the column fallback
-        /// for a corner park. On a desk where she stands near an edge, cards will sit off-screen
-        /// until the solver moves to Core; the clamp WPF used before the solver is deliberately NOT
-        /// reintroduced, because clamping is not a layout, it is a way of hiding that the layout did
-        /// not fit.</para>
-        /// </summary>
-        private static IReadOnlyList<Point> SolveFan(double cx, double cy, double bodyW, int count)
-        {
-            if (count <= 0) return Array.Empty<Point>();
-
-            double r = bodyW * 0.5 + CardW * 0.5 + BodyGap;
-            var pts = new Point[count];
-            for (int i = 0; i < count; i++)
-            {
-                double a = (-90.0 + i * (360.0 / count)) * Math.PI / 180.0;
-                pts[i] = new Point(cx + Math.Cos(a) * r - CardW * 0.5,
-                                   cy + Math.Sin(a) * r - CardH * 0.5);
-            }
-            return pts;
         }
 
         // ---------------------------------------------------------------- the cards
@@ -778,23 +745,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             frame.Children.Add(grid);
             frame.Children.Add(seam);
 
-            // ---- the face of the card: dashboard art, or a flat hue tile ----------
-            var art = LoadThumb(slot);
-            if (art != null)
-            {
-                grid.Children.Add(new Image
-                {
-                    Source = art,
-                    Stretch = Stretch.UniformToFill,
-                    IsHitTestVisible = false,
-                    Opacity = slot.Locked ? 0.42 : 0.92,
-                });
-            }
-            else
-            {
-                var tile = new SolidColorBrush(slot.Hue) { Opacity = slot.Locked ? 0.28 : 0.62 };
-                grid.Children.Add(new Rectangle { Fill = tile, IsHitTestVisible = false });
-            }
+            // ---- the face of the card: dashboard art, a medallion plate, or the hue tile
+            AddArt(grid, slot);
 
             // ---- the name strip ---------------------------------------------------
             var strip = new Border
@@ -941,13 +893,46 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             catch { return null; }
         }
 
-        // ponytail: the resolver half is done - CoreModArt.OverridePath answers the mod override
-        // and Helpers.ModArt decodes it against this head's avares:// copy. The blocker is the
-        // ARGUMENT: EmiRingCard carries no Resources-relative art path, so there is no name to
-        // hand either of them. Give the card its art path (the WPF ring reads one per target) and
-        // this becomes `Helpers.ModArt.TryLoad(slot.ArtPath)`. Until then every card draws the
-        // flat hue tile - a road the WPF ring already takes for a target with no PNG.
-        private static IImage? LoadThumb(EmiRingCard slot) => null;
+        /// <summary>WPF EmiCardFace.AddArt (iconSize 50, strip reserve CardLabelLine + 6): a cover
+        /// image, or for a nav icon a soft backdrop + dark wash + hue tint + the medallion; else the
+        /// flat hue tile. Art goes through ModArt, so a .ccpmod's own card art wins as on WPF.</summary>
+        private static void AddArt(Grid grid, EmiRingCard slot)
+        {
+            double artOpacity = slot.Locked ? 0.42 : 0.92;
+            var art = LoadThumb(slot, slot.ThumbIsIcon ? 128 : 192);
+            if (art != null && slot.ThumbIsIcon)
+            {
+                var soft = LoadThumb(slot, 12) ?? art;
+                grid.Children.Add(new Rectangle { Fill = new ImageBrush(soft) { Stretch = Stretch.UniformToFill }, Opacity = artOpacity, IsHitTestVisible = false });
+                grid.Children.Add(new Rectangle { Fill = new SolidColorBrush(Color.FromArgb(0xB0, 0x0E, 0x0A, 0x1A)), IsHitTestVisible = false });
+                grid.Children.Add(new Rectangle { Fill = new SolidColorBrush(slot.Hue) { Opacity = 0.14 }, IsHitTestVisible = false });
+                grid.Children.Add(new Image
+                {
+                    Source = art, Width = 50, Height = 50, Stretch = Stretch.Uniform,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, CardLabelLine + 6), Opacity = slot.Locked ? 0.5 : 1.0,
+                    IsHitTestVisible = false,
+                });
+                return;
+            }
+            if (art != null)
+            {
+                grid.Children.Add(new Image { Source = art, Stretch = Stretch.UniformToFill, IsHitTestVisible = false, Opacity = artOpacity });
+                return;
+            }
+            grid.Children.Add(new Rectangle { Fill = new SolidColorBrush(slot.Hue) { Opacity = slot.Locked ? 0.28 : 0.62 }, IsHitTestVisible = false });
+        }
+
+        private static global::Avalonia.Media.Imaging.Bitmap? LoadThumb(EmiRingCard slot, int decodeWidth)
+        {
+            try
+            {
+                var bmp = Helpers.ModArt.TryLoad(slot.ThumbPath, decodeWidth);
+                if (bmp == null && slot.ThumbPath != null) Log.Debug("[EmiDesk] ring art missing for {Target}", slot.Id);
+                return bmp;
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring art failed for {Target}", slot.Id); return null; }
+        }
 
         // ---------------------------------------------------------------- animation
 
