@@ -17,10 +17,10 @@ public class SyncBodyGoldenTests
     private const string Consents = "\"allow_discord_dm\":true,\"show_online_status\":false,\"share_profile_picture\":true,\"public_share_avatar\":false,\"goon_share_avatar\":true,\"goon_share_dm\":false,";
 
     private const string Full = Head + "\"companion_progress\":{\"0\":{\"CompanionId\":0,\"Level\":1,\"CurrentXP\":0.0,\"TotalXPEarned\":0.0,\"FirstActivated\":\"0001-01-01T00:00:00\",\"TotalActiveTime\":\"00:00:00\"}}," + Consents
-        + "\"cosmetics\":{\"banner_id\":\"b1\",\"accent\":\"#FF69B4\",\"title_id\":null,\"pinned_achievements\":[],\"avatar_deco\":null,\"charms\":[]},\"web_xp_claim_ack\":\"claim-7\",\"install_date\":\"2025-01-02\",\"descent_epoch\":1,\"reset_weekly_quest\":false,\"reset_daily_quest\":false,\"force_streak_override\":false,\"force_skills_reset\":false}";
+        + "\"cosmetics\":{\"banner_id\":\"b1\",\"accent\":\"#FF69B4\",\"title_id\":null,\"pinned_achievements\":[],\"avatar_deco\":null,\"charms\":[]},\"web_xp_claim_ack\":\"claim-7\",\"install_date\":\"2025-01-02\",\"descent_epoch\":1,\"descent_auto\":true,\"reset_weekly_quest\":false,\"reset_daily_quest\":false,\"force_streak_override\":false,\"force_skills_reset\":false}";
 
     private const string Fresh = Head + "\"companion_progress\":{}," + Consents
-        + "\"cosmetics\":null,\"web_xp_claim_ack\":null,\"install_date\":null,\"descent_epoch\":1,\"reset_weekly_quest\":false,\"reset_daily_quest\":false,\"force_streak_override\":false,\"force_skills_reset\":null}";
+        + "\"cosmetics\":null,\"web_xp_claim_ack\":null,\"install_date\":null,\"descent_epoch\":1,\"descent_auto\":true,\"reset_weekly_quest\":false,\"reset_daily_quest\":false,\"force_streak_override\":false,\"force_skills_reset\":null}";
 
     private static SyncBody Body(bool fresh) => new()
     {
@@ -47,6 +47,7 @@ public class SyncBodyGoldenTests
         WebXpClaimAck = fresh ? null : "claim-7",
         InstallDate = fresh ? null : "2025-01-02",
         DescentEpoch = 1,
+        DescentAuto = true,
         ForceSkillsReset = fresh ? null : false,
     };
 
