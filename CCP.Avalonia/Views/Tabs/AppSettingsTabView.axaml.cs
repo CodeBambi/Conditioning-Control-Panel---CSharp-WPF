@@ -13,10 +13,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// Settings door is opened, so sections that have to re-read live state (device lists,
     /// login cards, update status) get a seam without ShowTab knowing their names.
     ///
-    /// ponytail: no ported section declares this interface yet - they carry a public
-    /// OnSectionShown() but not the `: IAppSettingsSection` - and a port may only add files
-    /// under Views/. So <see cref="Views.Tabs.AppSettingsTabView.RefreshSections"/> is a no-op
-    /// today; it starts working the moment a section adds the interface, with no change here.
+    /// General and Account (Account &amp; Plans) declare it; the host calls it each time the page
+    /// becomes visible, as WPF ShowTab's "appsettings" case does.
     /// </summary>
     public interface IAppSettingsSection
     {
@@ -30,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <summary>
     /// The Settings door (tab key <c>appsettings</c>), PORTED from
     /// ConditioningControlPanel/Views/Tabs/AppSettingsTabView.xaml.cs. A single scrolling page of
-    /// nine sections plus a left mini-rail that acts as its table of contents.
+    /// ten sections plus a left mini-rail that acts as its table of contents.
     ///
     /// <para><b>This file is the host only.</b> It owns the rail, the scroll, and
     /// <see cref="FocusSection"/> - all view state, all ported for real. It owns no settings
@@ -53,7 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Rail order, and the only section keys <see cref="FocusSection"/> answers to.</summary>
         internal static readonly string[] SectionKeys =
         {
-            "general", "audio", "devices", "performance",
+            "general", "audio", "devices", "monitors", "performance",
             "notifications", "emidesk", "account", "data", "updates",
         };
 
@@ -70,6 +68,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (pill != null) pill.Click += SectionPill_Click;
             }
             SectionScroll.ScrollChanged += SectionScroll_ScrollChanged;
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property != IsVisibleProperty) return;
+                // WPF ShowTab's "appsettings" case: sections that re-read live state get their seam.
+                if (IsVisible) RefreshSections();
+                SyncPlansMotion();
+            };
         }
 
         // =====================================================================================
@@ -81,6 +86,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             "general" => SectionGeneral,
             "audio" => SectionAudio,
             "devices" => SectionDevices,
+            "monitors" => SectionMonitors,
             "performance" => SectionPerformance,
             "notifications" => SectionNotifications,
             "emidesk" => SectionEmidesk,
@@ -95,6 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             "general" => SectionPillGeneral,
             "audio" => SectionPillAudio,
             "devices" => SectionPillDevices,
+            "monitors" => SectionPillMonitors,
             "performance" => SectionPillPerformance,
             "notifications" => SectionPillNotifications,
             "emidesk" => SectionPillEmidesk,
@@ -141,8 +148,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// Per-open refresh: hands every section that implements <c>IAppSettingsSection</c> a
         /// chance to re-read live state. One section throwing must not stop the rest, so each
-        /// call is guarded individually. See the interface's ponytail note: no ported section
-        /// declares it yet, so this is currently a no-op.
+        /// call is guarded individually.
         /// </summary>
         internal void RefreshSections()
         {
@@ -173,6 +179,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             return true;
         }
 
+        /// <summary>The section the lit pill names: the one the reader is on (scroll spy or click).
+        /// WPF 7.1.5: Settings is ONE scrolling page, so anything gated on a section's IsVisible is
+        /// on for every section; gate on this instead.</summary>
+        internal string? CurrentSectionKey { get; private set; } = "general";
+
         private void CheckPill(string key)
         {
             var pill = PillFor(key);
@@ -180,6 +191,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _syncingPills = true;
             try { pill.IsChecked = true; }
             finally { _syncingPills = false; }
+
+            // Account & Plans runs the vault's ambient motion, and Settings is ONE scrolling page:
+            // the plans copy reads "visible" on every section. So the motion follows the lit pill
+            // instead (WPF 7.1.5 review fix): on while the reader is on Account, parked elsewhere.
+            var was = CurrentSectionKey;
+            CurrentSectionKey = key;
+            if ((was == "account") != (key == "account")) SyncPlansMotion();
+        }
+
+        /// <summary>Starts the Account &amp; Plans room while its pill is lit and the page is
+        /// on screen, parks it otherwise. Called on a pill change and on every page show/hide.</summary>
+        internal void SyncPlansMotion()
+        {
+            try { SectionAccount?.SetPlansMotion(IsVisible && CurrentSectionKey == "account"); }
+            catch { /* cosmetic: a navigation must never throw */ }
         }
 
         private void SectionPill_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)

@@ -1,13 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Media.Transformation;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls;
@@ -15,26 +22,52 @@ using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.UI;
+using MotionLevel = ConditioningControlPanel.Models.MotionLevel;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// PORTED from ConditioningControlPanel/Views/Tabs/ExclusivesTabView.xaml.cs.
+    /// PORTED from WPF 7.1.5 ConditioningControlPanel/Views/Tabs/ExclusivesTabView.xaml.cs plus the
+    /// view half of MainWindow.Exclusives.cs and MainWindow.Exclusives.Flair.cs. ONE view, two uses:
     ///
-    /// <para>The WPF shell owns only the backdrop and geometry chores; all roster/card logic lives
-    /// in MainWindow.Exclusives.cs. What survived here is the ambient canvas tuning (fog + dust +
-    /// aurora at 0.55, copied from StartExclusivesMotion - canvas composition, not service logic)
-    /// plus the roster/gate repaint (RefreshVault), which reads Core's ExclusiveFeature.All.</para>
+    /// <para><b>The Premium page</b> (Home > Premium, tab key "premium", PlansMode off): the full
+    /// vault. Spotlight on top, then the shelf grouped Basic, Prime, Free (Core
+    /// <see cref="PremiumShelfOrder"/>), open doors first in each group. Its flair (polish 12 round
+    /// 2): the room's canvas runs VaultMotes off the cards and signs (gold off Basic, cyan diamonds
+    /// off Prime), a shimmer crosses each group's tier sign, a card that is yours wears a breathing
+    /// rim in its tier colour, a click throws a burst in the card's colour, and the cards rise in,
+    /// staggered, as the page opens. Full = all of it; Reduced = a few slow motes, a slow shimmer,
+    /// a short fade-in, no burst; Off = static (rims lit, no clocks).</para>
     ///
-    /// <para>Dropped:
-    /// <c>RoundClipOnResize</c> - WPF's ClipToBounds is rectangular, so a rounded host needed clip
-    /// geometry tracked against every resize; an Avalonia Border clips its child to its own
-    /// CornerRadius, so the helper has no work left. Its two other callers were MainWindow's card
-    /// builder, which is not ported either.</para>
+    /// <para><b>Account &amp; Plans</b> (Settings, PlansMode on): the header with the tier plates, a
+    /// "See everything Premium gets you" link and the invites. The spotlight and the shelf are the
+    /// Premium page's. The inner ScrollViewer is lifted out so a wheel notch reaches the Settings
+    /// page's scroller.</para>
+    ///
+    /// <para>Dropped: <c>RoundClipOnResize</c> (an Avalonia Border clips its child to its own
+    /// CornerRadius). Still not on this head: the Ken Burns drift on the spotlight, the card glass
+    /// sheen adorner and the FREE TODAY pulse (parity ledger).</para>
     /// </summary>
     public partial class ExclusivesTabView : UserControl
     {
         private readonly AmbientFxCanvas _ambientFx;
+        private bool _plansMode;
+        private bool _contentLifted;
+        private bool _motionOn;
+        private bool _zonesQueued;
+        private readonly List<DispatcherTimer> _entranceTimers = new();
+        private readonly List<CancellationTokenSource> _sheens = new();
+
+        /// <summary>Gold of the BASIC SUBJECT plate, cyan of PRIME's, lilac for the free doors.
+        /// Commerce colours: they never follow the mod accent.</summary>
+        internal static readonly Color VaultBasicGold = Color.FromRgb(0xFF, 0xC8, 0x5A);
+        internal static readonly Color VaultPrimeCyan = Color.FromRgb(0x6F, 0xE8, 0xFF);
+        internal static readonly Color VaultFreeLilac = Color.FromRgb(0xB7, 0x9C, 0xFF);
+
+        /// <summary>Entrance stagger step and cap (Full), WPF Flair.cs.</summary>
+        internal const int VaultEntranceStepMs = 38;
+        internal const int VaultEntranceCap = 16;
 
         public ExclusivesTabView()
         {
@@ -45,101 +78,409 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             LoadBackdrop();
             RefreshVault();
 
-            // The tab is permanently mounted on WPF and MainWindow parks its canvas through
-            // RegisterTabFx. No tab host on this head: the view runs its own room and stops it on
-            // unload. The canvas self-gates on motion, tier and window focus regardless.
-            Loaded += OnLoaded;
-            Unloaded += OnUnloaded;
-            // Main bf57cecdf: columns follow the width, cards stretch to fill the row (Core ExclusiveShelfFit).
-            this.FindControl<ItemsControl>("ExclusivesShelf")!.SizeChanged += (_, e) => { if (e.WidthChanged) FitShelf(); };
+            // The Premium page parks and resumes with its own visibility (the shell shows it as a
+            // tab panel); Account & Plans is driven by AppSettingsTabView.SyncPlansMotion instead,
+            // because Settings is one scrolling page and the copy reads "visible" on every section.
+            AttachedToVisualTree += OnAttached;
+            DetachedFromVisualTree += OnDetached;
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property != IsVisibleProperty || _plansMode) return;
+                if (IsVisible) ShowPage(); else SetMotion(false);
+            };
+
+            var shelf = Find<ItemsControl>("ExclusivesShelf");
+            shelf.SizeChanged += (_, e) => { if (e.WidthChanged) FitShelf(); QueueZones(); };
+            Find<ScrollViewer>("ContentScroll").ScrollChanged += (_, _) => QueueZones();
+            _ambientFx.SizeChanged += (_, _) => QueueZones();
         }
 
-        /// <summary>WPF FitExclusiveShelf: every card sized for the shelf's width; the Gap is each card's right/bottom margin.</summary>
-        internal void FitShelf()
+        // =====================================================================================
+        //  the two views
+        // =====================================================================================
+
+        /// <summary>
+        /// Account &amp; Plans mode (WPF nav rework, trimmed in polish 12): the header with the tier
+        /// plates, the link to the Premium page and the invites; no spotlight, no shelf. Its own
+        /// header words (no Vault or Exclusives names), rebound so a language switch repaints them.
+        /// </summary>
+        public bool PlansMode
         {
-            var shelf = this.FindControl<ItemsControl>("ExclusivesShelf")!;
-            if (shelf.Bounds.Width <= 0 || shelf.ItemsPanelRoot is not WrapPanel wrap) return;
-            var (_, w, h) = Services.UI.ExclusiveShelfFit.For(shelf.Bounds.Width);
-            wrap.ItemWidth = w + Services.UI.ExclusiveShelfFit.Gap;
-            wrap.ItemHeight = h + Services.UI.ExclusiveShelfFit.Gap;
+            get => _plansMode;
+            set
+            {
+                _plansMode = value;
+                Find<ItemsControl>("ExclusivesShelf").IsVisible = !value;
+                Find<Border>("SpotlightCard").IsVisible = !value;
+                Find<Button>("BtnSeePremium").IsVisible = value;
+                Find<Border>("InvitesWrap").IsVisible = value;   // the panel shows itself once the server answers
+                BindLoc(Find<TextBlock>("TxtVaultTitle"), value ? "plans_header_title" : "premium_page_title");
+                BindLoc(Find<TextBlock>("TxtVaultSub"), value ? "plans_header_sub" : "premium_page_sub");
+                // Settings sizes this view to its content: the painted room would otherwise ask
+                // for the picture's own height.
+                Find<Image>("VaultBackdrop").IsVisible = !value;
+                if (value) LiftContentOutOfScroller();
+                RefreshVault();
+            }
         }
 
-        private void OnLoaded(object? sender, RoutedEventArgs e)
+        private void LiftContentOutOfScroller()
+        {
+            if (_contentLifted) return;
+            var scroll = Find<ScrollViewer>("ContentScroll");
+            if (scroll.Parent is not Panel host || scroll.Content is not Control content) return;
+            // A ScrollViewer takes the wheel even with nothing to scroll; the Settings page's own
+            // scroller must get every notch.
+            var index = host.Children.IndexOf(scroll);
+            scroll.Content = null;
+            host.Children.RemoveAt(index);
+            host.Children.Insert(index, content);
+            _contentLifted = true;
+        }
+
+        /// <summary>Rebind, never assign: a local Text would lose the live loc binding.</summary>
+        private static void BindLoc(TextBlock target, string key) =>
+            target.Bind(TextBlock.TextProperty, (Binding)new Localization.StrExtension(key).ProvideValue(null!));
+
+        /// <summary>Account &amp; Plans' link to the full Premium page.</summary>
+        private void SeePremium_Click(object? sender, RoutedEventArgs e)
+            => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ShowTab("premium");
+
+        private T Find<T>(string name) where T : Control => this.FindControl<T>(name)!;
+
+        // =====================================================================================
+        //  lifetime + motion
+        // =====================================================================================
+
+        private void OnAttached(object? sender, VisualTreeAttachmentEventArgs e)
         {
             CoreMods.ModChanged += OnModChanged;
-            StartAmbient();
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
+            if (!_plansMode && IsVisible) ShowPage();
+        }
+
+        private void OnDetached(object? sender, VisualTreeAttachmentEventArgs e)
+        {
+            CoreMods.ModChanged -= OnModChanged;
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            SetMotion(false);
         }
 
         /// <summary>ModChanged may be raised off the UI thread; marshal before touching the Image.</summary>
         private void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(() => { LoadBackdrop(); RefreshVault(); });
 
+        private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(RefreshVault);
+
+        /// <summary>WPF ShowVaultPage: repaint, start the room, play the entrance.</summary>
+        private void ShowPage()
+        {
+            RefreshVault();
+            SetMotion(true);
+            PlayEntrance();
+        }
+
+        /// <summary>WPF StartExclusivesMotion / StopVaultMotion for this view. The Premium page is
+        /// the vault: the room plus its own motes at Full, only the motes (a few, slow) below that.
+        /// Account &amp; Plans keeps the plain room.</summary>
+        internal void SetMotion(bool on)
+        {
+            _motionOn = on;
+            try
+            {
+                if (!on)
+                {
+                    _ambientFx.Stop();
+                    StopFlair();
+                    return;
+                }
+                var level = AmbientFxCanvas.Env.Level;
+                var room = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash;
+                _ambientFx.StartLayers(new AmbientFxConfig
+                {
+                    Layers = _plansMode ? room
+                        : level == MotionLevel.Full ? room | AmbientFxLayers.VaultMotes
+                        : AmbientFxLayers.VaultMotes,
+                    Intensity = _plansMode ? 0.55 : 0.75,
+                    FogPuffs = 3,
+                });
+                RefreshTierPlates();
+                if (!_plansMode) StartFlair(level);
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Vault motion: {E}", ex.Message); }
+        }
+
+        // =====================================================================================
+        //  the vault (WPF EnsureExclusivesBuilt + RefreshVaultCore)
+        // =====================================================================================
+
         /// <summary>WPF LoadBackdrop: null keeps what is already painted rather than blanking the room.</summary>
         private void LoadBackdrop()
         {
-            var art = Helpers.ModArt.TryLoad("exclusives/vault_backdrop.png");
-            if (art != null) this.FindControl<Image>("VaultBackdrop")!.Source = art;
+            var art = ModArt.TryLoad("exclusives/vault_backdrop.png");
+            if (art != null) Find<Image>("VaultBackdrop").Source = art;
         }
-
-        private void StartAmbient()
-            => _ambientFx.StartLayers(new AmbientFxConfig
-            {
-                Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash,
-                Intensity = 0.55,
-                FogPuffs = 3,
-            });
-
-        private void OnUnloaded(object? sender, RoutedEventArgs e)
-        {
-            CoreMods.ModChanged -= OnModChanged;
-            _ambientFx.Stop();
-        }
-
-        // ------------------------------------------------------------------
-        // The vault (WPF MainWindow.Exclusives.cs EnsureExclusivesBuilt + RefreshExclusivesTab)
-        // ------------------------------------------------------------------
 
         /// <summary>
-        /// Repaints the spotlight and the shelf from <see cref="ExclusiveFeature.All"/> and each
-        /// feature's live gate. Called on construction, on every show of the tab
-        /// (MainShellWindow.OnTabShown) and on a mod switch, as WPF's refresh is.
-        /// ponytail: no Ken Burns, sheen, veil breath, FREE TODAY pulse, tier-plate refresh,
-        /// accent re-tint or "coming soon" teasers yet - see the parity ledger.
+        /// Repaints the header, the spotlight and the grouped shelf from
+        /// <see cref="ExclusiveFeature.All"/> and each feature's live gate. Called on construction,
+        /// on every show (MainShellWindow.OnTabShown, the Settings section seam), on a mod switch
+        /// and on a language change.
         /// </summary>
         internal void RefreshVault()
         {
-            // Main 2e9080399: Prime first, then Basic, then the untiered doors. Just Drop until the server opens
-            // its door and the Arcademy behind its build flag are hidden, not veiled (ExclusiveFeature.IsShown).
-            var rows = new List<ExclusiveCardRow>();
-            foreach (var f in ExclusiveFeature.ShelfOrder(ExclusiveFeature.All))
-                if (f.Shown()) rows.Add(new ExclusiveCardRow(f));
-            this.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource = rows;
+            try
+            {
+                PaintHero();
+                RefreshTierPlates();
+                if (_plansMode) return;
 
+                // Every roster entry the build shows, grouped Basic, Prime, Free, open doors first.
+                // Just Drop until the server opens its door and the Arcademy behind its build flag
+                // are hidden, not veiled (ExclusiveFeature.Shown).
+                var rows = ExclusiveFeature.All.Where(f => f.Shown()).Select(f => new ExclusiveCardRow(f)).ToList();
+                var groups = PremiumShelfOrder.Arrange(rows, r => r.Feature.Key, r => r.Tier, r => r.IsMine);
+                StopSheens();
+                Find<ItemsControl>("ExclusivesShelf").ItemsSource =
+                    groups.Select((g, i) => new ExclusiveShelfGroup(g.Group, g.Items, first: i == 0)).ToList();
+                Dispatcher.UIThread.Post(() =>
+                {
+                    FitShelf();
+                    if (_motionOn) StartFlair(AmbientFxCanvas.Env.Level);
+                    QueueZones();
+                }, DispatcherPriority.Background);
+
+                PaintSpotlight();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Premium page repaint failed"); }
+        }
+
+        private void PaintHero()
+        {
+            // The header plate's vault art, mod-aware (WPF ModTileVariant("vault")): the mod's
+            // override of features/vault.png wins inside ModArt.
+            var hero = ModArt.TryLoad(CoreMods.ActiveModId == BuiltInMods.BambiSleepId
+                           ? "features/vault_bambi.png" : "features/vault.png", 720)
+                       ?? ModArt.TryLoad("features/vault.png", 720);
+            Find<Image>("VaultHeroArt").Source = hero;
+            Find<TextBlock>("TxtVaultHeroGlyph").IsVisible = hero == null;
+        }
+
+        private void PaintSpotlight()
+        {
             var spot = new ExclusiveCardRow(ExclusiveFeature.All[0]);
-            this.FindControl<TextBlock>("TxtSpotArtGlyph")!.Text = spot.Art == null ? spot.Feature.Emoji : "";
-            var spotArt = this.FindControl<Image>("SpotArtImage")!;
-            spotArt.Source = ModArt.TryLoad(ArtName(spot.Feature.BannerArtResource), 1400) ?? spot.Art;
-            this.FindControl<TextBlock>("TxtSpotTitle")!.Text = spot.Title;
-            this.FindControl<TextBlock>("TxtSpotTagline")!.Text = spot.Tagline;
-            this.FindControl<Border>("SpotBadge")!.IsVisible = spot.HasBadge;
-            this.FindControl<TextBlock>("TxtSpotBadge")!.Text = spot.BadgeText;
-            this.FindControl<Border>("SpotVeil")!.IsVisible = spot.IsLocked;
-            this.FindControl<TextBlock>("TxtSpotFreeToday")!.Text = Loc.Get("mosaic_free_today");
-            this.FindControl<Border>("SpotFreeToday")!.IsVisible = spot.HasFreePill;
-            var badge = this.FindControl<TierBadge>("SpotTierBadge")!;
+            Find<TextBlock>("TxtSpotArtGlyph").Text = spot.Art == null ? spot.Feature.Emoji : "";
+            Find<Image>("SpotArtImage").Source = ModArt.TryLoad(ArtName(spot.Feature.BannerArtResource), 1400) ?? spot.Art;
+            Find<TextBlock>("TxtSpotTitle").Text = spot.Title;
+            Find<TextBlock>("TxtSpotTagline").Text = spot.Tagline;
+            Find<Border>("SpotBadge").IsVisible = spot.HasBadge;
+            Find<TextBlock>("TxtSpotBadge").Text = spot.BadgeText;
+            Find<Border>("SpotVeil").IsVisible = spot.IsLocked;
+            Find<TextBlock>("TxtSpotFreeToday").Text = Loc.Get("mosaic_free_today");
+            Find<Border>("SpotFreeToday").IsVisible = spot.HasFreePill;
+            var badge = Find<TierBadge>("SpotTierBadge");
             badge.Tier = spot.Tier;
             badge.FreeToday = spot.BadgeFreeToday;
-            var card = this.FindControl<Border>("SpotlightCard")!;
+            var card = Find<Border>("SpotlightCard");
             card.Cursor = spot.Cursor;
             ToolTip.SetTip(card, spot.UnavailableTip);
-            var open = this.FindControl<Button>("BtnSpotOpen")!;
+            var open = Find<Button>("BtnSpotOpen");
             open.IsEnabled = spot.IsAvailable;
             ToolTip.SetTip(open, spot.UnavailableTip);
             ToolTip.SetShowOnDisabled(open, true);
         }
 
+        private static Bitmap? _plate1, _plate2;
+        private static bool _platesTried;
+
+        /// <summary>WPF RefreshExclusiveTierPlates: the access properties, not the raw tier, light the
+        /// plate (Prime full over a dim Basic, Basic full over a dim Prime, both dim when free).</summary>
+        private void RefreshTierPlates()
+        {
+            if (!_platesTried)
+            {
+                _platesTried = true;
+                _plate1 = ModArt.TryLoad("Patreon tier1.png", 200);
+                _plate2 = ModArt.TryLoad("Patreon tier2.png", 200);
+            }
+            Paint("TierPlate1", _plate1);
+            Paint("TierPlate2", _plate2);
+
+            bool top = CoreEntitlement.HasLab, premium = CoreEntitlement.HasPremium;
+            Find<Panel>("TierPlate1").Opacity = top ? 0.55 : premium ? 1.0 : 0.3;
+            Find<Panel>("TierPlate2").Opacity = top ? 1.0 : 0.3;
+
+            void Paint(string name, Bitmap? art)
+            {
+                var img = Find<Image>(name + "Art");
+                img.Source = art;
+                img.IsVisible = art != null;
+                Find<Border>(name + "Vector").IsVisible = art == null;
+            }
+        }
+
         /// <summary>"Resources/features/x.png" -> "features/x.png", the name ModArt resolves.</summary>
         internal static string? ArtName(string? resource) =>
             resource?.StartsWith("Resources/", StringComparison.Ordinal) == true ? resource["Resources/".Length..] : resource;
+
+        /// <summary>WPF FitExclusiveShelf: every card sized for the shelf's width; the Gap is each
+        /// card's right/bottom margin. One fit for every group's wrap.</summary>
+        internal void FitShelf()
+        {
+            var shelf = Find<ItemsControl>("ExclusivesShelf");
+            if (shelf.Bounds.Width <= 0) return;
+            var (_, w, h) = ExclusiveShelfFit.For(shelf.Bounds.Width);
+            foreach (var wrap in shelf.GetVisualDescendants().OfType<WrapPanel>())
+            {
+                wrap.ItemWidth = w + ExclusiveShelfFit.Gap;
+                wrap.ItemHeight = h + ExclusiveShelfFit.Gap;
+            }
+        }
+
+        // =====================================================================================
+        //  flair (WPF MainWindow.Exclusives.Flair.cs)
+        // =====================================================================================
+
+        private IEnumerable<T> Shelf<T>(string cls) where T : StyledElement =>
+            Find<ItemsControl>("ExclusivesShelf").GetVisualDescendants().OfType<T>().Where(c => c.Classes.Contains(cls));
+
+        private void StartFlair(MotionLevel level)
+        {
+            if (_plansMode) return;
+            // Rims: lit at every level, breathing at Full only.
+            foreach (var aura in Shelf<Border>("aura")) aura.Classes.Set("breathe", level == MotionLevel.Full);
+
+            // Sign shimmer: a band crosses each tier sign, staggered by group.
+            StopSheens();
+            if (level == MotionLevel.Off) { QueueZones(); return; }
+            int i = 0;
+            double cross = level == MotionLevel.Full ? 1.1 : 2.2;
+            double period = level == MotionLevel.Full ? 4.2 : 9.0;
+            foreach (var band in Shelf<Rectangle>("vault-sheen"))
+            {
+                double span = Math.Max(120, (band.Parent as Control)?.Bounds.Width ?? 160) + 90;
+                var anim = new Animation
+                {
+                    Duration = TimeSpan.FromSeconds(period),
+                    Delay = TimeSpan.FromSeconds(0.5 + 0.7 * i++),
+                    IterationCount = IterationCount.Infinite,
+                    Easing = new SineEaseInOut(),
+                    Children =
+                    {
+                        new KeyFrame { Cue = new Cue(0), Setters = { new Setter(Canvas.LeftProperty, -90d) } },
+                        new KeyFrame { Cue = new Cue(cross / period), Setters = { new Setter(Canvas.LeftProperty, span) } },
+                        new KeyFrame { Cue = new Cue(1), Setters = { new Setter(Canvas.LeftProperty, span) } },
+                    },
+                };
+                Canvas.SetLeft(band, -90);
+                var cts = new CancellationTokenSource();
+                _sheens.Add(cts);
+                _ = anim.RunAsync(band, cts.Token);
+            }
+            QueueZones();
+        }
+
+        private void StopSheens()
+        {
+            foreach (var cts in _sheens) cts.Cancel();
+            _sheens.Clear();
+        }
+
+        private void StopFlair()
+        {
+            foreach (var t in _entranceTimers) t.Stop();
+            _entranceTimers.Clear();
+            StopSheens();
+            if (this.FindControl<ItemsControl>("ExclusivesShelf") == null) return;
+            foreach (var aura in Shelf<Border>("aura")) aura.Classes.Set("breathe", false);
+            foreach (var card in Shelf<Border>("vault-card")) { card.Transitions = null; card.Opacity = 1; card.RenderTransform = null; }
+        }
+
+        /// <summary>The cards rise into place one after another as the page opens (WPF
+        /// PlayVaultEntrance): hidden until their turn, then a fade, plus a rise at Full.</summary>
+        private void PlayEntrance()
+        {
+            if (_plansMode) return;
+            var level = AmbientFxCanvas.Env.Level;
+            foreach (var t in _entranceTimers) t.Stop();
+            _entranceTimers.Clear();
+            Dispatcher.UIThread.Post(() =>
+            {
+                int i = 0;
+                bool full = level == MotionLevel.Full;
+                foreach (var card in Shelf<Border>("vault-card"))
+                {
+                    card.Transitions = null;
+                    card.Opacity = 1;
+                    card.RenderTransform = null;
+                    if (level == MotionLevel.Off) continue;
+                    var delay = (full ? VaultEntranceStepMs : 20) * Math.Min(i++, full ? VaultEntranceCap : 8);
+                    card.Opacity = 0;
+                    if (full) card.RenderTransform = TransformOperations.Parse("translateY(18px)");
+                    var transitions = new Transitions
+                    {
+                        new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(full ? 320 : 200), Easing = new QuadraticEaseOut() },
+                    };
+                    if (full)
+                        transitions.Add(new TransformOperationsTransition
+                        {
+                            Property = RenderTransformProperty, Duration = TimeSpan.FromMilliseconds(420), Easing = new BackEaseOut(),
+                        });
+                    card.Transitions = transitions;
+                    var target = card;
+                    var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(1, delay)) };
+                    timer.Tick += (_, _) =>
+                    {
+                        timer.Stop();
+                        target.Opacity = 1;
+                        if (full) target.RenderTransform = TransformOperations.Parse("translateY(0px)");
+                    };
+                    _entranceTimers.Add(timer);
+                    timer.Start();
+                }
+            }, DispatcherPriority.Background);
+        }
+
+        /// <summary>Coalesced: a burst of scroll steps recomputes the motes' zones once, after layout.</summary>
+        private void QueueZones()
+        {
+            if (_zonesQueued || _plansMode) return;
+            _zonesQueued = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                _zonesQueued = false;
+                try { UpdateZones(); }
+                catch (Exception ex) { Serilog.Log.Debug("Vault zones: {E}", ex.Message); }
+            }, DispatcherPriority.Background);
+        }
+
+        /// <summary>WPF UpdateVaultZones: every card and sign on screen is a place motes rise from.
+        /// A card that is yours counts twice, so the glitter gathers where the doors are open.</summary>
+        internal void UpdateZones()
+        {
+            if (!IsVisible || _plansMode) return;
+            double h = _ambientFx.Bounds.Height;
+            if (_ambientFx.Bounds.Width <= 0 || h <= 0) return;
+            var zones = new List<VaultZone>();
+            void Add(Control c, Color hue, bool diamond, int weight)
+            {
+                if (!c.IsEffectivelyVisible || c.Bounds.Width <= 0) return;
+                if (c.TranslatePoint(new Point(0, 0), _ambientFx) is not { } tl) return;
+                var r = new Rect(tl, c.Bounds.Size);
+                if (r.Bottom < 0 || r.Top > h) return;
+                for (int k = 0; k < weight; k++) zones.Add(new VaultZone(r, hue, diamond));
+            }
+            foreach (var card in Shelf<Border>("vault-card"))
+                if (card.DataContext is ExclusiveCardRow row)
+                    Add(card, row.Hue, row.Group == PremiumGroup.Prime, row.IsMine ? 2 : 1);
+            foreach (var sign in Shelf<Panel>("vault-sign"))
+                if (sign.DataContext is ExclusiveShelfGroup g)
+                    Add(sign, g.Hue, g.Group == PremiumGroup.Prime, 2);
+            _ambientFx.SetVaultZones(zones);
+        }
+
+        // =====================================================================================
+        //  clicks
+        // =====================================================================================
 
         private void Spotlight_Click(object? sender, RoutedEventArgs e) => Open(ExclusiveFeature.All[0]);
 
@@ -149,10 +490,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (e.InitialPressMouseButton == MouseButton.Left) Open(ExclusiveFeature.All[0]);
         }
 
+        /// <summary>WPF OnVaultCardClicked: a burst in the card's colour, then the door. The door
+        /// waits 140 ms only when there is a burst to see (particles allowed); else it opens at once.</summary>
         private void Card_PointerReleased(object? sender, PointerReleasedEventArgs e)
         {
-            if (e.InitialPressMouseButton == MouseButton.Left && (sender as Control)?.DataContext is ExclusiveCardRow row)
-                Open(row.Feature);
+            if (e.InitialPressMouseButton != MouseButton.Left || sender is not Border card
+                || card.DataContext is not ExclusiveCardRow row) return;
+            bool burst = false;
+            try
+            {
+                if (!_plansMode && row.IsAvailable && AmbientFxCanvas.Env.AllowParticles && card.Bounds.Width > 0
+                    && card.TranslatePoint(new Point(card.Bounds.Width / 2, card.Bounds.Height / 2), _ambientFx) is { } at)
+                {
+                    _ambientFx.Burst(at.X, at.Y, row.Hue, 90);
+                    burst = true;
+                }
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Vault card burst: {E}", ex.Message); }
+            if (!burst) { Open(row.Feature); return; }
+            DispatcherTimer.RunOnce(() => Open(row.Feature), TimeSpan.FromMilliseconds(140));
         }
 
         /// <summary>
@@ -171,14 +527,69 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OpenExclusiveFeature(feature.Key);
         }
 
-        /// <summary>WPF OnExclusiveCardHover: the shared hover pop on the art, driven from the card.
-        /// ponytail: no MotionFx.HoverLift or glow bloom on this head yet.</summary>
+        /// <summary>WPF OnExclusiveCardHover: the shared hover pop on the art, driven from the card.</summary>
         private void Card_PointerEntered(object? sender, PointerEventArgs e) => HoverPop.Enter(CardArt(sender));
 
         private void Card_PointerExited(object? sender, PointerEventArgs e) => HoverPop.Leave(CardArt(sender));
 
         private static Control? CardArt(object? card) =>
             (card as Control)?.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == "CardArt");
+    }
+
+    /// <summary>One shelf group on the Premium page: its header and its cards (WPF VaultGroupHead).</summary>
+    public sealed class ExclusiveShelfGroup
+    {
+        public ExclusiveShelfGroup(PremiumGroup group, IReadOnlyList<ExclusiveCardRow> cards, bool first)
+        {
+            Group = group;
+            Cards = cards;
+            Hue = ExclusiveCardRow.HueOf(group);
+            string titleKey, subKey;
+            (Sign, titleKey, subKey) = group switch
+            {
+                PremiumGroup.Basic => (Load("features/tier_badge_t1.png"), "premium_group_basic", "premium_group_basic_sub"),
+                PremiumGroup.Prime => (Load("features/tier_badge_t2.png"), "premium_group_prime", "premium_group_prime_sub"),
+                _ => ((Bitmap?)null, "premium_group_free", "premium_group_free_sub"),
+            };
+            Title = Loc.Get(titleKey);
+            Sub = Loc.Get(subKey);
+            CountText = string.Format(Loc.Get("premium_group_count"), cards.Count(c => c.IsMine), cards.Count);
+            HeadMargin = new Thickness(0, first ? 0 : 14, 0, 16);
+        }
+
+        private static readonly Dictionary<string, Bitmap?> SignCache = new();
+
+        private static Bitmap? Load(string name)
+        {
+            if (!SignCache.TryGetValue(name, out var bmp)) SignCache[name] = bmp = ModArt.TryLoad(name, 240);
+            return bmp;
+        }
+
+        public PremiumGroup Group { get; }
+        public IReadOnlyList<ExclusiveCardRow> Cards { get; }
+        public Color Hue { get; }
+        public Bitmap? Sign { get; }
+        public bool HasSign => Sign != null;
+        /// <summary>The sign's own pixels as an opacity mask, so the shimmer crosses the neon only.</summary>
+        public IBrush? SignMask => Sign == null ? null : new ImageBrush(Sign) { Stretch = Stretch.Uniform };
+        public string Title { get; }
+        public string Sub { get; }
+        public string CountText { get; }
+        public Thickness HeadMargin { get; }
+        public IBrush HueBrush => new SolidColorBrush(Hue);
+        public IBrush CountFill => new SolidColorBrush(Color.FromArgb(0x1F, Hue.R, Hue.G, Hue.B));
+        public IBrush CountEdge => new SolidColorBrush(Color.FromArgb(0x66, Hue.R, Hue.G, Hue.B));
+        /// <summary>A hairline in the plan's colour under the row, fading out to the right.</summary>
+        public IBrush RuleBrush => new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(Color.FromArgb(0xAA, Hue.R, Hue.G, Hue.B), 0),
+                new GradientStop(Color.FromArgb(0x00, Hue.R, Hue.G, Hue.B), 1),
+            },
+        };
     }
 
     /// <summary>
@@ -198,6 +609,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 : ExclusivesTabView.ArtName(feature.ArtResource), 700);
         }
 
+        internal static Color HueOf(PremiumGroup g) => g switch
+        {
+            PremiumGroup.Basic => ExclusivesTabView.VaultBasicGold,
+            PremiumGroup.Prime => ExclusivesTabView.VaultPrimeCyan,
+            _ => ExclusivesTabView.VaultFreeLilac,
+        };
+
         public ExclusiveFeature Feature { get; }
         public ExclusiveGateState State { get; }
         public bool FreeToday { get; }
@@ -207,6 +625,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public Cursor Cursor => new(IsAvailable ? StandardCursorType.Hand : StandardCursorType.Arrow);
         public string? UnavailableTip => IsAvailable ? null : Loc.Get("exclusives_not_on_this_build");
         public int Tier => Feature.Tier;
+
+        /// <summary>The shelf this card stands on (Core PremiumShelfOrder) and its colour.</summary>
+        public PremiumGroup Group => PremiumShelfOrder.GroupOf(Feature.Key, Feature.Tier);
+        public Color Hue => HueOf(Group);
+
+        /// <summary>WPF IsVaultDoorOpen: owned, a pass ready, or today's free door.</summary>
+        public bool IsMine => State != ExclusiveGateState.Locked || FreeToday;
+
+        /// <summary>WPF VaultCardAura: the rim and its soft glow, in the card's tier colour.</summary>
+        public IBrush AuraBrush => new SolidColorBrush(Color.FromArgb(0xD8, Hue.R, Hue.G, Hue.B));
+        public BoxShadows AuraShadow => new(new BoxShadow
+        {
+            Blur = 14, Spread = 1, Color = Color.FromArgb(0x70, Hue.R, Hue.G, Hue.B),
+        });
 
         /// <summary>"emoji + title"; WPF ExclusiveTitle takes Takeover's name from the mod.</summary>
         public string Title => $"{Feature.Emoji} " + (Feature.Key == "bambitakeover"

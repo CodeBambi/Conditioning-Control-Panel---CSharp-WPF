@@ -45,6 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // sender, and this is the ctor a reader will copy.
             InitializeComponent();
             DataContext = new AssetsTabViewModel();
+            InitializeLibraryPicker();   // the media picker + Folders chip (AssetsTabView.MediaPicker.cs)
         }
 
         /// <summary>

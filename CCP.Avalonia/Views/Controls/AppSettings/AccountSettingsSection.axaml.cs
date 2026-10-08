@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// <para>The login/link/backup/export buttons stay stubs: each needs a provider service (OAuth,
     /// cloud backup) that this head does not have. See the notes on each.</para>
     /// </summary>
-    public partial class AccountSettingsSection : UserControl
+    public partial class AccountSettingsSection : UserControl, IAppSettingsSection
     {
         // The same fixed brand values as the WPF original and the header chip: gold is the Tier-1
         // lock everywhere in the app, violet the Tier-2 "Lab" flask. Not mod-owned.
@@ -68,7 +68,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Host seam: the Settings door repaints the tier card every time it opens, so a login that
         /// happened behind another door is never shown stale.
         /// </summary>
-        public void OnSectionShown() => RefreshTierBadge();
+        public void OnSectionShown()
+        {
+            RefreshTierBadge();
+            PlansView.RefreshVault();   // the plates can move between visits (sign-in, tier change)
+            // Throttled inside (30 s): the invites card lives on this copy (WPF RefreshVaultCore).
+            _ = PlansView.FindControl<Controls.Invites.InvitePanel>("InvitesHost")?.RefreshAsync();
+        }
+
+        /// <summary>The Account &amp; Plans copy of the vault (header, plates, invites).</summary>
+        internal Tabs.ExclusivesTabView Plans => PlansView;
+
+        /// <summary>Starts or parks the plans room (AppSettingsTabView.SyncPlansMotion).</summary>
+        internal void SetPlansMotion(bool on) => PlansView.SetMotion(on);
 
         /// <summary>Repaints the account/tier card from the account seam. Never throws.</summary>
         internal void RefreshTierBadge()
