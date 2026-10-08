@@ -25,6 +25,9 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops.Scenes
         private Color? _accent;
         private IBrush _glow = null!, _cellHalo = null!;
         private Pen _hotEdge = null!;
+        // Letter widths and the "16 ms" label never change: measured once, on the first frame.
+        private double[]? _widths;
+        private FormattedText? _label;
 
         public override string Id => "Subliminals";
         public override double DurationMs => 6300;
@@ -97,16 +100,12 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops.Scenes
             new ImmutableSolidColorBrush(Color.FromArgb((byte)Math.Round(c.A * a), c.R, c.G, c.B));
 
         /// <summary>The 40px word, centred at y 108 with 4px letter spacing.</summary>
-        private static void DrawWord(LoopFrame f, DrawingContext dc, IBrush brush, double dx, double dy)
+        private void DrawWord(LoopFrame f, DrawingContext dc, IBrush brush, double dx, double dy)
         {
             const double size = 40, spacing = 4;
-            Span<double> widths = stackalloc double[Word.Length];
+            var widths = _widths ??= Letters.Select(l => f.Measure(l, size, LoopFrame.Display, bold: true).Width).ToArray();
             double total = 0;
-            for (int i = 0; i < Word.Length; i++)
-            {
-                widths[i] = f.Measure(Letters[i], size, LoopFrame.Display, bold: true).Width;
-                total += widths[i] + spacing;
-            }
+            for (int i = 0; i < Word.Length; i++) total += widths[i] + spacing;
             double x = LoopFrame.StageWidth / 2 - total / 2 + spacing / 2 + dx;
             double y = 108 + 5 + dy;
             for (int i = 0; i < Word.Length; i++)
@@ -119,7 +118,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops.Scenes
         /// <summary>The frame strip top right: ten cells, one lit per 60 ms while the word is up.</summary>
         private void DrawFrames(LoopFrame f, DrawingContext dc, double t, bool on)
         {
-            var label = f.Format("16 ms", 9, f.P.Dim, LoopFrame.Mono, FontWeight.Medium);
+            var label = _label ??= f.Format("16 ms", 9, f.P.Dim, LoopFrame.Mono, FontWeight.Medium);
             double inner = 10 * 9 + 9 * 3 + 3 + 6 + label.Width;
             double w = inner + 16 + 2, h = 28;
             var box = new Rect(LoopFrame.StageWidth - 14 - w, 14, w, h);

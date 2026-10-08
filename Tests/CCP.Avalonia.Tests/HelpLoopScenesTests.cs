@@ -135,6 +135,22 @@ public sealed class HelpLoopScenesTests
         return Task.CompletedTask;
     });
 
+    [Fact]
+    public Task IntensityRampCurveStopsAtItsHead() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        // A point on the full climb curve (WPF IntensityRampLoop: plot 332,132 118x74, y = .12 + .78 * EaseInOut(u)),
+        // well right of the head at t=1500 (u ~ .23). Before the curve starts (t=300) and at t=1500 it shows the
+        // same card; once the curve has reached it (t=4800) it does not.
+        const double x = 420;
+        double u = (x - 332) / 118.0, y = 206 - 74 * (.12 + .78 * LoopMath.EaseInOut(u));
+        uint Px(double at) { Assert.True(HelpLoopRegistry.TryGet("IntensityRamp", out var s)); return Pixel(new FixedAt(s, at), x, y); }
+        var empty = Px(300);
+        Assert.Equal(empty, Px(1500));
+        Assert.NotEqual(empty, Px(4800));
+        return Task.CompletedTask;
+    });
+
     /// <summary>A black Back with a white bar ending at x=240 (Front bar 360..440, ground right of 280); the pixel 3 px right of its edge.</summary>
     private static uint EdgePixel(double blur) => Pixel(new BarScene { Blur = blur }, 243, 135);
 

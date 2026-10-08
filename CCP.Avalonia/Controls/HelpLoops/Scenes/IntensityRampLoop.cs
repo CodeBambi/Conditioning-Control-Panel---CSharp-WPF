@@ -33,7 +33,8 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops.Scenes
         private static readonly Pen LilacRim = new(LoopPalette.Solid("#b99cff"), 2);
 
         // WPF draws the curve's 40 straight segments up to u each frame; the same polyline, built
-        // once and clipped at the head (the dot covers the cut), draws the same pixels.
+        // once and clipped at the head, looks the same: the cut and the missing round end cap sit under
+        // the head dot (pinned by HelpLoopScenesTests.IntensityRampCurveStopsAtItsHead).
         private static readonly StreamGeometry ClimbCurve = Polyline(Climb), FallCurve = Polyline(Fall);
 
         // The readouts the WPF code formats each frame: RAMP 1.0x..2.0x, RANGE 0%..100%.
