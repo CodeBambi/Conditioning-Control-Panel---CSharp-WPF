@@ -34,6 +34,7 @@ public sealed class GateFxAdornerTests
         Assert.Equal(AmbientFxLayers.FogDrift, fx.Fog.Layers);
         Assert.True(fx.IsRunning);
         Assert.True(fx.HasLockGlow);
+        Assert.True(fx.GlowTicking);
 
         var sheen = fx.CtaSheen!;
         Assert.True(sheen.IsTicking);
@@ -56,6 +57,15 @@ public sealed class GateFxAdornerTests
         shell.ShowTab("lockdown");
         Settle(shell);
         Assert.False(fx.IsRunning);
+        Assert.Null(fx.CtaSheen);
+
+        CoreSettings.Current.MotionLevel = MotionLevel.Full;            // torn out of the tree: everything parks (P01)
+        fx.Refresh();
+        Assert.True(fx.IsRunning);
+        ((Panel)gate.Parent!).Children.Remove(gate);
+        Settle(shell);
+        Assert.False(fx.IsRunning);
+        Assert.False(fx.GlowTicking);
         Assert.Null(fx.CtaSheen);
     });
 
@@ -88,7 +98,6 @@ public sealed class GateFxAdornerTests
         shell.ShowTab("studio");
         Settle(shell);
         Assert.Same(moved, rack.CometFor(other));
-        moved.Start();                                                  // what a fresh attach does
         Assert.False(moved.IsLapping);
         Assert.True(moved.IsVisible);
     });

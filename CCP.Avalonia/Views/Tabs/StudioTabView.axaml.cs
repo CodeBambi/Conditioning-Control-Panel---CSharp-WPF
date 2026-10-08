@@ -971,7 +971,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 e.Comet = null;
                 return;
             }
-            if (e.Comet != null) return;   // already lit - leave its clock alone
+            if (e.Comet != null) { e.Comet.Start(); return; }   // re-reads the motion gate (lap or static)
             e.Comet = PerimeterCometAdorner.Attach(e.Tile, ActiveTileCornerRadius, ActiveTileLapSeconds);
             if (e.Comet != null) return;
             // The tile joins the visual tree (via the row's ContentPresenter) only on the tab's

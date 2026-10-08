@@ -51,6 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private RectangleGeometry? _geometry;
         private Size _geometrySize;
         private double _perimeter;
+        private readonly Pen?[] _pens = new Pen?[TailSegments + 1];
 
         public PerimeterCometAdorner(Control adorned, double cornerRadius, double lapSeconds = DefaultLapSeconds)
             : base(adorned, AmbientFrameRate) => (_cornerRadius, _lapSeconds) = (Math.Max(0, cornerRadius), Math.Max(1.0, lapSeconds));
@@ -140,13 +141,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
             double segment = _perimeter * TailFraction / TailSegments;
             // Back to front, so the head paints over its own tail.
             for (int i = TailSegments - 1; i >= 0; i--)
-                DrawArc(context, geometry, headLength + (i * segment), segment, TailBrushes[i], TailThickness);
-            DrawArc(context, geometry, 0, headLength, HeadBrush, HeadThickness);
+                DrawArc(context, geometry, i, headLength + (i * segment), segment, TailBrushes[i], TailThickness);
+            DrawArc(context, geometry, TailSegments, 0, headLength, HeadBrush, HeadThickness);
         }
 
         /// <summary>One lit arc: a single dash <paramref name="length"/> long, placed
         /// <paramref name="behind"/> pixels back from the head (positive offset shifts backwards).</summary>
-        private void DrawArc(DrawingContext dc, Geometry geometry, double behind, double length,
+        private void DrawArc(DrawingContext dc, Geometry geometry, int slot, double behind, double length,
                              IBrush brush, double thickness)
         {
             double dash = length / thickness;
@@ -158,8 +159,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
             double offset = (-startPx / thickness) % pattern;
             if (offset < 0) offset += pattern;
 
-            dc.DrawGeometry(null, new Pen(brush, thickness, new DashStyle(new[] { dash, gap }, offset),
-                                          PenLineCap.Round, PenLineJoin.Round), geometry);
+            // The 8 pens are built once per size; a frame only moves each dash's offset.
+            var pen = _pens[slot] ??= new Pen(brush, thickness, new DashStyle(new[] { dash, gap }, 0),
+                                              PenLineCap.Round, PenLineJoin.Round);
+            ((DashStyle)pen.DashStyle!).Offset = offset;
+            dc.DrawGeometry(null, pen, geometry);
         }
 
         /// <summary>The outline inset by half the head thickness, cached per size.</summary>
@@ -175,6 +179,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _geometry = new RectangleGeometry(new Rect(inset, inset, w, h), r, r);
             _perimeter = (2 * (w - (2 * r))) + (2 * (h - (2 * r))) + (2 * Math.PI * r);
             _geometrySize = size;
+            Array.Clear(_pens);   // dash lengths depend on the perimeter
             return _geometry;
         }
 

@@ -1,14 +1,10 @@
 using System;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using Avalonia;
-using Avalonia.Animation;
-using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
-using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Models;
@@ -43,7 +39,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
         // Weak: a gate whose tab is torn down must not be kept alive by its decoration.
         private static readonly ConditionalWeakTable<Border, PremiumGateFx> Attached = new();
 
-        private CancellationTokenSource? _lockClock;
+        private DispatcherTimer? _lockClock;
+        private long _lockStart;
         private CardSheenAdorner? _ctaSheen;
         private bool _running;
         private IDisposable? _watch;
@@ -55,6 +52,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         internal bool IsRunning => _running;
         internal bool HasLockGlow => padlock?.Effect is DropShadowEffect;
         internal CardSheenAdorner? CtaSheen => _ctaSheen;
+        internal bool GlowTicking => _lockClock?.IsEnabled == true;
 
         /// <summary>Decorates a gate once and re-evaluates its clocks. Idempotent, never throws;
         /// null when the gate is not a shape this can decorate.</summary>
@@ -88,7 +86,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                     fx._watch?.Dispose();
                     fx._watch = null;
                     CoreMods.ModChanged -= fx.OnModChanged;   // a static event must not pin a gone tab
-                    fx.Refresh();
+                    Dispatcher.UIThread.Post(fx.Refresh);    // the tree still says "attached" mid-event
                 };
                 if (gate.IsAttachedToVisualTree()) fx.WatchVisibility();
                 fx.Refresh();
@@ -137,7 +135,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             try
             {
-                bool want = gate.IsVisible && gate.IsEffectivelyVisible && AmbientFxCanvas.Env.AllowAmbientLoops;
+                bool want = gate.IsVisible && gate.IsEffectivelyVisible && gate.IsAttachedToVisualTree()
+                            && AmbientFxCanvas.Env.AllowAmbientLoops;
                 if (!want)
                 {
                     if (!_running) return;
@@ -165,7 +164,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private void ApplyLockGlow(bool on)
         {
             if (padlock == null) return;
-            _lockClock?.Cancel();
+            _lockClock?.Stop();
             _lockClock = null;
             var tier = AmbientFxCanvas.Env.CurrentTier;
             if (!on || !AmbientFxCanvas.Env.AllowGlow(tier)) { padlock.ClearValue(Visual.EffectProperty); return; }
@@ -178,20 +177,14 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 Opacity = LockGlowMaxOpacity,
             };
             padlock.Effect = glow;
-            _lockClock = new CancellationTokenSource();
-            var anim = new Animation
+            // WPF: a 3.6s SineEase in/out, auto-reversed, capped at 24fps (SetDesiredFrameRate).
+            _lockStart = FxAdorner.Time.GetTimestamp();
+            _lockClock = new DispatcherTimer(TimeSpan.FromMilliseconds(1000.0 / 24), DispatcherPriority.Background, (_, _) =>
             {
-                Duration = TimeSpan.FromSeconds(LockGlowSeconds),
-                IterationCount = IterationCount.Infinite,
-                PlaybackDirection = PlaybackDirection.Alternate,
-                Easing = new SineEaseInOut(),
-                Children =
-                {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(DropShadowEffect.OpacityProperty, LockGlowMinOpacity) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(DropShadowEffect.OpacityProperty, LockGlowMaxOpacity) } },
-                },
-            };
-            _ = anim.RunAsync(glow, _lockClock.Token);
+                double t = FxAdorner.Time.GetElapsedTime(_lockStart).TotalSeconds % (2 * LockGlowSeconds);
+                double u = t < LockGlowSeconds ? t / LockGlowSeconds : 2 - (t / LockGlowSeconds);
+                glow.Opacity = LockGlowMinOpacity + ((LockGlowMaxOpacity - LockGlowMinOpacity) * (1 - Math.Cos(Math.PI * u)) / 2);
+            });   // this constructor starts the timer
         }
 
         /// <summary>The Presets-style travelling band on the CTA, in the adorner layer so the
