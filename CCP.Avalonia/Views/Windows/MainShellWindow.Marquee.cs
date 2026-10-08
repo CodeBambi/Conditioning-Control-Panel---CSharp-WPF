@@ -47,8 +47,7 @@
 //   StartMarqueeAnimation / UpdateMarqueeMessage - the scrolling marquee strip, a WPF Storyboard
 //     over a TranslateTransform on a control MainShellWindow.axaml does not carry. Nothing to
 //     drive: a still banner that says the right thing beats a faked scroll.
-//   SweepBannerSheen - MainShellWindow.ChromeFx.cs, still a stub. The BannerSheen border is in
-//     the XAML and parked at Opacity 0, so its absence costs nothing visible.
+//   (SweepBannerSheen, the drum roll and the beat FX are live in MainShellWindow.BannerFx.cs.)
 
 using System;
 using System.Linq;
@@ -78,7 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         public static bool IsStartupDialogShowing { get; set; }
 
         private const int BannerFadeMs = 500;
-        private static readonly TimeSpan BannerRotationInterval = TimeSpan.FromSeconds(4);
+        private static readonly TimeSpan BannerRotationInterval = TimeSpan.FromSeconds(ConditioningControlPanel.Fx.BannerFxRules.RotationSeconds);
 
         private DispatcherTimer? _bannerRotationTimer;
         private int _bannerCurrentIndex;          // 0 = Primary (support), 1 = Secondary (welcome)
@@ -100,6 +99,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 InitializeBannerRotation();
+                InitializeHeaderHud();
                 UpdateQuickLoginUI();
                 RefreshSessionFeatureLock();
 
@@ -199,11 +199,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_bannerCurrentIndex >= banners.Length) _bannerCurrentIndex = 0;
 
             var nextIndex = (_bannerCurrentIndex + 1) % banners.Length;
-            Crossfade(banners[_bannerCurrentIndex], banners[nextIndex]);
+            var outgoing = banners[_bannerCurrentIndex];
+            var incoming = banners[nextIndex];
+            // Polish wave 13: at Full the drum also rolls one face (MainShellWindow.BannerFx.cs).
+            bool rolled = RollBannerDrum(outgoing, incoming);
+            Crossfade(outgoing, incoming);
             _bannerCurrentIndex = nextIndex;
 
-            // ponytail: WPF also calls SweepBannerSheen() here. MainShellWindow.ChromeFx.cs is
-            // still a stub, so the sheen pass is skipped rather than faked.
+            // A light sheen rides the crossfade (throttled inside), then the incoming beat pops,
+            // the pill flashes and the support line gets its sparkle run (BannerFx.cs).
+            SweepBannerSheen();
+            OnBannerBeatChanged(incoming, rolled);
         }
 
         /// <summary>
@@ -213,8 +219,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         private static void Crossfade(TextBlock outgoing, TextBlock incoming)
         {
-            EnsureFadeTransition(outgoing);
-            EnsureFadeTransition(incoming);
+            // Motion Off (nav polish wave 6): nothing moves, the text just swaps.
+            if (global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowTransitions)
+            {
+                EnsureFadeTransition(outgoing);
+                EnsureFadeTransition(incoming);
+            }
+            else
+            {
+                outgoing.Transitions = null;
+                incoming.Transitions = null;
+            }
 
             outgoing.Opacity = 0;
             incoming.Opacity = 1;
@@ -232,6 +247,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             var secondary = BannerSecondary;
             if (secondary is not null) secondary.Text = message;
+
+            // A genuinely new message, so it bypasses the rotation throttle.
+            SweepBannerSheen(force: true);
 
             if (_bannerRotationTimer is { IsEnabled: false }) _bannerRotationTimer.Start();
         }
