@@ -1430,3 +1430,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-quiz-report: +162
 - win-quiz-report: past-quizzes list (trends + runs -> QuizReportWindow, one at a time) ported; still stub because both heads hide BtnStartQuiz.
 - QuizPastRunsReportTests, fail-proven x3.
+
+## avalonia-port/rows-season-recap: +482
+- Season recap card follows the active mod accent (Core RecapPalette, shared with WPF) and the foil shimmer is back on WPF's curve; it runs only while visible. The recap window's backdrop and pills follow the mod too.
+- Copy card and Share on X put the PNG on the clipboard (checked live on Wayland). All 3 recap rows are now wired.
