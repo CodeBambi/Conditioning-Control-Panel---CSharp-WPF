@@ -1330,3 +1330,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-floating-text: +357
 - FloatingWord overlay (WPF keyframes) thrown by friends drawer actions; bouncing text corner_hit achievement and real-time topmost re-assert (measured 0.4-0.7 s).
+
+## avalonia-port/launcher-fx: +1025
+- Launcher FX on one visibility/focus-gated frame clock: spirals and ambient, hover lift/tilt/glow, exit beat with guard, edge glint, fade, sounds and melody (Core).
