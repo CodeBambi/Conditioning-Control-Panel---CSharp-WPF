@@ -25,7 +25,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         { }
 
         public MessageDialog(string title, string message, bool showCancel, bool defaultToCancel = false,
-                             string? okText = null)
+                             string? okText = null, string? cancelText = null)
         {
             InitializeComponent();
 
@@ -41,6 +41,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // WPF ShowStyledDialog's yes label (e.g. "Delete"). A new TextBlock, not .Text over the
             // {loc:Str} one, which a language change would undo.
             if (okText != null) ok.Content = new TextBlock { Text = okText };
+            if (cancelText != null) cancel.Content = new TextBlock { Text = cancelText };
 
             // WPF's MessageBox.Show takes a defaultResult, and a guard prompt passes No so that
             // Enter keeps the guard. IsDefault lives on OK in the markup, so it has to MOVE, not
@@ -66,8 +67,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// rest, which defaulted to the first button.
         /// </param>
         public static async Task<bool> ConfirmAsync(Window owner, string title, string message,
-                                                    bool defaultToCancel = false, string? okText = null)
-            => await new MessageDialog(title, message, showCancel: true, defaultToCancel, okText)
+                                                    bool defaultToCancel = false, string? okText = null,
+                                                    string? cancelText = null)
+            => await new MessageDialog(title, message, showCancel: true, defaultToCancel, okText, cancelText)
                 .ShowDialog<bool?>(owner) == true;
     }
 }
