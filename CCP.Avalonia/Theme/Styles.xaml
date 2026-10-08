@@ -14,7 +14,8 @@
      Only the styles needed by the first ported view live here. The remaining ~12 keys in
      Controls.xaml and the rest of MainWindow.xaml follow the same mapping. -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ctrl="using:ConditioningControlPanel.Avalonia.Controls">
 
   <!-- MainWindow.xaml:525 -->
   <ControlTheme x:Key="SectionPanel" TargetType="Border">
@@ -119,30 +120,56 @@
     </Style>
   </ControlTheme>
 
-  <!-- Controls.xaml:95. Same shape as ActionButton, different palette. -->
+  <!-- 7.1.5 Controls.xaml:96. Depth (nav polish wave 10): opt-in through ctrl:HudPlank.Kind="Plank"
+       (Save on the START row). It adds a drop band (DepthDrop), the lamp's sheen and bevel over the
+       plate, and lets Controls/Depth/HudPlank.cs move the face (DepthFace). Without it the button
+       draws as before, and the press is the old squash: Controls/Depth/PressSquish.cs (0.97 in
+       80 ms linear, back in 150 ms on BackEase 0.3), which stands down on a plank so a press is
+       ONE motion, the travel. Depth brushes are DynamicResource from Theme/Depth.axaml. -->
   <ControlTheme x:Key="SecondaryButton" TargetType="Button">
+    <!-- The drop band and a pressed face hang below the button: never clip them (WPF does not). -->
+    <Setter Property="ClipToBounds" Value="False"/>
     <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
     <Setter Property="Foreground" Value="White"/>
     <Setter Property="FontSize" Value="12"/>
     <Setter Property="Padding" Value="12,8"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="ctrl:PressSquish.Scale" Value="0.97"/>
     <Setter Property="Template">
       <ControlTemplate TargetType="Button">
-        <Border x:Name="border" CornerRadius="8" Padding="{TemplateBinding Padding}"
-                Background="{TemplateBinding Background}"
-                RenderTransformOrigin="50%,50%">
-          <ContentPresenter Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
-        </Border>
+        <Panel>
+          <Border x:Name="DepthDrop" VerticalAlignment="Bottom" Height="5" Margin="6,0,6,-5"
+                  CornerRadius="0,0,7,7" Background="{DynamicResource DepthDropBand}"
+                  IsHitTestVisible="False" IsVisible="False"/>
+          <Panel x:Name="DepthFace">
+            <Border x:Name="border" CornerRadius="8" Padding="{TemplateBinding Padding}"
+                    Background="{TemplateBinding Background}"
+                    RenderTransformOrigin="50%,50%">
+              <ContentPresenter Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <Border x:Name="DepthSheen" CornerRadius="8" Background="{DynamicResource DepthRaisedSheen}"
+                    IsHitTestVisible="False" IsVisible="False"/>
+            <Border x:Name="DepthBevel" CornerRadius="8" BorderThickness="1"
+                    BorderBrush="{DynamicResource DepthRaisedBevel}"
+                    IsHitTestVisible="False" IsVisible="False"/>
+          </Panel>
+        </Panel>
       </ControlTemplate>
     </Setter>
     <Style Selector="^:pointerover /template/ Border#border">
       <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
     </Style>
-    <Style Selector="^:pressed /template/ Border#border">
-      <Setter Property="RenderTransform" Value="scale(0.97)"/>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Plank] /template/ Border#DepthDrop">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Plank] /template/ Border#DepthSheen">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Plank] /template/ Border#DepthBevel">
+      <Setter Property="IsVisible" Value="True"/>
     </Style>
   </ControlTheme>
 
@@ -371,8 +398,15 @@
     </Style>
   </ControlTheme>
 
-  <!-- Controls.xaml:342 -->
+  <!-- 7.1.5 Controls.xaml:368. Depth (nav polish wave 10): opt-in through ctrl:HudPlank.Kind, so
+       every PinkButton without it draws exactly as before. With it the plate is a raised PLANK: a
+       drop band under it (DepthDrop, sized and pressed by Controls/Depth/HudPlank.cs), the lamp's
+       bevel and sheen over the plate colour, the label above both, and the whole face (DepthFace)
+       travels on hover / press / release. Chunky (START only) wears the strong plank bevel + sheen.
+       The plate keeps the name "border" so the hover selector below still finds it. -->
   <ControlTheme x:Key="PinkButton" TargetType="Button">
+    <!-- The drop band and a pressed face hang below the button: never clip them (WPF does not). -->
+    <Setter Property="ClipToBounds" Value="False"/>
     <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
     <Setter Property="Foreground" Value="White"/>
     <Setter Property="FontWeight" Value="Bold"/>
@@ -383,18 +417,58 @@
     <Setter Property="BorderThickness" Value="1.5"/>
     <Setter Property="Template">
       <ControlTemplate TargetType="Button">
-        <Border x:Name="border" Background="{TemplateBinding Background}"
-                BorderBrush="{TemplateBinding BorderBrush}"
-                BorderThickness="{TemplateBinding BorderThickness}"
-                CornerRadius="8" Padding="{TemplateBinding Padding}">
-          <ContentPresenter Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
-        </Border>
+        <Panel>
+          <Border x:Name="DepthDrop" VerticalAlignment="Bottom" Height="5" Margin="6,0,6,-5"
+                  CornerRadius="0,0,7,7" Background="{DynamicResource DepthDropBand}"
+                  IsHitTestVisible="False" IsVisible="False"/>
+          <Panel x:Name="DepthFace">
+            <Border x:Name="border" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="8"/>
+            <Border x:Name="DepthSheen" CornerRadius="8" Background="{DynamicResource DepthRaisedSheen}"
+                    IsHitTestVisible="False" IsVisible="False"/>
+            <Border x:Name="DepthBevel" CornerRadius="8" BorderThickness="1"
+                    BorderBrush="{DynamicResource DepthRaisedBevel}"
+                    IsHitTestVisible="False" IsVisible="False"/>
+            <Border BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="Transparent"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </Panel>
+        </Panel>
       </ControlTemplate>
     </Setter>
     <Style Selector="^:pointerover /template/ Border#border">
       <Setter Property="Background" Value="{DynamicResource DarkPinkBrush}"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Plank] /template/ Border#DepthDrop">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Plank] /template/ Border#DepthSheen">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Plank] /template/ Border#DepthBevel">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Plank] /template/ Border#border">
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Chunky] /template/ Border#DepthDrop">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Chunky] /template/ Border#DepthSheen">
+      <Setter Property="IsVisible" Value="True"/>
+      <Setter Property="Background" Value="{DynamicResource DepthPlankSheen}"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Chunky] /template/ Border#DepthBevel">
+      <Setter Property="IsVisible" Value="True"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource DepthPlankBevel}"/>
+    </Style>
+    <Style Selector="^[(ctrl|HudPlank.Kind)=Chunky] /template/ Border#border">
+      <Setter Property="BorderThickness" Value="0"/>
     </Style>
   </ControlTheme>
 
