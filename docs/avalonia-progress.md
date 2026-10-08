@@ -1315,3 +1315,15 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/main-20261008: +513
 - Main sync #5: WPF main 0d9e83383 merged (breakout web fixes, descent ceremony retirement, descent_auto); delta ledger docs/avalonia-main-sync-20261008.md.
+
+## avalonia-port/main-20261008-compat: +25
+- Retire the Avalonia descent ceremony; descent_auto golden tests; WPF scan test adapted to the typed SyncBody.
+
+## avalonia-port/spiral-overlay: +599
+- Spiral overlay on Avalonia: per-monitor click-through windows, background decode, opacity curve shared with WPF via Core SpiralFrames, engine/session/panic wiring.
+
+## avalonia-port/rows-pink-mindwipe: +592
+- Mind Wipe plays on Linux (LibVLC, WPF 120 ms overlap loop measured gapless); Core CoreMindWipe run rule shared with WPF; pink tint follows the dashboard tile.
+
+## avalonia-port/rows-popups-unlock: +301
+- Achievement and item-unlocked passive toasts (X11 override-redirect, device-pixel placement), chime, Discord share in Core; rows wired.

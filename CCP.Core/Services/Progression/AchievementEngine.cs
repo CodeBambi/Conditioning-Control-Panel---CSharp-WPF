@@ -161,6 +161,14 @@ internal sealed class AchievementEngine
         return minutes;
     }
 
+    /// <summary>WPF AchievementService.TrackMindWipeDuration: clean_slate at 60 s of continuous loop.</summary>
+    public void TrackMindWipeDuration(double seconds)
+    {
+        Progress.ContinuousMindWipeSeconds = seconds;
+        _isDirty = true;
+        if (seconds >= 60) TryUnlock("clean_slate");
+    }
+
     /// <summary>WPF AchievementService.TrackBubbleCountGameStarted.</summary>
     public void TrackBubbleCountGameStarted()
     {
