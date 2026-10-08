@@ -30,6 +30,28 @@ public sealed class OfflineModeShellTests
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
     }
 
+    /// <summary>Factory reset's relaunch really starts the exe off Windows, even from a path with a
+    /// space (the old single Arguments string reached sh as a syntax error).</summary>
+    [Fact]
+    public void FactoryResetRelaunchStartsTheExe()
+    {
+        if (System.OperatingSystem.IsWindows()) return;
+        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ccp relaunch " + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(dir);
+        try
+        {
+            var marker = System.IO.Path.Combine(dir, "ran");
+            var exe = System.IO.Path.Combine(dir, "my app");
+            System.IO.File.WriteAllText(exe, $"#!/bin/sh\ntouch \"{marker}\"\n");
+            System.IO.File.SetUnixFileMode(exe, System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute);
+            using var p = System.Diagnostics.Process.Start(DataSettingsSection.RelaunchStartInfo(exe, delaySeconds: 0))!;
+            Assert.True(p.WaitForExit(10_000));
+            Assert.Equal(0, p.ExitCode);
+            Assert.True(System.IO.File.Exists(marker));
+        }
+        finally { System.IO.Directory.Delete(dir, true); }
+    }
+
     [Fact]
     public async Task TickingOfflineStopsTheHeartbeatAndGreysTheOnlineControls_UntickingRestoresThem()
     {
@@ -74,6 +96,12 @@ public sealed class OfflineModeShellTests
                 Assert.False(site.IsEnabled);
                 Assert.Equal("● Offline", status.Text);
                 Assert.Equal("about:blank", web.Source?.ToString());
+                // The privacy panel joins a window later (its dialog); it greys on arrival.
+                var panel = new ProfilePrivacyPanel();
+                var host = new Window { Content = panel };
+                host.Show();
+                Assert.False(panel.FindControl<Button>("BtnDiscordTabLogin")!.IsEnabled);
+                host.Close();
 
                 data.FindControl<CheckBox>("ChkOfflineMode")!.IsChecked = false;
                 Dispatcher.UIThread.RunJobs();

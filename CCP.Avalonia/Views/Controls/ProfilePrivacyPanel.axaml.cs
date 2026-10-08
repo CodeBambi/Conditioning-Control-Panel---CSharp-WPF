@@ -43,6 +43,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             AvaloniaXamlLoader.Load(this);
             DataContext = new ProfilePrivacyPanelViewModel();
         }
+
+        /// <summary>The panel joins a window only when its dialog opens, after the shell's offline
+        /// pass; grey its login button here too (WPF UpdateOfflineModeUI).</summary>
+        protected override void OnAttachedToVisualTree(global::Avalonia.VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            Views.Windows.MainShellWindow.SetOfflineDisabled(
+                this.FindControl<Button>("BtnDiscordTabLogin"), CoreSettings.Current.OfflineMode);
+        }
     }
 
     /// <summary>

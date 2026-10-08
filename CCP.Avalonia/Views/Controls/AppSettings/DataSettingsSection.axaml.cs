@@ -380,6 +380,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// have the new process ack against the old one and exit. Returns false if it could not be
         /// scheduled - the reset still proceeds, the user just starts the app themselves.
         /// </summary>
+        /// <summary>The detached delayed relaunch. Off Windows the exe goes in as "$1" through
+        /// ArgumentList: .NET splits a single Arguments string by Windows rules, which do not
+        /// honour single quotes, so <c>-c 'sleep 4; ...'</c> reached sh as a syntax error.</summary>
+        internal static ProcessStartInfo RelaunchStartInfo(string exe, int delaySeconds = 4)
+        {
+            var psi = OperatingSystem.IsWindows()
+                ? new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c timeout /t {delaySeconds} /nobreak >nul & start \"\" \"{exe}\"",
+                }
+                : new ProcessStartInfo
+                {
+                    FileName = "/bin/sh",
+                    ArgumentList = { "-c", $"sleep {delaySeconds}; exec \"$1\"", "sh", exe },
+                };
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            psi.WorkingDirectory = Path.GetDirectoryName(exe) ?? Environment.CurrentDirectory;
+            return psi;
+        }
+
         private static bool TryScheduleRelaunch()
         {
             try
@@ -391,22 +413,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     return false;
                 }
 
-                var psi = OperatingSystem.IsWindows()
-                    ? new ProcessStartInfo
-                    {
-                        FileName = "cmd.exe",
-                        Arguments = $"/c timeout /t 4 /nobreak >nul & start \"\" \"{exe}\"",
-                    }
-                    : new ProcessStartInfo
-                    {
-                        FileName = "/bin/sh",
-                        Arguments = $"-c 'sleep 4; exec \"{exe}\"'",
-                    };
-                psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
-                psi.WorkingDirectory = Path.GetDirectoryName(exe) ?? Environment.CurrentDirectory;
-
-                Process.Start(psi);
+                Process.Start(RelaunchStartInfo(exe));
                 Log.Information("[RESET] relaunch scheduled for {Exe}", exe);
                 return true;
             }

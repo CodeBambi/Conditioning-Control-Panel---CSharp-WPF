@@ -47,7 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             this.GetLogicalDescendants().OfType<T>().FirstOrDefault(c => c.Name == name);
 
         /// <summary>WPF SetOfflineDisabled: greyed, and the tooltip says why (shown while disabled).</summary>
-        private static void SetOfflineDisabled(Control? element, bool isOffline)
+        internal static void SetOfflineDisabled(Control? element, bool isOffline)
         {
             if (element == null) return;
             element.IsEnabled = !isOffline;
