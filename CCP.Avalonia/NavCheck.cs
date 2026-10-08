@@ -102,13 +102,19 @@ namespace ConditioningControlPanel.Avalonia
             Check(Vis("AssetsTab") && w.LitNavSection == NavSections.Library, "Folders is the Assets page in Library");
 
             // ---- the registry ---------------------------------------------------------------
-            var page = new Border { Name = "NavCheckLanePage" };
-            w.RegisterNavTab(new MainShellWindow.NavTabHost("leash", () => page));
+            // Leash is a real registered page now; only stand one in when it is not.
+            Control? page = null;
+            if (!w.IsRegisteredNavTab("leash"))
+            {
+                var standIn = new Border { Name = "NavCheckLanePage" };
+                w.RegisterNavTab(new MainShellWindow.NavTabHost("leash", () => standIn));
+                page = standIn;
+            }
             w.ShowTab("leash");
-            Check(page.IsVisible && !Vis("AssetsTab") && w.LitNavSection == NavSections.Social,
+            Check((page?.IsVisible ?? true) && !Vis("AssetsTab") && w.LitNavSection == NavSections.Social,
                   "a registered page shows in the page cell and lights its section");
             w.ShowTab("studio");
-            Check(!page.IsVisible && Vis("StudioTab"), "leaving a registered page hides it");
+            Check(!(page?.IsVisible ?? false) && Vis("StudioTab"), "leaving a registered page hides it");
 
             // ---- badges ---------------------------------------------------------------------
             NavBadges.Set(NavSections.Social, 3);
