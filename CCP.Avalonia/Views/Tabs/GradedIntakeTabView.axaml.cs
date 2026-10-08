@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -91,7 +92,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// WPF MainWindow.Lab.cs:343. Premium and Available open the page (Available also shows the
         /// pass banner); Spent and NeedsLogin show the gate with their own copy and disable the
         /// launch zone behind it. Pop Quiz sits outside the gated Border and stays reachable.
-        /// ponytail: PremiumGateFx (decoration only) is not ported.
         /// </summary>
         internal void RefreshGradedIntakeGate()
         {
@@ -101,6 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var open = state == IntakePassState.Premium || state == IntakePassState.Available;
 
                 GradedIntakeGate.IsVisible = !open;
+                PremiumGateFx.Attach(GradedIntakeGate);   // WPF MainWindow.Lab.cs:371
                 GradedIntakeGatedContent.IsEnabled = open;
                 GradedIntakePassBanner.IsVisible = state == IntakePassState.Available;
 

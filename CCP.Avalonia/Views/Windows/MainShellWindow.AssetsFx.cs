@@ -5,10 +5,8 @@
 // its effects are interaction motion on controls, and each is blocked on something concrete:
 //
 //   * the pack-card sheen (CardSheenAdorner over the hovered card). WPF hangs it off an
-//     AdornerLayer with a FrameworkElement host. There is no CardSheenAdorner on this head - it
-//     was never ported, and it is a control, so it belongs to a controls layer, not to a
-//     MainShellWindow partial. Avalonia does have an AdornerLayer, so this is a port and not a
-//     reimplementation, but it is somebody else's file.
+//     AdornerLayer with a FrameworkElement host. Controls/CardSheenAdorner.cs is ported now
+//     (Attach/Detach); what is missing is this host wiring.
 //   * the asset-tree row nudge (AssetTreeRowNudgePx over AssetTreeRowNudgeMs on hover). The
 //     target exists - AssetsTabView.axaml:518, TreeView x:Name="AssetTreeView" - but the hover
 //     handler belongs to the row template inside AssetsTabView, which this layer does not own.

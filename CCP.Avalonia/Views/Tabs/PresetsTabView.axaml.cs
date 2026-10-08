@@ -12,6 +12,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -27,11 +28,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// Preset Load / New / Save-over / Delete are wired (WPF MainWindow.Presets.cs:2202-2381).
     /// ponytail: needs JustDropOrdersService and the tab FX clock, wired when those move to
-    /// Core. The remaining wiring points, all named in the XAML, are:
-    ///   BtnRevealSpoilers / BtnSharePreset /
+    /// Core. Reveal spoilers and the Catalogue chip are wired. The remaining wiring points,
+    /// all named in the XAML, are:
+    ///   BtnSharePreset /
     ///   BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
-    ///   TxtRackSearch.TextChanged / SessionDropZone (catalogue) /
     ///   preset chip clicks and IsVisibleChanged -> OnPresetsTabVisibilityChanged (the card-sheen
     ///   clock, started on show, dropped on hide).
     ///
@@ -60,6 +61,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnSessionHistory.Click += BtnSessionHistory_Click;
             BtnCreateSession.Click += BtnCreateSession_Click;
             BtnExportSession.Click += (_, _) => { if (_selectedSession is { } s) ExportSession(s); };
+            BtnRevealSpoilers.Click += BtnRevealSpoilers_Click;
+            // WPF CatalogueCard_Click (MouseLeftButtonUp) -> MainWindow.BtnCatalogue_Click; Enter/Space too (P17).
+            SessionDropZone.PointerReleased += (_, e) =>
+            {
+                if (e.InitialPressMouseButton != MouseButton.Left) return;
+                e.Handled = true;
+                OpenCatalogue();
+            };
+            SessionDropZone.KeyDown += (_, e) =>
+            {
+                if (e.Key is not (Key.Enter or Key.Space)) return;
+                e.Handled = true;
+                OpenCatalogue();
+            };
             // WPF Window_Drop's Session/Preset cases (MainWindow.SessionIO.cs:1477-1484), scoped to
             // this tab. ponytail: asset/zip/mod drops and the window-wide overlay are still WPF-only.
             DragDrop.SetAllowDrop(this, true);
@@ -101,7 +116,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             if (_selectedSession is Session selected)
             {
+                var revealed = SessionSpoilerPanel.IsVisible;   // a language switch keeps the reveal
                 SelectSession(selected);
+                SessionSpoilerPanel.IsVisible = revealed;
+                if (revealed) SetRevealLabel("btn_hide_details");
                 return;
             }
             if (_selectedPreset is Preset preset)
@@ -787,6 +805,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Build the selectable rows from the available Core session snapshot.</summary>
         private void SeedSessionRack()
         {
+            DetachRowSweep();   // its row is gone
             var filtered = _availableSessions.Where(RackAccepts).ToArray();
             var shown = SessionRackQuery.SortRackSessions(filtered, _availableSessions, _rackSort);
             foreach (var session in shown)
@@ -905,7 +924,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             };
             row.PointerPressed += SessionRow_PointerPressed;
             row.KeyDown += SessionRow_KeyDown;
+            row.PointerEntered += (_, _) => AttachRowSweep(row);
+            row.PointerExited += (_, _) => { if (ReferenceEquals(row, _rowSweepHost)) _rowSweep?.Leave(); };
             return row;
+        }
+
+        // ---- the row sweep (WPF MainWindow.TabFxPresetsQuestsAchievements.cs:371-430) ----
+        // ONE sweep, moved to whichever row is hovered and left attached-and-idle after a leave.
+
+        private const double SessionCardCornerRadius = 10;
+        private RowSweepAdorner? _rowSweep;
+        internal RowSweepAdorner? RowSweep => _rowSweep;   // test seam
+        private Control? _rowSweepHost;
+
+        private void AttachRowSweep(Control row)
+        {
+            if (!row.IsEffectivelyVisible) return;
+            if (ReferenceEquals(row, _rowSweepHost) && _rowSweep != null)
+            {
+                _rowSweep.Enter();   // re-entering the row we are already parked on
+                return;
+            }
+            DetachRowSweep();
+            var sweep = new RowSweepAdorner(row, SessionCardCornerRadius);
+            if (!sweep.AddToLayer()) return;   // not rendered yet: the next hover tries again
+            sweep.Enter();
+            _rowSweep = sweep;
+            _rowSweepHost = row;
+        }
+
+        private void DetachRowSweep()
+        {
+            _rowSweep?.Reset();
+            _rowSweep?.RemoveFromLayer();
+            _rowSweep = null;
+            _rowSweepHost = null;
         }
 
         private Button RowAction(string glyph, string tip, bool danger)
@@ -974,17 +1027,88 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnStartSession.IsEnabled = true;
             BtnExportSession.IsEnabled = true;   // WPF SessionIO.cs:973
             SessionSpoilerPanel.IsVisible = false;
+            SetRevealLabel("btn_reveal_details");
+            // ponytail: WPF shows it when session.HasCornerGifOption; this head has no corner-GIF
+            // overlay surface (CoreCornerGif unseeded), so the option would promise a picture that never appears.
             CornerGifOptionPanel.IsVisible = false;
 
+            // WPF MainWindow.SessionIO.cs:927-972 (SelectSession).
             TxtDetailTitle.Text = $"{(string.IsNullOrWhiteSpace(session.Icon) ? "🎬" : session.Icon)} {SessionName(session)}";
-            TxtDetailSubtitle.Text = session.GenerateFeatureDescription();
-            TxtSessionDuration.Text = Loc.GetF("rack_duration", session.DurationMinutes);
-            TxtSessionXP.Text = Loc.GetF("rack_xp", session.BonusXP);
+            TxtDetailSubtitle.Text = SessionTimelineLine(session);
+            TxtSessionDuration.Text = Loc.GetF("label_0_minutes", session.DurationMinutes);
+            var multiplier = SessionXp.Multiplier(CoreSettings.Current?.PlayerLevel ?? 1);
+            var xp = Loc.GetF("rack_xp", (int)Math.Round(session.BonusXP * multiplier));
+            TxtSessionXP.Text = multiplier > 1.0 ? $"{xp} ({multiplier:F1}x)" : xp;
+            TxtSessionXP.Foreground = new SolidColorBrush(session.Difficulty switch
+            {
+                SessionDifficulty.Medium => Color.FromRgb(255, 215, 0),
+                SessionDifficulty.Hard => Color.FromRgb(255, 165, 0),
+                SessionDifficulty.Extreme => Color.FromRgb(255, 99, 71),
+                _ => Color.FromRgb(144, 238, 144),
+            });
             TxtSessionDifficulty.Text = session.GetDifficultyText();
-            TxtSessionDescription.Text = SessionDescription(session);
+            var description = SessionDescription(session);
+            var summary = session.GenerateFeatureDescription();
+            TxtSessionDescription.Text = string.IsNullOrWhiteSpace(description)
+                ? summary
+                : description + "\n\n─────────────────\n\n" + summary;
+            TxtSessionFlash.Text = session.GetSpoilerFlash();
+            TxtSessionSubliminal.Text = session.GetSpoilerSubliminal();
+            TxtSessionAudio.Text = session.GetSpoilerAudio();
+            TxtSessionOverlays.Text = session.GetSpoilerOverlays();
+            TxtSessionExtras.Text = session.GetSpoilerInteractive();
+            TxtSessionTimeline.Text = session.GetSpoilerTimeline();
 
             RefreshSessionRackSelection();
         }
+
+        /// <summary>WPF GenerateSessionTimelineDescription (MainWindow.SessionIO.cs:984), localized.</summary>
+        internal static string SessionTimelineLine(Session session)
+        {
+            var s = session.Settings;
+            var parts = new List<string>();
+            if (s.FlashEnabled) parts.Add(Loc.GetF("session_timeline_flashes", s.FlashPerHour));
+            if (s.SubliminalEnabled) parts.Add(Loc.GetF("session_timeline_subliminals", s.SubliminalPerMin));
+            if (s.AudioWhispersEnabled) parts.Add(Loc.Get("session_timeline_audio_whispers"));
+            if (s.PinkFilterEnabled) parts.Add(Loc.Get("session_timeline_pink_filter"));
+            if (s.SpiralEnabled) parts.Add(Loc.Get("session_timeline_spiral"));
+            if (s.BouncingTextEnabled) parts.Add(Loc.Get("session_timeline_bouncing_text"));
+            if (s.BubblesEnabled) parts.Add(Loc.Get("session_timeline_bubbles"));
+            if (s.LockCardEnabled) parts.Add(Loc.Get("session_timeline_lock_cards"));
+            if (s.MandatoryVideosEnabled) parts.Add(Loc.Get("session_timeline_videos"));
+            if (s.MindWipeEnabled) parts.Add(Loc.Get("session_timeline_mind_wipe"));
+            return string.Join(" • ", parts);
+        }
+
+        /// <summary>Binds the Reveal button's key (not .Text, which a language change would undo).</summary>
+        private void SetRevealLabel(string key) =>
+            TxtRevealSpoilers.Bind(TextBlock.TextProperty,
+                (global::Avalonia.Data.Binding)new global::ConditioningControlPanel.Avalonia.Localization.StrExtension(key).ProvideValue(null!));
+
+        /// <summary>WPF BtnRevealSpoilers_Click (MainWindow.Presets.cs:641): hide at once, or three
+        /// sequential warnings before the spoilers show. Enter keeps the mystery (safe answer).</summary>
+        private async void BtnRevealSpoilers_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (SessionSpoilerPanel.IsVisible)
+            {
+                SessionSpoilerPanel.IsVisible = false;
+                SetRevealLabel("btn_reveal_details");
+                return;
+            }
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            for (var i = 1; i <= 3; i++)
+            {
+                if (!await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get($"spoiler_warning{i}_title"),
+                        Loc.Get($"spoiler_warning{i}_body"), defaultToCancel: true,
+                        okText: Loc.Get($"spoiler_warning{i}_yes"), cancelText: Loc.Get($"spoiler_warning{i}_no")))
+                    return;
+            }
+            SessionSpoilerPanel.IsVisible = true;
+            SetRevealLabel("btn_hide_details");
+        }
+
+        private void OpenCatalogue() =>
+            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnCatalogue_Click(this, new global::Avalonia.Interactivity.RoutedEventArgs());
 
         private readonly object? _startSessionLabel;
 
