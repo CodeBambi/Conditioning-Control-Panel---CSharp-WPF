@@ -90,7 +90,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         }
 
         /// <summary>A feature card or an announcement is on screen.</summary>
-        private static bool PassiveWindowUp() => _passiveUp.Any(w => w.IsVisible);
+        internal static bool PassiveWindowUp() => _passiveUp.Any(w => w.IsVisible);
 
         /// <summary>Re-asks the held surfaces once the passive one on screen has closed.</summary>
         private static void EnsurePassiveWatch()

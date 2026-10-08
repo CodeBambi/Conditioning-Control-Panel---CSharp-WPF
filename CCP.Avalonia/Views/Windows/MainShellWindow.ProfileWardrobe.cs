@@ -30,13 +30,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private bool _charmResizeHooked;
 
         /// <summary>WPF CosmeticsCatalog.SanitizeOwn, wardrobe fields: registry slots + achievement gates
-        /// against YOUR unlocks. Banner/avatar sets are null (unchecked) - this head does not paint them.</summary>
+        /// against YOUR unlocks, plus the Core CosmeticsPool banner/avatar ids, so nothing unknown is saved or pushed.</summary>
         internal static ProfileCosmetics SanitizeOwnWardrobe(ProfileCosmetics? raw)
         {
             var progress = App.Achievements?.Progress?.UnlockedAchievements;
             var unlocked = progress != null ? new HashSet<string>(progress, StringComparer.Ordinal) : null;
-            return ProfileCosmetics.Sanitize(raw, null, new HashSet<string>(Achievement.All.Keys, StringComparer.Ordinal),
-                unlocked, WardrobeCatalog.DecoIds(), WardrobeCatalog.CharmIds(), null, WardrobeCatalog.AchievementGates());
+            return ProfileCosmetics.Sanitize(raw, CosmeticsPool.BannerIds, new HashSet<string>(Achievement.All.Keys, StringComparer.Ordinal),
+                unlocked, WardrobeCatalog.DecoIds(), WardrobeCatalog.CharmIds(), CosmeticsPool.AvatarIds, WardrobeCatalog.AchievementGates());
         }
 
         /// <summary>Your own loadout, straight from settings (WPF ApplyOwnProfileCosmetics, wardrobe half).</summary>
@@ -171,9 +171,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var page = ProfilePage;
                 var current = SanitizeOwnWardrobe(CoreSettings.Current.ProfileCosmetics);
-                var unlocked = (App.Achievements?.Progress?.UnlockedAchievements ?? new())
-                    .Where(Achievement.All.ContainsKey)
-                    .Select(id => (id, Achievement.All[id].LocalizedName));
+                // Declaration order, as WPF (Achievement.All.Values filtered by your unlocks).
+                var unlockedSet = new HashSet<string>(App.Achievements?.Progress?.UnlockedAchievements ?? new(), StringComparer.Ordinal);
+                var unlocked = Achievement.All.Values
+                    .Where(a => unlockedSet.Contains(a.Id))
+                    .Select(a => (a.Id, CoreMods.MakeModAware(a.TitleName))); // WPF ResolveAchievementTitle
                 // The stage shows your avatar only while YOUR card is on screen.
                 var avatar = _profileViewingSelf ? page?.ProfileHeroAvatar.AvatarBrush.Source : null;
                 var card = page?.ProfileHeroCard.Bounds;

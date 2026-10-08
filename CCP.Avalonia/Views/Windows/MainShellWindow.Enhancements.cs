@@ -44,8 +44,7 @@
 //   private Border CreateSecretSkillCard(…)
 //   private async void SkillCard_Click(…)
 //   private void RefreshActiveBonuses(…)
-//   private void OnPinkRushStarted(…)
-//   private void OnPinkRushEnded(…)
+//   (OnPinkRushStarted/OnPinkRushEnded: ported as PinkRushHost.Begin/End.)
 //   private void OnLuckyProc(…)
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows

@@ -96,4 +96,12 @@ public sealed class AchievementProgressShapeTests
         });
         Assert.Equal(double.MaxValue, new AchievementProgress().FastestLockCardSeconds);
     }
+
+    /// <summary>WPF MainWindow.ResolveAchievementTitle's fallback, now Core Achievement.TitleName: a missing
+    /// loc key must not put a raw achievement_x_name on a profile.</summary>
+    [Fact]
+    public void TitleName_FallsBackToBuiltInName_WhenTheKeyIsMissing()
+    {
+        Assert.Equal("Built In", new ConditioningControlPanel.Models.Achievement { Id = "zz_no_such_key", Name = "Built In" }.TitleName);
+    }
 }

@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -21,12 +22,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ProfileCustomizeDialog.xaml.cs. The tile
     /// builders, selection rules, pin cap and reset are the original's; <see cref="ProfileCosmetics"/>
-    /// is already in Core, and so is WardrobeCatalog (the wardrobe section is the original's). What
-    /// is not: CosmeticsCatalog lives in the WPF head (the mod-art resolver does NOT block anything here any more - see
-    /// <c>BuildPinTile</c> for the two things that do), so
-    ///  - unlocked achievements arrive as (id, name) pairs instead of being resolved from Achievement.All,
-    ///  - banners are the catalog's three generated gradients (no art file needed), avatar presets
-    ///    are none (art needed), pins draw a trophy glyph where the achievement PNG would be,
+    /// is already in Core, and so are WardrobeCatalog and the banner/avatar pools (CosmeticsPool;
+    /// the art decodes in Helpers/ModArt). Differences: unlocked achievements arrive as (id, name)
+    /// pairs (the name is the pin tooltip, where WPF asks MainWindow.ResolveAchievementTitle), and
     /// WPF's DialogResult becomes Close(bool).
     /// </summary>
     public partial class ProfileCustomizeDialog : Window
@@ -58,15 +56,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private readonly Dictionary<string, Border> _modTabs = new(StringComparer.OrdinalIgnoreCase);
         private string? _selectedMod;
 
-        // ponytail: CosmeticsCatalog.Banners lives in the WPF head. These are its three generated
-        // gradients (id, name, stops), which need no art file; the scene banners come with it.
-        private static readonly (string Id, string Name, string A, string B, string C)[] PlaceholderBanners =
-        {
-            ("gradient_velvet", "Velvet", "#2A1E4D", "#3B2159", "#1E1E3F"),
-            ("gradient_bloom",  "Bloom",  "#5A1B3D", "#8A2B63", "#2A1230"),
-            ("gradient_drone",  "Drone",  "#0E2A38", "#164A5E", "#0A1622"),
-        };
-
         private readonly WrapPanel _bannerHost, _avatarHost, _accentHost, _pinHost;
         private readonly StackPanel _titleHost;
         private readonly TextBlock _txtNoTitlesYet, _txtNoPinsYet, _txtPinCount, _txtWardrobeSlots, _txtWardrobeEmpty;
@@ -78,14 +67,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         public ProfileCustomizeDialog() : this(
             new ProfileCosmetics
             {
-                BannerId = "gradient_bloom",
+                BannerId = "bambi_neon_den",
                 Accent = "#B478FF",
-                TitleId = "first_session",
+                TitleId = "plastic_initiation",
                 AvatarDeco = "bambi_silk_bow",
                 Charms = new List<string> { "bambi_plush_bunny" },
-                PinnedAchievements = new List<string> { "first_session", "night_owl" }
+                PinnedAchievements = new List<string> { "plastic_initiation", "dumb_bimbo" }
             },
-            new[] { ("first_session", "First Session"), ("night_owl", "Night Owl"), ("marathon", "Marathon") })
+            new[] { ("plastic_initiation", "Plastic Initiation"), ("dumb_bimbo", "Dumb Bimbo"), ("fully_synthetic", "Fully Synthetic") })
         { }
 
         private readonly IImageBrushSource? _editorAvatar;
@@ -127,26 +116,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             BuildWardrobe();
         }
 
+        /// <summary>A tile answers a click like WPF's MouseLeftButtonUp, and Enter/Space once tabbed to (P17).</summary>
+        private static void Clickable(Border tile, Action act)
+        {
+            tile.Focusable = true;
+            tile.PointerReleased += (_, _) => act();
+            tile.KeyDown += (_, e) =>
+            {
+                if (e.Key is not (Key.Enter or Key.Space)) return;
+                act();
+                e.Handled = true;
+            };
+        }
+
         // ============================== banner ==============================
 
         private void BuildBanners()
         {
             _bannerHost.Children.Add(BuildBannerTile(NoneKey, Loc.Get("profile_customize_none"), null));
 
-            foreach (var (id, name, a, b, c) in PlaceholderBanners)
+            foreach (var banner in CosmeticsPool.Banners)
             {
-                var art = new LinearGradientBrush
-                {
-                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                    EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
-                    GradientStops =
-                    {
-                        new GradientStop(Color.Parse(a), 0),
-                        new GradientStop(Color.Parse(b), 0.5),
-                        new GradientStop(Color.Parse(c), 1),
-                    }
-                };
-                _bannerHost.Children.Add(BuildBannerTile(id, name, art));
+                // A banner whose art will not load is not offered at all - better than a tile that
+                // looks broken and equips to nothing. Thumbnails, not the card-sized decodes.
+                var art = ModArt.Banner(banner.Id, 256);
+                if (art == null) continue;
+                _bannerHost.Children.Add(BuildBannerTile(banner.Id, banner.Name, art));
             }
 
             SelectBanner(_draft.BannerId ?? NoneKey);
@@ -188,7 +183,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 Child = content
             };
             ToolTip.SetTip(tile, label);
-            tile.PointerReleased += (_, _) => SelectBanner(key);
+            Clickable(tile, () => SelectBanner(key));
 
             _bannerTiles[key] = tile;
             return tile;
@@ -207,8 +202,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             _avatarHost.Children.Add(BuildAvatarTile(NoneKey, Loc.Get("profile_customize_none"), null));
 
-            // ponytail: needs CosmeticsCatalog.AvatarPresets + GetAvatarImage (WPF head, pack:// art),
-            // wired when the catalog moves to Core. Same rule as WPF: no art, no tile.
+            foreach (var preset in CosmeticsPool.AvatarPresets)
+            {
+                // Same rule as banners: a preset whose art will not load is not offered at all.
+                var image = ModArt.AvatarPreset(preset.Id);
+                if (image == null) continue;
+                _avatarHost.Children.Add(BuildAvatarTile(preset.Id, preset.Name, new ImageBrush(image) { Stretch = Stretch.UniformToFill }));
+            }
 
             SelectAvatar(_draft.AvatarId ?? NoneKey);
         }
@@ -239,7 +239,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 Child = circle
             };
             ToolTip.SetTip(tile, label);
-            tile.PointerReleased += (_, _) => SelectAvatar(key);
+            Clickable(tile, () => SelectAvatar(key));
 
             _avatarTiles[key] = tile;
             return tile;
@@ -299,7 +299,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 Child = swatch
             };
             ToolTip.SetTip(tile, hex ?? Loc.Get("profile_customize_none"));
-            tile.PointerReleased += (_, _) => SelectAccent(key);
+            Clickable(tile, () => SelectAccent(key));
 
             _accentTiles[key] = tile;
             return tile;
@@ -318,8 +318,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             _titleHost.Children.Add(BuildTitleRow(NoneKey, Loc.Get("profile_customize_no_title")));
 
-            // ponytail: WPF resolves the worn name via MainWindow.ResolveAchievementTitle (mod-aware);
-            // here the caller supplies the name with the id.
+            // The caller supplies each name already resolved (Core Achievement.TitleName + CoreMods.MakeModAware,
+            // what WPF MainWindow.ResolveAchievementTitle does).
             foreach (var (id, name) in _unlocked)
                 _titleHost.Children.Add(BuildTitleRow(id, name));
 
@@ -352,7 +352,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     TextTrimming = TextTrimming.CharacterEllipsis
                 }
             };
-            row.PointerReleased += (_, _) => SelectTitle(key);
+            Clickable(row, () => SelectTitle(key));
 
             _titleRows[key] = row;
             return row;
@@ -374,7 +374,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void BuildPins()
         {
             foreach (var achievement in _unlocked)
-                _pinHost.Children.Add(BuildPinTile(achievement.Id, achievement.Name));
+            {
+                var tile = BuildPinTile(achievement.Id, achievement.Name);
+                if (tile != null) _pinHost.Children.Add(tile);
+            }
 
             _txtNoPinsYet.IsVisible = _pinHost.Children.Count == 0;
 
@@ -387,26 +390,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             RefreshPinVisuals();
         }
 
-        private Border BuildPinTile(string achievementId, string name)
+        private Border? BuildPinTile(string achievementId, string name)
         {
+            // WPF LoadAchievementArt: mod override first, the shipped achievements/ PNG second; a pin
+            // whose art will not load is not offered (WPF BuildPinTile returns null).
+            var art = Achievement.All.TryGetValue(achievementId, out var achievement)
+                ? ModArt.TryLoad($"achievements/{achievement.ImageName}", 116)
+                : null;
+            if (art == null) return null;
+
             var content = new Grid();
-            // ponytail: the resolver is NOT the blocker (CoreModArt + Helpers.ModArt do it, and
-            // AchievementPopup already loads achievement art that way). Two other things are, and
-            // the second one is why restoring this would make the dialog WORSE:
-            //   1. this dialog is handed (Id, Name) tuples, not Achievements, so it has no
-            //      ImageName to resolve - the ctor and every caller would have to change;
-            //   2. WPF DROPS a pin tile whose art will not load (BuildPinTile returns null), and
-            //      only six achievement PNGs are linked into this head, so a faithful port would
-            //      hide almost every pin instead of showing it.
-            // The trophy glyph is therefore the deliberate answer, not a placeholder: it shows
-            // every unlocked achievement as pinnable. Restore the art and the drop rule together
-            // with the rest of the achievement assets, or not at all.
-            content.Children.Add(new TextBlock
+            content.Children.Add(new Image
             {
-                Text = "🏆",
-                FontSize = 26,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
+                Source = art,
+                Stretch = Stretch.Uniform,
                 Margin = new Thickness(5),
                 IsHitTestVisible = false
             });
@@ -436,7 +433,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 Child = content
             };
             ToolTip.SetTip(tile, name);
-            tile.PointerReleased += (_, _) => TogglePin(achievementId);
+            Clickable(tile, () => TogglePin(achievementId));
 
             _pinTiles[achievementId] = tile;
             return tile;
@@ -540,7 +537,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     Foreground = Brushes.White, FontSize = 11, FontWeight = FontWeight.SemiBold
                 }
             };
-            tab.PointerReleased += (_, _) => SelectMod(mod);
+            Clickable(tab, () => SelectMod(mod));
             _modTabs[mod] = tab;
             return tab;
         }
@@ -627,7 +624,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // Item names are plain English proper nouns in the registry - not localized.
             // A locked tile teases the gate instead of naming the item.
             ToolTip.SetTip(tile, locked ? Loc.GetF("profile_customize_wardrobe_locked_tip", GateName(item)) : item.Name);
-            tile.PointerReleased += (_, _) => ToggleWardrobeItem(item);
+            Clickable(tile, () => ToggleWardrobeItem(item));
 
             _wardrobeTiles[item.Id] = tile;
             return tile;
