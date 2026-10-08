@@ -74,7 +74,13 @@ public class WebAssetServerTests
         using (s)
         {
             var outside = Path.Combine(Path.GetDirectoryName(root)!, "secret.txt");
-            File.CreateSymbolicLink(Path.Combine(root, "leak.txt"), outside);
+            try { File.CreateSymbolicLink(Path.Combine(root, "leak.txt"), outside); }
+            catch (IOException) when (OperatingSystem.IsWindows())
+            {
+                // Windows creates symlinks only elevated or with Developer Mode on; the refusal
+                // under test is the same code path on every OS, so Linux CI keeps the proof.
+                Assert.Skip("Windows refused to create a symlink (needs admin or Developer Mode).");
+            }
             Directory.CreateSymbolicLink(Path.Combine(root, "up"), Path.GetDirectoryName(root)!);
             File.CreateSymbolicLink(Path.Combine(root, "ok.html"), Path.Combine(root, "game", "index.html"));
             Assert.Null(s.ResolveFile("/leak.txt"));

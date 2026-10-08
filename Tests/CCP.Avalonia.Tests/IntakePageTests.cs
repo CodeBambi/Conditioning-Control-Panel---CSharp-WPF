@@ -149,7 +149,12 @@ public sealed class IntakePageTests
             foreach (var f in new[] { "images/a.gif", "images/off.png", "images/page.html", ".temp/t.png" })
                 File.WriteAllText(Path.Combine(assets, f), "x");
             File.WriteAllText(Path.Combine(outside, "secret.png"), "x");
-            File.CreateSymbolicLink(Path.Combine(assets, "images", "link.png"), Path.Combine(outside, "secret.png"));
+            try { File.CreateSymbolicLink(Path.Combine(assets, "images", "link.png"), Path.Combine(outside, "secret.png")); }
+            catch (IOException) when (OperatingSystem.IsWindows())
+            {
+                // Windows creates symlinks only elevated or with Developer Mode on (Linux CI keeps the proof).
+                Assert.Skip("Windows refused to create a symlink (needs admin or Developer Mode).");
+            }
             Directory.CreateSymbolicLink(Path.Combine(assets, "images", "out"), outside);
 
             using var server = new WebAssetServer(web) { AssetsRoot = () => assets, DisabledAssets = () => new[] { "images/off.png" } };
@@ -172,7 +177,7 @@ public sealed class IntakePageTests
         }
         finally
         {
-            File.Delete(profileImage);
+            if (File.Exists(profileImage)) File.Delete(profileImage);
             Directory.Delete(web, true);
             Directory.Delete(assets, true);
             Directory.Delete(outside, true);
@@ -185,12 +190,15 @@ public sealed class IntakePageTests
         await AvaloniaTestDispatcher.RunAsync(() =>
         {
             EnsureApp();
-            var host = new ConditioningControlPanel.Avalonia.Views.Controls.WebHost
-            {
-                Source = new Uri("http://127.0.0.1:5000/intake/index.html?ccp_t=ABC&x=1"),
-            };
-            var text = host.FindControl<global::Avalonia.Controls.TextBlock>("TxtSource")!.Text;
-            Assert.Equal("http://127.0.0.1:5000/intake/index.html?x=1", text);
+            var src = new Uri("http://127.0.0.1:5000/intake/index.html?ccp_t=ABC&x=1");
+            const string shown = "http://127.0.0.1:5000/intake/index.html?x=1";
+            // The rule the panel paints with, on every machine.
+            Assert.Equal(shown, ConditioningControlPanel.Avalonia.Views.Controls.WebHost.WithoutToken(src));
+            var host = new ConditioningControlPanel.Avalonia.Views.Controls.WebHost { Source = src };
+            // With a web engine installed (WebView2 on Windows) the page loads and the fallback
+            // panel is never painted; the panel itself is only reachable with no engine.
+            if (!host.HasEngine)
+                Assert.Equal(shown, host.FindControl<global::Avalonia.Controls.TextBlock>("TxtSource")!.Text);
             return Task.CompletedTask;
         });
     }
