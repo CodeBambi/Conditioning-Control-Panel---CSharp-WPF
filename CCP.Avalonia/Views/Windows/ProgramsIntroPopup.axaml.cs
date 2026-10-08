@@ -107,7 +107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         var popup = new ProgramsIntroPopup(featured);
                         live.HasSeenProgramsIntro = true;
                         CoreSettings.Save();
-                        if (owner is { IsVisible: true }) _ = popup.ShowDialog(owner);
+                        if (owner is { IsVisible: true }) _ = popup.ShowDialogSafe(owner);
                         else popup.Show();
                     }
                     catch (Exception ex) { Log.Warning(ex, "Programs intro popup failed to show"); }

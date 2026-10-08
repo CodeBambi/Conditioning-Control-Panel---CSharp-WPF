@@ -47,7 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             try
             {
                 dialog = create();
-                await dialog.ShowDialog(owner);
+                await dialog.ShowDialogSafe(owner);
             }
             catch (Exception ex)
             {

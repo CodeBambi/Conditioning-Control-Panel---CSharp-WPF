@@ -257,7 +257,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private async void AddKnowledgeLink_Click()
         {
             var dialog = new KnowledgeLinkEditorDialog();
-            await dialog.ShowDialog(this);
+            await dialog.ShowDialogSafe(this);
             if (dialog.Result != null)
             {
                 _knowledgeLinks.Add(dialog.Result);

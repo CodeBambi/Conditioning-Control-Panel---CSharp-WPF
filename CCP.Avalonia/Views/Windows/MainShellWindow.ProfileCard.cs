@@ -232,7 +232,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var page = ProfilePage;
                 if (page is null) return;
-                await new ProfilePrivacyDialog(page.PrivacyPanel).ShowDialog(this);
+                await new ProfilePrivacyDialog(page.PrivacyPanel).ShowDialogSafe(this);
             }
             catch (Exception ex) { Log.Error(ex, "OpenProfilePrivacyDialog failed"); }
             finally { UpdateProfileSharingSummary(); }

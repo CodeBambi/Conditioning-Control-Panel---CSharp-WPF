@@ -41,7 +41,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             var label = string.IsNullOrEmpty(entry.Name) ? System.IO.Path.GetFileName(entry.FilePath) : entry.Name;
             var dialog = new CatalogueSubmitDialog(label);
-            if (!await dialog.ShowDialog<bool>(this) || !dialog.Confirmed) return;
+            if (!await dialog.ShowDialogSafe<bool>(this) || !dialog.Confirmed) return;
             ShowCatalogueSubmissionResultToast(await SubmitDeeperEntryAsync(entry.FilePath));
         }
 

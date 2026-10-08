@@ -39,6 +39,8 @@ public sealed partial class AccountSeedTests : IDisposable
     {
         CoreAccount.IsLoggedInProvider = CoreAccount.HasPremiumAccessProvider = CoreAccount.HasLabAccessProvider = CoreAccount.IsWhitelistedProvider = null;
         CoreAccount.DisplayNameProvider = null;
+        CoreAccount.ChangeDisplayNameProvider = null;
+        CoreAccount.DeleteAccountProvider = null;
         CoreAccount.UnifiedUserId = null;
         CoreEntitlement.HasPremiumProvider = CoreEntitlement.HasLabProvider = null;
     }

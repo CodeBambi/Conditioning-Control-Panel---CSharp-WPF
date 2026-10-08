@@ -47,6 +47,11 @@ internal static class AccountSeed
         CoreEntitlement.HasPremiumProvider = () => CoreAccount.HasPremiumAccess;
         CoreEntitlement.HasLabProvider = () => CoreAccount.HasLabAccess;
         CoreProgram.HasPremiumProvider = () => CoreAccount.HasPremiumAccess; // WPF App.xaml.cs:426
+        // WPF App.xaml.cs:561-562 (ProfileSync rename/delete), with its "no unified id" precondition.
+        CoreAccount.ChangeDisplayNameProvider = name => CoreSettings.Current.UnifiedId is { Length: > 0 } id
+            ? NewV2().ChangeDisplayNameAsync(id, name) : null;
+        CoreAccount.DeleteAccountProvider = () => CoreSettings.Current.UnifiedId is { Length: > 0 } id
+            ? NewV2().DeleteAccountAsync(id) : null;
         // WPF App.xaml.cs:2937: the weekly intake pass re-evaluates (and refunds a pre-premium spend)
         // on either provider's TierChanged. Here, because this is where the providers now exist.
         App.IntakePass.AttachEntitlementSources(
@@ -160,9 +165,11 @@ internal static class AccountSeed
     /// Order (unit 7c): pre-logout push if loaded -> stop heartbeat -> providers and identity -> progression clear
     /// (Core <see cref="ProgressionClear"/> + achievements, WPF ClearProgressionData) -> the loaded flag reset.
     /// </summary>
-    internal static async Task Logout()
+    /// <param name="accountDeleted">WPF BtnDeleteProfile_Click: the account is gone server-side, so nothing is pushed
+    /// and the quest file goes too (ClearAccountData(wipeQuestProgress: true)).</param>
+    internal static async Task Logout(bool accountDeleted = false)
     {
-        if (Sync is { Loaded: true } sync) await sync.PushAsync("pre-logout", waitForGate: true);
+        if (!accountDeleted && Sync is { Loaded: true } sync) await sync.PushAsync("pre-logout", waitForGate: true);
         Sync?.StopHeartbeat();
         SecretStore.ClearFailed = false;
         Patreon?.Logout();
@@ -176,6 +183,7 @@ internal static class AccountSeed
         s.HasLinkedDiscord = false;
         s.HasLinkedPatreon = false;
         ProgressionClear.Apply(s);
+        if (accountDeleted) App.Quests?.ResetProgress();
         CoreSettings.Save();
         App.Achievements?.Reset();
         Sync?.Reset();
