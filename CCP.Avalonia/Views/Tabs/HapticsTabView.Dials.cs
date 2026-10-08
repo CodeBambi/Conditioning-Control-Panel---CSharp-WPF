@@ -192,6 +192,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (_loading) return;
             Cfg.AudioSync.ManualLatencyOffsetMs = latencyMs;
             CoreSettings.Save();
+            Controls.AppSettings.AudioSettingsBinder.RaiseChanged();   // WPF mirrors into Settings · Audio
         }
 
         private void OnSyncPowerChanged()
@@ -201,6 +202,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (_loading) return;
             Cfg.AudioSync.LiveIntensity = percent / 100.0;
             CoreSettings.Save();
+            Controls.AppSettings.AudioSettingsBinder.RaiseChanged();   // WPF mirrors into Settings · Audio
         }
 
         // ------------------------------------------------------------------ Phase F

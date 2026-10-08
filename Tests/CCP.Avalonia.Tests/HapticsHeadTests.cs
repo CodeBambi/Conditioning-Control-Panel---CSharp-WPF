@@ -131,7 +131,11 @@ public sealed class HapticsHeadTests
             {
                 var s = h.Settings;
                 var a = s.AudioSync;
-                var old = (s.V2.Temperament, s.DtrhDensity, a.Enabled, a.BassWeight, s.V2.Rule(HapticLayer.AudioSync).Enabled);
+                var old = (s.V2.Temperament, s.DtrhDensity, a.Enabled, s.V2.Rule(HapticLayer.AudioSync).Enabled);
+                var oldDsp = (a.Sensitivity, a.Smoothing, a.BassWeight, a.RmsWeight, a.OnsetWeight, a.MaxIntensity, a.LiveIntensity);
+                var mirrored = 0;
+                Action bump = () => mirrored++;
+                ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.AudioSettingsBinder.Changed += bump;
                 s.Enabled = true;
                 Assert.True(h.ConnectAsync().Result);
                 var tab = new HapticsTabView();
@@ -164,6 +168,11 @@ public sealed class HapticsHeadTests
                     Assert.Equal("33%", tab.TxtDspBass.Text);
                     tab.BtnDspReset.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     Assert.Equal(new AudioSyncSettings().BassWeight, a.BassWeight, 3);
+                    // sync power writes through and tells Settings · Audio's twin slider (WPF :958 mirror)
+                    mirrored = 0;
+                    tab.SliderVideoHapticPower.Value = 42;
+                    Assert.Equal(0.42, a.LiveIntensity, 3);
+                    Assert.True(mirrored > 0);
                     tab.RbTemperCruel.IsChecked = true;
                     Assert.Equal("cruel", s.V2.Temperament);
                     tab.CmbHapticDtrhDensity.SelectedIndex = 2;
@@ -185,7 +194,9 @@ public sealed class HapticsHeadTests
                 finally
                 {
                     host.Close();
-                    (s.V2.Temperament, s.DtrhDensity, a.Enabled, a.BassWeight, s.V2.Rule(HapticLayer.AudioSync).Enabled) = old;
+                    (s.V2.Temperament, s.DtrhDensity, a.Enabled, s.V2.Rule(HapticLayer.AudioSync).Enabled) = old;
+                    (a.Sensitivity, a.Smoothing, a.BassWeight, a.RmsWeight, a.OnsetWeight, a.MaxIntensity, a.LiveIntensity) = oldDsp;
+                    ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.AudioSettingsBinder.Changed -= bump;
                 }
             });
         });

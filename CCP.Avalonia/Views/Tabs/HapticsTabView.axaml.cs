@@ -33,7 +33,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // the four routing groups sharing one expansion scope, and the device-fed toy cards.
             ProviderChipsList.ItemsSource = _providerChips;
             RoutingGroupsList.ItemsSource = _routingGroups =
-                HapticRoutingGroupVm.BuildDefault(Cfg, _rowScope, (_, _) => RefreshAudioSyncCardVisibility());
+                HapticRoutingGroupVm.BuildDefault(Cfg, _rowScope, (_, _) =>
+                {
+                    RefreshAudioSyncCardVisibility();
+                    Controls.AppSettings.AudioSettingsBinder.RaiseChanged();   // Settings shows the pair only while the row is on
+                });
             ToyCardsList.ItemsSource = _toyCards;
             PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) SyncLiveStatusTimer(); };
 
