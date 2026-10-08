@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Windows;
-using System.Windows.Data;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Haptics.Core;
 
 namespace ConditioningControlPanel.Views.Controls
@@ -48,7 +48,7 @@ namespace ConditioningControlPanel.Views.Controls
 
         protected static void SaveSettings()
         {
-            try { App.Settings?.Save(); } catch { }
+            try { CoreSettings.Save(); } catch { }
         }
     }
 
@@ -180,7 +180,6 @@ namespace ConditioningControlPanel.Views.Controls
         /// <summary>Continuous layers have no pattern — a "vibration mode" only means
         /// something for a transient envelope. The combo is collapsed for them.</summary>
         public bool ShowMode => _kind.HasValue;
-        public Visibility ModeVisibility => ShowMode ? Visibility.Visible : Visibility.Collapsed;
 
         /// <summary>
         /// The whole row in one pill: "50% · Pulse · All", or "Off". This is what makes a
@@ -326,7 +325,7 @@ namespace ConditioningControlPanel.Views.Controls
         private void NotifyEngine()
         {
             if (!_kind.HasValue) return;
-            try { App.Haptics?.NotifyRuleChanged(_kind.Value); } catch { }
+            try { CoreHaptics.Service?.NotifyRuleChanged(_kind.Value); } catch { }
         }
 
         /// <summary>Re-read everything from settings (after a load or an external change).</summary>
@@ -354,6 +353,70 @@ namespace ConditioningControlPanel.Views.Controls
         public string Icon { get; }
         public string Title { get; }
         public ObservableCollection<HapticRoutingRowVm> Rows { get; }
+
+        /// <summary>
+        /// The four groups of the routing matrix (Core / Rewards / Media / Games), every row sharing
+        /// ONE expansion scope regardless of which group it sits in. Shared by both heads.
+        /// </summary>
+        public static List<HapticRoutingGroupVm> BuildDefault(HapticSettings s, HapticRowExpansionScope scope,
+                                                              EventHandler? changed)
+        {
+            HapticRoutingRowVm Ev(HapticEventKind kind, string icon, string labelKey, string hintKey,
+                                  HapticRowLegacyBinding legacy = HapticRowLegacyBinding.None)
+            {
+                var row = HapticRoutingRowVm.ForEvent(s, kind, icon, labelKey, hintKey, legacy);
+                row.Scope = scope;
+                if (changed != null) row.Changed += changed;
+                return row;
+            }
+            HapticRoutingRowVm Ly(HapticLayer layer, string icon, string labelKey, string hintKey,
+                                  HapticRowLegacyBinding legacy)
+            {
+                var row = HapticRoutingRowVm.ForLayer(s, layer, icon, labelKey, hintKey, legacy);
+                row.Scope = scope;
+                if (changed != null) row.Changed += changed;
+                return row;
+            }
+
+            return new List<HapticRoutingGroupVm>
+            {
+                new("🌀", Loc.Get("haptics_group_core"), new[]
+                {
+                    Ev(HapticEventKind.FlashClick, "⚡", "label_flash_click", "haptics_hint_flash_click"),
+                    Ev(HapticEventKind.FlashDecay, "💥", "label_flash_show", "haptics_hint_flash_decay"),
+                    Ev(HapticEventKind.SubliminalTrigger, "💬", "tab_subliminals", "haptics_hint_subliminal"),
+                    Ev(HapticEventKind.KeywordTrigger, "🔑", "haptics_row_keyword", "haptics_hint_keyword"),
+                    // Blink has had settings since v6.4 and never had a row until now.
+                    Ev(HapticEventKind.BlinkPulse, "👁", "haptics_row_blink", "haptics_hint_blink"),
+                }),
+                new("🏆", Loc.Get("haptics_group_rewards"), new[]
+                {
+                    Ev(HapticEventKind.Achievement, "🏆", "tab_achievements", "haptics_hint_achievement"),
+                    Ev(HapticEventKind.QuestComplete, "📋", "haptics_row_quest", "haptics_hint_quest"),
+                    Ev(HapticEventKind.LevelUp, "⭐", "label_level_up", "haptics_hint_levelup"),
+                    Ev(HapticEventKind.GazeReward, "👀", "haptics_row_gaze", "haptics_hint_gaze"),
+                }),
+                new("🎬", Loc.Get("haptics_group_media"), new[]
+                {
+                    Ly(HapticLayer.Video, "🎬", "haptics_row_video_bg", "haptics_hint_video_bg", HapticRowLegacyBinding.VideoLevel),
+                    Ev(HapticEventKind.VideoTargetHit, "🎯", "label_target_hit", "haptics_hint_target_hit"),
+                    Ly(HapticLayer.AudioSync, "🎵", "haptics_row_audio_sync", "haptics_hint_audio_sync", HapticRowLegacyBinding.AudioSync),
+                    Ev(HapticEventKind.BouncingTextBounce, "🔤", "label_bounce_text", "haptics_hint_bouncing_text"),
+                }),
+                new("🎮", Loc.Get("haptics_group_games"), new[]
+                {
+                    Ev(HapticEventKind.BubblePop, "🫧", "label_bubbles", "haptics_hint_bubble"),
+                    // DtRH is the one EVENT row with live legacy readers: DtrhHapticDirector reads the
+                    // v2 rule, but DtrhEnabled/DtrhIntensity are still mirrored (see the enum's docs).
+                    Ev(HapticEventKind.DtrhAccent, "🐇", "label_dtrh_haptics", "haptics_hint_dtrh",
+                       HapticRowLegacyBinding.Dtrh),
+                    // Deeper enhancements play authored keyframe envelopes through the Pattern LAYER
+                    // (HapticService.SetSyncPatternAsync). No legacy twin exists, so None is correct.
+                    Ly(HapticLayer.Pattern, "🌊", "haptics_row_deeper", "haptics_hint_deeper",
+                       HapticRowLegacyBinding.None),
+                }),
+            };
+        }
     }
 
     /// <summary>One connected toy: identity, battery, capability chips and per-toy config.</summary>
@@ -382,6 +445,30 @@ namespace ConditioningControlPanel.Views.Controls
         public string DeviceKey { get; }
         public string Name { get; }
         public string ProviderLabel { get; }
+
+        /// <summary>
+        /// #977: identity + layout of the device list (which toys, order, names, actuators). Excludes
+        /// everything the user edits on a card and the battery, so neither a trim drag nor a battery
+        /// poll can rebuild (and tear down) a card under the mouse.
+        /// </summary>
+        public static string ShapeSignature(IReadOnlyList<HapticDevice> devices)
+        {
+            if (devices == null || devices.Count == 0) return "";
+            const string Sep = "|~|";        // separators, not data: a toy name can contain anything
+            const string EndOfDevice = "|;|";
+            var sb = new System.Text.StringBuilder();
+            foreach (var d in devices)
+            {
+                if (d == null) continue;
+                sb.Append(d.DeviceKey).Append(Sep)
+                  .Append(d.Name).Append(Sep)
+                  .Append(d.IsConnected ? '1' : '0').Append(Sep);
+                foreach (var a in d.Actuators)
+                    sb.Append((int)a.Type).Append(':').Append(a.Index).Append(':').Append(a.Steps).Append(',');
+                sb.Append(EndOfDevice);
+            }
+            return sb.ToString();
+        }
         public int? BatteryPercent { get; private set; }
 
         public string BatteryText => BatteryPercent.HasValue
@@ -389,7 +476,7 @@ namespace ConditioningControlPanel.Views.Controls
             : "";
 
         /// <summary>Providers that never report a battery must not show an empty pill.</summary>
-        public Visibility BatteryVisibility => BatteryPercent.HasValue ? Visibility.Visible : Visibility.Collapsed;
+        public bool HasBattery => BatteryPercent.HasValue;
 
         /// <summary>
         /// Push provider-owned live state (currently just the battery reading) into an EXISTING
@@ -406,7 +493,7 @@ namespace ConditioningControlPanel.Views.Controls
             BatteryPercent = device.BatteryPercent;
             Raise(nameof(BatteryPercent));
             Raise(nameof(BatteryText));
-            Raise(nameof(BatteryVisibility));
+            Raise(nameof(HasBattery));
         }
 
         public ObservableCollection<string> Capabilities { get; }
@@ -518,6 +605,22 @@ namespace ConditioningControlPanel.Views.Controls
             Label = label;
         }
 
+        /// <summary>The three chips of the top strip, in WPF order.</summary>
+        public static List<HapticProviderChipVm> BuildDefault() => new()
+        {
+            new("lovense", "Lovense"),
+            new("buttplug", "Intiface"),
+            new("mock", Loc.Get("haptics_provider_mock")),
+        };
+
+        /// <summary>Enabled = the v2 provider flag; connected = that provider reports connected.</summary>
+        public void Sync(HapticSettings s, HapticService? haptics)
+        {
+            IsEnabledForConnect = s.V2.Provider(Key).Enabled;
+            IsConnected = haptics?.DeviceManager.Providers
+                .Any(p => string.Equals(p.Key, Key, StringComparison.OrdinalIgnoreCase) && p.IsConnected) == true;
+        }
+
         public string Key { get; }
         public string Label { get; }
 
@@ -532,41 +635,5 @@ namespace ConditioningControlPanel.Views.Controls
             get => _enabled;
             set { if (_enabled == value) return; _enabled = value; Raise(); }
         }
-    }
-
-    // ------------------------------------------------------------------------
-    // Converters. They live here (and are instantiated in the UserControl's own
-    // Resources root) because a converter declared inside a nested Grid.Resources
-    // is invisible to a DataTemplate — a trap this codebase has hit before.
-    // ------------------------------------------------------------------------
-
-    /// <summary>true -> the connected colour, false -> the muted colour. Parameter-free so it can
-    /// be reused for dots and chips alike.</summary>
-    public sealed class BoolToStatusBrushConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            var on = value is bool b && b;
-            var key = on ? "SuccessGreenBrush" : "TextDimBrush";
-            try
-            {
-                if (Application.Current?.Resources[key] is System.Windows.Media.Brush brush) return brush;
-            }
-            catch { }
-            return on ? System.Windows.Media.Brushes.LimeGreen : System.Windows.Media.Brushes.Gray;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => Binding.DoNothing;
-    }
-
-    /// <summary>Empty / whitespace string -> Collapsed.</summary>
-    public sealed class EmptyStringToCollapsedConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-            => string.IsNullOrWhiteSpace(value as string) ? Visibility.Collapsed : Visibility.Visible;
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => Binding.DoNothing;
     }
 }
