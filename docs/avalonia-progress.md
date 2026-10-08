@@ -1354,3 +1354,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-descent-migration: +325
 - Main sync #5 fc9640ff7 ported: the +10% XP bonus only for migrated accounts (Core XpBonusFor, applied by ProgressionBank); the server's migration confirmation shared in Core (DescentMigrationAck, called by SyncPush and WPF); own-card badge + (+N%) readout (DescentReceipt moved to Core).
 - abac4fa02 needs-port (lane descent-migration-offer): offer acceptance and ApplyChoice stay WPF-only, decision B (docs/avalonia-decisions.md).
+
+## avalonia-port/rows-takeover-ui: +165
+- Takeover tab: WPF copy restored, Open-models-folder button, Configure-in-Settings -> Devices, no-voiced-mantras chant hint; shell-takeover-ui -> wired.
+- TakeoverTabUiTests (6 fail-proofs) + Keincheck live run; still stub: Mantra Chant playback, wallpaper hooks.
