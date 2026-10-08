@@ -166,7 +166,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 var dialog = new Dialogs.ModManagerDialog();
-                await dialog.ShowDialog(this);
+                await dialog.ShowDialogSafe(this);
                 // Install/uninstall of a non-active mod still changes the combo's rows.
                 if (dialog.ModWasChanged) ApplyActiveModChange(); else InitializeModSelector();
             }

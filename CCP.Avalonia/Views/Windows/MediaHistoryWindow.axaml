@@ -142,8 +142,12 @@
                         <TextBlock Text="{loc:Str filter_images}"/>
                     </Button>
                     <Button x:Name="BtnFilterVideos" Theme="{StaticResource MlChip}"
-                            Tag="video">
+                            Tag="video" Margin="0,0,6,0">
                         <TextBlock Text="{loc:Str filter_videos}"/>
+                    </Button>
+                    <Button x:Name="BtnFilterAudio" Theme="{StaticResource MlChip}"
+                            Tag="audio">
+                        <TextBlock Text="{loc:Str filter_audio}"/>
                     </Button>
                 </StackPanel>
                 <Border HorizontalAlignment="Right" Width="240" Background="#1C1C30"
@@ -195,6 +199,7 @@
                                                 <TextBlock Text="{Binding PlaceholderGlyph, Mode=OneTime}"
                                                            FontSize="18" HorizontalAlignment="Center"
                                                            VerticalAlignment="Center" Opacity="0.65"/>
+                                                <Image Source="{Binding Thumb, Mode=OneTime}" Stretch="UniformToFill"/>
                                             </Grid>
                                         </Border>
 
@@ -216,6 +221,7 @@
                                         <Button Grid.Column="3" Content="📂" Theme="{StaticResource MlChip}"
                                                 Padding="7,4" VerticalAlignment="Center"
                                                 Tag="{Binding}"
+                                                IsVisible="{Binding FolderButtonVisible, Mode=OneTime}"
                                                 ToolTip.Tip="{loc:Str tooltip_reveal_in_explorer}"/>
                                     </Grid>
                                 </DataTemplate>
@@ -255,22 +261,31 @@
                         <StackPanel Grid.Row="1" Margin="0,12,0,0">
                             <TextBlock x:Name="PreviewName" Foreground="White" FontSize="14" FontWeight="Bold"
                                        TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="PreviewPath" Foreground="#7A7A90" FontSize="11" Margin="0,4,0,0"
+                            <SelectableTextBlock x:Name="PreviewPath" Foreground="#7A7A90" FontSize="11" Margin="0,4,0,0"
                                        TextWrapping="Wrap" MaxHeight="54"/>
                         </StackPanel>
 
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,0">
+                        <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,12,0,0">
                             <Button x:Name="BtnPreviewOpenFolder"
                                     Theme="{StaticResource MlChip}"
-                                    Margin="0,0,8,0" IsEnabled="False">
+                                    Margin="0,0,8,6" IsEnabled="False">
                                 <TextBlock Text="{loc:Str btn_open_in_folder}"/>
                             </Button>
                             <Button x:Name="BtnPreviewOpenFile"
                                     Theme="{StaticResource MlChip}"
-                                    IsEnabled="False">
+                                    Margin="0,0,8,6" IsEnabled="False">
                                 <TextBlock Text="{loc:Str btn_open_file}"/>
                             </Button>
-                        </StackPanel>
+                            <Button x:Name="BtnPreviewCopyLink" Theme="{StaticResource MlChip}"
+                                    Margin="0,0,8,6" IsVisible="False">
+                                <TextBlock x:Name="CopyLinkText" Text="{loc:Str btn_copy_link}"/>
+                            </Button>
+                            <Button x:Name="BtnPreviewOpenSource" Theme="{StaticResource MlChip}"
+                                    Margin="0,0,0,6" IsVisible="False"
+                                    ToolTip.Tip="{loc:Str tooltip_open_source}">
+                                <TextBlock Text="{loc:Str btn_open_source}"/>
+                            </Button>
+                        </WrapPanel>
                     </Grid>
                 </Border>
             </Grid>

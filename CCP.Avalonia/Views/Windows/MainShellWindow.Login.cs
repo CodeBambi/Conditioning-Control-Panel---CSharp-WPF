@@ -67,7 +67,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal async Task OpenUnifiedLoginDialog(Window? owner = null)
         {
             var dialog = new LoginDialog();
-            if (await dialog.ShowDialog<bool>(owner ?? this) && dialog.Result is not null)
+            if (await dialog.ShowDialogSafe<bool>(owner ?? this) && dialog.Result is not null)
             {
                 UpdateQuickLoginUI(accountChanged: true);
                 if (SecretStore.NotRemembered && !_notRememberedShown)

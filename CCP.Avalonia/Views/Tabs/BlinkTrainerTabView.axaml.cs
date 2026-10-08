@@ -20,6 +20,8 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Webcam;
 using Serilog;
+using VlcMedia = LibVLCSharp.Shared.Media;
+using VlcPlayer = LibVLCSharp.Shared.MediaPlayer;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -69,7 +71,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PropertyChanged += (_, e) =>
             {
                 if (e.Property != IsVisibleProperty) return;
-                if (IsVisible) Refresh(); else StopDemoLoop();
+                if (IsVisible) Refresh(); else Park();
             };
 
             // WPF HookBlinkTrainerService: one fan-out for session and tracker state.
@@ -82,19 +84,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 BlinkTrainerSession.StateChanged -= OnSessionStateChanged;
                 Platform.WebcamTracker.Instance.StateChanged -= OnSessionStateChanged;
-                Platform.WebcamTracker.Instance.OnBlink -= OnStagePreviewBlink;
-                _tick?.Stop();
-                _tick = null;
+                Park();
             };
         }
+
+        /// <summary>A hidden or detached page does no work (P01/P07): no demo loop, no live blink
+        /// subscription, no stage video decoding, no countdown tick. Showing it again re-runs Refresh.</summary>
+        private void Park()
+        {
+            StopDemoLoop();
+            if (_liveSubscribed) { Platform.WebcamTracker.Instance.OnBlink -= OnStagePreviewBlink; _liveSubscribed = false; }
+            StopStageVideo();
+            SyncTick();
+        }
+
+        /// <summary>WPF BlinkTrainerTick runs while a session runs; here only while the page shows too.</summary>
+        private void SyncTick()
+        {
+            if (BlinkTrainerSession.IsRunning && IsVisible && VisualRoot != null)
+                _tick ??= new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) => Tick());
+            else { _tick?.Stop(); _tick = null; }
+        }
+
+        internal bool CountdownTicking => _tick != null;
 
         /// <summary>WPF OnBlinkTrainerServiceStateChanged: countdown timer, status row, stage mode.</summary>
         private void OnSessionStateChanged()
         {
             try
             {
-                if (BlinkTrainerSession.IsRunning) _tick ??= new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Normal, (_, _) => Tick());
-                else { _tick?.Stop(); _tick = null; }
+                SyncTick();
                 RefreshTrackerButton();
                 RefreshStatusRow();
                 ApplyStageMode();
@@ -134,6 +153,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 RefreshGate();
                 RefreshStatusRow();
                 ApplyStageMode();
+                SyncTick();
+                HelpPopover.Attach(HelpBtnBlinkTrainer, HelpContentService.GetContent("BlinkTrainer"));   // WPF MainWindow.Presets.cs:118
             }
             catch (Exception ex) { Log.Warning(ex, "RefreshBlinkTrainerTab failed"); }
         }
@@ -154,12 +175,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// (ResetBlinkTrainerStageForLive) and swaps it on every real blink.</summary>
         private void ApplyStageMode()
         {
+            if (!IsVisible) { Park(); return; }   // Refresh re-applies on show
             var s = CoreSettings.Current;
             bool live = CoreEntitlement.HasPremium
                 && (BlinkTrainerSession.IsRunning || (WebcamConsent.IsCurrent(s) && s.BlinkTrainerFolders.Count > 0));
             if (!live)
             {
                 if (_liveSubscribed) { Platform.WebcamTracker.Instance.OnBlink -= OnStagePreviewBlink; _liveSubscribed = false; }
+                StopStageVideo();
                 StartDemoLoop();
                 return;
             }
@@ -186,17 +209,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             return _livePool;
         }
 
-        /// <summary>WPF OnBlinkTrainerStagePreviewBlink + ApplyBlinkTrainerLiveImage: a hard-cut swap.
-        /// ponytail: a video pick is skipped on the stage (WPF plays it in a MediaElement); the
-        /// session overlay plays it.</summary>
+        /// <summary>WPF OnBlinkTrainerStagePreviewBlink + ApplyBlinkTrainerLiveImage / ApplyBlinkTrainerLiveVideo:
+        /// a hard-cut swap, or a muted looping video over both images.</summary>
         internal void OnStagePreviewBlink()
         {
             try
             {
                 var s = CoreSettings.Current;
                 var path = LivePool(s).PickRandom(_liveLast);
-                if (path == null || BlinkTrainerAssetPool.IsVideo(path)) return;
+                if (path == null) return;
                 _liveLast = path;
+                if (BlinkTrainerAssetPool.IsVideo(path)) { ShowStageVideo(path); return; }
+                StopStageVideo();
                 var bmp = new Bitmap(path);
                 var incoming = _demoUsingA ? BlinkTrainerStageImageB : BlinkTrainerStageImageA;
                 var outgoing = _demoUsingA ? BlinkTrainerStageImageA : BlinkTrainerStageImageB;
@@ -209,6 +233,51 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 _demoUsingA = !_demoUsingA;
             }
             catch (Exception ex) { Log.Warning(ex, "OnBlinkTrainerStagePreviewBlink failed"); }
+        }
+
+        private VlcPlayer? _stagePlayer;
+        private VlcMedia? _stageMedia;
+        private Platform.VlcFrameSink? _stageSink;
+
+        /// <summary>The video the stage is playing, or null. Read by tests.</summary>
+        internal string? StageVideoPath { get; private set; }
+
+        /// <summary>WPF ApplyBlinkTrainerLiveVideo: both images hidden, the video on top, muted and
+        /// looped (WPF MediaEnded -> Position 0 -> Play) until the next blink swaps it.</summary>
+        private void ShowStageVideo(string path)
+        {
+            StopStageVideo();
+            SetOpacityNow(BlinkTrainerStageImageA, 0);
+            SetOpacityNow(BlinkTrainerStageImageB, 0);
+            StageVideoPath = path;
+            BlinkTrainerStageVideo.Opacity = 1;
+            var vlc = Platform.LibVlcAudio.Shared;
+            if (vlc == null) { Log.Warning("BlinkTrainer: LibVLC unavailable - stage cannot play {Path}", path); return; }
+            _stagePlayer = new VlcPlayer(vlc) { EnableHardwareDecoding = true, Mute = true };
+            _stageSink = new Platform.VlcFrameSink(_stagePlayer, () => _stageMedia,
+                bmp => BlinkTrainerStageVideo.Source = bmp, () => BlinkTrainerStageVideo.InvalidateVisual());
+            _stageMedia = new VlcMedia(vlc, path, LibVLCSharp.Shared.FromType.FromPath);
+            _stageMedia.AddOption(":no-audio");
+            _stageMedia.AddOption(":input-repeat=65535");
+            _stagePlayer.Play(_stageMedia);
+        }
+
+        private void StopStageVideo()
+        {
+            if (StageVideoPath == null && _stagePlayer == null) return;
+            StageVideoPath = null;
+            BlinkTrainerStageVideo.Opacity = 0;
+            BlinkTrainerStageVideo.Source = null;
+            if (_stagePlayer != null)
+            {
+                try { _stagePlayer.Stop(); } catch (Exception ex) { Log.Debug(ex, "stage video stop"); }   // joins the decoder thread
+                try { _stagePlayer.Dispose(); } catch (Exception ex) { Log.Debug(ex, "stage video dispose"); }
+            }
+            _stagePlayer = null;
+            try { _stageMedia?.Dispose(); } catch (Exception ex) { Log.Debug(ex, "stage media dispose"); }
+            _stageMedia = null;
+            _stageSink?.Free();
+            _stageSink = null;
         }
 
         internal bool DemoRunning => _demoTimer != null;
@@ -281,6 +350,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 BlinkTrainerStatusState.Error => Red,
                 _ => Amber,
             };
+            // WPF ApplyBlinkTrainerStatusState -> SetBlinkTrainerStatusPulse: the dot breathes only while RUNNING.
+            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.SetBlinkTrainerStatusPulse(StatusState == BlinkTrainerStatusState.Running);
             BlinkTrainerStatusText.Foreground = StatusState == BlinkTrainerStatusState.Error ? Red
                 : this.FindResource("TextMutedBrush") as IBrush ?? Brushes.Gray;
             if (StatusState is BlinkTrainerStatusState.Running or BlinkTrainerStatusState.Error)
@@ -325,7 +396,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private async void GrantConsent()
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
-            await new Dialogs.WebcamConsentDialog().ShowDialog(owner);
+            await new Dialogs.WebcamConsentDialog().ShowDialogSafe(owner);
             Refresh();
         }
 
@@ -568,7 +639,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var tracker = Platform.WebcamTracker.Instance;
                 if (!WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
-                    await new Dialogs.WebcamConsentDialog().ShowDialog(owner);
+                    await new Dialogs.WebcamConsentDialog().ShowDialogSafe(owner);
                     if (!WebcamConsent.IsCurrent(CoreSettings.Current)) { Refresh(); return; }
                 }
                 if (tracker.Calibration == null)
@@ -589,7 +660,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     }
                     startedHere = true;
                 }
-                await new Windows.WebcamQuickRecalWindow().ShowDialog<bool?>(owner);
+                await new Windows.WebcamQuickRecalWindow().ShowDialogSafe<bool?>(owner);
                 if (startedHere) await tracker.StopAsync();
                 Refresh();
             }
@@ -631,7 +702,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (!WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
                     var dlg = new Dialogs.WebcamConsentDialog();
-                    await dlg.ShowDialog(owner);
+                    await dlg.ShowDialogSafe(owner);
                     Refresh();
                     if (!WebcamConsent.IsCurrent(CoreSettings.Current)) return;
                 }

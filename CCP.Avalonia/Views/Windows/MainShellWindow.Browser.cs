@@ -52,7 +52,7 @@
 //     PORTED onto CCP.Avalonia/Views/Tabs/DiscordTabView.axaml.cs, text rules in Core
 //     TrainerCardText. Still missing: BtnDiscordTabLogin_Click, UpdateDiscordTabUI,
 //     ResolveProfilePictureUnavailable, LoadPatreonBadgeImage, ProfileDiscordHandle_Click,
-//     BtnProfileDiscord_Click, BtnChangeDisplayName_Click, BtnDeleteProfile_Click (writes/art).
+//     BtnProfileDiscord_Click (art). Change name / delete profile are ported below.
 //   * CoreMods (1): SyncSiteRadiosToActiveMod needs ShowBambiCloudOption() and
 //     GetDefaultBrowserUrl(); CCP.Core/CoreMods.cs carries neither yet. Its IsBrowserShowingKnownSite
 //     helper is NOT restored either: WebHost.CurrentUrl now answers it, but its only caller is
@@ -62,6 +62,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using Serilog;
 using ConditioningControlPanel.Localization;
 
@@ -235,6 +236,76 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 SetProfileViewingSelf(true);
             }
             catch (Exception ex) { Log.Debug("ClearProfileViewer: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF MainWindow.Browser.cs:1677 BtnChangeDisplayName_Click; the request goes through CoreAccount.</summary>
+        internal async System.Threading.Tasks.Task ChangeDisplayNameAsync()
+        {
+            var button = ProfilePage?.FindControl<Button>("BtnChangeDisplayName");
+            try
+            {
+                var s = CoreSettings.Current;
+                var currentName = s.UserDisplayName ?? "";
+                var dialog = new Dialogs.DisplayNameDialog(isChangeName: true, currentName: currentName);
+                if (!await dialog.ShowDialog<bool>(this)) return;
+
+                var newName = dialog.DisplayName;
+                if (string.Equals(newName, currentName, StringComparison.Ordinal)) return;
+
+                if (button != null) button.IsEnabled = false;
+                var (success, error, resultName) = await CoreAccount.ChangeDisplayNameAsync(newName);
+                if (success && resultName != null)
+                {
+                    s.UserDisplayName = resultName;
+                    CoreSettings.Save();
+                    var name = ProfilePage?.FindControl<TextBlock>("TxtProfileViewerName");
+                    if (name != null) name.Text = resultName;
+                    UpdateQuickLoginUI();
+                }
+                else
+                    await MessageDialog.ShowAsync(this, Loc.Get("title_name_change_failed"), error ?? Loc.Get("msg_failed_to_change_display_name"));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Error changing display name");
+                await MessageDialog.ShowAsync(this, Loc.Get("label_error"), Loc.Get("msg_error_changing_name"));
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        /// <summary>WPF MainWindow.Browser.cs:1730 BtnDeleteProfile_Click: type DELETE, delete server-side, then a
+        /// full sign-out that pushes nothing and wipes the quest file (AccountSeed.Logout(accountDeleted: true)).</summary>
+        internal async System.Threading.Tasks.Task DeleteProfileAsync()
+        {
+            var button = ProfilePage?.FindControl<Button>("BtnDeleteProfile");
+            try
+            {
+                if (!await new Dialogs.DisplayNameDialog("delete").ShowDialog<bool>(this)) return;
+
+                if (button != null) button.IsEnabled = false;
+                var (success, error) = await CoreAccount.DeleteAccountAsync();
+                if (success)
+                {
+                    await Platform.AccountSeed.Logout(accountDeleted: true);
+                    UpdateQuickLoginUI(accountChanged: true);
+                    ClearProfileViewer();
+                    await MessageDialog.ShowAsync(this, Loc.Get("title_profile_deleted"), Loc.Get("msg_profile_deleted"));
+                }
+                else
+                    await MessageDialog.ShowAsync(this, Loc.Get("title_deletion_failed"), error ?? Loc.Get("msg_failed_to_delete_profile"));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Error deleting profile");
+                await MessageDialog.ShowAsync(this, Loc.Get("label_error"), Loc.Get("msg_error_deleting_profile"));
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
         }
     }
 }

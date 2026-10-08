@@ -435,7 +435,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var dlg = new WebcamCalibrationWindow();
                 PlaceOnCalibratedScreen(dlg);
-                final = await dlg.ShowDialog<bool?>(owner);
+                final = await dlg.ShowDialogSafe<bool?>(owner);
                 if (!dlg.WantsRecalibrate) break;
             }
             return final;

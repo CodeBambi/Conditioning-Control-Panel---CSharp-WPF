@@ -5,14 +5,15 @@ using System.Linq;
 using System.Threading;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
     /// <summary>
     /// App-lifetime "media recap" log: records every flash image displayed and every
-    /// video played, regardless of whether a session is active. Mirrors the subscription
-    /// pattern of <see cref="SessionLogService"/> but is global (subscribed once at
-    /// startup) and keeps a single rolling, disk-persisted history capped at
+    /// video played, regardless of whether a session is active. Like
+    /// <see cref="SessionLogService"/> the heads feed it (RecordImages/RecordVideo/RecordAudio)
+    /// but it is global (created once at startup) and keeps a single rolling, disk-persisted history capped at
     /// <see cref="MaxEntries"/> so it never grows unbounded.
     ///
     /// The history window (opened from the Assets tab) reads a snapshot via
@@ -37,7 +38,6 @@ namespace ConditioningControlPanel.Services
         private readonly string _filePath;
         private readonly Timer _saveTimer;
         private bool _saveScheduled;
-        private bool _isSubscribed;
         private bool _disposed;
 
         /// <summary>Raised (on the thread that logged the media) when a new entry is appended.</summary>
@@ -46,13 +46,15 @@ namespace ConditioningControlPanel.Services
         /// <summary>Raised when the history is cleared.</summary>
         public event EventHandler? Cleared;
 
-        public MediaHistoryService()
+        public MediaHistoryService() : this(Path.Combine(CorePaths.UserData, "media_history.json")) { }
+
+        /// <summary>Tests: a history file of their own, never the profile's.</summary>
+        internal MediaHistoryService(string filePath)
         {
-            _filePath = Path.Combine(CorePaths.UserData, "media_history.json");
+            _filePath = filePath;
             _saveTimer = new Timer(_ => Flush(), null, Timeout.Infinite, Timeout.Infinite);
 
             Load();
-            Subscribe();
         }
 
         /// <summary>Newest-first copy of the current history. Safe to iterate off the UI thread.</summary>
@@ -75,57 +77,39 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lock) { _entries.Clear(); }
             try { Cleared?.Invoke(this, EventArgs.Empty); }
-            catch (Exception ex) { App.Logger?.Debug("MediaHistoryService: Cleared handler threw: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Debug("MediaHistoryService: Cleared handler threw: {Error}", ex.Message); }
             ScheduleSave();
         }
 
-        private void Subscribe()
-        {
-            if (_isSubscribed) return;
-            try
-            {
-                if (App.Flash != null) App.Flash.FlashDisplayed += OnFlashDisplayed;
-                if (App.Video != null) App.Video.VideoStarted += OnVideoStarted;
-                _isSubscribed = true;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "MediaHistoryService: subscribe failed");
-            }
-        }
-
-        private void Unsubscribe()
-        {
-            if (!_isSubscribed) return;
-            try { if (App.Flash != null) App.Flash.FlashDisplayed -= OnFlashDisplayed; } catch { }
-            try { if (App.Video != null) App.Video.VideoStarted -= OnVideoStarted; } catch { }
-            _isSubscribed = false;
-        }
-
-        private void OnFlashDisplayed(object? sender, EventArgs e)
+        /// <summary>
+        /// WPF FlashDisplayed: every image of the batch that reached the screen. The head that owns the
+        /// flash calls this (WPF App.xaml.cs subscribes FlashService.FlashDisplayed; the Avalonia
+        /// FlashOverlay calls it per shown image).
+        /// </summary>
+        public void RecordImages(IReadOnlyList<string>? paths)
         {
             try
             {
-                var paths = App.Flash?.LastDisplayedImagePaths;
                 if (paths == null || paths.Count == 0) return;
                 foreach (var path in paths)
                     Add(MediaType.Image, path);
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("MediaHistoryService.OnFlashDisplayed failed: {Error}", ex.Message);
+                Log.Debug("MediaHistoryService.RecordImages failed: {Error}", ex.Message);
             }
         }
 
-        private void OnVideoStarted(object? sender, EventArgs e)
+        /// <summary>WPF VideoStarted: the clip that went on screen.</summary>
+        public void RecordVideo(string? path)
         {
             try
             {
-                Add(MediaType.Video, App.Video?.LastVideoPath);
+                Add(MediaType.Video, path);
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("MediaHistoryService.OnVideoStarted failed: {Error}", ex.Message);
+                Log.Debug("MediaHistoryService.RecordVideo failed: {Error}", ex.Message);
             }
         }
 
@@ -136,7 +120,7 @@ namespace ConditioningControlPanel.Services
         public void RecordAudio(string? path)
         {
             try { Add(MediaType.Audio, path); }
-            catch (Exception ex) { App.Logger?.Debug("MediaHistoryService.RecordAudio failed: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Debug("MediaHistoryService.RecordAudio failed: {Error}", ex.Message); }
         }
 
         private void Add(MediaType type, string? path)
@@ -174,7 +158,7 @@ namespace ConditioningControlPanel.Services
             }
 
             try { EntryAdded?.Invoke(this, entry); }
-            catch (Exception ex) { App.Logger?.Debug("MediaHistoryService: EntryAdded handler threw: {Error}", ex.Message); }
+            catch (Exception ex) { Log.Debug("MediaHistoryService: EntryAdded handler threw: {Error}", ex.Message); }
 
             ScheduleSave();
         }
@@ -206,7 +190,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "MediaHistoryService: failed to load history");
+                Log.Warning(ex, "MediaHistoryService: failed to load history");
             }
         }
 
@@ -241,7 +225,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "MediaHistoryService: failed to persist history");
+                Log.Warning(ex, "MediaHistoryService: failed to persist history");
             }
         }
 
@@ -249,7 +233,6 @@ namespace ConditioningControlPanel.Services
         {
             if (_disposed) return;
             _disposed = true;
-            Unsubscribe();
             try { _saveTimer.Dispose(); } catch { }
             Flush(); // best-effort final write on shutdown
         }
