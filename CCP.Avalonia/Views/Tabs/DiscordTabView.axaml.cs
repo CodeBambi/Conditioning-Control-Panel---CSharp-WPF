@@ -301,7 +301,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var fraction = needed > 0 ? have / needed : 0;
             if (double.IsNaN(fraction) || double.IsInfinity(fraction)) fraction = 0;
             SetMeter("ProfileXpBar", Math.Clamp(fraction, 0, 1));
-            TxtProfileXpProgress.Text = Loc.GetF("profile_xp_progress", $"{have:N0}", $"{needed:N0}");
+            // WPF UpdateProfileXpMeter: the migration bonus rides the readout, own card only (same kind as the chip).
+            var kind = Host?.OwnDescentReceiptKind() ?? ConditioningControlPanel.Services.Descent.DescentReceiptKind.None;
+            var bonus = ConditioningControlPanel.Services.Descent.DescentCycleXp.XpBonusFor(CoreSettings.Current);
+            TxtProfileXpProgress.Text = ConditioningControlPanel.Services.Descent.DescentReceipt.ShowsXpMultiplier(kind, bonus)
+                ? Loc.GetF("profile_xp_progress_boosted", $"{have:N0}", $"{needed:N0}", ConditioningControlPanel.Services.Descent.DescentReceipt.BonusPercentText(bonus))
+                : Loc.GetF("profile_xp_progress", $"{have:N0}", $"{needed:N0}");
         }
 
         private void SetMeter(string gridName, double fraction)

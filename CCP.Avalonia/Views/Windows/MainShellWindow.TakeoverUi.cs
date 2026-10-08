@@ -1,10 +1,9 @@
-// PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.TakeoverUi.cs (165 lines).
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.TakeoverUi.cs (165 lines).
 //
-// The STATE HERO is real here: the title-bar pill, the orb's dormant/active look, and the two lines
-// of status copy under it. All three are plain painting over controls this head already carries
-// (MainShellWindow.axaml:426 for the pill, Views/Tabs/BambiTakeoverTabView.axaml:230/236/238 for the
-// orb and the copy, Controls/TakeoverOrb.cs for SetActive), and the strings are English literals in
-// WPF too - no {loc:Str} binding is being overwritten.
+// The STATE HERO: the title-bar pill, the orb's dormant/active look, and the two lines of status
+// copy under it (MainShellWindow.axaml for the pill, Views/Tabs/BambiTakeoverTabView.axaml for the
+// orb and the copy, Controls/TakeoverOrb.cs for SetActive). The status word is an English literal in
+// WPF too; the sub line is Loc takeover_status_sub_*, as WPF.
 //
 // The caller is Core AutonomyScheduler.EnabledChanged, hooked in MainShellWindow.Autonomy.cs (as WPF's
 // AutonomyService.EnabledChanged), so start, stop, panic and startup resume all repaint it.
@@ -20,6 +19,8 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Speech;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -59,9 +60,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                 var sub = tab.FindControl<TextBlock>("TxtTakeoverStatusSub");
                 if (sub != null)
-                    sub.Text = active
-                        ? "She has the reins. Tap stop any time."
-                        : "She's not watching right now.";
+                    sub.Text = Loc.Get(active ? "takeover_status_sub_active" : "takeover_status_sub_dormant");
 
                 if (!active) HideVoicePanel();
             }
@@ -131,6 +130,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 SetTakeoverActiveUi(Autonomy.IsEnabled);
             };
             _voicePanelHideTimer.Start();
+        }
+
+        /// <summary>WPF MainWindow.Autonomy.cs SpeechModelIsTheProblem: speech is unavailable and the
+        /// microphone is not the reason, so the answer is a model (missing, refusing to load, unprobed).</summary>
+        internal static bool SpeechModelIsTheProblem() =>
+            CoreSpeech.HasCaptureDevice && !CoreSpeech.IsAvailable
+            && CoreSpeech.ModelStatus is CoreSpeechModelStatus.LoadFailed or CoreSpeechModelStatus.NoModelFound
+                                      or CoreSpeechModelStatus.NotProbed;
+
+        /// <summary>WPF OpenSpeechModelFolder: open the folder the model goes in, creating it first; a
+        /// refusal is SHOWN as a toast naming the path. This head probes two roots (beside the app,
+        /// then user data), so the first one that exists or can be created is opened - an install
+        /// directory the user cannot write falls through to the user-data one instead of failing.</summary>
+        internal async void OpenSpeechModelFolder()
+        {
+            var roots = SpeechEngine.DefaultModelRoots;
+            var tried = roots[0];
+            foreach (var root in roots)
+            {
+                tried = root;
+                try { System.IO.Directory.CreateDirectory(root); }
+                catch (Exception ex) { Log.Debug("Speech model folder {Root} not creatable: {E}", root, ex.Message); continue; }
+                if (await Platform.ExternalOpener.OpenAsync(this, root)) return;
+                break;
+            }
+            Log.Warning("Could not open the speech model folder at {Root}", tried);
+            try
+            {
+                App.Notifications.Show(Loc.GetF("msg_open_models_folder_failed", tried),
+                    Helpers.NotificationType.Warning, TimeSpan.FromSeconds(12));
+            }
+            catch (Exception ex) { Log.Debug("Models-folder toast failed: {E}", ex.Message); }
         }
 
         /// <summary>Puts the live voice panel away (Takeover OFF, or the verdict's dwell ending).</summary>

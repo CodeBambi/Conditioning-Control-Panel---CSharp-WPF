@@ -77,7 +77,8 @@ public sealed partial class AccountSeedTests
         "PlayerLevel", "PlayerXP", "CurrentSeason", "DescentEpoch", "HighestLevelEver", "LastConfirmedServerXp",
         "LastConfirmedServerXpAccount", "LastConfirmedServerXpSeason", "PatreonTier", "UnifiedId", "UserDisplayName",
         "HasLinkedPatreon", "HasLinkedDiscord", "IsSeason0Og", "PatreonPremiumValidUntil", "PatreonLabValidUntil",
-        "PendingDescentMigrationChoice",
+        "PendingDescentMigrationChoice", "DescentMigrationCompleted", "DescentMigrationChoice", "DescentMigrationOffered",
+        "DescentCycleXpBonus", "DescentCycle",
     };
 
     private static JToken Get(AppSettings s, string n) =>

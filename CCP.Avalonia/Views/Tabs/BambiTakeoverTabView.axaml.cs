@@ -58,7 +58,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnGateUnlock.Click += (s, e) => Shell?.BtnGateUnlock_Click(s, e);
             BtnTestAutonomy.Click += (_, _) => Shell?.TestAutonomy();
             BtnTestVoice.Click += (_, _) => Shell?.TestSpokenMantra();   // WPF TestVoiceCommand
-            BtnOpenDeviceSettings.Click += BtnOpenDeviceSettings_Click;
+            BtnOpenDeviceSettings.Click += (_, _) => Shell?.OpenDeviceSettings();   // Settings -> Devices
+            BtnAutonomyOpenModels.Click += (_, _) => Shell?.OpenSpeechModelFolder();
             BtnWallpaperFolder.Click += BtnWallpaperFolder_Click;
 
             // Triggers + session toggles. WPF split these across Checked/Unchecked; Avalonia 11
@@ -236,11 +237,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 TxtMantraChantVolume.Text = $"{(int)Math.Round(s.MantraChantVolume)}%";
                 SldMantraChantGap.Value = s.MantraChantGapSeconds;
                 TxtMantraChantGap.Text = $"{s.MantraChantGapSeconds}s";
-                // ponytail: WPF's RefreshMantraChantHint swaps TxtMantraChantHint between
-                // desc_mantra_chant and desc_mantra_chant_none on App.MantraChant.CanChant().
-                // Needs ConditioningControlPanel/Services/MantraChantService.cs. The hint keeps its
-                // {loc:Str desc_mantra_chant} binding meanwhile - a .Text write here would be undone
-                // by the next language change anyway.
+                // WPF RefreshMantraChantHint: a mod with no voiced mantras can't chant, so say so.
+                // CanChant() is MantraVoice.HasVoicedMantras() on WPF too.
+                TxtMantraChantHint.Text = Loc.Get(App.MantraVoice.HasVoicedMantras() ? "desc_mantra_chant" : "desc_mantra_chant_none");
 
                 RefreshAutonomyVoiceHint();
             }
@@ -252,12 +251,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>WPF MainWindow.Autonomy.cs:501 RefreshAutonomyVoiceHint: amber while the surprise
-        /// mantras cannot run (no mic, model missing or broken) or are paused by wake word / PTT.
-        /// ponytail: WPF's "Open models folder" button (BtnAutonomyOpenModels) is not on this tab.</summary>
+        /// mantras cannot run (no mic, model missing or broken) or are paused by wake word / PTT. The
+        /// "Open models folder" button is up only while the model is the problem.</summary>
         internal void RefreshAutonomyVoiceHint()
         {
             var s = CoreSettings.Current;
             var on = s.AutonomyCanTriggerVoiceCommand && s.MicConsentGiven;
+            BtnAutonomyOpenModels.IsVisible = on && Windows.MainShellWindow.SpeechModelIsTheProblem();
             var amber = on && (!CoreSpeech.IsAvailable || s.SpeechWakeWordEnabled || s.SpeechPushToTalkEnabled);
             TxtAutonomyVoiceHint.Foreground = new global::Avalonia.Media.SolidColorBrush(amber
                 ? global::Avalonia.Media.Color.FromRgb(0xFF, 0xC1, 0x07)
@@ -512,10 +512,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     _isLoading = false;
                     return;
                 }
-                // ponytail: on WPF the consent dialog itself flips AppSettings.MicConsentGiven and
-                // saves; the ported one does not yet (CCP.Avalonia/Views/Dialogs/MicConsentDialog
-                // .axaml.cs, Enable()). Until it does, the seed's "&& MicConsentGiven" clears this
-                // box again on the next repaint. Fixing it belongs in that dialog, not here.
             }
 
             s.AutonomyCanTriggerVoiceCommand = on;
@@ -581,15 +577,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 RefreshWallpaperBlock(s);
             }
             catch (Exception ex) { Log.Warning(ex, "Wallpaper folder pick failed"); }
-        }
-
-        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e)
-        {
-            // WPF: mw.OpenDeviceSettings() = ShowTab("appsettings") + AppSettingsTab.FocusSection("devices").
-            // ponytail: the second half is the shell's helper, and MainShellWindow has no
-            // OpenDeviceSettings yet (CCP.Avalonia/Views/Windows/MainShellWindow.Presets.cs lists
-            // the stubbed navigation helpers), so this lands on the Settings door's first section.
-            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ShowTab("appsettings");
         }
 
         // =====================================================================================
