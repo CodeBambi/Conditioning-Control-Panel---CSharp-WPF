@@ -161,11 +161,28 @@ internal sealed class AchievementEngine
         return minutes;
     }
 
+    /// <summary>WPF AchievementService.TrackMindWipeDuration: clean_slate at 60 s of continuous loop.</summary>
+    public void TrackMindWipeDuration(double seconds)
+    {
+        Progress.ContinuousMindWipeSeconds = seconds;
+        _isDirty = true;
+        if (seconds >= 60) TryUnlock("clean_slate");
+    }
+
     /// <summary>WPF AchievementService.TrackBubbleCountGameStarted.</summary>
     public void TrackBubbleCountGameStarted()
     {
         Progress.TotalBubbleCountGames++;
         _isDirty = true;
+    }
+
+    /// <summary>WPF AchievementService.TrackCornerHit: the first bouncing-text corner hit unlocks corner_hit.</summary>
+    public void TrackCornerHit()
+    {
+        if (Progress.HasHitCorner) return;
+        Progress.HasHitCorner = true;
+        _isDirty = true;
+        TryUnlock("corner_hit");
     }
 
     /// <summary>WPF TrackAttentionCheckPassed: totals and eyes_front.</summary>

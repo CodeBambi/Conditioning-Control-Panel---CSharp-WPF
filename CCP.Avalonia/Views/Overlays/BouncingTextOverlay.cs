@@ -29,13 +29,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// <para>Coordinates are WPF's: the engine bounces in DIPs at ONE scale (WPF: the system DPI;
     /// here: the primary screen's scaling), each window draws the part on its screen.</para>
     ///
-    /// <para>ponytail: not here yet - pause during mandatory video / BouncingTextAlwaysOnTop (no
-    /// video service on this head), corner-hit achievement, the 0.5 s topmost
-    /// re-assert (override-redirect windows need no WM layer, but a later overlay maps above).</para>
     /// </summary>
     internal static class BouncingTextOverlay
     {
-        private static readonly BouncingTextEngine Engine = new();
+        internal static readonly BouncingTextEngine Engine = new();
+        private static double _zAccum;
+
+        /// <summary>WPF StepLogo on a corner hit: App.Achievements.TrackCornerHit (corner_hit).</summary>
+        internal static Action CornerHit = () => App.Achievements?.TrackCornerHit();
+
+        /// <summary>WPF ReassertTopmost: a later overlay maps above ours, so every ~0.5 s the windows go back on top.</summary>
+        internal static Action RaiseAll = () => { foreach (var w in Windows) X11Overlay.Raise(w); };
         private static readonly List<BouncingTextOverlayWindow> Windows = new();
         private static bool _running, _paused;
         private static int _chain;   // bumped by PauseForVideo: a frame requested before it is dropped
@@ -122,6 +126,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             _running = false;
             _paused = false;
+            _zAccum = 0;
             foreach (var w in Windows) w.Close();
             Windows.Clear();
             Engine.Stop();
@@ -206,8 +211,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _last = now;
             if (dt <= 0 || DisplayChangeCoordinator.SpawnsSuppressed) return;
             if (Stats) Sample(dt);
-            dt = Math.Min(dt, 0.1);
+            Advance(Math.Min(dt, 0.1), dt);
+        }
 
+        /// <summary>One frame of WPF Animate after the dt clamp: step, corner/bounce hooks, the 0.5 s
+        /// topmost re-assert, then move every window's copy.</summary>
+        /// <param name="realDt">Unclamped seconds since the last frame: the re-assert runs on real time
+        /// (WPF: "every ~0.5s of real time"), so slow frames (1 fps on a locked session) cannot stretch it.</param>
+        internal static void Advance(double dt, double? realDt = null)
+        {
             var s = CoreSettings.Current;
             Engine.Tick(dt);
             var logos = Engine.Logos;
@@ -215,6 +227,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             {
                 var l = logos[i];
                 var step = Engine.Step(l, dt, s);
+                if (step.CornerHit) CornerHit();
                 if (step.CornerHit && s.BouncingTextFxCornerBurst)
                 {
                     var c = step.ColorBeforeBounce;
@@ -226,6 +239,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     UpdateText(i);
                 }
             }
+            _zAccum += realDt ?? dt;
+            if (_zAccum >= 0.5) { _zAccum = 0; RaiseAll(); }
             for (var i = 0; i < logos.Count; i++)
             {
                 var l = logos[i];
