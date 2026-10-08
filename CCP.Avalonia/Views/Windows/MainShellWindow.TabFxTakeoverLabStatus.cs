@@ -23,8 +23,6 @@
 //   * FxTheme.GlowColor (ConditioningControlPanel/Services/FxTheme.cs) is the mod's glow. This head
 //     resolves the same slot through the FxGlowColor theme key, which is what a mod switch
 //     rewrites, so the retint on CoreMods.ModChanged still lands.
-//   * PremiumGateFx.RefreshAll() - ConditioningControlPanel/Controls/PremiumGateFx.cs is not
-//     ported; the gate borders on this head are static XAML. Dropped, not faked.
 //   * AmbientFrameRate (Timeline.SetDesiredFrameRate) has no Avalonia twin - same reason as
 //     MainShellWindow.AmbientFx.cs's note.
 //   * Tab visibility: WPF's IsVisibleChanged becomes a PropertyChanged filter on IsVisibleProperty,
@@ -171,7 +169,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ApplyPr4aFxLoops()
         {
             if (!_pr4aFxInitialized) return;
-            try { ApplyPr4aStatusPulses(); }
+            try { ApplyPr4aStatusPulses(); global::ConditioningControlPanel.Avalonia.Controls.PremiumGateFx.RefreshAll(); }
             catch (Exception ex) { Log.Debug("ApplyPr4aFxLoops: {E}", ex.Message); }
         }
 
