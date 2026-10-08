@@ -1406,3 +1406,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/lockdown-hidden-fix: +176
 - Dialogs no longer crash with a hidden shell owner (ShowDialogSafe, ownerless fallback like WPF); Lockdown activate from tray works.
 - Headless test hides the shell and activates via the real button; fail-proven.
+
+## avalonia-port/rows-name-dialogs: +342
+- Trainer Card rename/delete wired through DisplayNameDialog -> CoreAccount -> Core V2AuthService; delete signs out without a push.
+- UsernamePickerDialog documented as unreachable on WPF too (dead BtnQuick*Login handlers); both rows stay stub with exact gaps.
