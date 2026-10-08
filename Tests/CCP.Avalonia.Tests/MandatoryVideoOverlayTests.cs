@@ -163,6 +163,8 @@ public sealed class MandatoryVideoOverlayTests
 
                     // WPF #735 grace pause: the clip's first Esc pauses it behind the card (guards asleep);
                     // Resume plays on, and the spent pause makes the next Esc a dismiss.
+                    var clock = new SteppedClock();
+                    o.Time = clock;
                     w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
                     Assert.True(v.IsPlaying && o.GracePaused && sf.Grace.IsVisible && !sf.Layer.IsHitTestVisible, "first Esc = grace pause");
                     Assert.Contains("60", sf.Countdown.Text);
@@ -170,15 +172,55 @@ public sealed class MandatoryVideoOverlayTests
                     o.GuardTick();
                     Assert.True(v.IsPlaying, "the clip guards sleep through a grace pause");
                     s.VideoMaxDurationSeconds = 0;
-                    o.ResumeFromGrace("test");
-                    Assert.True(!o.GracePaused && !sf.Grace.IsVisible && sf.Layer.IsHitTestVisible, "resumed");
-                    await Task.Delay(300);   // past the 200 ms same-keystroke dedup
+                    clock.Step(1);
+                    o.GraceTick();
+                    Assert.Equal(Loc.GetF("video_grace_auto_resume_in", 59), sf.Countdown.Text);
+                    // WPF's Resume is a Button: Tab reaches it and Enter presses it (P17).
+                    var resume = System.Linq.Enumerable.Single(System.Linq.Enumerable.OfType<Button>(
+                        global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(sf.Grace)));
+                    w.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, "");
+                    Assert.True(resume.IsFocused, "Tab reaches Resume");
+                    w.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
+                    Assert.True(v.IsPlaying && !o.GracePaused && !sf.Grace.IsVisible && sf.Layer.IsHitTestVisible, "Enter on Resume resumes");
+                    clock.Step(0.3);   // past the 200 ms same-keystroke dedup
                     w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
                     Assert.False(v.IsPlaying);
                     Assert.Empty(o.Windows);
                     Assert.True(o.Sink == null, "frame buffer freed");
                     Assert.True(credited >= 1, $"credited {credited}s");
                     Assert.True((ducks, unducks) == (3, 3), $"every close releases its duck ({ducks}/{unducks})");
+
+                    // The pink pill by mouse (0.85 hover, 0.7 pressed, click resumes), then the 60 s auto-resume
+                    // on the next clip; neither stops the clip.
+                    w = await Open(strict: false);
+                    sf = o.Surfaces[0];
+                    clock.Step(1);
+                    w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
+                    Assert.True(o.GracePaused && sf.Grace.IsVisible, "grace on the second clip");
+                    resume = System.Linq.Enumerable.Single(System.Linq.Enumerable.OfType<Button>(
+                        global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(sf.Grace)));
+                    global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    var pill = resume.TranslatePoint(new Point(resume.Bounds.Width / 2, resume.Bounds.Height / 2), w)!.Value;
+                    w.MouseMove(pill);
+                    Assert.Equal(0.85, resume.Opacity);
+                    w.MouseDown(pill, MouseButton.Left);
+                    Assert.Equal(0.7, resume.Opacity);
+                    w.MouseUp(pill, MouseButton.Left);
+                    Assert.True(v.IsPlaying && !o.GracePaused && !sf.Grace.IsVisible, "Resume click resumes");
+                    v.End();
+                    w = await Open(strict: false);
+                    sf = o.Surfaces[0];
+                    clock.Step(1);
+                    w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
+                    clock.Step(59.5);
+                    o.GraceTick();
+                    Assert.True(o.GracePaused && sf.Countdown.Text == Loc.GetF("video_grace_auto_resume_in", 1), "still paused at 59.5 s");
+                    clock.Step(0.5);
+                    o.GraceTick();
+                    Assert.True(v.IsPlaying && !o.GracePaused && !sf.Grace.IsVisible, "auto-resume at 60 s");
+                    v.End();
+                    o.Time = TimeProvider.System;
 
                     // WPF vout heal: output lost for 5 s replays the same clip once; lost again, it ends.
                     w = await Open(strict: false);
@@ -233,6 +275,7 @@ public sealed class MandatoryVideoOverlayTests
             finally
             {
                 v.Stop();
+                o.Time = TimeProvider.System;
                 o.Scheduler = real;
                 MandatoryVideoOverlay.PanicListenerLive = listener;
                 CoreProgression.TrackVideoWatchedProvider = null;
@@ -246,5 +289,12 @@ public sealed class MandatoryVideoOverlayTests
             }
         }
         finally { Directory.Delete(dir, true); }
+    }
+
+    private sealed class SteppedClock : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        public void Step(double seconds) => _now = _now.AddSeconds(seconds);
+        public override DateTimeOffset GetUtcNow() => _now;
     }
 }
