@@ -1477,3 +1477,18 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-mantra-window: +277
 - win-mantra: five storyboards stepped on a clock, panic surface `mantra`, Programs mantra-task door; row stays stub (TodayTaskList unbuilt, failure MessageBox dropped).
+
+## avalonia-port/rows-webcam-windows: +230
+- Webcam loading splash wired to tracker startup progress (shell init, error/close paths); calibration Verify live gaze cursor; quick recal on calibrated monitor.
+- 4 fail-proven headless tests; live sandbox splash check (no camera opened); bubble test, mouth checks, quick-recal hotkey still stub.
+
+## avalonia-port/rows-profile-dialogs: +360
+- Customize dialog: 12 scene banners + 12 preset avatars from Core CosmeticsPool, pin tiles draw achievement art (artless pins dropped, as WPF), tiles take Enter/Space; titles use Core Achievement.TitleName.
+- Wardrobe editor stage paints the chosen banner (top-aligned like the hero); both rows stub -> wired.
+
+## avalonia-port/rows-pink-rush: +341
+- win-pink-rush stub -> wired: engine- or session-armed 10-min roll, 60 s 3x XP (Core PinkRushRules shared with WPF), popup + wash; panic/engine stop end it.
+- PinkRushTests, 8 fail-proofs (logged); no live rush (random 10-min trigger).
+
+## avalonia-port/rows-attention-check: +60
+- ctrl-attention-check: WPF never starts AttentionCheckService, so the ring stays unshown on both heads. A parity scan test (fail-proven both ways) pins this. Row stays stub with corrected notes.
