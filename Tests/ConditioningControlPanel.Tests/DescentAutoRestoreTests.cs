@@ -128,7 +128,7 @@ public class DescentAutoRestoreTests
     // ------------------------------------------------------------ the wire
 
     /// <summary>
-    /// <c>descent_auto = true</c> rides the sync body beside the epoch, unconditional. Without it
+    /// <c>DescentAuto = true</c> (wire key <c>descent_auto</c>) rides the sync body beside the epoch, unconditional. Without it
     /// the server offers nothing, so this one line is the whole difference between "migrated
     /// silently" and "never migrated".
     /// </summary>
@@ -137,9 +137,9 @@ public class DescentAutoRestoreTests
     {
         var src = AppFile("Services", "Settings", "ProfileSyncService.cs");
 
-        var epoch = src.IndexOf("descent_epoch = DescentEpochs.ClientEpoch,", StringComparison.Ordinal);
+        var epoch = src.IndexOf("DescentEpoch = DescentEpochs.ClientEpoch,", StringComparison.Ordinal);
         Assert.True(epoch >= 0, "descent_epoch is gone from the sync body - re-read the builder");
-        var auto = src.IndexOf("descent_auto = true,", epoch, StringComparison.Ordinal);
+        var auto = src.IndexOf("DescentAuto = true,", epoch, StringComparison.Ordinal);
         Assert.True(auto > epoch && auto - epoch < 1200, "descent_auto must sit beside descent_epoch in the same body");
     }
 
@@ -174,15 +174,6 @@ public class DescentAutoRestoreTests
     private static string StripComments(string src) =>
         string.Join("\n", src.Split('\n').Where(l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
 
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string AppFile(params string[] parts)
-        => File.ReadAllText(Path.Combine(RepoRoot(), Path.Combine("ConditioningControlPanel", Path.Combine(parts))));
+    /// <summary>Through SourceRoots, so a move into CCP.Core keeps this scan covering the file.</summary>
+    private static string AppFile(params string[] parts) => SourceRoots.ReadProductFile(parts);
 }

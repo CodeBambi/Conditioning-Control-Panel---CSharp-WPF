@@ -85,6 +85,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- The shipped spiral (WPF Resources\spiral.gif): SpiralOverlay's default and the card's Default thumbnail. -->
+    <Content Include="..\Assets\spiral.gif" Link="Resources\spiral.gif">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Subliminal whispers (SubliminalWhisper.FindLinkedAudio): the shared Bambi clips and the
          neutral voice's words.json + clips, at the WPF head's logical paths. -->
     <Content Include="..\Assets\sub_audio\**\*" Link="Resources\sub_audio\%(RecursiveDir)%(Filename)%(Extension)">
