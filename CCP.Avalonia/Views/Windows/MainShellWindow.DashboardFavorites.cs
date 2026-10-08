@@ -182,7 +182,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF NoteDestinationOpened (called from ShowTab there): the destination moves to
-        /// the front of RECENT. Seam: this head's ShowTab does not call it yet.</summary>
+        /// the front of RECENT. Called from ShowTab.</summary>
         internal void NoteDestinationOpened(string tabKey)
         {
             try
@@ -193,7 +193,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var entry = SettingsPaletteIndex.All.FirstOrDefault(e => e.Id == id);
                 if (entry == null || !entry.Available) return;
                 if (!FavoritesRailRule.NoteOpened(s.RailRecent, id)) return;
-                CoreSettings.Save();
+                // Navigation never writes settings.json on this head (PremiumGatesTests lapse rule): RECENT
+                // rides the next save, like the last-tab memory.
                 RefreshFavoritesRail();
             }
             catch (Exception ex) { Log.Debug("NoteDestinationOpened({Tab}): {E}", tabKey, ex.Message); }
