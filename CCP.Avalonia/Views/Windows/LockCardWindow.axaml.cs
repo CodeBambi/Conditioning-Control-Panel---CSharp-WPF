@@ -664,8 +664,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>Also false while the listener's key resolved to no keycode: a strict card must not
         /// lose Esc to a panic key that can never fire.</summary>
-        private static bool PanicHookIsInstalled =>
-            Platform.X11PanicKey.IsListening && Platform.X11PanicKey.BoundKeycode != 0;
+        private static bool PanicHookIsInstalled => Platform.PanicListeners.Live;   // X11 listener or the Windows hook
 
         /// <summary>
         /// #875: does Esc close THIS card? Non-strict cards: yes. Strict cards: only while a panic

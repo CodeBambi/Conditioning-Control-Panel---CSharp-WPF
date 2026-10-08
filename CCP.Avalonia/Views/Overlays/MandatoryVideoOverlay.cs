@@ -89,7 +89,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         /// <summary>The global panic listener can stop a video right now (LockCardWindow #875's
         /// PanicHookIsInstalled). Tests swap it.</summary>
-        internal static Func<bool> PanicListenerLive = () => X11PanicKey.IsListening && X11PanicKey.BoundKeycode != 0;
+        internal static Func<bool> PanicListenerLive = () => PanicListeners.Live;
 
         internal IReadOnlyList<Window> Windows => _surfaces.Select(s => s.Window).ToList();
         internal IReadOnlyList<Surface> Surfaces => _surfaces;
@@ -353,6 +353,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         // ---- grace pause (WPF TryGracePauseFromPanic / DoGracePause / ResumeFromGrace, #735) ----
 
         internal bool GracePaused => _gracePaused;
+
+        /// <summary>WPF VideoService.WantsGlobalEscape (:6361): a NON-strict clip is on screen, so a plain Esc
+        /// from the global hook may reach it when its window lost focus (Platform/Win32Input.EscapeDoor).</summary>
+        internal bool WantsGlobalEscape => Scheduler.IsPlaying && _surfaces.Count > 0 && !_closing && !_strict;
+
+        /// <summary>WPF TryEscapeFromGlobalKey (:6386), UI thread: the window handler's Esc, re-checked here
+        /// because a focused window may already have taken the same keystroke.</summary>
+        internal bool TryEscapeFromGlobalKey()
+        {
+            if (!WantsGlobalEscape) return false;
+            var s = CoreSettings.Current;
+            if (TryGracePause(ConditioningControlPanel.Services.Safety.PanicPolicy.EscapeIsThePanicKey(s.PanicKeyEnabled, s.PanicKey))) return true;
+            Scheduler.End();
+            return true;
+        }
 
         /// <summary>The first Esc/panic press of a clip pauses it behind the card for up to 60 s; the
         /// panic key only when panic does not override everything (PanicOverridesAll off).</summary>
