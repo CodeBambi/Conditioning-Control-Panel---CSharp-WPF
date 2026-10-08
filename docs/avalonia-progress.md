@@ -1336,3 +1336,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-splash-startup: +222
 - Splash fronts real launches with WPF steps/percentages; failed startup logged and exits non-zero; timing within noise of no-splash.
+
+## avalonia-port/rows-feat-bubble-count: +200
+- Bubble Count waits behind video / lock card / quiz like WPF TriggerGame; panic and stop drop the waiting game.
