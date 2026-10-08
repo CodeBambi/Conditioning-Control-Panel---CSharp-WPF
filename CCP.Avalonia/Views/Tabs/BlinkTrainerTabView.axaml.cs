@@ -13,6 +13,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Lab.GazeMinigame;
 using ConditioningControlPanel.Localization;
@@ -143,6 +144,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             bool premium = CoreEntitlement.HasPremium;
             BlinkTrainerGate.IsVisible = !premium;
+            PremiumGateFx.Attach(BlinkTrainerGate);   // WPF MainWindow.BlinkTrainer.cs:289
             BlinkTrainerGatedContent.IsEnabled = premium;
             BlinkTrainerStageActions.IsEnabled = premium;
         }

@@ -1368,3 +1368,18 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-quests-tab: +444
 - Quests: QuestComplete haptic post + on-tab completion burst (shared EventBurstLayer, Achievements reuses it); season title shimmer + gradient-panel particle drift on a 24 fps clock that runs only while shown. Rows stay stub (voice line, off-tab burst, stamps, art/punch card missing).
+
+## avalonia-port/rows-gate-fx: +1010
+- PremiumGateFx (fog/padlock glow/sheen on 8 gates), row sweep, perimeter comet, card sheen adorners; effects park off-screen; host gaps listed.
+
+## avalonia-port/rows-split-card: +305
+- feat-split-card (stays stub): breath, glow, sweep, title and hover now follow the MotionFx/PerformanceProfile/window-focus gates; off halves dim; each half has its own "?" (HelpPopover); rings are rounded. `SplitFeatureCardFxTests` fail-proven per gate.
+- Still missing: DashboardCardDepth, greyscale HalfMute, live re-gate on a settings change (shell-dashboard-fx caller).
+
+## avalonia-port/rows-feat-flash: +411
+- Flash Drift & Bounce plus the speed slider (#1265): picker on the card, windows moved on one shared tick. Core gets FlashMotion, FlashDrag and FlashPendulumRig by `git mv`. FlashDriftTests: 4 tests, each seen to fail when broken.
+- Ownership seam PrizeOwnership: unowned in Release, CCP_PRIZE_GRANTS override in Debug only. New row svc-prize-ownership. feat-flash stays stub; the missing list is in the row.
+
+## avalonia-port/rows-spiral-tab: +285
+- SpiralRoom moved to Core; the Avalonia Spiral tab and rail row now read the real fuse and settings (live fog T-minus, phase pulse and flare, gold-ellipsis rail row). SpiralRoomShellTests is fail-proven 3 ways and checked live in Keincheck.
+- Both rows stay stub: the block and withhold services (DescentService, DescentMigrationService) are still WPF-only, so the Spiral/embed state, FIRST LIGHT, SFX and the bark are still missing.

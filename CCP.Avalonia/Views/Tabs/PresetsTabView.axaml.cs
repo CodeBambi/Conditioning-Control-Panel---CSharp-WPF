@@ -12,6 +12,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -804,6 +805,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Build the selectable rows from the available Core session snapshot.</summary>
         private void SeedSessionRack()
         {
+            DetachRowSweep();   // its row is gone
             var filtered = _availableSessions.Where(RackAccepts).ToArray();
             var shown = SessionRackQuery.SortRackSessions(filtered, _availableSessions, _rackSort);
             foreach (var session in shown)
@@ -922,7 +924,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             };
             row.PointerPressed += SessionRow_PointerPressed;
             row.KeyDown += SessionRow_KeyDown;
+            row.PointerEntered += (_, _) => AttachRowSweep(row);
+            row.PointerExited += (_, _) => { if (ReferenceEquals(row, _rowSweepHost)) _rowSweep?.Leave(); };
             return row;
+        }
+
+        // ---- the row sweep (WPF MainWindow.TabFxPresetsQuestsAchievements.cs:371-430) ----
+        // ONE sweep, moved to whichever row is hovered and left attached-and-idle after a leave.
+
+        private const double SessionCardCornerRadius = 10;
+        private RowSweepAdorner? _rowSweep;
+        internal RowSweepAdorner? RowSweep => _rowSweep;   // test seam
+        private Control? _rowSweepHost;
+
+        private void AttachRowSweep(Control row)
+        {
+            if (!row.IsEffectivelyVisible) return;
+            if (ReferenceEquals(row, _rowSweepHost) && _rowSweep != null)
+            {
+                _rowSweep.Enter();   // re-entering the row we are already parked on
+                return;
+            }
+            DetachRowSweep();
+            var sweep = new RowSweepAdorner(row, SessionCardCornerRadius);
+            if (!sweep.AddToLayer()) return;   // not rendered yet: the next hover tries again
+            sweep.Enter();
+            _rowSweep = sweep;
+            _rowSweepHost = row;
+        }
+
+        private void DetachRowSweep()
+        {
+            _rowSweep?.Reset();
+            _rowSweep?.RemoveFromLayer();
+            _rowSweep = null;
+            _rowSweepHost = null;
         }
 
         private Button RowAction(string glyph, string tip, bool danger)

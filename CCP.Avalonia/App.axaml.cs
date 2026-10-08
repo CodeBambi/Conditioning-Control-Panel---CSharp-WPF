@@ -43,7 +43,7 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The one session runner (WPF MainWindow._sessionEngine), or null on the headless render path.</summary>
         internal static SessionRunner? Sessions { get; set; }
         /// <summary>THE FUSE (WPF App.DescentCountdown). Built before the shell so its spark can subscribe.</summary>
-        internal static Services.Descent.DescentCountdownService? DescentCountdown { get; private set; }
+        internal static Services.Descent.DescentCountdownService? DescentCountdown { get; set; }
 
         /// <summary>The Core quest board (WPF App.Quests), built by StartQuests before the shell.</summary>
         internal static QuestService? Quests { get; set; }
