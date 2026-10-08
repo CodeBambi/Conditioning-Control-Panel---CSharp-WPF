@@ -14,6 +14,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls
 {
@@ -23,7 +24,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// PORTED from ConditioningControlPanel/Controls/SeasonRecapCard.xaml.cs. Deviations:
     ///  - Spiral spin and holo sweep are Avalonia <see cref="Animation"/>s on the Canvas and the
     ///    Rectangle (TransformAnimator). The foil shimmer animated <c>GradientStop.Offset</c>, which
-    ///    is not Animatable here, so it is dropped: the foil sits at its still offsets.
+    ///    is not Animatable here, so a frame timer drives the same two offsets on the same curve
+    ///    (7 s, sine in-out, autoreverse) while the card is loaded and visible.
+    ///  - WPF's RecapTheme writes the mod palette into Application.Resources; here the card writes
+    ///    the same keys (Core <see cref="RecapPalette"/>) into its own resources on attach and on
+    ///    <see cref="CoreMods.ModChanged"/>, so the DynamicResource brushes recolor the same way.
     ///  - The parameterless constructor seeds a sample snapshot with <c>AnimateReveal = false</c>
     ///    so <c>--render-all</c> captures final figures, not a frame of the count-up.
     /// </summary>
@@ -32,6 +37,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         private SeasonRecapCardViewModel? _vm;
         private DispatcherTimer? _countTimer;
         private CancellationTokenSource? _ambient;
+        private DispatcherTimer? _foilTimer;
+        private DateTimeOffset _foilStart;
+        private bool _loaded, _modHooked;
+        private readonly GradientStop _foil1, _foil2;
+
+        /// <summary>Time source of the foil shimmer; tests step it.</summary>
+        internal TimeProvider Clock { get; set; } = TimeProvider.System;
 
         private readonly Canvas _spiralCanvas;
         private readonly Rectangle _holo;
@@ -53,8 +65,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             _heroSeasonTime = this.FindControl<TextBlock>("HeroSeasonTime")!;
             _heroAllTime = this.FindControl<TextBlock>("HeroAllTime")!;
             _statRank = this.FindControl<TextBlock>("StatRank")!;
+            var foil = (LinearGradientBrush)this.FindControl<Border>("OuterFoil")!.Background!;
+            _foil1 = foil.GradientStops[1];
+            _foil2 = foil.GradientStops[2];
             Loaded += OnLoaded;
-            Unloaded += (_, _) => { _countTimer?.Stop(); StopAmbientLoops(); };
+            Unloaded += (_, _) => { _loaded = false; _countTimer?.Stop(); StopAmbientLoops(); };
 
             // Render constructor: sample data so the headless proof draws every string.
             AnimateReveal = false;
@@ -72,8 +87,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
         private void OnLoaded(object? sender, EventArgs e)
         {
+            _loaded = true;
             BuildSpiral();
-            StartAmbientLoops();
+            if (IsVisible) StartAmbientLoops();
 
             if (AnimateReveal) RunCountUps();
             else SetFinalFigures();
@@ -141,12 +157,69 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             sweep.Children.Add(Frame(1d, new Setter(TranslateTransform.XProperty, 200d), new Setter(TranslateTransform.YProperty, 200d)));
             _ = sweep.RunAsync(_holo, token);
 
-            // ponytail: the WPF foil shimmer drifts two GradientStop offsets; GradientStop is not
-            // Animatable on Avalonia, so the foil holds its still offsets (0.35 / 0.65).
+            // Foil shimmer: two middle stops drift, autoreverse, 7s (GradientStop is not
+            // Animatable here, so a frame timer drives them).
+            _foilStart = Clock.GetUtcNow();
+            _foilTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+            _foilTimer.Tick += (_, _) => TickFoil();
+            _foilTimer.Start();
+        }
+
+        /// <summary>WPF's AddOffset(Foil1, 0.20, 0.50, 7) / AddOffset(Foil2, 0.55, 0.85, 7):
+        /// SineEase EaseInOut, AutoReverse, Forever.</summary>
+        internal void TickFoil()
+        {
+            var t = (Clock.GetUtcNow() - _foilStart).TotalSeconds % 14.0;
+            var u = t <= 7 ? t / 7 : (14 - t) / 7;
+            var eased = (1 - Math.Cos(Math.PI * u)) / 2;
+            _foil1.Offset = 0.20 + 0.30 * eased;
+            _foil2.Offset = 0.55 + 0.30 * eased;
+        }
+
+        internal bool FoilRunning => _foilTimer?.IsEnabled == true;
+
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+            // P01: the ambient loops run only while the card is loaded AND visible.
+            if (change.Property == IsVisibleProperty && _loaded)
+            {
+                if (IsVisible) StartAmbientLoops();
+                else StopAmbientLoops();
+            }
+        }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            ApplyModPalette();
+            if (!_modHooked) { CoreMods.ModChanged += OnModChanged; _modHooked = true; }
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            if (_modHooked) { CoreMods.ModChanged -= OnModChanged; _modHooked = false; }
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        private void OnModChanged(object? sender, ModPackage mod)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) ApplyModPalette();
+            else Dispatcher.UIThread.Post(ApplyModPalette);
+        }
+
+        /// <summary>WPF RecapTheme.ApplyForActiveMod, scoped to this card's own resources.</summary>
+        internal void ApplyModPalette()
+        {
+            CoreMods.TryParseHexColor(CoreMods.AccentColorHex, out var rgb); // miss = hot pink, as WPF
+            foreach (var (key, a, r, g, b) in RecapPalette.For(rgb.R, rgb.G, rgb.B))
+                Resources[key] = Color.FromArgb(a, r, g, b);
         }
 
         private void StopAmbientLoops()
         {
+            _foilTimer?.Stop();
+            _foilTimer = null;
             _ambient?.Cancel();
             _ambient?.Dispose();
             _ambient = null;
@@ -218,6 +291,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 var holo = (TranslateTransform)_holo.RenderTransform!;
                 holo.X = 0;
                 holo.Y = 0;
+                _foil1.Offset = 0.35;
+                _foil2.Offset = 0.65;
             }
             catch { /* freezing is best-effort; a still with default offsets is still fine */ }
 

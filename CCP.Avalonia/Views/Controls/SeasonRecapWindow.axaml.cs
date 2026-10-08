@@ -1,10 +1,12 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
@@ -22,13 +24,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     ///    below against Avalonia's <c>RenderTargetBitmap</c>, which needs no visual tree - the
     ///    throwaway card is measured, arranged, frozen with <c>PrepareForStill</c> and rendered
     ///    off-tree exactly as WPF does it, so the live card keeps animating.
-    ///  - Its CLIPBOARD half is not ported, so BtnCopy still reports <c>recap_toast_error</c>.
-    ///    Avalonia 12 replaced <c>SetDataObjectAsync</c> with <c>DataFormat</c>/<c>IAsyncDataTransfer</c>
-    ///    and no machine in this port's reach can prove an X11 selection actually serves
-    ///    <c>image/png</c> to a browser composer. "card copied, paste it (Ctrl+V)" over an empty
-    ///    clipboard is the kind of lie this port refuses; an unavailable button is not.
-    ///  - Both SHARE buttons therefore take the Reddit route on this head: save the PNG, open the
-    ///    composer, and tell you the path to attach. WPF's X route pastes from the clipboard.
+    ///  - Its CLIPBOARD half is <c>IClipboard.SetBitmapAsync</c> (Avalonia 12). Share on X copies
+    ///    and opens the composer like WPF; if the copy fails it falls back to the Reddit route
+    ///    (save the PNG, name the path) instead of toasting "copied" over an empty clipboard.
     ///  - A parameterless constructor with sample data exists for the headless render.
     /// </summary>
     public partial class SeasonRecapWindow : Window
@@ -62,11 +60,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
         // ---------- share actions ----------
 
-        /// ponytail: needs a clipboard image. Avalonia 12's IClipboard takes an IAsyncDataTransfer
-        /// of DataFormats and nothing here can prove the X11 backend serves image/png to another
-        /// process, so this stays refused rather than toasting "copied, paste it" over nothing.
-        /// The two share buttons below save the file instead, which is provable.
-        private void OnCopy(object? sender, RoutedEventArgs e) => ShowStatus(Loc.Get("recap_toast_error"));
+        private async void OnCopy(object? sender, RoutedEventArgs e) =>
+            ShowStatus(Loc.Get(await CopyToClipboardAsync() ? "recap_toast_copied" : "recap_toast_error"));
+
+        /// <summary>CardExporter.CopyToClipboard: the exported PNG as a clipboard bitmap.</summary>
+        internal async Task<bool> CopyToClipboardAsync()
+        {
+            var png = ExportPng();
+            var clip = GetTopLevel(this)?.Clipboard;
+            if (png == null || clip == null) return false;
+            try
+            {
+                using var ms = new MemoryStream(png);
+                await clip.SetBitmapAsync(new Bitmap(ms)); // the clipboard owns it from here
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "SeasonRecap: failed to copy the card to the clipboard");
+                return false;
+            }
+        }
 
         private void OnSave(object? sender, RoutedEventArgs e)
         {
@@ -75,14 +89,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             ShowStatus(path != null ? Loc.GetF("recap_toast_saved", path) : Loc.Get("recap_toast_error"));
         }
 
-        private void OnShareX(object? sender, RoutedEventArgs e) =>
-            ShareVia("https://x.com/intent/post?text=");
+        private async void OnShareX(object? sender, RoutedEventArgs e)
+        {
+            const string x = "https://x.com/intent/post?text=";
+            if (!await CopyToClipboardAsync()) { ShareVia(x); return; }
+            if (OpenUrl(x + Uri.EscapeDataString(_vm.SharePrefillText)))
+                ShowStatus(Loc.Get("recap_toast_x"));
+        }
 
         private void OnShareReddit(object? sender, RoutedEventArgs e) =>
             ShareVia("https://www.reddit.com/submit?title=");
 
-        /// <summary>Save the card, open the composer, and name the file to attach. WPF's X route
-        /// pasted from the clipboard instead; see the class summary for why both take this one.</summary>
+        /// <summary>Save the card, open the composer, and name the file to attach (WPF's Reddit
+        /// route; also X's fallback when the clipboard copy fails).</summary>
         private void ShareVia(string urlPrefix)
         {
             var png = ExportPng();
