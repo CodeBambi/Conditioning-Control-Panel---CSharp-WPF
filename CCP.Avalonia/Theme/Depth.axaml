@@ -1,0 +1,126 @@
+<!-- GENERATED from CCP.Core/Depth/DepthPalette.cs (= WPF 7.1.5 Resources/Theme/Depth.xaml, every key
+     and stop verbatim). Do not hand-edit a stop: change the Core table and regenerate; the
+     DepthThemeTests pin this file to that table key by key.
+
+     The depth law: one lamp, top-left. Three heights: Raised (you press it), Floating (you read
+     it), Sunken (it holds things). No Effect anywhere: bevels are 1 px gradient borders, shadows
+     are gradient rectangles / ellipses UNDER the element, wells are inner bands on the frame.
+     ON IS PRESSED IN: a lit thing sits down in its socket (DepthPressedBevel), an off thing rises.
+     Shadows here are the NEUTRAL ink; a painter that knows its section hue uses
+     DepthRules.ShadowColor(hue) instead. Recipes (raised / sunken / floating / ledge) are in the
+     WPF Depth.xaml header; Controls/Depth/DepthPaint.cs builds the same parts in code.
+
+     WPF to Avalonia: StartPoint "0,0" becomes "0%,0%" (WPF brushes are relative by default,
+     Avalonia points are absolute unless written as percentages). -->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <Color x:Key="DepthHighlight">#42FFFFFF</Color>
+  <Color x:Key="DepthShade">#80000000</Color>
+  <SolidColorBrush x:Key="DepthHighlightBrush" Color="#42FFFFFF"/>
+  <SolidColorBrush x:Key="DepthShadeBrush" Color="#80000000"/>
+  <LinearGradientBrush x:Key="DepthRaisedBevel" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.0" Color="#42FFFFFF"/>
+    <GradientStop Offset="0.5" Color="#10FFFFFF"/>
+    <GradientStop Offset="1.0" Color="#80000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthRaisedSheen" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.00" Color="#17FFFFFF"/>
+    <GradientStop Offset="0.55" Color="#00FFFFFF"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthPlankSheen" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.00" Color="#47FFFFFF"/>
+    <GradientStop Offset="0.50" Color="#00FFFFFF"/>
+    <GradientStop Offset="1.00" Color="#2E000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthPlankBevel" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.0" Color="#80FFFFFF"/>
+    <GradientStop Offset="0.5" Color="#14FFFFFF"/>
+    <GradientStop Offset="1.0" Color="#A6000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthPressedBevel" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.0" Color="#99000000"/>
+    <GradientStop Offset="0.5" Color="#26000000"/>
+    <GradientStop Offset="1.0" Color="#12FFFFFF"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthPressedShade" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.00" Color="#2E000000"/>
+    <GradientStop Offset="0.60" Color="#00000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthDropBand" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.0" Color="#9E06020F"/>
+    <GradientStop Offset="1.0" Color="#0006020F"/>
+  </LinearGradientBrush>
+  <RadialGradientBrush x:Key="DepthDropDisc" Center="50%,50%" GradientOrigin="50%,50%" RadiusX="50%" RadiusY="50%">
+    <GradientStop Offset="0.0" Color="#9E06020F"/>
+    <GradientStop Offset="0.6" Color="#5C06020F"/>
+    <GradientStop Offset="1.0" Color="#0006020F"/>
+  </RadialGradientBrush>
+  <LinearGradientBrush x:Key="DepthWellTop" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.0" Color="#A6000000"/>
+    <GradientStop Offset="1.0" Color="#00000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthWellLeft" StartPoint="0%,0%" EndPoint="100%,0%">
+    <GradientStop Offset="0.0" Color="#59000000"/>
+    <GradientStop Offset="1.0" Color="#00000000"/>
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="DepthWellFoot" Color="#12FFFFFF"/>
+  <SolidColorBrush x:Key="DepthWellFloorBrush" Color="#FF120D20"/>
+  <LinearGradientBrush x:Key="DepthFloatRim" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.0" Color="#1AFFFFFF"/>
+    <GradientStop Offset="1.0" Color="#33000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthFloatBand" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.0" Color="#6606020F"/>
+    <GradientStop Offset="1.0" Color="#0006020F"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthLedgeUp" StartPoint="0%,100%" EndPoint="0%,0%">
+    <GradientStop Offset="0.0" Color="#B3000000"/>
+    <GradientStop Offset="1.0" Color="#00000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthRailShadow" StartPoint="0%,0%" EndPoint="100%,0%">
+    <GradientStop Offset="0.0" Color="#BF000000"/>
+    <GradientStop Offset="1.0" Color="#00000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthTubeGloss" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.00" Color="#8CFFFFFF"/>
+    <GradientStop Offset="0.38" Color="#1FFFFFFF"/>
+    <GradientStop Offset="0.55" Color="#00000000"/>
+    <GradientStop Offset="1.00" Color="#47000000"/>
+  </LinearGradientBrush>
+  <RadialGradientBrush x:Key="DepthTubeBead" Center="50%,50%" GradientOrigin="44%,38%" RadiusX="50%" RadiusY="50%">
+    <GradientStop Offset="0.00" Color="#FFFFFFFF"/>
+    <GradientStop Offset="0.55" Color="#80FFFFFF"/>
+    <GradientStop Offset="1.00" Color="#00FFFFFF"/>
+  </RadialGradientBrush>
+  <RadialGradientBrush x:Key="DepthCoinDish" Center="50%,42%" GradientOrigin="50%,42%" RadiusX="60%" RadiusY="60%">
+    <GradientStop Offset="0.00" Color="#00000000"/>
+    <GradientStop Offset="0.70" Color="#1A000000"/>
+    <GradientStop Offset="1.00" Color="#66000000"/>
+  </RadialGradientBrush>
+  <LinearGradientBrush x:Key="DepthCoinRim" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.0" Color="#4DFFFFFF"/>
+    <GradientStop Offset="0.5" Color="#0AFFFFFF"/>
+    <GradientStop Offset="1.0" Color="#99000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthCoinSocket" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0.00" Color="#66000000"/>
+    <GradientStop Offset="0.35" Color="#26000000"/>
+    <GradientStop Offset="0.70" Color="#00000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthCoinInnerShadow" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0.0" Color="#A6000000"/>
+    <GradientStop Offset="0.55" Color="#4D000000"/>
+    <GradientStop Offset="1.0" Color="#26000000"/>
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="DepthCoinOuterRim" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0.0" Color="#40000000"/>
+    <GradientStop Offset="1.0" Color="#D9000000"/>
+  </LinearGradientBrush>
+  <RadialGradientBrush x:Key="DepthCoinSpecular" Center="12%,12%" GradientOrigin="12%,12%" RadiusX="62%" RadiusY="62%">
+    <GradientStop Offset="0.00" Color="#C8FFFFFF"/>
+    <GradientStop Offset="0.45" Color="#59FFFFFF"/>
+    <GradientStop Offset="1.00" Color="#00FFFFFF"/>
+  </RadialGradientBrush>
+
+</ResourceDictionary>
