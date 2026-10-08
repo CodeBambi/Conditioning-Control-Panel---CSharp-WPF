@@ -5,6 +5,8 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -24,6 +26,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    Avalonia video surface on this head. Everything up to the player - resolving the clip
     ///    path and proving the file exists - is restored, so StartClip takes the fail-soft branch
     ///    the original already had: hidden video surface, caption and link still shown.
+    ///  - The drawn help loop (TryShowLoop) is ported as-is and wins over the clip, as in WPF.
     ///  - App.Logger becomes Serilog's static Log, as everywhere else on this head.
     ///  - DragMove() -> BeginMoveDrag(e); PreviewKeyDown -> KeyDown (tunnelling has no twin, and
     ///    nothing in this window consumes Escape first).
@@ -40,6 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly string? _fullTutorialUrl;
         private readonly string? _whatItDoes;
         private bool _captionShown;
+        private readonly bool _hasLoop;
 
         private readonly TextBlock _txtCaption;
 
@@ -96,7 +100,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // Fallback so the window is never empty: with no clip and no caption, show the
             // topic's "what it does" blurb.
             _whatItDoes = content.WhatItDoes;
-            if (!content.HasClip) ShowWhatItDoesFallback();
+
+            // A drawn help loop wins over a clip: native, theme-aware, no LibVLC (WPF TryShowLoop).
+            _hasLoop = TryShowLoop(content);
+            if (!content.HasClip && !_hasLoop) ShowWhatItDoesFallback();
 
             _fullTutorialUrl = content.FullTutorialUrl;
             var btnFullTutorial = this.FindControl<Button>("BtnFullTutorial")!;
@@ -105,7 +112,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 btnFullTutorial.IsVisible = true;
             }
 
-            if (content.HasClip)
+            if (content.HasClip && !_hasLoop)
             {
                 _clipPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
                     "Resources", "tutorial_videos", content.ClipFile!);
@@ -163,8 +170,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _captionShown = true;
         }
 
+        /// <summary>
+        /// Hosts the topic's drawn help loop (and its step chips) in the video slot when the registry
+        /// has one, exactly as WPF HelpVideoWindow.TryShowLoop. The loop replaces the caption too: its
+        /// steps say the same thing.
+        /// </summary>
+        private bool TryShowLoop(HelpContent content)
+        {
+            try
+            {
+                if (!ConditioningControlPanel.Avalonia.Controls.HelpLoops.HelpLoopRegistry.TryGet(content.SectionId, out var scene)) return false;
+                var view = new ConditioningControlPanel.Avalonia.Controls.HelpLoops.HelpLoopView(scene) { Name = "HelpLoop" };
+                IBrush pink = this.TryFindResource("PinkBrush", out var v) && v is IBrush b
+                    ? b : new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+                var panel = new StackPanel();
+                panel.Children.Add(view);
+                panel.Children.Add(new ConditioningControlPanel.Avalonia.Controls.HelpLoops.HelpLoopSteps(view, pink) { Margin = new Thickness(12, 10, 12, 4) });
+                var container = this.FindControl<Border>("VideoContainer")!;
+                container.Height = double.NaN;
+                container.Background = Brushes.Transparent;
+                container.Child = panel;
+                container.IsVisible = true;
+                _txtCaption.IsVisible = false;
+                _captionShown = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "HelpVideoWindow: failed to build help loop");
+                return false;
+            }
+        }
+
         private void StartClip()
         {
+            if (_hasLoop) return; // WPF: _clipPath stays null with a loop, so StartClip had nothing to do
             // Fail soft: no clip configured, or file missing -> leave video hidden. Restored from
             // the WPF original, which logged a Warning here because an absent clip meant a
             // misconfigured topic. On this head it is the steady state - Resources/tutorial_videos

@@ -34,6 +34,9 @@ public sealed class HelpLoopScenesTests
     [InlineData("BrainDrain")]
     [InlineData("MindWipe")]
     [InlineData("BubbleCount")]
+    [InlineData("ScreenOcr")]
+    [InlineData("RemoteControl")]
+    [InlineData("SessionEditor")]
     public Task SceneRendersEveryStepAndLightsItsChipsInOrder(string id) => AvaloniaTestDispatcher.RunAsync(() =>
     {
         EnsureAvalonia();
