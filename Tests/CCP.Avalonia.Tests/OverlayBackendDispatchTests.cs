@@ -32,5 +32,7 @@ public sealed class OverlayBackendDispatchTests
         Assert.Equal(avaloniaRebuild | 0x00080000u | 0x80u | 0x08000000u | 0x20u, on);  // LAYERED|TOOLWINDOW + NOACTIVATE|TRANSPARENT
         // Interactive again (WPF ChaosOverlayWindow): NOACTIVATE goes with TRANSPARENT so it can take focus.
         Assert.Equal(avaloniaRebuild | 0x00080000u | 0x80u, Win32Overlay.Style(on, false));
+        // A passive toast takes clicks but keeps WS_EX_NOACTIVATE (WPF PassiveToastWindow).
+        Assert.Equal(avaloniaRebuild | 0x00080000u | 0x80u | 0x08000000u, Win32Overlay.Style(on, false, passive: true));
     }
 }

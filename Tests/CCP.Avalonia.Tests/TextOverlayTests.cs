@@ -128,6 +128,54 @@ public sealed class TextOverlayTests
         Assert.False(BouncingTextOverlay.IsNear(2100, 1024 + 490, 400, 100, second, 1.25));
     }
 
+    [Fact]
+    public void BouncingText_CornerHitUnlocksTheAchievementAndTheWindowsReassertTopmostEveryHalfSecond()
+    {
+        var dir = System.IO.Directory.CreateTempSubdirectory("ccp-corner-").FullName;
+        var (hit, raise) = (BouncingTextOverlay.CornerHit, BouncingTextOverlay.RaiseAll);
+        var eng = BouncingTextOverlay.Engine;
+        try
+        {
+            var ach = new ConditioningControlPanel.Services.AchievementEngine(
+                new ConditioningControlPanel.Services.AchievementStore(System.IO.Path.Combine(dir, "achievements.json")));
+            var raises = 0;
+            BouncingTextOverlay.CornerHit = ach.TrackCornerHit;
+            BouncingTextOverlay.RaiseAll = () => raises++;
+            BouncingTextOverlay.Stop();
+            eng.SetBounds(0, 0, 1000, 800);
+            eng.Measure = (_, _) => (200, 60);
+            eng.Start(new AppSettings());
+            var l = eng.Logos[0];
+            (l.PosX, l.PosY, l.VelX, l.VelY) = (400, 300, 100, 100);
+
+            BouncingTextOverlay.Advance(0.05);   // mid-screen: no corner
+            Assert.False(ach.Progress.HasHitCorner);
+            (l.PosX, l.PosY, l.VelX, l.VelY) = (2, 2, -100, -100);
+            BouncingTextOverlay.Advance(0.05);   // both walls at once (WPF StepLogo CornerHit)
+            Assert.True(ach.Progress.HasHitCorner);
+            Assert.Contains("corner_hit", ach.Progress.UnlockedAchievements);
+
+            Assert.Equal(0, raises);             // 0.1 s run so far
+            BouncingTextOverlay.Advance(0.1);
+            BouncingTextOverlay.Advance(0.1);
+            BouncingTextOverlay.Advance(0.1);
+            Assert.Equal(0, raises);             // 0.4 s
+            BouncingTextOverlay.Advance(0.1);
+            Assert.Equal(1, raises);             // 0.5 s: WPF ReassertTopmost
+            for (var i = 0; i < 6; i++) BouncingTextOverlay.Advance(0.1);   // float sum of 5 x 0.1 is just under 0.5
+            Assert.Equal(2, raises);
+            BouncingTextOverlay.Advance(0.1, 1.0);   // a 1 s frame (dt clamped to 0.1): re-asserts at once, on real time
+            Assert.Equal(3, raises);
+        }
+        finally
+        {
+            (BouncingTextOverlay.CornerHit, BouncingTextOverlay.RaiseAll) = (hit, raise);
+            BouncingTextOverlay.Stop();
+            eng.Measure = null;
+            System.IO.Directory.Delete(dir, recursive: true);
+        }
+    }
+
     private static void EnsureAvalonia()
     {
         Assert.True(AvaloniaTestDispatcher.IsDispatcherThread);
