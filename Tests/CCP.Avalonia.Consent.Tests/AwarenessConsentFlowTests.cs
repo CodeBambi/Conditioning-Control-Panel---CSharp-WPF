@@ -260,6 +260,11 @@ public sealed class AwarenessConsentFlowTests
             Language = "en",
             UseAwarenessV2 = true,
         };
+        // The shell queues its Dashboard feature cards on open (FeatureIntroPopup.ShowWhenStartupSettles);
+        // one is held 3 s by the startup ladder and then opens over WHICHEVER test's shell is up,
+        // failing that test's OwnedWindows assertion. A welcomed profile has seen them; drop held items too.
+        foreach (var key in FeatureIntros.All.Keys) settings.SeenFeatureIntros.Add(key);
+        ConditioningControlPanel.Avalonia.Platform.StartupLadder.ResetForTests();
         configure?.Invoke(settings);
         _settings.RestoreFrom(settings);
         return settings;
