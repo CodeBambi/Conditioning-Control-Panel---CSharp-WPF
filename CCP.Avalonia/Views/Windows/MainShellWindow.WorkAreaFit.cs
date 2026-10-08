@@ -110,8 +110,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var pos = Position;
                 var w = Math.Max(1, (int)Math.Round(Width * scale));
                 var h = Math.Max(1, (int)Math.Round(Height * scale));
-                var newW = Math.Min(w, wa.Width);
-                var newH = Math.Min(h, wa.Height);
+                // Uniform: both axes shrink by one factor so the Stretch="Fill" canvas keeps its
+                // aspect (Core WindowFitRule, as WPF 7.1.5). A window that fits is untouched.
+                var (newW, newH) = global::ConditioningControlPanel.Nav.WindowFitRule.FitPx(w, h, wa.Width, wa.Height);
                 var newL = pos.X;
                 var newT = pos.Y;
                 if (newL + newW > wa.Right) newL = wa.Right - newW;
