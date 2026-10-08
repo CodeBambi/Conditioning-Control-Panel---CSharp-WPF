@@ -137,7 +137,7 @@ public sealed class SectionEdgeTests(ITestOutputHelper output)
             edge.Refresh();
             Assert.Equal(4, edge.Strips.Count);
             Assert.All(edge.Strips, s => Assert.Equal(AmbientFxLayers.EdgeFog, s.Layers));
-            Assert.Equal(new[] { EdgeSide.Top, EdgeSide.Right, EdgeSide.Bottom, EdgeSide.Left }, edge.Strips.Select(s => s.EdgeSide));
+            Assert.Equal(new[] { CoreFx.EdgeSide.Top, CoreFx.EdgeSide.Right, CoreFx.EdgeSide.Bottom, CoreFx.EdgeSide.Left }, edge.Strips.Select(s => s.EdgeSide));
             Assert.Equal(CoreFx.EdgeFogMath.StripPx, edge.Strips[0].Height);
             Assert.Equal(CoreFx.EdgeFogMath.StripPx, edge.Strips[1].Width);
 
