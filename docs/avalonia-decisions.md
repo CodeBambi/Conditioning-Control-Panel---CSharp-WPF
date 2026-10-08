@@ -580,3 +580,11 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/RemoteRelayTests.cs` (Remote_haptics_play_and_every_stop_path_ends_them,
   A_command_in_flight_never_outlives_a_panic_or_a_leave), `Tests/CCP.Avalonia.Tests/RemoteHapticPanicTests.cs`;
   each fail-proven. WPF path compile-verified only (Windows suite does not run on Linux).
+
+## 2026-10-08: Linux-only legacy accounts are not migrated by the Avalonia head (oracle-deep, owner away)
+- B: Avalonia omits `descent_auto`; offer/ApplyChoice stay WPF-only.
+- Why: deferral loses nothing (the server holds lifetime XP; the bonus is gated on ack or pending choice); a partial relevel
+  port could corrupt the ledger.
+- Cost: Linux-only users stay on the old curve with no +10% and no receipt until a WPF sync or the port lands.
+- Shared in Core meanwhile (avalonia-port/rows-descent-migration): `DescentCycleXp.XpBonusFor`, `DescentMigrationAck`, `DescentReceipt`.
+  Port gate: main sync #5 row 5 (`abac4fa02`, lane `descent-migration-offer`) in `docs/avalonia-main-sync-20261008.md`.

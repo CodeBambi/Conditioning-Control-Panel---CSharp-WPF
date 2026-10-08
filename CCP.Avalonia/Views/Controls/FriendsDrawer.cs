@@ -5,7 +5,7 @@
 // ponytail: no send pickers (poke / invite / watch, FriendsDrawer.Pickers.cs), no feed, trails,
 // open tables or leash section, no lock-day chip, no once-only presence ask, no juice (.Juice.cs), no bell (the corner notices are not on this
 // head), no per-PC block list (the server's list only). A word WPF throws outside the drawer
-// (FriendsLanding.Tell) lands on the foot's status line.
+// (FriendsLanding.Tell) is a FloatingWord over the drawer's window.
 using System;
 using System.Collections.Generic;
 using Avalonia.Input.Platform;
@@ -46,7 +46,7 @@ public sealed class FriendsDrawer : Border
     private readonly StackPanel _list = new();
     private readonly TextBox _codeBox = new();
     private readonly Button _addGo;
-    private readonly TextBlock _addResult = Label("", 11.5, Muted, Display), _said = Label("", 11.5, Mint, Display);
+    private readonly TextBlock _addResult = Label("", 11.5, Muted, Display);
     public event Action? CloseRequested;
     public event Action? SettingsRequested;
     public event Action? SignInRequested;
@@ -557,11 +557,6 @@ public sealed class FriendsDrawer : Border
             foot.Children.Add(new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(8, 0, 2, 4), Children = { copied, mine } });
         }
         foot.Children.Add(buttons);
-        _said.IsVisible = !string.IsNullOrEmpty(_said.Text);
-        _said.Margin = new Thickness(8, 4, 8, 0);
-        _said.Tag = "friends-said";
-        (_said.Parent as Panel)?.Children.Remove(_said);
-        foot.Children.Add(_said);
         _foot.Child = foot;
     }
 
@@ -589,11 +584,9 @@ public sealed class FriendsDrawer : Border
         DispatcherTimer.RunOnce(() => { if (_results.TryGetValue(rowId, out var cur) && cur.Text == text) { _results.Remove(rowId); Render(); } },
             TimeSpan.FromSeconds(FriendsDrawerRules.ResultHoldSeconds));
     }
-    private void Say(string text, bool good)
-    {
-        _said.Text = text;
-        _said.Foreground = good ? Mint : Gold;
-    }
+    /// <summary>WPF TellOutside(always) -> FriendsLanding.Say: a floating word over the window.</summary>
+    private void Say(string text, bool good) =>
+        Overlays.FloatingWord.Throw(TopLevel.GetTopLevel(this) as Window, text, pink: !good, small: true);
     internal static TextBlock Label(string text, double size, IBrush fg, FontFamily? font = null, FontWeight weight = FontWeight.Normal) => new()
     {
         Text = text, FontSize = size, Foreground = fg, FontFamily = font ?? FontFamily.Default, FontWeight = weight,

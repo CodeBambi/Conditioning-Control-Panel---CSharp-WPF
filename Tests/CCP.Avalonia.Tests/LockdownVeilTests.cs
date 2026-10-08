@@ -278,4 +278,165 @@ public sealed class LockdownVeilTests
         Dispatcher.UIThread.RunJobs();
         return c;
     }
+
+    /// <summary>WPF SetLockdownBadge / OnLockdownTick / LockdownBadge_Click (Lab.cs:672/753/771/814):
+    /// the badge shows for the whole run, its clock follows the stepped service clock (masked by
+    /// HideLockdownTimer), a click or Enter leads to the Lockdown tab, and it goes on exit.</summary>
+    [Fact]
+    public void TitleBarBadge_ShowsTheRunningClock_LeadsToTheLockdownTab_AndGoesOnExit() => Run((shell, ld) =>
+    {
+        var now = DateTime.UtcNow;
+        ld.UtcNow = () => now;
+        var tick = typeof(LockdownService).GetMethod("OnCountdownTick",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var badge = shell.Named<Border>("LockdownBadge")!;
+        var time = shell.Named<TextBlock>("TxtLockdownBadgeTime")!;
+        try
+        {
+            shell.ShowTab("settings");
+            Frame();
+            Assert.False(badge.IsVisible);
+
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.True(badge.IsVisible);
+            Assert.Equal("30:00", time.Text);
+
+            now = now.AddMinutes(10);
+            tick.Invoke(ld, new object?[] { null, EventArgs.Empty });
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("20:00", time.Text);
+
+            CoreSettings.Current.HideLockdownTimer = true;
+            tick.Invoke(ld, new object?[] { null, EventArgs.Empty });
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(SessionClockLabel.LockdownClock(TimeSpan.Zero, true), time.Text);
+            CoreSettings.Current.HideLockdownTimer = false;
+
+            var p = badge.TranslatePoint(new Point(badge.Bounds.Width / 2, badge.Bounds.Height / 2), shell)!.Value;
+            shell.MouseDown(p, MouseButton.Left);
+            shell.MouseUp(p, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("lockdown", shell.CurrentTab);
+
+            shell.ShowTab("settings");
+            Frame();
+            badge.Focus();
+            shell.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("lockdown", shell.CurrentTab);
+            Assert.True(ld.IsActive);   // a signpost: nothing about it ends the lockdown
+
+            ld.Deactivate();
+            Frame();
+            Assert.False(badge.IsVisible);
+        }
+        finally { CoreSettings.Current.HideLockdownTimer = false; }
+    });
+
+    /// <summary>WPF StartEmergencyExitPulse (LockdownTabView.xaml.cs:267): the slab's glow breathes
+    /// 0.26-0.62 / 24-42 on a 1.5 s sine while a lockdown runs, only while the tab shows (P01),
+    /// never under LockdownPhotosafe or MotionLevel Off, never while minimised, and rests at 0.32 / 28 when stopped.</summary>
+    [Fact]
+    public void EmergencyExitGlow_BreathesOnlyWhileShown_AndNeverUnderPhotosafe() => Run((shell, ld) =>
+    {
+        var tab = shell.Named<LockdownTabView>("LockdownTab")!;
+        var plate = tab.FindControl<Border>("EEPlate")!;
+        try
+        {
+            CoreSettings.Current.LockdownPhotosafe = false;
+            shell.ShowTab("lockdown");
+            Frame();
+            Assert.False(tab.EmergencyExitPulsing);   // setup panel: nothing to breathe
+
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.True(tab.EmergencyExitPulsing);
+            tab.PaintEmergencyExitGlow(1500);   // the top of the breath
+            var glow = Assert.IsType<global::Avalonia.Media.DropShadowEffect>(plate.Effect);
+            Assert.Equal(0.62, glow.Opacity, 3);
+            Assert.Equal(42, glow.BlurRadius, 3);
+
+            shell.ShowTab("settings");
+            Frame();
+            Assert.False(tab.EmergencyExitPulsing);
+            shell.ShowTab("lockdown");
+            Frame();
+            Assert.True(tab.EmergencyExitPulsing);
+
+            ld.Deactivate();
+            Frame();
+            Assert.False(tab.EmergencyExitPulsing);
+            glow = Assert.IsType<global::Avalonia.Media.DropShadowEffect>(plate.Effect);
+            Assert.Equal(0.32, glow.Opacity, 3);
+            Assert.Equal(28, glow.BlurRadius, 3);
+
+            CoreSettings.Current.LockdownPhotosafe = true;
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.False(tab.EmergencyExitPulsing);
+            ld.Deactivate();
+            Frame();
+
+            // Motion Off (WPF: SystemParameters.ClientAreaAnimation) holds the resting glow too.
+            CoreSettings.Current.LockdownPhotosafe = false;
+            CoreSettings.Current.MotionLevel = MotionLevel.Off;
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.False(tab.EmergencyExitPulsing);
+            ld.Deactivate();
+            Frame();
+
+            // P01: a minimised window stops the breath; restoring it brings it back.
+            CoreSettings.Current.MotionLevel = MotionLevel.Full;
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.True(tab.EmergencyExitPulsing);
+            shell.WindowState = WindowState.Minimized;
+            Frame();
+            Assert.False(tab.EmergencyExitPulsing);
+            shell.WindowState = WindowState.Normal;
+            Frame();
+            Assert.True(tab.EmergencyExitPulsing);
+        }
+        finally
+        {
+            CoreSettings.Current.LockdownPhotosafe = false;
+            CoreSettings.Current.MotionLevel = MotionLevel.Full;
+            shell.WindowState = WindowState.Normal;
+        }
+    });
+
+    /// <summary>WPF LockdownTabView.xaml:202/218: the quest hint follows the picked duration
+    /// (QuestService.LockdownQuestMinimum) and the hide-clock toggle masks the badge it feeds.</summary>
+    [Fact]
+    public void SetupPanel_QuestHintFollowsTheDuration_HideClockToggleMasksTheBadge() => Run((shell, ld) =>
+    {
+        var tab = shell.Named<LockdownTabView>("LockdownTab")!;
+        var hint = tab.FindControl<TextBlock>("TxtLockdownQuestHint")!;
+        var combo = tab.FindControl<ComboBox>("CmbLockdownDuration")!;
+        var hide = tab.FindControl<CheckBox>("ChkLockdownHideTimer")!;
+        try
+        {
+            shell.ShowTab("lockdown");
+            Frame();
+            Assert.True(hint.IsVisible);    // 10 minutes, the default: under the quest minimum
+            combo.SelectedIndex = 3;        // 30 minutes
+            Assert.False(hint.IsVisible);
+            combo.SelectedIndex = 0;        // 5 minutes
+            Assert.True(hint.IsVisible);
+
+            hide.IsChecked = true;
+            Assert.True(CoreSettings.Current.HideLockdownTimer);
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.Equal(SessionClockLabel.LockdownClock(TimeSpan.Zero, true),
+                shell.Named<TextBlock>("TxtLockdownBadgeTime")!.Text);
+            ld.Deactivate();
+            Frame();
+            hide.IsChecked = false;
+            Assert.False(CoreSettings.Current.HideLockdownTimer);
+        }
+        finally { CoreSettings.Current.HideLockdownTimer = false; }
+    });
 }

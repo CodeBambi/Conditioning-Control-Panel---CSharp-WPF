@@ -28,7 +28,7 @@
                                           Theme/Styles.xaml's ToggleStyle already made)
        DropShadowEffect ShadowDepth/Direction -> OffsetX/OffsetY; the two named effects
                                           (EEGlow, LockdownImageGlow) lose their x:Name for the
-                                          same AVLN2000 reason, and nothing drives them here yet
+                                          same AVLN2000 reason; EEGlow is reached via its Border EEPlate
        RadiusX="1.05"                 ->  RadiusX="105%" (a bare RelativeScalar is absolute px)
        x:FieldModifier="internal"     ->  dropped; no host re-publishes these fields on this head.
                                           x:Names are kept so the wiring is a one-line change.
@@ -220,7 +220,8 @@
                                                            VerticalAlignment="Center"/>
                                                 <ComboBox Grid.Column="1" x:Name="CmbLockdownDuration"
                                                           Width="160" SelectedIndex="1" VerticalAlignment="Center" FontSize="13"
-                                                          Theme="{StaticResource DarkComboBoxStyle}">
+                                                          Theme="{StaticResource DarkComboBoxStyle}"
+                                                          SelectionChanged="CmbLockdownDuration_SelectionChanged">
                                                     <ComboBoxItem Content="{loc:Str btn_5_minutes}" Tag="5"/>
                                                     <ComboBoxItem Content="{loc:Str btn_10_minutes}" Tag="10"/>
                                                     <ComboBoxItem Content="{loc:Str btn_15_minutes}" Tag="15"/>
@@ -229,6 +230,27 @@
                                                     <ComboBoxItem Content="{loc:Str btn_2_hours}" Tag="120"/>
                                                     <ComboBoxItem Content="{loc:Str btn_4_hours}" Tag="240"/>
                                                 </ComboBox>
+                                            </Grid>
+
+                                            <!-- WPF LockdownTabView.xaml:202: under QuestService.LockdownQuestMinimum the run
+                                                 does not count for quests (ccp-bugs #705/#1360). -->
+                                            <TextBlock x:Name="TxtLockdownQuestHint" Text="{loc:Str lockdown_quest_min_hint}"
+                                                       FontSize="11.5" Foreground="{DynamicResource TextMutedBrush}"
+                                                       TextWrapping="Wrap" Margin="0,0,0,4" IsVisible="False"/>
+
+                                            <!-- WPF LockdownTabView.xaml:209: hide the clock (page, badge, Home chip). -->
+                                            <Grid Height="28" Background="Transparent"
+                                                  ToolTip.Tip="{loc:Str lockdown_hide_timer_tip}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str lockdown_hide_timer}" FontSize="11.5"
+                                                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkLockdownHideTimer"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          IsCheckedChanged="ChkLockdownHideTimer_Changed"/>
                                             </Grid>
 
                                             <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
@@ -491,7 +513,7 @@
                                                     </Grid.Transitions>
 
                                                     <!-- Hazard plate -->
-                                                    <Border CornerRadius="20" BorderThickness="7" Background="#160810"
+                                                    <Border x:Name="EEPlate" CornerRadius="20" BorderThickness="7" Background="#160810"
                                                             BorderBrush="{StaticResource EEHazardBrush}">
                                                         <Border.Effect>
                                                             <DropShadowEffect Color="#FF8A5C" BlurRadius="28"

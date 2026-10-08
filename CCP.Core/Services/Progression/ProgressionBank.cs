@@ -8,7 +8,7 @@ namespace ConditioningControlPanel
     /// The engine half of WPF <c>ProgressionService.AddXP</c> / <c>SpendXPOnLevels</c>, for a head that seeds
     /// <see cref="CoreProgression.AddXPProvider"/> with <see cref="Add"/>: the login gate, the XP add and the
     /// level loop with <c>HighestLevelEver</c>.
-    /// ponytail: no skill/Cycle multipliers (skill-tree owners are under-awarded, which errs safe), no skill
+    /// ponytail: no skill multiplier (skill-tree owners are under-awarded, which errs safe), no skill
     /// points or companion XP - each lands with its ported feature. Level achievements listen to <see cref="LevelUp"/>; quests listen to <see cref="Awarded"/>
     /// (the Avalonia head feeds it to QuestService.TrackXPEarned, as WPF AddXP:120 does).
     /// </summary>
@@ -36,8 +36,11 @@ namespace ConditioningControlPanel
                 Log.Debug("XP not banked: +{Amount} from passive {Source} (no idle tracker)", amount, source);
                 return;
             }
-            s.PlayerXP += amount;
-            Log.Information("XP awarded: +{Amount} from {Source} (now {Now})", amount, source, s.PlayerXP);
+            // WPF ProgressionService.AddXP:90: the lasting Descent bonus for a migrated account (1.0 otherwise).
+            // Awarded still carries the base amount: WPF feeds quests the base too (AddXP:120).
+            var adjusted = amount * Services.Descent.DescentCycleXp.XpBonusFor(s);
+            s.PlayerXP += adjusted;
+            Log.Information("XP awarded: +{Amount} from {Source} (now {Now})", adjusted, source, s.PlayerXP);
             var epoch = ProfileAdopt.Epoch(s);
             var levels = new System.Collections.Generic.List<int>();
             for (var need = XpCurve.GetXPForLevel(s.PlayerLevel, epoch); s.PlayerXP >= need; need = XpCurve.GetXPForLevel(s.PlayerLevel, epoch))
