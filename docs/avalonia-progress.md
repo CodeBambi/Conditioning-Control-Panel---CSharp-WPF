@@ -1375,3 +1375,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-split-card: +305
 - feat-split-card (stays stub): breath, glow, sweep, title and hover now follow the MotionFx/PerformanceProfile/window-focus gates; off halves dim; each half has its own "?" (HelpPopover); rings are rounded. `SplitFeatureCardFxTests` fail-proven per gate.
 - Still missing: DashboardCardDepth, greyscale HalfMute, live re-gate on a settings change (shell-dashboard-fx caller).
+
+## avalonia-port/rows-feat-flash: +411
+- Flash Drift & Bounce plus the speed slider (#1265): picker on the card, windows moved on one shared tick. Core gets FlashMotion, FlashDrag and FlashPendulumRig by `git mv`. FlashDriftTests: 4 tests, each seen to fail when broken.
+- Ownership seam PrizeOwnership: unowned in Release, CCP_PRIZE_GRANTS override in Debug only. New row svc-prize-ownership. feat-flash stays stub; the missing list is in the row.
