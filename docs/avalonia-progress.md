@@ -1303,3 +1303,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-emi-codex-book: +357
 - EmiBook deck/demos/pixel canvas to Core (WPF blits via EmiPixelBitmap); Avalonia book: real deck, demo clock only while open, reduced-motion still, Complete Guide; codex door opens at the bookmark.
+
+## avalonia-port/rows-audio-devices: +536
+- Settings Audio + dashboard card share one binder (dials, ducking with force-unduck, live volumes, sync pair, output picker routed to one-shots/layers/video, Test Audio, help card); rows wired.
