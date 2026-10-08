@@ -146,16 +146,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal async void OpenSpeechModelFolder()
         {
             var roots = SpeechEngine.DefaultModelRoots;
+            var tried = roots[0];
             foreach (var root in roots)
             {
+                tried = root;
                 try { System.IO.Directory.CreateDirectory(root); }
                 catch (Exception ex) { Log.Debug("Speech model folder {Root} not creatable: {E}", root, ex.Message); continue; }
                 if (await Platform.ExternalOpener.OpenAsync(this, root)) return;
                 break;
             }
-            Log.Warning("Could not open the speech model folder at {Root}", roots[0]);
-            App.Notifications.Show(Loc.GetF("msg_open_models_folder_failed", roots[0]),
-                Helpers.NotificationType.Warning, TimeSpan.FromSeconds(12));
+            Log.Warning("Could not open the speech model folder at {Root}", tried);
+            try
+            {
+                App.Notifications.Show(Loc.GetF("msg_open_models_folder_failed", tried),
+                    Helpers.NotificationType.Warning, TimeSpan.FromSeconds(12));
+            }
+            catch (Exception ex) { Log.Debug("Models-folder toast failed: {E}", ex.Message); }
         }
 
         /// <summary>Puts the live voice panel away (Takeover OFF, or the verdict's dwell ending).</summary>
