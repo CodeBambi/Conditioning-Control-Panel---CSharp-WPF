@@ -81,13 +81,7 @@ namespace ConditioningControlPanel.Services.Descent
         /// settings file can never buy more than the constant, and an account that lost the field
         /// still gets the bonus its migration earned.</para>
         /// </summary>
-        public static double XpBonusFor(Models.AppSettings? settings)
-        {
-            if (settings is null) return 1.0;
-            var migrated = settings.DescentMigrationCompleted
-                           || DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice);
-            return migrated ? CycleXpBonus : 1.0;
-        }
+        public static double XpBonusFor(Models.AppSettings? settings) => DescentCycleXp.XpBonusFor(settings);
 
         /// <summary>
         /// What a choice does to the ledger, in one place, with no side effects.

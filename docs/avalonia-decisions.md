@@ -581,6 +581,13 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   A_command_in_flight_never_outlives_a_panic_or_a_leave), `Tests/CCP.Avalonia.Tests/RemoteHapticPanicTests.cs`;
   each fail-proven. WPF path compile-verified only (Windows suite does not run on Linux).
 
+## 2026-10-08: Linux-only legacy accounts are not migrated by the Avalonia head (oracle-deep, owner away)
+- B: Avalonia omits `descent_auto`; offer/ApplyChoice stay WPF-only.
+- Why: deferral loses nothing (the server holds lifetime XP; the bonus is gated on ack or pending choice); a partial relevel
+  port could corrupt the ledger.
+- Cost: Linux-only users stay on the old curve with no +10% and no receipt until a WPF sync or the port lands.
+- Shared in Core meanwhile (avalonia-port/rows-descent-migration): `DescentCycleXp.XpBonusFor`, `DescentMigrationAck`, `DescentReceipt`.
+  Port gate: main sync #5 row 5 (`abac4fa02`, lane `descent-migration-offer`) in `docs/avalonia-main-sync-20261008.md`.
 ## 2026-10-08: VideoMetadataCache moves to Core with a managed LibVLCSharp reference (rows-feat-video)
 - Need: the mandatory-video length filter (min/max) at selection time and the #1352 "length filter emptied the library"
   dialog (854ac954a) need clip lengths. WPF reads them from `VideoMetadataCache` (LibVLC parse, #750 dispose-grace

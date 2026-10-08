@@ -45,7 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops.Scenes
 
             bool ticked = t > 6080;
             var back = f.Back;
-            back.DrawRectangle(ticked ? p.Mint : null, new Pen(ticked ? p.Mint : ChkEdge, 2),
+            back.DrawRoundedRectangle(ticked ? p.Mint : null, new Pen(ticked ? p.Mint : ChkEdge, 2),
                 new Rect(ChkX - 6, ChkY - 6, 12, 12), 3, 3);
             f.DrawText(back, "Remember me", 60 + 38, ChkY - 7, 10, LabelBrush, LoopFrame.Body, FontWeight.SemiBold, TextAlignment.Left);
 
