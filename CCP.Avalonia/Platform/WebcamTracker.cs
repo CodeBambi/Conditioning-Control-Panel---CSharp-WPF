@@ -58,8 +58,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         public bool Open()
         {
-            int index = Math.Max(0, int.TryParse(Environment.GetEnvironmentVariable("CCP_WEBCAM_DEVICE"), out var i)
-                ? i : CoreSettings.Current.WebcamDeviceIndex);
+            int index = int.TryParse(Environment.GetEnvironmentVariable("CCP_WEBCAM_DEVICE"), out var i)
+                ? Math.Max(0, i) : ResolveSavedIndex();
             _cap = new VideoCapture(index, OperatingSystem.IsLinux() ? VideoCaptureAPIs.V4L2 : VideoCaptureAPIs.ANY);
             if (!_cap.IsOpened()) return false;
             // WPF's default mode (WebcamTrackingService CaptureWidth/Height/TargetFps).
@@ -67,6 +67,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
             _cap.Set(VideoCaptureProperties.FrameHeight, 480);
             _cap.Set(VideoCaptureProperties.Fps, 30);
             return true;
+        }
+
+        /// <summary>The saved /dev/videoN when it is listed, else the first listed camera - the one the
+        /// Settings picker shows in that case (V4L2 numbers have gaps, so "0" may not exist).</summary>
+        internal static int ResolveSavedIndex()
+        {
+            int saved = CoreSettings.Current.WebcamDeviceIndex;
+            var cams = V4l2Cameras.Enumerate();
+            foreach (var c in cams) if (c.Index == saved) return saved;
+            return cams.Count > 0 ? cams[0].Index : Math.Max(0, saved);
         }
 
         public bool Read(Mat bgr) => _cap != null && _cap.Read(bgr) && !bgr.Empty();

@@ -54,6 +54,13 @@ public sealed class WebcamDevicePickerTests
                 Assert.Equal(new[] { "[0] Cam A", "[2] Cam B" },
                     cmb.Items.Cast<ComboBoxItem>().Select(i => i.Content!.ToString()).ToArray());
                 Assert.Equal("[2] Cam B", ((ComboBoxItem)cmb.SelectedItem!).Content);
+                Assert.Equal(2, OpenCvFrameSource.ResolveSavedIndex());
+                s.WebcamDeviceIndex = -1;   // never picked: tracking opens the camera the picker shows first
+                Assert.Equal(0, OpenCvFrameSource.ResolveSavedIndex());
+                Directory.Delete(Path.Combine(root, "video0"), true);
+                Assert.Equal(2, OpenCvFrameSource.ResolveSavedIndex());   // gap: no /dev/video0
+                Node(0, "Cam A", 0);
+                s.WebcamDeviceIndex = 2;
 
                 cmb.SelectedIndex = 0;   // the user picks Cam A
                 Assert.Equal(0, s.WebcamDeviceIndex);
@@ -78,6 +85,7 @@ public sealed class WebcamDevicePickerTests
             V4l2Cameras.Root = oldRoot;
             CoreWebcam.IsAvailableProvider = oldAvail;
             s.WebcamDeviceIndex = oldIdx; s.WebcamDeviceName = oldName;
+            CoreSettings.SaveImmediate();   // cancels the pick's 500 ms debounced write so it cannot land in a later test (P02)
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
