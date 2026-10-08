@@ -1,6 +1,4 @@
 using System;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using Serilog;
 
 namespace ConditioningControlPanel.Services.EmiDesk;
@@ -11,10 +9,10 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// <para><b>Why a bitmap and not shapes.</b> Her glass channels (<see cref="EmiChannelPainter"/>)
 /// draw with WPF <c>Shape</c>s because they draw a handful of big things. A book demo is a 96 x 72
 /// pixel screen, and a shape per pixel is 6,912 visuals on a 30 fps clock. One
-/// <see cref="WriteableBitmap"/> written as a <c>uint</c> array and blitted once per frame is two
+/// <c>WriteableBitmap</c> written as a <c>uint</c> array and blitted once per frame is two
 /// orders of magnitude cheaper and, more to the point, is the only way to get pixels that are
 /// actually square: the <c>Image</c> is scaled 3x with
-/// <see cref="BitmapScalingMode.NearestNeighbor"/>, so one buffer cell is exactly nine screen
+/// <c>NearestNeighbor</c>, so one buffer cell is exactly nine screen
 /// pixels with no filtering and no half-pixel seams.</para>
 ///
 /// <para><b>Format is Bgra32</b>, so a colour packs as <c>(a &lt;&lt; 24) | (r &lt;&lt; 16) |
@@ -33,9 +31,7 @@ public sealed class EmiPixelCanvas
     /// <summary>Buffer height in cells.</summary>
     public int H { get; }
 
-    private readonly WriteableBitmap _bmp;
     private readonly uint[] _buf;
-    private readonly System.Windows.Int32Rect _all;
 
     /// <summary>Builds a buffer. 96 x 72 is the book's 4:3 mini screen.</summary>
     public EmiPixelCanvas(int w, int h)
@@ -43,12 +39,13 @@ public sealed class EmiPixelCanvas
         W = Math.Max(1, w);
         H = Math.Max(1, h);
         _buf = new uint[W * H];
-        _bmp = new WriteableBitmap(W, H, 96, 96, PixelFormats.Bgra32, null);
-        _all = new System.Windows.Int32Rect(0, 0, W, H);
     }
 
-    /// <summary>The image source to hang on an <c>Image</c>. Stable for the canvas's life.</summary>
-    public ImageSource Source => _bmp;
+    /// <summary>The Bgra32 cells, row-major. Each head blits this into its own bitmap on <see cref="Committed"/>.</summary>
+    public uint[] Pixels => _buf;
+
+    /// <summary>Raised by <see cref="Commit"/>; the head's bitmap copies <see cref="Pixels"/> here.</summary>
+    public event Action<EmiPixelCanvas>? Committed;
 
     /// <summary>Pack a colour for this buffer.</summary>
     public static uint Rgb(byte r, byte g, byte b) => 0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b;
@@ -127,7 +124,7 @@ public sealed class EmiPixelCanvas
     /// <summary>Push the buffer to the bitmap. Once per frame, on the dispatcher.</summary>
     public void Commit()
     {
-        try { _bmp.WritePixels(_all, _buf, W * 4, 0); }
+        try { Committed?.Invoke(this); }
         catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book frame blit failed"); }
     }
 }

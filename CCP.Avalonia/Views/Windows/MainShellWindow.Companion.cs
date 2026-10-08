@@ -17,7 +17,7 @@
 //   OnCompanionLevelUp       events (ConditioningControlPanel/Services/Companion/CompanionService.cs)
 //   OnCompanionXPDrained     and UpdateCompanionCardsUI, which is itself blocked twice over -
 //   OnCompanionSwitched      see MainShellWindow.CompanionTab.cs. The level-up half also needs
-//                            _trayIcon.ShowNotification (here: Platform.OsNotifications.Show), PlayLevelUpSound (MainShellWindow.HomeAudio.cs) and
+//                            _trayIcon.ShowNotification (here: Platform.OsNotifications.Show), PlayLevelUpSound (WPF MainWindow.xaml.cs, not ported) and
 //                            UpdateLevelDisplay (MainShellWindow.Progression.cs), both stubs.
 //   FlashXpBarOnDrain      - restored for the HEADER bar only. Its second overlay,
 //                            CompanionTab.PrgCompanion0FlashOverlay, lives inside
@@ -207,13 +207,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
 
             if (_avatarTubeWindow == null) InitializeAvatarTube();
-            if (_avatarTubeWindow == null) return;
-
-            _avatarTubeWindow.ShowSafe();
-            _avatarTubeWindow.StartPoseAnimation();
-
-            _avatarTubeWindow.Detach();
-            // ponytail: WPF also has her Giggle("Good morning~!") - Speech.cs has not crossed.
+            if (_avatarTubeWindow != null)
+            {
+                _avatarTubeWindow.ShowSafe();
+                _avatarTubeWindow.StartPoseAnimation();
+                _avatarTubeWindow.Detach();
+                // ponytail: WPF also has her Giggle("Good morning~!") - Speech.cs has not crossed.
+            }
+            SyncHero();   // WPF CompanionRoom?.SyncHero(): every on/off label follows the switch
         }
 
         /// <summary>Force a pose. Poses themselves load in the tube's Avatar.cs partial, which has

@@ -686,6 +686,31 @@ public sealed class EmiState
         }
     }
 
+    /// <summary>The book card the reader last had open, or null. Read once at open.</summary>
+    public static string? BookBookmark
+    {
+        get
+        {
+            try { var id = Current.BookCard; return string.IsNullOrWhiteSpace(id) ? null : id; }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book bookmark read failed"); return null; }
+        }
+    }
+
+    /// <summary>Remember the card on screen as the bookmark. Debounced; a repeat is free.</summary>
+    public static void NoteBookCard(string? cardId)
+    {
+        if (string.IsNullOrWhiteSpace(cardId)) return;
+        try
+        {
+            var id = cardId.Trim();
+            var s = Current;
+            if (string.Equals(s.BookCard, id, StringComparison.Ordinal)) return;
+            s.BookCard = id;
+            SaveSoon();
+        }
+        catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book bookmark write failed"); }
+    }
+
     /// <summary>Push a line id onto the global recent ring, capped at 40. Debounced save.</summary>
     public static void NoteLine(string lineId)
     {
