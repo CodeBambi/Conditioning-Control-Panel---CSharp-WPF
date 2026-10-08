@@ -1,7 +1,7 @@
 // PORTED (slice 1) from WPF LauncherWindow.xaml.cs/.Tiles.cs and LauncherHost.cs; rules are Core's
 // LauncherCards/LauncherRules; slice 2 adds the boot surface and the second-instance handoff (WPF App.xaml.cs
 // RouteBootSurface/RouteSurfaceHandoff, LauncherHost.OnBareRelaunch). Slice 3 adds the account chip, mod pill and panel-card status/stats (WPF LauncherWindow.xaml.cs:220-606).
-// ponytail: games and FX = later slices.
+// ponytail: no game host exists on this head yet (slice 4 found none); game tiles land with their hosts, FX = later slices.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -73,6 +73,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 else _statusTimer.Stop();
             };
             BuildTiles();
+            HookVeil();
         }
 
         /// <summary>WPF OnShown, minus the FX (launcher-fx slice).</summary>
@@ -264,12 +265,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnClose_Click(object? sender, RoutedEventArgs e) => RequestClose();
 
-        private void PanelCta_Click(object? sender, RoutedEventArgs e) => OpenPanel();
+        // ponytail: no LockdownVeil on this head yet (WPF's covers these doors); these refusals stand in for it.
+        private void PanelCta_Click(object? sender, RoutedEventArgs e) { if (!MainShellWindow.LockdownActive) OpenPanel(); }
 
         /// <summary>WPF AccountChip_Click: the panel's account settings.</summary>
-        private void AccountChip_Click(object? sender, RoutedEventArgs e) => OpenPanel(p => p.ShowTab("appsettings"));
+        private void AccountChip_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!MainShellWindow.LockdownActive) OpenPanel(p => p.ShowTab("appsettings"));
+        }
 
-        private void SignIn_Click(object? sender, RoutedEventArgs e) => OpenSignIn();
+        private void SignIn_Click(object? sender, RoutedEventArgs e) { if (!MainShellWindow.LockdownActive) OpenSignIn(); }
 
         /// <summary>WPF StopLink_Click.</summary>
         private void StopLink_Click(object? sender, RoutedEventArgs e)
@@ -583,12 +588,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 TextTrimming = TextTrimming.CharacterEllipsis, Height = LauncherGridLayout.BlurbHeight,
             });
             var play = PlayButton(hue, locked, needsAccount);
-            play.Click += (_, _) => Play(card);
+            // ponytail: no LockdownVeil on this head yet (WPF's swallows every tile click); this refusal stands in for it.
+            play.Click += (_, _) => { if (!MainShellWindow.LockdownActive) Play(card); };
             text.Children.Add(play);
             body.Children.Add(text);
 
             // A signed-out card is the ask as a whole, not only its button (WPF Tiles.cs:218).
-            if (needsAccount) tile.PointerReleased += (_, _) => OpenSignIn();
+            if (needsAccount) tile.PointerReleased += (_, _) => { if (!MainShellWindow.LockdownActive) OpenSignIn(); };
 
             tile.Child = body;
             return tile;

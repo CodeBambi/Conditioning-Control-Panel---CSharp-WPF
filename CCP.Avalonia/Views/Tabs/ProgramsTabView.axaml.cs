@@ -34,14 +34,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             base.OnAttachedToVisualTree(e);
             LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
+            CoreMods.ModChanged += OnModChanged;   // the active mod's programs lead (WPF #966)
             RefreshBrowse();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            CoreMods.ModChanged -= OnModChanged;
             base.OnDetachedFromVisualTree(e);
         }
+
+        private void OnModChanged(object? sender, ConditioningControlPanel.Models.ModPackage e) => OnLanguageChanged(sender, EventArgs.Empty);
 
         private void OnLanguageChanged(object? sender, EventArgs e) =>
             Dispatcher.UIThread.Post(() =>

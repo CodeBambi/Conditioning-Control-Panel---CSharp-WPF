@@ -226,9 +226,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
 
-            // ponytail: WPF refuses outright during Lockdown (App.Lockdown.IsActive) so the reset
-            // cannot become a lockdown escape hatch; restore this check when a lockdown seam
-            // exists on this head.
+            // WPF DataSettingsSection.xaml.cs:76: a factory reset must not become a lockdown escape hatch.
+            if (Windows.MainShellWindow.LockdownActive)
+            {
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_lockdown"), Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"));
+                return;
+            }
 
             // --- confirmation 1: what happens ---
             var warning = new Dialogs.WarningDialog(

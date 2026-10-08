@@ -1518,7 +1518,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 return;
             }
             _txtUserInput.Text = string.Empty;
-            _inputPanel.IsVisible = false;   // WPF ToggleInputPanel
+            // Keep the box open and focused so the player can type the next line (WPF ShowInputPanel,
+            // ccp-bugs #1279). The reply bubble sits above it (ZIndex 10 over 3), so it is never covered.
+            OpenChatInput();
 
             var ai = App.Ai;
             var brain = App.Brain;   // decided once, up front, as WPF (ChatInput.cs:772)
