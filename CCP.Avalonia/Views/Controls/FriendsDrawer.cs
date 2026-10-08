@@ -2,7 +2,8 @@
 // your head with the presence switch, the list (online, requests,
 // offline, blocked), a friend's card with the menu (squelch, remove and block after a confirm,
 // report), request answers, add by code and your own code. Driven only by IFriendsService.
-// ponytail: no send pickers (poke / invite / watch, FriendsDrawer.Pickers.cs), no feed, trails,
+// The send pickers (poke / invite / watch) are in FriendsDrawer.Pickers.cs.
+// ponytail: no feed, trails,
 // open tables or leash section, no lock-day chip, no once-only presence ask, no juice (.Juice.cs), no bell (the corner notices are not on this
 // head), no per-PC block list (the server's list only). A word WPF throws outside the drawer
 // (FriendsLanding.Tell) is a FloatingWord over the drawer's window.
@@ -24,7 +25,7 @@ using ConditioningControlPanel.Services.Friends;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls;
 
-public sealed class FriendsDrawer : Border
+public sealed partial class FriendsDrawer : Border
 {
     // WPF FriendsLook's palette.
     internal static readonly IBrush Raised = Rgb(0x2C, 0x14, 0x50), Line = Rgb(0x3A, 0x2A, 0x5E), Line2 = Rgb(0x4D, 0x3A, 0x78),
@@ -114,6 +115,7 @@ public sealed class FriendsDrawer : Border
         {
             if (e.Key != Key.Escape) return;
             if (_addBox.IsVisible && _codeBox.IsFocused) _addBox.IsVisible = false;
+            else if (_picker != null) { _picker = null; Render(); }
             else CloseRequested?.Invoke();
             e.Handled = true;
         };
@@ -136,7 +138,7 @@ public sealed class FriendsDrawer : Border
     public void OnClosed()
     {
         try { _svc?.SetDrawerOpen(false); } catch { }
-        (_isOpen, _openId, _confirm, _addBox.IsVisible) = (false, null, null, false);
+        (_isOpen, _openId, _confirm, _picker, _addBox.IsVisible) = (false, null, null, null, false);
     }
     private void Rebind()
     {
@@ -220,7 +222,7 @@ public sealed class FriendsDrawer : Border
             return;
         }
         var (online, offline) = FriendsDrawerRules.Split(snap);
-        if (_openId != null && !Contains(snap, _openId)) _openId = null;
+        if (_openId != null && !Contains(snap, _openId)) (_openId, _picker) = (null, null);
         if (_confirm is { } c && !Contains(snap, c.Id)) _confirm = null;
         if (online.Count > 0)
         {
@@ -320,7 +322,7 @@ public sealed class FriendsDrawer : Border
     internal void Toggle(string friendId)
     {
         _openId = _openId == friendId ? null : friendId;
-        _confirm = null;
+        (_confirm, _picker) = (null, null);
         Render();
     }
 
@@ -352,11 +354,18 @@ public sealed class FriendsDrawer : Border
             });
             return card;
         }
+        card.Children.Add(CardActions(f));
         var more = Pill(Loc.Get("friends_action_more"), Brushes.Transparent, Muted, "friends-action:more", Line2);
         more.HorizontalAlignment = HorizontalAlignment.Stretch;
         more.HorizontalContentAlignment = HorizontalAlignment.Center;
         more.Click += (_, _) => Menu(f).Open(more);
         card.Children.Add(more);
+        if (_picker != null)
+        {
+            var picker = Picker(f);
+            picker.Margin = new Thickness(0, 8, 0, 0);
+            card.Children.Add(picker);
+        }
         return card;
     }
 
