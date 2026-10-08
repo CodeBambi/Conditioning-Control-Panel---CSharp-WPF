@@ -52,9 +52,46 @@ internal sealed class IsolateProcessStateAttribute : BeforeAfterTestAttribute
     // On the shared Avalonia UI thread: reading a head static can create Dispatcher.UIThread, which
     // must be the thread the tests' headless platform lives on, and settings change handlers are UI code.
     public override void Before(MethodInfo methodUnderTest, IXunitTest test) =>
-        CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() => Current = ProcessStateSnapshot.Take());
+        CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() => { Current = ProcessStateSnapshot.Take(); OpenWindows.Mark(); });
     public override void After(MethodInfo methodUnderTest, IXunitTest test) =>
-        CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() => { Current?.Restore(); Current = null; });
+        CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() =>
+        {
+            // PLAYBOOK P52: a passive card (FeatureIntroPopup, AnnouncementPopup) or any other app
+            // window a test left open holds the next test's startup surfaces, so close it first.
+            OpenWindows.CloseLeftovers();
+            ConditioningControlPanel.Avalonia.Platform.StartupLadder.ResetForTests();
+            Current?.Restore();
+            Current = null;
+        });
+}
+
+/// <summary>Every window open in the test process, tracked by class handler (headless tests have no
+/// desktop lifetime to list them).</summary>
+internal static class OpenWindows
+{
+    private static readonly HashSet<global::Avalonia.Controls.Window> Open = new();
+    private static HashSet<global::Avalonia.Controls.Window> _before = new();
+    private static bool _hooked;
+
+    internal static void Mark()
+    {
+        if (!_hooked)
+        {
+            _hooked = true;
+            global::Avalonia.Controls.Window.WindowOpenedEvent.AddClassHandler<global::Avalonia.Controls.Window>((w, _) => Open.Add(w));
+            global::Avalonia.Controls.Window.WindowClosedEvent.AddClassHandler<global::Avalonia.Controls.Window>((w, _) => Open.Remove(w));
+        }
+        _before = new(Open);
+    }
+
+    /// <summary>Closes the windows this test opened that are app windows (types from the head);
+    /// a test's own plain <c>Window</c> host or test-assembly helper is left to the test.</summary>
+    internal static void CloseLeftovers()
+    {
+        var head = typeof(ConditioningControlPanel.Avalonia.App).Assembly;
+        foreach (var w in Open.Where(w => !_before.Contains(w) && w.GetType().Assembly == head).ToArray())
+            try { w.Close(); } catch (Exception) { /* a window that refuses to close must not fail the next test */ }
+    }
 }
 
 internal sealed class ProcessStateSnapshot
