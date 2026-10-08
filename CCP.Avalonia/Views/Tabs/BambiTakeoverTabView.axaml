@@ -239,7 +239,7 @@
                                                          page wakes, so the authored value has to match it. -->
                                                     <TextBlock x:Name="TxtTakeoverStatus" Text="○ DORMANT"
                                                                Foreground="#8888A0" FontSize="18" FontWeight="Bold"/>
-                                                    <TextBlock x:Name="TxtTakeoverStatusSub" Text="She's not watching right now."
+                                                    <TextBlock x:Name="TxtTakeoverStatusSub" Text="{loc:Str takeover_status_sub_dormant}"
                                                                Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,2,0,0"/>
 
                                                     <!-- #1048: the one setting that answers "why was Takeover off when I
@@ -436,7 +436,7 @@
                                     <Expander IsExpanded="False" Margin="0,0,0,10" HorizontalAlignment="Stretch"
                                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold">
                                         <Expander.Header>
-                                            <TextBlock Text="Advanced — what she's allowed to do" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"/>
+                                            <TextBlock Text="{loc:Str takeover_advanced_header}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"/>
                                         </Expander.Header>
                                         <Border Theme="{StaticResource SettingCardStyle}" Margin="0,8,0,0">
                                             <Grid>
@@ -560,6 +560,10 @@
                                                                 <TextBlock Grid.Column="0" Text="{loc:Str label_autonomy_wallpaper}" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                                                 <CheckBox Grid.Column="1" x:Name="ChkAutonomyWallpaper" Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                                                             </Grid>
+                                                            <!-- WPF: preconditions on the face of the setting (no usable wallpaper / empty pool refuse silently). -->
+                                                            <TextBlock Text="{loc:Str hint_autonomy_wallpaper_needs_image}" FontSize="10.5"
+                                                                       Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"
+                                                                       Margin="0,2,0,0"/>
                                                         </StackPanel>
                                                     </Grid>
 
@@ -634,14 +638,24 @@
                                                      TxtAutonomyVoiceHint stays a VISIBLE second line rather than moving into the
                                                      ToolTip: MainWindow.Autonomy.cs rewrites it to explain why the mic is or is
                                                      not armed, and a warning nobody hovers is a warning nobody reads. -->
-                                                <Grid Background="Transparent" Margin="0,2" ToolTip.Tip="During Takeover she'll occasionally ask you to repeat a phrase, listen for it offline, then give a custom response. First time on asks for mic consent. (On-demand mantras + the mic live in She's Listening.)">
+                                                <Grid Background="Transparent" Margin="0,2" ToolTip.Tip="{loc:Str takeover_mantra_toggle_tooltip}">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                                         <TextBlock Text="🎤 Surprise me with mantras" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"/>
-                                                        <TextBlock x:Name="TxtAutonomyVoiceHint" Text="During Takeover she'll now and then ask you to repeat a phrase. Suppressed while you're driving the mic yourself." FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}"/>
+                                                        <TextBlock x:Name="TxtAutonomyVoiceHint" Text="{loc:Str takeover_voice_hint_off}" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource TextMutedBrush}"/>
+                                                        <!-- WPF: only up while the hint is about a missing or unloadable model; opens (and creates) the folder. -->
+                                                        <Button x:Name="BtnAutonomyOpenModels" IsVisible="False"
+                                                                HorizontalAlignment="Left" Margin="0,5,0,0"
+                                                                Theme="{StaticResource OutlineButton}"
+                                                                BorderBrush="{StaticResource TabHueBorderBrush}"
+                                                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                FontSize="11" Padding="9,3"
+                                                                ToolTip.Tip="{loc:Str tooltip_open_models_folder}">
+                                                            <TextBlock Text="{loc:Str btn_open_models_folder}"/>
+                                                        </Button>
                                                     </StackPanel>
                                                     <CheckBox Grid.Column="1" x:Name="ChkAutonomyVoice" Theme="{StaticResource ToggleStyle}"
                                                               VerticalAlignment="Center"/>
@@ -655,7 +669,7 @@
 
                                                 <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 
-                                                <Grid Height="34" Background="Transparent" ToolTip.Tip="Shows a thin pink bar under the avatar that drains as the next surprise Takeover approaches, so you can see it coming.">
+                                                <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str takeover_countdown_bar_tooltip}">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>

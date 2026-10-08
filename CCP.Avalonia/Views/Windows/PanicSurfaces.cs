@@ -1,0 +1,66 @@
+// PORTED from ConditioningControlPanel/Services/Safety/GameSurfaces.cs and MainWindow.xaml.cs
+// PanicStopEverySurface (:1923): one list of everything a panic stops, so a new surface is one line here
+// instead of a call remembered in each route (P06). The panic key, the tray's Stop everything and the
+// spoken safe word all call StopAll; Lockdown refusal, the lock-card/palette/grace-pause rungs, the
+// window restore and the double-press exit ladder stay in the routes. Guarded by PanicSurfacesTests.
+
+using System;
+using System.Collections.Generic;
+using ConditioningControlPanel.Services;
+
+namespace ConditioningControlPanel.Avalonia.Views.Windows
+{
+    internal static class PanicSurfaces
+    {
+        /// <summary>A thing a panic must stop. <paramref name="OwnsTheScreen"/> marks a game-like host:
+        /// a press that ends it does not advance the double-press exit ladder (P30, WPF
+        /// AnyGameSurfaceOwnsTheScreen). <paramref name="Stop"/> gets the shell the route ran on
+        /// (null off the desktop path) and must be idempotent and safe when idle.</summary>
+        internal sealed record Surface(string Id, Action<MainShellWindow?> Stop, Func<bool>? OwnsTheScreen = null);
+
+        /// <summary>In stop order; order matters where noted. Add a surface with one line. Tests swap it.</summary>
+        internal static IReadOnlyList<Surface> All { get; set; } = new Surface[]
+        {
+            // Mic first (decisions "Panic ↔ mic"): the capture and command chain in flight end before
+            // anything can react to them; the wake loop and push-to-talk stay armed.
+            new("voice-capture", sh => sh?.CancelVoicePrompt()),
+            new("ai-followups", _ => MainShellWindow.CancelPendingAi()),
+            // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
+            new("blink-trainer", _ => Overlays.BlinkTrainerSession.Stop()),
+            new("chaos", _ => Chaos.ChaosRunHost.ForceShutdown(), () => Chaos.ChaosRunHost.IsDescending),
+            // WPF PanicStopEverySurface (:1992): the toys go to zero, bypassing throttles and gates.
+            new("haptics", _ => CoreHaptics.Service?.PanicStop()),
+            new("remote-haptics", _ => RemoteCommands.StopHaptics()),   // decisions 2026-10-08
+            new("takeover", sh => sh?.StopAutonomyForPanic()),           // WPF KillAllAudio -> Autonomy.Stop
+            // WPF RunPanicStopTail StopEngine/StopAdHocEffects: pauses a running session; OnEngineStopped
+            // then ends Takeover pulses, desktop overlays (subliminal/whisper, mind wipe, spiral, video,
+            // bubbles, pink filter), pop quizzes and open lock cards.
+            new("engine", _ => MainShellWindow.StopEngine()),
+            new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
+            new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
+        };
+
+        /// <summary>WPF AnyGameSurfaceOwnsTheScreen. Sample BEFORE <see cref="StopAll"/>.</summary>
+        internal static bool AnyOwnsTheScreen()
+        {
+            foreach (var s in All)
+            {
+                try { if (s.OwnsTheScreen?.Invoke() == true) return true; }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: {Id} screen probe failed", s.Id); }
+            }
+            return false;
+        }
+
+        /// <summary>Stops every surface in order. One failing stop never skips the rest. Never throws.</summary>
+        internal static void StopAll(string reason, MainShellWindow? shell = null)
+        {
+            Serilog.Log.Information("Panic: stopping every surface ({Reason})", reason);
+            shell ??= MainShellWindow.Current;
+            foreach (var s in All)
+            {
+                try { s.Stop(shell); }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: {Id} stop failed", s.Id); }
+            }
+        }
+    }
+}

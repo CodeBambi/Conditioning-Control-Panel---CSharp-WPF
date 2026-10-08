@@ -27,7 +27,9 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
         private IDisposable? _visibilityWatch;
         private bool _running;
         private int _generation;               // bumped on every start/stop: stale frame callbacks drop out
-        private DrawingGroup? _lastBack, _lastFront;   // the last good frame, kept up if the scene faults
+        private DrawingGroup? _lastGround, _lastBack, _lastFront;   // the last good frame, kept up if the scene faults
+        private double _lastBlur;                                    // that frame's Back blur, stage px
+        private readonly BlurEffect _blur = new();                   // one effect, radius set per frame
         private long _startTs;
         private double _base, _speed = 1, _lastT = -1;
 
@@ -150,18 +152,23 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
                     {
                         try
                         {
-                            // Two recorded layers so Back always lands under Front, whatever order a
-                            // scene paints them in (WPF's two DrawingVisuals).
+                            // Recorded layers so Back always lands under Front, whatever order a
+                            // scene paints them in, and the ground stays sharp under a blurred Back
+                            // (WPF's three DrawingVisuals).
+                            var ground = new DrawingGroup();
                             var back = new DrawingGroup();
                             var front = new DrawingGroup();
+                            double blur;
+                            using (var g = ground.Open())
                             using (var b = back.Open())
                             using (var fr = front.Open())
                             {
-                                var f = new LoopFrame(b, fr, _palette);
+                                var f = new LoopFrame(g, b, fr, _palette);
                                 f.Ground();
                                 Scene.Draw(f, CurrentTime);
+                                blur = f.BackBlur;
                             }
-                            (_lastBack, _lastFront) = (back, front);
+                            (_lastGround, _lastBack, _lastFront, _lastBlur) = (ground, back, front, blur);
                         }
                         catch (Exception ex)
                         {
@@ -172,7 +179,15 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
                             Log.Error(ex, "HelpLoopView: scene {Scene} failed at t={T}", Scene.Id, CurrentTime);
                         }
                     }
-                    _lastBack?.Draw(context);
+                    _lastGround?.Draw(context);
+                    if (_lastBlur > 0.05)
+                    {
+                        _blur.Radius = _lastBlur;
+                        using (context.PushEffect(_blur, new Rect(0, 0, LoopFrame.StageWidth, LoopFrame.StageHeight)))
+                            _lastBack?.Draw(context);
+                    }
+                    else
+                        _lastBack?.Draw(context);
                     _lastFront?.Draw(context);
                 }
             }

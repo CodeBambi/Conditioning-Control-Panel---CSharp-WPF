@@ -580,3 +580,33 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/RemoteRelayTests.cs` (Remote_haptics_play_and_every_stop_path_ends_them,
   A_command_in_flight_never_outlives_a_panic_or_a_leave), `Tests/CCP.Avalonia.Tests/RemoteHapticPanicTests.cs`;
   each fail-proven. WPF path compile-verified only (Windows suite does not run on Linux).
+
+## 2026-10-08: Linux-only legacy accounts are not migrated by the Avalonia head (oracle-deep, owner away)
+- B: Avalonia omits `descent_auto`; offer/ApplyChoice stay WPF-only.
+- Why: deferral loses nothing (the server holds lifetime XP; the bonus is gated on ack or pending choice); a partial relevel
+  port could corrupt the ledger.
+- Cost: Linux-only users stay on the old curve with no +10% and no receipt until a WPF sync or the port lands.
+- Shared in Core meanwhile (avalonia-port/rows-descent-migration): `DescentCycleXp.XpBonusFor`, `DescentMigrationAck`, `DescentReceipt`.
+  Port gate: main sync #5 row 5 (`abac4fa02`, lane `descent-migration-offer`) in `docs/avalonia-main-sync-20261008.md`.
+## 2026-10-08: VideoMetadataCache moves to Core with a managed LibVLCSharp reference (rows-feat-video)
+- Need: the mandatory-video length filter (min/max) at selection time and the #1352 "length filter emptied the library"
+  dialog (854ac954a) need clip lengths. WPF reads them from `VideoMetadataCache` (LibVLC parse, #750 dispose-grace
+  reaper, `video_metadata.json` keyed on path+size+mtime).
+- Option A (chosen): git mv `VideoMetadataCache` (and `NoVideosReason`) to `CCP.Core/Services/Video/`, edits limited to
+  `App.UserDataPath` -> `CorePaths.UserData` (the same path) and `App.Logger` -> Serilog `Log`; Core gains the managed
+  `LibVLCSharp` package only, pinned at 3.8.5 = what `LibVLCSharp.WPF` 3.8.5 resolves in the WPF head, so WPF ships the
+  same assembly; the Avalonia head's direct 3.10.1 wins there. No native VideoLAN package in Core.
+- Option B (rejected): a Core `Func<string,double?>` seam fed only by lengths of clips already played; the minimum would
+  only apply after a clip had played once, and a second parse path would drift from WPF's crash fixes.
+- Why A: one copy of the crash-sensitive parse code; Core already carries managed-only wrappers for native libraries
+  (Vosk, OpenCvSharp4, OnnxRuntime.Managed). Core `MandatoryVideoScheduler.KeepByLength` applies WPF's rule (a clip with
+  no cached length is kept and parsed for the next refill); `DurationOf` is set by the Avalonia overlay on the shared
+  LibVLC. WPF VideoService keeps its own filter and constructs the cache as before.
+## 2026-10-08: One panic registry; the safe word and the tray stop every surface (avalonia-port/panic-surfaces)
+- The panic key, the tray's Stop everything and the spoken safe word each call `PanicSurfaces.StopAll` once
+  (`CCP.Avalonia/Views/Windows/PanicSurfaces.cs`). As a result the safe word now also stops a Chaos run and the
+  camera, and the tray now also stops the lock-card scheduler and the Blink Trainer.
+- Deliberate deviation from WPF (whose routes each stop a hand-written subset): the safe word is the only exit under
+  Lockdown, so it must end everything the panic key would. Reviewer-checked (safety review, 2026-10-08).
+- Tests: `Tests/CCP.Avalonia.Tests/PanicSurfacesTests.cs` (routes call StopAll once, exact surface order, safe word
+  stops chaos and the camera, starter scan); each fail-proven.

@@ -24,13 +24,10 @@
 //                                 pack:// URI. CoreModArt.OverridePath answers the override half,
 //                                 but this head ships no Resources/achievements/*.png to fall back
 //                                 to, so there is nothing to paint yet.
-//   UpdateProfileXpMeter        - ported onto DiscordTabView.SetXpMeter (Core XpCurve), minus the
-//                                 descent-bonus suffix.
-//   RefreshProfileDescentReceipt- DescentReceipt / DescentMigration.ActiveCycleXpBonus
-//                                 (ConditioningControlPanel/Services/Descent/). SetProfileViewingSelf
-//                                 below still enforces the half that is portable: a searched card
-//                                 wears no receipt.
-//   OwnDescentReceiptKind       - the same two types.
+//   UpdateProfileXpMeter        - ported onto DiscordTabView.SetXpMeter (Core XpCurve), with the
+//                                 descent-bonus suffix (Core DescentReceipt).
+//   RefreshProfileDescentReceipt / OwnDescentReceiptKind - ported below (Core DescentReceipt,
+//                                 DescentCycleXp.XpBonusFor), called from SetProfileViewingSelf as WPF.
 //   FindNextAchievementName     - Models.Achievement.All
 //                                 (ConditioningControlPanel/Models/Achievement.cs).
 //   RefreshProfileSpiralPlate   - MainShellWindow.ProfileSpiral.cs, still a stub.
@@ -45,6 +42,7 @@ using System.Linq;
 using Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Descent;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -85,20 +83,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var privacy = page.FindControl<Button>("BtnProfilePrivacy");
                 if (privacy is not null) privacy.IsVisible = isSelf;
 
-                // The migration receipt rides the same switch: a searched card must never wear
-                // your descent. WPF re-resolves the pill through RefreshProfileDescentReceipt;
-                // only its "what does a self card show" half is blocked (see the header), and
-                // hiding it on a stranger's card is the half that must not wait for that.
-                if (!isSelf)
-                {
-                    var receipt = page.FindControl<Border>("ProfileDescentReceipt");
-                    if (receipt is not null) receipt.IsVisible = false;
-                }
+                // The migration receipt rides the same switch: a searched card must never wear your descent.
+                RefreshProfileDescentReceipt(page);
 
                 var back = page.FindControl<Button>("BtnProfileBackToMe");
                 if (back is not null) back.IsVisible = !isSelf;
             }
             catch (Exception ex) { Log.Debug("SetProfileViewingSelf: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF OwnDescentReceiptKind: None for a searched card or an account the server has not acked.</summary>
+        internal DescentReceiptKind OwnDescentReceiptKind()
+        {
+            if (!_profileViewingSelf) return DescentReceiptKind.None;
+            var s = CoreSettings.Current;
+            return DescentReceipt.Resolve(s.DescentMigrationCompleted, s.DescentMigrationChoice);
+        }
+
+        /// <summary>WPF RefreshProfileDescentReceipt: the permanent record of the migration under the hero XP
+        /// bar; the percent is the multiplier ProgressionBank actually applies.</summary>
+        private void RefreshProfileDescentReceipt(Tabs.DiscordTabView page)
+        {
+            var pill = page.FindControl<Border>("ProfileDescentReceipt");
+            if (pill is null) return;
+            var kind = OwnDescentReceiptKind();
+            if (kind == DescentReceiptKind.None)
+            {
+                pill.IsVisible = false;
+                return;
+            }
+            var percent = DescentReceipt.BonusPercentText(
+                DescentCycleXp.XpBonusFor(CoreSettings.Current));
+            var (label, tip) = kind == DescentReceiptKind.Cycle
+                ? (Loc.GetF("profile_cycle_receipt_cycle", percent), Loc.GetF("profile_cycle_receipt_tip_cycle", percent))
+                : (Loc.Get("profile_cycle_receipt_restore"), Loc.Get("profile_cycle_receipt_tip_restore"));
+            if (page.FindControl<TextBlock>("ProfileDescentReceiptText") is { } text) text.Text = label;
+            ToolTip.SetTip(pill, tip);
+            pill.IsVisible = true;
         }
 
         /// <summary>
