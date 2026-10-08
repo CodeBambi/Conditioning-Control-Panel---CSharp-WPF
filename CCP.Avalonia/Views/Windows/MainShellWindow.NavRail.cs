@@ -704,6 +704,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Debug("RefreshNavPremiumTags: {E}", ex.Message); }
         }
 
+        /// <summary>WPF 7.1.5 keeps this on the rail (MainWindow.NavRail.cs): is a sold feature's
+        /// door shut to this account, over Core's roster and the entitlement seam. Fails to NOT
+        /// LOCKED on anything unexpected, as WPF does.</summary>
+        private static bool IsNavEntryLocked(string exclusiveKey)
+        {
+            try
+            {
+                var feature = Models.ExclusiveFeature.All.FirstOrDefault(f => f.Key == exclusiveKey);
+                if (feature == null) return false;
+                var state = feature.GateState();
+                return state == Models.ExclusiveGateState.Locked && !feature.IsFreeToday(state);
+            }
+            catch { return false; }
+        }
+
         /// <summary>The two canonical gates for the strip's tier signs; null while no account
         /// provider is wired (render, nav-check), which reads as locked.</summary>
         private static (bool? Premium, bool? Lab) NavAccess() =>
