@@ -331,7 +331,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             DetachCommand = new RelayCommand(() =>
             {
                 CoreBark.NotifyUiAction("detach_companion");   // WPF MainWindow.Patreon.cs:1278
-                AvatarTube.AvatarTubeWindow.ToggleDetachedSink?.Invoke();
+                // Popping out a switched-off companion wakes it, popped out, as the tray's Wake does
+                // (WPF MainWindow.Patreon.cs:1287); it used to do nothing here.
+                if (!CoreSettings.Current.AvatarEnabled) Shell?.WakeBambiUp();
+                else AvatarTube.AvatarTubeWindow.ToggleDetachedSink?.Invoke();
             });
             ToggleMuteCommand = new RelayCommand(() => { Shell?.SetAvatarMuted(!IsMuted); Sync(); });
             ToggleShownCommand = new RelayCommand(() => { Shell?.SetAvatarEnabled(!IsCompanionShown); Sync(); });

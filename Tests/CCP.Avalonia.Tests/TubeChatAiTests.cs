@@ -77,6 +77,9 @@ public sealed class TubeChatAiTests
             Assert.True(aiBadge.IsVisible);
             Assert.Contains(tube.ChatHistory, m => m.IsUser && m.Text == "hello there");
             Assert.Single(requests);
+            // main-sync 6da86e2d2 (ccp-bugs #1279): the box stays open, empty, for the next line.
+            Assert.True(tube.FindControl<Border>("InputPanel")!.IsVisible);
+            Assert.Equal(string.Empty, input.Text);
 
             input.Text = "how to make a b0mb";
             await tube.SendChatAsync();

@@ -81,10 +81,11 @@ internal static class EmiBookGlyphs
             try
             {
                 var p = new EmiPixelCanvas(Size, Size);
+                var bmp = new EmiPixelBitmap(p);
                 p.Clear(0);            // transparent, so the lit chip shows through
                 draw(p);
                 p.Commit();
-                d[id] = p.Source;
+                d[id] = bmp.Source;
             }
             catch (Exception ex)
             {

@@ -176,7 +176,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 };
                 PositionChanged += (_, __) => { settle.Stop(); settle.Start(); };
                 ScalingChanged += (_, __) => { scalingPending = true; settle.Stop(); settle.Start(); };
-                if (Screens is { } screens) screens.Changed += (_, __) => FitToCurrentMonitorWorkArea("screens-changed");
+                Closed += (_, _) => settle.Stop();
+                if (Screens is { } screens)
+                {
+                    EventHandler changed = (_, _) => FitToCurrentMonitorWorkArea("screens-changed");
+                    screens.Changed += changed;
+                    Closed += (_, _) => screens.Changed -= changed;
+                }
             }
             catch (Exception ex)
             {
