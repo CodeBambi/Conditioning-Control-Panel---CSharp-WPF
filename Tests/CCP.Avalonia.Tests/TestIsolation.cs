@@ -89,6 +89,9 @@ internal sealed class ProcessStateSnapshot
         }
         foreach (var (settings, json) in _settings)
             if (JsonConvert.SerializeObject(settings, Json) != json) JsonConvert.PopulateObject(json, settings, Json);
+        // A test's private SettingsService outlives it with a 500 ms debounce armed; disarm before the
+        // files go back, or it rewrites settings.json inside the next test.
+        ConditioningControlPanel.Services.SettingsService.DisarmAllPendingSaves();
         foreach (var f in Directory.EnumerateFiles(TestUserDataProfile.Root, "*.json"))
             if (!_files.ContainsKey(f)) try { File.Delete(f); } catch (IOException) { }
         foreach (var (f, bytes) in _files)
