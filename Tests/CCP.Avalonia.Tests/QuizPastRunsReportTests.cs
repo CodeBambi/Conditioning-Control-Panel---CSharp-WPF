@@ -46,6 +46,7 @@ public sealed class QuizPastRunsReportTests
             Assert.Equal(new[] { "Obedience: 78% \u219128% · Devoted Servant", "Velvet Édition: 30%" }, trends);
             var runs = tab.PastQuizzesList.Children.OfType<Button>().ToList();
             Assert.Equal(3, runs.Count);
+            Assert.All(runs, r => Assert.Equal(global::Avalonia.Layout.HorizontalAlignment.Left, r.HorizontalContentAlignment));
             Assert.EndsWith("Obedience  ·  31/40 (78%)", ((TextBlock)runs[0].Content!).Text);
 
             runs[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

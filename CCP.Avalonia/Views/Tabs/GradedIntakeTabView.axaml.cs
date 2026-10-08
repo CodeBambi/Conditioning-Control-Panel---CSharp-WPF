@@ -308,6 +308,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                         Padding = new Thickness(8, 5, 8, 5),
                         Background = global::Avalonia.Media.Brushes.Transparent,
                         HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Stretch,
+                        HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
                         Content = new TextBlock
                         {
                             Text = $"{entry.TakenAt:MMM d}  ·  {QuizStore.DisplayName(entry)}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)",
