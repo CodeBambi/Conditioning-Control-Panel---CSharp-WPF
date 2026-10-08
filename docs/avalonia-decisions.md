@@ -610,3 +610,9 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   Lockdown, so it must end everything the panic key would. Reviewer-checked (safety review, 2026-10-08).
 - Tests: `Tests/CCP.Avalonia.Tests/PanicSurfacesTests.cs` (routes call StopAll once, exact surface order, safe word
   stops chaos and the camera, starter scan); each fail-proven.
+## 2026-10-08: Phrase import confirm matches WPF's two buttons (avalonia-port/rows-settings-data)
+- Question: the Avalonia phrase import used the acknowledge-checkbox WarningDialog; WPF uses a two-button styled
+  confirm "Import"/"Cancel" (MainWindow.PresetIO.cs:115).
+- Option A (chosen): `MessageDialog.ConfirmAsync` with WPF's copy and buttons, Enter on Cancel (the only extra over WPF).
+- Option B (rejected): keep the stricter dialog and record the divergence.
+- Chose A on the supervisor's advice (P44).
