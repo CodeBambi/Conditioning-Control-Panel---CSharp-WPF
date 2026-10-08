@@ -125,7 +125,8 @@ namespace ConditioningControlPanel.Services
         {
             if (string.IsNullOrEmpty(path)) return "";
             if (IsRemote(path)) return path;
-            return path.Replace('/', '\\');
+            // Windows (WPF) tidies to '\\' exactly as before; on Linux the same call would mangle every path.
+            return System.IO.Path.DirectorySeparatorChar == '\\' ? path.Replace('/', '\\') : path.Replace('\\', '/');
         }
 
         /// <summary>

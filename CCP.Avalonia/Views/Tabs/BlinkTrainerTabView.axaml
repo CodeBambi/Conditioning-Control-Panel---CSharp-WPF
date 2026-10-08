@@ -23,7 +23,7 @@
        SnapsToDevicePixels           ->  dropped (no equivalent, no visual effect here)
        Button.Resources Style-for-Border -> CornerRadius straight on the Button
        feat:AdaptiveSideArt.CollapseBelow -> dropped; the attached behaviour is not ported
-       MediaElement                  ->  dropped; no media element on this head (see comment)
+       MediaElement                  ->  Image fed by a VlcFrameSink (muted, looped)
        Image / ImageBrush art        ->  named plate Borders painted by ModArt.BindFeaturePlates -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -143,9 +143,8 @@
               </StackPanel>
             </StackPanel>
 
-            <!-- Help button. ponytail: needs Controls/HelpPopover.cs ported to this head.
-                 HelpContentService is already in Core; WPF wires the two together in
-                 MainWindow.Presets.cs via SetHelpContent(..., "BlinkTrainer"). -->
+            <!-- Help button: HelpPopover.Attach in code-behind Refresh (WPF MainWindow.Presets.cs:118
+                 SetHelpContent(BlinkTrainerTab.HelpBtnBlinkTrainer, "BlinkTrainer")). -->
             <Button x:Name="HelpBtnBlinkTrainer" Theme="{StaticResource HelpButtonStyle}"
                     HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"
                     Tag="BlinkTrainer"/>
@@ -186,9 +185,9 @@
                        Sources are set by the host, so both are empty here. -->
                   <Image x:Name="BlinkTrainerStageImageA" Stretch="UniformToFill" Opacity="1"/>
                   <Image x:Name="BlinkTrainerStageImageB" Stretch="UniformToFill" Opacity="0"/>
-                  <!-- ponytail: the WPF stage also hosts a muted MediaElement for video assets.
-                       Avalonia has no built-in media element; wire a video surface here when the
-                       head gets one (LibVLCSharp / Avalonia.MediaPlayer). -->
+                  <!-- WPF BlinkTrainerStageMedia: a live video pick plays here, muted and looped;
+                       the frames come from one VlcFrameSink (code-behind ShowStageVideo). -->
+                  <Image x:Name="BlinkTrainerStageVideo" Stretch="UniformToFill" Opacity="0"/>
                 </Grid>
               </Border>
             </Border>
