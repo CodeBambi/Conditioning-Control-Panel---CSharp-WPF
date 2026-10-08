@@ -372,6 +372,10 @@
             <Style Selector="^:pointerover">
                 <Setter Property="BorderBrush" Value="{DynamicResource SessionSrcImportedBrush}"/>
             </Style>
+            <!-- Keyboard reach (P17): the chip is focusable, so focus must show. -->
+            <Style Selector="^:focus-visible">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
         </ControlTheme>
 
         <ControlTheme x:Key="SdTakeawayChipTitle" TargetType="TextBlock">
