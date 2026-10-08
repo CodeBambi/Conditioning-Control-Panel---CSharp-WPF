@@ -55,44 +55,36 @@ namespace ConditioningControlPanel.Avalonia
             // Keep the expectations behavioural - "the You door is open", not "Height is 224" -
             // because an implementation detail in an assertion is how the door bug hid: the old
             // check watched Height, and Height was never the thing that was broken.
+            // Nav rework (WPF 7.1.5): the rail is always open and labelled, a row click lands on its
+            // section, and a section's pages are pills on the strip above the page (NavPill_<key>,
+            // built in code, so they are found through the visual tree, not the name scope).
             var steps = new List<Step>
             {
-                new("DoorYou",     "the You door opens",             s => s.ExpandedDoor == "you"),
-                new("BtnQuests",   "its Quests entry navigates",     s => s.CurrentTab == "quests"),
-                new("DoorStudio",  "the Studio door opens",          s => s.ExpandedDoor == "studio"),
-                new("BtnNavStudio","its Studio entry navigates",     s => s.CurrentTab == "studio"),
-                new("DoorPlay",    "the Play door opens",            s => s.ExpandedDoor == "play"),
-                // BtnLab's x:Name is legacy API; its Tag is "Play", so Play is where it goes.
-                new("BtnLab",      "its Lab entry navigates to Play", s => s.CurrentTab == "play"),
-                new("DoorCompanion", "the Companion door opens",     s => s.ExpandedDoor == "companion"),
-                new("DoorLibrary", "the Library door opens",         s => s.ExpandedDoor == "library"),
-                new("DoorHome",    "the Home door opens",            s => s.ExpandedDoor == "home"),
+                new("DoorYou",          "the You row opens You",              s => s.ExpandedDoor == "you"),
+                new("NavPill_quests",   "its Quests pill navigates",          s => s.CurrentTab == "quests"),
+                new("DoorStudio",       "the Studio row opens Studio",        s => s.ExpandedDoor == "studio"),
+                new("NavPill_presets",  "its Presets pill navigates",         s => s.CurrentTab == "presets"),
+                new("DoorPlay",         "the Play row opens Play",            s => s.ExpandedDoor == "play"),
+                new("NavPill_deeper",   "its Deeper pill navigates",          s => s.CurrentTab == "deeper"),
+                new("DoorCompanion",    "the Companion row opens Companion",  s => s.ExpandedDoor == "companion"),
+                new("DoorSocial",       "the Social row opens Social",        s => s.ExpandedDoor == "social"),
+                new("DoorLibrary",      "the Library row opens Library",      s => s.ExpandedDoor == "library"),
+                new("DoorHome",         "the Home row opens the dashboard",   s => s.CurrentTab == "settings"),
+                new("DoorSettings",     "the gear opens Settings",            s => s.CurrentTab == "appsettings"),
             };
 
             var fails = 0;
             var n = 0;
 
-            // The rail before anything touches it: 56px, labels clipped. Then a real pointer move
-            // into it, which is the only thing that opens it - there is no click involved, which is
-            // exactly why every click-based proof missed that it never opened at all.
-            // InitializeNavRail runs in the window's constructor (a Window never gets
-            // OnAttachedToVisualTree, which is why the rail never opened live).
-            var railBefore = w.NavRailExpanded;
-            var rail = w.FindControl<Border>("NavSidebar");
-            if (rail is not null)
-            {
-                var p = rail.TranslatePoint(new Point(rail.Bounds.Width / 2, rail.Bounds.Height / 2), w);
-                if (p is { } pt) { w.MouseMove(pt); Pump(); }
-            }
-            if (!railBefore && w.NavRailExpanded) Console.WriteLine("  [PASS] pointer into the rail  -> the rail opens");
-            else { fails++; Console.Error.WriteLine("  [FAIL] the nav rail did not open under the pointer"); }
-            Save(w, Path.Combine(outDir, "00-rail-open.png"));
+            if (w.NavRailExpanded) Console.WriteLine("  [PASS] the rail is open and labelled");
+            else { fails++; Console.Error.WriteLine("  [FAIL] the nav rail is not open"); }
             Save(w, Path.Combine(outDir, "00-start.png"));
 
             foreach (var step in steps)
             {
                 n++;
-                var target = w.FindControl<Control>(step.Control);
+                var target = w.FindControl<Control>(step.Control)
+                    ?? w.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Name == step.Control);
                 if (target is null)
                 {
                     Fail($"step {n}: no control named {step.Control}");
