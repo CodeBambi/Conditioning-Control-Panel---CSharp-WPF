@@ -1485,3 +1485,14 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-profile-dialogs: +360
 - Customize dialog: 12 scene banners + 12 preset avatars from Core CosmeticsPool, pin tiles draw achievement art (artless pins dropped, as WPF), tiles take Enter/Space; titles use Core Achievement.TitleName.
 - Wardrobe editor stage paints the chosen banner (top-aligned like the hero); both rows stub -> wired.
+
+## avalonia-port/rows-pink-rush: +341
+- win-pink-rush stub -> wired: engine- or session-armed 10-min roll, 60 s 3x XP (Core PinkRushRules shared with WPF), popup + wash; panic/engine stop end it.
+- PinkRushTests, 8 fail-proofs (logged); no live rush (random 10-min trigger).
+
+## avalonia-port/rows-attention-check: +60
+- ctrl-attention-check: WPF never starts AttentionCheckService, so the ring stays unshown on both heads. A parity scan test (fail-proven both ways) pins this. Row stays stub with corrected notes.
+
+## avalonia-port/help-attach: +224
+- Every WPF tab ? (33 SetHelpContent buttons + Intake Pass) is now attached from shell startup through an x:Name table; all 23 help loops can be opened (ctrl-help-popover, feat-help-loops: stub -> wired).
+- New HelpButtonsTests: a WPF-source table scan, plus a shell walk that clicks every ?; fail-proven.

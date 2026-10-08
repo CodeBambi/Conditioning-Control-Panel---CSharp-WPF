@@ -108,6 +108,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// <summary>Closes the one currently open card, if any.</summary>
         public static void CloseActive() => _active?.Close();
 
+        internal static bool IsAttached(Button button) => button?.GetValue(InstanceProperty) is HelpPopover;
+
+        internal static string? SectionOf(Button button) =>
+            button?.GetValue(InstanceProperty) is HelpPopover popover ? popover._content.SectionId : null;
+
         internal static bool IsOpen(Button button) =>
             button?.GetValue(InstanceProperty) is HelpPopover popover && popover._popup.IsOpen;
 
