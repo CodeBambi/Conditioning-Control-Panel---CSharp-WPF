@@ -170,8 +170,14 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 Relayout(); RefreshMotion();
                 _visibilityWatch?.Dispose();
                 _visibilityWatch = EffectiveVisibility.Watch(this, RefreshMotion);
+                AmbientFxCanvas.Env.MotionGateChanged -= RefreshMotion;
+                AmbientFxCanvas.Env.MotionGateChanged += RefreshMotion;
             };
-            Unloaded += (_, _) => { StopBreath(); _visibilityWatch?.Dispose(); _visibilityWatch = null; };
+            Unloaded += (_, _) =>
+            {
+                StopBreath(); _visibilityWatch?.Dispose(); _visibilityWatch = null;
+                AmbientFxCanvas.Env.MotionGateChanged -= RefreshMotion;
+            };
             SizeChanged += (_, _) => Relayout();
         }
 

@@ -150,3 +150,26 @@ internal static class AvaloniaTestDispatcher
         completion.TrySetResult(null);
     }
 }
+
+/// <summary>
+/// Every Avalonia test host links this file. Point XDG_CONFIG_HOME at a throwaway folder before any
+/// test runs: building a GeneralSettingsSection (any MainShellWindow does) reconciles the session
+/// autostart entry under $XDG_CONFIG_HOME/autostart, and ApplicationData resolves there too, so
+/// without this a test reads, adopts or writes the developer's real ~/.config.
+/// </summary>
+internal static class TestXdgConfigSandbox
+{
+    internal static readonly string Root = System.IO.Path.Combine(
+        System.IO.Path.GetTempPath(), "ccp-test-xdg-" + Guid.NewGuid().ToString("N"));
+
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Initialize()
+    {
+        System.IO.Directory.CreateDirectory(Root);
+        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", Root);
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try { System.IO.Directory.Delete(Root, recursive: true); } catch { }
+        };
+    }
+}

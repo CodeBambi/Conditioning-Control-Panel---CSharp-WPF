@@ -1,0 +1,17 @@
+<!-- PORTED from ConditioningControlPanel/Features/MonitorTargetPicker.xaml: the app-wide
+     "Show content on" picker (All monitors / Primary only / one named monitor). -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.MonitorTargetPicker">
+    <Grid MinHeight="34" Background="Transparent" ColumnDefinitions="*,Auto"
+          ToolTip.Tip="{loc:Str tooltip_content_monitor}">
+        <TextBlock Grid.Column="0" Text="{loc:Str setting_content_monitor}"
+                   FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"
+                   Margin="0,0,12,0"/>
+        <ComboBox Grid.Column="1" x:Name="CmbContentMonitor"
+                  Width="200" MinHeight="28" VerticalAlignment="Center" FontSize="11"
+                  Theme="{StaticResource DarkComboBoxStyle}"/>
+    </Grid>
+</UserControl>

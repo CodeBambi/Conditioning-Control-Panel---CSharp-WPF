@@ -140,6 +140,23 @@
                     </ComboBox>
                 </Grid>
 
+                <!-- THE BACK ROOM effects intensity. Item order IS the BackRoomFxIntensity ordinal
+                     (Calm=0, Normal=1, Full=2) - never reorder. Motion caps it: below Full plays Calm. -->
+                <Grid MinHeight="34" Margin="0,2,0,0" ColumnDefinitions="*,Auto"
+                      ToolTip.Tip="{loc:Str tooltip_backroom_fx_intensity}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                               Text="{loc:Str setting_backroom_fx_intensity}"
+                               Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                    <ComboBox Grid.Column="1" x:Name="CmbBackRoomFxIntensity"
+                              Theme="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                              Width="110" MinHeight="28" VerticalAlignment="Center" SelectedIndex="1"
+                              SelectionChanged="CmbBackRoomFxIntensity_SelectionChanged">
+                        <ComboBoxItem Content="{loc:Str label_backroom_fx_calm}"/>
+                        <ComboBoxItem Content="{loc:Str label_backroom_fx_normal}"/>
+                        <ComboBoxItem Content="{loc:Str label_backroom_fx_full}"/>
+                    </ComboBox>
+                </Grid>
+
                 <!-- ============================================================
                      DO NOT DISTURB. The user lists the apps they watch things in;
                      while one of those owns the FOREGROUND window the app stops
