@@ -62,7 +62,7 @@ public sealed class SpiralHelpPopoverTests
 
                 host.Show();
                 Dispatcher.UIThread.RunJobs();
-                Assert.True(view.IsShowingSpiral, "the mounted view did not enter its current spiral presentation path");
+                Assert.False(view.IsShowingSpiral, "no descent block on this head: the room is the waiting panel, which also carries the help chip");
                 Assert.True(button!.IsVisible);
 
                 Move(host, button);
@@ -81,7 +81,7 @@ public sealed class SpiralHelpPopoverTests
                 Assert.True(HelpPopover.IsOpen(button));
                 Assert.Same(firstPopup, HelpPopover.PopupContent(button));
 
-                // The real fog predicate is still WPF-only on this branch. This presentation-only
+                // The fog needs an armed fuse (SpiralRoomShellTests covers it). This presentation-only
                 // invocation exercises the existing false gate without inventing a state setter.
                 var applyHelp = typeof(SpiralTabView).GetMethod(
                     "ApplyHelpChip", BindingFlags.Instance | BindingFlags.NonPublic);
