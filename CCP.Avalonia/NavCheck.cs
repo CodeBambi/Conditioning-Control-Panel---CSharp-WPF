@@ -1,12 +1,21 @@
 using System;
+using System.IO;
+using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using ConditioningControlPanel.Avalonia.Views.Windows;
+using ConditioningControlPanel.Nav;
 
 namespace ConditioningControlPanel.Avalonia
 {
     /// <summary>
     /// The smallest thing that fails if shell navigation breaks. Constructs the shell headlessly,
-    /// calls ShowTab the way every rail handler does, and asserts what the user would see.
+    /// calls ShowTab the way the rail, the strip and every deep link do, and asserts what the user
+    /// would see. Nav rework (WPF 7.1.5): the section rail, the on-page strip, the registry and the
+    /// old keys that must keep resolving.
+    ///
+    /// <para>Set CCP_NAV_SHOTS to a directory to also save d1-home.png, d1-studio.png and
+    /// d1-social.png of the shell (the lane's visual proof).</para>
     /// </summary>
     internal static class NavCheck
     {
@@ -15,34 +24,40 @@ namespace ConditioningControlPanel.Avalonia
             RenderProof.EnsureSetUp();
             var w = new MainShellWindow();
             // Shown, not merely constructed: a TopLevel that was never opened has no popup host,
-            // so ToolTip.SetIsOpen throws from inside its own property-changed handler and the
-            // tooltip sweep below could not be probed at all. Show() is what RenderProof does too.
+            // so the tooltip sweep below could not be probed at all.
             w.Show();
             global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             bool Vis(string n) => w.FindControl<Control>(n)?.IsVisible == true;
-            double H(string n) => w.FindControl<Control>(n)?.Height ?? -1;
-            bool Clickable(string n) => w.FindControl<Control>(n)?.IsHitTestVisible == true;
+            var strip = w.NavStrip!;
 
             var fails = 0;
             void Check(bool ok, string what) { if (!ok) { fails++; Console.Error.WriteLine("FAIL " + what); } }
 
             Check(Vis("SettingsTab") && !Vis("QuestsTab"), "startup shows Settings only");
 
+            // ---- the rail ----------------------------------------------------------------
+            var expected = NavRailRules.RailSections.Select(s => s.Key).Append(NavSections.Settings).ToArray();
+            Check(w.NavRailSectionOrder.SequenceEqual(expected),
+                  $"the rail paints the seven sections + the gear in table order (saw {string.Join(",", w.NavRailSectionOrder)})");
+            Check(w.NavRailHooked, "the rail's setup ran");
+            Check(w.LitNavSection == NavSections.Home, $"startup lights Home (saw {w.LitNavSection})");
+            Check(Math.Abs((w.FindControl<Control>("NavSidebar")?.Bounds.Width ?? 0) - 96) < 0.5,
+                  $"the rail fills the 96px column (saw {w.FindControl<Control>("NavSidebar")?.Bounds.Width})");
+            Check(!strip.IsVisible, "Home draws no strip");
+            Check(Math.Abs(w.Width - WindowFitRule.DefaultWidthDip) < 0.5 && Math.Abs(w.Height - WindowFitRule.DefaultHeightDip) < 0.5,
+                  $"the window opens at WindowFitRule's default size (saw {w.Width}x{w.Height})");
+
             w.ShowTab("quests");
             Check(Vis("QuestsTab") && !Vis("SettingsTab"), "quests shows QuestsTab and hides Settings");
-            Check(w.ExpandedDoor == "you", "quests unfolds the You door only");
-            // The assertion that was missing, and the reason a real defect survived every green run:
-            // the old check asked only about Height. The markup parks each closed door at
-            // IsHitTestVisible="False", and the port never set it back, so an open door drew its
-            // entries and not one of them could be clicked. Height alone cannot see that.
-            Check(Clickable("DoorPanelYou") && !Clickable("DoorPanelStudio"),
-                  "an unfolded door's entries can actually be clicked");
+            Check(w.LitNavSection == NavSections.You && w.ExpandedDoor == "you", "quests lights the You row");
+            Check(strip.IsVisible && strip.Section == NavSections.You && strip.ActivePillKey == "quests",
+                  $"the You strip shows with Quests lit (saw {strip.Section}/{strip.ActivePillKey})");
+            Check(strip.PillKeys.SequenceEqual(NavStripRules.Pills(NavSections.You).Select(p => p.Key)),
+                  "the strip draws the section's pills in table order, hidden tabs skipped");
 
-            w.ShowTab("Haptics");                       // alias + case-insensitive
+            w.ShowTab("Haptics");                       // module alias + case-insensitive
             Check(Vis("StudioTab") && !Vis("QuestsTab"), "haptics lands on StudioTab");
-            Check(w.ExpandedDoor == "studio", "haptics unfolds the Studio door only");
-            Check(Clickable("DoorPanelStudio") && !Clickable("DoorPanelYou"),
-                  "the door that closed stops taking clicks");
+            Check(w.LitNavSection == NavSections.Studio && strip.ActivePillKey == "haptics", "haptics lights Studio and its pill");
 
             w.ShowTab("no-such-tab");
             Check(Vis("StudioTab"), "unknown key keeps the current tab, never a blank page");
@@ -50,12 +65,64 @@ namespace ConditioningControlPanel.Avalonia
             w.ShowTab("fyp");
             Check(Vis("StudioTab") && w.CurrentTab == "haptics", "a window key leaves the tab alone");
 
-            // ---- the entry points every "Configure in Settings" button calls -------------------
-            // Each is ShowTab + a focus call on the landed tab, so the assertion is both halves:
-            // the right panel visible AND the right thing selected inside it.
+            // ---- Ctrl+1..7 and last-tab memory ----------------------------------------------
+            Check(w.TryOpenSectionShortcut(3) && w.CurrentTab == "companion" && Vis("CompanionTab"),
+                  $"Ctrl+3 opens Companion (saw {w.CurrentTab})");
+            Check(!w.TryOpenSectionShortcut(8), "Ctrl+8 has no row");
+            w.ShowTab("leaderboard");
+            w.ShowTab("settings");
+            w.OpenNavSection(NavSections.Social);
+            Check(w.CurrentTab == "leaderboard", $"a section row returns to its last tab (saw {w.CurrentTab})");
+            w.OpenNavSection(NavSections.Home);
+            Check(w.CurrentTab == "settings", "the Home row always opens the dashboard");
 
-            // The lit mini-rail pill is the section the user sees revealed; the scroll itself needs
-            // a measured layout, which a headless construct does not have.
+            // ---- the strip ------------------------------------------------------------------
+            w.ShowTab("availablesubjects");
+            strip.ChooseForTests("leaderboard");
+            Check(w.CurrentTab == "leaderboard" && strip.ActivePillKey == "leaderboard", "a strip pill navigates and lights");
+            Check(strip.PillLockedFor("remotecontrol") && !strip.PillLockedFor("leaderboard"),
+                  "a tier-1 pill wears its lock with no account service, a free pill never does");
+            Check(strip.CrumbText.Length > 0, "the breadcrumb names the section and page");
+
+            // ---- old keys and zones ---------------------------------------------------------
+            w.ShowTab("exclusives");
+            Check(w.CurrentTab == "premium" && Vis("ExclusivesTab") && w.LitNavSection == NavSections.Home,
+                  $"'exclusives' lands on Home > Premium silently (saw {w.CurrentTab})");
+            w.ShowTab("together");
+            Check(w.CurrentTab == "availablesubjects" && w.LitNavSection == NavSections.Social,
+                  $"'together' lands on Social > Lobby (saw {w.CurrentTab})");
+            w.ShowTab("lab");
+            Check(Vis("PlayTab") && strip.ActivePillKey == "play", "'lab' is the Play wall, Games lit");
+            w.ShowTab("playsessions");
+            Check(Vis("PlayTab") && strip.ActivePillKey == "playsessions", "the Sessions zone is the Play wall, its pill lit");
+            w.ShowTab("ramp");
+            Check(Vis("StudioTab") && w.StudioRack!.SelectedRackKey == "scheduler",
+                  $"the Ramp zone selects the rack's scheduler (saw {w.StudioRack!.SelectedRackKey})");
+            w.ShowTab("folders");
+            Check(Vis("AssetsTab") && w.LitNavSection == NavSections.Library, "Folders is the Assets page in Library");
+
+            // ---- the registry ---------------------------------------------------------------
+            var page = new Border { Name = "NavCheckLanePage" };
+            w.RegisterNavTab(new MainShellWindow.NavTabHost("leash", () => page));
+            w.ShowTab("leash");
+            Check(page.IsVisible && !Vis("AssetsTab") && w.LitNavSection == NavSections.Social,
+                  "a registered page shows in the page cell and lights its section");
+            w.ShowTab("studio");
+            Check(!page.IsVisible && Vis("StudioTab"), "leaving a registered page hides it");
+
+            // ---- badges ---------------------------------------------------------------------
+            NavBadges.Set(NavSections.Social, 3);
+            var b1 = w.NavBadgeFor(NavSections.Social);
+            Check(b1.Text == "3" && b1.Opacity == 1.0, $"a fresh count shows bright (saw {b1.Text}@{b1.Opacity})");
+            w.ShowTab("availablesubjects");
+            var b2 = w.NavBadgeFor(NavSections.Social);
+            Check(b2.Text == "3" && b2.Opacity < 1.0, $"visiting the section dims the seen count (saw {b2.Text}@{b2.Opacity})");
+            NavBadges.Set(NavSections.Social, 12);
+            Check(w.NavBadgeFor(NavSections.Social).Text == "9+", "past nine reads 9+");
+            NavBadges.Set(NavSections.Social, 0);
+            Check(w.NavBadgeFor(NavSections.Social).Text == "", "a count of 0 clears the badge");
+
+            // ---- the entry points every "Configure in Settings" button calls -------------------
             string Section() =>
                 w.AppSettingsPage!.FindControl<RadioButton>("SectionPillGeneral")?.IsChecked == true ? "general"
                 : w.AppSettingsPage!.FindControl<RadioButton>("SectionPillDevices")?.IsChecked == true ? "devices"
@@ -65,6 +132,7 @@ namespace ConditioningControlPanel.Avalonia
             w.OpenAppSettingsSection("data");
             Check(Vis("AppSettingsTab") && !Vis("StudioTab"), "OpenAppSettingsSection lands on the Settings door");
             Check(Section() == "data", $"OpenAppSettingsSection('data') reveals Data (saw {Section()})");
+            Check(w.LitNavSection == NavSections.Settings && strip.IsVisible, "Settings lights the gear and shows its header");
 
             w.OpenDeviceSettings();
             Check(Vis("AppSettingsTab"), "OpenDeviceSettings lands on the Settings door");
@@ -79,32 +147,17 @@ namespace ConditioningControlPanel.Avalonia
             Check(w.StudioRack!.SelectedRackKey == "flash",
                   $"OpenStudioModule('flash') selects the Flash module (saw {w.StudioRack!.SelectedRackKey})");
 
-            // Haptics is the one rack key that must route as a TAB, not as a rack row - the bark
-            // and the first-visit card hang off the tab key. Same landing, different announcement.
             w.OpenStudioModule("haptics");
             Check(Vis("StudioTab") && w.CurrentTab == "haptics", "OpenStudioModule('haptics') routes through ShowTab");
             Check(w.StudioRack!.SelectedRackKey == "haptics",
                   $"the haptics route still selects the Haptics module (saw {w.StudioRack!.SelectedRackKey})");
 
-            // The ? panel. Its rows still cannot START a tour (App.Tutorial is not on this head),
-            // but the panel itself now opens and closes - which is what every one of those rows
-            // did first, and what none of them did while this file's handlers were empty.
             w.SetTutorialOverlay(true);
             Check(Vis("MainTutorialOverlay"), "the ? panel opens");
             w.SetTutorialOverlay(false);
             Check(!Vis("MainTutorialOverlay"), "the ? panel closes");
 
-            // ---- the shell members that WERE restored but had no caller ------------------------
-            // Each assertion drives the CALL SITE, not the member, and checks something the user
-            // would see - a control found, a pill's state written, a footer with a number in it.
-            // Break the one line each adds and the corresponding check fails.
-
-            // 1. ShowTab closes a stale tooltip (MainShellWindow.ToolTipHygiene.cs). The window
-            //    itself stands in for the owner: FindOpenToolTipOwner descends the pointer-over
-            //    chain and tests the ROOT first, and headless there is no pointer to be over
-            //    anything, so the root is the only reachable owner. It needs a Tip - Avalonia's
-            //    IsOpenChanged puts IsOpen straight back to false on a control that has none, so
-            //    a tipless probe would pass whether or not ShowTab swept anything.
+            // 1. ShowTab closes a stale tooltip (MainShellWindow.ToolTipHygiene.cs).
             ToolTip.SetTip(w, "nav-check probe");
             ToolTip.SetIsOpen(w, true);
             Check(ToolTip.GetIsOpen(w), "the tooltip probe is actually open before the sweep");
@@ -112,57 +165,52 @@ namespace ConditioningControlPanel.Avalonia
             Check(!ToolTip.GetIsOpen(w), "ShowTab closes a tooltip that was still open");
             ToolTip.SetTip(w, null);
 
-            // 2. The rail's one-time setup paints the premium pills
-            //    (MainShellWindow.NavPremiumTags.RefreshNavPremiumTags, called by
-            //    MainShellWindow.NavRail.InitializeNavRail). Forced ON first, so a no-op wiring
-            //    leaves it on and fails; the answer for every key is "not locked" on a head with no
-            //    entitlement service, which is WPF's own documented fallback.
-            var pillNames = new[]
-            {
-                "TagPremiumHaptics", "TagPremiumTakeover", "TagPremiumSheListening",
-                "TagPremiumAwareness", "TagPremiumGradedIntake", "TagPremiumLockdown",
-                "TagPremiumBlinkTrainer", "TagPremiumRemoteControl",
-            };
-            var pillsFound = 0;
-            foreach (var n in pillNames)
-                if (w.FindControl<Border>(n) is { } pill) { pillsFound++; pill.IsVisible = true; }
-            Check(pillsFound == pillNames.Length,
-                  $"every rail premium pill resolves by name (saw {pillsFound} of {pillNames.Length})");
+            // 2. The Back row keeps its room: toggling it never moves the section rows.
+            var back = w.Named<Button>("BtnNavBack")!;
+            var host = back.Parent as Control;
+            Check(back.IsVisible && host?.Height == 24, "Back shows inside its fixed 24px host once there is history");
 
-            w.InitializeNavRail();
-            var pillsLit = 0;
-            foreach (var n in pillNames)
-                if (w.FindControl<Border>(n)?.IsVisible == true) pillsLit++;
-            Check(pillsLit == 0, $"the rail setup repaints every pill from the roster (saw {pillsLit} still lit)");
-
-            // 3. Landing on the Profile tab repaints the sharing footer
-            //    (MainShellWindow.ProfileCard.UpdateProfileSharingSummary, called from OnTabShown).
-            //    The string is "{0} on · {1} private", so the separator proves it was FORMATTED -
-            //    a raw key or an unresolved lookup carries no interpunct.
+            // 3. Landing on the Profile tab repaints the sharing footer (OnTabShown).
             w.ShowTab("discord");
             var sharing = w.ProfilePage?.FindControl<TextBlock>("TxtProfileSharingSummary")?.Text;
-            Check(!string.IsNullOrEmpty(sharing) && sharing!.Contains('\u00b7'),
+            Check(!string.IsNullOrEmpty(sharing) && sharing!.Contains('·'),
                   $"the Profile tab repaints its sharing footer (saw \"{sharing}\")");
 
-            // 4. DiscordTabView's ctor calls InitializeComponent, not AvaloniaXamlLoader.Load, so
-            //    its generated x:Name fields are ASSIGNED. Under the loader every one of them was
-            //    permanently null - which compiles, renders and reviews clean. Reading the field and
-            //    demanding it be the same object FindControl returns is the only thing that tells
-            //    the two ctors apart, and it fails the moment anyone puts the loader back.
-            var page = w.ProfilePage;
-            Check(page is not null && ReferenceEquals(page.TxtProfileSharingSummary,
-                                                     page.FindControl<TextBlock>("TxtProfileSharingSummary")),
+            // 4. DiscordTabView's generated x:Name fields are assigned (InitializeComponent).
+            var profile = w.ProfilePage;
+            Check(profile is not null && ReferenceEquals(profile.TxtProfileSharingSummary,
+                                                     profile.FindControl<TextBlock>("TxtProfileSharingSummary")),
                   "DiscordTabView's generated x:Name fields are assigned (InitializeComponent, not the loader)");
 
             w.ShowTab("settings");
-
             var shown = 0;
             foreach (var n in new[] { "SettingsTab","PresetsTab","QuestsTab","ProgramsTab","EnhancementsTab","DeeperTab","AchievementsTab","CompanionTab","PlayTab","LeaderboardTab","AssetsTab","DiscordTab","AwarenessTab","RemoteControlTab","AvailableSubjectsTab","BambiTakeoverTab","StudioTab","LockdownTab","BlinkTrainerTab","SheListeningTab","GradedIntakeTab","AppSettingsTab","SpiralTab","ExclusivesTab" })
                 if (Vis(n)) shown++;
             Check(shown == 1, $"exactly one tab visible (saw {shown})");
 
+            var shots = Environment.GetEnvironmentVariable("CCP_NAV_SHOTS");
+            if (!string.IsNullOrWhiteSpace(shots)) fails += Shoot(w, shots!);
+
             Console.WriteLine(fails == 0 ? "nav-check: shell navigation holds." : $"nav-check: {fails} failure(s).");
             return fails == 0 ? 0 : 1;
+        }
+
+        /// <summary>Home, Studio and Social, as the user sees them, into the given directory.</summary>
+        private static int Shoot(MainShellWindow w, string dir)
+        {
+            int fails = 0;
+            Directory.CreateDirectory(dir);
+            foreach (var (tab, file) in new[] { ("settings", "d1-home.png"), ("studio", "d1-studio.png"), ("availablesubjects", "d1-social.png") })
+            {
+                w.ShowTab(tab);
+                for (int i = 0; i < 4; i++) global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                using var frame = w.CaptureRenderedFrame();
+                if (frame is null) { fails++; Console.Error.WriteLine("FAIL no frame for " + tab); continue; }
+                var path = Path.Combine(dir, file);
+                frame.Save(path);
+                Console.WriteLine($"shot -> {path} ({frame.PixelSize.Width}x{frame.PixelSize.Height})");
+            }
+            return fails;
         }
     }
 }
