@@ -1,0 +1,258 @@
+<!-- PORTED from WPF 7.1.5 ConditioningControlPanel/Views/Controls/Companion/V2/ConversationPage.xaml:
+     Companion > Chat, the conversation page that stands over the collapsed room (v2 is on for
+     everyone). The header carries the companion's own switches (7.1.1): Show while it is off,
+     Pop out, Voice, Hide while it is on, and Settings, which opens the Personality page.
+
+     Deviations:
+       Style TargetType=Button (implicit) ->  Button.v2 / .v2primary / .v2quiet class styles over
+                                             a ControlTheme with a real template (traps 4 and 6)
+       BooleanToVisibilityConverter      ->  IsVisible bindings
+       DataTrigger on IsUser             ->  Border.turn / Border.turn.user classes set from code
+       TextBox IsReadOnly (selectable)   ->  SelectableTextBlock
+       AutomationProperties.LiveSetting  ->  dropped (no Avalonia equivalent)
+       SheetOverlay                      ->  dropped: every sheet has its own page now and the
+                                             WPF sheet is only a fallback where the pages are not
+                                             registered (its preview harness); here they always are. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
+             xmlns:v2="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion.V2"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.V2.ConversationPage"
+             x:DataType="v2:ConversationPageVm"
+             Foreground="#FFF8FF" FontSize="14" MinHeight="560">
+
+    <UserControl.Resources>
+        <ControlTheme x:Key="V2Button" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFF8FF"/>
+            <Setter Property="Background" Value="#2B2138"/>
+            <Setter Property="Padding" Value="13,8"/>
+            <Setter Property="Margin" Value="0,0,8,6"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#685077"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Chrome"><Setter Property="BorderBrush" Value="#F68BC8"/></Style>
+            <Style Selector="^:focus-visible /template/ Border#Chrome"><Setter Property="BorderBrush" Value="#F5A3D3"/></Style>
+            <Style Selector="^:pressed /template/ Border#Chrome"><Setter Property="Background" Value="#B52A7C"/></Style>
+            <Style Selector="^:disabled /template/ Border#Chrome"><Setter Property="Opacity" Value="0.45"/></Style>
+        </ControlTheme>
+        <LinearGradientBrush x:Key="V2PrimaryFill" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#C82D86" Offset="0"/>
+            <GradientStop Color="#8E43BC" Offset="1"/>
+        </LinearGradientBrush>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.v2"><Setter Property="Theme" Value="{StaticResource V2Button}"/></Style>
+        <Style Selector="Button.v2primary">
+            <Setter Property="Theme" Value="{StaticResource V2Button}"/>
+            <Setter Property="Background" Value="{StaticResource V2PrimaryFill}"/>
+            <Setter Property="BorderBrush" Value="#F087C6"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.v2quiet">
+            <Setter Property="Theme" Value="{StaticResource V2Button}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#D5BFDF"/>
+        </Style>
+        <Style Selector="TextBlock"><Setter Property="Foreground" Value="#FFF8FF"/></Style>
+        <Style Selector="Border.turn">
+            <Setter Property="BorderBrush" Value="#F27BBF"/>
+            <Setter Property="Background" Value="#231B30"/>
+            <Setter Property="Margin" Value="0,0,44,16"/>
+        </Style>
+        <Style Selector="Border.turn.user">
+            <Setter Property="BorderBrush" Value="#C5A4EE"/>
+            <Setter Property="Background" Value="#342344"/>
+            <Setter Property="Margin" Value="72,0,6,16"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border CornerRadius="20" Padding="24,20" BorderBrush="#4C355C" BorderThickness="1">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#201329" Offset="0"/>
+                <GradientStop Color="#140F1C" Offset="0.5"/>
+            </LinearGradientBrush>
+        </Border.Background>
+        <Grid RowDefinitions="Auto,*,Auto">
+
+            <!-- ===== header: who, how it is, and its own switches ===== -->
+            <Border BorderBrush="#49304F" BorderThickness="0,0,0,1" Padding="0,0,0,16" Margin="0,0,0,16">
+                <Grid ColumnDefinitions="84,*,Auto">
+                    <Border Width="66" Height="80" CornerRadius="18" Margin="0,0,18,0" BorderBrush="#62406B" BorderThickness="1" ClipToBounds="True">
+                        <Border.Background>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#53365F" Offset="0"/>
+                                <GradientStop Color="#211429" Offset="1"/>
+                            </RadialGradientBrush>
+                        </Border.Background>
+                        <Grid>
+                            <fx:AmbientFxCanvas x:Name="StageDust" IsHitTestVisible="False"/>
+                            <Image Source="{Binding Hero.Portrait}" Height="68" Stretch="Uniform" IsHitTestVisible="False"/>
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,18,0">
+                        <WrapPanel>
+                            <TextBlock Text="{Binding Name}" FontSize="25" FontWeight="SemiBold" Margin="0,0,16,0"/>
+                            <TextBlock x:Name="TxtStatus" Text="{Binding Status}" FontSize="12" VerticalAlignment="Center"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Flavor}" Foreground="#D7C9E2" FontSize="13" TextTrimming="CharacterEllipsis" Margin="0,5,0,0"/>
+                        <TextBlock Text="{Binding PerkCost}" Foreground="#FF9999" FontSize="12" FontWeight="SemiBold" IsVisible="{Binding HasPerkCost}"/>
+                    </StackPanel>
+                    <!-- The companion's own switches live in the header (7.1.1): the Settings button
+                         opens the Personality page, so the sheet that used to hold them is out of
+                         reach. Off, Show leads. -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnShow" Classes="v2primary" Command="{Binding Hero.ToggleShownCommand}"
+                                IsVisible="{Binding CompanionHidden}" Margin="0,0,8,0" Tag="companion-header-show">
+                            <TextBlock Text="{loc:Str companion_v2_show}"/>
+                        </Button>
+                        <Button x:Name="BtnPopOut" Classes="v2quiet" Command="{Binding Hero.DetachCommand}" Margin="0,0,4,0">
+                            <TextBlock Text="{loc:Str companion_v2_popout}"/>
+                        </Button>
+                        <Button x:Name="BtnVoice" Classes="v2quiet" Command="{Binding Hero.ToggleMuteCommand}" Margin="0,0,4,0">
+                            <TextBlock Text="{Binding VoiceLabel}"/>
+                        </Button>
+                        <Button x:Name="BtnHide" Classes="v2quiet" Command="{Binding Hero.ToggleShownCommand}"
+                                IsVisible="{Binding CompanionShown}" Margin="0,0,8,0" Tag="companion-header-hide">
+                            <TextBlock Text="{loc:Str companion_v2_hide}"/>
+                        </Button>
+                        <Button x:Name="BtnSettings" Classes="v2" Padding="12,9" Margin="0" Tag="who" Click="Sheet_Click"
+                                ToolTip.Tip="{loc:Str companion_v2_who}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI" FontSize="19"
+                                           Foreground="#F5A3D3" Margin="0,0,8,0"/>
+                                <TextBlock Text="{loc:Str tab_settings}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ===== the transcript, or the empty welcome ===== -->
+            <Grid Grid.Row="1" MinHeight="220">
+                <StackPanel IsVisible="{Binding HasNoTurns}" MaxWidth="640" VerticalAlignment="Center" Margin="20,30">
+                    <TextBlock Text="{loc:Str companion_v2_intro}" FontSize="25" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock Text="{loc:Str companion_v2_hello}" Foreground="#CBB5D8" Margin="0,12,0,24" TextWrapping="Wrap" TextAlignment="Center"/>
+                    <WrapPanel HorizontalAlignment="Center">
+                        <Button Classes="v2primary" Click="Starter_Click"><TextBlock Text="{loc:Str companion_v2_chat}"/></Button>
+                        <Button Classes="v2" Click="Starter_Click"><TextBlock Text="{loc:Str companion_v2_pick}"/></Button>
+                        <Button Classes="v2quiet" Click="Starter_Click"><TextBlock Text="{loc:Str companion_v2_capabilities}"/></Button>
+                    </WrapPanel>
+                </StackPanel>
+                <ScrollViewer x:Name="Transcript" IsVisible="{Binding HasTurns}"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="Messages" ItemsSource="{Binding Turns}" MaxWidth="920">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="v2:ConversationLine">
+                                <Border Classes="turn" Classes.user="{Binding IsUser}" CornerRadius="6" Padding="18,14" BorderThickness="3,0,0,0">
+                                    <StackPanel>
+                                        <DockPanel Margin="0,0,0,6">
+                                            <Button DockPanel.Dock="Right" Classes="v2quiet" FontSize="11" Padding="7,3" Margin="0"
+                                                    Tag="{Binding Text}" Click="Copy_Click">
+                                                <TextBlock Text="{loc:Str companion_v2_copy}"/>
+                                            </Button>
+                                            <TextBlock Text="{Binding Time}" FontSize="11" DockPanel.Dock="Right" Foreground="#BBA7C9" Margin="8,0"/>
+                                            <TextBlock Text="{Binding Speaker}" FontSize="12" FontWeight="SemiBold" Foreground="#F5A3D3"/>
+                                        </DockPanel>
+                                        <SelectableTextBlock Text="{Binding Text}" Foreground="#FFF8FF" TextWrapping="Wrap" FontSize="17"
+                                                             SelectionBrush="#965198"/>
+                                        <Button Classes="v2primary" Click="Link_Click" Margin="0,12,8,0" HorizontalAlignment="Left"
+                                                IsVisible="{Binding HasLink}" ToolTip.Tip="{Binding LinkTitle}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE768;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding LinkTitle}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <ItemsControl ItemsSource="{Binding Actions}" IsVisible="{Binding HasActions}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="v2:ConversationAction">
+                                                    <Button Classes="v2primary" Click="Activity_Click" Margin="0,12,8,0">
+                                                        <TextBlock Text="{Binding Label}"/>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <ItemsControl ItemsSource="{Binding AskChoices}" IsVisible="{Binding HasAsk}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="v2:ConversationAskChoice">
+                                                    <Button Classes="v2" Click="AskChoice_Click" IsEnabled="{Binding Enabled}" Margin="0,12,8,0" FontWeight="SemiBold"
+                                                            Background="{Binding Background}" BorderBrush="{Binding BorderColor}" Foreground="{Binding Foreground}">
+                                                        <TextBlock Text="{Binding Label}" Foreground="{Binding Foreground}"/>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- ===== start / notice / composer ===== -->
+            <StackPanel Grid.Row="2" Margin="0,14,0,0" MaxWidth="920">
+                <Border Background="#2C1F3B" BorderBrush="#664270" BorderThickness="1" Padding="16" CornerRadius="12" Margin="0,0,0,12"
+                        IsVisible="{Binding ShowStart}">
+                    <StackPanel>
+                        <WrapPanel>
+                            <Button x:Name="BtnStart" Classes="v2primary" Click="Start_Click"><TextBlock Text="{Binding StartLabel}"/></Button>
+                            <Button Classes="v2quiet" Tag="connection" Click="Sheet_Click"><TextBlock Text="{loc:Str companion_v2_local}"/></Button>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Privacy}" TextWrapping="Wrap" Margin="0,5,0,0" Foreground="#D7C9E2" FontSize="12"/>
+                    </StackPanel>
+                </Border>
+                <Border Background="#40311F" CornerRadius="9" Padding="10" Margin="0,0,0,10" IsVisible="{Binding HasNotice}">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Classes="v2" Click="Send_Click" IsVisible="{Binding CanRetry}" Margin="10,0,0,0">
+                            <TextBlock Text="{loc:Str companion_v2_retry}"/>
+                        </Button>
+                        <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                    </DockPanel>
+                </Border>
+                <Grid ColumnDefinitions="*,Auto">
+                    <Grid>
+                        <TextBox x:Name="Composer" Text="{Binding Draft}" IsReadOnly="{Binding Busy}" AcceptsReturn="True"
+                                 TextWrapping="Wrap" MinHeight="50" MaxHeight="130" Background="#231B30" Foreground="#FFF8FF"
+                                 CaretBrush="#FFF8FF" BorderBrush="#765689" Padding="12" FontSize="17"
+                                 AutomationProperties.Name="{loc:Str companion_v2_input}"/>
+                        <TextBlock Text="{loc:Str companion_v2_input}" Foreground="#BDAACA" Margin="13,13,13,0" VerticalAlignment="Top"
+                                   IsHitTestVisible="False" IsVisible="{Binding DraftEmpty}"/>
+                    </Grid>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                        <Button x:Name="BtnSend" Classes="v2primary" Click="Send_Click" IsEnabled="{Binding CanSend}" MinWidth="76" MinHeight="50" Margin="0">
+                            <TextBlock Text="{loc:Str companion_v2_send}"/>
+                        </Button>
+                        <Button Classes="v2" Click="Stop_Click" IsVisible="{Binding Busy}" Margin="0,4,0,0">
+                            <TextBlock Text="{loc:Str companion_v2_stop}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+                <DockPanel Margin="0,8,0,0">
+                    <Button Classes="v2quiet" Click="New_Click" ToolTip.Tip="{loc:Str companion_v2_history_note}" DockPanel.Dock="Right"
+                            Padding="7,3" FontSize="11" Margin="8,0,0,0" IsEnabled="{Binding CanCompose}">
+                        <TextBlock Text="{loc:Str companion_v2_new}"/>
+                    </Button>
+                    <TextBlock Text="{loc:Str companion_v2_keyboard}" Foreground="#BDAACA" FontSize="11" VerticalAlignment="Center"/>
+                </DockPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
