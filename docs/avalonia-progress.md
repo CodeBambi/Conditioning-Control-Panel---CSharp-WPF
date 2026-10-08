@@ -1418,3 +1418,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/flake-layout: +24
 - Root-caused the Blink/ChasterRaffle/EmiBook shard flakes to one test setting up headless drawing without Skia (first setup wins per testhost); fixed it.
 - Added a source-scan guard that every Avalonia test platform setup uses Skia drawing; fail-proven with a fixed order seed.
+
+## avalonia-port/rows-media-history: +547
+- win-media-history: the Media Log reads the shared MediaHistoryService, now in Core and fed by both heads. Added audio filter, thumbnails, remote Copy link / Go to Source, LibVLC video and SkiaSharp GIF preview, and Clear behind a confirm. Row stays stub: Load preview, Brain Drain producer and the MediaFailed card are still missing.
+- Tests fail-proven (window, service, scheduler LastVideoPath); live evidence in evidence/rows-media-history.
