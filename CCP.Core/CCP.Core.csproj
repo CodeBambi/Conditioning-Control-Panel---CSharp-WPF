@@ -46,6 +46,10 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Serilog" Version="3.1.1" />
     <PackageReference Include="Buttplug" Version="5.0.1" />
+    <!-- LibVLCSharp (managed only): VideoMetadataCache parses clip lengths for the video length filter.
+         3.8.5 = what LibVLCSharp.WPF resolves in the WPF head, so WPF ships unchanged; the Avalonia head
+         references 3.10.1 directly and that wins there. Natives come from each head. -->
+    <PackageReference Include="LibVLCSharp" Version="3.8.5" />
     <!-- Vosk: the speech engine (Services/Speech/SpeechEngine.cs). Managed side is netstandard2.0.
          Its build/ targets add libvosk to Core's output, picked by the BUILD MACHINE's OS (not the RID),
          and that file copies on to every consumer; heads still reference Vosk themselves. -->

@@ -372,6 +372,10 @@
             <Style Selector="^:pointerover">
                 <Setter Property="BorderBrush" Value="{DynamicResource SessionSrcImportedBrush}"/>
             </Style>
+            <!-- Keyboard reach (P17): the chip is focusable, so focus must show. -->
+            <Style Selector="^:focus-visible">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
         </ControlTheme>
 
         <ControlTheme x:Key="SdTakeawayChipTitle" TargetType="TextBlock">
@@ -702,7 +706,7 @@
                             <Border DockPanel.Dock="Right"
                                     x:Name="SessionDropZone"
                                     Theme="{StaticResource SdCatalogueChip}"
-                                    IsEnabled="False" Opacity="0.5"
+                                    Focusable="True" IsTabStop="True"
                                     ToolTip.Tip="{loc:Str tooltip_open_catalogue}">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock x:Name="DropZoneIcon"
@@ -990,10 +994,10 @@
                             </Border>
 
                             <Button x:Name="BtnRevealSpoilers"
-                                    Theme="{StaticResource OutlineButton}" Padding="12,8" FontSize="12" IsEnabled="False"
-                                    Opacity="0.5" Margin="0,0,0,13"
+                                    Theme="{StaticResource OutlineButton}" Padding="12,8" FontSize="12"
+                                    Margin="0,0,0,13"
                                     ToolTip.Tip="{loc:Str tooltip_this_will_show_all_session_settings_spoils_th}">
-                                <TextBlock Text="{loc:Str btn_reveal_details}"/>
+                                <TextBlock x:Name="TxtRevealSpoilers" Text="{loc:Str btn_reveal_details}"/>
                             </Button>
 
                             <!-- Spoiler content, hidden by default. -->

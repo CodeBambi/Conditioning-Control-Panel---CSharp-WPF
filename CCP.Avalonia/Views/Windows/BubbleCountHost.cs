@@ -24,6 +24,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         internal IReadOnlyList<Window> Messages => _messages;
         public double LastVideoDurationSeconds => BubbleCountWindow.LastVideoDurationSeconds;
+        // WPF InteractionQueue: Video, LockCard and PopQuiz claim the screen before a game may start.
+        public bool OtherInteractionActive =>
+            CoreEngine.Video?.IsPlaying == true || LockCardWindow.IsAnyOpen() || PopQuizWindow.IsAnyOpen();
 
         // The app seeds CoreDispatch (AvaloniaCoreDispatch), but headless tests do not: every door hops onto the UI thread.
         public void Show(string path, int difficulty, bool strict, Action<bool> onComplete) => Dispatcher.UIThread.Invoke(() =>

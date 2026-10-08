@@ -10,6 +10,7 @@ using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Overlays;
+using ConditioningControlPanel.Localization;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -20,6 +21,29 @@ namespace CCP.Avalonia.Tests;
 /// closes it. Skips where ffmpeg (to make the clip) or libvlc is missing.</summary>
 public sealed class MandatoryVideoOverlayTests
 {
+    [Fact]
+    public void NoVideosDialogBlamesTheLengthFilterWhenItEmptiedTheLibrary()
+    {
+        // WPF #1352 (854ac954a): files exist, the length filter kept none -> name the filter, not "add files".
+        Assert.NotNull(MandatoryVideoOverlay.Instance.Scheduler.DurationOf);   // the real overlay filters by length
+        var s = CoreSettings.Current;
+        var (min, max) = (s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds);
+        try
+        {
+            (s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds) = (52, 170);
+            var v = new ConditioningControlPanel.Services.MandatoryVideoScheduler(MandatoryVideoOverlay.Instance,
+                library: () => new[] { "/v/a.mp4", "/v/b.mp4" }) { DurationOf = _ => 20 };
+            Assert.False(v.Trigger());
+            Assert.Equal(Loc.GetF("video_length_filter_emptied", 2, "52s - 2m 50s"), MandatoryVideoOverlay.NoVideosMessage(v));
+
+            var empty = new ConditioningControlPanel.Services.MandatoryVideoScheduler(MandatoryVideoOverlay.Instance,
+                library: Array.Empty<string>) { DurationOf = _ => 20 };
+            Assert.False(empty.Trigger());
+            Assert.EndsWith(Loc.Get("video_add_files_hint"), MandatoryVideoOverlay.NoVideosMessage(empty));
+        }
+        finally { (s.VideoMinDurationSeconds, s.VideoMaxDurationSeconds) = (min, max); }
+    }
+
     [Fact]
     public async Task OpensPlaysHonoursStrictAndClosesOnEscAndEngineStop()
     {

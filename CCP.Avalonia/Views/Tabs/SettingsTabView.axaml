@@ -926,7 +926,7 @@
                             Title="Flash Images"
                             HelpSectionId="FlashImages"/>
       <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" IconB="/Resources/features/Bubble_count.png" IconA="/Resources/features/mandatory_videos.png"
-                                 TitleA="Mandatory Video" TitleB="Bubble Count"/>
+                                 TitleA="Mandatory Video" TitleB="Bubble Count" DashboardDepth="True" HelpSectionIdA="Video" HelpSectionIdB="BubbleCount"/>
       <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" Icon="/Resources/features/subliminal.png"
                             Title="Subliminals"
                             HelpSectionId="Subliminals"/>
@@ -1151,7 +1151,7 @@
       </Border>
 
       <features:SplitFeatureCard Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" IconB="/Resources/features/Pink_filter.png" IconA="/Resources/features/spiral_overlay.png"
-                                 TitleA="Spiral Overlay" TitleB="Pink Filter"/>
+                                 TitleA="Spiral Overlay" TitleB="Pink Filter" DashboardDepth="True" HelpSectionIdA="SpiralOverlay" HelpSectionIdB="PinkFilter"/>
 
       <!-- Row 3: the ? box + the immersion pair -->
       <!-- The ? BOX: today's premium feature, free for the day (DailyFreeService). The title is
@@ -1256,7 +1256,7 @@
                    Foreground="#3A2A00" FontSize="10" FontWeight="Black"/>
       </Border>
       <features:SplitFeatureCard Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" IconB="/Resources/features/brain_drain.png" IconA="/Resources/features/Mind_Wipers.png"
-                                 TitleA="Mind Wipe" TitleB="Brain Drain"/>
+                                 TitleA="Mind Wipe" TitleB="Brain Drain" DashboardDepth="True" HelpSectionIdA="MindWipe" HelpSectionIdB="BrainDrain"/>
 
       <!-- Row 4: the vault (double-wide) + the two games -->
       <!-- THE VAULT: the Exclusives storefront (Velvet Vault + the premium T2 shelf).

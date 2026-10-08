@@ -30,14 +30,14 @@
 //     neither file is this layer's. TabFxAmbientAllowed is that partial's Pr4aAmbientAllowed;
 //     reuse it, do not define a second gate.
 //   * Presets, the tab's only ambient clock - the three _cardSheen* fields, RefreshCardSheen,
-//     DetachCardSheen, FindSelectedCard, InitializePresetsFx, StaggerPresetCards. Needs
-//     Controls/CardSheenAdorner.cs ported, and needs to know which preset card is selected -
+//     DetachCardSheen, FindSelectedCard, InitializePresetsFx, StaggerPresetCards.
+//     Controls/CardSheenAdorner.cs is ported now; what is missing is which preset card is selected -
 //     MainWindow.Presets.cs's list, and MainShellWindow.Presets.cs is still a stub.
 //   * the session rack rows - the three _rowSweep* fields, PrepareSessionRowFx,
 //     SessionRow_MouseEnter/MouseLeave, Attach/Release/DetachRowSweep, LiftSessionRow,
 //     SessionRowLiftPx, SessionCardCornerRadius. Attached by
-//     MainWindow.SessionIO.BuildSessionRackRow as each row is built; nothing builds rack rows
-//     here. Needs Controls/RowSweepAdorner.cs too.
+//     MainWindow.SessionIO.BuildSessionRackRow as each row is built. The SWEEP is restored on
+//     PresetsTabView's own rack rows (Controls/RowSweepAdorner.cs); the lift is not.
 //   * ACHIEVEMENTS: ported. Stagger, tilt/lift/pop and the unlocked gate (PrepareAchievementTileFx,
 //     SetAchievementTileUnlocked, AchievementTile_MouseEnter/MouseLeave, TiltAchievementTile,
 //     StaggerAchievementTiles) live in CCP.Avalonia/Views/Tabs/AchievementsTabView.Fx.cs, next to the grid.

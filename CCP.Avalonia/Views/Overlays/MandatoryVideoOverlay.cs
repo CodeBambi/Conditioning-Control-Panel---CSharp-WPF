@@ -71,7 +71,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private DispatcherTimer? _graceTimer, _guard;
         private readonly Stopwatch _sinceShow = new();
 
-        private MandatoryVideoOverlay() => Scheduler = new MandatoryVideoScheduler(this);
+        private MandatoryVideoOverlay() => Scheduler = new MandatoryVideoScheduler(this) { DurationOf = LengthOf };
+
+        /// <summary>WPF VideoService.MetadataCache: created on first use on the shared LibVLC; a miss starts
+        /// a background parse and the clip is kept this refill.</summary>
+        private static VideoMetadataCache? _lengths;
+        private static double? LengthOf(string path)
+        {
+            if (_lengths == null && LibVlcAudio.Shared is { } vlc) _lengths = new VideoMetadataCache(vlc);
+            var d = _lengths?.TryGetDuration(path);
+            if (d == null && _lengths != null) _ = _lengths.GetOrComputeDurationAsync(path);
+            return d;
+        }
 
         /// <summary>The global panic listener can stop a video right now (LockCardWindow #875's
         /// PanicHookIsInstalled). Tests swap it.</summary>
@@ -691,9 +702,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
             if (owner == null) return;
-            var msg = Loc.GetF("video_no_videos_found", Path.Combine(CorePaths.EffectiveAssets, "videos")) + "\n\n" + Loc.Get("video_add_files_hint");
-            _ = Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("video_no_videos_title"), msg);
+            _ = Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("video_no_videos_title"), NoVideosMessage(Scheduler));
         });
+
+        /// <summary>WPF TriggerVideo's guidance text: #1352 names the length filter when it emptied a
+        /// library that has files, else the add-files hint.</summary>
+        internal static string NoVideosMessage(MandatoryVideoScheduler s)
+        {
+            var c = CoreSettings.Current;
+            if (NoVideosReason.LengthFilterEmptied(s.LastFunnelEnabled, s.LastFunnelDuration))
+                return Loc.GetF("video_length_filter_emptied", s.LastFunnelEnabled,
+                    NoVideosReason.FormatRange(c.VideoMinDurationSeconds, c.VideoMaxDurationSeconds));
+            return Loc.GetF("video_no_videos_found", Path.Combine(CorePaths.EffectiveAssets, "videos")) + "\n\n" + Loc.Get("video_add_files_hint");
+        }
 
         public double CloseAll() => Dispatcher.UIThread.Invoke(() =>
         {

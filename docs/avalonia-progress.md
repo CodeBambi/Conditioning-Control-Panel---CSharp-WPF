@@ -1330,3 +1330,56 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-floating-text: +357
 - FloatingWord overlay (WPF keyframes) thrown by friends drawer actions; bouncing text corner_hit achievement and real-time topmost re-assert (measured 0.4-0.7 s).
+
+## avalonia-port/launcher-fx: +1025
+- Launcher FX on one visibility/focus-gated frame clock: spirals and ambient, hover lift/tilt/glow, exit beat with guard, edge glint, fade, sounds and melody (Core).
+
+## avalonia-port/rows-splash-startup: +222
+- Splash fronts real launches with WPF steps/percentages; failed startup logged and exits non-zero; timing within noise of no-splash.
+
+## avalonia-port/rows-feat-bubble-count: +200
+- Bubble Count waits behind video / lock card / quiz like WPF TriggerGame; panic and stop drop the waiting game.
+
+## avalonia-port/rows-lockdown-tab: +325
+- Lockdown title-bar badge wired (clock, hide mask, click/Enter -> tab); Emergency Exit breath (off under Photosafe, motion Off, minimised); quest hint + Hide-clock toggle.
+- 3 shell tests, 9 itemised fail-proofs; live evidence rows-lockdown-tab/; row stays stub (theme, Possession, Dose, Strict greying, EE games, system keys).
+
+## avalonia-port/help-loops-kit: +988
+- Help loops kit finished (Back blur, rounded corners fixed) + BouncingText, BlinkTrainer, KeywordTriggers, Audio, Scheduler scenes (7/23).
+
+## avalonia-port/rows-presets-tab: +448
+- Presets session detail matches WPF SelectSession (feature line, minutes, XP multiplier + colour, summary, spoiler lines).
+- Reveal Details behind WPF's three warnings (9 languages); Community Catalogue chip opens the catalogue (click/keys, focus-visible).
+
+## avalonia-port/rows-descent-migration: +325
+- Main sync #5 fc9640ff7 ported: the +10% XP bonus only for migrated accounts (Core XpBonusFor, applied by ProgressionBank); the server's migration confirmation shared in Core (DescentMigrationAck, called by SyncPush and WPF); own-card badge + (+N%) readout (DescentReceipt moved to Core).
+- abac4fa02 needs-port (lane descent-migration-offer): offer acceptance and ApplyChoice stay WPF-only, decision B (docs/avalonia-decisions.md).
+
+## avalonia-port/rows-takeover-ui: +165
+- Takeover tab: WPF copy restored, Open-models-folder button, Configure-in-Settings -> Devices, no-voiced-mantras chant hint; shell-takeover-ui -> wired.
+- TakeoverTabUiTests (6 fail-proofs) + Keincheck live run; still stub: Mantra Chant playback, wallpaper hooks.
+
+## avalonia-port/rows-feat-video: +141
+- Length filter (min/max) at selection via Core MandatoryVideoScheduler.KeepByLength; VideoMetadataCache + NoVideosReason git-mv'd to Core (managed LibVLCSharp 3.8.5).
+- Folded 854ac954a: the no-videos dialog names the length filter and range when it emptied the library; tests fail-proven, live evidence in rows-feat-video/.
+
+## avalonia-port/panic-surfaces: +265
+- One PanicSurfaces registry: panic key, tray and safe word call StopAll once (WPF order); id/order test and source-scan guard so new starters register.
+
+## avalonia-port/rows-quests-tab: +444
+- Quests: QuestComplete haptic post + on-tab completion burst (shared EventBurstLayer, Achievements reuses it); season title shimmer + gradient-panel particle drift on a 24 fps clock that runs only while shown. Rows stay stub (voice line, off-tab burst, stamps, art/punch card missing).
+
+## avalonia-port/rows-gate-fx: +1010
+- PremiumGateFx (fog/padlock glow/sheen on 8 gates), row sweep, perimeter comet, card sheen adorners; effects park off-screen; host gaps listed.
+
+## avalonia-port/rows-split-card: +305
+- feat-split-card (stays stub): breath, glow, sweep, title and hover now follow the MotionFx/PerformanceProfile/window-focus gates; off halves dim; each half has its own "?" (HelpPopover); rings are rounded. `SplitFeatureCardFxTests` fail-proven per gate.
+- Still missing: DashboardCardDepth, greyscale HalfMute, live re-gate on a settings change (shell-dashboard-fx caller).
+
+## avalonia-port/rows-feat-flash: +411
+- Flash Drift & Bounce plus the speed slider (#1265): picker on the card, windows moved on one shared tick. Core gets FlashMotion, FlashDrag and FlashPendulumRig by `git mv`. FlashDriftTests: 4 tests, each seen to fail when broken.
+- Ownership seam PrizeOwnership: unowned in Release, CCP_PRIZE_GRANTS override in Debug only. New row svc-prize-ownership. feat-flash stays stub; the missing list is in the row.
+
+## avalonia-port/rows-spiral-tab: +285
+- SpiralRoom moved to Core; the Avalonia Spiral tab and rail row now read the real fuse and settings (live fog T-minus, phase pulse and flare, gold-ellipsis rail row). SpiralRoomShellTests is fail-proven 3 ways and checked live in Keincheck.
+- Both rows stay stub: the block and withhold services (DescentService, DescentMigrationService) are still WPF-only, so the Spiral/embed state, FIRST LIGHT, SFX and the bark are still missing.
