@@ -1293,3 +1293,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/port-misc: +425
 - Quests: Takeover time credited while minimised; cards and streak header quote what the completion pays (Core StreakPaidOn, shield-aware).
 - Presets drop sniffing, programs active-mod-first, Deeper opacity % labels; 7 rows folded.
+
+## avalonia-port/port-remote: +505
+- Controller leave hands back the panic key and the controller's own strict lock; remote haptics play and stop on panic (both heads) or leave; late commands refused after panic/leave.
+- disable_panic refused with WPF wording; faster polling while busy; HUD pill and live preview folded into shell-remote-control.
