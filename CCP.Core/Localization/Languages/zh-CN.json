@@ -2254,6 +2254,8 @@
   "label_local_ai_done_detail": "{0} 在你的机器上用 {1}秒 回答。后续回复快得多",
   "label_local_ai_error_heading": "设置未完成",
   "error_local_ai_start_service_failed": "Ollama已安装但服务无法启动。请尝试从开始菜单启动Ollama，然后返回",
+  "error_local_ai_start_service_failed_linux": "Ollama 已安装，但服务无法启动。请用 `systemctl start ollama` 启动，或在终端运行 `ollama serve`，然后点击重试。",
+  "error_local_ai_not_found_linux": "未找到 Ollama：PATH、/usr/local/bin 或 /usr/bin 中没有 `ollama`，localhost:11434 也无响应。请安装后点击重试。",
   "error_local_ai_download_failed": "无法下载 Ollama 安装程序。请检查网络连接后重试。\n\n详情：{0}",
   "error_local_ai_install_failed": "Ollama安装程序未成功完成。你可以重试，或从ollama.com手动安装Ollama",
   "error_local_ai_install_failed_detail": "Ollama安装失败。\n\n详情：{0}",

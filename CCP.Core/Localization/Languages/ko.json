@@ -4402,6 +4402,8 @@
   "label_local_ai_done_detail": "{0}이(가) 이 컴퓨터에서 {1}초 만에 답했어요. 다음 답변은 훨씬 빨라져요.",
   "label_local_ai_error_heading": "설정을 마치지 못했어요",
   "error_local_ai_start_service_failed": "Ollama는 설치됐지만 서비스가 시작되지 않았어요. 시작 메뉴에서 Ollama를 실행한 뒤 다시 와 주세요.",
+  "error_local_ai_start_service_failed_linux": "Ollama가 설치되어 있지만 서비스를 시작할 수 없습니다. `systemctl start ollama`로 시작하거나 터미널에서 `ollama serve`를 실행한 뒤 다시 시도를 누르세요.",
+  "error_local_ai_not_found_linux": "Ollama를 찾을 수 없습니다: PATH, /usr/local/bin, /usr/bin에 `ollama`가 없고 localhost:11434도 응답하지 않습니다. 설치한 뒤 다시 시도를 누르세요.",
   "error_local_ai_download_failed": "Ollama 설치 파일을 받지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.\n\n자세히: {0}",
   "error_local_ai_install_failed": "Ollama 설치 파일이 제대로 끝나지 않았어요. 다시 시도하거나 ollama.com에서 직접 설치할 수 있어요.",
   "error_local_ai_install_failed_detail": "Ollama 설치에 실패했어요.\n\n자세히: {0}",

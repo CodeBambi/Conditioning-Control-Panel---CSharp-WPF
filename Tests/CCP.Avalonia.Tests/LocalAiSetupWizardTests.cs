@@ -131,10 +131,17 @@ public sealed class LocalAiSetupWizardTests
             Assert.True(enter.Handled);
             Assert.Empty(opened);
 
+            // Continue while Ollama is still missing says so instead of silently showing Consent again.
+            Click(w, "BtnPrimary");
+            Assert.True(C<StackPanel>(w, "PanelError").IsVisible);
+            Assert.Equal(Loc.Get("error_local_ai_not_found_linux"), C<TextBox>(w, "TxtErrorDetail").Text);
+            Click(w, "BtnPrimary"); // Retry: still missing -> back to Consent
+            Assert.True(C<StackPanel>(w, "PanelConsent").IsVisible);
+
             // The user installed Ollama meanwhile: Continue detects it running without the model.
             fakes.DetectResults.Enqueue(Status.RunningNoModel);
             Click(w, "BtnPrimary");
-            Assert.Equal(new[] { "detect:test-model:1b", "detect:test-model:1b", "pull:test-model:1b" }, fakes.Calls);
+            Assert.Equal(new[] { "detect:test-model:1b", "detect:test-model:1b", "detect:test-model:1b", "detect:test-model:1b", "pull:test-model:1b" }, fakes.Calls);
             Assert.True(C<StackPanel>(w, "PanelPullModel").IsVisible);
         }
         finally { w.Close(); CoreSettings.ServiceProvider = null; }
@@ -182,7 +189,7 @@ public sealed class LocalAiSetupWizardTests
             w.Show();
             Pump();
             Assert.True(C<StackPanel>(w, "PanelError").IsVisible);
-            Assert.Equal(Loc.Get("error_local_ai_start_service_failed"), C<TextBox>(w, "TxtErrorDetail").Text);
+            Assert.Equal(Loc.Get("error_local_ai_start_service_failed_linux"), C<TextBox>(w, "TxtErrorDetail").Text);
 
             // Retry re-detects; the service now comes up and the model is missing -> pull.
             fakes.ServiceStarts = true;

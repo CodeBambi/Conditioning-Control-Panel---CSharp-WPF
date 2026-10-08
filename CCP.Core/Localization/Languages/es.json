@@ -4402,6 +4402,8 @@
   "label_local_ai_done_detail": "{0} respondió en {1}s en tu máquina. Las siguientes respuestas serán mucho más rápidas.",
   "label_local_ai_error_heading": "La configuración no terminó",
   "error_local_ai_start_service_failed": "Ollama está instalado pero el servicio no pudo arrancar. Prueba a abrir Ollama desde tu menú Inicio y vuelve luego.",
+  "error_local_ai_start_service_failed_linux": "Ollama está instalado, pero el servicio no pudo iniciarse. Inícialo con `systemctl start ollama` o ejecuta `ollama serve` en una terminal y luego pulsa Reintentar.",
+  "error_local_ai_not_found_linux": "No se encontró Ollama: no hay `ollama` en el PATH, en /usr/local/bin ni en /usr/bin, y nada responde en localhost:11434. Instálalo y luego pulsa Reintentar.",
   "error_local_ai_download_failed": "No se pudo descargar el instalador de Ollama. Revisa tu conexión a internet e inténtalo de nuevo.\n\nDetalles: {0}",
   "error_local_ai_install_failed": "El instalador de Ollama no terminó correctamente. Puedes intentarlo de nuevo, o instalar Ollama a mano desde ollama.com.",
   "error_local_ai_install_failed_detail": "La instalación de Ollama falló.\n\nDetalles: {0}",

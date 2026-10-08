@@ -10,9 +10,14 @@ using Xunit;
 
 namespace CCP.Core.Tests;
 
+/// <summary>Runs alone: one test prepends to the process-wide PATH.</summary>
+[CollectionDefinition("ProcessPath", DisableParallelization = true)]
+public sealed class ProcessPathCollection { }
+
 /// <summary>OllamaSetupService off Windows: `ollama` comes from PATH (no installer, decision in
 /// docs/avalonia-decisions.md), and exit stops only the `ollama serve` this app spawned. The binary
 /// is a shell-script fake and the API a loopback fake; no real ollama, pull or network.</summary>
+[Collection("ProcessPath")]
 public sealed class OllamaSetupServiceTests
 {
     [Fact]

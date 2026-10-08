@@ -232,7 +232,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private CancellationTokenSource? _cts;
 
-        private async Task StartDetectAsync()
+        /// <param name="afterManualInstall">Linux Continue: still nothing found is an error, not a silent return to Consent.</param>
+        private async Task StartDetectAsync(bool afterManualInstall = false)
         {
             Show(Step.Detecting);
             _cts = new CancellationTokenSource();
@@ -254,7 +255,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                         var started = await StartService(_cts.Token);
                         if (!started)
                         {
-                            ShowError(Loc.Get("error_local_ai_start_service_failed"));
+                            ShowError(Loc.Get(CanAutoInstall ? "error_local_ai_start_service_failed" : "error_local_ai_start_service_failed_linux"));
                             return;
                         }
                         var snap2 = await Detect(_targetModel, _cts.Token);
@@ -264,7 +265,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
                     case OllamaSetupService.InstallStatus.NotInstalled:
                     default:
-                        Show(Step.Consent);
+                        if (afterManualInstall) ShowError(Loc.Get("error_local_ai_not_found_linux"));
+                        else Show(Step.Consent);
                         return;
                 }
             }
@@ -495,7 +497,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     }
                     // Off Windows Continue re-runs detection: the user installed Ollama themselves.
                     if (CanAutoInstall) await StartDownloadInstallerAsync();
-                    else await StartDetectAsync();
+                    else await StartDetectAsync(afterManualInstall: true);
                     break;
                 case Step.Done:
                     Close(true);
