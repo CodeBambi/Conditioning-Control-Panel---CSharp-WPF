@@ -314,6 +314,114 @@ public sealed class BlinkTrainerSessionTests
         });
     }
 
+    /// <summary>WPF ApplyBlinkTrainerLiveVideo: a video pick hides both images and plays on the stage;
+    /// an image pick stops it; hiding the page parks everything (no subscription, video or tick);
+    /// the help button carries the BlinkTrainer card (WPF MainWindow.Presets.cs:118).</summary>
+    [Fact]
+    public void Stage_PlaysAVideoPick_ParksWhenHidden_AndHelpIsAttached()
+    {
+        WithSession((dir, _) =>
+        {
+            var oldPremium = CoreEntitlement.HasPremiumProvider;
+            var oldVideos = CoreSettings.Current.BlinkTrainerIncludeVideos;
+            CoreSettings.Current.BlinkTrainerIncludeVideos = true;
+            File.WriteAllBytes(Path.Combine(dir, "clip.mp4"), new byte[] { 0 });   // never decoded: LibVLC is not set up here
+            CoreEntitlement.HasPremiumProvider = () => true;
+            var tab = new BlinkTrainerTabView { IsVisible = false };
+            var host = new Window { Width = 1400, Height = 1000, Content = tab };
+            host.Show();
+            try
+            {
+                tab.IsVisible = true;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(tab.LivePreview);
+                Assert.Equal(HelpContentService.GetContent("BlinkTrainer").Title,
+                    global::Avalonia.Automation.AutomationProperties.GetName(tab.FindControl<Button>("HelpBtnBlinkTrainer")!));
+
+                var a = tab.FindControl<Image>("BlinkTrainerStageImageA")!;
+                var b = tab.FindControl<Image>("BlinkTrainerStageImageB")!;
+                var video = tab.FindControl<Image>("BlinkTrainerStageVideo")!;
+                bool sawVideo = false, sawImage = false;
+                for (int i = 0; i < 4; i++)   // two assets, never the same twice: they alternate
+                {
+                    tab.OnStagePreviewBlink();
+                    if (tab.StageVideoPath != null)
+                    {
+                        Assert.EndsWith("clip.mp4", tab.StageVideoPath);
+                        Assert.Equal(1, video.Opacity);
+                        Assert.Equal(0, Math.Max(a.Opacity, b.Opacity));
+                        sawVideo = true;
+                    }
+                    else
+                    {
+                        Assert.Equal(0, video.Opacity);
+                        Assert.Equal(1, Math.Max(a.Opacity, b.Opacity));
+                        sawImage = true;
+                    }
+                }
+                Assert.True(sawVideo && sawImage);
+                if (tab.StageVideoPath == null) tab.OnStagePreviewBlink();
+                Assert.NotNull(tab.StageVideoPath);
+
+                tab.IsVisible = false;   // what ShowTab does on leaving
+                Assert.Null(tab.StageVideoPath);
+                Assert.False(tab.LivePreview);
+                Assert.False(tab.DemoRunning);
+                tab.IsVisible = true;
+                Assert.True(tab.LivePreview);
+            }
+            finally
+            {
+                host.Close();
+                CoreEntitlement.HasPremiumProvider = oldPremium;
+                CoreSettings.Current.BlinkTrainerIncludeVideos = oldVideos;
+            }
+        });
+    }
+
+    /// <summary>The countdown ticks only while the page shows (P01), and the shell's status dot
+    /// breathes only while a session runs (WPF SetBlinkTrainerStatusPulse).</summary>
+    [Fact]
+    public void RunningSession_DotBreathes_AndTheCountdownFollowsVisibility()
+    {
+        WithSession((_, _) =>
+        {
+            var shell = new ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+            shell.Show();
+            shell.Activate();
+            try
+            {
+                var tab = shell.FindControl<BlinkTrainerTabView>("BlinkTrainerTab")!;
+                shell.ShowTab("blinktrainer");
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(tab.IsVisible);
+                var dot = tab.FindControl<Control>("BlinkTrainerStatusDot")!;
+                Assert.Null(dot.Effect);
+
+                Assert.True(WebcamTracker.Instance.Start());
+                Assert.True(BlinkTrainerSession.Start(shell));
+                Dispatcher.UIThread.RunJobs();
+                Assert.IsType<global::Avalonia.Media.DropShadowEffect>(dot.Effect);
+                Assert.True(tab.CountdownTicking);
+
+                shell.ShowTab("settings");
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(tab.CountdownTicking);
+                Assert.Null(dot.Effect);   // a hidden tab's dot does not breathe (IsEffectivelyVisible)
+                shell.ShowTab("blinktrainer");
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(tab.CountdownTicking);
+                Assert.IsType<global::Avalonia.Media.DropShadowEffect>(dot.Effect);
+
+                BlinkTrainerSession.Stop();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Null(dot.Effect);
+                Assert.False(tab.CountdownTicking);
+            }
+            finally { shell.Close(); }
+        });
+    }
+
     [Fact]
     public void TrayStopEverything_StopsTheCameraAndTheSession()
     {

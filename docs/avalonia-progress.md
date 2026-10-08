@@ -1422,3 +1422,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-media-history: +547
 - win-media-history: the Media Log reads the shared MediaHistoryService, now in Core and fed by both heads. Added audio filter, thumbnails, remote Copy link / Go to Source, LibVLC video and SkiaSharp GIF preview, and Clear behind a confirm. Row stays stub: Load preview, Brain Drain producer and the MediaFailed card are still missing.
 - Tests fail-proven (window, service, scheduler LastVideoPath); live evidence in evidence/rows-media-history.
+
+## avalonia-port/rows-blink-trainer: +208
+- Blink Trainer stage plays video picks (VLC), status dot breathes while running, help popover attached, hidden page parks all work.
+- Duplicate parity rows merged; both rows stay stub with the remaining list.
