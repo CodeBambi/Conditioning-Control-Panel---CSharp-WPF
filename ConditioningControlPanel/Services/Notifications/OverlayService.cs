@@ -1275,11 +1275,7 @@ public class OverlayService : IDisposable
     /// that exact curve (nobody's 10-50% setting changes); above it the line climbs steeply so
     /// 100% paints at 0.6. Every spiral opacity path goes through here.
     /// </summary>
-    internal static double SpiralPaint(double f)
-    {
-        f = double.IsNaN(f) ? 0 : Math.Clamp(f, 0, 1);
-        return f <= 0.5 ? f * 0.1 : 0.05 + (f - 0.5) * 1.1;
-    }
+    internal static double SpiralPaint(double f) => SpiralFrames.Paint(f);
 
     private void ApplySpiralOpacityDirect(double opacity)
     {
@@ -1763,38 +1759,16 @@ public class OverlayService : IDisposable
                     if (propertyItem?.Value != null && propertyItem.Value.Length >= 4)
                     {
                         frameDelayMs = BitConverter.ToInt32(propertyItem.Value, 0) * 10;
-                        if (frameDelayMs < 20 || frameDelayMs > 500) frameDelayMs = 50;
                     }
                 }
                 catch (Exception ex) { App.Logger?.Debug("Spiral: Could not read GIF frame delay: {Error}", ex.Message); }
 
-                delay = TimeSpan.FromMilliseconds(frameDelayMs);
-
-                // Downscale + budget the frame cache (#572 "3.5 GB / laggy" report): frames were
-                // decoded at the GIF's native size with no cap — a fullscreen-sized custom spiral
-                // (SpiralPath) at 120 Bgra32 frames retains ~1 GB. The spiral is stretched over
-                // the whole screen at low opacity, so capping the long side loses nothing
-                // visually, and the byte budget bounds the worst case regardless of dimensions.
-                const int maxDimension = 1280;
-                const long maxCacheBytes = 300L * 1024 * 1024;
-
-                double frameScale = Math.Min(1.0, (double)maxDimension / Math.Max(gif.Width, gif.Height));
-                int frameW = Math.Max(1, (int)Math.Round(gif.Width * frameScale));
-                int frameH = Math.Max(1, (int)Math.Round(gif.Height * frameScale));
-                long bytesPerFrame = (long)frameW * frameH * 4;
-
-                var maxFrames = (int)Math.Min(Math.Min(frameCount, 120),
-                    Math.Max(8, maxCacheBytes / Math.Max(1, bytesPerFrame)));
-                // Ceiling, not integer division: floor-step keeps frames 0..maxFrames-1 and
-                // silently drops the tail for any GIF with maxFrames <= frameCount < 2*maxFrames,
-                // breaking the loop point (#683 family). Ceiling subsamples the whole clip evenly;
-                // scaling the delay by the stride preserves the wall-clock loop duration.
-                var step = Math.Max(1, (int)Math.Ceiling(frameCount / (double)maxFrames));
-                if (step > 1)
-                    delay = TimeSpan.FromMilliseconds(frameDelayMs * step);
-                if (maxFrames < Math.Min(frameCount, 120))
+                // Downscale + budget the frame cache (#572), stride and delay: SpiralFrames.Plan, shared with every head.
+                var (frameW, frameH, maxFrames, step, delayMs) = SpiralFrames.Plan(gif.Width, gif.Height, frameCount, frameDelayMs);
+                delay = TimeSpan.FromMilliseconds(delayMs);
+                if (maxFrames < Math.Min(frameCount, SpiralFrames.MaxFrames))
                     App.Logger?.Warning("Spiral: frame cache capped at {Frames} frames ({W}x{H}) to stay under {MB} MB — a smaller spiral GIF will loop smoother",
-                        maxFrames, frameW, frameH, maxCacheBytes / (1024 * 1024));
+                        maxFrames, frameW, frameH, SpiralFrames.MaxCacheBytes / (1024 * 1024));
 
                 for (int i = 0; i < frameCount && frames.Count < maxFrames; i += step)
                 {
