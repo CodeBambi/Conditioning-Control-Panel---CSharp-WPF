@@ -4,6 +4,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using Avalonia.Media;
+using System.Linq;
 using Avalonia.Threading;
 using ConditioningControlPanel.Models;
 using Serilog;
@@ -51,6 +53,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ChkFlashGazePop.IsCheckedChanged += ChkFlashGazePop_Changed;
             ChkFlashGazeLinger.IsCheckedChanged += ChkFlashGazeLinger_Changed;
             SliderFlashLingerMs.ValueChanged += SliderFlashLingerMs_Changed;
+            CmbMotion.SelectionChanged += CmbMotion_Changed;
+            SliderDriftSpeed.ValueChanged += SliderDriftSpeed_Changed;
 
             LoadFromSettings();
 
@@ -124,8 +128,86 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 ChkFlashAvoidCenter.IsChecked = s.FlashAvoidCenter;
                 SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
                 TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
+                SliderDriftSpeed.Value = s.FlashDriftSpeed;
+                TxtDriftSpeed.Text = FormatDriftSpeed(s.FlashDriftSpeed);
+                BuildMotionPicker();
             }
             finally { _isLoading = false; }
+        }
+
+        // ---- Flashes v2 motion picker (WPF FlashFeatureControl.xaml.cs:414-560) ----------------
+        // WPF rebuilds on PrizeGrants.GrantsChanged; ownership never changes at runtime on this head
+        // (PrizeOwnership), so the rebuild on load/rebind is all there is to do.
+
+        /// <summary>Still always, Drift and Bounce with its v2 pill when owned, Mix once anything v2 is
+        /// owned; with nothing owned the box stays hidden. Pendulum is not offered: this head cannot
+        /// play it yet (it would play Still).</summary>
+        private void BuildMotionPicker()
+        {
+            var drift = Platform.PrizeOwnership.IsGranted(Platform.PrizeOwnership.FlashDriftBounce);
+            BoxFlashV2.IsVisible = RowMotion.IsVisible = drift;
+            CmbMotion.Items.Clear();
+            AddMotionChoice(FlashMotionStyle.Still, "option_flash_motion_still", v2: false);
+            if (drift)
+            {
+                AddMotionChoice(FlashMotionStyle.DriftBounce, "option_flash_motion_drift", v2: true);
+                AddMotionChoice(FlashMotionStyle.Mix, "option_flash_motion_mix", v2: false);
+            }
+            // A style with no row here (unowned, Pendulum) shows as Still, which is how it plays.
+            var style = CoreSettings.Current.FlashMotionStyle;
+            CmbMotion.SelectedItem = CmbMotion.Items.OfType<ComboBoxItem>().FirstOrDefault(i => i.Tag is FlashMotionStyle t && t == style)
+                ?? CmbMotion.Items[0];
+            UpdateDriftSpeedRow();
+        }
+
+        private void AddMotionChoice(FlashMotionStyle style, string key, bool v2)
+        {
+            var row = new StackPanel { Orientation = global::Avalonia.Layout.Orientation.Horizontal };
+            row.Children.Add(new TextBlock { Text = ConditioningControlPanel.Localization.Loc.Get(key), VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center });
+            if (v2)
+                row.Children.Add(new Border
+                {
+                    Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(6, 2, 7, 3), CornerRadius = new CornerRadius(7),
+                    Background = new SolidColorBrush(Color.FromArgb(0xD9, 0x1A, 0x1A, 0x2E)),
+                    BorderBrush = V2Brush, BorderThickness = new Thickness(1), IsHitTestVisible = false,
+                    VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+                    Child = new TextBlock { Text = ConditioningControlPanel.Localization.Loc.Get("badge_v2"), Foreground = V2Brush, FontSize = 9, FontWeight = FontWeight.Bold },
+                });
+            CmbMotion.Items.Add(new ComboBoxItem { Content = row, Tag = style });
+        }
+
+        private static readonly IBrush V2Brush = new SolidColorBrush(Color.Parse("#FFE08A"));
+
+        private void CmbMotion_Changed(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (CmbMotion.SelectedItem is not ComboBoxItem { Tag: FlashMotionStyle style }) return;
+            UpdateDriftSpeedRow();
+            if (CoreSettings.Current.FlashMotionStyle == style) return;
+            CoreSettings.Current.FlashMotionStyle = style;
+            CoreSettings.Save();
+            // No service bounce: every spawn resolves the picker, so the next flash uses it.
+        }
+
+        /// <summary>#1265: the speed row shows only while Drift and Bounce is owned and the picker can
+        /// roll it (Drift and Bounce itself, or Mix).</summary>
+        private void UpdateDriftSpeedRow()
+        {
+            var picked = (CmbMotion.SelectedItem as ComboBoxItem)?.Tag as FlashMotionStyle?;
+            RowDriftSpeed.IsVisible = Platform.PrizeOwnership.IsGranted(Platform.PrizeOwnership.FlashDriftBounce)
+                && picked is FlashMotionStyle.DriftBounce or FlashMotionStyle.Mix;
+        }
+
+        private static string FormatDriftSpeed(double v)
+            => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "x";
+
+        private void SliderDriftSpeed_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            s.FlashDriftSpeed = e.NewValue;
+            TxtDriftSpeed.Text = FormatDriftSpeed(s.FlashDriftSpeed);
+            CoreSettings.Save();
         }
 
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -146,6 +228,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 e.PropertyName == nameof(AppSettings.FlashGazeLingerEnabled) ||
                 e.PropertyName == nameof(AppSettings.FlashGazeLingerExtensionMs) ||
                 e.PropertyName == nameof(AppSettings.FlashAvoidCenter) ||
+                e.PropertyName == nameof(AppSettings.FlashMotionStyle) ||
+                e.PropertyName == nameof(AppSettings.FlashDriftSpeed) ||
                 e.PropertyName == nameof(AppSettings.FlashCenterExclusionPercent))
             {
                 Dispatcher.UIThread.Post(LoadFromSettings);

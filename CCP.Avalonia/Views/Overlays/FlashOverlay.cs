@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     ///
     /// <para>ponytail: not here yet, each a later branch - audio + ducking (lifetime then follows the sound's length), clickable
     /// flashes (hydra multiply / XP / pops - FlashClickable is ignored, always click-through),
-    /// GIF animation (first frame only), glow, content-pack and remote pools, avatar pre-announce.</para>
+    /// the Pendulum motion style (Drift and Bounce is below), GIF animation (first frame only), glow, content-pack and remote pools, avatar pre-announce.</para>
     /// </summary>
     internal static class FlashOverlay
     {
@@ -99,14 +99,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var refused = false;
                 for (var i = 0; i < flashes.Count; i++)
                 {
-                    var (bmp, rect, path) = flashes[i];
+                    var (bmp, rect, path, screen) = flashes[i];
                     var last = i == flashes.Count - 1;
                     DispatcherTimer.RunOnce(() =>
                     {
                         try
                         {
                             if (refused || _closed || generation != _generation || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
-                            refused = !Spawn(bmp, rect, alpha, fade, lifetime);
+                            refused = !Spawn(bmp, rect, screen, alpha, fade, lifetime);
                             // WPF FlashService.cs:1608 records the batch; per shown image here, so the
                             // log's media count is exactly what reached the screen.
                             if (!refused) App.Sessions?.SessionLog.RecordImages(new[] { path });
@@ -157,7 +157,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// BEFORE SetOverrideRedirect so its XSync covers them: the window maps already
         /// click-through and at alpha 0, never as one opaque or clickable frame. False (window
         /// closed) when the platform refuses.</summary>
-        private static bool Spawn(Bitmap bmp, PixelRect rect, double alpha, TimeSpan fade, TimeSpan lifetime)
+        private static bool Spawn(Bitmap bmp, PixelRect rect, PixelRect screen, double alpha, TimeSpan fade, TimeSpan lifetime)
         {
             var w = new FlashOverlayWindow(bmp);
             if (!X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, rect))
@@ -172,7 +172,69 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             Active.Add(entry);
             w.Show();
             w.Run(alpha, fade, lifetime);
+            if (BuildMotion(rect, screen, CoreSettings.Current, Rng) is { } motion) StartDrift(w, motion);
             return true;
+        }
+
+        // ---- Flashes v2 motion: Drift and Bounce (WPF FlashService.SpawnLayerVisual + FlashLayer tick) ----
+
+        /// <summary>Stepped clock for the drift tick (tests swap it).</summary>
+        internal static TimeProvider Clock = TimeProvider.System;
+        internal static readonly List<(Window Window, FlashMotionState Motion)> Drifting = new();
+        private static DispatcherTimer? _driftTimer;
+        private static long _lastDriftTick;
+
+        /// <summary>
+        /// The motion one flash plays, or null for Still. WPF ResolveMotionStyle + FlashMotion.Create
+        /// + the #1265 speed (FlashDriftSpeed x the rolled velocity), in screen pixels over the spawn
+        /// monitor, like WPF's world px. Ownership is <see cref="PrizeOwnership"/>; this head has no
+        /// pendulum yet, so a Pendulum pick (synced profile) plays Still and Mix rolls Still or Drift.
+        /// </summary>
+        internal static FlashMotionState? BuildMotion(PixelRect rect, PixelRect screen, AppSettings s, Random rng)
+        {
+            if (s.FlashMotionStyle == FlashMotionStyle.Still) return null;
+            var style = FlashMotion.Resolve(s.FlashMotionStyle, PrizeOwnership.IsGranted(PrizeOwnership.FlashDriftBounce),
+                ownsPendulum: false, s.MotionLevel, rng);
+            if (style != FlashMotionStyle.DriftBounce) return null;
+            var m = FlashMotion.Create(style, rect.X, rect.Y, rect.Width, rect.Height,
+                screen.X, screen.Y, screen.Width, screen.Height, s.MotionLevel, rng);
+            if (m.Style != FlashMotionStyle.DriftBounce) return null;
+            m.Vx *= s.FlashDriftSpeed;
+            m.Vy *= s.FlashDriftSpeed;
+            return m;
+        }
+
+        /// <summary>Moves <paramref name="w"/> with <paramref name="m"/> on the one shared tick, which
+        /// runs only while some flash drifts: closing the last (expiry, Stop, panic via CloseAll)
+        /// stops it.</summary>
+        internal static void StartDrift(Window w, FlashMotionState m)
+        {
+            var entry = (w, m);
+            Drifting.Add(entry);
+            w.Closed += (_, _) =>
+            {
+                Drifting.Remove(entry);
+                if (Drifting.Count == 0) { _driftTimer?.Stop(); _driftTimer = null; }
+            };
+            if (_driftTimer != null) return;
+            _lastDriftTick = Clock.GetTimestamp();
+            _driftTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) => DriftTick());
+            _driftTimer.Start();
+        }
+
+        /// <summary>True while the shared drift tick is running.</summary>
+        internal static bool DriftRunning => _driftTimer != null;
+
+        /// <summary>One frame: real elapsed time since the last (P40), FlashMotion.Step, and a window
+        /// move only when the position changed - a move, never a re-render.</summary>
+        internal static void DriftTick()
+        {
+            var now = Clock.GetTimestamp();
+            var dt = Clock.GetElapsedTime(_lastDriftTick, now).TotalSeconds;
+            _lastDriftTick = now;
+            foreach (var (w, m) in Drifting)
+                if (FlashMotion.Step(m, dt))
+                    w.Position = new PixelPoint((int)Math.Round(m.X), (int)Math.Round(m.Y));
         }
 
         /// <summary>Close every flash on screen and drop the spawns still queued. <paramref name="final"/>
@@ -205,12 +267,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// from the header size alone, so each picture is decoded AT its display size like WPF's
         /// decode-at-display-size - never a full-resolution source held per window.
         /// </summary>
-        private static List<(Bitmap Bitmap, PixelRect Rect, string Path)> LoadPictures(int count, IReadOnlyList<Screen> screens,
+        private static List<(Bitmap Bitmap, PixelRect Rect, string Path, PixelRect Screen)> LoadPictures(int count, IReadOnlyList<Screen> screens,
             int[] targets, AppSettings s, List<PixelRect> occupied, int? size)
         {
             var root = CorePaths.EffectiveAssets;
             var dir = Path.Combine(root, "images");
-            var result = new List<(Bitmap, PixelRect, string)>(count);
+            var result = new List<(Bitmap, PixelRect, string, PixelRect)>(count);
             if (!Directory.Exists(dir) || targets.Length == 0) return result;
 
             var files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
@@ -233,7 +295,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     var screen = screens[targets[Rng.Next(targets.Length)]];
                     var rect = Place(screen.Bounds, screen.Scaling, info.Width, info.Height, s, Rng, occupied, size);
                     using var stream = File.OpenRead(path);
-                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, path));
+                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, path, screen.Bounds));
                     occupied.Add(rect);
                 }
                 catch (Exception ex) { Log.Debug("Flash: could not decode {Path}: {E}", path, ex.Message); }
