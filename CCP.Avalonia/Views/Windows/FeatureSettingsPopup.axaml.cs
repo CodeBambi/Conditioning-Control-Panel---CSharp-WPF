@@ -576,7 +576,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // not ported: Views/Dialogs/InputDialog is already the same dialog on this head -
             // title, prompt, text box, Cancel/OK - and it carries the app's loc strings.
             var dialog = new Dialogs.InputDialog("Add Phrase", "Enter a new phrase:");
-            if (await dialog.ShowDialog<bool?>(owner) != true) return;
+            if (await dialog.ShowDialogSafe<bool?>(owner) != true) return;
 
             var text = dialog.ResultText;
             if (string.IsNullOrWhiteSpace(text)) return;

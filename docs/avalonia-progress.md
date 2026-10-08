@@ -1402,3 +1402,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/help-loops-b: +744
 - Help-loop scenes SpiralOverlay, GazeMinigame, Video, BubblePop, BrainDrain, MindWipe and BubbleCount ported line-for-line from WPF (14 of 23 done). Headless frames are saved per step, and the live BubblePop `?` shows the loop.
 - Six of these scenes still have no Avalonia entry point: the SplitFeatureCard help ids and the GazeMinigame help attach.
+
+## avalonia-port/lockdown-hidden-fix: +176
+- Dialogs no longer crash with a hidden shell owner (ShowDialogSafe, ownerless fallback like WPF); Lockdown activate from tray works.
+- Headless test hides the shell and activates via the real button; fail-proven.

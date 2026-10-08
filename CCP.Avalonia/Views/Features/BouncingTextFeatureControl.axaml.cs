@@ -324,7 +324,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var editor = new TextEditorDialog("Bouncing Text Phrases", s.BouncingTextPool);
             try
             {
-                if (await editor.ShowDialog<bool?>(owner) == true && editor.ResultData != null)
+                if (await editor.ShowDialogSafe<bool?>(owner) == true && editor.ResultData != null)
                 {
                     s.BouncingTextPool = editor.ResultData;
                     CoreSettings.Save();
