@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using ConditioningControlPanel.Views.Controls;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -14,7 +14,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// <para>On WPF this file is a forwarding shim: every handler hands straight to the MainWindow
     /// partial (ConditioningControlPanel/MainWindow/MainWindow.Haptics.cs), which owns all the
-    /// state. That partial has not moved, so the 34 forwards are stubs with the same names.</para>
+    /// state. Here the view owns it (Connection.cs + Dials.cs), because this view calls
+    /// InitializeComponent and its x:Name fields are real (CLAUDE.md trap 7).</para>
     ///
     /// <para><b>The art hooks are real again.</b> WPF's Loaded/Unloaded pair repainted the vibe.png
     /// plates through ModResourceResolver; here <see cref="Helpers.ModArt.TryLoad"/> answers the
@@ -28,73 +29,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             InitializeComponent();
 
-            // Placeholder data. On WPF, MainWindow.Haptics.cs builds these three lists from
-            // App.Haptics / HapticDeviceManager and the HapticSettings routing rules; the VM types
-            // (Views/Controls/HapticUiModels.cs) use System.Windows.Visibility, so they cannot move
-            // as-is. Seeded here so --render-all proves the four DataTemplates and their
-            // ControlThemes actually draw - an empty ItemsControl hides a template-less control
-            // (CLAUDE.md trap 4). Labels, icons and order copied from MainWindow.Haptics.cs:71-131.
-            ProviderChipsList.ItemsSource = new List<HapticProviderChipSample>
-            {
-                new() { Label = "Lovense",  IsConnected = true,  IsEnabledForConnect = true },
-                new() { Label = "Intiface", IsConnected = false, IsEnabledForConnect = true },
-                new() { Label = "Mock",     IsConnected = false, IsEnabledForConnect = false },
-            };
-
-            ToyCardsList.ItemsSource = new List<HapticToyCardSample>
-            {
-                new()
+            // The real VMs (moved to Core with WPF's MainWindow.Haptics.cs:61-140 builders): chips,
+            // the four routing groups sharing one expansion scope, and the device-fed toy cards.
+            ProviderChipsList.ItemsSource = _providerChips;
+            RoutingGroupsList.ItemsSource = _routingGroups =
+                HapticRoutingGroupVm.BuildDefault(Cfg, _rowScope, (_, _) =>
                 {
-                    DeviceKey = "lovense:lush-3", Name = "Lush 3", ProviderLabel = "Lovense",
-                    BatteryText = "84%", BatteryVisible = true, ToyEnabled = true,
-                    Capabilities = new List<string> { "VIBE x2", "DEPTH" },
-                    Nickname = "", RoleIndex = 0, TrimPercent = 100, TrimText = "100%",
-                },
-                new()
-                {
-                    DeviceKey = "buttplug:handy", Name = "The Handy", ProviderLabel = "Intiface",
-                    BatteryText = "", BatteryVisible = false, ToyEnabled = false,
-                    Capabilities = new List<string> { "THRUST", "VIBE" },
-                    Nickname = "", RoleIndex = 3, TrimPercent = 60, TrimText = "60%",
-                },
-            };
-
-            RoutingGroupsList.ItemsSource = new List<HapticRoutingGroupSample>
-            {
-                new()
-                {
-                    Icon = "🌀", Title = "Core",
-                    Rows = new List<HapticRoutingRowSample>
-                    {
-                        // One row open, one closed, one disabled: the open row proves the drawer,
-                        // the disabled row proves the .rowoff class the WPF DataTriggers became.
-                        new() { Icon = "⚡", Label = "Flash click", ValueSummary = "50% · Pulse · All",
-                                RowEnabled = true, IsExpanded = true, IntensityPercent = 50,
-                                IntensityText = "50%", ModeVisible = true, ModeIndex = 1, RoleIndex = 0 },
-                        new() { Icon = "💥", Label = "Flash show", ValueSummary = "70% · Wave · Reward",
-                                RowEnabled = true, IsExpanded = false, IntensityPercent = 70,
-                                IntensityText = "70%", ModeVisible = true, ModeIndex = 2, RoleIndex = 1 },
-                        new() { Icon = "🔑", Label = "Keyword", ValueSummary = "Off",
-                                RowEnabled = false, IsExpanded = false, IntensityPercent = 0,
-                                IntensityText = "0%", ModeVisible = true, ModeIndex = 0, RoleIndex = 0 },
-                    },
-                },
-                new()
-                {
-                    Icon = "🎬", Title = "Media",
-                    Rows = new List<HapticRoutingRowSample>
-                    {
-                        // A LAYER row, not an event row: no pattern picker (ModeVisible false).
-                        new() { Icon = "🎵", Label = "Audio sync", ValueSummary = "80% · All",
-                                RowEnabled = true, IsExpanded = false, IntensityPercent = 80,
-                                IntensityText = "80%", ModeVisible = false, ModeIndex = 0, RoleIndex = 0 },
-                    },
-                },
-            };
-
-            // WPF fills this from the live device list; one entry so the themed ComboBox draws text.
-            CmbPatternToy.Items.Add(new ComboBoxItem { Content = "Lush 3" });
-            CmbPatternToy.SelectedIndex = 0;
+                    RefreshAudioSyncCardVisibility();
+                    Controls.AppSettings.AudioSettingsBinder.RaiseChanged();   // Settings shows the pair only while the row is on
+                });
+            ToyCardsList.ItemsSource = _toyCards;
+            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) SyncLiveStatusTimer(); };
 
             ApplyFeatureArt();
             LoadHapticsSettingsToUi();
@@ -105,14 +50,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             CoreMods.ModChanged += OnModChanged;
             ApplyFeatureArt();
+            _attached = true;
             HookHapticService(true);
-            RefreshHapticConnectionUi();
+            RefreshHapticToys();
+            SyncLiveStatusTimer();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             CoreMods.ModChanged -= OnModChanged;
+            _attached = false;
             HookHapticService(false);
+            SyncLiveStatusTimer();
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -138,16 +87,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ImgVideoHapticSync.Source = art;
         }
 
-        // Wired: enable (premium gate), providers, addresses, auto-connect, connect/panic/test, help,
-        // intensity and max power (HapticsTabView.Connection.cs). ponytail: the empty handlers below
-        // (per-toy test, DtRH, pattern preview, sync dials, Phase F) and the three sample lists
-        // above - toy cards, provider chips, routing rows - still need MainWindow.Haptics.cs's VMs.
+        // Every handler is wired (HapticsTabView.Connection.cs + HapticsTabView.Dials.cs), mirroring
+        // WPF MainWindow.Haptics.cs, which owns them there.
         private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
         private void ChkHapticsEnabled_Changed(object? sender, RoutedEventArgs e) => OnHapticsEnabledChanged();
         private void BtnHapticConnect_Click(object? sender, RoutedEventArgs e) => OnHapticConnectClicked();
         private void BtnHapticPanic_Click(object? sender, RoutedEventArgs e) => OnHapticPanicClicked();
         private void BtnHapticTest_Click(object? sender, RoutedEventArgs e) => OnHapticTestClicked();
-        private void BtnHapticToyTest_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnHapticToyTest_Click(object? sender, RoutedEventArgs e) => OnHapticToyTestClicked(sender);
         private async void BtnHapticsHelp_Click(object? sender, RoutedEventArgs e)
         {
             // WPF: the wizard rewrites provider flags and addresses, so re-read afterwards.
@@ -175,86 +122,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
         private void SliderHapticIntensity_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtHapticIntensity != null) OnHapticIntensityChanged(); }
         private void SliderHapticMaxPower_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtHapticMaxPower != null) OnHapticMaxPowerChanged(); }
-        private void SliderHapticDtrhAmbient_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void CmbHapticDtrhDensity_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
-        private void CmbPatternMode_SelectionChanged(object? sender, SelectionChangedEventArgs e) { }
-        private void SliderPatternIntensity_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void BtnPatternPlay_Click(object? sender, RoutedEventArgs e) { }
-        private void PatternPreviewCanvas_SizeChanged(object? sender, SizeChangedEventArgs e) { }
-        private void SliderVideoHapticDelay_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderVideoHapticPower_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
+        private void SliderHapticDtrhAmbient_Changed(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtHapticDtrhAmbient != null) OnDtrhAmbientChanged(); }
+        private void CmbHapticDtrhDensity_SelectionChanged(object? sender, SelectionChangedEventArgs e) => OnDtrhDensityChanged();
+        private void CmbPatternMode_SelectionChanged(object? sender, SelectionChangedEventArgs e) => UpdateHapticPatternPreview();
+        private void SliderPatternIntensity_Changed(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtPatternIntensity == null) return; TxtPatternIntensity.Text = $"{(int)SliderPatternIntensity.Value}%"; UpdateHapticPatternPreview(); }
+        private void BtnPatternPlay_Click(object? sender, RoutedEventArgs e) => OnPatternPlayClicked();
+        private void PatternPreviewCanvas_SizeChanged(object? sender, SizeChangedEventArgs e) => UpdateHapticPatternPreview();
+        private void SliderVideoHapticDelay_Changed(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtVideoHapticDelay != null) OnSyncDelayChanged(); }
+        private void SliderVideoHapticPower_Changed(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtVideoHapticPower != null) OnSyncPowerChanged(); }
 
         // ---- Phase F: temperament, toy input, FunScript, luminance, audio advanced ----
 
-        private void RbHapticTemperament_Checked(object? sender, RoutedEventArgs e) { }
-        private void ChkHapticToyInput_Changed(object? sender, RoutedEventArgs e) { }
-        private void ChkHapticToyAttentionCheck_Changed(object? sender, RoutedEventArgs e) { }
-        private void SliderHapticOverrideCooldown_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void ChkHapticFunScript_Changed(object? sender, RoutedEventArgs e) { }
-        private void ChkHapticFunScriptVibe_Changed(object? sender, RoutedEventArgs e) { }
-        private void ChkHapticLuminance_Changed(object? sender, RoutedEventArgs e) { }
-        private void SliderHapticLuminance_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void ChkHapticBandSplit_Changed(object? sender, RoutedEventArgs e) { }
-        private void SliderDspSensitivity_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderDspSmoothing_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderDspBass_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderDspRms_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderDspOnset_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void SliderDspMax_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
-        private void BtnDspReset_Click(object? sender, RoutedEventArgs e) { }
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // Stand-ins for ConditioningControlPanel/Views/Controls/HapticUiModels.cs, which has not
-    // moved to Core: those VMs expose System.Windows.Visibility and reach Application.Current
-    // for brushes, so neither the types nor their converters can be referenced from this head.
-    // Only the members the four DataTemplates bind are here, and every WPF `Visibility` member
-    // is a bool named *Visible, because Avalonia binds IsVisible to a bool directly. Swap the
-    // x:DataType attributes for the real types when the VMs land in Core.
-    // ---------------------------------------------------------------------------------------
-
-    public sealed class HapticProviderChipSample
-    {
-        public string Label { get; set; } = "";
-        public bool IsConnected { get; set; }
-        public bool IsEnabledForConnect { get; set; }
-    }
-
-    public sealed class HapticToyCardSample
-    {
-        public string DeviceKey { get; set; } = "";
-        public string Name { get; set; } = "";
-        public string ProviderLabel { get; set; } = "";
-        public string BatteryText { get; set; } = "";
-        public bool BatteryVisible { get; set; }
-        public bool ToyEnabled { get; set; }
-        public List<string> Capabilities { get; set; } = new();
-        public string Nickname { get; set; } = "";
-        public int RoleIndex { get; set; }
-        public double TrimPercent { get; set; }
-        public string TrimText { get; set; } = "";
-    }
-
-    public sealed class HapticRoutingRowSample
-    {
-        public string Icon { get; set; } = "";
-        public string Label { get; set; } = "";
-        public string Hint { get; set; } = "";
-        public string ValueSummary { get; set; } = "";
-        public bool RowEnabled { get; set; }
-        public bool IsExpanded { get; set; }
-        public double IntensityPercent { get; set; }
-        public string IntensityText { get; set; } = "";
-        /// <summary>WPF's <c>ModeVisibility</c>: false on a LAYER row, which has no pattern picker.</summary>
-        public bool ModeVisible { get; set; }
-        public int ModeIndex { get; set; }
-        public int RoleIndex { get; set; }
-    }
-
-    public sealed class HapticRoutingGroupSample
-    {
-        public string Icon { get; set; } = "";
-        public string Title { get; set; } = "";
-        public List<HapticRoutingRowSample> Rows { get; set; } = new();
+        private void RbHapticTemperament_Checked(object? sender, RoutedEventArgs e) => OnTemperamentChecked(sender);
+        private void ChkHapticToyInput_Changed(object? sender, RoutedEventArgs e) => OnToyInputChanged();
+        private void ChkHapticToyAttentionCheck_Changed(object? sender, RoutedEventArgs e) => OnToyAttentionChanged();
+        private void SliderHapticOverrideCooldown_Changed(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtHapticOverrideCooldown != null) OnOverrideCooldownChanged(); }
+        private void ChkHapticFunScript_Changed(object? sender, RoutedEventArgs e) => OnFunScriptChanged();
+        private void ChkHapticFunScriptVibe_Changed(object? sender, RoutedEventArgs e) => OnFunScriptVibeChanged();
+        private void ChkHapticLuminance_Changed(object? sender, RoutedEventArgs e) => OnLuminanceChanged();
+        private void SliderHapticLuminance_Changed(object? sender, RangeBaseValueChangedEventArgs e) { if (TxtHapticLuminance != null) OnLuminanceLevelChanged(); }
+        private void ChkHapticBandSplit_Changed(object? sender, RoutedEventArgs e) => OnBandSplitChanged();
+        private void SliderDspSensitivity_Changed(object? sender, RangeBaseValueChangedEventArgs e) => OnDspSliderChanged(SliderDspSensitivity, TxtDspSensitivity, "x", v => Cfg.AudioSync.Sensitivity = v);
+        private void SliderDspSmoothing_Changed(object? sender, RangeBaseValueChangedEventArgs e) => OnDspSliderChanged(SliderDspSmoothing, TxtDspSmoothing, "%", v => Cfg.AudioSync.Smoothing = v);
+        private void SliderDspBass_Changed(object? sender, RangeBaseValueChangedEventArgs e) => OnDspSliderChanged(SliderDspBass, TxtDspBass, "%", v => Cfg.AudioSync.BassWeight = v);
+        private void SliderDspRms_Changed(object? sender, RangeBaseValueChangedEventArgs e) => OnDspSliderChanged(SliderDspRms, TxtDspRms, "%", v => Cfg.AudioSync.RmsWeight = v);
+        private void SliderDspOnset_Changed(object? sender, RangeBaseValueChangedEventArgs e) => OnDspSliderChanged(SliderDspOnset, TxtDspOnset, "%", v => Cfg.AudioSync.OnsetWeight = v);
+        private void SliderDspMax_Changed(object? sender, RangeBaseValueChangedEventArgs e) => OnDspSliderChanged(SliderDspMax, TxtDspMax, "%", v => Cfg.AudioSync.MaxIntensity = v);
+        private void BtnDspReset_Click(object? sender, RoutedEventArgs e) => OnDspReset();
     }
 }

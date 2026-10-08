@@ -60,7 +60,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (turningOn && !s.MicConsentGiven)
             {
                 var dlg = new Dialogs.MicConsentDialog();
-                await dlg.ShowDialog(this);
+                await dlg.ShowDialogSafe(this);
                 if (!dlg.ConsentGiven)
                 {
                     var wasLoading = _slLoading;
@@ -219,7 +219,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!s.MicConsentGiven)
             {
                 var dlg = new Dialogs.MicConsentDialog();
-                await dlg.ShowDialog(this);
+                await dlg.ShowDialogSafe(this);
                 if (!dlg.ConsentGiven) return;
             }
             if (!s.SpeechWakeWordEnabled && !s.SpeechPushToTalkEnabled)

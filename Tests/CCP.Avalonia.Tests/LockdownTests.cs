@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Services;
@@ -106,6 +107,52 @@ public sealed class LockdownTests
                 ld.Dispose();
                 LockdownService.Current = null;
                 win.Close();
+            }
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>Activate with the shell hidden (tray / behind the launcher): Avalonia's ShowDialog
+    /// threw "Cannot show window with non-visible owner"; WPF shows the consent anyway, so the
+    /// dialog opens ownerless and its answer still activates.</summary>
+    [Fact]
+    public async Task ActivateWithTheShellHiddenShowsTheConsentAndActivates()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            Arm(forceStrict: false, disablePanic: false);
+            var oldPremium = CoreEntitlement.HasPremiumProvider;
+            CoreEntitlement.HasPremiumProvider = () => true;
+            var ld = LockdownService.Current = new LockdownService();
+            var shell = new MainShellWindow();
+            WarningDialog? shown = null;
+            void OnOpened(object? s, RoutedEventArgs e) => shown ??= s as WarningDialog;
+            using var hook = Window.WindowOpenedEvent.AddClassHandler<WarningDialog>(OnOpened);
+            try
+            {
+                shell.Show();
+                Dispatcher.UIThread.RunJobs();
+                shell.Hide();
+                var tab = shell.Named<LockdownTabView>("LockdownTab")!;
+                tab.CmbLockdownDuration.SelectedIndex = 0;
+                tab.BtnActivateLockdown.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.NotNull(shown);
+                Assert.True(shown!.IsVisible);
+                shown.FindControl<CheckBox>("ChkConfirm")!.IsChecked = true;
+                shown.FindControl<Button>("BtnConfirm")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(ld.IsActive);
+            }
+            finally
+            {
+                shown?.Close();
+                CoreEntitlement.HasPremiumProvider = oldPremium;
+                ld.Dispose();
+                LockdownService.Current = null;
+                shell.RequestExit();
             }
             return Task.CompletedTask;
         });

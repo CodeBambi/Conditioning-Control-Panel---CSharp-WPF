@@ -274,7 +274,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             try
             {
                 if (TopLevel.GetTopLevel(this) is not Window owner) return;
-                await new WebcamConsentDialog().ShowDialog(owner);
+                await new WebcamConsentDialog().ShowDialogSafe(owner);
                 AppendWebcamDebugLog("Privacy info reviewed.");
             }
             catch (Exception ex) { Log.Warning(ex, "Webcam review privacy dialog failed"); }
@@ -298,7 +298,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 {
                     if (TopLevel.GetTopLevel(this) is not Window owner) return;
                     AppendWebcamDebugLog("Consent not given — opening consent dialog…");
-                    await new WebcamConsentDialog().ShowDialog(owner);
+                    await new WebcamConsentDialog().ShowDialogSafe(owner);
                     if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined or dialog cancelled."); return; }
                     AppendWebcamDebugLog("Consent granted.");
                 }
@@ -334,7 +334,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
                     AppendWebcamDebugLog("Consent not given — opening consent dialog…");
-                    await new WebcamConsentDialog().ShowDialog(owner);
+                    await new WebcamConsentDialog().ShowDialogSafe(owner);
                     if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined."); return; }
                 }
                 if (!tracker.IsRunning)
@@ -374,7 +374,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
-                await new WebcamConsentDialog().ShowDialog(owner);
+                await new WebcamConsentDialog().ShowDialogSafe(owner);
                 if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined."); return; }
             }
             bool startedHere = false;
@@ -391,7 +391,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 return;
             }
             AppendWebcamDebugLog(opening);
-            var result = await dialog.ShowDialog<bool?>(owner);
+            var result = await dialog.ShowDialogSafe<bool?>(owner);
             AppendWebcamDebugLog(closed(result));
             if (startedHere) { await tracker.StopAsync(); RefreshWebcamStartLabel(); }
         }
@@ -662,7 +662,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (prompt == null) return;
 
                 var dlg = new ChatShortcutCaptureDialog { GlobalHotkey = prompt.ChatShortcutGlobal };
-                if (!await dlg.ShowDialog<bool>(owner)) return;
+                if (!await dlg.ShowDialogSafe<bool>(owner)) return;
 
                 if (dlg.ResetToDefault)
                 {

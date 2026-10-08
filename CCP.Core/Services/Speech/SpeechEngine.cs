@@ -140,7 +140,7 @@ namespace ConditioningControlPanel.Services.Speech
         /// at least one capture device exists. Does NOT check consent — callers gate on that.
         /// Lazily loads the model on first query and caches the result.
         /// </summary>
-        public bool IsAvailable
+        public virtual bool IsAvailable
         {
             get
             {
@@ -317,7 +317,7 @@ namespace ConditioningControlPanel.Services.Speech
         /// Returns when an utterance finalizes, the user clears the bar, or the window times out.
         /// Never throws — failures degrade to <see cref="PhraseResult.NotAvailable"/> or a timeout.
         /// </summary>
-        public Task<PhraseResult> RecognizePhraseAsync(string target, RecognizeOptions? options = null, CancellationToken ct = default)
+        public virtual Task<PhraseResult> RecognizePhraseAsync(string target, RecognizeOptions? options = null, CancellationToken ct = default)
             => RunGrammarSessionAsync(target, new[] { target }, options, isWakeWord: false, ct);
 
         /// <summary>
