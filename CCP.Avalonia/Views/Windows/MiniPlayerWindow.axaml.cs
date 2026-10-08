@@ -229,7 +229,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF AnimationBehavior (AutoStart, RepeatBehavior Forever) on the spiral's SkiaSharp
         /// decoder: the still first frame shows at once (LoadImage, WPF's fallback), the frames decode
         /// off the UI thread and then loop. Deviation: SpiralFrames' caps apply (1280 px long side,
-        /// at most 120 frames by stride) and every frame plays at the first frame's delay.</summary>
+        /// at most 120 frames by stride, 300 MB in total) and every frame plays at the
+        /// first frame's delay (outside 20..500 ms: 50 ms).</summary>
         private void LoadGif(string filePath)
         {
             LoadImage(filePath);
@@ -293,10 +294,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             catch (Exception ex)
             {
-                // ponytail: WPF showed a MessageBox here. Dialogs.MessageDialog is this head's
-                // equivalent, but LoadFile runs before the window is shown and ShowDialog needs a
-                // shown owner, so telling the user means deferring the notice to Opened. Logged
-                // until then; closing is the WPF behaviour and is what matters to the user.
                 Log.Error(ex, "MiniPlayerWindow: Failed to load image");
                 FailWithNotice(Loc.GetF("msg_image_load_failed", ex.Message));
             }
