@@ -16,11 +16,12 @@ public class TestIsolationTests
     [Fact]
     public void EveryPlatformSetupUsesSkiaDrawing()
     {
-        var bad = Directory.EnumerateFiles(Here(), "*.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+        var bad = Directory.EnumerateFiles(Path.GetDirectoryName(Here())!, "*.cs", SearchOption.AllDirectories) // every test project
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                     && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
             .SelectMany(f =>
             {
-                var code = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(f), @"//[^\n]*|/\*.*?\*/", "",
+                var code = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(f), @"@""(?:[^""]|"""")*""|""(?:\\.|[^""\\\n])*""|'(?:\\.|[^'\\\n])+'|//[^\n]*|/\*.*?\*/", "",
                     System.Text.RegularExpressions.RegexOptions.Singleline);
                 return System.Text.RegularExpressions.Regex.Matches(code, @"\.UseHeadless\(")
                     .Where(m => !code.Substring(m.Index, System.Math.Min(160, code.Length - m.Index)).Contains("UseHeadlessDrawing = false")
