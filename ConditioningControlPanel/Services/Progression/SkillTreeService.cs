@@ -803,6 +803,8 @@ public class SkillTreeService : IDisposable
     /// </summary>
     public void AddConditioningTime(double minutes)
     {
+        // Nothing to add, nothing to write: no PropertyChanged, no bark, no settings.json save.
+        if (!(minutes > 0)) return;
         var settings = App.Settings?.Current;
         if (settings == null) return;
 

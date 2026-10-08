@@ -290,6 +290,7 @@ internal sealed class CompanionAskService
                 .Select(a => new AskOption(a.Id, a.Label, () => a.Allowed)).ToArray(),
             Sessions = App.MainWindowRef?.CompanionSessionOptions() ?? Array.Empty<AskOption>(),
             Quests = activities.FirstOrDefault(a => a.Id == "page.quests") is { } q ? new AskOption(q.Id, q.Label, () => q.Allowed) : null,
+            QuestsOpen = ConversationDelivery.QuestsOpen(),
             KnownTopics = settings?.CompanionAskKnownTopics.ToArray() ?? Array.Empty<string>(),
             Text = Loc.Get,
         };

@@ -182,12 +182,13 @@
                                                            FontWeight="SemiBold" Foreground="{StaticResource TextLightBrush}"
                                                            VerticalAlignment="Center"/>
                                                 <ComboBox Grid.Column="1" x:Name="CmbLockdownDuration" x:FieldModifier="internal"
-                                                          Width="160" SelectedIndex="1" VerticalAlignment="Center" FontSize="13"
+                                                          Width="160" SelectedIndex="3" VerticalAlignment="Center" FontSize="13"
                                                           Style="{DynamicResource DarkComboBoxStyle}"
                                                           SelectionChanged="CmbLockdownDuration_SelectionChanged">
                                                     <ComboBoxItem Content="{loc:Str btn_5_minutes}" Tag="5"/>
                                                     <ComboBoxItem Content="{loc:Str btn_10_minutes}" Tag="10"/>
                                                     <ComboBoxItem Content="{loc:Str btn_15_minutes}" Tag="15"/>
+                                                    <ComboBoxItem Content="{loc:Str btn_20_minutes}" Tag="20"/>
                                                     <ComboBoxItem Content="{loc:Str label_30_minutes}" Tag="30"/>
                                                     <ComboBoxItem Content="{loc:Str btn_60_minutes}" Tag="60"/>
                                                     <ComboBoxItem Content="{loc:Str btn_2_hours}" Tag="120"/>
