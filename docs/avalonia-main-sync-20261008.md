@@ -16,7 +16,8 @@ Counts: 3 ported-by-merge, 2 needs-port, 0 n/a (total 5).
 
 | lane | rows |
 |---|---|
-| `descent-migration` | `fc9640ff7`, `abac4fa02` |
+| `descent-migration` | `fc9640ff7` |
+| `descent-migration-offer` | `abac4fa02` |
 
 ## Rows
 
@@ -24,9 +25,9 @@ Counts: 3 ported-by-merge, 2 needs-port, 0 n/a (total 5).
 |---|---|---|---|---|---|---|
 | 1 | `75c078465` | fix(breakout): level 8 keeps an early launch press; pendulum hint clears the prompt | assets: 2; tests: 1 | Assets/web/backroom/stations/breakout (WebAssetServer wildcard) | ported-by-merge | web-only; finale.test.js lands beside the other breakout JS tests |
 | 2 | `4d668a96d` | fix(breakout): Endless board name shows on arrival, then fades | assets: 2 | Assets/web/backroom/stations/breakout | ported-by-merge | web-only |
-| 3 | `fc9640ff7` | fix(descent): the bonus is for migrated accounts, not every curve_epoch 1 record | `DescentMigration.cs`, `DescentFuseWindow.xaml` (comment); tests: 1 | none yet (DescentMigration is head-only; Avalonia has no migration path) | needs-port (`descent-migration`) | XpBonusFor rule lives in the WPF head; Avalonia shows no cycle XP bonus yet (MainShellWindow.ProfileCard.cs ponytail). Port with the migration. |
+| 3 | `fc9640ff7` | fix(descent): the bonus is for migrated accounts, not every curve_epoch 1 record | `DescentMigration.cs`, `DescentFuseWindow.xaml` (comment); tests: 1 | Core `DescentCycleXp.XpBonusFor` (WPF `DescentMigration.XpBonusFor` delegates); Core `ProgressionBank.Add` applies it; Avalonia own Trainer Card receipt + "(+N%)" readout (`MainShellWindow.ProfileCard.cs`, `DiscordTabView.SetXpMeter`, Core `DescentReceipt` git-mv) | ported (avalonia-port/rows-descent-migration) | Rule: ack or valid pending choice, never a bare epoch-1 stamp. `Tests/CCP.Avalonia.Tests/DescentMigrationAckTests.cs` (both tests fail-proven: epoch rule, no multiply, no receipt call, no suffix). |
 | 4 | `3aa4801fb` | chore(descent): delete the dead migration ceremony | `DescentCeremonyWindow.xaml(.cs)`, `DescentCeremonyCopy.cs`, `DescentStageCopy.cs`, `DescentShowDirector.cs`, `MainWindow.StartStop.cs`; tests: 2 | Core `DescentCeremonyCopy.cs` / `DescentStageCopy.cs` (merge); `CCP.Avalonia/Views/Windows/DescentCeremonyWindow.axaml(.cs)` | ported-by-merge | Core side by merge (copy deleted, RomanNumeral in DescentStageCopy). The Avalonia ceremony window (ported from the deleted WPF window, no production opener) and its CoreStandInTests check are deleted in the -compat layer of this sync; parity row win-descent-ceremony removed. |
-| 5 | `abac4fa02` | fix(descent): retire the migration ceremony - auto-restore on offer, bonus for every migrated account | `DescentMigration.cs`, `DescentMigrationService.cs`, `DescentReceipt.cs`, `DescentShowDirector.cs`, `ProfileSyncService.cs`; tests: 1 | Core `SyncBody` (descent_auto, WPF-only flag); none yet for auto-restore | needs-port (`descent-migration`) | Merge adds `descent_auto` to Core SyncBody, sent by WPF only: Avalonia does not take offers, so it must not claim it does. Auto-restore + bonus rule port with the migration. |
+| 5 | `abac4fa02` | fix(descent): retire the migration ceremony - auto-restore on offer, bonus for every migrated account | `DescentMigration.cs`, `DescentMigrationService.cs`, `DescentReceipt.cs`, `DescentShowDirector.cs`, `ProfileSyncService.cs`; tests: 1 | Core `DescentMigrationAck` (ack settle + `EnsureCycleBonus` heal; WPF `HandleDescentMigrationAck`/`EnsureCycleBonus` delegate), called by Core `SyncPush`; receipt shows for Restore too (avalonia-port/rows-descent-migration). Missing: the offer auto-restore | needs-port (`descent-migration-offer`) | Ported: bonus for every migrated account + ack settle/heal (`Tests/CCP.Core.Tests/DescentMigrationAckTests.cs`, `Tests/CCP.Avalonia.Tests/DescentMigrationAckTests.cs`). MISSING: Avalonia does not take the offer, so a lapsed user who returns on Linux only stays unmigrated (old curve, no bonus, no receipt). Port gate for lane `descent-migration-offer`: a full `ApplyChoice` plus the choice submit (`descent_auto`, `descent_migration.choice`); fixture-only tests for idempotence, crash ordering and no XP loss; a golden sync body; each fail-proven. See `docs/avalonia-decisions.md` 2026-10-08. |
 
 ## Merge notes (75b682228) and -compat
 

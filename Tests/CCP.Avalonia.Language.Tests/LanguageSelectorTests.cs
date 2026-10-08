@@ -107,9 +107,9 @@ public sealed class LanguageSelectorTests
             shell.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
             Dispatcher.UIThread.RunJobs();
             Assert.Equal("🧭 Language Custom", presets.FindControl<TextBlock>("TxtDetailTitle")!.Text);
-            Assert.Equal("Raw language description",
+            Assert.StartsWith("Raw language description" + "\n\n",
                 presets.FindControl<TextBlock>("TxtSessionDescription")!.Text);
-            Assert.Equal(Loc.GetF("rack_duration", 23),
+            Assert.Equal(Loc.GetF("label_0_minutes", 23),
                 presets.FindControl<TextBlock>("TxtSessionDuration")!.Text);
             Assert.Equal(custom.GetDifficultyText(),
                 presets.FindControl<TextBlock>("TxtSessionDifficulty")!.Text);
@@ -181,7 +181,7 @@ public sealed class LanguageSelectorTests
             Assert.Equal("fr", LocalizationManager.Instance.CurrentLanguage);
             Assert.Equal("fr", SelectedCode(General(shell)));
             Assert.Equal("🧭 Language Custom", presets.FindControl<TextBlock>("TxtDetailTitle")!.Text);
-            Assert.Equal("Raw language description",
+            Assert.StartsWith("Raw language description" + "\n\n",
                 presets.FindControl<TextBlock>("TxtSessionDescription")!.Text);
             Assert.Equal(custom.GetDifficultyText(),
                 presets.FindControl<TextBlock>("TxtSessionDifficulty")!.Text);

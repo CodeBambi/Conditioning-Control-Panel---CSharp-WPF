@@ -31,6 +31,12 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
         public IBrush Dim { get; } = Solid("#a497c4");
         public IBrush Accent { get; }
         public IBrush Mint { get; } = Solid("#5fffd0");
+        public IBrush Panel { get; } = Solid("#1b1530");
+        public IBrush Panel2 { get; } = Solid("#241c3d");
+        public IBrush Ink { get; } = Solid("#1a1030");
+        public IBrush Lilac { get; } = Solid("#b99cff");
+        public IBrush Gold { get; } = Solid("#ffcf6b");
+        public IBrush Red { get; } = Solid("#ff5a6e");
         public IBrush White { get; } = Solid("#ffffff");
 
         public static IBrush Solid(string css) => new ImmutableSolidColorBrush(Css(css));

@@ -1321,3 +1321,47 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/spiral-overlay: +599
 - Spiral overlay on Avalonia: per-monitor click-through windows, background decode, opacity curve shared with WPF via Core SpiralFrames, engine/session/panic wiring.
+
+## avalonia-port/rows-pink-mindwipe: +592
+- Mind Wipe plays on Linux (LibVLC, WPF 120 ms overlap loop measured gapless); Core CoreMindWipe run rule shared with WPF; pink tint follows the dashboard tile.
+
+## avalonia-port/rows-popups-unlock: +301
+- Achievement and item-unlocked passive toasts (X11 override-redirect, device-pixel placement), chime, Discord share in Core; rows wired.
+
+## avalonia-port/rows-floating-text: +357
+- FloatingWord overlay (WPF keyframes) thrown by friends drawer actions; bouncing text corner_hit achievement and real-time topmost re-assert (measured 0.4-0.7 s).
+
+## avalonia-port/launcher-fx: +1025
+- Launcher FX on one visibility/focus-gated frame clock: spirals and ambient, hover lift/tilt/glow, exit beat with guard, edge glint, fade, sounds and melody (Core).
+
+## avalonia-port/rows-splash-startup: +222
+- Splash fronts real launches with WPF steps/percentages; failed startup logged and exits non-zero; timing within noise of no-splash.
+
+## avalonia-port/rows-feat-bubble-count: +200
+- Bubble Count waits behind video / lock card / quiz like WPF TriggerGame; panic and stop drop the waiting game.
+
+## avalonia-port/rows-lockdown-tab: +325
+- Lockdown title-bar badge wired (clock, hide mask, click/Enter -> tab); Emergency Exit breath (off under Photosafe, motion Off, minimised); quest hint + Hide-clock toggle.
+- 3 shell tests, 9 itemised fail-proofs; live evidence rows-lockdown-tab/; row stays stub (theme, Possession, Dose, Strict greying, EE games, system keys).
+
+## avalonia-port/help-loops-kit: +988
+- Help loops kit finished (Back blur, rounded corners fixed) + BouncingText, BlinkTrainer, KeywordTriggers, Audio, Scheduler scenes (7/23).
+
+## avalonia-port/rows-presets-tab: +448
+- Presets session detail matches WPF SelectSession (feature line, minutes, XP multiplier + colour, summary, spoiler lines).
+- Reveal Details behind WPF's three warnings (9 languages); Community Catalogue chip opens the catalogue (click/keys, focus-visible).
+
+## avalonia-port/rows-descent-migration: +325
+- Main sync #5 fc9640ff7 ported: the +10% XP bonus only for migrated accounts (Core XpBonusFor, applied by ProgressionBank); the server's migration confirmation shared in Core (DescentMigrationAck, called by SyncPush and WPF); own-card badge + (+N%) readout (DescentReceipt moved to Core).
+- abac4fa02 needs-port (lane descent-migration-offer): offer acceptance and ApplyChoice stay WPF-only, decision B (docs/avalonia-decisions.md).
+
+## avalonia-port/rows-takeover-ui: +165
+- Takeover tab: WPF copy restored, Open-models-folder button, Configure-in-Settings -> Devices, no-voiced-mantras chant hint; shell-takeover-ui -> wired.
+- TakeoverTabUiTests (6 fail-proofs) + Keincheck live run; still stub: Mantra Chant playback, wallpaper hooks.
+
+## avalonia-port/rows-feat-video: +141
+- Length filter (min/max) at selection via Core MandatoryVideoScheduler.KeepByLength; VideoMetadataCache + NoVideosReason git-mv'd to Core (managed LibVLCSharp 3.8.5).
+- Folded 854ac954a: the no-videos dialog names the length filter and range when it emptied the library; tests fail-proven, live evidence in rows-feat-video/.
+
+## avalonia-port/panic-surfaces: +265
+- One PanicSurfaces registry: panic key, tray and safe word call StopAll once (WPF order); id/order test and source-scan guard so new starters register.

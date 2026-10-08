@@ -240,6 +240,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 CoreSettings.Save();
                 CoreEngine.ApplyLive(key, on);
+                if (key == "pinkfilter") Overlays.PinkFilterOverlay.Refresh(this);   // WPF Presets.cs:1360 RefreshOverlays
             }
             catch (Exception ex)
             {
