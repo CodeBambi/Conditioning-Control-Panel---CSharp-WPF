@@ -1346,3 +1346,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/help-loops-kit: +988
 - Help loops kit finished (Back blur, rounded corners fixed) + BouncingText, BlinkTrainer, KeywordTriggers, Audio, Scheduler scenes (7/23).
+
+## avalonia-port/rows-presets-tab: +448
+- Presets session detail matches WPF SelectSession (feature line, minutes, XP multiplier + colour, summary, spoiler lines).
+- Reveal Details behind WPF's three warnings (9 languages); Community Catalogue chip opens the catalogue (click/keys, focus-visible).
