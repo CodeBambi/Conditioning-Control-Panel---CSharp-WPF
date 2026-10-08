@@ -196,7 +196,9 @@ public sealed class IntakeBridgeTests
         CoreSettings.Current.MicConsentGiven = true;
         await Listen(host, engine, 2);
         engine.End(new PhraseResult { Matched = true, Transcript = "good girls obey", Score = 1, LoudEnough = true });
-        Dispatcher.UIThread.RunJobs();
+        // FirstListen fires before the loop thread reaches its await, so the loop may resume on its own
+        // thread and Post "final" to the dispatcher after End returns: pump until it lands.
+        SpinWait.SpinUntil(() => { Dispatcher.UIThread.RunJobs(); return sent.Any(f => (string?)f["kind"] == "final"); }, TimeSpan.FromSeconds(10));
         var final = sent.Single(f => (string?)f["kind"] == "final");
         Assert.Equal(2, (int)final["id"]!);
         Assert.True((bool)final["matched"]!);
