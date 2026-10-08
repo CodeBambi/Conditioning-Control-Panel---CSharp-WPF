@@ -220,6 +220,21 @@ public sealed class MandatoryVideoOverlayTests
                     o.GraceTick();
                     Assert.True(v.IsPlaying && !o.GracePaused && !sf.Grace.IsVisible, "auto-resume at 60 s");
                     v.End();
+                    // The panic key bound to Enter beats a focused Resume: it stops the clip, never resumes it.
+                    w = await Open(strict: false);
+                    sf = o.Surfaces[0];
+                    clock.Step(1);
+                    w.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, "");
+                    resume = System.Linq.Enumerable.Single(System.Linq.Enumerable.OfType<Button>(
+                        global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(sf.Grace)));
+                    w.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, "");
+                    Assert.True(o.GracePaused && resume.IsFocused, "paused, Resume focused");
+                    clock.Step(1);
+                    s.PanicKey = Key.Enter.ToString();
+                    w.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
+                    s.PanicKey = "F12";
+                    Assert.False(v.IsPlaying, "panic key Enter stops the clip instead of resuming");
+                    Assert.Empty(o.Windows);
                     o.Time = TimeProvider.System;
 
                     // WPF vout heal: output lost for 5 s replays the same clip once; lost again, it ends.

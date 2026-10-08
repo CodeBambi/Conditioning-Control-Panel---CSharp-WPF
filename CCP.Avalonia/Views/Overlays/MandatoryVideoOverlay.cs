@@ -252,7 +252,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 Content = new Panel { ClipToBounds = true, Children = { fill, scrim, video, layer, grace } },
             };
             Place(w, screen);
-            w.KeyDown += (_, e) =>
+            void OnKey(KeyEventArgs e)
             {
                 var s = CoreSettings.Current;
                 var live = s.PanicKeyEnabled && PanicListenerLive();
@@ -269,7 +269,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     case VideoKeyAction.ForceStop: e.Handled = true; Scheduler.ForceCleanup(); break;
                     case VideoKeyAction.Swallow: e.Handled = true; break;
                 }
-            };
+            }
+            w.KeyDown += (_, e) => OnKey(e);
+            // The panic key always wins: tunnel it so a focused Resume button cannot take it as a click
+            // when the panic key is Enter/Space (the WPF card was a separate window). Other keys bubble as before.
+            w.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+            {
+                var s = CoreSettings.Current;
+                if (!s.PanicKeyEnabled || e.Key.ToString() != s.PanicKey) return;
+                OnKey(e);
+                e.Handled = true;
+            }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
             // WPF: strict vetoes a user close while playing; a non-strict close is a dismiss.
             w.Closing += (_, e) => { if (!_closing && strict && Scheduler.IsPlaying) e.Cancel = true; };
             w.Closed += (_, _) => { if (!_closing) Scheduler.End(); };
