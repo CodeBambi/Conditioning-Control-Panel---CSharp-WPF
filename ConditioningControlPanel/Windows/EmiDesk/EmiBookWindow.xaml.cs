@@ -72,6 +72,7 @@ public partial class EmiBookWindow : Window
 
     private readonly EmiDeskWindow _owner;
     private readonly EmiPixelCanvas _canvas = new(BufW, BufH);
+    private readonly EmiPixelBitmap _bitmap;
     private readonly List<Border> _dots = new();
 
     /// <summary>One log line per book, not one per move: <c>PlaceWindow</c> runs on every drag tick.</summary>
@@ -113,6 +114,7 @@ public partial class EmiBookWindow : Window
     public EmiBookWindow(EmiDeskWindow owner)
     {
         InitializeComponent();
+        _bitmap = new EmiPixelBitmap(_canvas);
         _owner = owner ?? throw new ArgumentNullException(nameof(owner));
         SourceInitialized += OnSourceInitialized;
 
@@ -539,7 +541,7 @@ public partial class EmiBookWindow : Window
             if (p == null) return;
             p.Draw(_canvas, Math.Max(0, Math.Min(p.LoopMs - 1, tMs)));
             _canvas.Commit();
-            if (Stage.Source == null) Stage.Source = _canvas.Source;
+            if (Stage.Source == null) Stage.Source = _bitmap.Source;
         }
         catch (Exception ex) { Log.Warning(ex, "[EmiDesk] book shot frame failed"); }
     }
@@ -559,7 +561,7 @@ public partial class EmiBookWindow : Window
         _painter = EmiBookDemos.For(card.Id);
         // The clock is not restarted between cards: a shared elapsed time means a card you flip back
         // to is already mid-loop, which reads as "it was running all along" rather than as a rewind.
-        if (_painter != null && Stage.Source == null) Stage.Source = _canvas.Source;
+        if (_painter != null && Stage.Source == null) Stage.Source = _bitmap.Source;
         if (_painter == null) Stage.Source = null;
         if (!_since.IsRunning) PaintStill();
 

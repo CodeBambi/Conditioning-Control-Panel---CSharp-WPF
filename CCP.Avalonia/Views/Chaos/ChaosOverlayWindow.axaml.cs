@@ -81,21 +81,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// <c>ChaosBoonColors</c> (an id table, now ChaosBoonColors.cs beside this file),
     /// <c>ChaosRanks</c>/<c>ChaosRank</c>/<c>ChaosGlyphs</c> (Core, Services/Chaos/ChaosRanks.cs)
     /// and <c>ChaosWindowZ.BornTopmost</c> (<c>AppSettings.ChaosPinOnTop</c>). <c>ChaosArt</c>,
-    /// <c>ChaosNarrator</c>, <c>ChaosAnnouncerOverlay</c> and <c>ChaosModeService</c> still live
-    /// in the WPF head (ConditioningControlPanel/Services/Chaos/, the announcer in
-    /// ConditioningControlPanel/Chaos/) and are stubbed in the Stubs region below, shaped so every
-    /// call site ports unchanged. <c>ChaosMeta</c>, <c>ChaosLessons</c> and <c>RevealService</c>
-    /// are in Core now (CCP.Core/Services/Chaos/), but the overlay keeps local stand-ins for
-    /// them on purpose: its recap is a sample until ChaosModeService drives it, and a sample must
-    /// never read or write the real save. <c>ChaosBoon</c>, <c>ChaosRarity</c>
-    /// and the run snapshot are local stand-ins for the same reason;
-    /// <c>ChaosConversation</c> and friends are already in Core and are used for real, as is
-    /// <c>ChaosMetaState</c> — the recap reads the real save MODEL, over a sample instance.</para>
+    /// <c>ChaosNarrator</c> and <c>ChaosAnnouncerOverlay</c> still live in the WPF head and are
+    /// stubbed in the Stubs region below. <c>ChaosBoon</c>, <c>ChaosRunState</c>, <c>ChaosMeta</c>,
+    /// <c>ChaosLessons</c>, <c>RevealService</c> and <c>ChaosConversation</c> are the real Core
+    /// types; <see cref="ChaosRunHost"/> (the run-lifecycle slice of WPF ChaosModeService) drives
+    /// the window during a run.</para>
     ///
-    /// <para><b>The parameterless constructor draws a sample recap.</b> WPF's showed an empty
-    /// transparent window - every panel starts collapsed and a service drives it - and there is no
-    /// service on this head to drive it, so <c>--render-all</c> would prove nothing. Same choice
-    /// as ChaosSlotPickerWindow. Drop <see cref="ShowSampleRecap"/> when ChaosModeService lands.</para>
+    /// <para><b>The parameterless constructor draws a sample recap</b> for <c>--render-all</c>
+    /// (WPF's opened empty); it passes no rank-up, so it never saves. A run opens the window
+    /// through <see cref="ForRun"/>, empty like WPF's.</para>
     /// </summary>
     public partial class ChaosOverlayWindow : Window
     {
@@ -156,7 +150,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private T Part<T>(string name) where T : Control => this.FindControl<T>(name)
             ?? throw new InvalidOperationException($"ChaosOverlayWindow: no '{name}' in the XAML");
 
-        public ChaosOverlayWindow()
+        /// <summary>The render proof's entry (<c>--render-view</c> reflects the parameterless
+        /// ctor): the window plus the sample recap below. A run uses <see cref="ForRun"/>.</summary>
+        internal ChaosOverlayWindow() : this(renderSample: true) { }
+
+        /// <summary>WPF's <c>new ChaosOverlayWindow()</c>: every panel collapsed, the run host
+        /// drives it (ChaosModeService.StartRun -> ShowCountdown).</summary>
+        internal static ChaosOverlayWindow ForRun() => new(renderSample: false);
+
+        private ChaosOverlayWindow(bool renderSample)
         {
             AvaloniaXamlLoader.Load(this);
 
@@ -204,7 +206,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _storyCardPanel.PointerPressed += (_, e) => { e.Handled = true; AdvanceStory(); };
             KeyDown += OnStoryKey;
 
-            ShowSampleRecap();
+            if (renderSample) ShowSampleRecap();
         }
 
         /// <summary>WPF read <c>SystemParameters.PrimaryScreenWidth/Height</c> and pinned the
@@ -274,7 +276,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         }
 
         /// <summary>Complete the countdown immediately (timer end, or a skip click/keypress).</summary>
-        private void FinishCountdown()
+        internal void FinishCountdown()
         {
             if (_countdownFinished) return;
             _countdownFinished = true;
@@ -731,7 +733,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         // ============================ results ============================
 
-        public void ShowResults(RunSummary s, double baseXp, double skillMult, double finalXp, long previousBest, int sparksEarned,
+        public void ShowResults(ChaosRunState s, double baseXp, double skillMult, double finalXp, long previousBest, int sparksEarned,
                                 ChaosRank? rankUp = null)
         {
             SetClickThrough(false);
@@ -827,7 +829,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
             // Bark over the results (+ PB fields for the compulsion line).
             CoreBark.NotifyChaosResultsShown(score, ChaosMeta.State.BestScore, pbDelta, isPb,
-                s.Defused, s.Detonated, s.BestCombo, s.Difficulty);
+                s.Defused, s.Detonated, s.BestCombo, s.Config.Difficulty.ToString());
 
             // Rank spine: once the tally has settled, the quiet rank-up beat.
             if (rankUp.HasValue) ScheduleRankCard(rankUp.Value);
@@ -1080,6 +1082,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             // keep the 16ms pump awake on a dead window for the process's life.
             _tweens.Clear();
             _tweenTimer?.Stop(); _tweenTimer = null;
+            _countdownTimer?.Stop(); _countdownTimer = null;   // a mid-countdown close must not tick on
             try { RemoveCountdownSkipHooks(); } catch { }
             _rankBeatTimer?.Stop(); _rankBeatTimer = null;
             _rankCardTimer?.Stop(); _rankCardTimer = null;
@@ -1308,9 +1311,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         /// <summary>
         /// Sample recap so <c>--render-view</c> / <c>--render-all</c> draw something real. The WPF
-        /// window opens blank - every panel collapsed, a service drives it - and no such service is
-        /// on this head, so without this the proof would be a transparent rectangle.
-        /// ponytail: delete when ChaosModeService moves to Core and can drive the window for real.
+        /// window opens blank - every panel collapsed, a service drives it - and no run
+        /// is up during a render, so without this the proof would be a transparent rectangle. A
+        /// run (<see cref="ForRun"/>) never shows it. Reads the real <c>ChaosMeta</c> and passes
+        /// no rank-up, so nothing here saves.
         /// </summary>
         /// <summary>True only while <see cref="ShowSampleRecap"/> is running: it stops the score
         /// tally ticking, which under the headless render would otherwise freeze the PNG on a
@@ -1324,20 +1328,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             finally { _renderSample = false; }
         }
 
-        private void ShowSampleRecapCore() => ShowResults(
-            new RunSummary
+        private void ShowSampleRecapCore()
+        {
+            var s = new ChaosRunState(new ChaosRunConfig { Difficulty = ChaosDifficulty.Hard, DurationSec = 600, WaveCount = 10 })
             {
-                Score = 18_420,
-                ActIndex = 3,
-                WaveIndex = 4,
-                BestCombo = 27,
-                ElapsedSec = 512,
-                Defused = 214,
-                Detonated = 9,
-                EffectsFired = 63,
-                Difficulty = "Deep",
-            },
-            baseXp: 1_240, skillMult: 1.6, finalXp: 1_984, previousBest: 19_500, sparksEarned: 340);
+                Score = 18_420, ActIndex = 2, WaveIndex = 9, ElapsedSec = 512,
+                Defused = 214, Detonated = 9, EffectsFired = 63, Combo = 27,
+            };
+            ShowResults(s, baseXp: 1_240, skillMult: 1.6, finalXp: 1_984, previousBest: 19_500, sparksEarned: 340);
+        }
 
         // ============================ animation pump ============================
 
@@ -1454,40 +1453,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         // Everything below stands in for a WPF-head service so the call sites above port
         // unchanged. ponytail: each one is wired for real when its owner moves to Core; the
         // shapes here are exactly the members this view calls, nothing more.
-
-        /// <summary>Stand-in for <c>Services.Chaos.ChaosBoon</c>, carrying only the fields the
-        /// draft reads. ponytail: needs ChaosModels, wired when it moves to Core.</summary>
-        public sealed class ChaosBoon
-        {
-            public string Id { get; init; } = "";
-            public string Name { get; init; } = "";
-            public string Desc { get; init; } = "";
-            public string? Flavor { get; init; }
-            public ChaosRarity Rarity { get; init; } = ChaosRarity.Common;
-            public bool IsCurse { get; init; }
-            public string[]? RequiresAny { get; init; }
-            public string[]? RequiresAll { get; init; }
-        }
-
-        /// <summary>Mirrors <c>Services.Chaos.ChaosRarity</c>.</summary>
-        public enum ChaosRarity { Common, Uncommon, Rare }
-
-        /// <summary>The end-of-run snapshot the recap reads. WPF took the live
-        /// <c>ChaosRunState</c> (an INotifyPropertyChanged model with ~40 members); the recap only
-        /// ever reads these nine, and <c>s.Config.Difficulty.ToString()</c> flattens to a string.
-        /// ponytail: needs ChaosRunState, wired when it moves to Core.</summary>
-        public sealed class RunSummary
-        {
-            public double Score { get; init; }
-            public int ActIndex { get; init; }
-            public int WaveIndex { get; init; }
-            public int BestCombo { get; init; }
-            public double ElapsedSec { get; init; }
-            public int Defused { get; init; }
-            public int Detonated { get; init; }
-            public int EffectsFired { get; init; }
-            public string Difficulty { get; init; } = "";
-        }
 
         private enum ChaosAnnounceKind { Willpower, Temptation }
 
@@ -1644,57 +1609,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private static class ChaosModeService
         {
             public const int ChaosRestartCountdownMs = 1000;
-        }
-
-        private static class RevealIds
-        {
-            public const string DraftSkip = "draft_skip";
-        }
-
-        private static class RevealService
-        {
-            public static bool IsUnlocked(string id) => true;
-            public static void Sync(string id) { }
-        }
-
-        private sealed class MetaGoal
-        {
-            public string Name = "";
-            public long Cost;
-            public bool Affordable;
-            public string? LessonId;
-        }
-
-        private sealed class MetaLesson
-        {
-            public string Text = "";
-            public int Target;
-        }
-
-        private static class ChaosLessons
-        {
-            public static MetaLesson? ById(string id) => null;
-            public static int Progress(string id) => 0;
-        }
-
-        /// <summary>The save model is ALREADY in Core (<see cref="ChaosMetaState"/>), so the
-        /// recap reads the real one rather than a five-field copy of it — the five members below
-        /// are all this view touches. The real <c>ChaosMeta</c> (and its store) is in Core now;
-        /// this stand-in stays because the recap is a sample until ChaosModeService drives it:
-        /// a fresh in-memory state seeded to a played save, and <see cref="Save"/> is a no-op so
-        /// the sample never touches the real save. ponytail: swap for Core <c>ChaosMeta</c> when
-        /// the run service lands (its FIRST_FALL_BONUS is 25, not this sample's 100).</summary>
-        private static class ChaosMeta
-        {
-            public const int FIRST_FALL_BONUS = 100;
-            public static readonly ChaosMetaState State = new()
-            {
-                RunsCompleted = 3,
-                BestScore = 17_050,
-                Sparks = 1_120,
-            };
-            public static void Save() { }
-            public static MetaGoal? NextGoal() => new() { Name = "porcelain mask", Cost = 1_500, Affordable = true };
         }
 
     }

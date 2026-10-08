@@ -71,6 +71,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal async Task ConfirmStopSession(string titleKey, string bodyKey)
         {
             if (App.Sessions is not { IsRunning: true, CurrentSession: { } session } runner) return;
+            if (LockdownActive)   // WPF MainWindow.Presets.cs:1993
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("title_lockdown"), Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_end_a_se"));
+                return;
+            }
             var elapsed = runner.Elapsed;
             var remaining = runner.Remaining;
             var potentialXP = (int)Math.Round(session.BonusXP * SessionXp.Multiplier(CoreSettings.Current.PlayerLevel));

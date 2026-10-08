@@ -30,6 +30,22 @@ namespace ConditioningControlPanel
             catch { try { onFinished?.Invoke(); } catch { } }
         }
 
+        /// <summary>Optional: a player that also hands back the clip's stop (WPF's one-shot handle.Stop).</summary>
+        public static volatile Func<string, float, string, Action<TimeSpan>?, Action?, Action?>? PlayStoppableProvider;
+
+        /// <summary><see cref="PlayOneShot"/> that returns a stop for the clip (never null). Without a
+        /// stoppable provider the clip plays through and the stop is a no-op.</summary>
+        public static Action PlayStoppable(string path, float volume, string tag = "audio",
+                                           Action<TimeSpan>? onStarted = null, Action? onFinished = null)
+        {
+            var p = PlayStoppableProvider;
+            if (p is null) { PlayOneShot(path, volume, tag, onStarted, onFinished); return Noop; }
+            try { return p(path, volume, tag, onStarted, onFinished) ?? Noop; }
+            catch { try { onFinished?.Invoke(); } catch { } return Noop; }
+        }
+
+        private static void Noop() { }
+
         public static void Duck(int strength = 80) { try { DuckProvider?.Invoke(strength); } catch { } }
         public static void Unduck(long generation = -1) { try { UnduckProvider?.Invoke(generation); } catch { } }
         public static long DuckGeneration { get { try { return DuckGenerationProvider?.Invoke() ?? 0; } catch { return 0; } } }

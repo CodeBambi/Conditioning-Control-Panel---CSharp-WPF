@@ -59,7 +59,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // at rather than sit on. The language hook is the one addition: the two TextBlocks are
             // driven from code, so nothing else would re-render them after a language change.
             RefreshTierBadge();
-            LocalizationManager.Instance.LanguageChanged += (_, _) => RefreshTierBadge();
+            EventHandler changed = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshTierBadge);
+            AttachedToVisualTree += (_, _) => { LocalizationManager.Instance.LanguageChanged += changed; RefreshTierBadge(); };
+            DetachedFromVisualTree += (_, _) => LocalizationManager.Instance.LanguageChanged -= changed;
         }
 
         /// <summary>

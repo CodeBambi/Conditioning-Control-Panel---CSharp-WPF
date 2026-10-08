@@ -115,6 +115,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             this.FindControl<Button>("BtnLeaderboardMonthly")!.Click += (_, _) => SetLeaderboardMode(false);
             this.FindControl<Button>("BtnLeaderboardAllTime")!.Click += (_, _) => SetLeaderboardMode(true);
             this.FindControl<Button>("BtnJumpToMe")!.Click += BtnJumpToMe_Click;
+            // WPF LeaderboardTabView.xaml.cs:235 forwards to the window, which owns the re-view.
+            this.FindControl<Button>("BtnViewSeasonRecap")!.Click += (s, e) =>
+                (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnViewSeasonRecap_Click(s, e);
 
             this.FindControl<Button>("BtnRefreshLeaderboard")!.Click += (_, _) => _ = RefreshLeaderboardAsync();
             // ponytail: the row double-click (profile lookup on the Discord tab) and the per-row Discord chip (a
@@ -626,8 +629,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ------------------------------------------------------------------
         // ponytail: the row double-click needs DiscordTabView's profile search, which is itself a stub here; the
         // per-row Discord chip opens a browser from inside a DataTemplate, so it needs a Click in
-        // LeaderboardTabView.axaml as well as a launcher; BtnViewSeasonRecap needs MainWindow.SeasonRecap.cs and is
-        // IsVisible="False" until it has a recap to show.
+        // LeaderboardTabView.axaml as well as a launcher. BtnViewSeasonRecap is revealed by the shell's
+        // BtnLeaderboard_Click (MainShellWindow.AchievementsTab.cs) when a snapshot exists.
     }
 
     /// <summary>

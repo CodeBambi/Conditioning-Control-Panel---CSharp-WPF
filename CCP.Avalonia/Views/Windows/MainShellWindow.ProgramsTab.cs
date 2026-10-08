@@ -4,6 +4,7 @@ using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Program;
+using ConditioningControlPanel.Services.Program;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -17,7 +18,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             IReadOnlyList<ProgramDefinition> library)
         {
             var items = new List<ProgramBrowseItem>(library.Count);
-            foreach (var definition in library)
+            // WPF 608ff3181 (ccp-bugs #966): the active mod's programs lead.
+            foreach (var definition in ProgramBrowseOrder.Sort(library, CoreMods.ActiveModId))
             {
                 var premium = definition.Tier == ProgramTier.Premium;
                 // WPF MainWindow.ProgramsTab.cs:605 (ProgramHasPremium = Patreon.HasPremiumAccess, the

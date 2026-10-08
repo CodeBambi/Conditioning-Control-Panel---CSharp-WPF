@@ -850,6 +850,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 KeywordVisualEffect.OverlayPulse,
                 KeywordVisualEffect.MindWipe,
                 KeywordVisualEffect.Bubbles,
+                KeywordVisualEffect.BrainDrain,
             };
             foreach (var v in effectValues)
             {
@@ -1214,6 +1215,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 existing.Contains("VisualEffect:" + KeywordVisualEffect.MindWipe) ? "(already added)" : null);
             AddMenuItem(menu, "🫧 Bubbles",             () => AddAction(trigger, new VisualEffectAction { Effect = KeywordVisualEffect.Bubbles }, parentBorder),
                 existing.Contains("VisualEffect:" + KeywordVisualEffect.Bubbles) ? "(already added)" : null);
+            AddMenuItem(menu, "🫠 Brain Drain",         () => AddAction(trigger, new VisualEffectAction { Effect = KeywordVisualEffect.BrainDrain }, parentBorder),
+                existing.Contains("VisualEffect:" + KeywordVisualEffect.BrainDrain) ? "(already added)" : null);
 
             menu.PlacementTarget = anchor;
             menu.Open(anchor);
@@ -1421,6 +1424,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             KeywordVisualEffect.OverlayPulse    => "Overlay Pulse",
             KeywordVisualEffect.MindWipe        => "Mind Wipe",
             KeywordVisualEffect.Bubbles         => "Bubbles (spawn once)",
+            KeywordVisualEffect.BrainDrain      => "Brain Drain (10 s melt)",
             _ => e.ToString(),
         };
 
@@ -1432,6 +1436,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             KeywordVisualEffect.OverlayPulse    => "🌫",
             KeywordVisualEffect.MindWipe        => "🧠",
             KeywordVisualEffect.Bubbles         => "🫧",
+            KeywordVisualEffect.BrainDrain      => "🫠",
             _ => "✨",
         };
 

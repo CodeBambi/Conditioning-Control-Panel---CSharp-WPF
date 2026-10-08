@@ -6,7 +6,7 @@
 // missing is every CALLER - the progression moments themselves:
 //
 //   CelebrateLevelUp                <- the XP/level path (MainWindow.ProfileBubble.cs)
-//   CelebrateAchievementUnlock      <- MainWindow.AchievementsTab.cs:782
+//   CelebrateAchievementUnlock      <- MainWindow.AchievementsTab.cs:782 (on-tile reveal + burst: AchievementsTabView.Fx.cs)
 //   CelebrateQuestComplete          <- MainWindow.Quests.cs:77 (a quest-completed event)
 //   CelebrateProgramDayComplete     <- MainWindow.ProgramsTab.cs:1020
 //   CelebrateEnhancementPurchase    <- MainWindow.Enhancements.cs:2059
