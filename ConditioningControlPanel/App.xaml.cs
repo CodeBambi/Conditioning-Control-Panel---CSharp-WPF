@@ -6231,7 +6231,7 @@ Application State:
             KeywordHighlight?.Dispose();
 
             SessionLog?.Dispose();
-            MediaHistory?.Dispose(); // before Flash/Video so it unsubscribes cleanly + flushes final entries
+            MediaHistory?.Dispose(); // flushes final entries (the Flash/Video feeds are lambdas null-guarded on MediaHistory)
             Flash?.Dispose();
             // Dispose the enhancement bridge BEFORE the VideoService it subscribes to,
             // so it unsubscribes (VideoStarted/VideoEnded/time-source) and tears down its

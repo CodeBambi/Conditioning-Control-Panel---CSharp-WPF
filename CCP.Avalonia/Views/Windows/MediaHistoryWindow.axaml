@@ -261,7 +261,7 @@
                         <StackPanel Grid.Row="1" Margin="0,12,0,0">
                             <TextBlock x:Name="PreviewName" Foreground="White" FontSize="14" FontWeight="Bold"
                                        TextTrimming="CharacterEllipsis"/>
-                            <TextBlock x:Name="PreviewPath" Foreground="#7A7A90" FontSize="11" Margin="0,4,0,0"
+                            <SelectableTextBlock x:Name="PreviewPath" Foreground="#7A7A90" FontSize="11" Margin="0,4,0,0"
                                        TextWrapping="Wrap" MaxHeight="54"/>
                         </StackPanel>
 

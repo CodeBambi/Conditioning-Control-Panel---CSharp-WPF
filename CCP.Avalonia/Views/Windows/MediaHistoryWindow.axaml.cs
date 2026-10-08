@@ -56,6 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private VlcFrameSink? _sink;
         private int _copyGeneration, _previewGeneration;
         private DispatcherTimer? _gifTimer;
+        private Bitmap? _still;
         private List<Bitmap> _gifFrames = new();
 
         public MediaHistoryWindow()
@@ -285,7 +286,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     using var stream = File.OpenRead(row.Entry.FilePath);
                     // WPF capped the single preview with DecodePixelWidth=720; never full-res.
-                    _previewImage.Source = Bitmap.DecodeToWidth(stream, 720);
+                    _previewImage.Source = _still = Bitmap.DecodeToWidth(stream, 720);
                     _previewImage.IsVisible = true;
                 }
                 catch (Exception ex)
@@ -385,6 +386,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try { _media?.Dispose(); } catch { }
             _media = null;
             _previewImage.Source = null;
+            _still?.Dispose();
+            _still = null;
             foreach (var f in _gifFrames) f.Dispose();
             _gifFrames = new();
             _sink?.Free();
