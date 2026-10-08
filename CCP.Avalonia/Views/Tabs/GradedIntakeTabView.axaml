@@ -190,7 +190,14 @@
                                         <Border MaxHeight="130" CornerRadius="6" x:Name="PastQuizzesPanel" IsVisible="False"
                                                 Background="#10FFFFFF" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                                <StackPanel x:Name="PastQuizzesList"/>
+                                                <StackPanel x:Name="PastQuizzesList">
+                                                    <StackPanel.Styles>
+                                                        <!-- WPF Lab.cs:567-574: run rows hover #15FFFFFF, otherwise transparent -->
+                                                        <Style Selector="Button:pointerover /template/ ContentPresenter, Button:pressed /template/ ContentPresenter">
+                                                            <Setter Property="Background" Value="#15FFFFFF"/>
+                                                        </Style>
+                                                    </StackPanel.Styles>
+                                                </StackPanel>
                                             </ScrollViewer>
                                         </Border>
                                     </StackPanel>

@@ -1410,3 +1410,35 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-name-dialogs: +342
 - Trainer Card rename/delete wired through DisplayNameDialog -> CoreAccount -> Core V2AuthService; delete signs out without a push.
 - UsernamePickerDialog documented as unreachable on WPF too (dead BtnQuick*Login handlers); both rows stay stub with exact gaps.
+
+## avalonia-port/rows-mini-player: +198
+- win-mini-player: GIFs now loop (SkiaSharp decode + frame timer) and load failures show a MessageDialog notice before closing; the row stays stub because there is no opener.
+- MiniPlayerPreviewTests: 2 tests, each fail-proven.
+
+## avalonia-port/flake-layout: +24
+- Root-caused the Blink/ChasterRaffle/EmiBook shard flakes to one test setting up headless drawing without Skia (first setup wins per testhost); fixed it.
+- Added a source-scan guard that every Avalonia test platform setup uses Skia drawing; fail-proven with a fixed order seed.
+
+## avalonia-port/rows-media-history: +547
+- win-media-history: the Media Log reads the shared MediaHistoryService, now in Core and fed by both heads. Added audio filter, thumbnails, remote Copy link / Go to Source, LibVLC video and SkiaSharp GIF preview, and Clear behind a confirm. Row stays stub: Load preview, Brain Drain producer and the MediaFailed card are still missing.
+- Tests fail-proven (window, service, scheduler LastVideoPath); live evidence in evidence/rows-media-history.
+
+## avalonia-port/rows-blink-trainer: +208
+- Blink Trainer stage plays video picks (VLC), status dot breathes while running, help popover attached, hidden page parks all work.
+- Duplicate parity rows merged; both rows stay stub with the remaining list.
+
+## avalonia-port/rows-quiz-report: +162
+- win-quiz-report: past-quizzes list (trends + runs -> QuizReportWindow, one at a time) ported; still stub because both heads hide BtnStartQuiz.
+- QuizPastRunsReportTests, fail-proven x3.
+
+## avalonia-port/rows-season-recap: +482
+- Season recap card follows the active mod accent (Core RecapPalette, shared with WPF) and the foil shimmer is back on WPF's curve; it runs only while visible. The recap window's backdrop and pills follow the mod too.
+- Copy card and Share on X put the PNG on the clipboard (checked live on Wayland). All 3 recap rows are now wired.
+
+## avalonia-port/help-loops-c: +812
+- Help-loop scenes LockCard, FocusGaze, IntensityRamp, Presets, Subliminals and WebcamCalibration ported (20 of 23). Each renders every step and lights its chips in order on the stepped clock.
+- New WebcamCalibration and IntensityRamp pixel tests, both fail-proven. Live: Settings Subliminals `?` plays the loop.
+
+## avalonia-port/rows-feature-intro: +219
+- win-feature-intro: cards now yield to a startup modal or update dialog; tour callers wired on 10 tab cases plus the Dashboard launch (daily-free / one-account) via StartupLadder; 4 fail-proven tests; row stays stub with the missing callers listed.
+- Test profile marks every intro key as spent, so a card no longer leaks across shell tests and holds passive surfaces in later ones.
