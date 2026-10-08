@@ -92,7 +92,7 @@ public sealed class LockdownVeilTests
         Frame();
         Assert.True(veil.IsVisible);
         Assert.Equal(Loc.Get("launcher_lockdown_veil"), launcher.FindControl<TextBlock>("LockdownText")!.Text);
-        Assert.Equal(AmbientFxCanvas.Env.AllowAmbientLoops, launcher.VeilBreathing);
+        Assert.True(launcher.VeilBreathing);
 
         // A click on the panel CTA lands on the veil.
         var p = cta.TranslatePoint(new Point(cta.Bounds.Width / 2, cta.Bounds.Height / 2), launcher)!.Value;
@@ -124,7 +124,14 @@ public sealed class LockdownVeilTests
         Assert.False(launcher.VeilBreathing);
         launcher.Show();
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(AmbientFxCanvas.Env.AllowAmbientLoops, launcher.VeilBreathing);
+        Assert.True(AmbientFxCanvas.Env.AllowAmbientLoops);   // MotionLevel.Full, so the next asserts mean something
+        Assert.True(launcher.VeilBreathing);
+        launcher.WindowState = WindowState.Minimized;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(launcher.VeilBreathing);
+        launcher.WindowState = WindowState.Normal;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(launcher.VeilBreathing);
 
         ld.Deactivate();
         Frame();
@@ -198,6 +205,8 @@ public sealed class LockdownVeilTests
                 ("search palette", () => SettingsPaletteWindow.Toggle(shell), () => SettingsPaletteWindow.IsOpen),
                 // WPF Autonomy.cs:44
                 ("Takeover switch off", () => shell.SetAutonomyEnabled(false), () => !shell.Autonomy.IsEnabled),
+                ("Takeover Start/Stop button", () => Click(shell.Named<BambiTakeoverTabView>("BambiTakeoverTab")!.BtnAutonomyStartStop),
+                    () => !shell.Autonomy.IsEnabled),
                 // WPF Presets.cs:1993 / 2033
                 ("session Stop", () => shell.BtnStartSession_Click(null),
                     () => !runner.IsRunning || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_end_a_se"))),
@@ -212,8 +221,11 @@ public sealed class LockdownVeilTests
                 ("Bubble Count strict toggle", () => { s.BubbleCountStrictLock = true; Host(host, new BubbleCountFeatureControl()).FindControl<CheckBox>("ChkStrict")!.IsChecked = false; },
                     () => !s.BubbleCountStrictLock || host.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "ChkStrict").IsChecked != true),
                 ("no-panic box", () => Host(host, new DevicesSettingsSection()).FindControl<CheckBox>("ChkNoPanic")!.IsChecked = false,
-                    () => s.PanicKeyEnabled || host.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "ChkNoPanic").IsChecked != true),
-                // WPF LauncherHost.cs:413, launcher Stop link and mod pill
+                    () => s.PanicKeyEnabled || NoPanic(host).IsChecked != true || NoPanic(host).IsEnabled
+                          || ToolTip.GetTip(NoPanic(host)) as string != Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape")),
+                // WPF Lab.cs:612: the CC Labs door is greyed, not only refused
+                ("CC Labs button greyed", () => { }, () => shell.Named<Button>("BtnBackToLauncher")!.IsEnabled),
+                // WPF LauncherHost.cs:413 and the launcher Stop link
                 ("launcher close", launcher.RequestClose, () => !launcher.IsVisible),
                 ("launcher Stop link", () => Click(launcher.FindControl<Button>("StopLink")!), () => !CoreEngine.IsRunning),
             };
@@ -229,6 +241,13 @@ public sealed class LockdownVeilTests
                 if (closed) break;
             }
             Assert.Empty(escaped);
+
+            // Given back on exit (WPF Lab.cs:707/741-745).
+            ld.Deactivate();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.Named<Button>("BtnBackToLauncher")!.IsEnabled);
+            Assert.True(NoPanic(host).IsEnabled);
+            Assert.Null(ToolTip.GetTip(NoPanic(host)));
         }
         finally
         {
@@ -241,6 +260,9 @@ public sealed class LockdownVeilTests
             host.Close();
         }
     });
+
+    private static CheckBox NoPanic(Window host) =>
+        host.GetVisualDescendants().OfType<CheckBox>().First(c => c.Name == "ChkNoPanic");
 
     private static void ShowTab(MainShellWindow shell, string tab)
     {

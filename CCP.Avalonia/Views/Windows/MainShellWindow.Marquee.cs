@@ -130,9 +130,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             UpdateBannerWelcomeMessage();
 
+            _bannerRotationTimer?.Stop();
             _bannerRotationTimer = new DispatcherTimer { Interval = BannerRotationInterval };
             _bannerRotationTimer.Tick += BannerRotationTimer_Tick;
             _bannerRotationTimer.Start();
+            Closed += (_, _) => _bannerRotationTimer.Stop();
         }
 
         /// <summary>

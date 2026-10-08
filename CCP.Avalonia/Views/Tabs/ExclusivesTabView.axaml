@@ -329,12 +329,12 @@
                     <ItemsControl x:Name="ExclusivesShelf">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal"/>
+                                <WrapPanel Orientation="Horizontal" ItemWidth="352" ItemHeight="216"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="tabs:ExclusiveCardRow">
-                                <Border Width="336" Height="200" Margin="0,0,16,16"
+                                <Border Margin="0,0,16,16"
                                         CornerRadius="12"
                                         Background="#1A1A2E"
                                         BorderBrush="{Binding EdgeBrush}" BorderThickness="{Binding EdgeThickness}"

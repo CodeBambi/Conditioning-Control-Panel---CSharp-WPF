@@ -297,7 +297,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         ///
         /// <para>The seam is seeded by Platform.AccountSeed, so a Tier 2 account opens the window.</para>
         /// </summary>
-        private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e)
+        private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e) => OpenGazeMinigame();
+
+        /// <summary>The Play wall button and the Exclusives card (main 2e9080399) share this door and its gate.</summary>
+        internal void OpenGazeMinigame()
         {
             if (!TierGate.DemandLab(Loc.Get("label_gaze_minigame"))) return;
             // A non-modal Show still needs a visible owner; the shell can be minimised to tray.

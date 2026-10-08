@@ -283,6 +283,9 @@ public sealed class InvitePanel : Border
 
     // ============================== redeem ==============================
 
+    /// <summary>The vault gate card's "have a code" box (WPF InviteRedeemBox("gate")).</summary>
+    internal void ShowRedeemFace() => ShowRedeem();
+
     private void ShowRedeem()
     {
         _body.Children.Clear();

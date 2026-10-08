@@ -177,51 +177,40 @@ public class DescentSpiralWithholdTests
     }
 
     /// <summary>
-    /// The in-session half of the deferral, through the real service: an offer that arrives is
-    /// remembered in <c>LiveOffer</c> forever, which is the input the predicate reads. This is the
-    /// wiring the persona above asserts the arithmetic for.
+    /// A HELD OFFER WITHHOLDS until it applies: it is in <c>LiveOffer</c>, which is the input the
+    /// predicate reads, and nothing has been answered yet.
     /// </summary>
     [Fact]
-    public void AnOfferReceived_LeavesTheWithholdsInputSet()
+    public void AHeldOffer_IsWithheldUntilItApplies()
     {
-        var service = new DescentMigrationService();
-        service.HoldOffers();   // keeps the window-open path from needing a dispatcher
+        var s = Fresh();
+        var service = new DescentMigrationService(() => s);
+        service.HoldOffers();
 
         service.OfferReceived(new DescentMigrationOffer { TotalXpEarned = 120_000, DevotionDays = 240 });
 
         Assert.NotNull(service.LiveOffer);
-        Assert.True(DescentMigrationService.SpiralWithheldFor(Fresh(), offerInHand: service.LiveOffer is not null, ceremonyOpen: false));
+        Assert.True(service.SpiralWithheld);
+
+        service.ReleaseOffers();
+        Assert.False(service.SpiralWithheld);
     }
 
     /// <summary>
-    /// THE #1111 LATCH IS NOT A WITHHOLD INPUT, and must never become one. The per-session deferral
-    /// added in v6.9.1 stops the ceremony RE-OPENING every 120-second heartbeat after "Not tonight";
-    /// it says nothing about whether the question has been answered, and the spiral is still owed
-    /// nobody until it has. So the offer stays in <c>LiveOffer</c> across the close, the withhold
-    /// still reads true off it, and the arithmetic below is byte-identical to the case above.
-    ///
-    /// <para>The failure this pins is the tempting one: "they closed it, so let them have the
-    /// spiral". That would pay out the reveal for dismissing the question instead of answering it,
-    /// and it would do so on a flag that exists purely to stop a window re-painting.</para>
+    /// THE AUTO-RESTORE OPENS THE GATE AT ONCE (2026-10-06). The offer applies the restore the
+    /// moment it lands, the pending choice it writes is ANSWERED, and the spiral is not withheld
+    /// for a single read after the offer.
     /// </summary>
     [Fact]
-    public void ADeferredCeremony_StillWithholdsTheSpiral()
+    public void AnOffer_IsNotWithheldRightAfterItArrives()
     {
-        var service = new DescentMigrationService();
-        service.HoldOffers();
+        var s = Fresh();
+        var service = new DescentMigrationService(() => s);
+
         service.OfferReceived(new DescentMigrationOffer { TotalXpEarned = 120_000, DevotionDays = 240 });
 
-        service.NoteCeremonyClosed(committed: false);
-
-        Assert.True(service.DeferredThisSession);
-        Assert.NotNull(service.LiveOffer);      // the withhold's input survives the close
-
-        var s = Fresh();
-        s.DescentMigrationOffered = true;
-        Assert.True(DescentMigrationService.SpiralWithheldFor(s, offerInHand: service.LiveOffer is not null, ceremonyOpen: false));
-
-        // ...and committing is still the only thing that opens it, deferral latched or not.
-        s.PendingDescentMigrationChoice = DescentMigrationChoices.Restore;
+        Assert.Equal(DescentMigrationChoices.Restore, s.PendingDescentMigrationChoice);
+        Assert.False(service.SpiralWithheld);
         Assert.False(DescentMigrationService.SpiralWithheldFor(s, offerInHand: true, ceremonyOpen: false));
     }
 }

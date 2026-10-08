@@ -55,6 +55,8 @@
 // twins carry inert handlers, and the tray/dashboard paths are in MainShellWindow.axaml.cs.
 
 using System;
+using System.Linq;
+using Avalonia.LogicalTree;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Awareness;
@@ -87,6 +89,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (enabled) ShowAvatarTube();
             else HideAvatarTube();
             CoreSettings.Save();
+            // Every on/off button reads the hero's copy of the switch, wherever it was flipped from.
+            SyncHero();
+        }
+
+        /// <summary>WPF CompanionRoom?.SyncHero(): re-read every seated hero card.</summary>
+        internal void SyncHero()
+        {
+            foreach (var hero in this.GetLogicalDescendants().OfType<Controls.Companion.CompanionHeroCard>())
+                hero.ViewModel?.Sync();
         }
 
         /// <summary>

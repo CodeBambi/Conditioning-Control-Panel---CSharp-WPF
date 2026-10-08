@@ -97,8 +97,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal static (int Xp, string? Bonus) ComputeQuestXpDisplay(QuestDefinition def, AppSettings s)
         {
             var rerollMult = SkillTreeRules.GetRerollBonusMultiplier(s);
-            var streak = s.DailyQuestStreak;
-            var xp = QuestService.ScaledQuestXp(def.XPReward, s);
+            // The streak this completion pays at (the day's first daily advances it first).
+            var streak = App.Quests?.StreakPaidOn(def.Type, s) ?? s.DailyQuestStreak;
+            var xp = QuestService.ScaledQuestXp(def.XPReward, s, streak);
             string? bonus = null;
             if (streak > 0) bonus = $"+{streak * 3}%\U0001f525";
             if (rerollMult > 1.0)
@@ -216,8 +217,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtTotalQuestXP.Text = (quests.Progress.TotalXPFromQuests + s.MobileQuestXP).ToString();
             TxtStreakFixCharges.Text = s.StreakFixCharges.ToString();
             TxtQuestStats.Text = $"{dailyCompleted + (weekly?.IsCompleted == true ? 1 : 0)} completed today";
+            // The bonus the next daily pays at, as the daily cards quote it.
             TxtQuestStreakCount.Text = s.DailyQuestStreak > 0
-                ? $"\U0001f525 {s.DailyQuestStreak} day streak (+{s.DailyQuestStreak * 3}% XP)" : "";
+                ? $"\U0001f525 {s.DailyQuestStreak} day streak (+{quests.StreakPaidOn(QuestType.Daily, s) * 3}% XP)" : "";
 
             PaintStreakCalendar();
         }
