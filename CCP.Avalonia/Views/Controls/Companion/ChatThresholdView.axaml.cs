@@ -193,10 +193,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // WPF's CommandManager.RequerySuggested re-polled CanExecute for free; Avalonia only
             // re-polls on CanExecuteChanged, so Draft and IsThinking raise it by hand.
             SendCommand = _send = new Relay(Send, () => CanSend && !IsThinking && !string.IsNullOrWhiteSpace(Draft));
-            // ponytail: OpenFullChat needs the tube's chat pane (AvatarTubeWindow has no chat
-            // surface on this head yet); History needs the transcript viewer; Unlock needs the
-            // Patreon tab. None of the three has a target here, and all three are Relays whose
-            // CanExecute is constant so the buttons at least do not pretend to be armed.
+            // Staged (not live): the three commands are disarmed Relays, so the buttons do not
+            // pretend to be armed.
             // Live: Open full chat is the tube's input box (WPF App.AvatarWindow.OpenChatInput),
             // History the stored transcript (WPF CompanionTranscriptWindow.ShowFor) and Unlock the Patreon tab.
             OpenFullChatCommand = live
