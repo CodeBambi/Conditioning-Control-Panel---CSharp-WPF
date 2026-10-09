@@ -146,6 +146,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         private void ApplyFeatureArt()
         {
+            // WPF MainWindow.xaml.cs:2334 (LoadTakeoverImage): the mod's own name for the takeover.
+            try { TxtTakeoverUnlocked.Text = "\U0001F916 " + (App.Mods?.GetTakeoverLabel() ?? Loc.Get("label_takeover")); }
+            catch (Exception ex) { Log.Debug("takeover label: {E}", ex.Message); }
             var art = Helpers.ModArt.TryLoad(TakeoverArtPath);
             if (art == null) return;
 
