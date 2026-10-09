@@ -1676,3 +1676,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-shell-rails: +592
 - Dashboard FAVORITES + RECENT rail ported: art chips, pin menus, RECENT from ShowTab, lock repaint; Core FavoritesRailRule/Art moved with git mv; premium-rail stand-in deleted.
 - Banner One Account link is a real link and retires its beat; Just Drop and the rest of the marquee remain stubs, with the missing pieces listed in the ledger.
+
+## avalonia-port/programs-signals: +479
+- Quest signals now wired: LockCard, Pink Filter/Spiral minutes (1 s tick only while the overlay shows) and Lockdown completed, all as on WPF.
+- `CanEnroll` refuses programs with required tasks this head never raises (Core provider, unseeded on WPF, plus head `ProgramCapabilities` table); refused cards name what is missing.
