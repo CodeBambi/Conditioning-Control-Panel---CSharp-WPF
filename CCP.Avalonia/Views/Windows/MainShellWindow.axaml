@@ -2416,7 +2416,10 @@
                      rest of the app uses for destructive actions (PANIC STOP does use the real
                      red). Quiet outline at rest, fills on hover: still findable, no longer
                      competing with the primary action for the eye. -->
+                <!-- Depth (wave 10, lane B): Exit is a raised plank too. The red outline stays the
+                     signal; the lamp's bevel sits just inside it, the sheen over the face. -->
                 <Button Grid.Column="6" Content="{loc:Str btn_exit}" Height="50" FontSize="16" Click="BtnExit_Click"
+                        fx:HudPlank.Kind="Plank"
                         ToolTip.Tip="{loc:Str tooltip_exit_the_application_completely}">
                     <Button.Theme>
                         <ControlTheme TargetType="Button">
@@ -2426,18 +2429,34 @@
                             <Setter Property="Cursor" Value="Hand"/>
                             <Setter Property="Template">
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="b" Background="{TemplateBinding Background}"
-                                                BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
-                                                CornerRadius="6" Padding="20,10">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                             Content="{TemplateBinding Content}"
-                                                             ContentTemplate="{TemplateBinding ContentTemplate}"/>
-                                        </Border>
-                                        <!-- ponytail: WPF ControlTemplate.Triggers (IsMouseOver) dropped. Avalonia writes these as
-                                             Style selectors outside the template (":pointerover /template/ Border#x"); the
-                                             rest state renders correctly and only the hover/press/tag skins are lost. -->
+                                        <Panel>
+                                            <Border x:Name="DepthDrop" VerticalAlignment="Bottom" Height="5" Margin="6,0,6,-5"
+                                                    CornerRadius="0,0,5,5" Background="{DynamicResource DepthDropBand}"
+                                                    IsHitTestVisible="False"/>
+                                            <Panel x:Name="DepthFace">
+                                                <Border x:Name="b" Background="{TemplateBinding Background}"
+                                                        BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
+                                                        CornerRadius="6" Padding="20,10">
+                                                    <ContentPresenter x:Name="PART_ContentPresenter"
+                                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                      Foreground="{TemplateBinding Foreground}"
+                                                                      Content="{TemplateBinding Content}"
+                                                                      ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                                                </Border>
+                                                <Border Margin="1" CornerRadius="5" Background="{DynamicResource DepthRaisedSheen}"
+                                                        IsHitTestVisible="False"/>
+                                                <Border Margin="1" CornerRadius="5" BorderThickness="1"
+                                                        BorderBrush="{DynamicResource DepthRaisedBevel}" IsHitTestVisible="False"/>
+                                            </Panel>
+                                        </Panel>
                                     </ControlTemplate>
                             </Setter>
+                            <Style Selector="^:pointerover /template/ Border#b">
+                                <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
+                            </Style>
+                            <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                <Setter Property="Foreground" Value="White"/>
+                            </Style>
                         </ControlTheme>
                     </Button.Theme>
                 </Button>

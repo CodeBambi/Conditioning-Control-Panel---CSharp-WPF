@@ -130,7 +130,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.Fx
             var next = new FxFrame(_surface.Snapshot());
             var old = _frame;
             _frame = next;
-            old?.Release();
+            Retire(old);
             PaintCount++;
             LastPaintMs = System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
             InvalidateVisual();
@@ -160,7 +160,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.Fx
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnDetachedFromVisualTree(e);
-            _frame?.Release();
+            Retire(_frame);
             _frame = null;
             _surface?.Dispose();
             _surface = null;
@@ -169,27 +169,107 @@ namespace ConditioningControlPanel.Avalonia.Controls.Fx
         public override void Render(DrawingContext context)
         {
             var f = _frame;
-            if (f == null) return;
+            if (f == null || !f.TryAddRef()) return;
             context.Custom(new FxDrawOp(f, new Rect(Bounds.Size), CompositeBlend));
         }
 
+        // ---- frame lifetime (the section edge flicker, 2026-10-09) ---------------------------------
+        //
+        // Avalonia composes on its render thread, a frame behind the UI thread: while the UI thread
+        // paints frame N+1 the render thread can still be drawing the op recorded for frame N. The
+        // first port disposed frame N's image the moment N+1 was painted, so that late draw found
+        // no image and drew NOTHING: the strip blinked out for one composed frame, at random, which
+        // read as the section edge glow flickering (WPF repainted one WriteableBitmap in place and
+        // never had a blank frame). Now each recorded draw op holds a reference on its frame and
+        // the image is freed only when the surface AND every op that recorded it are done. Avalonia
+        // disposes a replaced op on the render thread; the retired list is a hard cap in case it
+        // ever does not, so a missed Dispose can never leak more than MaxRetired snapshots.
+
+        /// <summary>Frames replaced on the UI thread that a recorded op still draws.</summary>
+        private readonly System.Collections.Generic.List<FxFrame> _retired = new();
+
+        /// <summary>How many replaced-but-referenced frames may wait for their ops before the
+        /// oldest is freed anyway (the render thread is never this many frames behind).</summary>
+        internal const int MaxRetired = 8;
+
+        /// <summary>Frames still holding an image: the current one plus any a late op draws (tests).</summary>
+        internal int LiveFrames
+        {
+            get
+            {
+                int n = _frame?.IsAlive == true ? 1 : 0;
+                foreach (var f in _retired) if (f.IsAlive) n++;
+                return n;
+            }
+        }
+
+        /// <summary>A draw op for the current frame, as Render records it (tests). Dispose it.</summary>
+        internal ICustomDrawOperation? RecordForTests()
+        {
+            var f = _frame;
+            return f != null && f.TryAddRef() ? new FxDrawOp(f, new Rect(Bounds.Size), CompositeBlend) : null;
+        }
+
+        /// <summary>True while <paramref name="op"/> (from <see cref="RecordForTests"/>) can still draw its pixels.</summary>
+        internal static bool OpCanDraw(ICustomDrawOperation op) => op is FxDrawOp d && d.CanDraw;
+
+        private void Retire(FxFrame? old)
+        {
+            if (old != null && !old.Release()) _retired.Add(old);
+            _retired.RemoveAll(f => !f.IsAlive);
+            while (_retired.Count > MaxRetired)
+            {
+                _retired[0].ForceDispose();
+                _retired.RemoveAt(0);
+            }
+        }
+
         /// <summary>
-        /// One painted frame. The render thread draws it under <see cref="Gate"/>, and the UI
-        /// thread releases it under the same lock, so a snapshot can never be freed mid-draw.
+        /// One painted frame, reference counted: the surface holds one reference while it is the
+        /// current frame, and every recorded draw op holds one until Avalonia disposes the op. The
+        /// render thread draws it under <see cref="Gate"/>; the image is freed under the same lock
+        /// when the last reference goes, so a snapshot is never freed mid-draw or before a late draw.
         /// </summary>
         private sealed class FxFrame
         {
             public readonly object Gate = new();
             public SKImage? Image;
+            private int _refs = 1;   // the surface's own
 
             public FxFrame(SKImage image) => Image = image;
 
-            public void Release()
+            public bool IsAlive { get { lock (Gate) return Image != null; } }
+
+            public bool TryAddRef()
+            {
+                lock (Gate)
+                {
+                    if (Image == null) return false;
+                    _refs++;
+                    return true;
+                }
+            }
+
+            /// <summary>Drops one reference; true when the image is gone afterwards.</summary>
+            public bool Release()
+            {
+                lock (Gate)
+                {
+                    if (Image == null) return true;
+                    if (--_refs > 0) return false;
+                    Image.Dispose();
+                    Image = null;
+                    return true;
+                }
+            }
+
+            public void ForceDispose()
             {
                 lock (Gate)
                 {
                     Image?.Dispose();
                     Image = null;
+                    _refs = 0;
                 }
             }
         }
@@ -198,19 +278,25 @@ namespace ConditioningControlPanel.Avalonia.Controls.Fx
         {
             private readonly FxFrame _frame;
             private readonly SKBlendMode _blend;
+            private int _disposed;
 
             public FxDrawOp(FxFrame frame, Rect bounds, SKBlendMode blend)
             {
-                _frame = frame;
+                _frame = frame;   // the caller took a reference for this op
                 Bounds = bounds;
                 _blend = blend;
             }
 
             public Rect Bounds { get; }
+            public bool CanDraw => System.Threading.Volatile.Read(ref _disposed) == 0 && _frame.IsAlive;
             public bool HitTest(Point p) => false;
             // Never equal: a reused op would freeze the surface on its last frame.
             public bool Equals(ICustomDrawOperation? other) => false;
-            public void Dispose() { }
+
+            public void Dispose()
+            {
+                if (System.Threading.Interlocked.Exchange(ref _disposed, 1) == 0) _frame.Release();
+            }
 
             public void Render(ImmediateDrawingContext context)
             {

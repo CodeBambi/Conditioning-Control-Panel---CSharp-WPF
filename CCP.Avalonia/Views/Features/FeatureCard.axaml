@@ -16,6 +16,20 @@
              x:Class="ConditioningControlPanel.Avalonia.Views.Features.FeatureCard"
              Cursor="Hand">
 
+  <Grid>
+    <!-- The socket a mosaic tile sits in: a SUNKEN well (polish wave 10), the well floor with its
+         top band, left band and lit foot, so an on tile reads as pressed into it. Shown only on
+         the dashboard (DashboardDepth). -->
+    <Border x:Name="DepthSocket" Margin="6,9,6,2" CornerRadius="12" Background="{DynamicResource DepthWellFloorBrush}"
+            BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1" ClipToBounds="True"
+            IsVisible="False" IsHitTestVisible="False">
+        <Grid>
+            <Border Background="{DynamicResource DepthWellTop}" Height="9" VerticalAlignment="Top" CornerRadius="11"/>
+            <Border Background="{DynamicResource DepthWellLeft}" Width="6" HorizontalAlignment="Left"/>
+            <Border Background="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom"/>
+        </Grid>
+    </Border>
+    <Panel x:Name="PressFace">
     <Border x:Name="RootBorder"
             Background="{DynamicResource ElevatedSurfaceBrush}"
             BorderBrush="{DynamicResource GlassBorderBrush}"
@@ -151,6 +165,12 @@
                            FontWeight="Bold"/>
             </Border>
 
+            <!-- The shared lamp (polish wave 10): a 1 px bevel, DepthRaisedBevel while the tile
+                 stands off its socket, DepthPressedBevel while it is on or pressed. Swapped by
+                 Controls/Depth/DashboardCardDepth.Refresh; this is the resting look. -->
+            <Border x:Name="DepthBevel" CornerRadius="11" BorderThickness="1"
+                    BorderBrush="{DynamicResource DepthRaisedBevel}"
+                    IsHitTestVisible="False" IsVisible="False"/>
             <!-- Help icon overlay (top-right corner) -->
             <Button x:Name="BtnHelp"
                     Theme="{StaticResource HelpButtonStyle}"
@@ -161,4 +181,6 @@
                     IsVisible="False"/>
         </Grid>
     </Border>
+    </Panel>
+  </Grid>
 </UserControl>
