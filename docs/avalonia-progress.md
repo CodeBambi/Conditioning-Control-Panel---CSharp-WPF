@@ -1684,3 +1684,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-companion-tab: +222
 - Companion tab visibility hook: drawer state persisted on leave/exit and restored on show, upgrader v2 consent offered on show, mod switch repaints the roster.
 - Rows stay stub; what remains needs CompanionService + CommunityPromptService in Core.
+
+## avalonia-port/rows-launcher: +83
+- Launcher speaker mute button (WPF Sound.cs), real-click test fail-proven, live sandbox checked.
+- win-launcher ledger: 5 duplicate rows merged into one (P21); still stub.
