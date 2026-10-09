@@ -44,12 +44,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             _txtHighlightOffHint = this.FindControl<TextBlock>("TxtHighlightOffHint")!;
             _highlightDurationPanel = this.FindControl<StackPanel>("HighlightDurationPanel")!;
 
-            // ponytail: the PRESET half is in Core already (CCP.Core/Services/
-            // KeywordTriggerPresetService.cs, CCP.Core/Models/KeywordTrigger.cs). What is missing
-            // is MainWindow.KeywordTriggers.cs's row BUILDER - it constructs WPF rows into
-            // TriggerRowsHost and has no Avalonia twin - and the editor dialog those rows open.
-            this.FindControl<Button>("BtnAddKeywordTrigger")!.Click += (_, _) => { };
-            this.FindControl<Button>("BtnImportFromCustomTriggers")!.Click += (_, _) => { };
+            // platform#1: the custom-trigger list, Add and Import live in KeywordTriggersPanel.Rows.cs.
+            WireTriggerList();
             // ponytail: needs App.ScreenOcr / App.KeywordHighlight. Both are live Win32/OCR
             // services with no Core seam at all (there is no CoreOcr), so these two combos have
             // nothing to push a mode to on this head. Deliberately NOT persisted meanwhile: a
@@ -103,6 +99,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 // The masters themselves live on the Awareness tab; this panel only follows them.
                 SetScreenOcrDetail(s.ScreenOcrEnabled);
                 SetHighlightDetail(s.KeywordHighlightEnabled);
+                RefreshKeywordTriggerList();
             }
             catch (Exception ex)
             {
