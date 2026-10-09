@@ -27,8 +27,8 @@
 // compile error, not a runtime gap.
 //
 // Members dropped (87 - the ones now restored are marked RESTORED):
-//   private void SetupHelpButtons(…)
-//   private void SetHelpContent(…)
+//   private void SetupHelpButtons(…)   RESTORED as MainShellWindow.HelpButtons.cs InitializeHelpButtons
+//   private void SetHelpContent(…)     RESTORED as MainShellWindow.HelpButtons.cs AttachHelpButton
 //   private void HelpVideoButton_Click(…)
 //   private Models.Preset? _selectedPreset
 //   private List<Models.Preset> _allPresets

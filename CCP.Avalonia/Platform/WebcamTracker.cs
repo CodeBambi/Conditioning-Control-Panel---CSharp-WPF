@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,36 @@ namespace ConditioningControlPanel.Avalonia.Platform
         bool Read(Mat bgr);
     }
 
+    /// <summary>The Linux twin of WPF WebcamDeviceEnumerator: one entry per V4L2 capture node read from sysfs,
+    /// never opening a camera. Nodes whose <c>index</c> is not 0 are the metadata twins a UVC camera also
+    /// exposes; listing them would offer a "camera" that yields no frames.</summary>
+    internal static class V4l2Cameras
+    {
+        /// <summary>sysfs root; tests point it at a fake tree.</summary>
+        internal static string Root = "/sys/class/video4linux";
+
+        public static IReadOnlyList<(int Index, string Name)> Enumerate()
+        {
+            var list = new List<(int, string)>();
+            try
+            {
+                if (!Directory.Exists(Root)) return list;
+                foreach (var dir in Directory.GetDirectories(Root, "video*"))
+                {
+                    if (!int.TryParse(Path.GetFileName(dir)["video".Length..], out int n)) continue;
+                    var idx = Path.Combine(dir, "index");
+                    if (File.Exists(idx) && File.ReadAllText(idx).Trim() != "0") continue;
+                    var nameFile = Path.Combine(dir, "name");
+                    var name = File.Exists(nameFile) ? File.ReadAllText(nameFile).Trim() : "";
+                    list.Add((n, name.Length > 0 ? name : $"video{n}"));
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "Webcam: camera enumeration failed"); }
+            list.Sort((a, b) => a.Item1.CompareTo(b.Item1));
+            return list;
+        }
+    }
+
     /// <summary>V4L2 capture through OpenCV. <c>CCP_WEBCAM_DEVICE</c> (an index) overrides the saved camera
     /// index; live checks point it at one with no /dev/videoN so no real camera is opened.</summary>
     internal sealed class OpenCvFrameSource : IFrameSource
@@ -27,8 +58,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         public bool Open()
         {
-            int index = Math.Max(0, int.TryParse(Environment.GetEnvironmentVariable("CCP_WEBCAM_DEVICE"), out var i)
-                ? i : CoreSettings.Current.WebcamDeviceIndex);
+            int index = int.TryParse(Environment.GetEnvironmentVariable("CCP_WEBCAM_DEVICE"), out var i)
+                ? Math.Max(0, i) : ResolveSavedIndex();
             _cap = new VideoCapture(index, OperatingSystem.IsLinux() ? VideoCaptureAPIs.V4L2 : VideoCaptureAPIs.ANY);
             if (!_cap.IsOpened()) return false;
             // WPF's default mode (WebcamTrackingService CaptureWidth/Height/TargetFps).
@@ -36,6 +67,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
             _cap.Set(VideoCaptureProperties.FrameHeight, 480);
             _cap.Set(VideoCaptureProperties.Fps, 30);
             return true;
+        }
+
+        /// <summary>The saved /dev/videoN when it is listed, else the first listed camera - the one the
+        /// Settings picker shows in that case (V4L2 numbers have gaps, so "0" may not exist).</summary>
+        internal static int ResolveSavedIndex()
+        {
+            int saved = CoreSettings.Current.WebcamDeviceIndex;
+            var cams = V4l2Cameras.Enumerate();
+            foreach (var c in cams) if (c.Index == saved) return saved;
+            return cams.Count > 0 ? cams[0].Index : Math.Max(0, saved);
         }
 
         public bool Read(Mat bgr) => _cap != null && _cap.Read(bgr) && !bgr.Empty();
@@ -72,6 +113,13 @@ namespace ConditioningControlPanel.Avalonia.Platform
         public event Action<GazeSide>? OnGazeSide;
         /// <summary>Gaze in DIPs of the calibrated monitor; fires only with a calibration.</summary>
         public event Action<ScreenPoint>? OnGazeMove;
+        /// <summary>Start's stage and status text, 1.0 when tracking is up (WPF OnStartupProgress, same
+        /// texts); drives the loading splash. A failed start ends with StateChanged and LastError.</summary>
+        public event Action<double, string>? OnStartupProgress;
+        /// <summary>The last start failed only because a Stop (panic, revoke) overtook it: WPF's Stopped
+        /// state, which closes the splash instead of showing an error.</summary>
+        internal bool StartWasStopped { get; private set; }
+        private void Progress(double p, string status) => Dispatcher.UIThread.Post(() => OnStartupProgress?.Invoke(p, status));
 
         /// <summary>The saved calibration (WPF's file in the profile folder), read once on first use
         /// as WPF reads it in the service constructor; revoke clears it with the file.</summary>
@@ -143,6 +191,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             try
             {
                 LastError = null;
+                StartWasStopped = false;
                 if (!WebcamConsent.IsCurrent(CoreSettings.Current)) { LastError = "Webcam consent is not current."; return false; }
                 // WPF #743: a loop a timed-out Stop gave up on may still hold the camera.
                 if (_wedged is { IsAlive: true })
@@ -150,6 +199,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     LastError = "The previous camera session is still closing. Try again in a moment, or restart the app.";
                     return false;
                 }
+                Progress(0.08, "Preparing eye-tracking engine…");
                 try { Cv2.GetVersionString(); }
                 catch (Exception ex)
                 {
@@ -157,6 +207,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     LastError = "Webcam tracking is unavailable: the OpenCV library could not be loaded on this system.";
                     return false;
                 }
+                // Models before the camera (WPF opens the camera first), so the stages swap places.
+                Progress(0.25, "Loading AI models…");
                 try
                 {
                     run.Face = new BlazeFaceDetector(Path.Combine(ModelDir, "face_detection_short_range.onnx"), Path.Combine(ModelDir, "blazeface_anchors.json"));
@@ -170,6 +222,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     run.Release();
                     return false;
                 }
+                Progress(0.55, "Opening camera…");
                 run.Source = SourceFactory();
                 bool opened;
                 try { opened = run.Source.Open(); } catch (Exception ex) { Log.Warning(ex, "[Webcam] open threw"); opened = false; }
@@ -191,10 +244,13 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 if (stale)
                 {
                     LastError = "Webcam tracking was stopped before the camera finished opening.";
+                    StartWasStopped = true;
                     run.Release();   // outside _gate: a slow driver close must not block Stop/StopAsync
                     return false;
                 }
+                Progress(0.92, "Starting capture…");
                 run.Thread.Start();
+                Progress(1.0, "Ready");
                 Log.Information("[Webcam] tracking started");
                 return true;
             }

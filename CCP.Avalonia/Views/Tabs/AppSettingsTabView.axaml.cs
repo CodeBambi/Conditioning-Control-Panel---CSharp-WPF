@@ -13,10 +13,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// Settings door is opened, so sections that have to re-read live state (device lists,
     /// login cards, update status) get a seam without ShowTab knowing their names.
     ///
-    /// ponytail: no ported section declares this interface yet - they carry a public
-    /// OnSectionShown() but not the `: IAppSettingsSection` - and a port may only add files
-    /// under Views/. So <see cref="Views.Tabs.AppSettingsTabView.RefreshSections"/> is a no-op
-    /// today; it starts working the moment a section adds the interface, with no change here.
+    /// ShowTab("appsettings") calls RefreshSections (MainShellWindow.TabNavigation.cs OnTabShown).
     /// </summary>
     public interface IAppSettingsSection
     {
@@ -141,8 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// Per-open refresh: hands every section that implements <c>IAppSettingsSection</c> a
         /// chance to re-read live state. One section throwing must not stop the rest, so each
-        /// call is guarded individually. See the interface's ponytail note: no ported section
-        /// declares it yet, so this is currently a no-op.
+        /// call is guarded individually.
         /// </summary>
         internal void RefreshSections()
         {
