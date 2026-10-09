@@ -100,6 +100,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 InitializeBannerRotation();
                 InitializeMarqueeBanner();
+                InitializeBannerLinks();
                 InitializeHeaderHud();
                 UpdateQuickLoginUI();
                 RefreshSessionFeatureLock();

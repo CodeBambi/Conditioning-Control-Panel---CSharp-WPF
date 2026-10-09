@@ -1184,7 +1184,7 @@
                                 <Run Text="{loc:Str label_if_you_love_the_project_please}"/>
                                 <Run Text="{loc:Str label_consider_supporting_it}" FontWeight="Bold" FontStyle="Normal" Foreground="White"/>
                                 <Run Text=" "/>
-                                <!-- ponytail: WPF Hyperlink/RequestNavigate has no Avalonia inline twin; renders as text. --><Run Text="https://linktr.ee/CodeBambi" Foreground="{DynamicResource PinkBrush}"/>
+                                <!-- Link run: MainShellWindow.BannerLinks.cs hit-tests the last run (no inline Hyperlink here). --><Run Text="https://linktr.ee/CodeBambi" Foreground="{DynamicResource PinkBrush}"/>
                             </TextBlock>
                             <TextBlock x:Name="TxtBannerSecondary" Foreground="{DynamicResource PinkButtonHoveredBrush}"
                                        FontSize="14" FontStyle="Italic"
@@ -1209,7 +1209,7 @@
                                 </TextBlock.Effect>
                                 <Run Text="{loc:Str label_banner_web_xp}"/>
                                 <Run Text=" "/>
-                                <!-- ponytail: WPF Hyperlink/RequestNavigate has no Avalonia inline twin; renders as text. --><Run Text="{loc:Str label_banner_web_link}" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                                <!-- Link run: MainShellWindow.BannerLinks.cs hit-tests the last run (no inline Hyperlink here). --><Run Text="{loc:Str label_banner_web_link}" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
                             </TextBlock>
                         </Grid>
                         </Grid>
@@ -1426,8 +1426,8 @@
                             </ControlTheme>
                         </ComboBox.ItemContainerTheme>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v7_0_5_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip.Tip="{loc:Str tooltip_v6_11_3_locktober}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v7_1_5_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip.Tip="{loc:Str tooltip_v7_1_5_stay_tuned}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Theme>
                             <ControlTheme TargetType="Button">
