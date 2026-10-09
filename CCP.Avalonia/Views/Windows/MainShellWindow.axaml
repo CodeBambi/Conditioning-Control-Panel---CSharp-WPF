@@ -411,6 +411,7 @@
                             Margin="0,0,12,0"
                             Cursor="Hand"
                             PointerPressed="MicActivePill_Click"
+                            Focusable="True" IsTabStop="True"
                             ToolTip.Tip="Microphone is active. Click to stop listening.">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Fill="#FFA726" Margin="0,0,6,0" VerticalAlignment="Center">

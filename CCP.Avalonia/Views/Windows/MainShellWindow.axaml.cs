@@ -121,6 +121,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeWebcamLoadingSplash(); // MainShellWindow.WebcamSplash.cs (WPF MainWindow.xaml.cs:3631)
             InitializeOfflineModeUI(); // MainShellWindow.OfflineMode.cs (WPF MainWindow.Settings.cs:122)
             InitializeHelpButtons(); // MainShellWindow.HelpButtons.cs (WPF MainWindow.Presets.cs:35 SetupHelpButtons)
+            InitializeMicActivePill(); // MainShellWindow.SheListening.cs (WPF MainWindow.xaml.cs:3594 WireMicActivePill)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
             Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
             Closed += (_, _) => _avatarTubeWindow?.Close();
