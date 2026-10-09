@@ -5044,6 +5044,7 @@
   "programs_unavailable": "This program cannot be started right now.",
   "programs_unavailable_title": "Not available",
   "programs_needs_feature": "Not available on this build yet: needs {0}.",
+  "programs_feature_rituals": "Rituals",
   "programs_day_counter": "Day {0} / {1}",
   "programs_attempt": "Attempt {0}",
   "programs_days_off_left": "Days off left: {0}",

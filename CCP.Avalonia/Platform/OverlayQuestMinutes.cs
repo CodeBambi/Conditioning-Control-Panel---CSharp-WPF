@@ -15,7 +15,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
     internal sealed class OverlayQuestMinutes
     {
         private readonly Action<double> _track;
-        private readonly RunningTimeCredit _credit = new(TimeSpan.FromSeconds(6));
+        private readonly RunningTimeCredit _credit = new(TimeSpan.FromSeconds(6) - TimeSpan.FromTicks(1));   // WPF: elapsed < 0.1 min, so exactly 6 s counts nothing
         private readonly Stopwatch _watch = Stopwatch.StartNew();
         private DispatcherTimer? _tick;
 

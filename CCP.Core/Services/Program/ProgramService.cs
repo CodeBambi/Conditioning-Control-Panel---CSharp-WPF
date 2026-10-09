@@ -361,7 +361,9 @@ public class ProgramService : IDisposable
     public static string? UnavailableReason(ProgramDefinition program, Func<ProgramTask, bool> isAvailable)
     {
         var needs = UnavailableTasks(program, isAvailable)
-            .Select(t => t.Kind == ProgramTaskKind.Ritual ? "Ritual" : t.Verifier?.ToString() ?? t.Id)
+            .Select(t => t.Kind == ProgramTaskKind.Ritual ? Localization.Loc.Get("programs_feature_rituals")
+                : t.Verifier == QuestCategory.KeywordTrigger ? Localization.Loc.Get("label_pro_keyword_triggers")
+                : t.Verifier?.ToString() ?? t.Id)   // every other required category is raised on both heads today
             .Distinct().ToList();
         return needs.Count == 0 ? null : Localization.Loc.GetF("programs_needs_feature", string.Join(", ", needs));
     }

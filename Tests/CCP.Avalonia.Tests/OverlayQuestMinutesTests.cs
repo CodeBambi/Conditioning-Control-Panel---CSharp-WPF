@@ -28,6 +28,9 @@ public sealed class OverlayQuestMinutesTests
         now += TimeSpan.FromSeconds(30);         // a stalled tick: WPF's < 0.1 min sanity check drops it
         counter.Sample(true);
         Assert.Equal(1.0, credited.Sum(), 6);
+        now += TimeSpan.FromSeconds(6);          // exactly 0.1 min: WPF's strict < drops it too
+        counter.Sample(true);
+        Assert.Equal(1.0, credited.Sum(), 6);
 
         counter.Follow(false);                   // hidden: the tick stops, later time counts nothing
         Assert.False(counter.TickRunning);

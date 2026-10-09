@@ -766,6 +766,7 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
     tier check with `programs_needs_feature` ("Not available on this build yet: needs {0}.", 9 languages).
   - Head: static table `CCP.Avalonia/Platform/ProgramCapabilities.cs` (raised categories + `RitualsAvailable`, flipped by 3b),
     seeded at startup. A static table, not runtime registration: a signal that has not fired yet must not look unavailable.
+  - The reason names features by loc key (`label_pro_keyword_triggers`, `programs_feature_rituals`), never raw enum names.
   - Programs stay read-only on Avalonia (no Enroll). Enrollable once 3a lands: first_week; +presentation, the_takeover at 3b;
     kept and firmware_install refused until the keyword engine is ported.
 - Not done here: the loaded-run rule (an Active run of an unavailable program opens with rollover suppressed, Withdraw enabled)

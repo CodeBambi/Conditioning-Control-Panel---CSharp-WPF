@@ -4740,6 +4740,7 @@
   "programs_unavailable": "지금은 이 프로그램을 시작할 수 없어요.",
   "programs_unavailable_title": "이용 불가",
   "programs_needs_feature": "이 빌드에서는 아직 사용할 수 없습니다: {0} 필요.",
+  "programs_feature_rituals": "의식",
   "programs_day_counter": "{0}일차 / {1}일",
   "programs_attempt": "{0}회차",
   "programs_days_off_left": "남은 휴식일: {0}",

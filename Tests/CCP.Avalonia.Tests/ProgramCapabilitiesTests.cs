@@ -75,6 +75,21 @@ public sealed class ProgramCapabilitiesTests
         }
     }
 
+    /// <summary>The hooks that make those calls fire: both overlays start/stop their minute tick when their
+    /// windows open and close, and the Lockdown credit is subscribed at startup (WPF App.xaml.cs:3295).</summary>
+    [Fact]
+    public void OverlayAndLockdownHooksAreWired()
+    {
+        string Src(params string[] p) => Code(File.ReadAllText(Path.Combine(new[] { RepoRoot(), "CCP.Avalonia" }.Concat(p).ToArray())));
+        foreach (var overlay in new[] { "PinkFilterOverlay.cs", "SpiralOverlay.cs" })
+        {
+            var src = Src("Views", "Overlays", overlay);
+            Assert.Matches(@"QuestMinutes\.Follow\(Windows\.Count > 0\)", src);
+            Assert.Matches(@"QuestMinutes\.Follow\(false\)", src);
+        }
+        Assert.Matches(@"LockdownDeactivated \+=[^;]*?TrackLockdownCompleted\(", Src("App.axaml.cs"));
+    }
+
     // Strips comments and string literals (P23), as ShellInitializerScanTests does.
     private static string Code(string src) =>
         Regex.Replace(src, @"//[^\n]*|/\*.*?\*/|'(?:[^'\\]|\\.)'|[$@]{0,2}""(?:[^""\\]|\\.)*""", " ", RegexOptions.Singleline);

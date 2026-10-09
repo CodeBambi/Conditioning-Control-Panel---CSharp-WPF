@@ -48,7 +48,7 @@ public sealed class ProgramsBrowseTests
 
                 var texts = view.FindControl<ListBox>("ProgramLibraryList")!
                     .GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
-                Assert.Contains("Not available on this build yet: needs KeywordTrigger.", texts);
+                Assert.Contains("Not available on this build yet: needs Keyword Triggers.", texts);
                 Assert.DoesNotContain(texts, t => t.Contains("programs_needs_feature"));
             }
             finally

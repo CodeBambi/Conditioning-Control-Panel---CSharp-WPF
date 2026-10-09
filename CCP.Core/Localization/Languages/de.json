@@ -4740,6 +4740,7 @@
   "programs_unavailable": "Dieses Programm kann gerade nicht gestartet werden.",
   "programs_unavailable_title": "Nicht verfügbar",
   "programs_needs_feature": "In dieser Version noch nicht verfügbar: benötigt {0}.",
+  "programs_feature_rituals": "Rituale",
   "programs_day_counter": "Tag {0} / {1}",
   "programs_attempt": "Versuch {0}",
   "programs_days_off_left": "Freie Tage übrig: {0}",
