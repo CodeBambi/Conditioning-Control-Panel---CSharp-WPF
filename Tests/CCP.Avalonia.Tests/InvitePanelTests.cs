@@ -157,7 +157,8 @@ public sealed class InvitePanelTests
             await shell.RefreshInviteTicketAsync();
             Assert.False(ticket.IsVisible);
 
-            var vault = shell.Named<ConditioningControlPanel.Avalonia.Views.Tabs.ExclusivesTabView>("ExclusivesTab")!;
+            // WPF 7.1.5: the ticket opens Settings > Account & Plans, where the invites card lives.
+            var vault = shell.Named<ConditioningControlPanel.Avalonia.Views.Tabs.AppSettingsTabView>("AppSettingsTab")!;
             shell.ShowTab("achievements");
             var ld = LockdownService.Current = new LockdownService();
             ld.Activate(TimeSpan.FromMinutes(30));
