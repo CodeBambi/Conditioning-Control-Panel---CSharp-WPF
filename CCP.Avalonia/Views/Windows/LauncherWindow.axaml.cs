@@ -529,11 +529,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             bool hosted = Destinations.TryGetValue(targetId, out var dest);
             // A card with no host on this head flinches like a refusal; its tooltip says why.
             FxPlayBeat(card.Id, needsAccount || locked || !hosted);
-            // No leash gate on this head yet, and every destination here is a panel tab: a locked
-            // one still opens it (its own gate paints the refusal), as WPF's does.
-            if (LauncherRules.Game(needsAccount, locked, leashBlocks: false) == LauncherGameStep.SignIn)
+            // Every destination here is a panel tab: a locked one still opens it (its own gate paints the
+            // refusal), as WPF's does. A pending leash punishment sends the tile to the gate on the panel
+            // first (WPF LauncherHost.cs:360, play#48).
+            var step = LauncherRules.Game(needsAccount, locked, leashBlocks: MainShellWindow.LeashBlocksGames);
+            if (step == LauncherGameStep.SignIn)
             {
                 OpenSignIn();
+                return;
+            }
+            if (step == LauncherGameStep.Leash && hosted)
+            {
+                Log.Information("[Launcher] {Id} waits: a leash punishment is pending", targetId);
+                OpenPanel(p => p.PresentLeashGateFromLauncher());
                 return;
             }
             if (!hosted)

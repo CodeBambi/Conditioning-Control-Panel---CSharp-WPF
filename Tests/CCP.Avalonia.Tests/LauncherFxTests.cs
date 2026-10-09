@@ -224,6 +224,27 @@ public sealed class LauncherFxTests
         Assert.True(shell.IsVisible);
     });
 
+    /// <summary>play#48 (WPF LauncherHost.cs:360): a pending leash punishment sends a game tile to the
+    /// gate on the panel instead of the game.</summary>
+    [Fact]
+    public void Play_UnderALeashPunishment_GoesToTheGate() => Run(MotionLevel.Full, (shell, launcher, _) =>
+    {
+        var (oldDue, oldGate) = (MainShellWindow.LeashGateDueProvider, MainShellWindow.PresentLeashGateProvider);
+        int gates = 0;
+        MainShellWindow.LeashGateDueProvider = () => true;
+        MainShellWindow.PresentLeashGateProvider = _ => gates++;
+        try
+        {
+            launcher.Hide();
+            launcher.Play(LauncherCards.Find("intake")!);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(1, gates);
+            Assert.False(IntakeHostWindow.IsAnyOpen());
+            Assert.False(ConditioningControlPanel.Avalonia.Views.Games.GameWindow.IsAnyOpen());
+        }
+        finally { (MainShellWindow.LeashGateDueProvider, MainShellWindow.PresentLeashGateProvider) = (oldDue, oldGate); }
+    });
+
     [Fact]
     public void Deactivated_ParksTheSpirals() => Run(MotionLevel.Full, (_, launcher, _) =>
     {
