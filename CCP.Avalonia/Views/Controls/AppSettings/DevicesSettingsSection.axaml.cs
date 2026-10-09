@@ -634,6 +634,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             _loading = false;
         });
 
+        private bool _capturingPanicKey;
+
         /// <summary>
         /// WPF BtnPanicKey_Click (MainWindow.UiUpdates.cs:2440) + the capture branch of
         /// OnGlobalKeyPressed (MainWindow.xaml.cs:916): no dialog, the button reads "Press any
@@ -644,7 +646,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// </summary>
         private void BtnPanicKey_Click(object? sender, RoutedEventArgs e)
         {
-            if (TopLevel.GetTopLevel(this) is not { } top) return;
+            // WPF's click only sets _isCapturingPanicKey, so a second click is a no-op; here it
+            // would attach a second key handler that rebinds the key again on the NEXT press.
+            if (_capturingPanicKey || TopLevel.GetTopLevel(this) is not { } top) return;
+            _capturingPanicKey = true;
             MainShellWindow.CapturingPanicKey = true;
             SetButtonLabel(BtnPanicKey, "Press any key...");
             top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
@@ -654,6 +659,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
             void Detach()
             {
+                _capturingPanicKey = false;
                 top.RemoveHandler(KeyDownEvent, OnCaptureKey);
                 if (top is Window w) w.Deactivated -= OnCancel;
             }

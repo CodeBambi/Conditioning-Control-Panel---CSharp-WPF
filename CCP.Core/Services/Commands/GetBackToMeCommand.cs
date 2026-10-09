@@ -106,7 +106,14 @@ namespace ConditioningControlPanel.Services.Commands
             // ModerationLog. IsAiGenerated propagates so canned fallbacks don't wear
             // the AI badge.
             if (AiProvider?.Invoke() is not { } ai) return;
-            var result = await ai.GetBambiReplyExAsync($"[Token={token}, JsonOnly={jsonOnly}]");
+            // Scoped to this async method: the reply's own commands, executed inside the call, see this
+            // follow-up's token and are dropped if a panic cancels it meanwhile (audit #1987).
+            // Restored explicitly so the scope ends with the round trip, not with the method.
+            var outer = AiCommandService.FollowUpCancellation.Value;
+            AiCommandService.FollowUpCancellation.Value = _cancellationToken;
+            Moderation.AiReplyResult result;
+            try { result = await ai.GetBambiReplyExAsync($"[Token={token}, JsonOnly={jsonOnly}]"); }
+            finally { AiCommandService.FollowUpCancellation.Value = outer; }
             // A panic or switch-off during the AI round trip drops the reply and the nested commands.
             _cancellationToken.ThrowIfCancellationRequested();
             if (!jsonOnly && result.Refusal == null && !string.IsNullOrEmpty(result.Text))

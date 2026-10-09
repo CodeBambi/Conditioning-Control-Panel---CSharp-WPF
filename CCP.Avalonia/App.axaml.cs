@@ -148,7 +148,7 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>
         /// WPF App.xaml.cs SeedAskSeams + NoticeSurface: the asks service and the oversize-prompt toast.
         /// ponytail: SessionOptions/StartSession stay unseeded (no session launcher on this head, so no
-        /// Session cards), Busy knows a session, video, lock card, bubble count and pop quiz (not grace pause), and a Watch link opens in the external
+        /// Session cards), Busy knows a session, video, lockdown, lock card, bubble count and pop quiz (not grace pause, Mantra, a connected remote controller or the startup ladder, which WPF also counts), and a Watch link opens in the external
         /// browser - WPF's own fallback when its embedded browser cannot take it.
         /// </summary>
         internal static void SeedCompanionTubeSeams()
@@ -169,7 +169,8 @@ namespace ConditioningControlPanel.Avalonia
                 Views.AvatarTube.AvatarTubeWindow.Live?.RunOnAvatar(() => Views.AvatarTube.AvatarTubeWindow.Live?.GigglePriority(text, aiGenerated: false));
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BusyProvider = () => CoreSession.IsSessionRunning
                 || CoreEngine.Video?.IsPlaying == true || Views.Windows.LockCardWindow.IsAnyOpen()
-                || Views.Windows.BubbleCountWindow.IsAnyOpen() || Views.Windows.PopQuizWindow.IsAnyOpen();
+                || Views.Windows.BubbleCountWindow.IsAnyOpen() || Views.Windows.PopQuizWindow.IsAnyOpen()
+                || ConditioningControlPanel.Services.LockdownService.Current?.IsActive == true;   // WPF App.xaml.cs:696
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.OpenLink = url =>
             {
                 if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
