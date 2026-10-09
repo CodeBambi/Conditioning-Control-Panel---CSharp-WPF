@@ -24,11 +24,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// <para>The bridge is the shell protocol every one of those pages shares: the page says
     /// <c>ready</c>, the host answers <c>init</c> (language + identity) and an empty media
     /// <c>manifest</c>, and <c>exit</c> / <c>exit-done</c> / <c>boot-error</c> close the window.
-    /// ponytail: each game's own host frames are not ported (DtRH meta/payout/run-config, Back
-    /// Room station calls + bank, Goon signalling + relay, chess friends/media/stakes, Arcademy
-    /// wallet sync, the breakout demo/full access flag, the asset media manifest, heartbeat
-    /// watchdogs and fullscreen-set). A page asking for one of them gets no answer and runs on its
-    /// own timeout fallback.</para>
+    /// Each game's own frames live in a partial beside this shell (GameWindow.BackRoom.cs: station
+    /// relay + bank; GameWindow.Dtrh.cs: meta, run config, payout; GameWindow.Host.cs: manifest,
+    /// heartbeat, fullscreen; GameWindow.Channel.cs: WebView2's own message channel).
+    /// ponytail: Goon signalling + relay, chess friends/media/stakes, Arcademy meta/sync/wallet and
+    /// the Racing host are not ported; their pages run on their own timeout fallbacks.</para>
     /// </summary>
     internal sealed partial class GameWindow : Window
     {
