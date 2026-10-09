@@ -71,19 +71,29 @@ internal sealed class LeashTaskHost : ILeashTaskHost, IDisposable
     /// back by itself), the video window closes. The punishment stays pending. With
     /// <paramref name="panicRuns"/> false (panic switched off or Lockdown holding the keys; panic
     /// always works on a leash) the leash's own session stops too.</summary>
-    internal static void OnPanicPress(bool panicRuns)
+    internal static void OnPanicPress(bool panicRuns) => OnPanicPressCore(panicRuns);
+
+    /// <summary>The gate's half of a panic press (panic runs, a task was live): the shell snoozes
+    /// and hides its LeashGateCard. Set by MainShellWindow.InitializeLeash.</summary>
+    internal static Action<bool, bool>? GatePanic { get; set; }
+
+    private static void OnPanicPressCore(bool panicRuns)
     {
         var r = Runner;
+        bool live = false;
         try
         {
-            if (r?.IsRunning == true || LeashPunishWindow.Current != null)
+            live = r?.IsRunning == true || LeashPunishWindow.Current != null;
+            if (live)
                 Serilog.Log.Information("Leash: panic press stops the running task (kept pending, panic runs={Runs})", panicRuns);
             if (panicRuns) r?.Park();
             else r?.ParkAndStopItsSession();
         }
         catch (Exception ex) { Serilog.Log.Debug("Leash park failed: {E}", ex.Message); }
         LeashPunishWindow.CloseNow();
-        // SEAM: WPF also snoozes the gate 10 min (LeashUiRules.PanicSnooze) and hides it: gate owner wires that.
+        // WPF: the gate stands back ten minutes (LeashUiRules.PanicSnooze) and hides.
+        try { GatePanic?.Invoke(panicRuns, live); }
+        catch (Exception ex) { Serilog.Log.Debug("Leash gate stand-back failed: {E}", ex.Message); }
     }
 
     /// <summary>WPF EndLeashTask: cancel whatever the runner drives and close its window. Idempotent.</summary>

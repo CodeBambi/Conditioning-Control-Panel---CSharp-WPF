@@ -71,6 +71,25 @@ internal static partial class LeashLook
         ["clock"] = new[] { ("M12,2 A10,10 0 1 0 12.01,2 Z", false, 2.0), ("M12,6 V12 L16,14", false, 2.2) },
     };
 
+    /// <summary>WPF LeashLook.Stamp: a tilted rubber-stamp word in a 2 px frame.</summary>
+    internal static Border Stamp(string text, Color color, double angle = 10)
+    {
+        var ink = new SolidColorBrush(color);
+        return new Border
+        {
+            BorderBrush = ink,
+            BorderThickness = new Thickness(2),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 2, 6, 2),
+            Opacity = 0.88,
+            RenderTransformOrigin = RelativePoint.Center,
+            RenderTransform = new RotateTransform(angle),
+            IsHitTestVisible = false,
+            Tag = "leash-stamp",
+            Child = new TextBlock { Text = text, FontFamily = FriendsDrawer.Mono, FontWeight = FontWeight.Bold, FontSize = 11, Foreground = ink },
+        };
+    }
+
     internal static Control Icon(string name, IBrush brush, double size)
     {
         var canvas = new Canvas { Width = 24, Height = 24 };

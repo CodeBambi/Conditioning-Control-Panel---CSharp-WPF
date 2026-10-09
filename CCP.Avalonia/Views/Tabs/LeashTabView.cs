@@ -2,8 +2,8 @@
 // for both roles. Hosts a second LeashDrawerSection (the drawer keeps its own); every action, the
 // cut included, is the section's own, so the page adds no path the drawer does not have. The "?"
 // explainer sits top right. Empty (no offer, no leash, signed out): one line and a button to
-// Friends, where offers start. Deviation: the gate stand-in under the section (LeashTabView.Cards.cs)
-// until the LeashGateCard overlay lands on this head.
+// Friends, where offers start. The gate is the panel overlay
+// (LeashGateCard, MainShellWindow.Leash.cs), as WPF.
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -35,12 +35,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal Func<ILeashService?> Resolve { get; set; } = () => Platform.LeashHead.Service;
 
         private readonly TextBlock _emptyLine;
-        private Control? _gate;
 
         public LeashTabView()
         {
             Section = new LeashDrawerSection(() => Resolve());
-            Section.Changed += () => { SyncGate(); SyncEmpty(); };
+            Section.Changed += SyncEmpty;
             SectionHost.Children.Add(Section);
 
             Help = LeashLook.Help(LeashExplainRole.Leashed);
@@ -97,28 +96,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void SyncEmpty() => EmptyPanel.IsVisible = !Section.IsVisible;
 
-        /// <summary>The gate stand-in follows the section's repaint (see LeashTabView.Cards.cs).</summary>
-        private void SyncGate()
-        {
-            if (_gate != null) SectionHost.Children.Remove(_gate);
-            _gate = null;
-            try
-            {
-                if (Section.Service is { Available: true } s && s.Snapshot.Me is { } me && GateStandIn(s, me) is { } g)
-                {
-                    _gate = g;
-                    SectionHost.Children.Add(g);
-                }
-            }
-            catch (Exception ex) { Serilog.Log.Debug("[Leash] gate stand-in failed: {E}", ex.Message); }
-        }
-
         /// <summary>Repaints the section (rebinding to the live service) and the empty state.</summary>
         internal void Rebuild()
         {
             try { Section.Render(); }
             catch (Exception ex) { Serilog.Log.Debug("[Leash] page repaint failed: {E}", ex.Message); }
-            SyncGate();
             SyncEmpty();
         }
 

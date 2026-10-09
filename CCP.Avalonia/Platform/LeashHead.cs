@@ -63,7 +63,7 @@ internal static class LeashHead
         };
         Service = svc;
         Views.Windows.MainShellWindow.LeashGateDueProvider = () => Service?.GateDue != null;
-        Views.Windows.MainShellWindow.PresentLeashGateProvider = w => w.CheckLeashGate();
+        Views.Windows.MainShellWindow.PresentLeashGateProvider = w => w.PresentLeashGateNow();
         return svc;
     }
 
