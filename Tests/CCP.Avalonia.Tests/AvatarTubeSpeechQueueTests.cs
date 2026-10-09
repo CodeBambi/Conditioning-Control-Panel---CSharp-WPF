@@ -137,4 +137,36 @@ public sealed class AvatarTubeSpeechQueueTests
         finally { tube.Close(); service.SealForReset(); }
         return Task.CompletedTask;
     });
+    [Fact]
+    public Task LiveTubeSpeaksIntoItsOwnBubbleWindowAndTypes() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        AvatarTubeWindow.SpeechInstantOverride = false;   // the running app: own window, typewriter
+        var tube = new AvatarTubeWindow(null);
+        try
+        {
+            tube.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(tube.HasBubbleWindow);
+            var bubble = tube.FindControl<Border>("SpeechBubble")!;
+            var text = tube.FindControl<TextBlock>("TxtSpeech")!;
+            tube.GigglePriority("hello there", playSound: false, aiGenerated: true);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(tube.IsSpeaking);
+            var host = TopLevel.GetTopLevel(bubble);
+            Assert.NotNull(host);
+            Assert.NotSame(tube, host);   // moved out of the tube's canvas into its own window
+            Assert.True(host!.IsVisible);
+            Assert.NotEqual("hello there", text.Text);   // still typing
+            tube.FinishTypewriterForTest();
+            Assert.Equal("hello there", text.Text);
+        }
+        finally { AvatarTubeWindow.SpeechInstantOverride = null; tube.Close(); service.SealForReset(); }
+        return Task.CompletedTask;
+    });
 }

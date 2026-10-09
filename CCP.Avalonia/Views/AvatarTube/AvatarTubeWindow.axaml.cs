@@ -327,6 +327,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // puts the avatar, title, input panel, Takeover bar and speech bubble on the mod's
             // chamber rather than on the stock one.
             RefreshTubeLayout();
+            CreateBubbleWindow();   // WPF 7.1.5: the bubble is its own window, clear of main (BubbleWindow.cs)
 
             AttachAwareness();   // WPF xaml.cs:317-322 (Reactions.cs)
             AttachAppReactions();   // WPF xaml.cs:261-340 (tube#T5)
@@ -896,6 +897,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// </summary>
         private void ApplySpeechBubblePlacement()
         {
+            if (_bubbleWindow != null) { PlaceBubbleWindow(); return; }   // its own window (BubbleWindow.cs)
             var useAttached = _isAttached || ModOverridesAttachedTubeOnly();
             var dx = useAttached ? EffAvatarOffsetX() : EffAvatarDetachedOffsetX();
 
