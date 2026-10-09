@@ -30,7 +30,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// watchdogs and fullscreen-set). A page asking for one of them gets no answer and runs on its
     /// own timeout fallback.</para>
     /// </summary>
-    internal sealed class GameWindow : Window
+    internal sealed partial class GameWindow : Window
     {
         /// <summary>A game this head can open: its launcher id, title key, page under Resources/web,
         /// and the WPF gate run before the window is built (null = free).</summary>
@@ -98,8 +98,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             Content = Web;
             Web.WebMessage += OnPageMessage;
             Web.AllowNavigation = url => PageUrl != null && SameOrigin(url, PageUrl);
-            Opened += (_, _) => { lock (Open) Open.Add(this); };
-            Closed += (_, _) => { lock (Open) Open.Remove(this); };
+            Opened += (_, _) => { lock (Open) Open.Add(this); OnGameOpened(); };
+            Closing += (_, _) => IsClosedOrClosing = true;
+            Closed += (_, _) => { lock (Open) Open.Remove(this); OnGameClosed(); };
         }
 
         internal void Load(WebAssetServer server)
@@ -123,13 +124,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         internal void HandleMessage(string json)
         {
             JObject o;
-            try { o = JObject.Parse(json); }
+            try { o = JObject.Parse(Unwrap(json)); }
             catch (Exception ex) { Log.Debug("[Game] {Id}: unreadable page message: {E}", Spec.Id, ex.Message); return; }
+            // Each game's own frames first (Views/Games/GameWindow.<Game>.cs); the shell frames below.
+            if (HandleGameMessage(o)) return;
             switch ((string?)o["type"])
             {
                 case "ready":
-                    Post(InitMessage());
-                    Post(new { type = "manifest", images = Array.Empty<string>(), videos = Array.Empty<string>(), gifs = Array.Empty<string>(), skipped = 0, truncated = false });
+                    IsReady = true;
+                    OnPageReady();
                     break;
                 case "log":
                     Log.Debug("[Game] {Id} page: {Msg}", Spec.Id, (string?)o["msg"]);
@@ -149,6 +152,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "fire-payload" when Spec.Id == "dtrh":
                     // WPF DtrhHostService.cs:296: the run's video / whisper cross to the desktop.
                     Chaos.DtrhPayloadBridge.Fire(json);
+                    break;
+                case "heartbeat":
+                case "pong":
+                    NoteHeartbeat();
+                    break;
+                case "fullscreen-set":
+                    // WPF DtrhHostService.ApplyHostFullscreen: C# owns the borderless toggle, echoed back.
+                    SetHostFullscreen((bool?)o["on"] ?? false);
+                    break;
+                default:
+                    // WPF BackRoomBridge default: a page waiting on a bridge leaves a line naming it (play#56).
+                    Log.Debug("[Game] {Id}: unhandled page message '{Type}'", Spec.Id, (string?)o["type"]);
                     break;
             }
         }
@@ -188,20 +203,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             return full && !demoDoor
                 ? new { storyLimit = 8, endless = true, demo = false }
                 : new { storyLimit = 3, endless = false, demo = true };
-        }
-
-        /// <summary>Host -&gt; page on either carrier: the string push (web-shim's __ccpRnPush) when
-        /// the page installed it, else a message event on chrome.webview (WebView2's object carrier).
-        /// ponytail: a page whose bridge only listens on chrome.webview gets the frame only if that
-        /// object accepts dispatchEvent; the sure path is CoreWebView2.PostWebMessageAsJson through
-        /// NativeWebView.TryGetPlatformHandle.</summary>
-        internal void Post(object message)
-        {
-            var json = JsonConvert.SerializeObject(message);
-            var script = "(function(m){try{if(typeof window.__ccpRnPush==='function'){window.__ccpRnPush(JSON.stringify(m));return;}"
-                + "var w=window.chrome&&window.chrome.webview;if(w&&w.dispatchEvent){w.dispatchEvent(new MessageEvent('message',{data:m}));}}catch(e){}})("
-                + json + ");";
-            _ = Web.InvokeScriptAsync(script);
         }
 
         // ---- panic (PanicSurfaces "games", WPF GameSurfaces) ----------------------------------
