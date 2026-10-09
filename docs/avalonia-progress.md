@@ -1656,3 +1656,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/programs-run-2: +867
 - Read-only Programs run view of a saved enrollment; stale days read LAST SAVED, not TODAY (CHECKPOINT A); no lifecycle/session controls, no writes.
 - ProgramsRunViewTests (shell path, 7 breaks fail-proven) + Keincheck temp-profile screenshot with programs.json byte-identical.
+
+## avalonia-port/rows-dashboard: +987
+- Dashboard FX funnel wired (RefreshFx on motion/performance/window changes, vault CTA breath, FeatureCard parks at peak); browser fold and billboard ported (BrowserFoldRule and DashboardBillboard moved to Core); billboard and fold rows now wired.
+- Still stubs: dashboard-fx (? box, logo, rail, browser sweep), hero-fx (untouched).

@@ -81,7 +81,7 @@ public class DashboardBillboardTests
     [Fact]
     public void APosterResolvesToAPackUri()
         => Assert.Equal("pack://application:,,,/Resources/billboard/loom.png",
-                        DashboardBillboard.PosterUri(Card("loom")));
+                        global::ConditioningControlPanel.BillboardPoster.Uri(Card("loom")));
 
     [Fact]
     public void EveryCardHasItsOwnPoster()
