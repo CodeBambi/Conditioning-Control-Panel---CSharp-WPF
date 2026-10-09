@@ -29,6 +29,10 @@ public sealed class AvatarTubeSpeechLoopTests
         Assert.Equal(5.0, AvatarTubeWindow.TriggerDisplaySeconds(0));
         Assert.Equal(6.0, AvatarTubeWindow.TriggerDisplaySeconds(20));
         Assert.Equal(14.0, AvatarTubeWindow.TriggerDisplaySeconds(1000));
+        Assert.Equal(1.0, AvatarTubeWindow.ClickBounceScale(0));
+        Assert.Equal(1.015, AvatarTubeWindow.ClickBounceScale(80), 3);
+        Assert.Equal(1.0, AvatarTubeWindow.ClickBounceScale(300));
+        Assert.InRange(AvatarTubeWindow.ClickBounceScale(150), 0.99, 1.03);
     }
 
     [Fact]
