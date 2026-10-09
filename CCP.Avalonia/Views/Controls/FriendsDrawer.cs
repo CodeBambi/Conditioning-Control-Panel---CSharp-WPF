@@ -96,6 +96,8 @@ public sealed partial class FriendsDrawer : Border
         Grid.SetRow(_addBox, 3);
         Grid.SetRow(_foot, 4);
         root.Children.AddRange(new Control[] { _head, _ask, scroll, _addBox, _foot });
+        Grid.SetRowSpan(_fx, 5);
+        root.Children.Add(_fx);
         Child = root;
         // The leash, pinned above the list (WPF field _leash = new LeashDrawerSection(), re-added on every render).
         MountLeash(_leashSlot);
@@ -450,6 +452,8 @@ public sealed partial class FriendsDrawer : Border
         _openId = _openId == friendId ? null : friendId;
         (_confirm, _picker) = (null, null);
         Render();
+        // WPF CardIn: the card that just opened grows in under its row.
+        if (_openId != null) foreach (var r in _rowsInOrder) if (r.Tag as string == "friends-row:" + _openId) CardIn(r);
     }
 
     /// <summary>The open card: the menu one press away, or the Remove / Block question.</summary>
@@ -602,7 +606,7 @@ public sealed partial class FriendsDrawer : Border
             // Drawn in an open drawer: the one who asked may hear it was seen (once per request).
             if (_isOpen) FriendsSeen.Shared.RequestSeen(_svc, r);
             var accept = Pill(Loc.Get("friends_request_accept"), Mint, MintInk, "friends-accept");
-            accept.Click += async (_, _) => await AnswerRequestAsync(r, "accept");
+            accept.Click += async (_, _) => await AnswerRequestAsync(r, "accept", accept);
             var decline = Pill(Loc.Get("friends_request_decline"), Raised, Text, "friends-decline");
             decline.Margin = new Thickness(6, 0, 0, 0);
             decline.Click += async (_, _) => await AnswerRequestAsync(r, "decline");
@@ -626,7 +630,7 @@ public sealed partial class FriendsDrawer : Border
         };
     }
 
-    internal async Task<ActResult> AnswerRequestAsync(FriendRequest r, string what)
+    internal async Task<ActResult> AnswerRequestAsync(FriendRequest r, string what, Control? from = null)
     {
         if (_svc == null) return ActResult.TryLater;
         Friends.FriendsSfx.Click();
@@ -643,7 +647,7 @@ public sealed partial class FriendsDrawer : Border
         catch { res = ActResult.TryLater; }
         if (res == ActResult.Done)
         {
-            if (what == "accept") { Friends.FriendsSfx.Accepted(); TellOutside(Loc.Get("friends_add_accepted"), good: true); }
+            if (what == "accept") { if (from != null) Shockwave(from, MintC); Friends.FriendsSfx.Accepted(); TellOutside(Loc.Get("friends_add_accepted"), good: true); }
             else Friends.FriendsSfx.Dismiss();
         }
         else ShowActResult((what == "cancel" ? "out:" : "in:") + r.Id, res);
@@ -745,6 +749,8 @@ public sealed partial class FriendsDrawer : Border
                 try { await (TopLevel.GetTopLevel(this)?.Clipboard?.SetTextAsync(code) ?? Task.CompletedTask); } catch { return; }
                 copied.Text = Loc.Get("friends_copied");
                 copied.Foreground = Mint;
+                Friends.FriendsSfx.Click();
+                Pop(copy, LilacC);
                 DispatcherTimer.RunOnce(() => { copied.Text = Loc.Get("friends_my_code"); copied.Foreground = Dim; }, TimeSpan.FromSeconds(2));
             };
             var mine = new StackPanel { Orientation = Orientation.Horizontal, Children = { Tagged(Label(code, 12, Lilac, Mono, FontWeight.SemiBold), "friends-my-code"), copy } };
@@ -794,7 +800,7 @@ public sealed partial class FriendsDrawer : Border
         bool good = FriendsDrawerRules.IsGood(r);
         _addResult.Text = Loc.Get(FriendsDrawerRules.AddResultKey(r));
         _addResult.Foreground = good ? Mint : Gold;
-        if (good) Friends.FriendsSfx.Accepted(); else Friends.FriendsSfx.Denied();
+        if (good) { Shockwave(_addGo, MintC); Friends.FriendsSfx.Accepted(); } else Friends.FriendsSfx.Denied();
         if (good) _codeBox.Text = "";
         else _addGo.IsEnabled = FriendsDrawerRules.NormaliseCode(_codeBox.Text).Length == FriendsDrawerRules.CodeLength;
         await SafeRefreshAsync();
@@ -830,6 +836,7 @@ public sealed partial class FriendsDrawer : Border
         _addResult.Text = "";
         _inviteLine.IsVisible = OffersInviteLink();
         _codeBox.Focus();
+        if (Amount > 0) StaggerIn(_addBox, TimeSpan.Zero);   // WPF MotionFx.StaggerIn(_addBox)
     }
 
     /// <summary>The page's empty state: one line and one button ("No friends yet. Add one").</summary>

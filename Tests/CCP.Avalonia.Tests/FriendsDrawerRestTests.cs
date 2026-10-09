@@ -169,6 +169,7 @@ public sealed class FriendsDrawerRestTests
         try
         {
             ConditioningControlPanel.CoreSettings.Current.MasterVolume = 50;
+            await Task.Delay(200);   // one gate for every drawer sound: let an earlier test's sound clear the 130 ms floor
             FriendsSfx.DrawerOpen();
             await Task.Delay(150);
             FriendsSfx.Click();
@@ -253,6 +254,34 @@ public sealed class FriendsDrawerRestTests
             Assert.IsType<global::Avalonia.Media.ScaleTransform>(pill.RenderTransform);
         }
         finally { (FriendsDrawer.TierArt, FriendsDrawer.MotionLevelNow) = (art, level); }
+    });
+
+    /// <summary>WPF Sparks / Shockwave: dots and rings land on the drawer's fx layer at Full (BoxShadow
+    /// glow, never an Effect) and nothing at Off; a sent chip pops (scale) and sparks.</summary>
+    [Fact]
+    public Task SparksAndShockwaveDrawOnTheFxLayer() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var level = FriendsDrawer.MotionLevelNow;
+        try
+        {
+            FriendsDrawer.MotionLevelNow = () => MotionLevel.Full;
+            var d = await Drawer(Service());
+            var fx = Tagged<Canvas>(d, "friends-fx")!;
+            var row = Tagged<Border>(d, "friends-row:u_on")!;
+            d.Sparks(row, FriendsDrawer.MintC, 5);
+            Assert.Equal(5, fx.Children.Count(c => c.Tag as string == "friends-spark"));
+            Assert.All(fx.Children, c => Assert.Null(c.Effect));
+            d.Shockwave(row, FriendsDrawer.MintC);
+            Assert.Equal(2, fx.Children.Count(c => c.Tag as string == "friends-shockwave"));
+            d.Pop(row, FriendsDrawer.PinkC);
+            Assert.IsType<global::Avalonia.Media.ScaleTransform>(row.RenderTransform);
+            fx.Children.Clear();
+            FriendsDrawer.MotionLevelNow = () => MotionLevel.Off;
+            d.Sparks(row, FriendsDrawer.MintC, 5);
+            d.Shockwave(row, FriendsDrawer.MintC);
+            Assert.Empty(fx.Children);
+        }
+        finally { FriendsDrawer.MotionLevelNow = level; }
     });
 
     /// <summary>Juice: online dots carry the breathing tag, a row has the sheen host, and motion Off

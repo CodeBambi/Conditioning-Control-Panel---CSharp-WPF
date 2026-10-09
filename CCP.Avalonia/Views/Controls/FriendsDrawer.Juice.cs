@@ -4,7 +4,7 @@
 // Every move reads the motion level: Full plays it, Reduced at half the size, Off leaves it still.
 // Avalonia rules: transforms move through TransformTween (never Animation.RunAsync on a Transform),
 // the breathing dots ride one BreathClock (never a Forever Animation), opacity stays inside 0..1.
-// ponytail: no Sparks / Shockwave (WPF draws them on an fx Canvas with a glow Effect each; no fx layer here).
+// Sparks and the Add shockwave draw on the drawer's own fx Canvas; their glow is a BoxShadow, never an Effect.
 using System;
 using System.Collections.Generic;
 using Avalonia;
@@ -13,6 +13,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Views.Features;
@@ -30,6 +31,8 @@ public sealed partial class FriendsDrawer
     private readonly Dictionary<string, Control> _avatars = new();
     private readonly List<Control> _rowsInOrder = new();
     private BreathClock? _breath;
+    internal static readonly Color MintC = Color.FromRgb(0x5F, 0xFF, 0xD0), PinkC = Color.FromRgb(0xFF, 0x5F, 0xB4),
+        LilacC = Color.FromRgb(0xB9, 0x9C, 0xFF), GoldC = Color.FromRgb(0xFF, 0xCF, 0x6B);
 
     /// <summary>The spring the card opens with: up from the chip, a little overshoot, rows staggering in.</summary>
     private void PlayEntrance()
@@ -157,10 +160,11 @@ public sealed partial class FriendsDrawer
             (0.78, TranslateTransform.YProperty, -3 * k), (0.9, TranslateTransform.YProperty, 0), (0.95, TranslateTransform.YProperty, -1 * k),
             (1, TranslateTransform.YProperty, 0),
         });
+        Sparks(av, MintC, 8);
     }
 
-    /// <summary>The chip pop: the pressed element swells and settles.</summary>
-    internal static void Pop(Control el)
+    /// <summary>The chip pop: the pressed element swells and settles, and throws a few sparks.</summary>
+    internal void Pop(Control el, Color color)
     {
         double k = Amount;
         if (k <= 0) return;
@@ -172,5 +176,118 @@ public sealed partial class FriendsDrawer
             (0, ScaleTransform.ScaleXProperty, 1), (0.29, ScaleTransform.ScaleXProperty, peak), (0.6, ScaleTransform.ScaleXProperty, 0.96), (1, ScaleTransform.ScaleXProperty, 1),
             (0, ScaleTransform.ScaleYProperty, 1), (0.29, ScaleTransform.ScaleYProperty, peak), (0.6, ScaleTransform.ScaleYProperty, 0.96), (1, ScaleTransform.ScaleYProperty, 1),
         });
+        Sparks(el, color, (int)Math.Round(12 * k));
+    }
+
+    /// <summary>The drawer's own fx layer over every row (WPF _fx): never hit-testable.</summary>
+    private readonly Canvas _fx = new() { IsHitTestVisible = false, Tag = "friends-fx" };
+    private readonly Random _rng = new();
+
+    /// <summary>The centre of <paramref name="from"/> on the fx layer, or null when it is not on screen.</summary>
+    private Point? FxCentre(Control from)
+    {
+        try
+        {
+            if (from.TranslatePoint(new Point(from.Bounds.Width / 2, from.Bounds.Height / 2), _fx) is { } p) return p;
+            // Not in a window yet (or a detached host): add the offsets up to the drawer, which _fx fills.
+            double x = from.Bounds.Width / 2, y = from.Bounds.Height / 2;
+            Visual? v = from;
+            while (v != null && !ReferenceEquals(v, this)) { x += v.Bounds.X; y += v.Bounds.Y; v = v.GetVisualParent() ?? (v as Control)?.Parent as Visual; }
+            return v == null ? null : new Point(x, y);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Removes <paramref name="c"/> from the fx layer after <paramref name="ms"/>.</summary>
+    private void Retire(Control c, double ms)
+    {
+        var t = new global::Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms + 40) };
+        t.Tick += (_, _) => { t.Stop(); _fx.Children.Remove(c); };
+        t.Start();
+    }
+
+    /// <summary>Little glowing dots flung out of an element's centre. The glow is a BoxShadow on a
+    /// round Border (never an Effect); a handful of dots, never a particle system.</summary>
+    internal void Sparks(Control from, Color color, int count)
+    {
+        if (count <= 0 || Amount <= 0 || FxCentre(from) is not { } c) return;
+        var brush = new SolidColorBrush(color);
+        var glow = new BoxShadows(new BoxShadow { Blur = 6, Color = Color.FromArgb(0xE6, color.R, color.G, color.B) });
+        for (int i = 0; i < count; i++)
+        {
+            double size = 3 + _rng.NextDouble() * 3;
+            var dot = new Border { Width = size, Height = size, CornerRadius = new CornerRadius(size / 2), Background = brush, BoxShadow = glow, Tag = "friends-spark" };
+            Canvas.SetLeft(dot, c.X - size / 2);
+            Canvas.SetTop(dot, c.Y - size / 2);
+            var t = new TranslateTransform();
+            dot.RenderTransform = t;
+            _fx.Children.Add(dot);
+            double ang = _rng.NextDouble() * Math.PI * 2, dist = (24 + _rng.NextDouble() * 30) * Amount;
+            double ms = 420 + _rng.Next(260);
+            var ease = new QuadraticEaseOut();
+            TransformTween.Run(t, TimeSpan.FromMilliseconds(ms), new (double, AvaloniaProperty, double)[]
+            {
+                (0, TranslateTransform.XProperty, 0), (1, TranslateTransform.XProperty, Math.Cos(ang) * dist),
+                (0, TranslateTransform.YProperty, 0), (1, TranslateTransform.YProperty, Math.Sin(ang) * dist + 6),
+            }, ease);
+            TransformTween.Run(dot, TimeSpan.FromMilliseconds(ms), new (double, AvaloniaProperty, double)[] { (0, OpacityProperty, 1), (1, OpacityProperty, 0) });
+            Retire(dot, ms);
+        }
+    }
+
+    /// <summary>The shockwave on Add: two rings that grow out of the button and fade, then sparks.</summary>
+    internal void Shockwave(Control from, Color color)
+    {
+        double k = Amount;
+        if (k <= 0 || FxCentre(from) is not { } c) return;
+        for (int i = 0; i < 2; i++)
+        {
+            var ring = new Border
+            {
+                Width = 20, Height = 20, CornerRadius = new CornerRadius(10), BorderBrush = new SolidColorBrush(color), BorderThickness = new Thickness(2.5),
+                BoxShadow = new BoxShadows(new BoxShadow { Blur = 12, Color = Color.FromArgb(0xE6, color.R, color.G, color.B) }),
+                RenderTransformOrigin = RelativePoint.Center, Opacity = 0, Tag = "friends-shockwave",
+            };
+            Canvas.SetLeft(ring, c.X - 10);
+            Canvas.SetTop(ring, c.Y - 10);
+            var s = new ScaleTransform(0.4, 0.4);
+            ring.RenderTransform = s;
+            _fx.Children.Add(ring);
+            double ms = 620 / Math.Max(k, 0.5), begin = i * 120;
+            var ease = new CubicEaseOut();
+            void Go()
+            {
+                TransformTween.Run(s, TimeSpan.FromMilliseconds(ms), new (double, AvaloniaProperty, double)[]
+                {
+                    (0, ScaleTransform.ScaleXProperty, 0.4), (1, ScaleTransform.ScaleXProperty, 1 + 9 * k),
+                    (0, ScaleTransform.ScaleYProperty, 0.4), (1, ScaleTransform.ScaleYProperty, 1 + 9 * k),
+                }, ease);
+                TransformTween.Run(ring, TimeSpan.FromMilliseconds(ms), new (double, AvaloniaProperty, double)[] { (0, OpacityProperty, 0.95), (1, OpacityProperty, 0) });
+            }
+            if (begin <= 0) Go();
+            else
+            {
+                var d = new global::Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(begin) };
+                d.Tick += (_, _) => { d.Stop(); Go(); };
+                d.Start();
+            }
+            Retire(ring, ms + begin);
+        }
+        Sparks(from, color, (int)Math.Round(14 * k));
+    }
+
+    /// <summary>A card that just opened grows in under its row (WPF CardIn -> MotionFx.StaggerIn).</summary>
+    private static void CardIn(Control row) { if (Amount > 0) StaggerIn(row, TimeSpan.Zero); }
+
+    /// <summary>WPF LandLine: a feed line that just landed slides in from the left (280 ms, a small
+    /// back-ease on the slide; the opacity stays linear inside 0..1).</summary>
+    private static void LandLine(Control row)
+    {
+        double k = Amount;
+        if (k <= 0) return;
+        var slide = new TranslateTransform(-12 * k, 0);
+        row.RenderTransform = slide;
+        TransformTween.Run(slide, TimeSpan.FromMilliseconds(280), new (double, AvaloniaProperty, double)[] { (0, TranslateTransform.XProperty, -12 * k), (1, TranslateTransform.XProperty, 0) }, new BackEaseOut());
+        TransformTween.Run(row, TimeSpan.FromMilliseconds(280), new (double, AvaloniaProperty, double)[] { (0, OpacityProperty, 0), (1, OpacityProperty, 1) });
     }
 }
