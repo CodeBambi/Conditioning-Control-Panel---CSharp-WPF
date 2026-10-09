@@ -331,12 +331,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void CommitAppList()
         {
-            // ponytail: BLOCKED on KeywordTriggerService.ParseAppList, which canonicalises the box
-            // (split on , ; newline, strip a trailing ".exe", de-duplicate case-insensitively).
-            // That is a pure static with no platform dependency and belongs in Core, but the
-            // service is not this layer's file and copying the parse here would give the two heads
-            // two definitions of what "chrome.exe" means. The box is seeded and readable; commit
-            // lands with the service.
+            // WPF MainWindow.Awareness.cs:683: Core's ParseAppList canonicalises the box (split on
+            // , ; newline, strip ".exe", de-duplicate case-insensitively); unchanged = no write.
+            var settings = CoreSettings.Current;
+            if (_isLoading || settings == null) return;
+            var parsed = ConditioningControlPanel.Services.KeywordTriggers.KeywordTriggerEngine.ParseAppList(TxtAwarenessAppList.Text);
+            var existing = settings.KeywordTriggerApps ?? new System.Collections.Generic.List<string>();
+            if (System.Linq.Enumerable.SequenceEqual(parsed, existing, StringComparer.OrdinalIgnoreCase)) return;
+            settings.KeywordTriggerApps = parsed;
+            CoreSettings.Save();
+            Log.Information("Awareness app scope list set to {Count} app(s) ({Mode})", parsed.Count, settings.KeywordTriggerAppScope);
         }
 
         // ------------------------------------------------------------------ highlight colour
