@@ -1600,3 +1600,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/panic-order-test: +60
 - PanicSurfacesTests checks WPF-cited ordering pairs, unique ids and a safety-critical set instead of one exact list, so branches that add a surface stop conflicting on it (P53).
+
+## avalonia-port/rows-exclusives: +400
+- Vault: tier plates read the access gates, 3px/4px tier livery, two coming-soon teasers, and one visibility-gated 24fps clock for padlock breath, FREE TODAY pulse, Ken Burns and sheens.
+- Duplicate shell-exclusives ledger rows merged; both rows stay stub (re-tint, hover lift, launches and hero art still missing).
