@@ -417,6 +417,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             strip.AccessProvider = NavAccess;
             strip.TabRequested += OnSectionPillChosen;
+            strip.PillCreated += OnSectionPillCreated;   // shell#23: every pill gets a pin menu (MainShellWindow.FavoritePins.cs)
             strip.SectionRequested += section =>
             {
                 if (section == NavSections.Settings) ShowTab("appsettings");
