@@ -1,32 +1,51 @@
-// PORTED from WPF 7.1.5 ConditioningControlPanel/Views/Tabs/LeashTabView.xaml(.cs): Social > Leash.
-// WPF hosts a LeashDrawerSection (offers, your own card with the cut, one card per account you
-// hold) over an empty state. The cards live in LeashTabView.Cards.cs (Core LeashService via LeashHead);
-// with no leash, no offer and no one held, the page shows exactly what 7.1.5 shows with no
-// leash: one line and a button to Friends, where offers start.
-// ponytail: LeashLook.Help (the "?" explainer).
+// PORTED from WPF 7.1.5 Views/Tabs/LeashTabView.xaml(.cs): Social > Leash, the leash cards as a page
+// for both roles. Hosts a second LeashDrawerSection (the drawer keeps its own); every action, the
+// cut included, is the section's own, so the page adds no path the drawer does not have. The "?"
+// explainer sits top right. Empty (no offer, no leash, signed out): one line and a button to
+// Friends, where offers start. Deviation: the gate stand-in under the section (LeashTabView.Cards.cs)
+// until the LeashGateCard overlay lands on this head.
+using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Avalonia.Views.Controls.Leash;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Leash;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>Social &gt; Leash: the leash cards as a page; cards, or the empty state.</summary>
     public sealed partial class LeashTabView : UserControl
     {
-        /// <summary>Where the leash cards go once the service exists (WPF SectionHost).</summary>
+        /// <summary>Where the leash section goes (WPF SectionHost).</summary>
         internal StackPanel SectionHost { get; } = new();
+
+        internal LeashDrawerSection Section { get; }
+
+        /// <summary>The "?" explainer button (LeashExplainHost).</summary>
+        internal Button Help { get; }
 
         internal StackPanel EmptyPanel { get; }
 
         internal Button EmptyButton { get; }
 
+        /// <summary>The service the page draws (tests hand one in; the app reads LeashHead).</summary>
+        internal Func<ILeashService?> Resolve { get; set; } = () => Platform.LeashHead.Service;
+
         private readonly TextBlock _emptyLine;
+        private Control? _gate;
 
         public LeashTabView()
         {
+            Section = new LeashDrawerSection(() => Resolve());
+            Section.Changed += () => { SyncGate(); SyncEmpty(); };
+            SectionHost.Children.Add(Section);
+
+            Help = LeashLook.Help(LeashExplainRole.Leashed);
+            var helpHost = new Border { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 0, 8), Child = Help };
+
             _emptyLine = new TextBlock
             {
                 Text = Loc.Get("social_leash_empty"),
@@ -60,6 +79,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 MaxWidth = 660,
                 RowDefinitions = new RowDefinitions("Auto,*"),
             };
+            grid.Children.Add(helpHost);
             var scroll = new ScrollViewer
             {
                 VerticalScrollBarVisibility = global::Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
@@ -72,13 +92,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Rebuild();
         }
 
-        /// <summary>True while there is nothing leash-shaped to show (always, on this head).</summary>
+        /// <summary>True while there is nothing leash-shaped to show.</summary>
         internal bool ShowingEmpty => EmptyPanel.IsVisible;
 
-        private void SyncEmpty() => EmptyPanel.IsVisible = SectionHost.Children.Count == 0;
+        private void SyncEmpty() => EmptyPanel.IsVisible = !Section.IsVisible;
 
-        /// <summary>ShowTab("leash"): re-read the copy (a language change since the last visit) and
-        /// the empty state.</summary>
+        /// <summary>The gate stand-in follows the section's repaint (see LeashTabView.Cards.cs).</summary>
+        private void SyncGate()
+        {
+            if (_gate != null) SectionHost.Children.Remove(_gate);
+            _gate = null;
+            try
+            {
+                if (Section.Service is { Available: true } s && s.Snapshot.Me is { } me && GateStandIn(s, me) is { } g)
+                {
+                    _gate = g;
+                    SectionHost.Children.Add(g);
+                }
+            }
+            catch (Exception ex) { Serilog.Log.Debug("[Leash] gate stand-in failed: {E}", ex.Message); }
+        }
+
+        /// <summary>Repaints the section (rebinding to the live service) and the empty state.</summary>
+        internal void Rebuild()
+        {
+            try { Section.Render(); }
+            catch (Exception ex) { Serilog.Log.Debug("[Leash] page repaint failed: {E}", ex.Message); }
+            SyncGate();
+            SyncEmpty();
+        }
+
+        /// <summary>ShowTab("leash"): re-read the copy, repaint, and report the offers / today's task on screen.</summary>
         internal void OnShown()
         {
             _emptyLine.Text = Loc.Get("social_leash_empty");

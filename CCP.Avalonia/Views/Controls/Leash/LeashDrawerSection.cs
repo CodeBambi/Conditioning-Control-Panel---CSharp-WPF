@@ -118,6 +118,7 @@ public sealed class LeashDrawerSection : StackPanel
 
     internal void Render()
     {
+        Rebind();   // the service may have started (or a page swapped it) since the last paint
         Children.Clear();
         var snap = Snap();
 
