@@ -3,7 +3,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Flash;
 
@@ -102,20 +105,93 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             ArmExpiry(TimeSpan.FromMilliseconds(extraMs));
         }
 
+        // ---- Motion: the state the shared drift tick steps, and the pendulum rig ----
+
+        /// <summary>The motion this window plays (drift, pendulum, or a drag's own); null = still.</summary>
+        internal FlashMotionState? Motion { get; set; }
+
+        private Control? _rigCard;
+        private double _rigSidePx;
+        internal double RigAngleRad { get; private set; }
+        internal bool IsRig => _rigCard != null;
+
+        /// <summary>
+        /// WPF FlashLayer's pendulum draw on a window: the picture card (<paramref name="cardW"/> x
+        /// <paramref name="cardH"/> DIP, glow pad included) sits centred in a square window the
+        /// size of its diagonal, so it can turn to any angle without being cut, and turns about its
+        /// own centre. The window then only MOVES with the swing; it never resizes.
+        /// Returns the window side in physical px.
+        /// </summary>
+        internal int MakeRig(double cardW, double cardH, double scaling)
+        {
+            var card = Content as Control ?? _image;
+            Content = null;
+            card.Width = cardW;
+            card.Height = cardH;
+            card.HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Center;
+            card.VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center;
+            card.RenderTransformOrigin = RelativePoint.TopLeft;
+            _rigCard = card;
+            var k = scaling > 0 ? scaling : 1.0;
+            var side = (int)Math.Ceiling(Math.Sqrt(cardW * cardW + cardH * cardH) * k) + 2;
+            _rigSidePx = side;
+            Content = new Panel { Children = { card } };
+            // A clickable rig takes the click on the picture, not on the empty corners of the square.
+            if (IsHitTestVisible) MoveHitSurfaceToCard();
+            return side;
+        }
+
+        private void MoveHitSurfaceToCard()
+        {
+            Background = Brushes.Transparent;
+            if (_rigCard is Panel p) p.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+            else if (_rigCard is Border b) b.Background ??= new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+        }
+
+        /// <summary>Turn the rig's card to <paramref name="angleRad"/> (clockwise, SKCanvas sense).</summary>
+        internal void SetRigAngle(double angleRad)
+        {
+            RigAngleRad = angleRad;
+            if (_rigCard == null || Exit != null) return;
+            _rigCard.RenderTransform = new MatrixTransform(RotateAbout(angleRad, _rigCard.Width / 2, _rigCard.Height / 2));
+        }
+
+        private static Matrix RotateAbout(double rad, double cx, double cy) =>
+            Matrix.CreateTranslation(-cx, -cy) * Matrix.CreateRotation(rad) * Matrix.CreateTranslation(cx, cy);
+
+        /// <summary>
+        /// Put the window where <paramref name="m"/> says (physical px) and return its new rect. A
+        /// rig sits centred on the media centre (for a pendulum the AABB centre IS it) and turns to
+        /// the swing angle; a drag or a drift moves the rect as is.
+        /// </summary>
+        internal PixelRect ApplyMotion(FlashMotionState m, PixelSize size)
+        {
+            if (_rigCard != null)
+            {
+                SetRigAngle(m.Style == FlashMotionStyle.Pendulum ? m.AngleRad : 0);
+                var side = (int)_rigSidePx;
+                var p = new PixelPoint((int)Math.Round(m.X + m.W / 2 - side / 2.0), (int)Math.Round(m.Y + m.H / 2 - side / 2.0));
+                Position = p;
+                return new PixelRect(p, new PixelSize(side, side));
+            }
+            var at = new PixelPoint((int)Math.Round(m.X), (int)Math.Round(m.Y));
+            Position = at;
+            return new PixelRect(at, size);
+        }
+
         // ---- Press: tap pops; FlashDraggable lets a hand move it first (WPF FlashDrag) ----
 
-        private PixelPoint? _dragFrom;
-        private PixelPoint _winFrom;
-        private DateTime _pressAt;
-        private double _travel;
+        private static long NowMs() => Environment.TickCount64;
 
         private void OnFlashPressed(PointerPressedEventArgs e)
         {
-            if (!CoreSettings.Current.FlashDraggable) { Pop(); return; }
-            _dragFrom = this.PointToScreen(e.GetPosition(this));
-            _winFrom = Position;
-            _pressAt = DateTime.Now;
-            _travel = 0;
+            if (!CoreSettings.Current.FlashDraggable || IsLeaving) { Pop(); return; }
+            // The drag owns the motion state from here (FlashDrag.Begin turns a pendulum into a
+            // still rect and the shared tick moves it), so a let-go flash STAYS where it was put
+            // or flies on - the next drift tick reads the same state and never snaps it back.
+            var m = FlashOverlay.EnsureMotion(this);
+            var p = this.PointToScreen(e.GetPosition(this));
+            FlashDrag.Begin(m, p.X, p.Y, NowMs());
             e.Pointer.Capture(this);
             PointerMoved -= OnDragMove;
             PointerReleased -= OnDragUp;
@@ -125,11 +201,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         private void OnDragMove(object? sender, PointerEventArgs e)
         {
-            if (_dragFrom is not { } from || IsLeaving) return;
+            if (Motion?.Drag is not { } d || IsLeaving) return;
             var p = this.PointToScreen(e.GetPosition(this));
-            var d = p - from;
-            _travel = Math.Max(_travel, Math.Sqrt((double)d.X * d.X + (double)d.Y * d.Y));
-            Position = new PixelPoint(_winFrom.X + d.X, _winFrom.Y + d.Y);
+            FlashDrag.Sample(d, p.X, p.Y, NowMs());
         }
 
         private void OnDragUp(object? sender, PointerReleasedEventArgs e)
@@ -137,48 +211,114 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             e.Pointer.Capture(null);
             PointerMoved -= OnDragMove;
             PointerReleased -= OnDragUp;
-            _dragFrom = null;
-            // WPF FinishPress: a tap pops exactly as a click; a drag only moves (no hydra).
-            if (FlashDrag.IsTap(_travel, (DateTime.Now - _pressAt).TotalMilliseconds)) Pop();
+            var m = Motion;
+            if (m?.Drag is not { } d) return;
+            var p = this.PointToScreen(e.GetPosition(this));
+            var now = NowMs();
+            FlashDrag.Sample(d, p.X, p.Y, now);
+            // WPF ApplyWorkAreaBounds: a drag can cross screens, so the walls come from the work
+            // area of the monitor it was let go over (a flung flash never hides behind the taskbar).
+            if (Screens?.ScreenFromPoint(p) is { } under)
+            {
+                var wa = under.WorkingArea;
+                m.BoundsX = wa.X; m.BoundsY = wa.Y; m.BoundsW = wa.Width; m.BoundsH = wa.Height;
+            }
+            var outcome = FlashDrag.Release(m, now, CoreSettings.Current.MotionLevel);
+            // WPF EndLayerDrag: a tap pops exactly as a click; a place or a fling only moves (no hydra).
+            if (outcome == FlashDragOutcome.Tap && !IsLeaving) Pop();
         }
 
         // ---- Exit ----
 
-        /// <summary>The leave animation a pop plays, or WPF's old quick fade for None.</summary>
+        /// <summary>The control a leave animation moves: the rig's card, or the whole content.</summary>
+        private Control? ExitTarget => _rigCard ?? Content as Control;
+
+        /// <summary>WPF SafeCloseFlashWindow on a dismiss: an owned Shatter breaks the picture into
+        /// a monitor-wide shard window and this one goes at once; else the exit style (Pop throws
+        /// its sparks into a window of their own), or the old quick fade for None.</summary>
         private void PlayExit()
         {
             _expiryTimer?.Stop();
+            if (FlashOverlay.TryShatter(this))
+            {
+                X11Overlay.SetOpacity(this, 0);
+                Close();
+                return;
+            }
             var exit = FlashOverlay.PickExit(CoreSettings.Current, new Random());
-            if (exit == null || Content is not Control content)
+            if (exit == null || ExitTarget is not { } content)
             {
                 Fade(_alpha, 0, TimeSpan.FromMilliseconds(180), Close);
                 return;
             }
             Exit = exit;
+            FlashOverlay.ThrowSparks(this, exit);
             content.RenderTransformOrigin = RelativePoint.TopLeft;
+            var size = _rigCard != null ? new Size(_rigCard.Width, _rigCard.Height) : Bounds.Size;
+            var angle = RigAngleRad;
             var last = DateTime.Now;
             _exitTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) =>
             {
                 var now = DateTime.Now;
                 FlashExit.Step(exit, (now - last).TotalSeconds);
                 last = now;
-                ApplyExitFrame(content, exit, Bounds.Size);
+                ApplyExitFrame(content, exit, size, angle);
                 if (exit.Done) { _exitTimer?.Stop(); Close(); }
             });
-            ApplyExitFrame(content, exit, Bounds.Size);
+            ApplyExitFrame(content, exit, size, angle);
             _exitTimer.Start();
+        }
+
+        /// <summary>The picture's box in world px, unrotated, glow pad excluded: what a shatter
+        /// cuts and what the sparks spray around.</summary>
+        internal Rect PictureRectPx()
+        {
+            var k = DesktopScaling > 0 ? DesktopScaling : 1.0;
+            var at = _image.TranslatePoint(new Point(0, 0), this) ?? new Point(0, 0);
+            if (_rigCard != null)
+            {
+                // The rig turns the card; measure the image against the card's own (unturned) box.
+                var inCard = _image.TranslatePoint(new Point(0, 0), _rigCard) ?? new Point(0, 0);
+                var side = _rigSidePx / k;
+                at = new Point((side - _rigCard.Width) / 2 + inCard.X, (side - _rigCard.Height) / 2 + inCard.Y);
+            }
+            return new Rect(Position.X + at.X * k, Position.Y + at.Y * k, _image.Bounds.Width * k, _image.Bounds.Height * k);
+        }
+
+        /// <summary>A still of the picture as it shows right now (the clip or GIF frame
+        /// included), at its physical size. Null when it has no size yet.</summary>
+        internal Bitmap? Snapshot()
+        {
+            var k = DesktopScaling > 0 ? DesktopScaling : 1.0;
+            var b = _image.Bounds.Size;
+            if (b.Width < 1 || b.Height < 1) return null;
+            var rtb = new RenderTargetBitmap(new PixelSize((int)Math.Ceiling(b.Width * k), (int)Math.Ceiling(b.Height * k)), new Vector(96 * k, 96 * k));
+            using (var dc = rtb.CreateDrawingContext())
+                if (_image.Source is { } src) dc.DrawImage(src, new Rect(src.Size), FitUniform(src.Size, b));
+            return rtb;
+        }
+
+        /// <summary>Stretch.Uniform of <paramref name="src"/> centred in <paramref name="box"/>.</summary>
+        internal static Rect FitUniform(Size src, Size box)
+        {
+            if (src.Width <= 0 || src.Height <= 0) return new Rect(box);
+            var s = Math.Min(box.Width / src.Width, box.Height / src.Height);
+            double w = src.Width * s, h = src.Height * s;
+            return new Rect((box.Width - w) / 2, (box.Height - h) / 2, w, h);
         }
 
         /// <summary>One exit frame on the content: scale/rotate about (0.5, PivotY), drop by
         /// OffsetY, alpha on the content (the compositor alpha stays where the fade-in left it).</summary>
-        internal static void ApplyExitFrame(Control content, FlashExitState exit, Size size)
+        internal static void ApplyExitFrame(Control content, FlashExitState exit, Size size, double rigAngleRad = 0)
         {
             var f = FlashExit.Sample(exit);
             double px = size.Width * 0.5, py = size.Height * f.PivotY;
+            // A rig's card keeps the tilt it had at the pop (WPF draws the exit inside the pivot frame).
             var m = Matrix.CreateTranslation(-px, -py)
                     * Matrix.CreateScale(f.ScaleX, f.ScaleY)
                     * Matrix.CreateRotation(f.RotationDeg * Math.PI / 180)
                     * Matrix.CreateTranslation(px, py + f.OffsetY * size.Height);
+            if (rigAngleRad != 0) m *= RotateAbout(rigAngleRad, size.Width / 2, size.Height / 2);
             content.RenderTransform = new MatrixTransform(m);
             content.Opacity = Math.Clamp(f.Alpha, 0, 1);
         }
