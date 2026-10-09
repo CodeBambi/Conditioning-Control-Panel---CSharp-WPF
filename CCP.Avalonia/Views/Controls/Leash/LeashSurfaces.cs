@@ -4,9 +4,7 @@
 // rules in Core LeashUiRules.EventNotice), notices held while the panel is away and said when it
 // is back, and the tug wobble request. The one-click cut itself stays LeashHead.Cut (Platform);
 // this listens to its CutDone so the cut sounds once and its own Ended event stays quiet.
-// SEAM (main session): call LeashSurfaces.Init(() => shell) from MainShellWindow.InitializeLeash,
-// LeashSurfaces.Rebind() after LeashHead.Start (sign in / out) and when the panel comes back
-// (WPF MainWindow.Leash.cs), and hook TugArrived to LeashFx.Tug(<the window root>, 0.8).
+// Wired from MainShellWindow.InitializeLeash (Init, the 2 s Rebind, the tug wobble).
 using System;
 using System.Collections.Generic;
 using System.Linq;

@@ -196,7 +196,7 @@ internal static class LeashFx
     private static readonly LeashSfxRules Rules = new();
 
     /// <summary>Seam: true while the punishment window is up (r10's LeashPunishWindow fills it).</summary>
-    internal static Func<bool> PunishWindowOpen = () => false;
+    internal static Func<bool> PunishWindowOpen = () => LeashPunishWindow.Current != null;
 
     /// <summary>Test seam: the last cue that reached the player (tag), or null.</summary>
     internal static string? LastPlayed { get; private set; }
