@@ -1542,3 +1542,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/audit-fix-media: +382
 - Audit fixes for #1778/#1843/#1933/#1932/#1935: overlap layer loop, media-folder fallback, panic-safe grace pause, bubble count LibVLC skip, hermetic Buttplug test.
 - Each fix has a real-path test proven red by a break (evidence/audit-fix-media/fail-proofs.txt); gate GATE-OK.
+
+## avalonia-port/rows-companion-cards: +668
+- Her Room: live attention gauge (AttentionCopy/ConstellationMath shared from Core), runtime dormant constellation with shimmer, chat History transcript window, SyncBrain on provider pick; "patreon" key opens Settings/Account like WPF.
+- Rows: attention-gauge and constellation are wired; chat-threshold (link chip, wheel relay) and hero-card (tutorial chip) stay stub.
