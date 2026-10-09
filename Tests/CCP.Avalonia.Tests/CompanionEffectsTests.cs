@@ -52,11 +52,12 @@ public sealed class CompanionEffectsTests
             CoreAccount.IsLoggedInProvider = () => true;
             var all = CompanionEffects.Activities();
             // WPF 7.1.5 CompanionActivities.Current: LauncherCatalogue.Games in launcher order, then the four
-            // pages. Race has no host on this head yet (no LauncherWindow.Destinations row), so it is never offered.
+            // pages. Race is listed but only offered once revealed (a track owned), as WPF's game.Revealed gate.
             Assert.Equal(new[] { "game.backroom", "game.breakoutdemo", "game.breakout", "game.piecebypiece",
-                    "game.dtrh", "game.arcademy", "game.goon", "game.intake",
+                    "game.race", "game.dtrh", "game.arcademy", "game.goon", "game.intake",
                     "page.studio", "page.presets", "page.quests", "page.assets" },
                 all.Select(a => a.Id));
+            Assert.False(all.Single(a => a.Id == "game.race").Allowed);   // fresh profile: no track, mystery card
             var intake = all.Single(a => a.Id == "game.intake");
             Assert.True(intake.Allowed);
             CoreAccount.IsLoggedInProvider = () => false;          // the tile would ask to sign in

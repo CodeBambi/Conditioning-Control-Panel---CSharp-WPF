@@ -142,7 +142,7 @@ namespace ConditioningControlPanel.Avalonia
             {
                 var dest = LauncherWindow.Destinations[card.Id];
                 result.Add(new("game." + card.Id, Loc.Get(card.TitleKey), Loc.Get(card.BlurbKey),
-                    () => CompanionPages.CanOfferGame(true, dest.Locked(), true,
+                    () => CompanionPages.CanOfferGame(true, dest.Locked(), LauncherWindow.Revealed(card),
                         card.RequiresAccount && !CoreAccount.IsLoggedIn, CoreSettings.Current.AudioOnlySession),
                     () => OnUi(() =>
                     {

@@ -30,6 +30,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         private static bool HasUnifiedId => !string.IsNullOrEmpty(CoreSettings.Current?.UnifiedId);
 
+        /// <summary>Linking needs the id AND its token. An id whose token is gone (cleared secret store, a
+        /// copied profile) cannot link (the server answers "Invalid or missing auth token"), so the provider
+        /// button runs the full sign-in instead, which mints a fresh token.</summary>
+        private static bool CanLink => HasUnifiedId && !string.IsNullOrEmpty(CoreSettings.Current?.AuthToken);
+
         private T? Find<T>(string name) where T : Control => this.FindControl<T>(name);
 
         /// <summary>WPF UpdatePatreonUI + UpdateDiscordUI + UpdateSubscribeStarUI + UpdateAccountLinkingUI. Never throws.</summary>
@@ -182,7 +187,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             }
 
             // SubscribeStar always goes through the dialog (WPF: it establishes the real account there).
-            if (provider != "substar" && HasUnifiedId)
+            if (provider != "substar" && CanLink)
             {
                 await LinkFlowAsync(provider, owner, btn);
                 return;
@@ -207,6 +212,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (!HasUnifiedId)
                 {
                     if (owner != null) await MessageDialog.ShowAsync(owner, Loc.Get("account_not_logged_in_title"), Loc.Get("account_login_first"));
+                    return;
+                }
+                if (!CanLink)
+                {
+                    // The id survived but its token did not: sign in again (mints the token) rather than a
+                    // link the server can only refuse.
+                    Log.Warning("Account: {Provider} link asked with no auth token; opening sign-in", provider);
+                    if (owner is MainShellWindow shellOwner) await shellOwner.OpenUnifiedLoginDialog();
                     return;
                 }
                 Action<string> open = url => { if (ExternalOpener.Allowed(url)) _ = ExternalOpener.OpenAsync(owner, url); };

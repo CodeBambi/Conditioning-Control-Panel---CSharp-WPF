@@ -131,6 +131,7 @@ public sealed class EmiDeskSummonTests
         var main = new Window { Width = 800, Height = 600 };
         main.Show();
         var tube = new AvatarTubeWindow(main);
+        tube.Show();   // WPF ShowGiggle skips a line while the tube is off screen (IsAvatarVisibleOnScreen)
         try
         {
             tube.GigglePriority("before", playSound: false);
