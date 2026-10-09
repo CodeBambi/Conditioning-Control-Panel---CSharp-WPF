@@ -14,6 +14,24 @@ namespace ConditioningControlPanel.AvatarTubeLayout
         public static double FitScale(double workW, double workH, double designW = 780, double designH = 1020)
             => Math.Max(0.4, Math.Min(1.0, Math.Min(workH * 0.85 / designH, workW * 0.3 / designW)));
 
+        /// <summary>
+        /// How far (window design units, 0..maxUnits) a mod's tube art paints past the built-in
+        /// glass's right edge. Each picture is drawn Uniform, centred, in the gridW x gridH design
+        /// grid, which the window then fits by <paramref name="k"/>. Edges are the rightmost opaque
+        /// column as a fraction of the picture's width. Never negative: a narrower mod tube keeps the
+        /// built-in seam (the dock never pulls the art away from main).
+        /// </summary>
+        public static double ArtOverhangUnits(double modEdge, double modAspect, double builtInEdge, double builtInAspect,
+            double gridW = 780, double gridH = 1080, double k = 1020.0 / 1080, double maxUnits = 120)
+        {
+            double Pos(double edge, double aspect)
+            {
+                double w = Math.Min(gridW, gridH * Math.Max(0.01, aspect));
+                return (gridW - w) / 2 + Math.Clamp(edge, 0, 1) * w;
+            }
+            return Math.Clamp((Pos(modEdge, modAspect) - Pos(builtInEdge, builtInAspect)) * k, 0, maxUnits);
+        }
+
         /// <summary>Keep at least half the detached tube on the work area; only the bottom edge bounds Top.</summary>
         public static (int X, int Y) ClampDetached(double left, double top, double w, double h, Box work)
         {

@@ -806,7 +806,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// <summary>Transparent right margin of the tube frame, MEASURED off tube.png's alpha
         /// bounds - see the derivation in AvatarTubeWindow.Windowing.cs. Everything right of it is
         /// alpha-0, i.e. click-through, which is why the tube's RECT may overlap main's rail.</summary>
-        private const double TubeArtRightPadding = 353;
+        private const double BuiltInTubeArtRightPadding = 353;
+
+        /// <summary>The padding the dock uses: the built-in figure, less however far a mod's own
+        /// tube.png paints past the built-in glass (Infection Control's pipes ran ~15 px into main).
+        /// See <see cref="TubeArtOverhang"/>.</summary>
+        private double TubeArtRightPadding => BuiltInTubeArtRightPadding - _tubeArtOverhang;
 
         /// <summary>Canvas px of OPAQUE art allowed over main's left edge. 0 = flush against the
         /// door rail; 60 is the ceiling. The seam is a HIT-TEST budget, not just a look.</summary>
@@ -816,7 +821,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         private const double AttachedBubbleSeamGap = 12;
 
         private const double AttachedBubbleRightMargin =
-            TubeArtRightPadding - SeamOverlapOverMain + AttachedBubbleSeamGap;
+            BuiltInTubeArtRightPadding - SeamOverlapOverMain + AttachedBubbleSeamGap;
 
         /// <summary>Attached = riding beside main. Seeded from the state the user left the tube
         /// in, which is what makes a detached user's layout and glass come back detached.
@@ -1002,6 +1007,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 var art = ModArt.TryLoad(name);
                 if (art != null) _imgTubeFrame.Source = art;
                 Log.Information("Tube style changed to: {Style}", name);
+                RefreshTubeArtOverhang();
             }
             catch (Exception ex) { Log.Warning(ex, "Failed to change tube style"); }
         });
