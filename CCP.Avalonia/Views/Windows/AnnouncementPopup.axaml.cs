@@ -386,6 +386,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // The single server-announcement slot. No Save() here, matching WPF: the settings
                 // service's own debounce writes it out.
                 CoreSettings.Current.DismissedAnnouncementId = _announcementId;
+                MainShellWindow.RecordAnnouncementDismissal(_announcementId);   // WPF RecordServerDismissal (:342)
             }
 
             try

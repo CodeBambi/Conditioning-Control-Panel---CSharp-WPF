@@ -114,6 +114,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeDescentFuse(); // MainShellWindow.DescentFuse.cs (WPF MainWindow ctor); no-op without App.DescentCountdown
             InitializeSpiralRoom();  // MainShellWindow.SpiralRoom.cs (WPF MainWindow ctor): the rail row
             InitializeInboxBadge(); // MainShellWindow.Inbox.cs (WPF MainWindow.Inbox.cs:27)
+            InitializeServerAnnouncement(); // MainShellWindow.Announcement.cs (WPF MainWindow.Marquee.cs:688)
             InitializeLockdownGreys(); // MainShellWindow.Lockdown.cs (WPF Lab.cs:612/707)
             InitializeInviteTicket(); // MainShellWindow.InviteTicket.cs (WPF MainWindow.xaml.cs, main e2d4e35ef)
             InitializeInviteEnding(); // MainShellWindow.Patreon.cs (WPF MainWindow.xaml.cs:3590, main fbe161de2)

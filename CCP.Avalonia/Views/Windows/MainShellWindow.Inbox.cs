@@ -78,6 +78,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Warning(ex, "Inbox could not be opened"); }
         }
 
+        /// <summary>WPF MainWindow.Inbox.cs:136 Summarise: one flattened line of a surface's body for an Inbox row.</summary>
+        internal static string Summarise(string? body, int max = 90)
+        {
+            if (string.IsNullOrWhiteSpace(body)) return "";
+            var flat = body.Replace("\r", " ").Replace("\n", " ").Trim();
+            while (flat.Contains("  ")) flat = flat.Replace("  ", " ");
+            return flat.Length <= max ? flat : flat.Substring(0, max - 1).TrimEnd() + "…";
+        }
+
         private void CloseInboxPopup()
         {
             try

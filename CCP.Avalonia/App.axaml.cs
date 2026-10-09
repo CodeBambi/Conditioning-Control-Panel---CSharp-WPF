@@ -490,6 +490,8 @@ namespace ConditioningControlPanel.Avalonia
                 // ponytail: no Speaker - the tube's speech coupling is not ported, so phase lines stay unsaid.
                 DescentCountdown = new Services.Descent.DescentCountdownService();
                 DescentCountdown.Start();
+                // WPF MainWindow.Marquee.cs:688: the server announcement check, 7 s after the shell opens.
+                Views.Windows.MainShellWindow.AnnouncementClient = () => new V2AuthService();
                 if (Platform.AccountSeed.Seed())
                 {
                     // Unit 7c, with the logout clear: the push, XP banking and its two triggers (WPF
