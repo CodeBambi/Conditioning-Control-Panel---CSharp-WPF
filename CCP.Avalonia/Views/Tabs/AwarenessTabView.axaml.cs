@@ -239,13 +239,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void ChkAwarenessOcr_Changed(object? sender, RoutedEventArgs e)
         {
             // WPF MainWindow.Awareness.cs:448: ON needs KeywordTriggerService.HasAccess; the box
-            // bounces back (TierGate's toast for WPF's message box, as on the master above).
+            // bounces back and WPF's own message box says why.
             if (!_isLoading && ChkAwarenessOcr.IsChecked == true
-                && !ConditioningControlPanel.Services.TierGate.DemandPremium(ConditioningControlPanel.Localization.Loc.Get("tab_awareness"), "awareness"))
+                && !ConditioningControlPanel.Services.TierGate.RequiresPremium(ConditioningControlPanel.Localization.Loc.Get("tab_awareness"), "awareness").Allowed)
             {
                 _isLoading = true;
                 try { ChkAwarenessOcr.IsChecked = false; }
                 finally { _isLoading = false; }
+                _ = Controls.Companion.KeywordTriggersPanel.Inform(TopLevel.GetTopLevel(this) as Window,
+                    ConditioningControlPanel.Localization.Loc.Get("title_patreon_feature"),
+                    ConditioningControlPanel.Localization.Loc.Get("msg_screen_ocr_patreon_only"));
                 return;
             }
             // ponytail: WPF starts/stops App.ScreenOcr here; no OCR engine on this head.

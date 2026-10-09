@@ -141,12 +141,15 @@ public sealed class KeywordTriggersPanelTests
     [Fact]
     public Task OcrCombosPersistAndOcrDetailNeedsAccess() => Run((view, panel, s) =>
     {
+        var told = new List<string>();
+        KeywordTriggersPanel.Inform = (_, title, text) => { told.Add(title + "|" + text); return Task.CompletedTask; };
         var ocr = view.FindControl<CheckBox>("ChkAwarenessOcr")!;
         var detail = Find<StackPanel>(panel, "ScreenOcrIntervalPanel");
         ocr.IsChecked = false;
         ocr.IsChecked = true;                                         // no access: WPF bounces the box back
         Assert.False(ocr.IsChecked == true);
         Assert.False(s.ScreenOcrEnabled);
+        Assert.Equal(Loc.Get("title_patreon_feature") + "|" + Loc.Get("msg_screen_ocr_patreon_only"), Assert.Single(told));
 
         CoreEntitlement.HasPremiumProvider = () => true;
         ocr.IsChecked = true;                                         // master re-syncs the panel (WPF :475)
