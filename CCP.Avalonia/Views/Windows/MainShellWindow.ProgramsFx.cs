@@ -11,8 +11,8 @@
 //         -> the wash alpha, the sigil breath depth, the border rotation, the rail glow, the comet
 //            budget and ProgramHeat.ParticleCount().
 //
-// Models.ProgramDefinition / ProgramEnrollment / ProgramDay and Services ProgramHeat are all still
-// in the WPF head, and MainWindow.ProgramsTab.cs - the only caller of ApplyProgramIgnition,
+// ProgramDefinition / ProgramEnrollment / ProgramDay and ProgramHeat are in Core now, but no
+// ProgramService runs on this head (docs/avalonia-parity.md row shell-programs-tab), and MainWindow.ProgramsTab.cs's run view - the only caller of ApplyProgramIgnition,
 // NoteProgramDayCompletion, NoteProgramChapterSeal and CelebrateProgramGraduation - is not ported
 // either. With no heat there is no tier, and every knob collapses to "cold".
 //

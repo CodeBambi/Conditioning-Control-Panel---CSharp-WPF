@@ -51,8 +51,13 @@ public sealed class ProgramsRoadmapAwarenessOpenersTests
             settings.HasSeenProgramsIntro = false;
             ProgramsIntroPopup.ShowIfFirstTime(null);
             Dispatcher.UIThread.RunJobs();
-            Assert.Single(opened.OfType<ProgramsIntroPopup>());
+            var popup = Assert.Single(opened.OfType<ProgramsIntroPopup>());
             Assert.True(settings.HasSeenProgramsIntro);
+            // WPF ProgramsIntroPopup.xaml.cs:189: the featured program's sigil masks the accent rail.
+            var sigil = popup.FindControl<global::Avalonia.Controls.Shapes.Rectangle>("ArtSigil")!;
+            Assert.True(sigil.IsVisible);
+            Assert.IsType<global::Avalonia.Media.Imaging.Bitmap>(
+                Assert.IsType<global::Avalonia.Media.ImageBrush>(sigil.OpacityMask).Source);
 
             ProgramsIntroPopup.ShowIfFirstTime(null);
             Dispatcher.UIThread.RunJobs();

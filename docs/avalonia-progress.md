@@ -1616,3 +1616,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-session-io: +629
 - Window-wide file drop (session/preset/mod/assets/zip/folder/unrecognised + overlay) over a new Core `DropRules` that WPF also calls; a single media file offers Add to Library only (decision logged).
 - Session-lock ribbon pulses on a refused change; `WindowDropTests` (8, incl. session/preset/mod) + `SessionIoTests.RefusedChangePulsesTheLockRibbon`, all fail-proven.
+
+## avalonia-port/rows-programs-tab: +362
+- Programs browse cards + intro popup show WPF's banner/sigil/plate art via new Core ProgramArtPaths (shared with WPF ProgramArt).
+- Enroll/run panel still unwired (decision A); slice plan in briefs/programs-run-plan.md.
