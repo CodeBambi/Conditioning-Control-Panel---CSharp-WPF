@@ -1656,3 +1656,11 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/programs-run-2: +867
 - Read-only Programs run view of a saved enrollment; stale days read LAST SAVED, not TODAY (CHECKPOINT A); no lifecycle/session controls, no writes.
 - ProgramsRunViewTests (shell path, 7 breaks fail-proven) + Keincheck temp-profile screenshot with programs.json byte-identical.
+
+## avalonia-port/rows-dashboard: +987
+- Dashboard FX funnel wired (RefreshFx on motion/performance/window changes, vault CTA breath, FeatureCard parks at peak); browser fold and billboard ported (BrowserFoldRule and DashboardBillboard moved to Core); billboard and fold rows now wired.
+- Still stubs: dashboard-fx (? box, logo, rail, browser sweep), hero-fx (untouched).
+
+## avalonia-port/rows-login-phone: +684
+- Link phone dialog is real: Core mobile-link code, QRCoder QR, countdown and expiry. Sign in via Web polls Core V2DeviceCodeService, which moved from the WPF head with `git mv`. dialogs-login and dialogs-link-phone are now wired.
+- Unopenable sign-in links are copied with WPF's prompt. The home Discord button opens the invite. 5 headless tests on a stepped clock, all fail-proven.

@@ -163,7 +163,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         //
         // LinkPhoneDialog and LayeredAudioWindow are the only two handlers in the WPF file that
         // do not forward. LayeredAudioWindow is wired (HomeBtnAudioLayers_Click); LinkPhoneDialog
-        // is refused for its own reason at its own site below.
+        // is wired too (BtnLinkPhone_Click below).
         // ------------------------------------------------------------------------------
         private void WireStubs()
         {
@@ -363,13 +363,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (TopLevel.GetTopLevel(this) is Windows.MainShellWindow mw) await mw.OpenUnifiedLoginDialog();
         }
         private void BtnQuickLogout_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.Logout();
-        // REFUSED, and not for want of the dialog: LinkPhoneDialog is ported and would open. Its
-        // FetchCode is a stub with PLACEHOLDER data (V2AuthService.AuthorizeMobileLinkAsync and
-        // QRCoder are both WPF-head), so this button would show a QR and a six-letter code that
-        // pair nothing. A dead button is a dead button; a fake one-time auth code presented as a
-        // real one is the wrong direction on the one surface that signs an account in.
-        private void BtnLinkPhone_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDiscord_Click(object? sender, RoutedEventArgs e) { }                 // mw.BtnDiscord_Click(...)
+        /// <summary>WPF SettingsTabView.BtnLinkPhone_Click: the modal one-time phone-link code.</summary>
+        private async void BtnLinkPhone_Click(object? sender, RoutedEventArgs e)
+            => await new Dialogs.LinkPhoneDialog().ShowDialogSafe(TopLevel.GetTopLevel(this) as Window);
+        private void BtnDiscord_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnDiscord_Click(sender, e);
         private void ChkDiscordRichPresence_Changed(object? sender, RoutedEventArgs e) { }   // mw.ChkDiscordRichPresence_Changed(...)
 
         // -- quick-toggles row -----------------------------------------------------------
