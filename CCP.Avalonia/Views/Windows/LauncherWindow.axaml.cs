@@ -2,8 +2,8 @@
 // LauncherCards/LauncherRules; slice 2 adds the boot surface and the second-instance handoff (WPF App.xaml.cs
 // RouteBootSurface/RouteSurfaceHandoff, LauncherHost.OnBareRelaunch). Slice 3 adds the account chip, mod pill and panel-card status/stats (WPF LauncherWindow.xaml.cs:220-606).
 // Slice 5 (FX) lives in LauncherWindow.Fx.cs. Parity wave 1: the shelf shows every card WPF 7.1.5 shows (order, pills,
-// NEW, the Racing mystery card, the Breakout covers, whole-card press, grow-to-fit). ponytail: only the Intake has a
-// destination here; a game card with no host on this head flinches (Denied) and says so in its tooltip.
+// NEW, the Racing mystery card, the Breakout covers, whole-card press, grow-to-fit). Every card has a
+// destination (Racing Thoughts = Views/Games/RaceWindow, play#42); a card with none would flinch and say so.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -46,6 +46,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 ["goon"] = (() => false, _ => Games.GameWindow.Launch("goon")),
                 ["dtrh"] = (() => FaceLocked("dtrh"), _ => Games.GameWindow.Launch("dtrh")),
                 ["arcademy"] = (() => FaceLocked("arcademy"), _ => Games.GameWindow.Launch("arcademy")),
+                // Racing Thoughts (WPF LauncherCatalogue.cs:243 -> CaucusHostService.Launch), its own
+                // window (Views/Games/RaceWindow.cs); revealed only once a track is owned.
+                ["race"] = (() => false, _ => Games.RaceWindow.Launch()),
             };
 
         private static bool FaceLocked(string id) => FaceLocks.TryGetValue(id, out var probe) && probe();
@@ -73,14 +76,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static bool Revealed(LauncherCard card)
         {
             if (!string.Equals(card.Id, "race", StringComparison.OrdinalIgnoreCase)) return true;
-            try
-            {
-                for (int n = 0; n <= 10; n++)
-                    if (Platform.PrizeOwnership.IsGranted("rt.original." + n.ToString("00", System.Globalization.CultureInfo.InvariantCulture)))
-                        return true;
-                return false;
-            }
-            catch (Exception ex) { Log.Debug(ex, "[Launcher] reveal probe threw"); return false; }
+            return Games.RaceWindow.CanLaunch();
         }
 
         /// <summary>The padlock as WPF draws it: the destination's probe, else the face probe, else free.</summary>
@@ -549,7 +545,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Log.Information("[Launcher] {Id}: no game host on this head yet", targetId);
                 return;
             }
-            if (Games.GameWindow.Games.ContainsKey(targetId))
+            if (Games.GameWindow.Games.ContainsKey(targetId) || IsRace(targetId))
             {
                 LaunchGame(targetId);
                 return;
@@ -562,7 +558,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// A gate that refused leaves the launcher where it is.</summary>
         private void LaunchGame(string id)
         {
-            var game = Games.GameWindow.Launch(id);
+            var game = IsRace(id) ? Games.RaceWindow.Launch() : Games.GameWindow.Launch(id);
             if (game == null) return;
             AfterExitBeat(() =>
             {
@@ -577,6 +573,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 catch (Exception ex) { Log.Debug(ex, "[Launcher] return after {Id} failed", id); }
             };
         }
+
+        private static bool IsRace(string id) => string.Equals(id, "race", StringComparison.OrdinalIgnoreCase);
 
         private static bool Locked((Func<bool> Locked, Action<MainShellWindow> Open) dest)
         {
