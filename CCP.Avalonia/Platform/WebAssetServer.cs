@@ -142,6 +142,11 @@ public sealed class WebAssetServer : IDisposable
     /// (IntakeHostService maps it over App.EffectiveAssetsPath): same server, same token rule.</summary>
     public const string AssetsPrefix = "ccp.assets/";
 
+    /// <summary>The URL a page loads a library file by (WPF DtrhAssetManifest.AssetUrl's https://ccp.assets/&lt;rel&gt;):
+    /// same origin as the page, so the token cookie covers it; each path segment escaped.</summary>
+    public string AssetUrl(string rel) =>
+        $"http://127.0.0.1:{Port}/{AssetsPrefix}" + string.Join('/', rel.Replace(Path.DirectorySeparatorChar, '/').Split('/').Select(Uri.EscapeDataString));
+
     /// <summary>Root behind <see cref="AssetsPrefix"/>, read per request (the user can move the library);
     /// null = the prefix is not served.</summary>
     public Func<string?>? AssetsRoot { get; init; }
