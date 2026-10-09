@@ -36,9 +36,9 @@ namespace ConditioningControlPanel.Avalonia
         internal static AchievementEngine? Achievements { get; private set; }
 
         /// <summary>WPF App.WindowAwareness (App.xaml.cs:2674), the legacy title observer. X11/XWayland
-        /// titles only; unlike WPF, the privacy rules run on each title first (docs/avalonia-decisions.md).</summary>
+        /// titles on Linux, user32 on Windows (Platform/ActiveWindowTitle); unlike WPF, the privacy rules run on each title first (docs/avalonia-decisions.md).</summary>
         internal static WindowAwarenessService WindowAwareness { get; } =
-            new(Platform.X11ActiveWindow.ReadTitle, WindowAwarenessService.PassesPrivacyRules);
+            new(Platform.ActiveWindowTitle.Read, WindowAwarenessService.PassesPrivacyRules);
 
         /// <summary>The one session runner (WPF MainWindow._sessionEngine), or null on the headless render path.</summary>
         internal static SessionRunner? Sessions { get; set; }
