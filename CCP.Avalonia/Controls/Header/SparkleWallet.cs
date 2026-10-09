@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
@@ -19,6 +20,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using Serilog;
 using Env = ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env;
 
 // Namespace is Controls (not Controls.Header) so MainShellWindow.axaml reaches it through its
@@ -342,15 +344,21 @@ namespace ConditioningControlPanel.Avalonia.Controls
             StopWave();
             if (!AnimateInteractions) return;
             var scale = Env.Level == MotionLevel.Reduced ? .45 : 1;
-            var anim = new Animation { Duration = TimeSpan.FromMilliseconds(620), Easing = new SineEaseInOut() };
-            foreach (var (ms, angle) in new[] { (0, 0d), (100, -17d), (220, 13d), (340, -13d), (470, 8d), (620, 0d) })
-                anim.Children.Add(new KeyFrame { Cue = new Cue(ms / 620.0), Setters = { new Setter(RotateTransform.AngleProperty, angle * scale) } });
-            _waveRun = anim.RunAsync(_armTurn);
+            var keys = new (double, AvaloniaProperty, double)[6];
+            var table = new[] { (0, 0d), (100, -17d), (220, 13d), (340, -13d), (470, 8d), (620, 0d) };
+            for (int i = 0; i < table.Length; i++)
+                keys[i] = (table[i].Item1 / 620.0, RotateTransform.AngleProperty, table[i].Item2 * scale);
+            _waveRun = Run(_armTurn, 620, new SineEaseInOut(), keys);
         }
 
-        private System.Threading.Tasks.Task? _waveRun;
+        private DispatcherTimer? _waveRun;
 
-        private void StopWave() => _armTurn.Angle = 0;
+        private void StopWave()
+        {
+            _waveRun?.Stop();
+            _waveRun = null;
+            _armTurn.Angle = 0;
+        }
 
         private void RewardSparkles()
         {
@@ -380,13 +388,49 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _gainBadge.IsVisible = false;
         }
 
-        /// <summary>A one-shot keyframe run that leaves the property where WPF's FillBehavior.Stop did.</summary>
-        private static void Run(Animatable target, int ms, Easing easing, params (double cue, AvaloniaProperty prop, double value)[] keys)
+        /// <summary>A one-shot keyframe run that leaves the property where WPF's FillBehavior.Stop did.
+        /// Timer-driven on purpose: Animation.RunAsync on a Transform object throws InvalidCastException
+        /// (TransformAnimator casts its target to Visual); from a pointer handler that killed the app
+        /// (2026-10-09, hovering the wallet). Same road as EmiDeskWindow.Tween.</summary>
+        private static DispatcherTimer Run(AvaloniaObject target, int ms, Easing easing, params (double cue, AvaloniaProperty prop, double value)[] keys)
         {
-            var anim = new Animation { Duration = TimeSpan.FromMilliseconds(ms), Easing = easing, FillMode = FillMode.None };
-            foreach (var (cue, prop, value) in keys)
-                anim.Children.Add(new KeyFrame { Cue = new Cue(cue), Setters = { new Setter(prop, value) } });
-            _ = anim.RunAsync(target);
+            var props = keys.Select(k => k.prop).Distinct().ToArray();
+            var rest = props.Select(p => target.GetValue(p)).ToArray();
+            var started = DateTime.UtcNow;
+            void Apply(double p)
+            {
+                double e = easing.Ease(p);
+                foreach (var prop in props)
+                {
+                    var k = keys.Where(x => x.prop == prop).OrderBy(x => x.cue).ToArray();
+                    double v = k[^1].value;
+                    for (int i = 0; i < k.Length; i++)
+                    {
+                        if (e > k[i].cue) continue;
+                        if (i == 0) { v = k[0].value; break; }
+                        double span = k[i].cue - k[i - 1].cue;
+                        double t = span <= 0 ? 1 : (e - k[i - 1].cue) / span;
+                        v = k[i - 1].value + (k[i].value - k[i - 1].value) * t;
+                        break;
+                    }
+                    target.SetValue(prop, v);
+                }
+            }
+            Apply(0);
+            DispatcherTimer? timer = null;
+            timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) =>
+            {
+                try
+                {
+                    double p = Math.Min(1, (DateTime.UtcNow - started).TotalMilliseconds / Math.Max(1, ms));
+                    if (p < 1) { Apply(p); return; }
+                    timer!.Stop();
+                    for (int i = 0; i < props.Length; i++) target.SetValue(props[i], rest[i]);   // FillMode.None
+                }
+                catch (Exception ex) { timer!.Stop(); Log.Debug("SparkleWallet tween: {E}", ex.Message); }
+            });
+            timer.Start();
+            return timer;
         }
 
         // ---- helpers ----
