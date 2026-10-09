@@ -359,8 +359,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ProfilePatreonTierBadge.Source = plate;
             ProfilePatreonTierBadge.IsVisible = plate != null;
 
-            // SEAM(csproj): "Pink filter.webp" and "prime subject.webp" sit in /Assets but only /Assets/*.png is
-            // compiled in, so this art is null (plate hidden) until the project links /Assets/*.webp under Resources.
             var art = hasPatreon ? PatreonArt(tier >= 3 ? "prime subject.webp" : "Pink filter.webp") : null;
             ImgPatreonTierBanner.Source = art;
             ProfilePatreonTierBanner.IsVisible = art != null;
