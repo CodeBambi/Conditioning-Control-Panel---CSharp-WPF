@@ -7299,5 +7299,16 @@
   "vaultgate_yearly_note": "연간 결제는 현재 Patreon에서만 가능해요. 다른 결제 수단은 월간이에요.",
   "vaultgate_sale_first": "/ 첫 달",
   "vaultgate_sale_line": "첫 달 {0}% 할인, 이후 매월 {1}.",
-  "vaultgate_sale_ends": "세일은 {0}까지."
+  "vaultgate_sale_ends": "세일은 {0}까지.",
+  "kwt_no_audio": "오디오 없음",
+  "kwt_cd": "CD:",
+  "kwt_vol": "볼륨:",
+  "kwt_effect_none": "없음",
+  "kwt_effect_highlight_only": "하이라이트만",
+  "kwt_effect_subliminal": "서브리미널",
+  "kwt_effect_exact_subliminal": "정확한 서브리미널",
+  "kwt_effect_image_flash": "이미지 플래시",
+  "kwt_effect_overlay_pulse": "오버레이 펄스",
+  "kwt_effect_mind_wipe": "마인드 와이프",
+  "kwt_effect_bubbles": "버블"
 }

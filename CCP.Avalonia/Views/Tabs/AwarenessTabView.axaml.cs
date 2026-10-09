@@ -238,11 +238,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void ChkAwarenessOcr_Changed(object? sender, RoutedEventArgs e)
         {
-            // ponytail: WPF gates ON behind KeywordTriggerService.HasAccess() with a Patreon
-            // message box, starts/stops App.ScreenOcr, and calls SyncKeywordRescuePanelUi() to
-            // show the scan-interval / confirmation rows. The OCR engine is head-side, and the
-            // rescue rows live in KeywordTriggersPanel.
+            // WPF MainWindow.Awareness.cs:448: ON needs KeywordTriggerService.HasAccess; the box
+            // bounces back (TierGate's toast for WPF's message box, as on the master above).
+            if (!_isLoading && ChkAwarenessOcr.IsChecked == true
+                && !ConditioningControlPanel.Services.TierGate.DemandPremium(ConditioningControlPanel.Localization.Loc.Get("tab_awareness"), "awareness"))
+            {
+                _isLoading = true;
+                try { ChkAwarenessOcr.IsChecked = false; }
+                finally { _isLoading = false; }
+                return;
+            }
+            // ponytail: WPF starts/stops App.ScreenOcr here; no OCR engine on this head.
             WriteFlag(v => CoreSettings.Current.ScreenOcrEnabled = v, ChkAwarenessOcr, "ScreenOcrEnabled");
+            if (!_isLoading) KeywordPanel?.SyncFromSettings();   // WPF :475 SyncKeywordRescuePanelUi
         }
 
         private void ChkAwarenessIgnoreOwnUi_Changed(object? sender, RoutedEventArgs e)
@@ -259,10 +267,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void ChkAwarenessHighlight_Changed(object? sender, RoutedEventArgs e)
         {
-            // ponytail: WPF also calls SyncKeywordRescuePanelUi() here for the highlight mode +
-            // duration rows, which live in KeywordTriggersPanel (not this layer's file).
             WriteFlag(v => CoreSettings.Current.KeywordHighlightEnabled = v,
                       ChkAwarenessHighlight, "KeywordHighlightEnabled");
+            if (!_isLoading) KeywordPanel?.SyncFromSettings();   // WPF SyncKeywordRescuePanelUi
             SyncHighlightSwatchUi(CoreSettings.Current.KeywordHighlightColor);
         }
 
