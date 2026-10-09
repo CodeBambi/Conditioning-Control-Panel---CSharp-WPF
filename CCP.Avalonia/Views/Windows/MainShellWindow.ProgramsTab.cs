@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Program;
@@ -26,8 +27,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // same answer CoreEntitlement is seeded with): owned premium cards drop the padlock.
                 var locked = premium && !CoreEntitlement.HasPremium;
                 var accent = AccentBrush(definition.AccentColor);
+                // WPF ProgramsTab.cs:633-660. Banner: no default, five cards in the same fallback
+                // strip read as a copy-paste bug. Crest: sigil, else day 1's mood plate; the art is a
+                // luminance mask, so it masks an accent fill, never an Image (ProgramArt.cs header).
+                var banner = ModArt.FirstOf(ProgramArtPaths.Banner(definition, includeDefault: false));
+                var sigil = ProgramArtPaths.Sigil(definition);
+                var crest = ModArt.FirstOf(sigil != null ? new[] { sigil } : Array.Empty<string>(), 256)
+                            ?? ModArt.FirstOf(ProgramArtPaths.DayPlate(definition, definition.GetDay(1)), 256);
                 items.Add(new ProgramBrowseItem
                 {
+                    BannerArt = banner,
+                    BannerVisible = banner != null,
+                    ArtMask = crest == null ? null : new ImageBrush(crest) { Stretch = Stretch.Uniform },
+                    ArtGlowBrush = crest == null ? Brushes.Transparent : ProgramRadialGlowBrush(accent, 130),
+                    ArtVisible = crest != null,
+                    IconOnlyVisible = crest == null,
                     Definition = definition,
                     ProgramId = definition.Id,
                     Icon = definition.Icon,
@@ -55,6 +69,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
 
             return items;
+        }
+
+        /// <summary>WPF ProgramsTab.cs:309 ProgramRadialGlowBrush: accent at alpha, fading out at 0.75.</summary>
+        internal static IBrush ProgramRadialGlowBrush(IBrush accent, byte alpha)
+        {
+            if (accent is not ISolidColorBrush solid) return Brushes.Transparent;
+            var c = solid.Color;
+            return new RadialGradientBrush
+            {
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(alpha, c.R, c.G, c.B), 0),
+                    new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 1),
+                },
+                RadiusX = new global::Avalonia.RelativeScalar(0.75, global::Avalonia.RelativeUnit.Relative),
+                RadiusY = new global::Avalonia.RelativeScalar(0.75, global::Avalonia.RelativeUnit.Relative),
+            };
         }
 
         private static IBrush AccentBrush(string? hex)

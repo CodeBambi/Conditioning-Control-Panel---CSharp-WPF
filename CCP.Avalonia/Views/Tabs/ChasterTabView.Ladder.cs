@@ -88,6 +88,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtBalanceCaption.Text = Loc.Get("chaster_balance_caption");
             Receipt.Show(new TabBill(new[] { new TabBillLine("attention", 2, 300), new TabBillLine("typo", 1, -60) }, 300, -60, 0));
             BuildCalendar((DateTime.Today.AddDays(-3), DateTime.Today.AddDays(4)), DateTime.Today);
+            // Circe's mood meter and a line of hers on the page
+            MoodMeter.Apply(new CircesMood(MoodLevel.Hot));
+            PageSays.Say(Loc.Get(CirceLines.Key(CirceMoment.Popped, 1)));
         }
 
         /// <summary>WPF LadderOnShown + ScrapOnShown: a page open re-reads the card and the board.</summary>

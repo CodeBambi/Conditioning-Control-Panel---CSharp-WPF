@@ -151,7 +151,7 @@ public sealed class ExclusivesVaultTests
     }
 
     private static ExclusiveCardRow[] Rows(ExclusivesTabView view) =>
-        view.FindControl<ItemsControl>("ExclusivesShelf")!.Items.Cast<ExclusiveCardRow>().ToArray();
+        view.FindControl<ItemsControl>("ExclusivesShelf")!.Items.OfType<ExclusiveCardRow>().ToArray();
 
     private static void EnsureAvalonia()
     {

@@ -12,8 +12,7 @@
      Deliberately NOT transparent, exactly as the original: this window is opaque by design,
      because the whole point of the beat is that the room goes away.
 
-     The show itself (DescentFuseStageVisual) is a WPF DrawingVisual living in the other head,
-     so StageHost stays empty here - see the code-behind. -->
+     The show itself (Controls/DescentFuseStageVisual) is added to StageHost from the code-behind. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.DescentFuseWindow"
