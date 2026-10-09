@@ -68,6 +68,7 @@ namespace ConditioningControlPanel
 
             _running = true;
             StartedUtc = DateTime.UtcNow;
+            ConditioningTime.OnEngineStarted(DateTime.Now);   // WPF StartStop.cs:423 StartConditioningTimeTracker
             Log.Information("Engine started - Flash: {Flash}, Subliminal: {Sub}, LockCard: {Lock}, BouncingText: {Bt}",
                 s.FlashEnabled, s.SubliminalEnabled, s.LockCardEnabled, s.BouncingTextEnabled);
         }
@@ -92,6 +93,7 @@ namespace ConditioningControlPanel
                 CoreMindWipe.Stop();   // WPF StartStop.cs:489, also ends the loop
                 _running = false;
                 StartedUtc = null;
+                ConditioningTime.OnEngineStopped(DateTime.Now);   // WPF StartStop.cs:540 StopConditioningTimeTracker
                 try { StoppedHook?.Invoke(); }
                 catch (Exception ex) { Log.Warning(ex, "Engine stop hook failed"); }
                 Log.Information("Engine stopped");

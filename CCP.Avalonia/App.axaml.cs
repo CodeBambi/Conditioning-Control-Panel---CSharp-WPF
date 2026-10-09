@@ -490,6 +490,7 @@ namespace ConditioningControlPanel.Avalonia
                 // ponytail: no Speaker - the tube's speech coupling is not ported, so phase lines stay unsaid.
                 DescentCountdown = new Services.Descent.DescentCountdownService();
                 DescentCountdown.Start();
+                Platform.ProgressionHead.Start();   // idle gate, conditioning-time tick, level-up toast + sound
                 if (Platform.AccountSeed.Seed())
                 {
                     // Unit 7c, with the logout clear: the push, XP banking and its two triggers (WPF

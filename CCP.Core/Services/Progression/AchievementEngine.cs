@@ -130,6 +130,32 @@ internal sealed class AchievementEngine
             if (level >= milestone) TryUnlock(id);
     }
 
+    /// <summary>WPF AchievementService.BubbleSaveEveryNPops (#1071): the pop count flushes every 50 pops.</summary>
+    internal const int BubbleSaveEveryNPops = 50;
+
+    /// <summary>WPF AchievementService.TrackBubblePopped (AchievementService.cs:596): the lifetime count,
+    /// pop_the_thought, 1 Sparkle Point every 100 bubbles. Quest credit stays with the caller (the head
+    /// already calls QuestService.TrackBubblePopped beside this).
+    /// ponytail: no ShowBubbleMilestoneNotification popup.</summary>
+    public void TrackBubblePopped() => TrackBubblesPopped(1);
+
+    /// <summary>WPF TrackBubblesPopped (a whole run at once): every 100-boundary crossed pays in one save.</summary>
+    public void TrackBubblesPopped(int count)
+    {
+        if (count <= 0) return;
+        int before = Progress.TotalBubblesPopped;
+        Progress.TotalBubblesPopped += count;
+        int after = Progress.TotalBubblesPopped;
+        _isDirty = true;
+
+        if (after >= AchievementRules.PopTheThoughtBubbles) TryUnlock("pop_the_thought");
+
+        var s = CoreSettings.Current;
+        if (SkillPointsBank.CreditBubbleMilestones(s, before, after) > 0) CoreSettings.Save();
+
+        if (count > 1 || after % BubbleSaveEveryNPops == 0) Save();
+    }
+
     /// <summary>A bubble-count answer: the correct-answer streak (mathematicians_nightmare) and the totals.</summary>
     public void TrackBubbleCountResult(bool correct)
     {
