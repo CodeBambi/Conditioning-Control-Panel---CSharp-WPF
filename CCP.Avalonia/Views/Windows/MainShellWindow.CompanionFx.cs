@@ -1,42 +1,69 @@
-// PORTED-AS-A-NOTE from ConditioningControlPanel/MainWindow/MainWindow.CompanionFx.cs (95 lines).
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.CompanionFx.cs (95 lines).
 //
-// Nothing is wired here, and re-checked rather than assumed: the WPF file has NO ambient effect
-// left to register. Both of its loops moved out in the "Her Room" redesign - the hero disc's
-// breathe belongs to CompanionHeroCard.StartAmbientLoop (parked by CompanionRoomView off the
-// tab's own visibility, including her asleep state, which a MainWindow clock could not see), and
-// the connect sheen was deleted with the AI-brain card it swept. So there is no RegisterTabFx
-// call to make on this tab and no canvas in CompanionTabView.axaml to make it with.
-//
-// What is left in the WPF file is a REPAINT hook, not an effect: a mod switch changes her name,
-// her portrait, her flavour line, the mod chip and the five-card picker (a mod can hide a whole
-// avatar set), and this is the one place that repaints them.
-//
-// Half of that hook is now available and half is not:
-//   * AVAILABLE - CoreMods.ModChanged (CCP.Core/CoreMods.cs:206) is the seam the head forwards
-//     its service's event into. Subscribing is one line, and CoreDispatch covers the
-//     Dispatcher.CheckAccess marshalling WPF does by hand.
-//   * MISSING - every repaint target. CompanionRoomView on this head has no ViewModel and no
-//     Sync(): CompanionTabView's own note records that it needs CompanionRoomRuntimeVm plus the
-//     eight zone viewmodels, all still in the WPF head. UpdateCompanionCardsUI and
-//     UpdateCompanionPromptLabels do not exist here either. A subscription with nothing to call
-//     would be a live event handler that does nothing, which is worse than the note.
-//
-// Wire this when CompanionRoomRuntimeVm lands: subscribe to CoreMods.ModChanged from an
-// EnsureCompanionFx case in EnsureTabFx (MainShellWindow.AmbientFx.cs) and call Room.Sync().
-//
-// Also dropped with its service: PersistCompanionDrawerStates (a settings write on tab exit) and
-// EnsureAwarenessV2Consent (the upgrade consent dialog raised on this page).
-//
-// Members dropped (4):
-//   private bool _companionFxInitialized
-//   internal void OnCompanionTabVisibilityChanged(…)
-//   private void InitializeCompanionFx(…)
-//   private void OnCompanionFxModChanged(…)
+// The WPF file has no ambient effect left: the hero disc's breathe belongs to
+// CompanionHeroCard.StartAmbientLoop (parked by CompanionRoomView off the tab's own visibility) and
+// the connect sheen was deleted with the AI-brain card it swept. What remains, and is ported here:
+//   * the tab's visibility hook - leaving writes the two drawers' open/closed state, entering
+//     restores it (WPF SyncCompanionTabUI -> RestoreCompanionSectionStates) and offers an upgrader
+//     the Awareness v2 consent dialog (WPF EnsureAwarenessV2Consent, MainShellWindow.CompanionRoom.cs);
+//   * the mod repaint - CoreMods.ModChanged re-reads the roster (WPF UpdateCompanionCardsUI). The
+//     hero re-reads its own name/portrait off the same event (CompanionHeroCard.OnModChanged).
+// WPF's UpdateCompanionPromptLabels half has nothing to repaint: the per-card assigned-prompt
+// labels wait on CompanionService (row shell-companion-tab).
+// WPF's IsIncomingTab guard is not needed: this head's ShowTab has no fade-out re-show.
+
+using System;
+using ConditioningControlPanel.Avalonia.Views.Controls.Companion;
+using ConditioningControlPanel.Models;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // No member of this partial is referenced from MainShellWindow.axaml.
+        private bool _companionFxInitialized;
+
+        /// <summary>WPF MainWindow.CompanionFx.cs:32, called from CompanionTabView on a real
+        /// visibility edge of the room.</summary>
+        internal void OnCompanionTabVisibilityChanged(bool visible, CompanionRoomView room)
+        {
+            try
+            {
+                var map = CoreSettings.Current?.CompanionSectionOpen;
+                if (!visible)
+                {
+                    // Per-toggle would be a settings save on every click of a rarely-opened drawer.
+                    if (map != null) { room.PersistDrawerStates(map); CoreSettings.Save(); }
+                }
+                else if (map != null) room.RestoreDrawerStates(map);
+
+                InitializeCompanionFx(room);
+
+                if (visible) EnsureAwarenessV2Consent();
+            }
+            catch (Exception ex) { Log.Debug("OnCompanionTabVisibilityChanged: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF WindowChrome.cs:176: quitting while still on the tab is not a hide edge.</summary>
+        private void PersistCompanionDrawerStatesOnExit()
+        {
+            var map = CoreSettings.Current?.CompanionSectionOpen;
+            var room = Named<Tabs.CompanionTabView>("CompanionTab")?.FindControl<CompanionRoomView>("Room");
+            if (map == null || room == null) return;
+            room.PersistDrawerStates(map);
+            CoreSettings.Save();
+        }
+
+        private void InitializeCompanionFx(CompanionRoomView room)
+        {
+            if (_companionFxInitialized) return;
+            _companionFxInitialized = true;
+            void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(room.RefreshRoster);
+            CoreMods.ModChanged += OnModChanged;
+            // A static event must not pin a closed shell (P41).
+            Closed += (_, _) => CoreMods.ModChanged -= OnModChanged;
+        }
     }
 }
