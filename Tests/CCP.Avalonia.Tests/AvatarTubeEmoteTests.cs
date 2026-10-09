@@ -11,6 +11,7 @@ using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Views.AvatarTube;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Xunit;
 
@@ -86,6 +87,60 @@ public sealed class AvatarTubeEmoteTests
             Assert.NotNull(tube.EmoteActiveLayer?.Source);
         }
         finally { tube.Close(); }
+        return Task.CompletedTask;
+    });
+
+    /// <summary>
+    /// Owner bug 2026-10-09: a saved SelectedAvatarSet 2 (the live 7.1.5 profile) opened Bambi Sleep
+    /// on the still set-2 poses (the neon sprite) because the registry maps avatar0 to set 1 only.
+    /// WPF locks a single-emote mod to its set (xaml.cs:163); a mod switch re-resolves the set and
+    /// the emote mode (Avatar.cs OnModChanged), and the pick comes back in a mod with a picker.
+    /// </summary>
+    [Fact]
+    public Task SingleEmoteModsPlayAvatar0WhateverSetWasSavedAndModSwitchesFollow() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        Setup();
+        var oldId = CoreMods.ActiveModIdProvider;
+        var oldPkg = CoreMods.ActiveModPackageProvider;
+        ModPackage pkg = new ModPackage(BuiltInMods.BambiSleep, null, isBuiltIn: true);
+        CoreMods.ActiveModIdProvider = () => pkg.Manifest.Id;
+        CoreMods.ActiveModPackageProvider = () => pkg;
+        var s = CoreSettings.Current;
+        s.SelectedAvatarSet = 2;
+        s.ModAvatarSet = new System.Collections.Generic.Dictionary<string, int>();
+        var tube = new AvatarTubeWindow(null);
+        try
+        {
+            Assert.Equal(1, tube.CurrentAvatarSet);
+            Assert.True(tube.EmoteModeActive, "Bambi Sleep with SelectedAvatarSet 2 stayed on the still poses");
+            Assert.Equal(2, s.SelectedAvatarSet);   // the pin is not a pick
+
+            // A mod with a picker and no emote set shows the saved set 2 as still poses.
+            pkg = new ModPackage(BuiltInMods.InfectionControl, null, isBuiltIn: true);
+            CoreMods.RaiseModChanged(null, pkg);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(2, tube.CurrentAvatarSet);
+            Assert.False(tube.EmoteModeActive);
+            Assert.True(tube.FindControl<global::Avalonia.Controls.Image>("ImgAvatar")!.IsVisible);
+
+            // Sissy and CCP Default engage avatar0 again on a switch.
+            foreach (var m in new[] { BuiltInMods.SissyHypno, BuiltInMods.CCPDefault })
+            {
+                pkg = new ModPackage(m, null, isBuiltIn: true);
+                CoreMods.RaiseModChanged(null, pkg);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(1, tube.CurrentAvatarSet);
+                Assert.True(tube.EmoteModeActive, $"{m.Id} did not engage avatar0 after a mod switch");
+                Assert.NotNull(tube.EmoteActiveLayer?.Source);
+            }
+            Assert.Equal(2, s.SelectedAvatarSet);
+        }
+        finally
+        {
+            tube.Close();
+            CoreMods.ActiveModIdProvider = oldId;
+            CoreMods.ActiveModPackageProvider = oldPkg;
+        }
         return Task.CompletedTask;
     });
 

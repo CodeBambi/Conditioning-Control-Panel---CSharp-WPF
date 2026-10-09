@@ -75,6 +75,93 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             return false;
         }
 
+        /// <summary>
+        /// WPF ctor (AvatarTubeWindow.xaml.cs:138-166): the set the tube opens on. The look last
+        /// picked in the active mod, else SelectedAvatarSet; clamped to the unlocked sets unless it
+        /// is a custom set; an unsupported pick falls back to the last supported set; and a mod whose
+        /// only avatar is one emote set (Bambi Sleep, Sissy, CCP Default: avatar0 on set 1) is LOCKED
+        /// to that set whatever was saved. Without that lock a saved SelectedAvatarSet 2 left those
+        /// mods on the still set-2 poses (the neon sprite) because the registry maps only set 1.
+        /// </summary>
+        internal int ResolveStartAvatarSet()
+        {
+            var s = CoreSettings.Current;
+            var unlocked = GetUnlockedAvatarSets(s.PlayerLevel);
+            int set = StoredLookFor(s.ModAvatarSet, CoreMods.ActiveModId, unlocked) ?? s.SelectedAvatarSet;
+            bool custom = CoreMods.ActiveModPackage?.Manifest?.CustomAvatarSets?.Any(c => c.SetNumber == set) == true;
+            if (!custom) set = Math.Clamp(set, 1, _maxUnlockedSet);
+            if (unlocked.Length > 0 && !unlocked.Contains(set)) set = unlocked[unlocked.Length - 1];
+            if (IsSingleEmoteAvatarMod(out int only)) set = only;
+            return set;
+        }
+
+        /// <summary>
+        /// WPF OnModChanged set half (Avatar.cs:629-667): a single-emote mod pins its set without
+        /// saving it; any other mod gets back the look last picked in it, then the last look picked
+        /// anywhere, and an unsupported set falls back to the mod's first. Not saved to disk here
+        /// (WPF only wrote the in-memory setting), so a trip through Bambi Sleep keeps the pick.
+        /// </summary>
+        internal int ResolveModSwitchAvatarSet()
+        {
+            if (IsSingleEmoteAvatarMod(out int only)) return only;
+            var s = CoreSettings.Current;
+            var unlocked = GetUnlockedAvatarSets(s.PlayerLevel);
+            int set = _currentAvatarSet;
+            int remembered = LookForModSwitch(s.ModAvatarSet, CoreMods.ActiveModId, s.SelectedAvatarSet, set, unlocked);
+            if (remembered != set && unlocked.Contains(remembered))
+            {
+                Log.Information("Mod switch: restoring avatar set {Set} (was {OldSet})", remembered, set);
+                set = remembered;
+                s.SelectedAvatarSet = remembered;
+            }
+            if (unlocked.Length > 0 && !unlocked.Contains(set))
+            {
+                Log.Information("Avatar set {OldSet} not supported by new mod, switched to {NewSet}", set, unlocked[0]);
+                set = unlocked[0];
+                s.SelectedAvatarSet = set;
+            }
+            return set;
+        }
+
+        /// <summary>WPF OnModChanged: the glass, the layout, the set, the art, the emote set, the arrows.</summary>
+        private void OnTubeModChanged(object? sender, ModPackage mod) =>
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    SetTubeStyle(!_isAttached);
+                    _currentAvatarSet = ResolveModSwitchAvatarSet();
+                    _poseTimer.Stop();
+                    ApplyAvatarSet();
+                    TryUpdateEmoteMode();
+                    ApplyTubeLayoutOffsets();
+                    UpdateNavigationArrows();
+                    UpdateQuickMenuState();
+                    Log.Information("Tube refreshed for mod {Mod} on avatar set {Set} (emotes {Emotes})",
+                        mod?.Id, _currentAvatarSet, _emoteMode);
+                }
+                catch (Exception ex) { Log.Warning(ex, "Tube refresh after mod change failed"); }
+            });
+
+        // WPF Services/Companion/ModAvatarLooks (StoredFor / ForModSwitch), kept head-local: the WPF
+        // project still compiles its own copy against CCP.Core, so a Core twin would collide.
+        private static int? StoredLookFor(IReadOnlyDictionary<string, int>? map, string? modId, IEnumerable<int>? pickable)
+        {
+            if (map == null || string.IsNullOrWhiteSpace(modId)) return null;
+            if (!map.TryGetValue(modId!, out var set) || set < 1) return null;
+            return pickable != null && pickable.Contains(set) ? set : null;
+        }
+
+        private static int LookForModSwitch(IReadOnlyDictionary<string, int>? map, string? modId,
+            int globalPick, int current, IReadOnlyList<int>? pickable)
+        {
+            if (pickable == null || pickable.Count == 0) return current;
+            if (StoredLookFor(map, modId, pickable) is { } stored) return stored;
+            if (pickable.Contains(globalPick)) return globalPick;
+            if (pickable.Contains(current)) return current;
+            return pickable[0];
+        }
+
         internal int[] EffectiveAvatarSets() =>
             IsSingleEmoteAvatarMod(out int only) ? new[] { only } : GetUnlockedAvatarSets(CoreSettings.Current.PlayerLevel);
 

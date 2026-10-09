@@ -122,7 +122,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         // actually loaded never starts the timer, which is the WPF rule verbatim.
         private readonly DispatcherTimer _poseTimer;
         private int _currentPoseIndex;
-        private int _currentAvatarSet = Math.Max(1, CoreSettings.Current.SelectedAvatarSet);
+        // Set from ResolveStartAvatarSet in the ctor (AvatarSets.cs): never straight from
+        // SelectedAvatarSet, which a single-emote mod (Bambi Sleep, Sissy, CCP Default) ignores.
+        private int _currentAvatarSet = 1;
         private readonly Border _btnPrevAvatar, _btnNextAvatar;
         private Bitmap?[] _avatarPoses = new Bitmap?[4];
 
@@ -260,11 +262,13 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // avatar and its caption instead of rendering as an empty frame.
             SetTubeStyle(!_isAttached);
             InitWindowing();
+            _currentAvatarSet = ResolveStartAvatarSet();   // WPF ctor xaml.cs:138-166
             ApplyAvatarSet();
             // The animated avatar (AvatarTubeWindow.Emotes.cs): CCP Default / Bambi Sleep / Sissy play
             // the avatar0 cel set, a mod its own resources/emotes set. Its clock starts in OnOpened.
             TryUpdateEmoteMode();
             UpdateNavigationArrows();   // tube#T12
+            CoreMods.ModChanged += OnTubeModChanged;   // WPF OnModChanged (Avatar.cs:614)
             // The caption is Loc-driven and set from code (a persona name has no static key), so it
             // has to be re-run rather than bound - see the porting note about {loc:Str} and .Text.
             LocalizationManager.Instance.LanguageChanged += OnTubeLanguageChanged;
@@ -355,6 +359,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // in one process, and a tick against a torn-down visual tree is exactly the flaky
             // failure the constructor's note refuses to risk.
             LocalizationManager.Instance.LanguageChanged -= OnTubeLanguageChanged;
+            CoreMods.ModChanged -= OnTubeModChanged;
             _poseTimer.Stop();
             _speechTimer?.Stop();
             _cooldownTickTimer?.Stop();
