@@ -413,7 +413,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private MainWindow? _diagnostics;
 
         // -- training programs "today" card ----------------------------------------------
-        private void ProgramTodayCard_Loaded(object? sender, RoutedEventArgs e) { }          // mw.ProgramTodayCard_Loaded(...)
-        private void ProgramTodayCard_Click(object? sender, RoutedEventArgs e) { }           // mw.ProgramTodayCard_Click(...)
+        private void ProgramTodayCard_Loaded(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ProgramTodayCard_Loaded();   // progression#1
+        private void ProgramTodayCard_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ProgramTodayCard_Click();
     }
 }

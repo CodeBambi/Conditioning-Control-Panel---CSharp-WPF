@@ -683,6 +683,7 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                StartPrograms();   // progression#1: WPF App.xaml.cs:2165, after Quests (verifier seam)
 
                 // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no
                 // ContentPackService or RoadmapService, so it answers "no pack videos, no roadmap".
@@ -782,6 +783,7 @@ namespace ConditioningControlPanel.Avalonia
                     StopDesktopOverlays();
                     Views.Overlays.CornerGifOverlay.StopAll();   // WPF CornerGifService.OnMainWindowClosing / OnExit
                     Views.Windows.LockCardWindow.ForceCloseAll();
+                    StopPrograms();   // WPF App.OnExit Programs?.Dispose()
                 };
                 // WPF App.xaml.cs:2602: restore at ApplicationIdle, once startup has settled (#709).
                 Dispatcher.UIThread.Post(() =>
