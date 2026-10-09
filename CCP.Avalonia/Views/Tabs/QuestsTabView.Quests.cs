@@ -134,9 +134,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 IsCompleted = quest.IsCompleted,
                 XpText = $"\U0001f381 {xp} XP",
                 BonusText = bonus,
-                // ponytail: no quest art - GetModeAwareQuestImagePath resolves pack:// resources this
-                // head does not ship; the card draws its icon instead.
-                Art = null,
+                Art = GetQuestArt(def),
                 CanReroll = canReroll,
                 RerollText = canReroll ? Loc.GetF("btn_reroll_with_count", rerollsLeft) : Loc.Get("btn_reroll_none"),
                 RerollTooltip = canReroll ? Loc.Get("quest_card_reroll_tip") : Loc.Get("quest_card_reroll_tip_none"),
@@ -183,6 +181,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (weeklyDef != null && weekly != null)
             {
                 TxtWeeklyQuestIcon.Text = weeklyDef.Icon;
+                if (GetQuestArt(weeklyDef) is { } weeklyArt) ImgWeeklyQuest.Source = weeklyArt;
                 TxtWeeklyQuestName.Text = CoreMods.MakeModAware(weeklyDef.Name);
                 TxtWeeklyQuestDesc.Text = CoreMods.MakeModAware(weeklyDef.Description);
                 TxtWeeklyProgress.Text = $"{weekly.CurrentProgress} / {weeklyDef.TargetValue}";
