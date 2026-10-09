@@ -1608,3 +1608,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-profile-cards: +663
 - Profile bubble paints identity, tier and account doors and reacts to XP/level/achievements; the public-profile door is live (row stays stub).
 - Profile FX wired: card stagger, search glow, OG border loop gated per P01; spiral/vat/faucet blocked on DescentService, privacy panel on a sync payload change (P44).
+
+## avalonia-port/rows-play-tab: +487
+- Play wall matches WPF's 2026-09-18 layout: GAMES zone with Breakout covers, Graded Intake states and FREE TODAY stamps; Devices and Loom buttons open the right section. Game buttons stay disabled because this head has no host for them.
+- Start caret "Jump right in" (RandomizeAndStart) ported, refused while a session holds the lock; tests fail-proven and checked live.

@@ -2566,7 +2566,7 @@
                      lockbands are decoration and TierGate does the refusing.
                      ShowTab("lab") is a permanent alias onto this view — the key is API (54 bark rules
                      per mod match on it) and BarkTabAliases["play"]="lab" keeps those rules firing.
-                     Owns this door's single ambient loop, RabbitHoleFx, registered as "play". -->
+                     No ambient loop since the 2026-09-18 relayout (WPF MainWindow.PlayTab.cs). -->
                 <views:PlayTabView x:Name="PlayTab" Margin="10,5,10,10" IsVisible="False" />
 
 
@@ -2816,8 +2816,8 @@
                     <TextBlock Text="▼" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"/>
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem x:Name="MenuStartNormal" Header="▶  Start normally" Click="MenuStartNormal_Click"/>
-                            <MenuItem x:Name="MenuJumpRightIn" Header="🎲  Jump right in (randomize + start)" Click="MenuJumpRightIn_Click"/>
+                            <MenuItem x:Name="MenuStartNormal" Header="{loc:Str menu_start_normally}" Click="MenuStartNormal_Click"/>
+                            <MenuItem x:Name="MenuJumpRightIn" Header="{loc:Str menu_jump_right_in}" Click="MenuJumpRightIn_Click"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
