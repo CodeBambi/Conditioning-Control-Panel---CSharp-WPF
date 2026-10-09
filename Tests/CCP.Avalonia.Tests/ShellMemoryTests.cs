@@ -12,12 +12,9 @@ using Xunit;
 
 namespace CCP.Avalonia.Tests;
 
-/// <summary>Runs alone: the test yields between shells, and a test from another class that opens its
-/// own shell in that gap reads as a rooted closed shell here.</summary>
-[CollectionDefinition(nameof(ShellMemoryTests), DisableParallelization = true)]
-public sealed class ShellMemoryCollection { }
-
-[Collection(nameof(ShellMemoryTests))]
+// Runs alone: the test yields between shells, and a shell another class opens in that gap reads as
+// a rooted closed shell here.
+[Collection(RunsAloneCollection.Name)]
 public sealed class ShellMemoryTests(ITestOutputHelper output)
 {
     [Fact]

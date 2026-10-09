@@ -24,7 +24,9 @@ namespace CCP.Avalonia.Tests;
 /// First-run wizard "Choose a content folder": the picker opens on the click itself, owned by the
 /// wizard (not deferred until the wizard closes, which a user read as "does nothing"), and the
 /// folder it returns is applied like the shell's picker and shown on the button.
+/// Runs alone: it binds a fake storage provider for the whole process while it yields.
 /// </summary>
+[Collection(RunsAloneCollection.Name)]
 public sealed class FirstRunFolderPickerTests
 {
     [Fact]
