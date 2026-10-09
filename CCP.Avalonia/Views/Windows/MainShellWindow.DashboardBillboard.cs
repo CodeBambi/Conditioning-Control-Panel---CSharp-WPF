@@ -29,9 +29,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <see cref="BillboardDeckView"/>, the provider list is <see cref="BillboardWiring"/>.
     ///
     /// <para>Differences from 7.1.5, all because the port lacks the thing: snoozes live in board/snoozes.json (no
-    /// AppSettings.BillboardSnoozedUntil yet); there is no Live (no Lobby), no Showcase (no clips),
-    /// no program day (no ProgramService), and the Back Room house card stays out of the deck (no
-    /// Back Room host). The board stays silent, as 7.1.5 shipped it.</para>
+    /// AppSettings.BillboardSnoozedUntil yet); there is no Showcase (no clips),
+    /// no program day (no ProgramService), and the Back Room house card waits for a Back Room
+    /// launcher destination. Live joins open the Lobby until chess and Goon are hosted here. The board stays silent, as 7.1.5 shipped it.</para>
     /// </summary>
     public partial class MainShellWindow
     {
@@ -129,9 +129,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 new WaitingProvider(hooks),
                 new ResumeProvider(hooks),
                 new EventProvider(() => Platform.ChasterHead.Service),
+                // WPF LiveProvider over App.Lobby: the shell's one LobbyService (the Social badge
+                // and the Lobby page keep its snapshot fresh while the panel is on screen).
+                new LiveProvider(() => Lobby, (game, key) => BillboardShell()?.JoinFromBoard(game, key)),
             };
-            // No Back Room host on this head (ExclusivesTabView.IsOnThisBuild): HouseProvider.OpenBackRoom
-            // stays null, so the Daily Daze card stays out of the deck.
+            // WPF 7.1.5 called MainWindow.LaunchPlayBackRoom. The Daily Daze card joins the deck only
+            // once this head hosts the Back Room (a launcher destination), so it is never a dead button.
+            if (LauncherWindow.Destinations.ContainsKey("backroom"))
+                HouseProvider.OpenBackRoom = () =>
+                {
+                    if (BillboardShell() is { } w) LauncherWindow.LaunchGame(w, "backroom");
+                };
+        }
+
+        /// <summary>
+        /// The Live card's Join (WPF LiveProvider.Invoke): signed out asks to sign in, a gate refusal
+        /// shows the sign-in, else each game's own door. ponytail: chess
+        /// (PieceByPieceHostService.JoinOpenTable) and Goon (GoonHostService.Launch joinCode) are not
+        /// hosted on this head yet, so the card opens the Lobby with the table on it instead.
+        /// </summary>
+        private void JoinFromBoard(global::ConditioningControlPanel.Services.Lobby.LobbyGame game, string key)
+        {
+            var gates = CurrentLobbyGates();
+            if (!gates.SignedIn || !gates.CanJoin(game)) { _ = OpenUnifiedLoginDialog(); return; }
+            Log.Information("[Billboard] live join {Game} goes to the Lobby (not hosted on this head yet)", game);
+            ShowBillboardTab("availablesubjects");
         }
 
         private static MainShellWindow? BillboardShell() =>

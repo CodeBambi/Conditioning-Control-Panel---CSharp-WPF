@@ -74,6 +74,16 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public Func<bool>? IsAvailable { get; init; }
 
+        /// <summary>Studio rack key: the row opens the Studio on this module (OpenStudioModule).</summary>
+        public string? RackKey { get; init; }
+
+        /// <summary>Launcher game id: the row starts the game the way the launcher tile does.</summary>
+        public string? GameId { get; init; }
+
+        /// <summary>The caption key carries its own leading emoji (rack form labels); the palette
+        /// draws the glyph itself, so the label drops it.</summary>
+        public bool StripLeadingGlyph { get; init; }
+
         /// <summary>Never throws: a predicate that blows up hides its row rather than taking the
         /// palette down, which is the same fail-closed rule ExclusiveFeature.Gate follows.</summary>
         public bool Available
@@ -88,7 +98,7 @@ namespace ConditioningControlPanel.Services
 
         // ---- display-time resolution (deliberately not cached) ----
 
-        public string Label => Loc.Get(LabelKey);
+        public string Label => StripLeadingGlyph ? SettingsPaletteIndex.StripGlyph(Loc.Get(LabelKey)) : Loc.Get(LabelKey);
 
         public string Context =>
             ContextKeys.Length == 0
@@ -122,8 +132,28 @@ namespace ConditioningControlPanel.Services
             catch { return false; }
         }
 
+        /// <summary>Seeded by the head: true when this head can start launcher game <c>id</c>
+        /// (WPF LauncherCatalogue.Find(id)?.Available). Fail-closed: unset or throwing hides the row.</summary>
+        public static volatile Func<string, bool>? GameAvailableProvider;
+
+        internal static bool GameAvailable(string id)
+        {
+            try { return GameAvailableProvider?.Invoke(id) ?? false; }
+            catch { return false; }
+        }
+
+        /// <summary>"🫧 Bubble Pop" -> "Bubble Pop": drops leading symbols and spaces.</summary>
+        internal static string StripGlyph(string label)
+        {
+            if (string.IsNullOrEmpty(label)) return label ?? string.Empty;
+            int i = 0;
+            while (i < label.Length && !char.IsLetterOrDigit(label[i])) i++;
+            return i >= label.Length ? label : label.Substring(i);
+        }
+
         // Group captions (also used as the first breadcrumb crumb).
         private const string GroupNav = "set2_palette_group_go_to";
+        private const string GroupLaunch = "launcher_panel_launch";
         private const string GroupDoors = "set2_palette_group_doors";
         private const string GroupSettings = "nav_door_settings";
 
@@ -582,7 +612,120 @@ namespace ConditioningControlPanel.Services
                     new[] { "BtnViewPatchNotes", "TxtPatchNotes" }, "set2_section_updates",
                     "patch notes changelog whats new");
 
+            // ---- the 2026-10-06 rework's new pages ---------------------------------------
+            AddNavRework(list);
+
             return list.ToArray();
+        }
+
+        /// <summary>
+        /// Rows the nav rework (2026-10-06) added (WPF 7.1.5 SettingsPaletteIndex.AddNavRework): the
+        /// new pills, Settings › Monitors, one row per Studio rack module and one per launcher game.
+        /// </summary>
+        private static void AddNavRework(List<SettingsPaletteEntry> list)
+        {
+            void Pill(string tab, string labelKey, string glyph, string sectionLabelKey, string aliases) =>
+                list.Add(new SettingsPaletteEntry
+                {
+                    Id = "tab." + tab,
+                    LabelKey = labelKey,
+                    Glyph = glyph,
+                    TabKey = tab,
+                    ContextKeys = new[] { GroupNav, sectionLabelKey },
+                    Aliases = aliases,
+                });
+
+            Pill("personality", "nav_tab_personality", "🎭", "nav_door_companion",
+                 "personality persona presets prompt editor traits community prompts fork");
+            Pill("permissions", "nav_tab_permissions", "🛂", "nav_door_companion",
+                 "permissions lock cards lock card permissions ai permissions what she can do allowed consent");
+            Pill("companionlinks", "nav_tab_companionlinks", "🔗", "nav_door_companion",
+                 "companion links video links hypnotube knowledge links she knows videos she can play");
+            Pill("companionai", "label_ai_badge", "🔌", "nav_door_companion",
+                 "ai settings connection ai provider model cloud local ollama openai openrouter custom endpoint " +
+                 "use my own model engine room sampler temperature test connection " +
+                 "memory remember memories preferred name call me recap forget diary what she knows " +
+                 "behaviour behavior how often it talks speaks chatter idle chatter bubble duration " +
+                 "mute voice lines trigger mode trigger interval whispers pause browser midnight glass tube");
+            Pill("friends", "nav_tab_friends", "🤝", "nav_section_social",
+                 "friends friend list add friend invite poke requests block");
+            Pill("leash", "nav_tab_leash", "🦮", "nav_section_social",
+                 "leash dom sub holder leashed cut the leash punishment");
+            Pill("folders", "nav_tab_folders", "🗂️", "nav_door_library",
+                 "folders folder assets path assets folder pictures folder content folder media folder asset presets");
+            Pill("playsessions", "nav_tab_sessions", "🎧", "nav_door_play",
+                 "sessions intake for you lockdown deeper sessions play");
+            Pill("playeyes", "nav_tab_eyes", "👁️", "nav_door_play",
+                 "eyes gaze focus gaze blink trainer webcam eye tracking");
+            Pill("ramp", "nav_tab_ramp", "📈", "nav_door_studio",
+                 "scheduler ramp intensity ramp schedule timer auto start starts by itself volume gets quiet");
+
+            // Settings › Monitors (the monitor picker lifted out of the Home System pill).
+            list.Add(new SettingsPaletteEntry
+            {
+                Id = "section.monitors",
+                LabelKey = "settings_section_monitors",
+                Glyph = "🖥️",
+                TabKey = "appsettings",
+                SectionKey = "monitors",
+                ContextKeys = new[] { GroupSettings },
+                Aliases = "monitor monitors screen screens second monitor second screen display displays " +
+                          "dual monitor multi monitor which screen",
+            });
+
+            // ---- Studio rack modules ---------------------------------------------------
+            // One row per module so "bubble pop" opens Bubble Pop, not the rack's first module.
+            void Rack(string key, string labelKey, string glyph, string aliases) =>
+                list.Add(new SettingsPaletteEntry
+                {
+                    Id = "rack." + key,
+                    LabelKey = labelKey,
+                    Glyph = glyph,
+                    TabKey = "studio",
+                    RackKey = key,
+                    StripLeadingGlyph = true,
+                    ContextKeys = new[] { GroupNav, "nav_door_studio" },
+                    Aliases = aliases,
+                });
+
+            Rack("flash", "section_flash_images", "⚡", "flash flashes images pictures popups");
+            Rack("video", "section_mandatory_video", "🎬", "video mandatory video videos");
+            Rack("subliminal", "section_subliminals_2", "💭", "subliminal subliminals words");
+            Rack("spiral", "label_spiral_overlay", "🌀", "spiral overlay");
+            Rack("pinkfilter", "label_pink_filter", "💗", "pink filter tint");
+            Rack("visuals", "section_visuals", "👁", "visuals");
+            Rack("bubbles", "label_bubble_pop", "🫧", "bubbles bubble pop");
+            Rack("bubblecount", "label_bubble_count", "🔢", "bubble count counting");
+            Rack("lockcard", "label_lock_card", "📐", "lock card typing phrase");
+            Rack("bouncingtext", "label_bouncing_text", "📺", "bouncing text dvd");
+            Rack("mindwipe", "label_mind_wipe", "🧠", "mind wipe");
+            Rack("braindrain", "section_brain_drain", "💧", "brain drain blur melt screen blur");
+
+            // ---- launcher games ----------------------------------------------------------
+            // Start the game the way the launcher tile does. A game this head cannot start
+            // (GameAvailableProvider) is hidden from search.
+            void Game(string id, string glyph, string aliases) =>
+                list.Add(new SettingsPaletteEntry
+                {
+                    Id = "game." + id,
+                    LabelKey = "launcher_game_" + id + "_title",
+                    Glyph = glyph,
+                    GameId = id,
+                    // "Launch > CC Labs", never "Go to": the row starts the game.
+                    ContextKeys = new[] { GroupLaunch, "launcher_window_title" },
+                    Aliases = aliases,
+                    IsAvailable = () => GameAvailable(id),
+                });
+
+            Game("backroom", "🎰", "back room casino slots slot machine wheel blackjack roulette sparkle points");
+            Game("race", "🏎️", "racing racing thoughts race kart");
+            Game("dtrh", "🕳️", "rabbit hole down the rabbit hole descent dtrh");
+            Game("arcademy", "🎓", "arcademy academy campus school");
+            Game("goon", "🎮", "goon goon game 1v1 duel");
+            Game("piecebypiece", "♟️", "chess piece by piece board game");
+            Game("breakout", "🧱", "breakout brick breaker bricks paddle");
+            Game("breakoutdemo", "🧱", "breakout demo brick breaker free bricks");
+            Game("intake", "📝", "intake graded intake quiz");
         }
     }
 }
