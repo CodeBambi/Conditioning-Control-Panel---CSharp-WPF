@@ -31,10 +31,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
     /// balance; hover waves her arm, a credit pops the balance and throws four sparkles, a click
     /// opens EMI's invite to the Back Room, the "?" opens what sparkles are for.
     ///
-    /// <para>Built in code (no axaml) so the header owns one control, as WPF did. Two ponytails:
-    /// the face is a mono TextBlock in the visor, as EmiDeskWindow's own placeholder is (the WPF
-    /// EmiFace renderer is not ported), and the sprite PNGs load from avares only once the csproj
-    /// packs Assets/emi/wallet_croupier_*.png (seam request); until then a gold coin stands in.</para>
+    /// <para>Built in code (no axaml) so the header owns one control, as WPF did. The face is
+    /// WalletEmiFace (the flat path of WPF EmiFace); the sprite PNGs load from avares
+    /// (Assets/emi/wallet_croupier_*.png) and a gold coin stands in only if they are missing.</para>
     /// </summary>
     public sealed class SparkleWallet : UserControl
     {
@@ -103,21 +102,17 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _arm.RenderTransform = _armTurn;
             sprite.Children.Add(_arm);
             // The visor glass rect, measured off the sprite (302,279 425x385) and inset 18 px.
-            sprite.Children.Add(new TextBlock
+            // WPF: <emi:EmiFace x:Name="MascotFace" Margin="320,297,0,0" Width="389" Height="349"/>, Draw("^_^").
+            var face = new WalletEmiFace
             {
-                Text = "^_^",
-                Foreground = Brush("#FF9BCD"),
-                FontFamily = new FontFamily("Consolas, Courier New, monospace"),
-                FontWeight = FontWeight.Bold,
-                FontSize = 150,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(320, 297, 0, 0),
                 Width = 389,
                 Height = 349,
-                TextAlignment = TextAlignment.Center,
-                Padding = new Thickness(0, 90, 0, 0),
-            });
+            };
+            face.Draw("^_^");
+            sprite.Children.Add(face);
             var mascot = new Viewbox { Width = 30, Height = 28, IsHitTestVisible = false, Child = sprite };
 
             var gem = new Path
