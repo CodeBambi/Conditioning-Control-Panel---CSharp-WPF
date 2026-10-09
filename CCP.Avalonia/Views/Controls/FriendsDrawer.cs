@@ -412,6 +412,7 @@ public sealed partial class FriendsDrawer : Border
             return card;
         }
         card.Children.Add(CardActions(f));
+        if (LeashSection?.OfferChipFor(f) is { } leashChip) card.Children.Add(leashChip);   // WPF: under the actions
         var more = Pill(Loc.Get("friends_action_more"), Brushes.Transparent, Muted, "friends-action:more", Line2);
         more.HorizontalAlignment = HorizontalAlignment.Stretch;
         more.HorizontalContentAlignment = HorizontalAlignment.Center;

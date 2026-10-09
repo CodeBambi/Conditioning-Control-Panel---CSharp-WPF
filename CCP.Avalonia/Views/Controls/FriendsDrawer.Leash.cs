@@ -11,8 +11,6 @@ public sealed partial class FriendsDrawer
     /// <summary>The leash section, once mounted (also the source of a friend card's Offer chip).</summary>
     internal LeashDrawerSection? LeashSection { get; private set; }
 
-    partial void MountLeash(Panel slot);
-
     partial void MountLeash(Panel slot)
     {
         if (LeashSection != null) return;
