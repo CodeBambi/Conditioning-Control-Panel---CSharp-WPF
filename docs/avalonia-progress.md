@@ -1620,3 +1620,23 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-programs-tab: +362
 - Programs browse cards + intro popup show WPF's banner/sigil/plate art via new Core ProgramArtPaths (shared with WPF ProgramArt).
 - Enroll/run panel still unwired (decision A); slice plan in briefs/programs-run-plan.md.
+
+## avalonia-port/rows-she-listening: +132
+- She's Listening: title-bar mic privacy pill (click/Enter = disarm), armed-disc pulse, open-models button; 5 fail-proven assertions in SheListeningTests.
+- Rows shell-she-listening / views-tab-she-listening stay stub (sherpa KWS, bark lines, grammar gaps).
+
+## avalonia-port/rows-keyword-triggers: +606
+- Awareness custom trigger list (add/import/9 row editors), OCR combos persisted, OCR access gate + panel resync; 9-language strings; 3 fail-proven tests.
+- Rows stay stub: KeywordTriggerService/ScreenOcr/KeywordHighlight runtime (no Linux keystroke source) not ported.
+
+## avalonia-port/rows-patreon-subscribestar: +234
+- Premium celebration is back: a Patreon or SubscribeStar tier change, or the launch re-check, shows one card per tier (none for an invite week), via the presenter or Inbox. 2 fail-proven tests; live sandbox run showed the card.
+- shell-patreon and shell-subscribestar stay stub, with an exact missing list (live tier rise, unlockables/programs/profile-bubble repaint).
+
+## avalonia-port/rows-descent-fuse: +933
+- Fuse rail chip (tiers, flash-out at zero, Spiral Room door) and the zero-show stage visual are ported; both rows are now wired.
+- 2 fail-proven headless tests and a sandbox Keincheck run. win/shell descent-fuse rows stay stub (openers, sounds, dimming).
+
+## avalonia-port/rows-awareness-privacy: +661
+- Z5 privacy card on real settings: consent-gated dial, deny/allow chips, pause, wipe; WPF older-pipeline band whenever awareness is on (v2 observer still missing; decision logged).
+- "Set up local" opens the local-AI wizard (untested); tests can no longer read the real desktop (X11ActiveWindow.Disabled); duplicate awareness ledger rows merged.
