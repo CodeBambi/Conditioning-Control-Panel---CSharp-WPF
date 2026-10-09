@@ -810,7 +810,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private static Bitmap? _artT1, _artT2, _artStamp;
         private static bool _artT1Tried, _artT2Tried, _artStampTried;
 
-        private static Bitmap? TierArt(int tier)
+        internal static Bitmap? TierArt(int tier)
         {
             if (tier >= 2)
             {
