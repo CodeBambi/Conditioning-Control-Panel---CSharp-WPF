@@ -135,6 +135,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 CoreSettings.Current.CustomAssetsPath = selected;
                 CoreSettings.Save();
                 Log.Information("Custom assets path set to: {Path}", selected);
+                // WPF App.ContentPacks?.RefreshPacksPath(): the packs live under <assets>/.packs.
+                try { ConditioningControlPanel.Services.ContentPackStore.Current?.Rescan(); }
+                catch (Exception ex) { Log.Debug("Pack rescan after assets move failed: {E}", ex.Message); }
 
                 await MessageDialog.ShowAsync(owner, Loc.Get("title_assets_folder_set"),
                     Loc.GetF("msg_custom_assets_folder_set_0", selected));
