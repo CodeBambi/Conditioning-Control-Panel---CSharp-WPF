@@ -90,7 +90,14 @@ namespace ConditioningControlPanel
             {
                 bool busy;
                 try { busy = IsBusyProvider?.Invoke() ?? false; } catch { busy = false; }
-                if (ShouldFire(_isRunning, CoreSettings.Current.FlashEnabled, busy, DisplayChangeCoordinator.SpawnsSuppressed))
+                bool fire = ShouldFire(_isRunning, CoreSettings.Current.FlashEnabled, busy, DisplayChangeCoordinator.SpawnsSuppressed);
+                // WPF FlashService :682: a do-not-disturb app in front skips the scheduled spawn only.
+                if (fire && Services.UI.DndGuard.ShouldSuppressFlashes())
+                {
+                    Services.UI.DndGuard.LogSuppressionThrottled("flash");
+                    fire = false;
+                }
+                if (fire)
                 {
                     try { ShowProvider?.Invoke(); }
                     catch (Exception ex) { Log.Debug("Flash show provider failed: {Error}", ex.Message); }

@@ -107,6 +107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             CoreMods.ModChanged += OnModChanged;
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             SyncFromSettings();
             ApplyFeatureArt();
         }
@@ -115,8 +116,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
             CoreMods.ModChanged -= OnModChanged;
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             base.OnDetachedFromVisualTree(e);
         }
+
+        /// <summary>The voice and chant hints are chosen in code (local value beats {loc:Str}), so a
+        /// language switch re-runs the sync that picks their keys instead of leaving them stale.</summary>
+        private void OnLanguageChanged(object? sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(SyncFromSettings);
 
         /// <summary>ModChanged can be raised off the UI thread, so the repaint is marshalled.</summary>
         private void OnModChanged(object? sender, Models.ModPackage mod) =>

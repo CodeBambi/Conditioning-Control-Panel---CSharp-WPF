@@ -4,7 +4,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
@@ -18,11 +20,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// attach and writes it back plus <c>CoreSettings.Save()</c> on every change - the same shape
     /// the WPF original has, one for one.</para>
     ///
-    /// <para><b>The hotkey row captures a CHORD</b>, and that is where this head stops: the arbiter
-    /// of what is a legal chord (<c>EmiDeskService.ValidateChord</c>) and the thing that arms it
-    /// (<c>App.EmiDesk.ApplyHotkey</c>) are both Win32 and still in the WPF head, so capture enters
-    /// and leaves but never rebinds. The button still shows the stored chord and still greys out
-    /// with the feature, because both of those are settings.</para>
+    /// <para><b>The hotkey row captures a CHORD.</b> Core <see cref="EmiDeskChord.Validate"/> is the
+    /// single arbiter both heads use, and <see cref="EmiDeskService.ApplyHotkey"/> re-checks at arm
+    /// time and grabs it on X11, as WPF does with RegisterHotKey.</para>
     /// </summary>
     public partial class EmiDeskSettingsSection : UserControl
     {
@@ -121,8 +121,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (_loading) return;
             bool on = ChkEnabled.IsChecked == true;
             Persist(() => CoreSettings.Current.EmiDeskEnabled = on);
-            // WPF :123. ponytail: ApplyHotkey (freeing the chord) has no X11 chord grab on this head.
-            if (!on) Windows.EmiDesk.EmiDeskService.Instance.Dismiss();
+            // WPF :123: off takes her off the screen and frees the chord, not just the next summon.
+            try
+            {
+                if (!on) EmiDeskService.Instance.Dismiss();
+                EmiDeskService.Instance.ApplyHotkey();
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] enable toggle side effects failed"); }
             RefreshHotkeyButton();
         }
 
@@ -193,11 +198,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 case Key.System: case Key.None:
                     return;
             }
-            // ponytail: needs EmiDeskService.ValidateChord / FormatChord and App.EmiDesk.ApplyHotkey
-            // (ConditioningControlPanel/Services/EmiDesk/EmiDeskService.cs), Win32 RegisterHotKey and
-            // still in the WPF head. Until then a completed chord ends capture without rebinding -
-            // writing EmiDeskHotkey with nothing able to validate or arm it would be worse.
-            CancelCapture();
+            try
+            {
+                var m = e.KeyModifiers;
+                var mods = ((m & KeyModifiers.Control) != 0 ? ChordMods.Ctrl : 0)
+                         | ((m & KeyModifiers.Alt) != 0 ? ChordMods.Alt : 0)
+                         | ((m & KeyModifiers.Shift) != 0 ? ChordMods.Shift : 0)
+                         | ((m & KeyModifiers.Meta) != 0 ? ChordMods.Win : 0);
+                var key = e.Key.ToString();
+                if (EmiDeskChord.Validate(mods, key, CoreSettings.Current) is { } why)
+                {
+                    // Stay in capture so the user can just press something else.
+                    TxtHotkeyHint.Text = why;
+                    return;
+                }
+
+                var chord = EmiDeskChord.Format(mods, key);
+                _capturing = false;
+                Persist(() => CoreSettings.Current.EmiDeskHotkey = chord);
+                TxtHotkeyHint.Text = Loc.Get("set2_emi_desk_hotkey_hint");
+                RefreshHotkeyButton();
+
+                EmiDeskService.Instance.ApplyHotkey();
+                // Registration can still fail: another client may already hold the combo.
+                if (!EmiDeskService.Instance.HotkeyArmed)
+                    TxtHotkeyHint.Text = Loc.GetF("emi_desk_hotkey_err_taken", chord);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] hotkey capture failed");
+                CancelCapture();
+            }
         }
 
         private void CancelCapture()

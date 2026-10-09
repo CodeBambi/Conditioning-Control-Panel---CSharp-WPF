@@ -56,6 +56,34 @@ public sealed class CompanionEffectsTests
         }
     }
 
+    /// <summary>Audit #1982: a refused AI pink filter (nothing could show) leaves the user's saved
+    /// Pink filter switch and opacity exactly as they were.</summary>
+    [Fact]
+    public void RefusedPinkFilterLeavesTheSavedSettingsAlone()
+    {
+        var (provider, lab) = (CoreSettings.ServiceProvider, CoreAccount.HasLabAccessProvider);
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            var service = new SettingsService();
+            CoreSettings.ServiceProvider = () => service;
+            service.Current.CompanionPrompt.AllowAiToControlEffects = true;
+            service.Current.PinkFilterEnabled = false;
+            service.Current.PinkFilterOpacity = 10;
+            CoreAccount.HasLabAccessProvider = () => true;
+            try
+            {
+                CompanionEffects.Seed();
+                Assert.False(PinkCommand.Surface!(true, 25));   // no host here: the tint cannot show
+                Assert.False(service.Current.PinkFilterEnabled);
+                Assert.Equal(10, service.Current.PinkFilterOpacity);
+            }
+            finally
+            {
+                (CoreSettings.ServiceProvider, CoreAccount.HasLabAccessProvider) = (provider, lab);
+            }
+        });
+    }
+
     /// <summary>The AI's lock card is strict and reports "fired" only when a card really came up: a
     /// second request while one is open never stacks, so it is reported as not fired.</summary>
     [Fact]

@@ -28,9 +28,20 @@ namespace ConditioningControlPanel.Services.Commands
             _batchCount = 0;
         }
 
+        /// <summary>Set by a getbacktome follow-up around its AI round trip only: the reply's commands run
+        /// inside that call (CompanionBrain.CommandExecutor), so a panic during it must drop them here.
+        /// Default (no follow-up: chat replies, user-triggered commands) never cancels.</summary>
+        internal static readonly AsyncLocal<CancellationToken> FollowUpCancellation = new();
+
         public async void ExecuteCommand(AiCommandData commandData)
         {
             if (commandData.Data == null) return;
+
+            if (FollowUpCancellation.Value.IsCancellationRequested)
+            {
+                Log.Information("AiCommandService: follow-up cancelled (panic / switch-off) - dropping {Cmd}", commandData.Command);
+                return;
+            }
 
             if (Refusal(commandData.Command) is { } refusal)
             {

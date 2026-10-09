@@ -45,6 +45,13 @@ public sealed class LinuxMediaDefaultTests : IDisposable
     }
 
     [Fact]
+    public void UncreatableCcpMediaKeepsUserDataAssets()
+    {
+        File.WriteAllText(Home, "not a folder");   // ~/ccp media cannot be created (read-only/confined home)
+        Assert.Equal(Legacy, App.DefaultAssetsPath(true, Home, Data, false));
+    }
+
+    [Fact]
     public void LinuxProfileWithMediaInUserDataAssetsKeepsIt()
     {
         Directory.CreateDirectory(Path.Combine(Legacy, "images"));
