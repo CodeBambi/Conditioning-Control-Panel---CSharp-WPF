@@ -437,6 +437,9 @@ public sealed class LanguageSelectorTests
         // The Dashboard's launch cards spend their seen-flag (a real save) when they open, like WPF;
         // spent here so the no-startup-save assertion keeps measuring startup itself.
         settings.Current.SeenFeatureIntros.AddRange(new[] { "daily-free", "one-account" });
+        // Opening Presets notes it in the dashboard's RECENT rail (a real save, WPF NoteDestinationOpened);
+        // already at the head here, so the visit below is not a write.
+        settings.Current.RailRecent.Add("tab.presets");
         settings.SaveImmediate();
         return File.ReadAllText(settingsPath);
     }

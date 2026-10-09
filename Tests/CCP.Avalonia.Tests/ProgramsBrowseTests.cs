@@ -21,6 +21,50 @@ namespace CCP.Avalonia.Tests;
 
 public sealed class ProgramsBrowseTests
 {
+    private static string ExpectedReason(ProgramDefinition p) =>
+        ProgramService.UnavailableReason(p, ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.IsAvailable)
+        ?? Loc.Get("programs_unavailable");
+
+    /// <summary>
+    /// programs-3a test 7: a refused card renders the "needs X" reason as real text in the card,
+    /// never the raw loc key; Firmware Install needs the keyword engine.
+    /// </summary>
+    [Fact]
+    public async Task RefusedCardRendersTheMissingFeature()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureAvalonia();
+            Window? host = null;
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            try
+            {
+                // The parity trunk raises keyword triggers and takes rituals, so every built-in
+                // program is enrollable; switch rituals off to see a refused card render.
+                global::ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.RitualsAvailable = false;
+                LocalizationManager.Instance.SetLanguage("en");
+                var view = new ProgramsTabView { Width = 1200, Height = 900 };
+                host = new Window { Width = 1200, Height = 900, Content = view };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+
+                var texts = view.FindControl<ListBox>("ProgramLibraryList")!
+                    .GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
+                Assert.Contains("Not available on this build yet: needs Rituals.", texts);
+                Assert.DoesNotContain(texts, t => t.Contains("programs_needs_feature"));
+            }
+            finally
+            {
+                global::ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.RitualsAvailable = true;
+                LocalizationManager.Instance.SetLanguage(previousLanguage);
+                host?.Close();
+                Dispatcher.UIThread.RunJobs();
+            }
+            return Task.CompletedTask;
+        });
+    }
+
     /// <summary>WPF 608ff3181 (ccp-bugs #966): a mod switch reorders the open list, that mod's programs first.</summary>
     [Fact]
     public async Task ModSwitchPutsThatModsProgramsFirst()

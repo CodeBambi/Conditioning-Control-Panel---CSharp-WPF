@@ -76,7 +76,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     item.ActionText = Loc.Get("btn_program_enroll");
                     item.IsActionEnabled = false;
-                    item.ReasonText = Loc.Get("programs_unavailable");
+                    // A program this head can never finish says what it is missing (programs-3a).
+                    item.ReasonText = ProgramService.UnavailableReason(definition, Platform.ProgramCapabilities.IsAvailable)
+                                      ?? Loc.Get("programs_unavailable");
                     item.ReasonVisible = true;
                     item.CardOpacity = 0.72;
                 }

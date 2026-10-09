@@ -583,9 +583,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try { App.Quests?.TrackLockCardCompleted(); } catch (Exception ex) { Log.Debug("lock card quest credit: {E}", ex.Message); }
             }
 
-            // ponytail: the other two calls stay stubbed and have no Core seam to reach through.
-            // App.Achievements.TrackLockCardCompletion(completionTime, _totalCharsTyped,
-            //   _totalErrors, _requiredRepeats) - ConditioningControlPanel/Services/Progression/AchievementService.cs
+            // ponytail: the rest stays stubbed and has no Core seam to reach through.
+            // App.Achievements.TrackLockCardCompletion's achievement half (TotalLockCardsCompleted,
+            //   Chaster notes) - ConditioningControlPanel/Services/Progression/AchievementService.cs
             // App.LockCard.NotifyCompleted(_phrase, _totalErrors, _requiredRepeats) (!_isTest only)
             //   - ConditioningControlPanel/Services/LockCard/LockCardService.cs
             Log.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors{Test}",

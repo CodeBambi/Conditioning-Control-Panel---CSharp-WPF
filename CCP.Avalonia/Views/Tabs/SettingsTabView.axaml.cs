@@ -162,7 +162,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // handler NAMES are kept verbatim, because they are the behaviour-parity contract and
         // the wiring is a rename away once those partials reach Core.
         //
-        // ponytail: needs MainWindow (PremiumRail, DashboardFx, Browser, Login,
+        // ponytail: needs MainWindow (DashboardFx, Browser, Login,
         // ProgramsTab, TeaseCard, TabNavigation) and PremiumFeature - both WPF-head. TierGate is NOT
         // among them any more: CCP.Core/Services/TierGate.cs, over the CoreEntitlement seam.
         //

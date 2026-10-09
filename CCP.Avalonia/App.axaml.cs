@@ -725,6 +725,9 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                // programs-3a: refuse programs whose required tasks this head never raises. Seeded
+                // before the service so it is never unset.
+                CoreProgram.TaskAvailableProvider = Platform.ProgramCapabilities.IsAvailable;
                 StartPrograms();   // progression#1: WPF App.xaml.cs:2165, after Quests (verifier seam)
                 Platform.CompanionHead.Start();   // ai#5 + progression#47: companion switch, XP, drain, level-up
                 Platform.BarkHead.Start();        // ai#1: the bark engine, its seams and sources

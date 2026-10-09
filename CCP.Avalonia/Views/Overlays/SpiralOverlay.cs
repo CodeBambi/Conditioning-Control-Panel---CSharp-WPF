@@ -126,6 +126,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 Windows.Add(w);
             }
             _shownOn = want;
+            QuestMinutes.Follow(Windows.Count > 0);
             if (_frames.Count > 1 && Windows.Count > 0)
             {
                 _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = _delay };
@@ -156,7 +157,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
             Windows.Clear();
             _shownOn = Array.Empty<int>();
+            QuestMinutes.Follow(false);
         }
+
+        /// <summary>WPF AchievementService:276 - quest minutes while the spiral is on screen.</summary>
+        internal static readonly OverlayQuestMinutes QuestMinutes = new(m => App.Quests?.TrackSpiralMinutes(m));
 
         /// <summary>Same gate as the pink tint (WPF RefreshOverlays returns early unless the engine runs):
         /// a running engine or session, not paused. Unseeded (renders, tests) means the card owns it.</summary>

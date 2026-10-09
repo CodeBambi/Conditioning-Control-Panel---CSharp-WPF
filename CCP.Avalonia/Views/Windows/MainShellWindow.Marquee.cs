@@ -37,11 +37,8 @@
 //     (RefreshMarqueeFromSettings + MarqueeResponse are PORTED: MainShellWindow.MarqueeStrip.cs.)
 //   CheckIntakePassNudge / StartIntakeFromNudge - App.Programs (the weekly intake pass); the
 //     accepted nudge then wants ShowTab("gradedintake"), which does exist here.
-//   BannerWebLink_Click - Helpers.BrowserLauncher (ConditioningControlPanel/Helpers/
-//     BrowserLauncher.cs), a ShellExecute with a no-default-browser prompt. There is no browser
-//     launcher on this head, so the URL renders as text (see the <Run> notes in
-//     MainShellWindow.axaml) and only the Web App door and the one-account card can retire the
-//     beat.
+//   (BannerWebLink_Click is ported below: the beat's inline SafeHyperlinkButton opens through
+//   ExternalOpener, which has no no-default-browser prompt - WPF BrowserLauncher's fallback.)
 //   LocOr - a Loc.Get with an English literal fallback. Used only by the marquee and takeaway
 //     formatters, neither of which runs here; Loc.Get already returns the key when a string is
 //     missing, so there is nothing to restore in isolation.
@@ -257,6 +254,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (_bannerRotationTimer is { IsEnabled: false }) _bannerRotationTimer.Start();
         }
+
+        /// <summary>WPF BannerWebLink_Click (MainWindow.Marquee.cs:464): the beat's own link opens the
+        /// web app (SafeHyperlinkButton -> ExternalOpener) and, having worked, retires the beat.</summary>
+        private void BannerWebLink_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => RetireWebBannerBeat();
 
         /// <summary>
         /// Spends the One Account banner beat and takes it out of the live rotation. Called from

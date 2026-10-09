@@ -30,6 +30,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Conversation = new ConversationPage(hero, engine, () => Room.HeroZone.ApplyAvatarArt());
                 PageHost.Children.Add(Conversation);
             }
+
+            // WPF hooks IsVisibleChanged here to call MainWindow.OnCompanionTabVisibilityChanged.
+            // Avalonia's IsVisible is local, so the room's effective-visibility watch raises the edge.
+            Room.TabVisibilityChanged += (_, visible) =>
+                (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OnCompanionTabVisibilityChanged(visible, Room);
         }
 
         /// <summary>The live room (collapsed under the conversation in v2): the zones' owner.</summary>

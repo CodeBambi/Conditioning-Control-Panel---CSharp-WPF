@@ -244,9 +244,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 RefreshEntitlementVeils();
                 switch (tab)
                 {
-                    // WPF re-derives the session feature lock on the way into the dashboard and the
-                    // rack: both host real dose dials.
-                    case "settings": RefreshSessionFeatureLock(); MaybeShowFeatureIntro("daily-free", "settings"); break;
+                    // WPF re-derives the session feature lock on the way into each of these
+                    // three (MainWindow.TabNavigation.cs:260/476/501): the Dashboard and the rack
+                    // both host real dose dials, so a lock that was latched rather than re-derived
+                    // could survive a crash, an abort or an out-of-order session event.
+                    case "settings": RefreshFavoritesRail(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("daily-free", "settings"); break;
+                    case "progression": RefreshFavoritesRail(); break; // WPF TabNavigation.cs:308 (RefreshDashboardRail)
                     case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("studio-rack", "studio"); break;
                     case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("haptics"); break;
                     // Nav rework zone pill "Scheduler & Ramp": the Studio rack's scheduler module.
