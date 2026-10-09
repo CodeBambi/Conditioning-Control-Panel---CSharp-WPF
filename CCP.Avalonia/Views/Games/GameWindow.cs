@@ -146,6 +146,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "close":
                     Close();
                     break;
+                case "fire-payload" when Spec.Id == "dtrh":
+                    // WPF DtrhHostService.cs:296: the run's video / whisper cross to the desktop.
+                    Chaos.DtrhPayloadBridge.Fire(json);
+                    break;
             }
         }
 

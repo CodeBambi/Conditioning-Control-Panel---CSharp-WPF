@@ -9,9 +9,6 @@
 // PresentOrInbox (StartupLadder), and claims the launch's one popup slot. Every failure is silent
 // (Debug), so a sandbox (SandboxNet refuses the request) keeps the shell quiet.
 //
-// ponytail: the pill's click still runs AppUpdater.PillClickedAsync (MainShellWindow.AccountShell.cs,
-//   settings lane); WPF opens the banner's url instead when the server sends one. Needs a one-line
-//   `if (TryOpenServerUpdateUrl()) return;` in BtnUpdateAvailable_Click.
 // ponytail: the account half of a dismissal (App.ProfileSync.DismissAnnouncementAsync, so the same
 //   news does not greet the user again on another PC) has no port; only the local slot is recorded.
 // ponytail: CheckIntakePassNudge (14 s) needs App.IntakePass; _serverAnnouncementShownThisLaunch is

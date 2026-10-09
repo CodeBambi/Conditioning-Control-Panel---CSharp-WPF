@@ -22,9 +22,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // WPF MainWindow.AccountShell.cs:37: a plain tab button.
         internal void BtnPatreonExclusives_Click(object? sender, RoutedEventArgs e) => ShowTab("exclusives");
 
-        // WPF MainWindow.AccountShell.cs:482 (the server-banner URL branch has no banner service here).
-        private async void BtnUpdateAvailable_Click(object? sender, RoutedEventArgs e) =>
+        // WPF MainWindow.AccountShell.cs:482: a server banner's url wins, else the in-app updater.
+        private async void BtnUpdateAvailable_Click(object? sender, RoutedEventArgs e)
+        {
+            if (TryOpenServerUpdateUrl()) return;
             await Platform.AppUpdater.PillClickedAsync(this);
+        }
 
         /// <summary>WPF App.xaml.cs:4884 lights the pill; the version text and the install/download
         /// tooltip are WPF MainWindow.Marquee.cs:816-821's. Bound, so a language change keeps it.</summary>
