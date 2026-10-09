@@ -1,6 +1,7 @@
 // PORTED from ConditioningControlPanel/Controls/Friends/FriendsRailChip.cs: your face and name at the
 // foot of the rail with a mint pill for friends online; a click opens the drawer upward over the rail.
-// ponytail: no unread badge (the feed is not on this head), no bump / hover lift, no tier plate, no
+// The pink badge counts unread "What happened" lines (FriendsFeedHost.Feed).
+// ponytail: no bump / hover lift, no tier plate, no
 // rail hold; Popup light-dismiss stands in for WPF's click-outside and host-moved watchers.
 using System;
 using Avalonia;
@@ -13,6 +14,7 @@ using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
+using ConditioningControlPanel.Services.Friends.Feed;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls;
 
@@ -23,9 +25,20 @@ public sealed class FriendsRailChip : Grid
     private readonly Grid _faceGrid = new();
     private readonly Popup _popup;
     private IFriendsService? _svc;
+    private readonly Border _badge = new();
+    private readonly TextBlock _badgeText = new();
+    private readonly Func<FriendsFeed?> _resolveFeed;
+    private FriendsFeed? _feed;
     public FriendsRailChip() : this(null) { }
-    internal FriendsRailChip(IFriendsService? service)
+    internal FriendsRailChip(IFriendsService? service, FriendsFeed? feed = null)
     {
+        _resolveFeed = feed != null ? () => feed : () => Friends.FriendsFeedHost.Feed;
+        // Unread feed lines: pink, bottom right, under the mint online count (WPF FriendsRailChip).
+        (_badgeText.FontFamily, _badgeText.FontWeight, _badgeText.FontSize, _badgeText.HorizontalAlignment) = (FriendsDrawer.Display, FontWeight.SemiBold, 11, HorizontalAlignment.Center);
+        _badgeText.Foreground = new SolidColorBrush(Color.FromRgb(0x2A, 0x06, 0x1A));
+        (_badge.Child, _badge.Background, _badge.CornerRadius, _badge.Padding, _badge.MinWidth) = (_badgeText, FriendsDrawer.Pink, new CornerRadius(999), new Thickness(5, 0), 18);
+        (_badge.BorderThickness, _badge.BorderBrush) = (new Thickness(2), new SolidColorBrush(Color.FromRgb(0x0E, 0x09, 0x19)));
+        (_badge.HorizontalAlignment, _badge.VerticalAlignment, _badge.Margin, _badge.IsVisible, _badge.Tag) = (HorizontalAlignment.Right, VerticalAlignment.Bottom, new Thickness(0, 0, -4, -2), false, "friends-chip-unread");
         Drawer = new FriendsDrawer(service);
         (Height, Margin, Background, Cursor) = (48, new Thickness(0, 2, 0, 4), Brushes.Transparent, FriendsDrawer.Hand());
         ColumnDefinitions = new ColumnDefinitions("56,*");
@@ -60,8 +73,10 @@ public sealed class FriendsRailChip : Grid
             if (e.Source is Visual s && (ReferenceEquals(s, Drawer) || Drawer.IsVisualAncestorOf(s))) return;
             if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(); e.Handled = true; }
         };
-        AttachedToVisualTree += (_, _) => Rebind();
-        DetachedFromVisualTree += (_, _) => { _popup.IsOpen = false; Unwire(); Drawer.Unsubscribe(); };
+        // The feed is built after the shell at startup: follow it while on screen (a static event must not hold a dead chip).
+        Action feedBuilt = () => global::Avalonia.Threading.Dispatcher.UIThread.Post(RebindFeed);
+        AttachedToVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged += feedBuilt; Rebind(); };
+        DetachedFromVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged -= feedBuilt; _popup.IsOpen = false; Unwire(); UnwireFeed(); Drawer.Unsubscribe(); };
         Rebind();
     }
     internal FriendsDrawer Drawer { get; }
@@ -74,6 +89,7 @@ public sealed class FriendsRailChip : Grid
         _faceGrid.Children.Clear();
         _faceGrid.Children.Add(FriendsDrawer.Avatar(name, 40, null, Drawer.MeAvatarUrl()));
         _faceGrid.Children.Add(_pill);
+        _faceGrid.Children.Add(_badge);
         if (_name != null) _name.Text = name;
     }
     internal bool IsOpen => _popup.IsOpen;
@@ -91,6 +107,32 @@ public sealed class FriendsRailChip : Grid
         var next = Drawer.Service ?? Platform.FriendsHead.Service;
         if (!ReferenceEquals(next, _svc)) { Unwire(); _svc = next; if (_svc != null) _svc.SnapshotChanged += OnSnapshot; }
         UpdatePill();
+        RebindFeed();
+    }
+    /// <summary>The number the pink unread badge shows, 0 while hidden, 10 for "9+".</summary>
+    internal int UnreadBadge => !_badge.IsVisible ? 0 : _badgeText.Text == "9+" ? 10 : int.TryParse(_badgeText.Text, out var n) ? n : 0;
+    private void RebindFeed()
+    {
+        FriendsFeed? next;
+        try { next = _resolveFeed(); } catch { next = null; }
+        if (!ReferenceEquals(next, _feed)) { UnwireFeed(); _feed = next; if (_feed != null) _feed.Changed += OnFeedChanged; }
+        UpdateBadge();
+    }
+    private void UnwireFeed() { if (_feed != null) _feed.Changed -= OnFeedChanged; _feed = null; }
+    private void OnFeedChanged()
+    {
+        if (!global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) { global::Avalonia.Threading.Dispatcher.UIThread.Post(OnFeedChanged); return; }
+        UpdateBadge();
+    }
+    /// <summary>WPF UpdateBadge: the count; the tooltip leads with the name and the new-line count.</summary>
+    internal void UpdateBadge()
+    {
+        int n = 0;
+        try { if (_svc?.Available != false) n = _feed?.Unread ?? 0; } catch { }
+        _badgeText.Text = FriendsFeedRules.BadgeText(n);
+        _badge.IsVisible = n > 0;
+        var who = string.IsNullOrWhiteSpace(_name?.Text) ? "" : _name!.Text + "\n";
+        ToolTip.SetTip(this, n > 0 ? who + Loc.Get("friends_chip_tooltip") + "\n" + Loc.GetF("friends_feed_new", n) : who + Loc.Get("friends_chip_tooltip"));
     }
     private void Unwire() { if (_svc != null) _svc.SnapshotChanged -= OnSnapshot; _svc = null; }
     private void OnSnapshot(FriendsSnapshot _) => UpdatePill();

@@ -8,7 +8,10 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace ConditioningControlPanel.Services.Friends;
+namespace ConditioningControlPanel.Services.Friends.Feed;
+
+// Its own namespace: the WPF tree in this repo still carries ConditioningControlPanel.Services.Friends.FriendsFeed
+// (App-bound), and a test assembly that sees both would find the name twice. The WPF copy retires with WPF.
 
 /// <summary>One stored line of the friends feed: what happened, and whether it has been shown.</summary>
 public sealed record FeedEntry(FriendEvent Event, bool Read)
@@ -17,7 +20,7 @@ public sealed record FeedEntry(FriendEvent Event, bool Read)
 }
 
 /// <summary>
-/// THE FRIENDS FEED ("What happened", Wave 1, 2026-09-29), hung off the head (WPF App.FriendsFeed; Avalonia FriendsHead.Feed).
+/// THE FRIENDS FEED ("What happened", Wave 1, 2026-09-29), hung off the head (WPF App.FriendsFeed; Avalonia FriendsFeedHost.Feed).
 /// Keeps what the friends service says happened (<see cref="IFriendsService.Happened"/>): the
 /// newest <see cref="Cap"/> lines, newest first, one per <see cref="FriendEvent.Key"/>, and which of
 /// them nobody has looked at yet (the badges on the chips and the tray read <see cref="Unread"/>).

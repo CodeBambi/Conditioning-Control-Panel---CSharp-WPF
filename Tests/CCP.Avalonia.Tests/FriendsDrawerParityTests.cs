@@ -11,6 +11,7 @@ using Avalonia.Media;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Services.Friends;
+using ConditioningControlPanel.Services.Friends.Feed;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -107,6 +108,22 @@ public sealed class FriendsDrawerParityTests
             d.OnClosed();
         }
         finally { FriendsDrawer.FeedSource = before; PresenceAsk.Asked = asked; }
+    });
+
+    /// <summary>WPF FriendsRailChip: the pink badge counts unread feed lines and drops when they are read.</summary>
+    [Fact]
+    public Task TheRailChipBadgeCountsUnreadFeedLines() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var feed = new FriendsFeed(() => "u_me");
+        var svc = Service();
+        await svc.RefreshAsync();
+        var chip = new FriendsRailChip(svc, feed);
+        Assert.Equal(0, chip.UnreadBadge);
+        feed.Add(new FriendEvent(FriendEventKind.PokeReceived, "u_on", "Mia", DateTime.UtcNow, "b1", null, "hi"));
+        feed.Add(new FriendEvent(FriendEventKind.PokeReceived, "u_on", "Mia", DateTime.UtcNow, "b2", null, "hi"));
+        Assert.Equal(2, chip.UnreadBadge);
+        feed.MarkAllRead();
+        Assert.Equal(0, chip.UnreadBadge);
     });
 
     /// <summary>WPF RenderList: the leash slot is pinned first, then the feed, then the people.</summary>

@@ -3,6 +3,7 @@
 // drawer is folded is still a line (and a badge on the rail chip) when it opens.
 using System;
 using ConditioningControlPanel.Services.Friends;
+using ConditioningControlPanel.Services.Friends.Feed;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Friends;
 

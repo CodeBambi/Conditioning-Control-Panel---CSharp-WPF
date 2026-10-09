@@ -18,6 +18,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
+using ConditioningControlPanel.Services.Friends.Feed;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls;
 
