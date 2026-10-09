@@ -9,12 +9,8 @@
 // Sessions, Studio > Scheduler & Ramp, Library > Folders), the Library launcher pills, the strip
 // wiring and the section wash.
 //
-// Stand-ins, each named so it is not lost silently (7.1.5 pages this head has no view for yet;
-// a lane that ports one calls RegisterNavTab and the stand-in stops answering):
-//   - "personality", "permissions", "companionlinks", "companionai" land on the Companion room,
-//     which still carries those cells on this head;
-//   - "friends" opens the rail's Friends drawer (the full Social > Friends page is not ported);
-//   - "leash" has no surface here: ShowTab logs and stays.
+// Stand-ins: none left. The four Companion pages, Friends and Leash all register through
+// RegisterNavTab (RegisterCompanionTabs / RegisterSocialTabs).
 // Zones scroll in WPF (PlayTab.ScrollToZone, AssetsTab.ScrollToZone); those helpers are not on
 // this head's views, so a zone pill lands on the page's top.
 //
@@ -78,16 +74,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["shelistening"] = "SheListeningTab", ["gradedintake"] = "GradedIntakeTab",
             ["appsettings"] = "AppSettingsTab",  ["spiral"] = "SpiralTab",
             ["premium"] = "ExclusivesTab",       ["chaster"] = "ChasterTab",
-        };
-
-        /// <summary>7.1.5 pages with no view on this head yet, landing on the panel that still
-        /// carries their content (see the header). A registered page always wins.</summary>
-        private static readonly Dictionary<string, string> PendingPageStandIns = new(StringComparer.Ordinal)
-        {
-            ["personality"] = "CompanionTab",
-            ["permissions"] = "CompanionTab",
-            ["companionlinks"] = "CompanionTab",
-            ["companionai"] = "CompanionTab",
         };
 
         /// <summary>Keys that open a window or a service rather than a tab. ShowTab leaves the
@@ -205,18 +191,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (TryRedirectMovedTab(tab)) return;
 
             if (WindowKeys.Contains(tab)) return;                 // a window, not a tab - see header
-            if (tab == "friends" && !_navTabHosts.ContainsKey(tab))
-            {
-                // Stand-in (header): the drawer, until a Friends page registers.
-                try { Named<Views.Controls.FriendsRailChip>("FriendsChip")?.Toggle(); }
-                catch (Exception ex) { Log.Debug("Friends stand-in failed: {E}", ex.Message); }
-                return;
-            }
 
             // Unknown key: log and stay. Checked before anything is collapsed.
             bool lane = _navTabHosts.ContainsKey(tab);
             string? target = null;
-            if (!lane && !TabPanels.TryGetValue(tab, out target) && !PendingPageStandIns.TryGetValue(tab, out target))
+            if (!lane && !TabPanels.TryGetValue(tab, out target))
             {
                 Log.Warning("ShowTab({Tab}) ignored: no such tab on this head", tab);
                 return;

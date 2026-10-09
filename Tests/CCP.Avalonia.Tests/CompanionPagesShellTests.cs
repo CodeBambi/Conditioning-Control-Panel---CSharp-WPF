@@ -13,6 +13,7 @@ using ConditioningControlPanel.Avalonia.Views.Controls.Companion.V2;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Companion;
 using Xunit;
 using AppA = ConditioningControlPanel.Avalonia.App;
 
@@ -112,8 +113,14 @@ public sealed class CompanionPagesShellTests
             Pump();
             var personality = host.Children.OfType<PersonalityPage>().Single();
             Assert.Same(room.FindControl<MakeHerYoursView>("PersonalityZone"), personality.PresetsHost.Content);
-            Assert.NotNull(personality.PickerHost.Content);
+            var picker = Assert.IsType<CompanionPickerCard>(personality.PickerHost.Content);
             Assert.NotNull(personality.CommunityHost.Content);
+            // WPF CompanionPickerCard: every preset listed, the live one selected, its voice shown.
+            var active = PersonalityService.Shared.GetActivePreset();
+            Assert.Equal(PersonalityService.Shared.GetAllPresets().Count, picker.CmbPersonality.Items.Count);
+            Assert.Equal(active?.Id, (picker.CmbPersonality.SelectedItem as ComboBoxItem)?.Tag as string);
+            Assert.False(string.IsNullOrWhiteSpace(picker.TxtLiveName.Text));
+            Assert.False(string.IsNullOrWhiteSpace(picker.TxtPerk.Text));
 
             shell.ShowTab("permissions");
             Pump();
