@@ -592,6 +592,8 @@ namespace ConditioningControlPanel.Avalonia
                     Console.WriteLine($"[Audio] LibVLC unavailable, audio disabled: {ex.Message}");
                     Serilog.Log.Warning(ex, "[Audio] LibVLC unavailable; audio disabled on this head");
                 }
+                // WPF FlashService: asset selection changes drop the flash/chaos/voice caches.
+                Views.Overlays.FlashOverlay.SeedMedia();
                 // Speech: Core Vosk engine over parec, seeding CoreSpeech (model is a drop-in, no download).
                 try { Platform.PulseMicSource.Seed(); }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Speech] engine unavailable on this head"); }
@@ -1049,6 +1051,8 @@ namespace ConditioningControlPanel.Avalonia
             // Before libvlc goes: close the Mantra Lab (stops and disposes its drone), then its temp WAVs.
             try { StopMantra(((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!).Windows); } catch { }
 
+            // WPF: the flash clip stops and the online flash temp folder (%TEMP%/ccp-flash-remote) is swept.
+            try { Views.Overlays.FlashOverlay.ShutdownMedia(); } catch { }
             // Restore any app we ducked; a pending Unduck would otherwise die with the process.
             try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }
             try { Platform.LayeredAudio.Instance?.Shutdown(); } catch { }

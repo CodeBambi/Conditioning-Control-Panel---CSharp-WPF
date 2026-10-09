@@ -35,7 +35,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// flashes (hydra multiply / XP / pops - FlashClickable is ignored, always click-through),
     /// the Pendulum motion style (Drift and Bounce is below), glow, content-pack and remote pools, avatar pre-announce.</para>
     /// </summary>
-    internal static class FlashOverlay
+    internal static partial class FlashOverlay
     {
         // FlashService.ResolveFlashCap on the default (compositor) path.
         private const int MaxConcurrent = 30;
@@ -89,7 +89,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     return;
                 }
 
-                var lifetime = TimeSpan.FromMilliseconds((durationMs ?? s.FlashDuration * 1000) + 1000);
+                // WPF ShowImages: one voice line per burst; its length becomes the lifetime.
+                var sound = await Task.Run(() => PickSound(s));
+                var lifetime = BurstLifetime(durationMs, s, sound);
+                ScheduleBurstSound(sound, generation, TimeSpan.FromMilliseconds(1000));
                 var fade = TimeSpan.FromSeconds(s.FadeDuration * FlashPlacement.FadeSecondsPerPercent);
                 var alpha = Math.Clamp(s.FlashOpacity / 100.0, 0, 1);
 
@@ -173,7 +176,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 bmp.Dispose();   // the still is only the fallback; frame 0 stands in for it
                 w = new FlashOverlayWindow(a.Frames, FlashGifFrames.ScaleFrameDelay(a.Delay, CoreSettings.Current.FlashGifSpeedMultiplier));
             }
-            else w = new FlashOverlayWindow(bmp);
+            else { w = new FlashOverlayWindow(bmp); AttachClip(w, bmp); }
             var clickable = CoreSettings.Current.FlashClickable;
             if (clickable)
             {
@@ -272,6 +275,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             _generation++;
             _closed |= final;
+            StopFlashSound();   // WPF Stop -> StopCurrentSound
             foreach (var (w, _) in Active.ToList()) w.Close();
         }
 
@@ -320,11 +324,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             for (var tries = Math.Max(count * 5, 20); result.Count < count && tries > 0; tries--)
             {
                 string path, identity;
+                string? clip = null;
                 var remote = remoteReady > 0 && FlashSourceRules.ShouldDrawRemote(s, haveLocal, Rng);
                 if (remote && RemoteFlashSource.TryTake(Rng) is { } item)
                 {
                     path = item.PosterPath;   // decoded like any local still
                     identity = item.Url;      // history + session log key on the source, never the temp file
+                    clip = item.ClipPath;     // the moving half plays over the poster once spawned
                 }
                 else
                 {
@@ -346,7 +352,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     // WPF LoadGifFrames / TryLoadAnimatedWebpFrames: an animated file plays, at display size.
                     var ext = Path.GetExtension(path).ToLowerInvariant();
                     var anim = ext is ".gif" or ".webp" ? FlashGifFrames.Decode(path, rect.Width, rect.Height) : null;
-                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, identity, screen.Bounds, anim));
+                    var still = Bitmap.DecodeToWidth(stream, rect.Width);
+                    RememberClip(still, clip);
+                    result.Add((still, rect, identity, screen.Bounds, anim));
                     occupied.Add(rect);
                 }
                 catch (Exception ex) { Log.Debug("Flash: could not decode {Path}: {E}", path, ex.Message); }

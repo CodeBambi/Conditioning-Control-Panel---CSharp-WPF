@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// renderer under XWayland that stalled the UI dispatcher ~1.7 s per burst (staggers and
     /// timers late). With the property the app renders each flash exactly once.</para>
     /// </summary>
-    internal sealed class FlashOverlayWindow : Window
+    internal sealed partial class FlashOverlayWindow : Window
     {
         private readonly Image _image;
 

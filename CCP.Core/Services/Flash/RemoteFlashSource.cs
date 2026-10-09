@@ -235,6 +235,28 @@ namespace ConditioningControlPanel.Services.Flash
             Items.Clear();
         }
 
+        /// <summary>WPF ClearFileCache: drop the warm clips and refetch for the current selection.</summary>
+        internal static void ClearReady()
+        {
+            lock (Lock) { Pool.Clear(); _lastFetchUtc = DateTime.MinValue; }
+        }
+
+        /// <summary>Shutdown: stop the prefetch and delete every clip and poster in
+        /// <see cref="CacheDir"/> (WPF RemoteMediaCache's temp sweep). Never throws.</summary>
+        internal static void CleanupCache()
+        {
+            try { Cts.Cancel(); } catch { }
+            lock (Lock) Pool.Clear();
+            Items.Clear();
+            try
+            {
+                if (!Directory.Exists(CacheDir)) return;
+                foreach (var f in Directory.EnumerateFiles(CacheDir)) TryDelete(f);
+                Directory.Delete(CacheDir, false);
+            }
+            catch (Exception ex) { Log.Debug("Flash: remote cache cleanup incomplete: {Error}", ex.Message); }
+        }
+
         private static async Task PrefetchBatchAsync()
         {
             try
