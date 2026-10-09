@@ -95,17 +95,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// Mute/unmute her voice - the old ChkMuteAvatar_Changed body.
         ///
-        /// <para>The setting is written and persisted; the live
-        /// <c>AvatarTubeWindow.SetMuteAvatar</c> call is dropped because that method is in the
-        /// tube's Speech.cs partial, which did not cross. Nothing on this head speaks yet, so the
-        /// stored value is the whole of the behaviour there is to have - and it is the value the
-        /// speech pipeline will read the moment it lands.</para>
+        /// <para>The tube reads the setting live (<c>AvatarTubeWindow.IsMuted</c>), so the next
+        /// line obeys it; the voice playing right now is cut and the tube's quick menu repainted,
+        /// the same as the tube's own Mute item (<c>OnMenuMute</c>).</para>
         /// </summary>
         internal void SetAvatarMuted(bool muted)
         {
             if (_roomLoading) return;
             CoreSettings.Current.AvatarMuted = muted;
             CoreSettings.Save();
+            try
+            {
+                var tube = AvatarTube.AvatarTubeWindow.Live;
+                if (muted) tube?.StopSpokenAudio();
+                tube?.UpdateQuickMenuState();
+            }
+            catch (Exception ex) { Log.Debug(ex, "SetAvatarMuted: tube refresh"); }
         }
 
         // =====================================================================================

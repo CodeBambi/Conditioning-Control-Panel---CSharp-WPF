@@ -39,20 +39,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             parts.Behavior.ChatShortcutRequested += async (_, _) => await RebindChatShortcutAsync();
 
-            // Deliberately NOT wired, each for the reason a previous layer already recorded:
+            // WPF MainWindow.CompanionTab.cs CompanionCard_Click: switch the companion, repaint the
+            // five cards, then move the tube to that companion's look.
+            parts.Roster.CompanionCardClicked += (_, index) => SwitchCompanionFromCard(parts.Roster, index);
+
+            // NOT wired, and each control is HIDDEN in its cell so nothing visible is dead:
             //
-            //  · Behavior.CameraShortcutRequested — the combo drives MainWindow.SessionIO.cs:1485
-            //    ToggleWebcamFromHotkey / WebcamTrackingService, and no webcam engine exists on this
-            //    head, so a rebind would configure a key for a feature that cannot fire. Same
-            //    refusal as DevicesSettingsSection.axaml.cs's BtnCameraShortcutDevices.
-            //  · Behavior.PauseBrowserChanged — WPF mutes and suspends the live WebView2
-            //    (MainWindow.Patreon.cs); this drawer holds no WebHost to suspend, and a switch
-            //    that flips with nothing behind it would report a paused browser that is playing.
-            //  · Roster.CompanionCardClicked / PersonalityAssignRequested — MainWindow's
-            //    CompanionCard_Click / BtnCompanionPersonality_Click (MainWindow.Patreon.cs), which
-            //    switch the active companion through App.Companion. No seam on this head.
-            //  · Community.Browse/Import/Export/RefreshPromptsRequested — the community-prompt
-            //    service, still in the WPF head.
+            //  · Behavior.CameraShortcutRequested: no webcam engine or hotkey on this head.
+            //  · Behavior.PauseBrowserChanged: the port's browser has no mute or suspend hook.
+            //  · Roster.PersonalityAssignRequested and Community.Browse/Import/Export/Refresh:
+            //    CommunityPromptService is still in the WPF head.
+        }
+
+        internal static void SwitchCompanionFromCard(WorkshopRosterCell roster, int index)
+        {
+            try
+            {
+                if (index < 0 || index > 4) return;
+                var id = (Models.CompanionId)index;
+                if (CoreMods.Service?.IsCompanionSupported(id) == false) return;
+                if (!Services.Companion.CompanionCore.SwitchCompanion(id)) return;
+                roster.Refresh();
+                AvatarTube.AvatarTubeWindow.Live?.SwitchToCompanionAvatar(id);
+                Log.Information("Switched to companion: {Name}", Models.CompanionDefinition.GetById(id).Name);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Workshop: companion switch failed"); }
         }
 
         /// <summary>

@@ -36,6 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
         internal ContentControl PresetsHost { get; } = Host("PresetsHost", new Thickness(0, 0, 0, 16));
         internal ContentControl CommunityHost { get; } = Host("CommunityHost");
         internal Button BtnOpenPromptEditor { get; }
+        internal Control CommunityCard { get; }
 
         public PersonalityPage() : this(null) { }
 
@@ -67,7 +68,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
                 Card(who),
                 PresetsHost,
                 advanced,
-                Card(community));
+                CommunityCard = Card(community));
+            // The card stays (its ? help and the installed list are real); the cell hides its own
+            // four buttons until CommunityPromptService crosses to CCP.Core.
+            CommunityCard.Name = "CommunityCard";
         }
 
         /// <summary>Runs every time the page is shown: adopt the live zone and cells.</summary>

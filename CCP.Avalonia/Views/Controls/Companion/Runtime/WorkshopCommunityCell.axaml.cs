@@ -27,6 +27,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             this.FindControl<Button>("BtnExportPrompt")!.Click += (_, _) => ExportPromptRequested?.Invoke(this, EventArgs.Empty);
             this.FindControl<Button>("BtnRefreshPrompts")!.Click += (_, _) => RefreshPromptsRequested?.Invoke(this, EventArgs.Empty);
 
+            // Hidden: browse, import, export and refresh all wait for CommunityPromptService (WPF
+            // Services/Companion/CommunityPromptService.cs) to cross to CCP.Core. The ? help and
+            // the (empty) installed list stay.
+            foreach (var name in new[] { "BtnBrowsePrompts", "BtnImportPrompt", "BtnExportPrompt", "BtnRefreshPrompts" })
+                this.FindControl<Button>(name)!.IsVisible = false;
+
             // CompanionWheelRelay.Attach(InstalledPromptsScroll) is NOT ported: it works around
             // WPF's ScrollViewer marking every wheel notch handled even when it cannot scroll.
             // Avalonia's ScrollViewer.IsScrollChainingEnabled (default true) already passes an
