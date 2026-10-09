@@ -62,6 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AttachedToVisualTree += (_, _) => NotifyShellVisibility();
             PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) NotifyShellVisibility(); };
 
+            InitializeMarqueeStrip();
             WireStubs();
         }
 
