@@ -222,6 +222,16 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The release-content pack service (WPF App.ReleaseContent), or null on the headless render path.</summary>
         internal static ReleaseContentService? ReleaseContent { get; private set; }
 
+        /// <summary>The installed content packs (WPF App.ContentPacks), or null when not wired.</summary>
+        internal static ContentPackStore? ContentPacks => ContentPackStore.Current;
+
+        /// <summary>Register the pack store as the live one and seed the Core seams that read it.</summary>
+        internal static void StartContentPacks(ContentPackStore store)
+        {
+            ContentPackStore.Current = store;
+            CoreProgram.ActivePackVideoCountProvider = () => ContentPackStore.Current?.GetAllActivePackVideos().Count ?? 0;
+        }
+
         /// <summary>
         /// WPF App.xaml.cs:346-356 (seams) and :2943-2951 (service + AttachReleaseContent): the pack
         /// service the mod service reads stamps and sizes from. Install stamps are written on the UI
@@ -574,6 +584,10 @@ namespace ConditioningControlPanel.Avalonia
                 {
                     Serilog.Log.Error(ex, "Failed to initialize ReleaseContentService - downloaded content unavailable this session");
                 }
+                // WPF App.ContentPacks = new ContentPackService(): the installed encrypted creator
+                // packs under <assets>/.packs. Download / purchase stays WPF-only for now.
+                try { StartContentPacks(new ContentPackStore()); }
+                catch (Exception ex) { Serilog.Log.Error(ex, "Failed to initialize ContentPackStore - content packs unavailable this session"); }
                 await step(0.3, "Initializing audio...");
                 // Real audio through LibVLC, seeded only if libvlc loads. If it is missing,
                 // CoreAudio stays unseeded: every clip "finishes" at once and nothing plays.
@@ -702,8 +716,8 @@ namespace ConditioningControlPanel.Avalonia
                 Platform.CompanionHead.Start();   // ai#5 + progression#47: companion switch, XP, drain, level-up
                 Platform.BarkHead.Start();        // ai#1: the bark engine, its seams and sources
 
-                // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no
-                // ContentPackService or RoadmapService, so it answers "no pack videos, no roadmap".
+                // CoreProgram: the pack-video provider is seeded by StartContentPacks; the roadmap one
+                // stays unseeded - this head has no RoadmapService, so it answers "no roadmap".
                 // HasPremiumProvider is seeded by AccountSeed.Seed(); NotifyProvider below, once the
                 // shell's toast host exists.
 
@@ -1057,6 +1071,7 @@ namespace ConditioningControlPanel.Avalonia
             try { Platform.LibVlcAudio.Instance?.Shutdown(); } catch { }
             try { Platform.LayeredAudio.Instance?.Shutdown(); } catch { }
             try { ReleaseContent?.Dispose(); } catch { }
+            try { ContentPackStore.Current?.CleanupTempFiles(); } catch { }
             try { Platform.ChasterHead.Service?.Dispose(); } catch { }
 
             // WPF App.OnExit: a best-effort final push, capped at 2 s (off the UI thread, as WPF's Task.Run).

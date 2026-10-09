@@ -1471,29 +1471,6 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
-    /// Manifest for an installed pack (stored encrypted locally).
-    /// </summary>
-    public class InstalledPackManifest
-    {
-        public string PackId { get; set; } = "";
-        public string PackGuid { get; set; } = "";
-        public string PackName { get; set; } = "";
-        public DateTime InstalledDate { get; set; }
-        public List<PackFileEntry> Files { get; set; } = new();
-    }
-
-    /// <summary>
-    /// Entry for a file in an installed pack.
-    /// </summary>
-    public class PackFileEntry
-    {
-        public string OriginalName { get; set; } = "";
-        public string ObfuscatedName { get; set; } = "";
-        public string FileType { get; set; } = ""; // "image" or "video"
-        public string Extension { get; set; } = "";
-    }
-
-    /// <summary>
     /// Response from POST /pack/download-url endpoint.
     /// </summary>
     internal class PackDownloadUrlResponse

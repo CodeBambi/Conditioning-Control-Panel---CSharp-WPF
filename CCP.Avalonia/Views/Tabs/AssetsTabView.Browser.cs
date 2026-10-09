@@ -32,8 +32,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// every change saves (debounced) and tells the media services through
     /// <see cref="AssetSelection.NotifyChanged"/>.</para>
     ///
-    /// <para>ponytail: the WPF tree's third root, "Content Packs", is built from
-    /// App.ContentPacks, which is not on this head; the node comes back with the pack service.
+    /// <para>The third root, "Content Packs", lives in AssetsTabView.Packs.cs (ContentPackStore).
     /// Video tiles draw the clapper card: WPF used the Windows shell thumbnail, and this head has
     /// no shell thumbnailer.</para>
     /// </summary>
@@ -143,6 +142,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     Browser.Folders.Add(node);
                 }
             }
+            AddContentPacksNode();
 
             UpdateAssetCounts();
         }
@@ -218,6 +218,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public void SelectFolder(AssetTreeItem folder)
         {
             _selectedFolder = folder;
+            if (TrySelectPackFolder(folder)) return;
             if (!string.IsNullOrEmpty(folder.FullPath))
             {
                 LoadFolderThumbnails(folder.FullPath);
@@ -233,7 +234,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void RecalculateFolderCheckState(AssetTreeItem folder)
         {
-            if (!string.IsNullOrEmpty(folder.FullPath) && Directory.Exists(folder.FullPath))
+            if (RecalculatePackFolder(folder)) { }
+            else if (!string.IsNullOrEmpty(folder.FullPath) && Directory.Exists(folder.FullPath))
             {
                 try
                 {
@@ -348,6 +350,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void ThumbnailItem_OpenInExplorer_Click(object? sender, RoutedEventArgs e)
         {
             if (sender is not MenuItem { DataContext: AssetThumbnailViewModel file }) return;
+            if (file.IsPackFile) return;   // an encrypted pack file has no folder to show
             try { Platform.ExternalOpener.Open(Path.GetDirectoryName(file.FullPath)); }
             catch (Exception ex) { Log.Warning(ex, "Open in file manager failed for {File}", file.Name); }
         }
@@ -356,6 +359,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             try
             {
+                if (file.IsPackFile) { OpenPackPreview(file); return; }
                 if (!File.Exists(file.FullPath)) return;
                 var win = new Windows.MiniPlayerWindow();
                 win.LoadFile(file.FullPath);
@@ -421,6 +425,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void UpdateFolderFilesCheckState(AssetTreeItem folder, bool isChecked)
         {
+            SetPackFolderFiles(folder, isChecked);
             if (!string.IsNullOrEmpty(folder.FullPath) && Directory.Exists(folder.FullPath))
             {
                 var basePath = AssetsRoot;
@@ -494,7 +499,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 foreach (var folder in items)
                 {
-                    if (!string.IsNullOrEmpty(folder.FullPath) && Directory.Exists(folder.FullPath))
+                    if (CountPackFolder(folder) is { } pack)
+                    {
+                        if (pack.IsVideo) { tv += pack.Total; av += pack.Active; }
+                        else { ti += pack.Total; ai += pack.Active; }
+                    }
+                    else if (!string.IsNullOrEmpty(folder.FullPath) && Directory.Exists(folder.FullPath))
                     {
                         string[] files;
                         try { files = Directory.GetFiles(folder.FullPath); }
@@ -549,6 +559,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 AssetFolderExclusion.ExpandFromDisk(preset.DisabledAssetPaths, preset.DisabledAssetFolders, basePath);
                 CountEnabledFilesRecursive(Path.Combine(basePath, "images"), basePath, preset.DisabledAssetPaths, CountImageExtensions, ref images);
                 CountEnabledFilesRecursive(Path.Combine(basePath, "videos"), basePath, preset.DisabledAssetPaths, CountVideoExtensions, ref videos);
+                var (packImages, packVideos) = CountPackFilesEnabledIn(preset.DisabledAssetPaths);
+                images += packImages;
+                videos += packVideos;
                 if (preset.EnabledImageCount != images) preset.EnabledImageCount = images;
                 if (preset.EnabledVideoCount != videos) preset.EnabledVideoCount = videos;
             }
