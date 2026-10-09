@@ -1573,3 +1573,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/audit-fix-ui: +194
 - Closed the open P1/P2 audit items from #1974 (hint relocalises), #1976 (drawer click-inside), #1914 (cosmetics ride every sync; empty only as the explicit clear), #1899 (patreon -> Settings · Account), #1847 (right-dock input cut), plus 2 doc corrections (#1976, #1837).
 - Each fix has a real-path test proven to fail when the fix is broken (evidence/audit-fix-ui/fail-proofs.txt); gate OK.
+
+## avalonia-port/rows-settings-perf-emidesk: +999
+- EMI Desk summon chord: Core rules (WPF delegates), X11 XGrabKey arm at startup/rebind, live rebind from Settings; row stays stub (Offers/Glass/Spice unread).
+- Performance: DND app picker (X11 window owners) + one Core DndGuard for both heads; TierBadge follows live motion change.

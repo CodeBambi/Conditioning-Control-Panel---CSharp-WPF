@@ -836,6 +836,10 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Warning(ex, "Tray icon unavailable; X closes the app"); }
                 // The panic key (WPF MainWindow.xaml.cs:363 installs its hook at startup the same way).
                 shell.StartPanicKey();
+                // EMI Desk summon chord (WPF MainWindow.xaml.cs:246 arms it from the shell's Loaded).
+                Views.Windows.EmiDesk.EmiDeskService.Instance.ApplyHotkey();
+                // Do-not-disturb reads the foreground app from X (WPF DoNotDisturbGuard: user32).
+                ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess = Platform.X11Windows.ForegroundProcess;
                 // Linux: one toast naming the distro's install command for any missing runtime library
                 // (docs/avalonia-linux-install.md). dlopen off the UI thread; nothing when all load.
                 Dispatcher.UIThread.Post(async () =>
