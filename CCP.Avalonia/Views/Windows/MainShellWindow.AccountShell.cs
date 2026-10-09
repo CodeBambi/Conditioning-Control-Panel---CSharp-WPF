@@ -16,6 +16,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
+        // WPF MainWindow.AccountShell.cs:261: the dashboard's Discord button opens the invite.
+        internal async void BtnDiscord_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (await Platform.ExternalOpener.OpenAsync(this, ConditioningControlPanel.Services.DiscordLinks.Invite))
+                    Serilog.Log.Information("Opened Discord invite link");
+            }
+            catch (Exception ex) { Serilog.Log.Error(ex, "Failed to open Discord link"); }
+        }
+
         // WPF MainWindow.AccountShell.cs:96.
         private void BtnAwareness_Click(object? sender, RoutedEventArgs e) => ShowTab("awareness");
 

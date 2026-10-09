@@ -17,7 +17,9 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class V2DeviceCodeService
     {
-        private static readonly HttpClient _http = new();
+        // One shared client per process, configured as V2AuthService's (version headers, 30 s).
+        private static readonly Lazy<HttpClient> Shared = new(() => V2AuthService.Configure(new HttpClient()));
+        private readonly HttpClient _http;
         private const string SERVER_URL = "https://codebambi-proxy.vercel.app";
 
         // Hardcoded: /v2/auth/device/initiate doesn't return a verification_url.
@@ -26,11 +28,10 @@ namespace ConditioningControlPanel.Services
         // round-trip back to this path.
         public const string VerificationUrl = "https://app.cclabs.app/dashboard/link-device";
 
-        static V2DeviceCodeService()
+        /// <param name="handler">Test seam; null uses the shared production client.</param>
+        public V2DeviceCodeService(HttpMessageHandler? handler = null)
         {
-            _http.Timeout = TimeSpan.FromSeconds(30);
-            _http.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
-            _http.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+            _http = handler == null ? Shared.Value : V2AuthService.Configure(new HttpClient(handler));
         }
 
         public enum PollStatus
@@ -100,7 +101,7 @@ namespace ConditioningControlPanel.Services
             var body = new JObject
             {
                 ["client"] = "ccp-desktop",
-                ["version"] = UpdateService.AppVersion
+                ["version"] = CoreReleaseContent.AppVersion
             };
 
             var hasSession = !string.IsNullOrWhiteSpace(unifiedId) && !string.IsNullOrWhiteSpace(authToken);
@@ -115,7 +116,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 // Same source every other V2 call reads the session from (V2AuthService.AddAuthHeader).
-                var payload = BuildInitiatePayload(App.Settings?.Current?.UnifiedId, App.Settings?.Current?.AuthToken);
+                var payload = BuildInitiatePayload(CoreSettings.Service?.Current?.UnifiedId, CoreSettings.Service?.Current?.AuthToken);
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/auth/device/initiate")
                 {
