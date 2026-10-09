@@ -1546,3 +1546,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-companion-cards: +668
 - Her Room: live attention gauge (AttentionCopy/ConstellationMath shared from Core), runtime dormant constellation with shimmer, chat History transcript window, SyncBrain on provider pick; "patreon" key opens Settings/Account like WPF.
 - Rows: attention-gauge and constellation are wired; chat-threshold (link chip, wheel relay) and hero-card (tutorial chip) stay stub.
+
+## avalonia-port/rows-inbox: +317
+- shell-inbox: server announcement routed via the startup Inbox (Core V2AuthService fetch + account dismissal), row/popup dismiss record both halves; 3 tests, fail-proven x4.
+- Row stays stub (modal ladder, intake nudge, other posters).

@@ -816,6 +816,69 @@ namespace ConditioningControlPanel.Services
                 request.Headers.Add("X-Auth-Token", token);
         }
 
+        /// <summary>The server-triggered announcement, as <c>GET /config/announcement</c> serves it (WPF MainWindow.Marquee.cs AnnouncementResponse).</summary>
+        public class ServerAnnouncement
+        {
+            [JsonProperty("enabled")] public bool Enabled { get; set; }
+            [JsonProperty("id")] public string? Id { get; set; }
+            [JsonProperty("title")] public string? Title { get; set; }
+            [JsonProperty("message")] public string? Message { get; set; }
+            [JsonProperty("image_url")] public string? ImageUrl { get; set; }
+            [JsonProperty("link_url")] public string? LinkUrl { get; set; }
+            [JsonProperty("theme")] public string? Theme { get; set; }
+        }
+
+        /// <summary>
+        /// WPF MainWindow.CheckServerAnnouncement's fetch: the one live announcement, or null when the server
+        /// has none, is unreachable or answers junk. Never throws.
+        /// </summary>
+        public async Task<ServerAnnouncement?> GetAnnouncementAsync(string? unifiedId)
+        {
+            try
+            {
+                var url = $"{SERVER_URL}/config/announcement";
+                if (!string.IsNullOrWhiteSpace(unifiedId)) url += $"?unified_id={Uri.EscapeDataString(unifiedId)}";
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));   // WPF's 10 s client
+                var response = await _http.GetAsync(url, cts.Token);
+                if (!response.IsSuccessStatusCode) return null;
+                var a = JsonConvert.DeserializeObject<ServerAnnouncement>(await response.Content.ReadAsStringAsync());
+                return a is { Enabled: true } && !string.IsNullOrWhiteSpace(a.Id) && !string.IsNullOrWhiteSpace(a.Title) ? a : null;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Failed to check server announcement: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// WPF ProfileSyncService.DismissAnnouncementAsync: records the dismissal on the account so it does not
+        /// replay on the next PC. Fire-and-forget, never throws; no-op without a unified id.
+        /// </summary>
+        public async Task DismissAnnouncementAsync(string announcementId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(announcementId)) return;
+                var unifiedId = _settings()?.UnifiedId;
+                if (string.IsNullOrEmpty(unifiedId)) return;
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/announcement/dismiss");
+                AddAuthHeader(request);
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(new { unified_id = unifiedId, announcement_id = announcementId }),
+                    Encoding.UTF8, "application/json");
+                var response = await _http.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (await TryHandleMergedAsync(response)) return;
+                    Log.Debug("Announcement dismissal not recorded server-side: {Status} (id={Id})", response.StatusCode, announcementId);
+                    return;
+                }
+                Log.Debug("Announcement {Id} dismissed server-side", announcementId);
+            }
+            catch (Exception ex) { Log.Debug("Announcement dismissal request failed: {Error}", ex.Message); }
+        }
+
         /// <summary>Result of /v2/auth/device/authorize (mobile QR pairing).</summary>
         public class MobileLinkResponse
         {
