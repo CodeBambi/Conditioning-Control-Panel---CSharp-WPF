@@ -1517,3 +1517,8 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 - dialogs-mod-picker re-audited: unreachable on WPF too, parity holds; row stays stub with that note (x:Names match plus port-only TitleBar/TxtDownload).
 - Stale WPF cite MainWindow.xaml.cs:610-611 -> 587-588 (ledger + 3 comments); stale WPF first-run comment corrected.
 - Cherry-picked CornerGif frame-stepping + SettingsService leaked-save disarm flake fixes (from rows-companion-editors).
+
+## avalonia-port/rows-friends-drawer: +452
+- Friends drawer card: Invite / Poke / Send a watch actions with their inline pickers over Core FriendsService (Goon/chess tiles shut: hosts WPF-only).
+- Results after fold fly over the chip's window; folded drawer unsubscribes; poke hover; shut-tile string in 9 languages.
+- 2 headless tests over a fake wire (fail-proven x5 and x3; the second opens via the rail-chip click and checks the folded-drawer word); rows stay stub (feed, trails, tables, leash, juice, rail-chip extras remain).
