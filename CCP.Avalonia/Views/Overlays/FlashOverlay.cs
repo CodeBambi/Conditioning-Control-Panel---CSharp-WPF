@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var flashes = await Task.Run(() => LoadPictures(BurstCount(amount, s, Rng), screens, targets, s, occupied, size));
                 if (flashes.Count == 0)
                 {
-                    if (!_warnedEmpty) Log.Warning("Flash: no images found in {Path}", ImagesPath());
+                    if (!_warnedEmpty) Log.Warning("Flash: no images found in {Path} and no online clips ready yet (remote on: {Remote})", ImagesPath(), FlashSourceRules.RemoteEnabled(CoreSettings.Current));
                     _warnedEmpty = true;
                     return;
                 }
@@ -293,17 +293,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var root = CorePaths.EffectiveAssets;
             var dir = Path.Combine(root, "images");
             var result = new List<(Bitmap, PixelRect, string, PixelRect, (List<Bitmap> Frames, TimeSpan Delay)?)>(count);
-            if (!Directory.Exists(dir) || targets.Length == 0) return result;
+            if (targets.Length == 0) return result;
 
-            var files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
-                .Where(f => FlashPlacement.ImageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .ToList();
+            var files = Directory.Exists(dir)
+                ? Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
+                    .Where(f => FlashPlacement.ImageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    .ToList()
+                : new List<string>();
             files = AssetFolderExclusion.Enabled(files, root, s);
-            if (files.Count == 0) return result;
+
+            // WPF GetNextImages: the online clip pool is the third source beside disk (and packs).
+            // Non-blocking: kicks a background top-up and reads what is already warm.
+            RemoteFlashSource.EnsurePrefetch();
+            var haveLocal = files.Count > 0;
+            var remoteReady = RemoteFlashSource.ReadyCount;
+            if (!haveLocal && remoteReady == 0) return result;
 
             for (var tries = Math.Max(count * 5, 20); result.Count < count && tries > 0; tries--)
             {
-                if (NextPath(files) is not { } path) break;
+                string path, identity;
+                var remote = remoteReady > 0 && FlashSourceRules.ShouldDrawRemote(s, haveLocal, Rng);
+                if (remote && RemoteFlashSource.TryTake(Rng) is { } item)
+                {
+                    path = item.PosterPath;   // decoded like any local still
+                    identity = item.Url;      // history + session log key on the source, never the temp file
+                }
+                else
+                {
+                    if (remote) { remoteReady = 0; if (!haveLocal) break; }   // pool went cold: silently local
+                    if (NextPath(files) is not { } local) break;
+                    path = identity = local;
+                }
                 try
                 {
                     SkiaSharp.SKImageInfo info;
@@ -318,7 +338,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     // WPF LoadGifFrames / TryLoadAnimatedWebpFrames: an animated file plays, at display size.
                     var ext = Path.GetExtension(path).ToLowerInvariant();
                     var anim = ext is ".gif" or ".webp" ? FlashGifFrames.Decode(path, rect.Width, rect.Height) : null;
-                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, path, screen.Bounds, anim));
+                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, identity, screen.Bounds, anim));
                     occupied.Add(rect);
                 }
                 catch (Exception ex) { Log.Debug("Flash: could not decode {Path}: {E}", path, ex.Message); }

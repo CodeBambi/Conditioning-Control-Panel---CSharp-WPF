@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using ConditioningControlPanel.Services.Flash;
 using ConditioningControlPanel.Services.UI;
 using Serilog;
 
@@ -56,6 +57,8 @@ namespace ConditioningControlPanel
                 _timer ??= new Timer(OnTick, null, Timeout.Infinite, Timeout.Infinite);
                 ArmLocked();
             }
+            // WPF FlashService.Start warms the online pool so the first tick has clips ready.
+            try { RemoteFlashSource.EnsurePrefetch(); } catch (Exception ex) { Log.Debug("Flash: remote warm-up failed: {E}", ex.Message); }
             Log.Information("Flash schedule started");
         }
 
