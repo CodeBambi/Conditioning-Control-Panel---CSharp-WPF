@@ -198,6 +198,8 @@
          WPF ConditioningControlPanel.csproj:386-388 (GIF clips + emotes.json + clip_timing.json). -->
     <AvaloniaResource Include="..\Assets\avatar0_emotes\*.gif;..\Assets\avatar0_emotes\*.json"
                       Link="Resources\avatar0_emotes\%(Filename)%(Extension)" />
+    <!-- (modId, avatarSet) -> emote folder, as WPF; read by AvatarTubeWindow.Emotes.cs. -->
+    <AvaloniaResource Include="..\Assets\avatar_emotes_registry.json" Link="Resources\avatar_emotes_registry.json" />
     <!-- Home dashboard billboard posters, one per roster card (WPF DashboardBillboard), as WPF
          ConditioningControlPanel.csproj:419-424. Globbed: the folder holds exactly those six. -->
     <AvaloniaResource Include="..\Assets\billboard\*.png"

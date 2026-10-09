@@ -257,12 +257,15 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             SetTubeStyle(!_isAttached);
             InitWindowing();
             ApplyAvatarSet();
+            // The animated avatar (AvatarTubeWindow.Emotes.cs): CCP Default / Bambi Sleep / Sissy play
+            // the avatar0 cel set, a mod its own resources/emotes set. Its clock starts in OnOpened.
+            TryUpdateEmoteMode();
             // The caption is Loc-driven and set from code (a persona name has no static key), so it
             // has to be re-run rather than bound - see the porting note about {loc:Str} and .Text.
             LocalizationManager.Instance.LanguageChanged += OnTubeLanguageChanged;
 
-            // ponytail: still needs AvatarTubeWindow.Avatar.cs for the ANIMATED avatar (level 20+
-            // GIF sets, which need an Avalonia GIF decoder) and the emotive-portrait crossfade. The
+            // ponytail: the animated emote sets play (AvatarTubeWindow.Emotes.cs, SkiaSharp GIF
+            // decoder); still missing from Avatar.cs is the emotive-portrait crossfade. The
             // set ARROWS are blocked on the companion coupling, NOT on the set list - see
             // SelectAvatarSet. The static four-pose path below is the one every set-1 user is on.
 
@@ -292,6 +295,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         protected override void OnOpened(EventArgs e)
         {
             base.OnOpened(e);
+            StartEmoteClock();   // the animated avatar (AvatarTubeWindow.Emotes.cs), no-op outside emote mode
 
             // WPF OnLoaded: CalculateScaleFactor, then UpdatePosition (attached) or
             // RestoreSavedPlacement (detached). Topmost follows the mode (ApplyModeChrome).
@@ -341,6 +345,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _speechTimer?.Stop();
             _cooldownTickTimer?.Stop();
             _possessionGlitchTimer?.Stop();
+            ReleaseEmotes();
             base.OnClosed(e);
         }
 
@@ -898,15 +903,14 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         // The clamps are ModService.GetAvatar*'s, verbatim: a mod manifest is author-written JSON,
         // so an out-of-range number must be pinned here rather than thrown off the canvas.
         //
-        // ponytail: WPF's EffAvatar* (AvatarTubeWindow.CirceEmotes.cs) ADD a running Circe emote's
-        // per-clip nudge on top of these. Emote mode needs an Avalonia WebP/GIF decoder and did not
-        // port, so the emote term is the neutral one it has when no emote set is animating - which
-        // is the state every non-Circe mod is in permanently.
-        private static double EffAvatarScale() => Math.Clamp(EffectiveTubeLayout()?.AvatarScale ?? 1.0, 0.1, 3.0);
-        private static int EffAvatarOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetX ?? 0, -1000, 1000);
-        private static int EffAvatarOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetY ?? 0, -500, 500);
-        private static int EffAvatarDetachedOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetX ?? 0, -1000, 1000);
-        private static int EffAvatarDetachedOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetY ?? 0, -500, 500);
+        // WPF's EffAvatar* (AvatarTubeWindow.CirceEmotes.cs) ADD a running emote set's layout delta
+        // (emotes.json "layout") on top of these; EmoteLayoutActive is false outside emote mode, which
+        // leaves the mod's own layout untouched (AvatarTubeWindow.Emotes.cs).
+        private double EffAvatarScale() => Math.Clamp(EffectiveTubeLayout()?.AvatarScale ?? 1.0, 0.1, 3.0) * (EmoteLayoutActive ? _emoteScaleMul : 1.0);
+        private int EffAvatarOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetX ?? 0, -1000, 1000) + (EmoteLayoutActive ? _emoteOffX : 0);
+        private int EffAvatarOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetY ?? 0, -500, 500) - (EmoteLayoutActive ? _emoteOffY : 0);
+        private int EffAvatarDetachedOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetX ?? 0, -1000, 1000) + (EmoteLayoutActive ? _emoteDetX : 0);
+        private int EffAvatarDetachedOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetY ?? 0, -500, 500) - (EmoteLayoutActive ? _emoteDetY : 0);
 
         /// <summary>
         /// True when the mod replaces tube.png but not tube2.png - then the detached state uses the
@@ -1490,9 +1494,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // count behind the click-escalation eggs.
             CoreBark.NotifyAvatarClicked();
 
+            // WPF CirceClickEmote: one affectionate clip, 3 s cooldown (AvatarTubeWindow.Emotes.cs).
+            EmoteClick();
+
             // ponytail: the rest of that handler stays head-side and none of it is a Core move -
             // the 4-click animation refresh, the 50-clicks-in-60s collapse trigger,
-            // App.Achievements.TrackAvatarClick, CirceClickEmote and the 1-in-25 pop sound all
+            // App.Achievements.TrackAvatarClick and the 1-in-25 pop sound all
             // reach App.* or the animated-avatar pipeline. So does BounceAvatar (the click squash,
             // AvatarTubeWindow.Avatar.cs), which here would be a hand-stepped tween on
             // AvatarBounceHost's RenderTransform, not an Animation.
