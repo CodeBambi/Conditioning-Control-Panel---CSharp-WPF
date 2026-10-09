@@ -272,6 +272,12 @@ public sealed class MandatoryVideoOverlayTests
                         Assert.False(v.IsPlaying || o.GracePaused, "override off, game on screen: no grace pause");
                     }
                     finally { global::ConditioningControlPanel.Avalonia.Views.Windows.PanicSurfaces.All = surfaces; }
+                    // Audit #1933: a grace pause that throws must not swallow the press - panic still stops.
+                    w = await Open(strict: false);
+                    o.Time = new ThrowingClock();
+                    try { shell.HandlePanicKeyPress(t0.AddSeconds(17)); }
+                    finally { o.Time = TimeProvider.System; }
+                    Assert.False(v.IsPlaying || o.GracePaused, "grace pause threw: panic still stops the clip");
                     s.PanicOverridesAll = true;
                     w = await Open(strict: false);
                     shell.HandlePanicKeyPress(t0.AddSeconds(20));
@@ -304,6 +310,11 @@ public sealed class MandatoryVideoOverlayTests
             }
         }
         finally { Directory.Delete(dir, true); }
+    }
+
+    private sealed class ThrowingClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => throw new InvalidOperationException("grace pause failure");
     }
 
     private sealed class SteppedClock : TimeProvider

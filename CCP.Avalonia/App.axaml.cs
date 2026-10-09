@@ -154,7 +154,7 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>
         /// WPF App.xaml.cs SeedAskSeams + NoticeSurface: the asks service and the oversize-prompt toast.
         /// ponytail: SessionOptions/StartSession stay unseeded (no session launcher on this head, so no
-        /// Session cards), Busy knows a session, video, lock card, bubble count and pop quiz (not grace pause), and a Watch link opens in the external
+        /// Session cards), Busy knows a session, video, lockdown, lock card, bubble count and pop quiz (not grace pause, Mantra, a connected remote controller or the startup ladder, which WPF also counts), and a Watch link opens in the external
         /// browser - WPF's own fallback when its embedded browser cannot take it.
         /// </summary>
         internal static void SeedCompanionTubeSeams()
@@ -175,7 +175,8 @@ namespace ConditioningControlPanel.Avalonia
                 Views.AvatarTube.AvatarTubeWindow.Live?.RunOnAvatar(() => Views.AvatarTube.AvatarTubeWindow.Live?.GigglePriority(text, aiGenerated: false));
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BusyProvider = () => CoreSession.IsSessionRunning
                 || CoreEngine.Video?.IsPlaying == true || Views.Windows.LockCardWindow.IsAnyOpen()
-                || Views.Windows.BubbleCountWindow.IsAnyOpen() || Views.Windows.PopQuizWindow.IsAnyOpen();
+                || Views.Windows.BubbleCountWindow.IsAnyOpen() || Views.Windows.PopQuizWindow.IsAnyOpen()
+                || ConditioningControlPanel.Services.LockdownService.Current?.IsActive == true;   // WPF App.xaml.cs:696
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.OpenLink = url =>
             {
                 if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
@@ -496,6 +497,10 @@ namespace ConditioningControlPanel.Avalonia
                 // ponytail: no Speaker - the tube's speech coupling is not ported, so phase lines stay unsaid.
                 DescentCountdown = new Services.Descent.DescentCountdownService();
                 DescentCountdown.Start();
+                // WPF MainWindow.Marquee.cs:688: the server announcement check, 7 s after the shell opens.
+                // A sandbox never reaches the real proxy (the dailyFree rule above).
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")))
+                    Views.Windows.MainShellWindow.AnnouncementClient = () => new V2AuthService();
                 if (Platform.AccountSeed.Seed())
                 {
                     // Unit 7c, with the logout clear: the push, XP banking and its two triggers (WPF
@@ -962,7 +967,8 @@ namespace ConditioningControlPanel.Avalonia
         /// first use. A Linux profile that already has files in UserData/assets keeps using it -
         /// nothing is moved and nothing switches silently. A CCP_USERDATA_DIR sandbox (tests, live
         /// checks), an unknown home or an unreadable legacy folder also keep UserData/assets, so
-        /// nothing outside the sandbox is created. Decided once per process.
+        /// nothing outside the sandbox is created; so does a home where ~/ccp media cannot be
+        /// created (read-only or Flatpak-confined). Decided once per process.
         /// </summary>
         internal static string DefaultAssetsPath(bool isLinux, string home, string userData, bool sandboxed)
         {
@@ -984,7 +990,9 @@ namespace ConditioningControlPanel.Avalonia
             }
             var media = Path.Combine(home, "ccp media");
             CorePaths.EnsureCustomAssetsDirectories(media);
-            return media;
+            if (Directory.Exists(media)) return media;
+            Serilog.Log.Warning("Media folder: could not create {Media}; keeping {Legacy}", media, legacy);
+            return legacy;
         }
 
         /// <summary>The exit save, after Takeover hands back what a pulse borrowed - else a boosted

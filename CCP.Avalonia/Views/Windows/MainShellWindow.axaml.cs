@@ -114,6 +114,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeDescentFuse(); // MainShellWindow.DescentFuse.cs (WPF MainWindow ctor); no-op without App.DescentCountdown
             InitializeSpiralRoom();  // MainShellWindow.SpiralRoom.cs (WPF MainWindow ctor): the rail row
             InitializeInboxBadge(); // MainShellWindow.Inbox.cs (WPF MainWindow.Inbox.cs:27)
+            InitializeServerAnnouncement(); // MainShellWindow.Announcement.cs (WPF MainWindow.Marquee.cs:688)
             InitializeLockdownGreys(); // MainShellWindow.Lockdown.cs (WPF Lab.cs:612/707)
             InitializeInviteTicket(); // MainShellWindow.InviteTicket.cs (WPF MainWindow.xaml.cs, main e2d4e35ef)
             InitializeInviteEnding(); // MainShellWindow.Patreon.cs (WPF MainWindow.xaml.cs:3590, main fbe161de2)
@@ -338,13 +339,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 //   private static ImageSource? LoadModImageDecoded(…)
 //   private static void ApplyArtFraming(…)
 //   private static ModArtFraming? ActiveModFraming(…)
-//   private readonly List<(…)
-//   private void RefreshHypnotubeLinksUI(…)
-//   private static bool IsListingUrl(…)
-//   internal void BtnAddVideoLink_Click(…)
-//   private TextBox MakePoolTextBox(…)
-//   private void PersistVideoLinks(…)
-//   private void UpdateNoVideoLinksPlaceholder(…)
+//   (the video link pool members - _videoLinkRows, RefreshHypnotubeLinksUI, IsListingUrl,
+//    BtnAddVideoLink_Click, MakePoolTextBox, PersistVideoLinks, UpdateNoVideoLinksPlaceholder -
+//    are PORTED: Views/Controls/Companion/Runtime/WorkshopLibraryCell + Core Helpers/VideoLinkPool)
 //   private string GetModeAwareQuestImagePath(…)
 //   private System.Windows.Media.Imaging.BitmapImage? LoadQuestImage(…)
 //   private void CenterOnPrimaryScreen(…)
