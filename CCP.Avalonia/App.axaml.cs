@@ -725,6 +725,10 @@ namespace ConditioningControlPanel.Avalonia
                 // Dropped: WPF's EmiDesk "premiumTeaseSeen" fire - no EmiDesk service on this head.
                 var shell = (Views.Windows.MainShellWindow)desktop.MainWindow;
                 CoreEngine.StoppedHook = shell.OnEngineStopped;
+                // WPF StartStop.cs:333/:493: the Audio-Only Hypno bed (#668).
+                CoreEngine.AudioBedStart = () => Platform.LayeredAudio.Instance?.Start(ignoreMasterToggle: true);
+                CoreEngine.AudioBedStop = () => Platform.LayeredAudio.Instance?.Stop();
+                shell.StartSchedulerClock();   // WPF MainWindow.xaml.cs:637 (30 s poll after a 60 s grace)
                 Sessions.Ticked += shell.OnSessionTick;
                 Sessions.SessionLog.LogReady += shell.OnSessionLogReady;
                 // WPF App.xaml.cs:529 (main fbe161de2): "See tiers" opens the vault gate card at the tier this door needs.
