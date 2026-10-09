@@ -170,6 +170,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
             catch (Exception ex) { Log.Warning(ex, "Picking the assets folder failed"); }
             PaintAssetsFolder();
+            RefreshAssetBrowser();   // a new folder is a new tree
         }
 
         // =====================================================================================
