@@ -52,6 +52,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public SpiralFeatureControl()
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
+            // WPF ApplyFeatureArt: hero + side plates from features/spiral_overlay.png, mod override first, repainted on a mod switch.
+            Helpers.ModArt.BindFeaturePlates(this, "features/spiral_overlay.png", HeroArt, SideArt);
 
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
             ChkRandomize.IsCheckedChanged += ChkRandomize_Changed;

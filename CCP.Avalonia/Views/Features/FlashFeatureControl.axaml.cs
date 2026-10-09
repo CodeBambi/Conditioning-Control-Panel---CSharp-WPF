@@ -33,6 +33,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
             // x:Name fields, and everything below reads them.
             InitializeComponent();
+            // WPF ApplyFeatureArt: hero + side plates from features/flash.png, mod override first, repainted on a mod switch.
+            Helpers.ModArt.BindFeaturePlates(this, "features/flash.png", HeroArt, SideArt);
 
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
             BtnTestFlash.Click += (_, _) => Overlays.FlashOverlay.TriggerOnce(this);
@@ -58,11 +60,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
             LoadFromSettings();
 
-            // ponytail: WPF also repaints the hero and side art plates here (ApplyFeatureArt +
-            // App.Mods.ModChanged). The mod-override half of ResolveImageDecoded is portable now
-            // (CoreModArt.OverridePath), but the plate still needs a named ImageBrush in the
-            // .axaml, which Avalonia rejects (x:Name on a brush is AVLN2000); the port draws a
-            // static wash instead, so there is nothing here to repaint.
+            // The hero and side plates repaint themselves on a mod switch (ModArt.BindFeaturePlates).
         }
 
         // ---- settings instance tracking (WPF: SettingsHook + ISettingsRebindable) --------------

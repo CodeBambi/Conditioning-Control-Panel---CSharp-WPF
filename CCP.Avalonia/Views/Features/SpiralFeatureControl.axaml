@@ -30,7 +30,7 @@
         <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
             <Grid>
-                <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                <Border x:Name="HeroArt" CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
                         Background="{StaticResource SectionHueStudioWashBrush}">
                     <Border.OpacityMask>
                         <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
@@ -218,7 +218,7 @@
 
             <!-- SIDE ART. On WPF the art is the Border's BACKGROUND (an ImageBrush); the wash stands
                  in until feature art ships in this head. The scrim is kept verbatim. -->
-            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+            <Border x:Name="SideArt" Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
                     BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                     Background="{StaticResource SectionHueStudioWashBrush}"
                     VerticalAlignment="Stretch" MinHeight="200">
