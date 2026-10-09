@@ -105,6 +105,11 @@ namespace ConditioningControlPanel.Avalonia.Controls.Home
             new ContentPresenter
             {
                 Name = "PART_ContentPresenter",
+                // Fluent's Button:pointerover/:pressed setters reach this presenter by name and
+                // painted a grey square behind the open plate; local values outrank them.
+                Background = Brushes.Transparent,
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
                 [!ContentPresenter.ContentProperty] = c[!ContentControl.ContentProperty],
             });
 
@@ -172,6 +177,11 @@ namespace ConditioningControlPanel.Avalonia.Controls.Home
             b.Padding = new Thickness(0);
             b.BorderThickness = new Thickness(0);
             b.Focusable = true;
+            // The label FLOATS: the plate grows left past the button's 34 px slot under a
+            // negative margin. The Fluent Button theme clips a Button to its bounds, which cut
+            // the open plate back to a 34 px square and hid every label (parity fix, 2026-10-09);
+            // WPF never clipped here. A local value outranks the theme setter.
+            b.ClipToBounds = false;
             int index = _order.Count;
             b.Margin = new Thickness(index == 0 ? 0 : R.BubbleGap, 0, 0, 0);
             b.VerticalAlignment = VerticalAlignment.Center;

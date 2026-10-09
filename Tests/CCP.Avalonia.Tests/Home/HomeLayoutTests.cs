@@ -257,4 +257,49 @@ public sealed class HomeLayoutTests
         Assert.True(dial.IsAnimating, "the clock must run at Full motion");
         Assert.True(dial.Surface.PaintCount > p0 + 3, $"the dial must repaint over frames ({p0} -> {dial.Surface.PaintCount})");
     });
+    [Fact]
+    public Task Hovering_a_bubble_opens_its_label_to_the_left_and_leaving_closes_it() => WithHome((shell, tab) =>
+    {
+        // WPF 7.1.5 Controls/HoverBubbleBar.cs: hover slides the label out to the LEFT of the glyph
+        // (160 ms CubicEaseOut, 1.06 pop) while the button's slot stays 34 px; leaving closes it.
+        var bar = tab.FindControl<HoverBubbleBar>("HomeBubbleBar")!;
+        var webcam = bar.Bubbles.First(b => b.Name == "VelvetBtnWebcam");
+        var plate = (Border)webcam.Content!;
+        double rest = plate.Bounds.Width;
+        double slot = webcam.Bounds.Width;
+        // A spot inside the open plate, left of the button's own slot (over its neighbour at rest).
+        var probe = webcam.TranslatePoint(new Point(-30, webcam.Bounds.Height / 2), shell)!.Value;
+        using var restFrame = shell.CaptureRenderedFrame()!;
+        uint restPx = Px(restFrame, probe);
+
+        shell.MouseMove(webcam.TranslatePoint(new Point(slot / 2, webcam.Bounds.Height / 2), shell)!.Value,
+            global::Avalonia.Input.RawInputModifiers.None);
+        Wait();
+        Assert.True(bar.IsExpanded(webcam), "hover must open the bubble");
+        Assert.False(string.IsNullOrEmpty(bar.LabelOf(webcam)));
+        Assert.True(plate.Bounds.Width > rest + 20, $"the plate must grow to show its label ({rest} -> {plate.Bounds.Width})");
+        Assert.Equal(slot, webcam.Bounds.Width, 1);
+        // Drawn, not just laid out: the Fluent Button theme clipped the open plate to the slot.
+        Assert.False(webcam.ClipToBounds);
+        Shot(shell, "bubble-open.png");
+        using var openFrame = shell.CaptureRenderedFrame()!;
+        Assert.NotEqual(restPx, Px(openFrame, probe));
+
+        shell.MouseMove(new Point(5, 5), global::Avalonia.Input.RawInputModifiers.None);
+        Wait();
+        Assert.False(bar.IsExpanded(webcam));
+        Assert.Equal(rest, plate.Bounds.Width, 1);
+    });
+
+    /// <summary>Lets the 160 ms transitions run out on the headless clock.</summary>
+    private static void Wait()
+    {
+        for (int i = 0; i < 30; i++) { Settle(); System.Threading.Thread.Sleep(10); }
+    }
+
+    private static uint Px(global::Avalonia.Media.Imaging.WriteableBitmap frame, Point p)
+    {
+        var px = BoardHeadTests.Pixels(frame, out int w);
+        return px[(int)p.Y * w + (int)p.X];
+    }
 }
