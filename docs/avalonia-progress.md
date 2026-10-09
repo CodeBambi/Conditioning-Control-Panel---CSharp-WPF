@@ -1530,3 +1530,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-asset-submit: +289
 - dialogs-asset-submit wired: preset Share + session rack ☁ open AssetSubmitDialog -> Core CatalogueClient submit/record/badge/toast; auth + affirmation gates as WPF (AssetSubmitWireTests, 4 fail-proofs).
 - Live (sandbox) limited to listing/disabled state; mod (MEGA) branch still waits on shell-mod-catalogue.
+
+## avalonia-port/rows-companion-workshop: +465
+- Workshop Library cell: the per-mod video link editor now works on Avalonia (add/preview/delete/save), and its rules live in Core `VideoLinkPool`, which WPF also uses.
+- Roster cards show each companion's level, name, tooltip and an accent ring on the active one; switching companion and assigning a personality are still missing (stub).
