@@ -31,6 +31,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
         /// <summary>The signed-in account (WPF App.UnifiedUserId). A seam for tests.</summary>
         internal static Func<string?> CurrentAccount = () => CoreAccount.UnifiedUserId;
 
+        /// <summary>WPF PrizeGrants.GrantsChanged: the held grants moved (a snapshot landed, or the
+        /// store was cleared). Raised on the caller's thread, outside the lock: UI listeners post.</summary>
+        internal static event Action? Changed;
+
+        private static void RaiseChanged()
+        {
+            try { Changed?.Invoke(); }
+            catch (Exception ex) { Serilog.Log.Debug("[Prizes] Changed listener threw: {Error}", ex.Message); }
+        }
+
         private static readonly object Gate = new();
         private static string? _heldAccount;
         private static long _revision;
@@ -67,12 +77,14 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 _revision = revision;
                 _grants = new HashSet<string>(grants.Where(g => !string.IsNullOrWhiteSpace(g)).Select(g => g.Trim()), StringComparer.Ordinal);
             }
+            RaiseChanged();   // Apply lands here too
         }
 
         /// <summary>WPF OwnershipService.Clear (logout, tests).</summary>
         internal static void Clear()
         {
             lock (Gate) { _grants = new HashSet<string>(StringComparer.Ordinal); _heldAccount = null; _revision = 0; }
+            RaiseChanged();
         }
 
         private static bool HeldGrant(string id)
