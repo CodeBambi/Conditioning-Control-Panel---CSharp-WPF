@@ -112,6 +112,7 @@ namespace ConditioningControlPanel
                 ConditioningTime.OnEngineStopped(DateTime.Now);   // WPF StartStop.cs:540 StopConditioningTimeTracker
                 try { StoppedHook?.Invoke(); }
                 catch (Exception ex) { Log.Warning(ex, "Engine stop hook failed"); }
+                CoreTubeEvents.RaiseEngineStopped();   // WPF MainWindow.EngineStopped -> the tube's EngineStop line
                 Log.Information("Engine stopped");
             }
             finally { _stopInProgress = false; }

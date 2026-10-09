@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
     /// with v2 on WPF's arbiter speaks instead and titles stay local. This head has no v2 observer,
     /// so with v2 on it says the preset and nothing leaves (<see cref="MaySendToAi"/>,
     /// docs/avalonia-decisions.md). The deny list and incognito drop run in the poll, before any
-    /// event. ponytail: WPF's queued <c>Giggle</c> is <see cref="GigglePriority"/> (no speech queue).</para>
+    /// event.</para>
     /// </summary>
     public partial class AvatarTubeWindow
     {

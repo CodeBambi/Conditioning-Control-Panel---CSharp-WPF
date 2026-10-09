@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
     /// </summary>
     public partial class AvatarTubeWindow
     {
-        private const double MinSpeechDelaySeconds = 2.0;   // WPF Speech.cs:116
+        internal const double MinSpeechDelaySeconds = 2.0;   // WPF Speech.cs:116
         private DateTime _lastSpeechEndTime = DateTime.MinValue;
         private DispatcherTimer? _greetingTimer, _idleTimer, _triggerTimer, _triggerFirstTimer;
         private bool _speechLoopsStarted;
@@ -86,7 +86,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         internal bool IsSpeechReady()
         {
             if (_isGiggling || _isWaitingForAi || _isShowingAiBubble || _isListeningBubble || _isShowingChatHistory) return false;
-            return (DateTime.Now - _lastSpeechEndTime).TotalSeconds >= MinSpeechDelaySeconds;
+            return (DateTime.Now - _lastSpeechEndTime).TotalSeconds >= CalculateRequiredDelayAfterLastSpeech();
         }
 
         // ------------------------------------------------------------------ greeting
@@ -120,7 +120,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             var enabled = AwarenessReactionPhrases.Enabled(category);
             if (enabled.Length == 0) return;   // all phrases in this category disabled
-            Giggle(enabled[Random.Shared.Next(enabled.Length)]);
+            var text = enabled[Random.Shared.Next(enabled.Length)];
+            Giggle(text, ConditioningControlPanel.Services.Companion.CompanionPhraseAudio.ForLine(category, text));
         }
 
         /// <summary>WPF BuildAbsenceGreeting (Speech.cs:2661), templates verbatim.</summary>
@@ -185,6 +186,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (_idleTimer != null && configured > 0 && Math.Abs(_idleTimer.Interval.TotalSeconds - configured) > 0.5)
                 _idleTimer.Interval = TimeSpan.FromSeconds(configured);
 
+            ClearStaleSpeechLatch();   // WPF: the one beat that keeps running while she is wedged
             if (!IsSpeechReady()) return;
             Giggle(RandomBambiPhrase());
         }
@@ -232,16 +234,22 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// not a second voice); bubble + the trigger's linked clip only when she is visible and unmuted.
         /// Shown for clamp(5 + 0.05 s per char, 5, 14) s, held while hovered.
         /// ponytail: WPF types the word out with the slow typewriter; this bubble shows it whole.</summary>
-        internal void ShowTriggerBubble(string trigger)
+        internal void ShowTriggerBubble(string trigger) => RunOnAvatar(() => EnqueueTrigger(trigger));
+
+        private void ShowTriggerBubbleImmediate(string trigger)
         {
             _ = CoreHaptics.Service?.TriggerSubliminalPatternAsync(trigger);
 
             if (IsMuted || !IsVisible || Windows.EmiDesk.EmiDeskService.Instance.AvatarMuted || _isPlayingUninterruptibleClip)
             {
                 _lastSpeechEndTime = DateTime.Now;
+                _lastSpeechSource = SpeechSource.Trigger;
+                _lastSpeechLength = trigger.Length;
+                ProcessNextSpeech();
                 return;
             }
 
+            StopSpokenAudio();
             PlayTriggerAudio(trigger);
 
             _speechTimer?.Stop();
@@ -254,22 +262,28 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _aiBadge.IsVisible = false;
             _policyBadge.IsVisible = false;
             SyncAskButtonsFor(trigger);
-            _txtSpeech.Text = trigger;
-            _speechBubble.MaxWidth = 380;
+            if (SpeechInstant) _txtSpeech.Text = trigger; else StartTypewriter(trigger, slow: true);
+            _speechBubble.MaxWidth = SpeechBubbleMaxWidth;
             ApplySpeechBubblePlacement();
             _speechBubble.IsVisible = true;
             _isGiggling = true;
             _isShowingAiBubble = false;
 
-            var seconds = TriggerDisplaySeconds(trigger.Length);
+            var seconds = TriggerDisplaySeconds(trigger.Length)
+                + (SpeechInstant ? 0 : EstimateTypewriterDurationMs(trigger.Length, slow: true) / 1000.0);
+            DateTime? hoverSince = null;
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
             timer.Tick += (_, _) =>
             {
-                if (_isMouseOverSpeechBubble) { timer.Interval = TimeSpan.FromSeconds(1); return; }
+                hoverSince ??= DateTime.UtcNow;
+                if (_isMouseOverSpeechBubble && DateTime.UtcNow - hoverSince.Value < MaxHoverHold) { timer.Interval = TimeSpan.FromSeconds(1); return; }
                 timer.Stop();
-                _speechBubble.IsVisible = false;
-                _isGiggling = false;
+                CollapseSpeechBubble();
                 _lastSpeechEndTime = DateTime.Now;
+                _lastSpeechSource = SpeechSource.Trigger;
+                _lastSpeechLength = trigger.Length;
+                NoteLineEnded();
+                ProcessNextSpeech();
             };
             _speechTimer = timer;
             timer.Start();

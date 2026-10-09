@@ -172,6 +172,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             lock (_lock) { displaced = _oneShot; _oneShot = voice; }
             displaced?.Dispose();
             Log.Debug("MindWipe: Playing {File} at volume {Vol}%", Path.GetFileName(clip), volume * 100);
+            CoreTubeEvents.RaiseMindWipeTriggered();   // WPF MindWipeService.MindWipeTriggered (tube#T5)
         }
 
         internal void StartLoop(double volume)

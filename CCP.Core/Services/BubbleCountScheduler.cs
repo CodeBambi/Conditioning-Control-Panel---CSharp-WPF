@@ -210,6 +210,7 @@ namespace ConditioningControlPanel.Services
                     Log.Information("Bubble count game completed! +{Xp} XP", xp);
                 }
                 CoreProgression.TrackBubbleCountCompleted();
+                CoreTubeEvents.RaiseBubbleGameCompleted();   // WPF GameCompleted (tube#T5)
                 return;
             }
             var s = CoreSettings.Current;
@@ -218,20 +219,21 @@ namespace ConditioningControlPanel.Services
                 _retryCount = 0;
                 Idle();
                 Log.Information("Bubble count game failed");
+                CoreTubeEvents.RaiseBubbleGameFailed();   // WPF GameFailed (tube#T5)
                 return;
             }
             _retryCount++;
             if (_retryCount >= s.MercyAfterFails && s.MercySystemEnabled)   // #1145: 2..10, default 3
             {
                 Log.Information("Bubble count mercy after {Retries} retries", _retryCount);
-                _host.ShowMessage(CoreMods.AttentionCheckMercyMessage ?? "BAMBI GETS MERCY", 2500, () => { _retryCount = 0; Idle(); });
+                _host.ShowMessage(CoreMods.AttentionCheckMercyMessage ?? "BAMBI GETS MERCY", 2500, () => { _retryCount = 0; Idle(); CoreTubeEvents.RaiseBubbleGameFailed(); });
                 return;
             }
             Log.Information("Bubble count retry {Count} (mercy at {Mercy})", _retryCount, s.MercyAfterFails);
             _host.ShowMessage(CoreMods.BubbleCountRetryMessage ?? "WRONG!\nWATCH AGAIN", 2000, () =>
             {
                 if (!IsBusy) return;   // panic during the message
-                if (!Play(true)) { Log.Warning("BubbleCountService: No videos for retry, granting mercy"); _retryCount = 0; Idle(); }
+                if (!Play(true)) { Log.Warning("BubbleCountService: No videos for retry, granting mercy"); _retryCount = 0; Idle(); CoreTubeEvents.RaiseBubbleGameFailed(); }
             });
         }
 

@@ -327,13 +327,15 @@ public sealed class TakeoverTests
             Assert.NotEqual("preset zero", text.Text);
             tube.StopThinkingAnimation();
 
+            // tube#T6: the thinking bubble is still up, so the preset QUEUES behind it (WPF Giggle).
             tube.Giggle("preset one");
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal("preset one", text.Text);
+            Assert.Equal(1, tube.QueuedSpeechCount);
             Assert.Equal(history, tube.ChatHistory.Count);
 
-            tube.GigglePriority("ai reply", false, aiGenerated: true);
+            tube.GigglePriority("ai reply", false, aiGenerated: true);   // priority clears the queue
             Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, tube.QueuedSpeechCount);
             tube.Giggle("preset two");   // an AI bubble is up
             Dispatcher.UIThread.RunJobs();
             Assert.Equal("ai reply", text.Text);

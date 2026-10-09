@@ -371,6 +371,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         private void AdvanceEmote()
         {
             if (!_emoteMode) return;
+            if (_talkSeqActive) return;   // the talk timer owns transitions mid-line (WPF OnCirceClipCompleted)
             for (int tries = 0; tries <= _emoteIdle.Count; tries++)
                 if (DoEmoteCrossfade(PickWeightedIdle())) return;
             // Nothing else opens: replay the clip on screen rather than freeze or blank.
@@ -395,6 +396,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (pool.Count == 0) pool = _emoteClickClips.Where(c => !_emoteBadClips.Contains(c)).ToList();
             if (pool.Count == 0) return false;
             _emoteClickCooldownMs = now;
+            StopTalkSequence();   // a click interrupts any in-flight spoken line
             var clip = pool[_random.Next(pool.Count)];
             if (_emoteCurrentClip != null && now - _emoteClipStartMs < EmoteMinHoldMs) _emotePendingClip = clip;
             else if (!DoEmoteCrossfade(clip)) return false;
