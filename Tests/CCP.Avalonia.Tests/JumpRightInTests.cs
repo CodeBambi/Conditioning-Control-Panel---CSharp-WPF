@@ -31,6 +31,8 @@ public sealed class JumpRightInTests
             CoreSettings.ServiceProvider = () => service;
             var prevSession = CoreSession.IsSessionRunningProvider;
             var s = service.Current;
+            var saved = (s.FlashEnabled, s.FlashFrequency, s.SimultaneousImages, s.SubliminalEnabled,
+                s.SubliminalFrequency, s.SpiralEnabled, s.PinkFilterEnabled);
             var shell = new MainShellWindow();
             shell.Show();
             try
@@ -64,6 +66,9 @@ public sealed class JumpRightInTests
                 CoreEngine.Stop();
                 CoreEngine.StoppedHook = null;
                 CoreSession.IsSessionRunningProvider = prevSession;
+                (s.FlashEnabled, s.FlashFrequency, s.SimultaneousImages, s.SubliminalEnabled,
+                    s.SubliminalFrequency, s.SpiralEnabled, s.PinkFilterEnabled) = saved;
+                service.SaveImmediate();
                 CoreSettings.ServiceProvider = prevSettings;
                 shell.Close();
             }
