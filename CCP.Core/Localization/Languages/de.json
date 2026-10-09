@@ -2025,6 +2025,7 @@
   "tooltip_exit_the_application_completely": "Die App schließen.",
   "label_remote_controlled": "FERNGESTEUERT",
   "label_someone_else_is_controlling_your_app": "Jemand anderes steuert deine App",
+  "label_controller_may_be_idle": "Der Controller ist vielleicht inaktiv...",
   "label_no_active_session": "Keine aktive Sitzung",
   "btn_end_session": "Sitzung beenden",
   "label_drop_to_import": "Zum Importieren ablegen",

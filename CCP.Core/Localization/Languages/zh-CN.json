@@ -2754,6 +2754,7 @@
   "tooltip_exit_the_application_completely": "关闭应用。",
   "label_remote_controlled": "远程控制中",
   "label_someone_else_is_controlling_your_app": "其他人正在控制你的应用",
+  "label_controller_may_be_idle": "控制者可能处于空闲状态...",
   "label_no_active_session": "无活跃疗程",
   "btn_end_session": "结束疗程",
   "label_drop_to_import": "拖放导入",

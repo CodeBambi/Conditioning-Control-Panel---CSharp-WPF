@@ -2025,6 +2025,7 @@
   "tooltip_exit_the_application_completely": "Закрыть приложение.",
   "label_remote_controlled": "УДАЛЁННОЕ УПРАВЛЕНИЕ",
   "label_someone_else_is_controlling_your_app": "Кто-то другой управляет твоим приложением",
+  "label_controller_may_be_idle": "Контроллер, возможно, неактивен...",
   "label_no_active_session": "Нет активной сессии",
   "btn_end_session": "Завершить сессию",
   "label_drop_to_import": "Перетащи для импорта",
