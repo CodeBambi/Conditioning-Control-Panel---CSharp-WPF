@@ -72,6 +72,7 @@ namespace ConditioningControlPanel.Features
             // to buy the prize, which is the whole point of that row being there.
             BoxFlashV2.Visibility = (remix || motion || !RowGetFlashesV2.IsRowHidden)
                 ? Visibility.Visible : Visibility.Collapsed;
+            RefreshExitRow();
         }
 
         // One hook for both ownership-driven pieces of this control: the motion picker's rows
@@ -114,6 +115,7 @@ namespace ConditioningControlPanel.Features
             if (s == null) return;
             s.FlashShatterEnabled = ChkFlashShatter.IsChecked ?? false;
             App.Settings?.Save();
+            RefreshExitRow();
         }
 
         private void ChkJackpotRemix_Changed(object sender, RoutedEventArgs e)
@@ -175,6 +177,23 @@ namespace ConditioningControlPanel.Features
                 ChkFlashShatter.IsChecked = s.FlashShatterEnabled;
             }
             finally { _isLoading = false; }
+            RefreshExitRow();
+        }
+
+        /// <summary>
+        /// #1386: an owned, switched-on Shatter decides how a clicked flash leaves (FlashService
+        /// tries the break first and only falls back to the leave animation without it), so the
+        /// "when clicked" picker would do nothing. PURE.
+        /// </summary>
+        internal static bool ShatterDecidesClick(bool shatterOn, bool ownsMotion) => shatterOn && ownsMotion;
+
+        // Greys the "when clicked" picker and shows the one-line reason while Shatter owns the click.
+        private void RefreshExitRow()
+        {
+            bool shatter = ShatterDecidesClick(App.Settings?.Current?.FlashShatterEnabled == true,
+                Services.FlashService.OwnsFlashV2());
+            CmbExit.IsEnabled = !shatter;
+            TxtExitShatterNote.Visibility = shatter ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)

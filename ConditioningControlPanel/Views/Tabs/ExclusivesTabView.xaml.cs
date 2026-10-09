@@ -1,6 +1,8 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using ConditioningControlPanel.Localization;
 using System.Windows.Media;
 using ConditioningControlPanel.Services;
 
@@ -95,7 +97,61 @@ namespace ConditioningControlPanel.Views.Tabs
             };
         }
 
+        /// <summary>
+        /// Account &amp; Plans mode (nav rework 2026-10-06, trimmed in polish 12, 2026-10-07).
+        /// Settings · Account &amp; Plans hosts this view inline: the header with the tier plates,
+        /// a "See everything Premium gets you" link and the invites. The spotlight and the shelf
+        /// live on the Premium page (Home > Premium, the same view with this off). The inner
+        /// ScrollViewer is unhooked so a wheel notch reaches the Settings page scroller instead
+        /// of dying here.
+        /// </summary>
+        public bool PlansMode
+        {
+            get => _plansMode;
+            set
+            {
+                _plansMode = value;
+                var v = value ? Visibility.Collapsed : Visibility.Visible;
+                var plansOnly = value ? Visibility.Visible : Visibility.Collapsed;
+                ExclusivesShelf.Visibility = v;
+                SpotlightCard.Visibility = v;
+                BtnSeePremium.Visibility = plansOnly;
+                InvitesHost.Visibility = plansOnly;
+                // Settings > Account & Plans wears its own header (nav polish 2026-10-06): no Vault
+                // or Exclusives names. Rebound, never assigned, so a language switch still repaints
+                // them (a plain Text write would drop the live loc binding).
+                BindLoc(TxtVaultTitle, value ? "plans_header_title" : "premium_page_title");
+                BindLoc(TxtVaultSub, value ? "plans_header_sub" : "premium_page_sub");
+                ContentScroll.VerticalScrollBarVisibility =
+                    value ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+                if (value && ContentScroll.Content is UIElement content && ContentScroll.Parent is Panel host)
+                {
+                    // Lift the content out of the ScrollViewer: a ScrollViewer marks every wheel
+                    // notch Handled even when it has nothing to scroll.
+                    var index = host.Children.IndexOf(ContentScroll);
+                    ContentScroll.Content = null;
+                    host.Children.RemoveAt(index);
+                    host.Children.Insert(index, content);
+                }
+            }
+        }
+        private bool _plansMode;
+
+        private static void BindLoc(TextBlock? target, string key)
+        {
+            if (target == null) return;
+            BindingOperations.SetBinding(target, TextBlock.TextProperty,
+                new Binding($"[{key}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+        }
+
         private void Spotlight_Click(object sender, RoutedEventArgs e) => OpenSpotlight();
+
+        /// <summary>Account &amp; Plans' link to the full Premium page.</summary>
+        private void SeePremium_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ShowTab("premium");
+        }
 
         private void Spotlight_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenSpotlight();
 

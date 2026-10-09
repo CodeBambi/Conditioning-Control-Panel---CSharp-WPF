@@ -6,12 +6,14 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ConditioningControlPanel.Controls.NavRail;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.GoonGame;
 using ConditioningControlPanel.Services.Launcher;
 using ConditioningControlPanel.Services.Lobby;
 using ConditioningControlPanel.Services.PieceByPiece;
+using ConditioningControlPanel.Services.UI;
 using ConditioningControlPanel.Views.Tabs;
 using Serilog;
 
@@ -47,8 +49,9 @@ public partial class LauncherWindow
             {
                 CornerRadius = new CornerRadius(14),
                 Padding = new Thickness(12, 4, 12, 5),
-                Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x5F, 0xA2)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0x5F, 0xA2)),
+                // 7.1.5: the Social hue, never the pink-red that read as unread messages.
+                Background = new SolidColorBrush(NavStripRules.WithAlpha(NavStripRules.Sky, 0.20)),
+                BorderBrush = new SolidColorBrush(NavStripRules.WithAlpha(NavStripRules.Sky, 0.40)),
                 BorderThickness = new Thickness(1),
                 Child = _lobbyChipText,
             },
@@ -72,7 +75,13 @@ public partial class LauncherWindow
             PopupAnimation = MotionFx.AllowTransitions ? PopupAnimation.Fade : PopupAnimation.None,
             Child = LobbyDropShell(_lobbyDropRows),
         };
-        _lobbyDrop.Opened += (_, _) => { _lobbyDropLease ??= App.Lobby?.Watch(); };
+        _lobbyDrop.Opened += (_, _) =>
+        {
+            _lobbyDropLease ??= App.Lobby?.Watch();
+            // Opening the drop is seeing the tables: the chip dims until more open.
+            try { NavBadges.MarkSeen(NavSections.Social); } catch { }
+            if (_lobbyChip != null) _lobbyChip.Opacity = LobbyChipOpacity(NavBadges.Get(NavSections.Social), NavBadges.Seen(NavSections.Social));
+        };
         _lobbyDrop.Closed += (_, _) => { _lobbyDropLease?.Dispose(); _lobbyDropLease = null; };
         PaintLobbyChip(App.Lobby?.Snapshot ?? LobbySnapshot.Empty);
     }
@@ -108,6 +117,10 @@ public partial class LauncherWindow
     {
         if (_lobbyChipText == null || _lobbyDropRows == null) return;
         _lobbyChipText.Text = ChipText(snap);
+        // Same seen rule as the rail badge (NavBadges): bright only when the count rose past what
+        // the player last saw, dimmed after.
+        try { NavBadges.Set(NavSections.Social, snap.OpenCount); } catch { }
+        if (_lobbyChip != null) _lobbyChip.Opacity = LobbyChipOpacity(snap.OpenCount, NavBadges.Seen(NavSections.Social));
         FillLobbyDrop(_lobbyDropRows, snap, MainWindow.CurrentLobbyGates(), JoinFromDrop, () =>
         {
             if (_lobbyDrop != null) _lobbyDrop.IsOpen = false;
@@ -126,6 +139,11 @@ public partial class LauncherWindow
         BorderThickness = new Thickness(1),
         Child = rows,
     };
+
+    /// <summary>The chip's opacity: full when there is nothing to count or the count is fresh,
+    /// dimmed once the player has seen it (7.1.5). Pure.</summary>
+    internal static double LobbyChipOpacity(int openCount, int seen) =>
+        openCount <= 0 || NavBadges.IsFresh(openCount, seen) ? 1.0 : NavRailRules.BadgeSeenOpacity + 0.15;
 
     internal static string ChipText(LobbySnapshot snap) =>
         snap.OpenCount > 0 ? Loc.GetF("launcher_lobby_open", snap.OpenCount) : Loc.Get("launcher_lobby");

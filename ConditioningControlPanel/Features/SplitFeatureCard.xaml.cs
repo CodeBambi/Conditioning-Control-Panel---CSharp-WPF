@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Features
         private const double ActiveBreathSeconds = 3.5;
         private const double RimLightOpacity = 0.85;
         private const int RimLightMs = 150;
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;
 
         // ---- hover fill (the seam sweep) ----
         /// <summary>Seam parameter at rest: the 50/50 "/" diagonal.</summary>

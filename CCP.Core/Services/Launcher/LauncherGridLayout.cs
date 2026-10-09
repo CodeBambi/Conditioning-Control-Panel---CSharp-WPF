@@ -93,4 +93,17 @@ public static class LauncherGridLayout
     /// When they are not, the block is centred in the column instead of hanging from the top.</summary>
     public static bool NeedsScroll(double available, double gridHeight)
         => available > 0 && gridHeight > available + 0.5;
+
+    /// <summary>
+    /// 7.1.5 (tester: the bottom row is cut off at 1080p): the window height that seats every row
+    /// without a scroll. Grows by exactly the overflow, never shrinks, never past the work area;
+    /// on a screen too short for that the scroller stays the fallback.
+    /// </summary>
+    public static double FitWindowHeight(double windowHeight, double available, double gridHeight, double workAreaHeight)
+    {
+        if (windowHeight <= 0 || !NeedsScroll(available, gridHeight)) return windowHeight;
+        double want = Math.Ceiling(windowHeight + gridHeight - available + 1);
+        if (workAreaHeight > 0) want = Math.Min(want, workAreaHeight);
+        return Math.Max(windowHeight, want);
+    }
 }

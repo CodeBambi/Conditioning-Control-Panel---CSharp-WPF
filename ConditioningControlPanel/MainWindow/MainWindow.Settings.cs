@@ -116,7 +116,6 @@ namespace ConditioningControlPanel
 
             // Deeper
             if (AppSettingsTab?.ChkEnableDeeper != null) AppSettingsTab.ChkEnableDeeper.IsChecked = s.EnableDeeper;
-            if (BtnDeeper != null) BtnDeeper.Visibility = s.EnableDeeper ? Visibility.Visible : Visibility.Collapsed;
 
             // Update UI for offline mode state (disable login buttons, browser, etc.)
             if (s.OfflineMode)

@@ -55,9 +55,17 @@
       <TextBlock Text="{Binding Flavor}" Foreground="#D7C9E2" FontSize="13" TextTrimming="CharacterEllipsis" Margin="0,5,0,0"/>
       <TextBlock Text="{Binding PerkCost}" Foreground="#FF9999" FontSize="12" FontWeight="SemiBold"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><DataTrigger Binding="{Binding PerkCost}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
      </StackPanel>
-     <Button Grid.Column="2" Padding="12,9" Margin="0" VerticalAlignment="Center" Tag="who" Click="Sheet_Click" ToolTip="{loc:Str companion_v2_who}" AutomationProperties.Name="{loc:Str tab_settings}">
-      <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets, Segoe UI" FontSize="19" Foreground="#F5A3D3" Margin="0,0,8,0"/><TextBlock Text="{loc:Str tab_settings}" VerticalAlignment="Center"/></StackPanel>
-     </Button>
+     <!-- The companion's own switches live in the header (7.1.1): the Settings button now opens the
+          Personality page, so the sheet that used to hold them is out of reach. Off, Show leads. -->
+     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+      <Button Content="{loc:Str companion_v2_show}" Command="{Binding Room.Hero.ToggleShownCommand}" Style="{StaticResource PrimaryButton}" Visibility="{Binding CompanionHidden, Converter={StaticResource Visible}}" Margin="0,0,8,0"/>
+      <Button Content="{loc:Str companion_v2_popout}" Command="{Binding Room.Hero.DetachCommand}" Style="{StaticResource QuietButton}" Margin="0,0,4,0"/>
+      <Button Content="{Binding VoiceLabel}" Command="{Binding Room.Hero.ToggleMuteCommand}" Style="{StaticResource QuietButton}" Margin="0,0,4,0"/>
+      <Button Content="{loc:Str companion_v2_hide}" Command="{Binding Room.Hero.ToggleShownCommand}" Style="{StaticResource QuietButton}" Visibility="{Binding CompanionShown, Converter={StaticResource Visible}}" Margin="0,0,8,0"/>
+      <Button Padding="12,9" Margin="0" Tag="who" Click="Sheet_Click" ToolTip="{loc:Str companion_v2_who}" AutomationProperties.Name="{loc:Str tab_settings}">
+       <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets, Segoe UI" FontSize="19" Foreground="#F5A3D3" Margin="0,0,8,0"/><TextBlock Text="{loc:Str tab_settings}" VerticalAlignment="Center"/></StackPanel>
+      </Button>
+     </StackPanel>
     </Grid>
    </Border>
    <Grid Grid.Row="1" MinHeight="220">

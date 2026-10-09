@@ -1102,10 +1102,10 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// The Vault: the Exclusives storefront. Routes through the SAME handler the nav rail's
-        /// Patreon row uses so the pulse-clearing and lazy-init side effects stay in one place.
+        /// The Vault tile. The Exclusives storefront retired into Settings · Account &amp; Plans
+        /// (nav rework 2026-10-06): tier plates, spotlight, invites and the upgrade live there now.
         /// </summary>
-        internal void CardVault_Click(object sender, RoutedEventArgs e) => BtnPatreonExclusives_Click(sender, e);
+        internal void CardVault_Click(object sender, RoutedEventArgs e) => OpenAppSettingsSection("account");
 
         /// <summary>
         /// The mosaic's DEEPER EDITOR tile (owner, 2026-09-12), which took the slot the nameless
@@ -1439,20 +1439,20 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// The System popup. Still a <see cref="Features.FeaturePopupWindow"/> because System has
-        /// no Studio rack entry — it is display/video switches, not a feature. Phase 3 moved its
-        /// ENTRY POINT off the mosaic (the tile is Collapsed) onto the quick-toggles row's "System"
-        /// pill, which calls this same method: the popup, its mod-aware title and its
-        /// <c>NotifyFeatureOpened("System")</c> bark are unchanged.
-        ///
-        /// <para>Popup titles go through <c>ModAwareLabel</c> so a mod that renames a feature
-        /// retitles the window too — otherwise a "Flash Images" → "Drone Pulses" replacement would
-        /// rename the tile and the in-popup section header but leave the title bar behind.</para>
+        /// The Home quick-toggles row's "System" pill. Until the nav rework (2026-10-06) this opened
+        /// a FeaturePopupWindow around Features.SystemFeatureControl; the monitor picker and the
+        /// four video rows now live in Settings · Monitors and the assets-folder buttons in
+        /// Library · Folders, so the pill is plain navigation. The handler NAME is kept: the pill and
+        /// Phase8RedirectContractTests both address it. The <c>NotifyFeatureOpened("System")</c> bark
+        /// the popup host used to fire is fired here, the surface it always fired from (the
+        /// VelvetBtnWebcam_Click precedent below).
         /// </summary>
-        internal void CardSystem_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.SystemFeatureControl(),
-                ModAwareLabel("⚙ System", "section_system"),
-                glyph: "⚙");
+        internal void CardSystem_Click(object sender, RoutedEventArgs e)
+        {
+            try { App.Bark?.NotifyFeatureOpened("System"); }
+            catch { /* a bark must never break a navigation */ }
+            OpenAppSettingsSection("monitors");
+        }
 
         /// <summary>
         /// Dashboard "Webcam &amp; Mic" tile. Until Phase 2 this opened a FeaturePopupWindow around

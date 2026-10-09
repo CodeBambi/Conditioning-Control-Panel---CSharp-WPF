@@ -155,6 +155,8 @@ public class TierBadgeRenderTests
 
             // A papered-over neon sign does not keep humming.
             Assert.Null(badge.TierImage.Effect);
+            Assert.Null(badge.GlowImage.Effect);
+            Assert.Equal(Visibility.Collapsed, badge.GlowImage.Visibility);
 
             // The stamp is offset down-left of the sign, not centred on it - a literal second pass.
             Assert.True(badge.StampImage.Margin.Top > 0, "the stamp must sit lower than the sign");
@@ -288,6 +290,7 @@ public class TierBadgeRenderTests
             // The stamp is the message on a free day; a tier sign glowing away underneath it would
             // be two things asking for the same attention.
             Assert.Null(badge.TierImage.Effect);
+            Assert.Null(badge.GlowImage.Effect);
         });
     }
 
@@ -299,9 +302,15 @@ public class TierBadgeRenderTests
             var badge = Badge(2, motion: true);
             Realize(badge);
 
-            var glow = Assert.IsType<DropShadowEffect>(badge.TierImage.Effect);
+            // The glow lives on the cached layer under the sign (perf pass): the sharp sign
+            // carries no effect, so its wobble never re-renders a blur.
+            Assert.Null(badge.TierImage.Effect);
+            var glow = Assert.IsType<DropShadowEffect>(badge.GlowImage.Effect);
             Assert.Equal(0, glow.ShadowDepth);
             Assert.True(glow.BlurRadius > 0);
+            Assert.IsType<BitmapCache>(badge.GlowImage.CacheMode);
+            Assert.Equal(Visibility.Visible, badge.GlowImage.Visibility);
+            Assert.Same(badge.TierImage.Source, badge.GlowImage.Source);
         });
     }
 }

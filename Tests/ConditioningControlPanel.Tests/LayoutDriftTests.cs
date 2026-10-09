@@ -25,6 +25,16 @@ public class LayoutDriftTests
     }
 
     [Fact]
+    public void The_bigger_default_window_is_not_drift()
+    {
+        // Nav polish wave 7 default (1954x1179 DIP): laid out in full at 100% and at 125%.
+        Assert.False(LayoutDrift.Drifted(1954, 1179, 1954, 1179, 1.0, 1.0));
+        Assert.False(LayoutDrift.Drifted(2443, 1474, 1954, 1179, 1.25, 1.25));
+        // ...and a frame that outgrew it by a 125% seam is.
+        Assert.True(LayoutDrift.Drifted(2443, 1474, 1563, 943, 1.25, 1.25));
+    }
+
+    [Fact]
     public void Rounding_within_the_tolerance_is_not_drift()
     {
         Assert.False(LayoutDrift.Drifted(1000, 700, 1000 + LayoutDrift.TolerancePx - 0.5, 700, 1.0, 1.0));

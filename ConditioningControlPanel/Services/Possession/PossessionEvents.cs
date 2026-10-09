@@ -135,7 +135,9 @@ public sealed class PossessionEvents
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
         var director = _director;
-        if (director == null) return;
+        // No haunt, no reaction: RequestReactive refuses outside a haunt anyway, but NearestTarget
+        // walked the whole window first, on every setting write of every session (7.1.5 logs).
+        if (director == null || !director.IsHaunting) return;
 
         // The Possession settings themselves are exempt: reacting to "the user just turned the haunt
         // down" by haunting them is the one joke that reads as the app ignoring consent. The test is
@@ -155,7 +157,7 @@ public sealed class PossessionEvents
             {
                 // Re-read: Detach may have happened while this was queued.
                 var d = _director;
-                if (d == null) return;
+                if (d == null || !d.IsHaunting) return;
                 var label = d.NearestTarget(PossessionRole.Label);
                 if (label != null) d.RequestReactive("typo", label, PossessionRung.Drift);
             }

@@ -20,75 +20,70 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "7.0.5";
+        public const string AppVersion = "7.1.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v7.0.5 - Stay Tuned
+        public const string CurrentPatchNotes = @"v7.1.5 - Stay Tuned
 
-[a small hotfix]
+FIXES SINCE 7.1.0
+- new Companion > AI page: the connection (cloud, local or your own model), how often your companion talks (idle chatter, bubble time, voice lines, triggers, tube look) and its memory, all in one place and never folded away. 7.1.0 and 7.1.1 left some of them with no way in.
+- the Companion page has Show, Hide, Pop out and Voice right in its header again.
+- the Home slideshow is quiet: no more notes when a card changes.
+- Lockdown has a 20-minute choice and starts there, so a Lockdown counts for quests without changing anything.
+- flashes switched on while the engine runs now start right away. no restart needed.
+- conditioning time counts each minute once. it was counting twice, so it now grows at half the old speed. your total so far stays.
+- the app no longer saves its settings every second during a session.
+- the companion stops suggesting quests once they are all done.
+- the Social and Lobby counts wear the Social colour instead of red, and dim once you have seen them.
+- launcher: click anywhere on a tile to launch it. the window grows so the bottom row fits.
+- pop-up questions have a ""Turn these off"" link on the card, and switching them off survives the end of a session.
+- Flash: ""when clicked"" is greyed out while Shatter is on, since Shatter decides what a click does.
+- perks you have not unlocked yet are dimmed. fixed a crash in the tube fit dialog.
 
-NEW IN 7.0.5
+NEW IN 7.1.0
+
+GAMES
+- Breakout: the Endless board name shows when you arrive, then fades.
+- Breakout: on level 8, a launch pressed early is kept while the finale ring forms.
+- Breakout: the pendulum hint no longer covers the ""move to play"" line.
+
+HOME
+- the Home slideshow is now the Tonight Board: one card at a time for what matters right now, such as open tables, quests waiting, picking up where you left off and events, plus one tip each round.
+- news from us shows on a lit pixel board. click it and it ripples.
+- hover a card to hold it. snooze the board for a week if you want it quiet.
+
+FINDING THINGS
+- a new rail: seven labelled sections (Home, Studio, Companion, Play, Social, You, Library) plus Settings. Ctrl+1 to Ctrl+7 jump between them.
+- each section's pages sit in a tab bar at the top of the page, and every section has its own colour. the app remembers the last page you opened in each.
+- new Social section: the Lobby, Friends, Leaderboard, Remote and Leash in one place. the rail shows how many tables are open.
+- the companion has its own pages: Personality, Permissions and Links. the knowledge links editor is back.
+- Settings is one scrolling page and now holds Monitors and Account & Plans.
+- the Premium page is back: from the Vault tile, the spark in the header, search, or Account & Plans.
+- search (Ctrl+K) finds pages by their old names, forgives typos, remembers what you picked, and lists every Studio module and game.
+- a one-time ""What moved"" card shows where things went. replay it from Help.
+- Favorites and Recent live in a drawer at the right edge of Home.
+- Library: picking media is simpler. choose a source, then a flavour card; the fine-tuning switches sit in one fold.
+
+COMPANION
+- the tube and the Bambi, Sissy and CCP Default avatar are redrawn: 28 new animations, clear glass, and soft motes rising inside it.
+- the Drone companion moves: five of its outfits are animated, and every Drone line has a new voice.
+
+LOOK AND FEEL
+- buttons, chips and panels share one light and one depth. anything switched on sits pressed in.
+- the header marquee is a lit drum that rolls to each new line (Full motion).
+- the window edge takes the colour of the section you are in.
+- effects use less CPU and GPU.
 
 FIXES
-- Circe's Spiral Overlay picture got a touch-up.
-- Lockdown quests now say what they meant all along: a lockdown of 20 minutes or more. the Lockdown page tells you when the time you picked is too short to count.
-- the Remote ""Full"" warning no longer lists turning on strict lock or switching off the panic key. a controller can do neither. your panic key always works.
-
-NEW IN 7.0.4
-
-CIRCE'S TAB
-- locks that run a scripted extension (several Locktober locks do) no longer read as ""Chaster is offline"". time waiting on your tab lands again.
-- when your keyholder has turned off adding time, the tab says so instead of quietly trying forever. the time waits on the tab.
-- tab on but no key picked? it says nothing counts yet, and the keys glow until you pick one.
-- the raffle card no longer runs its lines into each other in German.
-
-FIXES
-- mandatory videos: when your length filter keeps every video out, the message says so and where to change it, instead of telling you to add files.
-- invite codes: clearer messages when a code doesn't work. codes also work on existing free accounts now.
-
-NEW IN 7.0.3
-
-REMOTE CONTROL
-- the remote page is new. whoever holds your remote sees a live preview of what is on your screen, draws their own toy patterns or loops one, and has a Melt button for Brain Drain.
-- while someone has your remote you get a small pill at the top of the screen: who, how long, what they did last. More asks for more. Easy halves the strength and tells them. Stop ends everything here and tells them. click the pill to fold it.
-- your panic key always works now. a controller can no longer switch it off.
-- the preview can say where your online pictures come from. turn that off in the Remote tab. file names are never shared.
-- a buzz sent with no toy connected is refused, so the controller knows.
-- when a controller leaves, any strict lock they set is released.
-
-FROM YOUR SUGGESTIONS
-- Awareness cooldowns go up to an hour.
-- Brain Drain can be an Awareness keyword effect, has its own clip volume, and its clips show in the Media Log.
-- flashes: a random range of images per flash, a speed slider for Drift & Bounce, and a spiral you can actually see at high settings.
-- lock cards can wipe the line on a typo. off by default.
-- Mercy has an on/off switch, and you pick after how many fails.
-- mandatory videos can be pinned to one monitor.
-- asset presets remember your online picture picks.
-- chess: invert the camera drag under Options.
-- tube chat stays open after you send.
-- Focus Gaze left on starts with the app. it never asks at launch.
-- ""Locked away"" needs a lockdown of 20 minutes or more.
-- smaller ones: your mod's programs list first, the Deeper editor shows its opacity values, the Deeper video nudge has ""Don't ask again"", the bug report window opens on top, FYP ghost mode starts at 60%.
-
-CIRCE'S TAB
-- a red bubble popped when your day or tab is full now says so.
-- the hover previews show each row's own sign, and the hold looks like a hold.
-
-FIXES
-- the AI can play videos from your mod's video links again.
-- Video links are back in the companion's Settings.
-- red bubbles: a quick click pops and a hold resists, more reliably.
-- the companion's speech bubble hides when a game opens and comes back when it closes.
-- games get their own taskbar icon under the launcher, and desktop game shortcuts wear the game's icon.
-- Chaster: one unreadable lock no longer hides your whole lock list.
-- Breakout: clicking to launch works while the mouse is captured, and drops that go through a portal stay on screen.
-- missed from the 7.0.2 notes: a Surrender button in every chess mode, and the companion's speech bubble no longer pulls the app in front of what you are doing.
+- clicking a friend's card no longer crashes the app.
+- pasting a Hypnotube link works again.
+- no more XP migration screen: older accounts are restored automatically and still get the 10% XP bonus.
 
 EVERYTHING ELSE
-the rest is 7.0.2. coming from 6.11.5? read the 7.0.0 notes on the release page.";
+every 7.0.x fix is in here too. coming from 6.11.5 or older? read the 7.0.0 notes on the release page.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
