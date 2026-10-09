@@ -59,14 +59,17 @@ namespace ConditioningControlPanel.Services
         /// <summary>The dial's clock, frames per second (the effect clock rate).</summary>
         public const int LogoFps = 30;
 
+        /// <summary>Seconds per dial turn at rest.</summary>
+        public const double LogoTurnSeconds = 8;
+
         /// <summary>Hover energy eases up with this time constant (s) and down with the slower one.</summary>
         public const double LogoEnergyRiseS = 0.18, LogoEnergyFallS = 0.48;
 
         /// <summary>Renderer drive for a hover energy of 0 (rest) to 1 (full hover).</summary>
         public static double LogoDrive(double energy) => LogoIdleFloor + (1 - LogoIdleFloor) * Math.Clamp(energy, 0, 1);
 
-        /// <summary>Phase speed in radians per second: one turn per 12 s at rest, three times that on hover.</summary>
-        public static double LogoPhaseRate(double energy) => Math.Tau / 12 * (1 + 2 * Math.Clamp(energy, 0, 1));
+        /// <summary>Phase speed in radians per second: one turn per 8 s at rest (owner, 2026-10-09: "bump up the speed a bit"; WPF 7.1.5 was 12 s), three times that on hover.</summary>
+        public static double LogoPhaseRate(double energy) => Math.Tau / LogoTurnSeconds * (1 + 2 * Math.Clamp(energy, 0, 1));
 
         /// <summary>One step of the hover energy ease toward <paramref name="target"/> over <paramref name="dt"/> seconds.</summary>
         public static double LogoEnergyStep(double energy, double target, double dt)

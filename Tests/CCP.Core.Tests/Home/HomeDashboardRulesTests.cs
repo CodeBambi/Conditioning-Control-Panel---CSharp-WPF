@@ -52,7 +52,7 @@ public class HomeDashboardRulesTests
         Assert.Equal(0.35, HomeDashboardRules.LogoDrive(0));
         Assert.Equal(1.0, HomeDashboardRules.LogoDrive(1), 6);
         Assert.Equal(1.0, HomeDashboardRules.LogoDrive(5), 6);
-        Assert.Equal(Math.Tau / 12, HomeDashboardRules.LogoPhaseRate(0), 9);
+        Assert.Equal(Math.Tau / 8, HomeDashboardRules.LogoPhaseRate(0), 9);
         Assert.Equal(3 * HomeDashboardRules.LogoPhaseRate(0), HomeDashboardRules.LogoPhaseRate(1), 9);
     }
 
