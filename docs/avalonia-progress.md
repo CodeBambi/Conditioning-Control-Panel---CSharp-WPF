@@ -1640,3 +1640,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-awareness-privacy: +661
 - Z5 privacy card on real settings: consent-gated dial, deny/allow chips, pause, wipe; WPF older-pipeline band whenever awareness is on (v2 observer still missing; decision logged).
 - "Set up local" opens the local-AI wizard (untested); tests can no longer read the real desktop (X11ActiveWindow.Disabled); duplicate awareness ledger rows merged.
+
+## avalonia-port/programs-run-1: +346
+- Avalonia builds ProgramService at startup in load-only, read-only mode (CHECKPOINT A). It never writes programs.json, does no rollover and runs no timers, and it is disposed on exit. WPF's ctor path is unchanged.
+- 7 tests, all fail-proven: a byte round-trip of a WPF-shape fixture under a pinned time zone, plus no-write, temp-recovery, corrupt-file, no-lapse, startup-audit-skipped and startup-scan checks.

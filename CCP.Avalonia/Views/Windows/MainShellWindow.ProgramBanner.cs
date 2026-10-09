@@ -5,8 +5,8 @@
 // 1. NO CALLER: THE CARD SHOWS THE ACTIVE ENROLLMENT, AND THIS HEAD HAS NONE.
 //    ApplyProgramBannerArt(ProgramDefinition?, Brush?) is the only door in. ProgramDefinition is in
 //    Core, and so is the art's file chain (Services/Program/ProgramArtPaths.Banner, resolved here by
-//    Helpers.ModArt.FirstOf - the browse cards already use it). What is missing is ProgramService on
-//    this head (docs/avalonia-parity.md row shell-programs-tab): the card is refreshed by
+//    Helpers.ModArt.FirstOf - the browse cards already use it). What is missing is a writing ProgramService on
+//    this head (it is load-only until programs slice 3) (docs/avalonia-parity.md row shell-programs-tab): the card is refreshed by
 //    MainWindow.ProgramsTab / .DashboardFx, also stubs. ProgramBannerAccentColor's fallback,
 //    FxTheme.GlowColor (ConditioningControlPanel/Services/FxTheme.cs), has an equivalent here in
 //    the FxGlowColor resource of CCP.Avalonia/Theme/Colors.xaml.

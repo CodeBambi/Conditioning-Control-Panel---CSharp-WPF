@@ -26,8 +26,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// folder. That is deliberate rather than lazy - see the note on ShowIfFirstTime.
     ///
     /// PORTED from ConditioningControlPanel/Windows/ProgramsIntroPopup.xaml.cs. Deviations:
-    ///  - <c>ShowIfFirstTime</c> reads CoreSettings / CoreMods and the built-in library; no
-    ///    ProgramService is constructed (its timers must not start on a head with no run panel).
+    ///  - <c>ShowIfFirstTime</c> reads CoreSettings / CoreMods and the built-in library; it does
+    ///    not read App.Programs (load-only on this head, docs/avalonia-decisions.md 2026-10-09).
     ///    Routed through Platform.StartupLadder, so the quiet window parks it as an Inbox row.
     ///  - <c>PreviewKeyDown</c> -&gt; <c>KeyDown</c>; <c>DragMove()</c> -&gt; <c>BeginMoveDrag(e)</c>.
     /// </summary>
