@@ -300,7 +300,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     if (e.Key is not (global::Avalonia.Input.Key.Enter or global::Avalonia.Input.Key.Space)) return;
                     e.Handled = true;
-                    DisarmVoiceMic();
+                    try { DisarmVoiceMic(); } catch (Exception ex) { Log.Warning(ex, "MicActivePill key failed"); }
                 };
             UpdateMicPill();
         }

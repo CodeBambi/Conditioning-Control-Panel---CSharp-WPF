@@ -100,7 +100,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class MainShellWindow
     {
         // WPF MainWindow.LabTab.cs MicActivePill_Click: the mic's privacy stop. Not Lockdown-gated, as WPF.
-        private void MicActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e) => DisarmVoiceMic();
+        private void MicActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e)
+        {
+            if (sender is global::Avalonia.Visual v && !e.GetCurrentPoint(v).Properties.IsLeftButtonPressed) return;   // WPF: left button
+            try { DisarmVoiceMic(); } catch (System.Exception ex) { Serilog.Log.Warning(ex, "MicActivePill_Click failed"); }
+        }
 
         // REFUSED (see the header): the camera's panic stop (GazeFocus/BlinkTrainer/Webcam all
         // released together). A pill that clears while the camera stays open is worse than one
