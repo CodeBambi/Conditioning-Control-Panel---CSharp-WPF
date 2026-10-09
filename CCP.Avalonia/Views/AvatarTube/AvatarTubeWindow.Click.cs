@@ -30,12 +30,40 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (Random.Shared.Next(25) == 0) PlayAvatarPopSound();
 
             var now = DateTime.Now;
-            if ((now - _lastAvatarClickTime).TotalMilliseconds < 300 && !IsMuted
-                && CoreSettings.Current.AiChatEnabled && App.Ai?.IsAvailable == true)
-                OpenChatInput();
+            if ((now - _lastAvatarClickTime).TotalMilliseconds < 300)
+            {
+                if (IsMuted) ShowMutedIndicator();   // WPF ChatInput.cs:97
+                else if (CoreSettings.Current.AiChatEnabled && App.Ai?.IsAvailable == true) OpenChatInput();
+            }
             _lastAvatarClickTime = now;
 
             PlayClickBounce();
+        }
+
+        private DispatcherTimer? _mutedIndicatorTimer;
+
+        /// <summary>WPF ShowMutedIndicator (Speech.cs:813): a double-click while muted says so in the
+        /// bubble for two seconds. Never over a bubble that is already up.</summary>
+        internal void ShowMutedIndicator()
+        {
+            if (_speechBubble.IsVisible || _isPlayingUninterruptibleClip) return;
+            StopTypewriter();
+            _aiBadge.IsVisible = false;
+            _policyBadge.IsVisible = false;
+            _txtSpeech.Text = "MUTED \U0001F509";
+            _txtSpeech.FontSize = 15;
+            _speechBubble.MaxWidth = 380;
+            ApplySpeechBubblePlacement();
+            _speechBubble.IsVisible = true;
+            _mutedIndicatorTimer?.Stop();
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                if (!_isGiggling && !_isListeningBubble && !_isWaitingForAi) CollapseSpeechBubble();
+            };
+            _mutedIndicatorTimer = timer;
+            timer.Start();
         }
 
         /// <summary>WPF PlayClickBounce, stepped at 60 Hz on AvatarBounceHost (origin 50%,100%). A running
