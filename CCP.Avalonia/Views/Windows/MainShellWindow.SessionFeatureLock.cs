@@ -34,10 +34,6 @@
 //     running this - Day 3") need App.Programs (ConditioningControlPanel/Services/
 //     ProgramService.cs) for ActiveProgram.Title and Today.DayIndex. The session-generic reason
 //     is what every caller gets here, which is the same string WPF falls back to.
-//   - PulseSessionLockRibbon is a WPF DoubleAnimationUsingKeyFrames flashing the ribbon after a
-//     refused click. Avalonia has no BeginAnimation and a five-keyframe opacity strobe is not
-//     worth a hand-rolled Transitions dance - the refusal is still logged and, for the action
-//     form, still explained in a dialog. Cosmetic only; named so it is not lost silently.
 //   - SetToggleLock's ToolTipService.ShowOnDisabled has no Avalonia twin to need: Avalonia shows
 //     a ToolTip on a disabled control already, which is the whole reason WPF needed the flag.
 //
@@ -311,9 +307,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// Call from any handler that is about to change the prescribed dose. Returns true when
-        /// the change must be refused.
-        /// <para>ponytail: WPF also flashes the ribbon (PulseSessionLockRibbon) so the refusal is
-        /// visible rather than a dead click. See the header - no Avalonia twin yet.</para>
+        /// the change must be refused; also flashes the ribbon so the refusal is visible rather
+        /// than a dead click.
         /// </summary>
         internal bool RefuseIfSessionFeatureLocked(string what)
         {
@@ -321,7 +316,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             Log.Information("[SessionLock] Refused feature change '{What}' - {Reason}",
                 what, SessionFeatureLockReason);
+            PulseSessionLockRibbon();
             return true;
+        }
+
+        /// <summary>
+        /// WPF PulseSessionLockRibbon (SessionFeatureLock.cs:503): 560 ms, opacity 1 - 0.25 - 1 -
+        /// 0.25 - 1, no fill afterwards. Runs on the ribbon's own clock, so it stops with the
+        /// ribbon. Cosmetic only - a throw here must never take the refusal down.
+        /// </summary>
+        /// <summary>The last pulse started, for tests (Avalonia's animation clock is internal, so
+        /// a test cannot step it).</summary>
+        internal global::Avalonia.Animation.Animation? LastRibbonPulse { get; private set; }
+
+        private void PulseSessionLockRibbon()
+        {
+            try
+            {
+                var ribbon = SettingsPage?.ProgramFeatureLockRibbon;
+                if (ribbon is null || !ribbon.IsVisible) return;
+
+                var pulse = new global::Avalonia.Animation.Animation { Duration = TimeSpan.FromMilliseconds(560) };
+                foreach (var (cue, opacity) in new[] { (0d, 1d), (0.25, 0.25), (0.5, 1d), (0.75, 0.25), (1d, 1d) })
+                    pulse.Children.Add(new global::Avalonia.Animation.KeyFrame
+                    {
+                        Cue = new global::Avalonia.Animation.Cue(cue),
+                        Setters = { new global::Avalonia.Styling.Setter(global::Avalonia.Visual.OpacityProperty, opacity) },
+                    });
+                LastRibbonPulse = pulse;
+                _ = pulse.RunAsync(ribbon);
+            }
+            catch { /* cosmetic only */ }
         }
 
         /// <summary>
@@ -342,6 +367,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             var reason = SessionFeatureLockReason;
             Log.Information("[SessionLock] Refused action '{What}' - {Reason}", what, reason);
+            PulseSessionLockRibbon();
 
             // Fire and forget: the refusal is synchronous and must return NOW. Awaiting a modal
             // here would invert WPF's order, where MessageBox.Show blocks after the decision is

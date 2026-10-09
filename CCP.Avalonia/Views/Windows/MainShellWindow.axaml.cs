@@ -90,7 +90,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // WPF put these on the Window element itself; Avalonia routes them as attached events.
             HookResizeEdges();
-            AddHandler(DragDrop.DropEvent, Window_Drop);
+            // handledEventsToo: a drop the Sessions tab already imported must still clear the overlay.
+            AddHandler(DragDrop.DropEvent, Window_Drop, RoutingStrategies.Bubble, handledEventsToo: true);
             AddHandler(DragDrop.DragEnterEvent, Window_DragEnter);
             AddHandler(DragDrop.DragOverEvent, Window_DragOver);
             AddHandler(DragDrop.DragLeaveEvent, Window_DragLeave);
@@ -144,22 +145,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Named<Tabs.PresetsTabView>("PresetsTab")?.UseSessionManager(sessions);
         }
 
-        // ---- window-level drag and drop ------------------------------------------------------
-        // A single *.preset.json imports through Core's PresetFileService (WPF's DropType.Preset).
-        // ponytail: every other drop type needs the asset/import pipeline (MainWindow.Assets.cs:
-        // media -> Play/Edit/Library prompt, *.ccpenh.json -> Deeper library import) plus the
-        // GlobalDropOverlay copy chooser. Wired when those services move to Core. The overlay
-        // itself is in the XAML and still collapses/expands correctly once they are.
-        private void Window_Drop(object? sender, DragEventArgs e)
-        {
-            if (e.DataTransfer.TryGetFiles() is { Length: 1 } files
-                && files[0].TryGetLocalPath() is { } path
-                && path.EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase))
-                Named<Tabs.PresetsTabView>("PresetsTab")?.HandlePresetDrop(path);
-        }
-        private void Window_DragEnter(object? sender, DragEventArgs e) { }
-        private void Window_DragOver(object? sender, DragEventArgs e) { }
-        private void Window_DragLeave(object? sender, RoutedEventArgs e) { }
+        // Window-level drag and drop: MainShellWindow.SessionIO.cs.
 
         // ---- the two handlers MainShellWindow.axaml takes from this file ---------------------
         // WPF MainWindow.xaml.cs:2910: a switch made in the manager repaints through the one path.
