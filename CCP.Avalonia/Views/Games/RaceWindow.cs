@@ -49,6 +49,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         private static GameWindow? _live;
 
+        /// <summary>WPF BackRoomHostService.OnRoomMessage: why the room's race door stays shut, or null.
+        /// "locked" = no account or no racing purchase (the Gate), "busy" = a race is already up.</summary>
+        internal static string? Refusal(Func<string, bool>? owns = null, bool? signedIn = null)
+        {
+            bool open;
+            try { open = (signedIn ?? CoreAccount.IsLoggedIn) && CanLaunch(owns); }
+            catch (Exception ex) { Log.Debug(ex, "[Race] door probe threw"); open = false; }
+            return !open ? "locked" : _live != null ? "busy" : null;
+        }
+
         /// <summary>WPF CaucusHostService.Launch: one race at a time, focused rather than relaunched.
         /// Returns null when the gate refused.</summary>
         internal static GameWindow? Launch()
