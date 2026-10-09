@@ -54,11 +54,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             SwatchHighlightOrange, SwatchHighlightViolet, SwatchHighlightWhite,
         };
 
+        /// <summary>The four switches that only mean something with a screen read behind them
+        /// (OCR, skip the app's own windows, the word highlight, highlight in captures). This head
+        /// has no OCR engine, so nothing reads them: each is greyed and says so. Typed keywords DO
+        /// work (Platform/KeywordTriggerHead reads the master on every key).</summary>
+        internal CheckBox[] ScreenReadOnlyToggles => new[]
+        {
+            ChkAwarenessOcr, ChkAwarenessIgnoreOwnUi, ChkAwarenessHighlight, ChkAwarenessHighlightVisibleInCapture,
+        };
+
+        private void MarkScreenReadRows()
+        {
+            foreach (var box in ScreenReadOnlyToggles)
+            {
+                box.IsEnabled = false;
+                if (box.Parent is not Grid row) continue;
+                var note = new TextBlock
+                {
+                    Text = ConditioningControlPanel.Localization.Loc.Get("exclusives_not_on_this_build"),
+                    FontSize = 10.5, FontStyle = global::Avalonia.Media.FontStyle.Italic,
+                    HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                    VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+                    Margin = new global::Avalonia.Thickness(8, 0, 10, 0),
+                    Tag = "ScreenReadNote",
+                };
+                note[!TextBlock.ForegroundProperty] = note.GetResourceObservable("TextMutedBrush").ToBinding();
+                Grid.SetColumn(note, 0);
+                row.Children.Add(note);
+            }
+        }
+
         public AwarenessTabView()
         {
             // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
             // x:Name fields this code-behind reads.
             InitializeComponent();
+            MarkScreenReadRows();
 
             // WPF's Slider.ValueChanged forwards to MainWindow, which writes the setting AND the
             // label. Wired here rather than in XAML so the seed below can move the sliders before
@@ -205,8 +236,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
                 CoreSettings.Current.KeywordTriggersEnabled = on;
 
-                // ponytail: this is where WPF starts/stops App.KeywordTriggers, the keyboard hook
-                // and App.ScreenOcr. All three are Win32 on that head; nothing arms here.
+                // Nothing to start or stop: Platform/KeywordTriggerHead rides the panic key's hook
+                // and reads this flag on every key (Windows). Screen OCR is not on this head.
 
                 _isLoading = true;
                 try { if ((ChkAwarenessKeyboard.IsChecked ?? false) != on) ChkAwarenessKeyboard.IsChecked = on; }
@@ -232,8 +263,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (ChkAwarenessKeyboard.IsChecked == true && ChkAwarenessMaster.IsChecked != true)
                 ChkAwarenessMaster.IsChecked = true;   // deliberately outside the guard: routes through the master handler
 
-            // ponytail: turning it OFF drops the keyboard hook on WPF when nothing else needs it
-            // (the panic key, OCR). The hook is Win32 and head-side.
+            // No hook to drop: typed keywords ride the panic key's hook, which stays up. This box mirrors the master.
         }
 
         private void ChkAwarenessOcr_Changed(object? sender, RoutedEventArgs e)
