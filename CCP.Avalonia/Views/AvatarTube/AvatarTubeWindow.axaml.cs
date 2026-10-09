@@ -322,6 +322,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             RefreshTubeLayout();
 
             AttachAwareness();   // WPF xaml.cs:317-322 (Reactions.cs)
+            StartSpeechLoops();  // greeting, idle chatter, Trigger Mode, random bubble (Speech.cs)
 
             // ponytail: WPF's OnLoaded also ran StartFloatingAnimation / StartFullscreenDetection
             // and InitTakeoverCountdownBar; none has ported.
@@ -345,6 +346,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _speechTimer?.Stop();
             _cooldownTickTimer?.Stop();
             _possessionGlitchTimer?.Stop();
+            StopSpeechLoops();
             ReleaseEmotes();
             base.OnClosed(e);
         }
@@ -1278,6 +1280,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 _speechBubble.IsVisible = false;
                 _isShowingAiBubble = false;
                 _isGiggling = false;
+                _lastSpeechEndTime = DateTime.Now;
             };
             _speechTimer = timer;
             timer.Start();
