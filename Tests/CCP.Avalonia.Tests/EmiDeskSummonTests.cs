@@ -215,6 +215,35 @@ public sealed class EmiDeskSummonTests
         await Pump(2000);
     });
 
+    /// <summary>WPF EmiDock.Refresh :150-163: while she is out the chip's mini face mirrors the
+    /// widget's face frame by frame; when she leaves it rests and stops listening.</summary>
+    [Fact]
+    public Task DockMiniFaceMirrorsHerWhileOut() => Muted(() => Task.FromResult(EmiMuteChoice.Keep), async svc =>
+    {
+        CoreSettings.Current.EmiDeskMuteAvatar = false;
+        var dock = new EmiDock();
+        var host = new Window { Width = 200, Height = 200, Content = dock };
+        host.Show();
+        Dispatcher.UIThread.RunJobs();
+        var mini = dock.FindControl<TextBlock>("MiniFace")!;
+        try
+        {
+            dock.FindControl<Button>("BtnChip")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await Pump(100);
+            Assert.True(svc.IsOut);
+            svc.Window!.DrawFace(">_<");
+            Assert.Equal(">_<", mini.Text);
+
+            svc.Dismiss();
+            await Pump(2000);
+            Assert.False(svc.IsOut);
+            Assert.Equal("0_0", mini.Text);
+            svc.Window!.DrawFace("^_^");
+            Assert.Equal("0_0", mini.Text);
+        }
+        finally { host.Close(); }
+    });
+
     /// <summary>WPF App.OnExit closed her; here she goes with the main window.</summary>
     [Fact]
     public Task ClosingTheShellClosesHer() => Muted(() => Task.FromResult(EmiMuteChoice.Keep), svc =>
