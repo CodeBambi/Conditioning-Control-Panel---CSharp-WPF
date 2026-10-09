@@ -235,6 +235,15 @@ namespace ConditioningControlPanel.Services
             });
         }
 
+        /// <summary>WPF's skip (BubbleCountService.cs:373-391): the game never started (here: no
+        /// LibVLC). Not a loss - a failed count would start the strict WRONG! WATCH AGAIN loop.</summary>
+        public void Skip()
+        {
+            if (!IsBusy) return;
+            _retryCount = 0;
+            Idle();
+        }
+
         private void Idle()
         {
             IsBusy = false;

@@ -66,6 +66,49 @@ public sealed class BubbleCountQueueTests
         return Task.CompletedTask;
     });
 
+    /// <summary>Audit #1932: with no LibVLC a strict game is skipped as WPF does (BubbleCountService.cs:373),
+    /// not counted as a failure - no window, no WRONG! WATCH AGAIN retry, the scheduler is idle again.</summary>
+    [Fact]
+    public Task StrictGameWithoutLibVlcIsSkippedNotRetried() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+
+        var clip = System.IO.Path.GetTempFileName();
+        var clock = new Clock();
+        var host = BubbleCountHost.Instance;
+        var b = new BubbleCountScheduler(host, clock, () => new[] { clip });
+        var s = CoreSettings.Current;
+        var (real, prevEngine, strict) = (host.Scheduler, CoreEngine.BubbleCount, s.BubbleCountStrictLock);
+        var shared = typeof(global::ConditioningControlPanel.Avalonia.Platform.LibVlcAudio).GetProperty("Shared",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var vlc = shared.GetValue(null);
+        host.Scheduler = b;
+        CoreEngine.BubbleCount = b;
+        s.BubbleCountStrictLock = true;
+        shared.SetValue(null, null);
+        try
+        {
+            b.Trigger(forceTest: true);
+            clock.Advance(BubbleCountScheduler.LeadIn);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Empty(BubbleCountWindow.OpenWindows);
+            Assert.Empty(host.Messages);                           // no WRONG! WATCH AGAIN
+            Assert.False(b.IsBusy);                                // skipped: the scheduler is free again
+        }
+        finally
+        {
+            shared.SetValue(null, vlc);
+            b.ForceCleanup();
+            host.CloseAll();
+            (host.Scheduler, CoreEngine.BubbleCount, s.BubbleCountStrictLock) = (real, prevEngine, strict);
+            System.IO.File.Delete(clip);
+        }
+        return Task.CompletedTask;
+    });
+
     /// <summary>Stepped clock: timers fire only on <see cref="Advance"/>.</summary>
     private sealed class Clock : TimeProvider
     {
