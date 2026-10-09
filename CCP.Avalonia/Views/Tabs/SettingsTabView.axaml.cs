@@ -157,7 +157,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // handler NAMES are kept verbatim, because they are the behaviour-parity contract and
         // the wiring is a rename away once those partials reach Core.
         //
-        // ponytail: needs MainWindow (PremiumRail, DashboardFx, Browser, Login,
+        // ponytail: needs MainWindow (DashboardFx, Browser, Login,
         // ProgramsTab, TeaseCard, TabNavigation) and PremiumFeature - both WPF-head. TierGate is NOT
         // among them any more: CCP.Core/Services/TierGate.cs, over the CoreEntitlement seam.
         //
@@ -171,24 +171,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // so the dashboard can show it without visiting the Programs tab first.
             ProgramTodayCard.Loaded += ProgramTodayCard_Loaded;
             ProgramTodayCard.Click += ProgramTodayCard_Click;
-
-            // Right-click anywhere in the chip stack: MainWindow works out which chip took the
-            // hit and turns that feature on/off. Left-click (the Chip*_Click stubs) opens it.
-            PremiumRailContent.PointerReleased += PremiumRailContent_RightClick;
-            ChipTakeover.Click += ChipTakeover_Click;
-            ChipAwareness.Click += ChipAwareness_Click;
-            ChipHaptics.Click += ChipHaptics_Click;
-            ChipGradedIntake.Click += ChipGradedIntake_Click;
-            ChipVoice.Click += ChipVoice_Click;
-            ChipFyp.Click += ChipFyp_Click;
-            BtnLockdownMinus.Click += BtnLockdownMinus_Click;
-            BtnLockdownPlus.Click += BtnLockdownPlus_Click;
-            BtnLockdownGo.Click += BtnLockdownGo_Click;
-            BtnBlinkMinus.Click += BtnBlinkMinus_Click;
-            BtnBlinkPlus.Click += BtnBlinkPlus_Click;
-            BtnBlinkGo.Click += BtnBlinkGo_Click;
-            ChipRemote.Click += ChipRemote_Click;
-            BtnRemoteStart.Click += BtnRemoteStart_Click;
 
             // Velvet mosaic. Left-click opens the half's Studio module, right-click toggles it;
             // the three diagonal combo tiles forward per-half. A = the top-left half, B = the
@@ -259,24 +241,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>WPF's <c>Window.GetWindow(this) is MainWindow mw</c>: the view forwards, the shell decides.</summary>
         private Windows.MainShellWindow? Shell => TopLevel.GetTopLevel(this) as Windows.MainShellWindow;
-
-        // -- premium rail ---------------------------------------------------------------
-        private void PremiumRailContent_RightClick(object? sender, PointerReleasedEventArgs e) { }  // mw.PremiumRail_RightClick(...)
-        private void ChipTakeover_Click(object? sender, RoutedEventArgs e) { }        // mw.PremiumChip_Click(PremiumFeature.Takeover)
-        private void ChipAwareness_Click(object? sender, RoutedEventArgs e) { }       // mw.PremiumChip_Click(PremiumFeature.Awareness)
-        private void ChipHaptics_Click(object? sender, RoutedEventArgs e) { }         // mw.PremiumChip_Click(PremiumFeature.Haptics)
-        private void ChipGradedIntake_Click(object? sender, RoutedEventArgs e) { }    // mw.PremiumChip_Click(PremiumFeature.GradedIntake)
-        private void ChipVoice_Click(object? sender, RoutedEventArgs e) { }           // mw.PremiumChip_Click(PremiumFeature.Voice)
-        private void ChipFyp_Click(object? sender, RoutedEventArgs e) { }             // mw.PremiumChip_Click(PremiumFeature.Fyp)
-        private void BtnLockdownMinus_Click(object? sender, RoutedEventArgs e) { }    // mw.PremiumLockdownAdjust(-5)
-        private void BtnLockdownPlus_Click(object? sender, RoutedEventArgs e) { }     // mw.PremiumLockdownAdjust(5)
-        private void BtnLockdownGo_Click(object? sender, RoutedEventArgs e) { }       // mw.PremiumLockdownActivate()
-        private void BtnBlinkMinus_Click(object? sender, RoutedEventArgs e) { }       // mw.PremiumBlinkAdjust(-5)
-        private void BtnBlinkPlus_Click(object? sender, RoutedEventArgs e) { }        // mw.PremiumBlinkAdjust(5)
-        private void BtnBlinkGo_Click(object? sender, RoutedEventArgs e) { }          // mw.PremiumBlinkToggle()
-        private void ChipRemote_Click(object? sender, RoutedEventArgs e) { }          // mw.PremiumRemoteOpenFlyout()
-        private void BtnRemoteStart_Click(object? sender, RoutedEventArgs e) { }      // mw.PremiumRemoteStart()
-
         // -- velvet mosaic (4x4 hybrid wall) --------------------------------------------
         private void CardFlash_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("flash");
         private void CardFlash_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("flash");
