@@ -322,6 +322,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             RefreshTubeLayout();
 
             AttachAwareness();   // WPF xaml.cs:317-322 (Reactions.cs)
+            StartSpeechLoops();  // greeting, idle chatter, Trigger Mode, random bubble (Speech.cs)
 
             // ponytail: WPF's OnLoaded also ran StartFloatingAnimation / StartFullscreenDetection
             // and InitTakeoverCountdownBar; none has ported.
@@ -345,6 +346,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _speechTimer?.Stop();
             _cooldownTickTimer?.Stop();
             _possessionGlitchTimer?.Stop();
+            StopSpeechLoops();
+            _clickBounceTimer?.Stop();
             ReleaseEmotes();
             base.OnClosed(e);
         }
@@ -1278,6 +1281,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 _speechBubble.IsVisible = false;
                 _isShowingAiBubble = false;
                 _isGiggling = false;
+                _lastSpeechEndTime = DateTime.Now;
             };
             _speechTimer = timer;
             timer.Start();
@@ -1496,13 +1500,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
             // WPF CirceClickEmote: one affectionate clip, 3 s cooldown (AvatarTubeWindow.Emotes.cs).
             EmoteClick();
+            OnAvatarLeftClick();   // squash, 1-in-25 pop, double-click chat (AvatarTubeWindow.Click.cs)
 
             // ponytail: the rest of that handler stays head-side and none of it is a Core move -
             // the 4-click animation refresh, the 50-clicks-in-60s collapse trigger,
             // App.Achievements.TrackAvatarClick and the 1-in-25 pop sound all
-            // reach App.* or the animated-avatar pipeline. So does BounceAvatar (the click squash,
-            // AvatarTubeWindow.Avatar.cs), which here would be a hand-stepped tween on
-            // AvatarBounceHost's RenderTransform, not an Animation.
+            // reach App.* or the animated-avatar pipeline. The click squash ported (AvatarTubeWindow.Click.cs).
         }
 
         /// <summary>
