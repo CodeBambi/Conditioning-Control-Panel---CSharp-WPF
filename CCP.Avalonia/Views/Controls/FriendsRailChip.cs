@@ -69,6 +69,8 @@ public sealed class FriendsRailChip : Grid
         _popup.Opened += (_, _) => OnPopupOpened();
         _popup.Closed += (_, _) => OnPopupClosed();
         Drawer.OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
+        // WPF OnDrawerMouseDown: a popup never activates its owner on a click.
+        Drawer.AddHandler(PointerPressedEvent, OnDrawerPressed, global::Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         Drawer.CloseRequested += () => _popup.IsOpen = false;
         Drawer.SettingsRequested += () => (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab("appsettings");
         Drawer.SignInRequested += () => { _popup.IsOpen = false; _ = (TopLevel.GetTopLevel(this) as MainShellWindow)?.OpenUnifiedLoginDialog(); };
@@ -176,6 +178,29 @@ public sealed class FriendsRailChip : Grid
             Drawer.OnClosed();
         }
         catch (Exception ex) { Serilog.Log.Debug("[Friends] drawer close failed: {E}", ex.Message); }
+    }
+    /// <summary>Test seam: is the host window the active one.</summary>
+    internal Func<Window, bool> HostIsActive { get; set; } = w => w.IsActive;
+    /// <summary>Test seam: bring the host to the front.</summary>
+    internal Action<Window> ActivateHost { get; set; } = w => w.Activate();
+    internal int HostActivations { get; private set; }
+
+    /// <summary>A press inside the drawer while another app has the foreground. Without this the code box took
+    /// the caret but every key and paste still went to the app in front (Discord, where the code was copied).
+    /// Activating the host hands the keyboard back; the pressed text box is focused again once that settled.</summary>
+    private void OnDrawerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        try
+        {
+            var host = _host ?? TopLevel.GetTopLevel(this) as Window;
+            if (host == null || HostIsActive(host)) return;
+            ActivateHost(host);
+            HostActivations++;
+            TextBox? box = null;
+            for (var v = e.Source as Visual; v != null && box == null; v = v.GetVisualParent()) box = v as TextBox;
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (box != null) box.Focus(); else Drawer.Focus(); }, global::Avalonia.Threading.DispatcherPriority.Input);
+        }
+        catch (Exception ex) { Serilog.Log.Debug("[Friends] drawer activate failed: {E}", ex.Message); }
     }
     private void OnHostMoved(object? sender, PixelPointEventArgs e) => _popup.IsOpen = false;
     private void OnHostState(object? sender, AvaloniaPropertyChangedEventArgs e) { if (e.Property == Window.WindowStateProperty) _popup.IsOpen = false; }
