@@ -187,20 +187,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
 
-            // ponytail: WPF ducks (minimises) the main window unless this is a first-ever run; not ported.
-            OpenIntake(owner as Windows.MainShellWindow);
+            // WPF Lab.cs:195: a first-ever run does not duck the control panel (it reads as a crash).
+            OpenIntake(owner, duckMain: IntakePunchCardState.ReadEverCompletedIntake(CorePaths.UserData));
         }
 
-        /// <summary>WPF IntakeHostService.Launch: one live run at a time, focused if already open.</summary>
-        internal static Windows.IntakeHostWindow OpenIntake(Windows.MainShellWindow? shell)
+        /// <summary>WPF IntakeHostService.Launch: one live run at a time, focused if already open;
+        /// built in the remembered window mode unless this is a recovery relaunch.</summary>
+        internal static Windows.IntakeHostWindow OpenIntake(Window? owner, bool duckMain, bool recovery = false)
         {
+            var shell = owner as Windows.MainShellWindow;
             var lifetime = Application.Current?.ApplicationLifetime as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
             if (lifetime?.Windows.OfType<Windows.IntakeHostWindow>().FirstOrDefault() is { } live)
             {
                 live.Activate();
                 return live;
             }
-            var intake = new Windows.IntakeHostWindow();
+            var intake = new Windows.IntakeHostWindow { DuckTarget = duckMain ? owner : null };
+            if (!recovery && CoreSettings.Current.IntakeFullscreen) intake.WindowState = WindowState.FullScreen;
+            intake.Relaunch = () => OpenIntake(owner, duckMain, recovery: true);
             intake.Drafted += (session, path) => OnSessionDrafted(shell, session, path);
             intake.Load(Platform.WebAssetServer.Shared);
             intake.Show();
