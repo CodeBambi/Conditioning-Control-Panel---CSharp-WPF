@@ -27,7 +27,7 @@ public class CompanionPagesTests
     }
 
     private static string Src(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+        SourceRoots.ReadProductFile(parts);
 
     private static string Page(string name) => Src("Views", "Controls", "Companion", "Pages", name);
     private static string Cell(string name) => Src("Views", "Controls", "Companion", "Runtime", name);

@@ -77,7 +77,7 @@ public class Fix715EngineTests
         Assert.True(QuestService.LockdownCountsForQuests(TimeSpan.FromMinutes(tags[index])),
             $"default lockdown of {tags[index]} min never counts for the Lockdown quests");
 
-        var langs = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var langs = SourceRoots.LanguagesDirectory;
         foreach (var file in Directory.GetFiles(langs, "*.json"))
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(file));

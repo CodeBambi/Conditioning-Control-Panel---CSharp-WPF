@@ -19,14 +19,7 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class NavPillHelpTests
 {
-    private static string LanguagesDir()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Localization")))
-            dir = dir.Parent;
-        Assert.NotNull(dir);
-        return Path.Combine(dir!.FullName, "ConditioningControlPanel", "Localization", "Languages");
-    }
+    private static string LanguagesDir() => SourceRoots.LanguagesDirectory;
 
     private static IEnumerable<(string Section, NavTab Tab)> VisiblePills() =>
         NavSections.Order.Where(s => NavStripRules.ShowsPills(s.Key))

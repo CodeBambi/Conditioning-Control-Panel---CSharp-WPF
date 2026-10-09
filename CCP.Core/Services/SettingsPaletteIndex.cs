@@ -141,6 +141,10 @@ namespace ConditioningControlPanel.Services
         /// <summary>Seeded by the head with JustDropService.DoorAvailable. Fail-closed: unset or throwing hides the door.</summary>
         public static volatile Func<bool>? JustDropDoorAvailableProvider;
 
+        /// <summary>Whether a launcher game exists on this build. WPF: LauncherCatalogue.Find(id)?.Available
+        /// (head-only, reads App). Unset (Avalonia): the game has a Core LauncherCards card.</summary>
+        public static volatile Func<string, bool>? GameAvailableProvider;
+
         internal static bool JustDropDoorAvailable()
         {
             try { return JustDropDoorAvailableProvider?.Invoke() ?? false; }
@@ -914,7 +918,7 @@ namespace ConditioningControlPanel.Services
                     // shot 09f). The Games row (tab.play) is the navigation twin.
                     ContextKeys = new[] { GroupLaunch, "launcher_window_title" },
                     Aliases = aliases,
-                    IsAvailable = () => Launcher.LauncherCatalogue.Find(id)?.Available == true,
+                    IsAvailable = () => GameAvailableProvider?.Invoke(id) ?? Launcher.LauncherCards.Find(id) != null,
                 });
 
             Game("backroom", "🎰", "back room casino slots slot machine wheel blackjack roulette sparkle points");

@@ -61,9 +61,9 @@ public sealed class DashboardFoldBillboardTests
             Assert.True(column.RowDefinitions[0].Height.IsAuto);
             Assert.True(column.RowDefinitions[1].Height.IsStar);
             Assert.Equal(Loc.Get("tooltip_browser_unfold"), ToolTip.GetTip(C<Button>("BtnFoldBrowser")));
-            Assert.Equal(Loc.Get(DashboardBillboard.CardAt(0).TitleKey), Title());
+            Assert.Equal(Loc.Get(LegacyBillboard.CardAt(0).TitleKey), Title());
             Assert.NotNull(C<Image>("BillboardCover").Source);   // the poster resource is linked
-            Assert.Equal(DashboardBillboard.Roster.Count, C<StackPanel>("BillboardDots").Children.Count);
+            Assert.Equal(LegacyBillboard.Roster.Count, C<StackPanel>("BillboardDots").Children.Count);
             Assert.False(shell.BillboardClockRunning);
 
             // Motion back to Full: the clock arms; a tick advances one slide.
@@ -72,7 +72,7 @@ public sealed class DashboardFoldBillboardTests
             Assert.True(shell.BillboardClockRunning);
             shell.BillboardTick();
             Assert.Equal(1, shell.BillboardIndex);
-            Assert.Equal(Loc.Get(DashboardBillboard.CardAt(1).TitleKey), Title());
+            Assert.Equal(Loc.Get(LegacyBillboard.CardAt(1).TitleKey), Title());
             Assert.True(((RadioButton)C<StackPanel>("BillboardDots").Children[1]).IsChecked);
 
             // Another tab: the clock stops (P01); Home again: it re-arms.
@@ -98,7 +98,7 @@ public sealed class DashboardFoldBillboardTests
             shell.ShowTab("settings");
             Click(C<Button>("BillboardNext"));                                 // "support", a Link card
             Click(C<Button>("BillboardCard"));
-            Assert.Equal(new[] { DashboardBillboard.PatreonUrl }, opened);
+            Assert.Equal(new[] { LegacyBillboard.PatreonUrl }, opened);
 
             // The chevron writes the preference: open card, billboard gone, clock stopped. Motion Off
             // so the fold settles at once (at Full the 180 ms ease keeps the body hidden until it lands).

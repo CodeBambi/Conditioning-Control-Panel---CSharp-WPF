@@ -189,7 +189,7 @@ public class ShowcaseTests
     [Fact]
     public void Every_clip_id_the_cutting_brief_allows_has_copy_in_english()
     {
-        var en = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", "en.json"));
+        var en = File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, "en.json"));
         foreach (var id in Ids)
         {
             Assert.Contains("\"" + ShowcaseRules.TitleKey(id) + "\"", en);

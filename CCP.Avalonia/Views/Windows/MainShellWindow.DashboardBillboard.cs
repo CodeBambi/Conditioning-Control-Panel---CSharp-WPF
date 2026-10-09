@@ -64,11 +64,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (dash == null || host == null || dots == null) return;
             _billboardWired = true;
 
-            for (int i = 0; i < DashboardBillboard.Roster.Count; i++)
+            for (int i = 0; i < LegacyBillboard.Roster.Count; i++)
             {
                 int index = i;
                 var dot = new RadioButton { GroupName = "DashboardSlides", Classes = { "dot" } };
-                var key = DashboardBillboard.CardAt(i).TitleKey;
+                var key = LegacyBillboard.CardAt(i).TitleKey;
                 BindLoc(dot, ToolTip.TipProperty, key);
                 BindLoc(dot, AutomationProperties.NameProperty, key);
                 dot.Click += (_, _) => StepBillboard(index - _billboardIndex, automatic: false);
@@ -104,7 +104,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private bool BillboardMayAdvance(Border host) =>
             IsVisible && host.IsEffectivelyVisible && !_billboardPaused && !host.IsKeyboardFocusWithin && Env.AllowAmbientLoops
-            && DashboardBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true);
+            && LegacyBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true);
 
         /// <summary>WPF RestartBillboardClock (:172).</summary>
         private void RestartBillboardClock()
@@ -114,7 +114,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (host == null || !BillboardMayAdvance(host)) return;
             _billboardTimer = new DispatcherTimer(DispatcherPriority.Background)
             {
-                Interval = TimeSpan.FromSeconds(DashboardBillboard.RotateSeconds),
+                Interval = TimeSpan.FromSeconds(LegacyBillboard.RotateSeconds),
             };
             _billboardTimer.Tick += (_, _) => BillboardTick();
             _billboardTimer.Start();
@@ -138,7 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var host = Dash?.FindControl<Border>("DashBillboard");
                 if (host?.IsEffectivelyVisible != true) return;
                 if (automatic && !BillboardMayAdvance(host)) { StopBillboardClock(); return; }
-                _billboardIndex = DashboardBillboard.SlideIndex(_billboardIndex, direction, DashboardBillboard.Roster.Count);
+                _billboardIndex = DashboardBillboard.SlideIndex(_billboardIndex, direction, LegacyBillboard.Roster.Count);
                 FillBillboard();
                 FadeBillboard();
                 if (!automatic) RestartBillboardClock();
@@ -151,7 +151,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var dash = Dash;
             if (dash == null) return;
-            var card = DashboardBillboard.CardAt(_billboardIndex);
+            var card = LegacyBillboard.CardAt(_billboardIndex);
             BindLoc(dash.FindControl<TextBlock>("BillboardEyebrow")!, TextBlock.TextProperty, card.EyebrowKey);
             BindLoc(dash.FindControl<TextBlock>("BillboardTitle")!, TextBlock.TextProperty, card.TitleKey);
             BindLoc(dash.FindControl<TextBlock>("BillboardLine")!, TextBlock.TextProperty, card.LineKey);
@@ -160,7 +160,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ToolTip.SetTip(button, tip);
             AutomationProperties.SetName(button, tip);
 
-            bool plate = card.Art == BillboardArt.Plate;
+            bool plate = card.Art == SlideArt.Plate;
             var art = LoadBillboardArt(card);
             dash.FindControl<Image>("BillboardCover")!.IsVisible = !plate;
             dash.FindControl<Grid>("BillboardPlate")!.IsVisible = plate;
@@ -174,7 +174,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>Missing art leaves the words readable over the shade, never a throw (WPF :241).</summary>
-        private static Bitmap? LoadBillboardArt(BillboardCard card)
+        private static Bitmap? LoadBillboardArt(SlideCard card)
         {
             try { return new Bitmap(AssetLoader.Open(new Uri("avares://CCP.Avalonia/Resources/" + card.Poster))); }
             catch (Exception ex)
@@ -209,8 +209,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                var card = DashboardBillboard.CardAt(_billboardIndex);
-                if (card.Kind == BillboardTargetKind.Link) BillboardOpenUrl(card.Target);
+                var card = LegacyBillboard.CardAt(_billboardIndex);
+                if (card.Kind == SlideTarget.Link) BillboardOpenUrl(card.Target);
                 else ShowTab(card.Target);
             }
             catch (Exception ex) { Log.Warning(ex, "Dashboard billboard: card click failed"); }
