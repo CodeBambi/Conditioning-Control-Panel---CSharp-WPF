@@ -36,8 +36,10 @@ internal static class LeashOverlay
 
     internal static void Open(Control card, Action onEscape, Window? owner)
     {
-        Close();
+        CloseQuiet();
         Current = card;
+        // WPF LeashOverlayWindow.Loaded: the card lands with a small THUD.
+        card.AttachedToVisualTree += (_, _) => { if (LeashFx.Amount > 0) LeashFx.Thud(card, 1.08); };
         if (ShowOverride is { } o) { o(card); return; }
         var w = new Window
         {
@@ -66,7 +68,14 @@ internal static class LeashOverlay
         catch (Exception ex) { Serilog.Log.Debug("[Leash] overlay failed: {E}", ex.Message); _overlay = null; }
     }
 
+    /// <summary>WPF CloseOverlay: closes the card, then the next waiting ask may show.</summary>
     internal static void Close()
+    {
+        CloseQuiet();
+        LeashSurfaces.OverlayClosed();
+    }
+
+    private static void CloseQuiet()
     {
         var o = _overlay;
         _overlay = null;
