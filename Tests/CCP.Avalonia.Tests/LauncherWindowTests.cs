@@ -140,11 +140,18 @@ public sealed class LauncherWindowTests
         LauncherWindow.BackToLauncher(shell);
         Dispatcher.UIThread.RunJobs();
         var w = LauncherWindow.Instance!;
-        var backroom = Tile(w, "backroom");
+        // Every game has a window now (Views/Games/GameWindow); a revealed Racing Thoughts is the one card left
+        // with no host on this head.
+        var oldGrants = ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted;
+        ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted = id => id == "rt.original.03";
+        w.BuildTiles();
+        var backroom = Tile(w, "race");
         Assert.Equal(Loc.Get("exclusives_not_on_this_build"), ToolTip.GetTip(backroom));
+        Assert.Null(ToolTip.GetTip(Tile(w, "backroom")));
         Assert.Null(ToolTip.GetTip(Tile(w, "intake")));
         ClickPlay(backroom);
         Dispatcher.UIThread.RunJobs();
+        ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted = oldGrants;
         Assert.True(w.IsVisible);
         Assert.False(shell.IsVisible);
     });

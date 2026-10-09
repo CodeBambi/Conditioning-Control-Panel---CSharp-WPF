@@ -37,7 +37,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // Graded Intake (WPF IntakePassService.CanStartIntake); locked still opens the tab's gate.
                 ["intake"] = (() => !(CoreEntitlement.HasLab || CoreEntitlement.IsIntakePassAvailable),
                               panel => panel.ShowTab("gradedintake")),
+                // The web games (Views/Games/GameWindow, WPF's per-game WebView2 hosts). The lock face is
+                // the same probe FaceLocks used; the window's own gate raises the refusal.
+                ["backroom"] = (() => false, _ => Games.GameWindow.Launch("backroom")),
+                ["breakoutdemo"] = (() => false, _ => Games.GameWindow.Launch("breakoutdemo")),
+                ["breakout"] = (() => FaceLocked("breakout"), _ => Games.GameWindow.Launch("breakout")),
+                ["piecebypiece"] = (() => false, _ => Games.GameWindow.Launch("piecebypiece")),
+                ["goon"] = (() => false, _ => Games.GameWindow.Launch("goon")),
+                ["dtrh"] = (() => FaceLocked("dtrh"), _ => Games.GameWindow.Launch("dtrh")),
+                ["arcademy"] = (() => FaceLocked("arcademy"), _ => Games.GameWindow.Launch("arcademy")),
             };
+
+        private static bool FaceLocked(string id) => FaceLocks.TryGetValue(id, out var probe) && probe();
 
         /// <summary>Cards this head can open (a destination exists): boot/handoff routing and the companion's offers.</summary>
         internal static IEnumerable<LauncherCard> VisibleCards => LauncherCards.All.Where(c => Destinations.ContainsKey(c.Id));
@@ -530,7 +541,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Log.Information("[Launcher] {Id}: no game host on this head yet", targetId);
                 return;
             }
+            if (Games.GameWindow.Games.ContainsKey(targetId))
+            {
+                LaunchGame(targetId);
+                return;
+            }
             OpenPanel(dest.Open);
+        }
+
+        /// <summary>WPF LauncherHost.LaunchGame: the game opens, then the launcher hides behind it (never
+        /// trays); the return poll brings the launcher back when the game closes and the panel is not up.
+        /// A gate that refused leaves the launcher where it is.</summary>
+        private void LaunchGame(string id)
+        {
+            var game = Games.GameWindow.Launch(id);
+            if (game == null) return;
+            AfterExitBeat(() =>
+            {
+                if (!game.IsVisible) return;
+                Hide();
+                game.Activate();
+            });
+            game.Closed += (_, _) =>
+            {
+                if (Panel is { IsVisible: true }) return;
+                try { Show(); Activate(); }
+                catch (Exception ex) { Log.Debug(ex, "[Launcher] return after {Id} failed", id); }
+            };
         }
 
         private static bool Locked((Func<bool> Locked, Action<MainShellWindow> Open) dest)
