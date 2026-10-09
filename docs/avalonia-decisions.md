@@ -680,3 +680,22 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   media and enhancement drops.
 - Chose A on the supervisor's advice (P44). No file format changes; WPF has no Lockdown refusal on drops, so none is
   added. Play/Edit stay missing until the Deeper player/editor rows land. Tests: `Tests/CCP.Avalonia.Tests/WindowDropTests.cs`.
+
+## 2026-10-09: Linux reads programs.json load-only before the run panel exists (avalonia-port/programs-run-1)
+- Question (programs CHECKPOINT A, ~/ccp-port/briefs/programs-run-plan.md): slice 1 is the first time the Linux head
+  touches `<userdata>/programs.json`, a file it may share with the WPF head, while it still has no run panel and no
+  session runner. May it read it, write it, and run the startup repair/rollover (which can lapse a run)?
+- Option (a) (chosen): load-only and read-only. `ProgramService.CreateReadOnly()` (Core) loads the file (and the same
+  `.tmp` recovery as WPF, without moving the temp), skips RepairSpuriousLapse and EvaluateRollover, starts no timers and
+  never writes (WriteState returns before the temp; the dirty generation stays unsaved). WPF's parameterless ctor is
+  unchanged. `CoreQuests.TrackProgramVerifierProvider` stays unseeded (it mutates); SessionFeatureLock, Marquee nudge,
+  ProgramBanner, Chaster program_done and the Settings Today card stay unwired.
+  Option (b) (rejected): construct the full writing service now (timers, rollover) - a run could lapse on a head that
+  cannot run its days. Option (c) (rejected): load + rollover without writes - state shown would diverge from disk.
+  Option (d) (rejected): do not construct it until slice 3.
+- Chose (a) on oracle-deep's advice via the supervisor (P44). Checkpoint B must decide JsonExtensionData vs a version
+  lock for schema skew before this head writes. Reviewer checks: WPF path byte-identical (`public ProgramService()`
+  chains to the same path, readOnly false); no write/move under readOnly; startup uses CreateReadOnly + Dispose.
+  Tests: `Tests/CCP.Core.Tests/ProgramServiceReadOnlyTests.cs` (WPF-shape fixture byte round-trip under
+  TZ=Europe/Berlin; no write on Save/Dispose; temp recovery untouched; corrupt file untouched; no lapse after 10 days),
+  `Tests/CCP.Avalonia.Tests/ProgramServiceStartupTests.cs`.
