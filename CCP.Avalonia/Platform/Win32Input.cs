@@ -62,7 +62,8 @@ internal static class Win32Input
         var s = CoreSettings.Current;
         // Panic off, rebinding or Lockdown: the handler refuses on the UI thread as before. No watchdog:
         // WPF never armed one there, so the off-thread teardown cannot outrank those rules.
-        if (!s.PanicKeyEnabled || MainShellWindow.CapturingPanicKey || MainShellWindow.LockdownActive)
+        if (!s.PanicKeyEnabled || MainShellWindow.CapturingPanicKey || MainShellWindow.LockdownActive
+            || Views.Controls.AppSettings.DevicesSettingsSection.CapturingPauseKey)
         {
             Dispatcher.UIThread.Post(onPanicPress);
             return;
@@ -84,7 +85,8 @@ internal static class Win32Input
         _pauseDown = true;
         if (PanicPolicy.PauseKeyIsShadowedByPanicKey(s.PanicKey, s.PanicKeyEnabled, s.PauseKey)
             || (s.PanicKeyEnabled && pauseVk == VirtualKeys.Of(s.PanicKey))
-            || MainShellWindow.CapturingPanicKey || MainShellWindow.LockdownActive)
+            || MainShellWindow.CapturingPanicKey || MainShellWindow.LockdownActive
+            || Views.Controls.AppSettings.DevicesSettingsSection.CapturingPauseKey)
             return false;
         Log.Information("Pause key {Key} received - queueing the video grace pause", s.PauseKey);
         Dispatcher.UIThread.Post(() =>
