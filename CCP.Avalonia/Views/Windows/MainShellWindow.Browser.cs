@@ -207,10 +207,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>Takes whoever's card is up off the screen. Every line of the WPF body is
-        /// presentation over controls this head carries, with one substitution: WPF also stops the
-        /// OgBorderAnimation storyboard in OgBorderContainer.Resources, and there is none to stop
-        /// here (MainShellWindow.ProfileFx.cs owns the OG loop and still names ApplyOgBorderLoop as
-        /// blocked), so collapsing the container is the whole of it. Ends in
+        /// presentation over controls this head carries. WPF also stops the OgBorderAnimation
+        /// storyboard; here collapsing the container re-gates the loop (MainShellWindow.ProfileFx.cs
+        /// listens to its IsVisible). Ends in
         /// SetProfileViewingSelf(true): nothing on screen belongs to anyone else any more, so the
         /// "back to me" chip retires and Customize and Privacy come back.</summary>
         internal void ClearProfileViewer()

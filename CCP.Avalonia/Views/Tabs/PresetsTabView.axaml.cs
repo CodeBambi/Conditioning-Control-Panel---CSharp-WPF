@@ -80,7 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 OpenCatalogue();
             };
             // WPF Window_Drop's Session/Preset cases (MainWindow.SessionIO.cs:1477-1484), scoped to
-            // this tab. ponytail: asset/zip/mod drops and the window-wide overlay are still WPF-only.
+            // this tab. Every other drop type is the window's (MainShellWindow.SessionIO.cs).
             DragDrop.SetAllowDrop(this, true);
             AddHandler(DragDrop.DropEvent, Tab_Drop);
             _startSessionLabel = BtnStartSession.Content;
@@ -324,9 +324,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshLocalizedDetails();
         }
 
-        // ---- placeholder furniture + Core-backed session rack --------------------
+        // ---- Takeaway empty state + Core-backed session rack --------------------
         //
-        // The Takeaway strip remains render furniture until its store moves. The preset rail and
+        // The Takeaway strip paints WPF's empty state until the order drawer moves. The preset rail and
         // the session rack read Core (Preset, AppSettings.UserPresets, Session).
 
         private void SeedRailRackAndTakeaway()
@@ -1350,118 +1350,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             return file?.TryGetLocalPath();
         }
 
-        /// <summary>Three pinned receipts, the "+n more" toggle, the shop door, and three tray
-        /// rows behind it. The tray host stays collapsed, as PaintTakeawayShelf leaves it.</summary>
+        /// <summary>WPF PaintTakeawayShelf (MainWindow.Takeaway.cs:107) with an empty drawer and the
+        /// door withheld: no chips, no tray rows, no count, the shelf collapsed and the empty sentence
+        /// shown. This head has neither JustDropOrdersService (the device-token order drawer) nor
+        /// JustDropService.DoorAvailable, so that is exactly what WPF paints for it - never sample
+        /// orders. The Community Catalogue chip and Export stay live on the same line.</summary>
         private void SeedTakeaway()
         {
-            // PaintTakeawayShelf pins up to three receipts, then the "+n more" toggle, then
-            // the door. ONE receipt here: the strip never wraps and never scrolls sideways,
-            // and at the render proof's 1100px the fill is ~330px, so a second receipt would
-            // push the door off the clip and leave its ControlTheme unproven. With three or
-            // fewer orders there is no overflow, so the toggle (SdTakeawayChipAccent, a
-            // two-setter Border variant of the chip below it) is correctly absent too.
-            TakeawayShelf.Children.Add(TakeawayChip("Slow Sink", 30, "AUG 09"));
-            TakeawayShelf.Children.Add(DoorChip());
-
-            // The tray renders EVERY order the drawer returned, not just the pinned ones.
-            TakeawayTray.Children.Add(TrayRow("Velvet Hour", 45, "AUG 12", Loc.Get("takeaway_today")));
-            TakeawayTray.Children.Add(TrayRow("Slow Sink", 30, "AUG 09", Loc.GetF("takeaway_days_ago", 3)));
-            TakeawayTray.Children.Add(TrayRow("Static Bloom", 20, "JUL 28", Loc.GetF("takeaway_days_ago", 15)));
-
-            TxtTakeawayCount.Text = Loc.GetF("sd_takeaway_kept", 3);
-        }
-
-        private Border TakeawayChip(string name, int minutes, string date)
-        {
-            var line = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            line.Children.Add(new TextBlock
-            {
-                Text = "📦",
-                FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0),
-            });
-            line.Children.Add(new TextBlock { Text = name, MaxWidth = 120, Theme = TabTheme("SdTakeawayChipTitle") });
-            line.Children.Add(new TextBlock { Text = Loc.GetF("sd_takeaway_meta", minutes, date), Theme = TabTheme("SdTakeawayChipMeta") });
-
-            // The copy element sits INSIDE the chip; its handler marks the click handled, or
-            // copying a link would also start playing the drop.
-            var copy = new Border
-            {
-                Theme = TabTheme("SdTakeawayCopy"),
-                Child = new TextBlock
-                {
-                    Text = "🔗",
-                    FontSize = 10,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-            };
-            ToolTip.SetTip(copy, Loc.Get("tooltip_takeaway_copy_link"));
-            line.Children.Add(copy);
-
-            var chip = new Border { Theme = TabTheme("SdTakeawayChip"), Child = line };
-            ToolTip.SetTip(chip, Loc.Get("tooltip_takeaway_replay"));
-            return chip;
-        }
-
-        private Border DoorChip()
-        {
-            var line = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            line.Children.Add(new TextBlock
-            {
-                Text = "+",
-                Foreground = Brush("PinkBrush"),
-                FontSize = 15,
-                FontWeight = FontWeight.Bold,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0),
-            });
-            line.Children.Add(new TextBlock
-            {
-                Text = Loc.Get("sd_takeaway_order"),
-                Foreground = Brush("PinkBrush"),
-                FontSize = 12,
-                FontWeight = FontWeight.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-
-            var chip = new Border { Theme = TabTheme("SdTakeawayChipDoor"), Child = line };
-            ToolTip.SetTip(chip, Loc.Get("tooltip_takeaway_order_drop"));
-            return chip;
-        }
-
-        private Border TrayRow(string name, int minutes, string date, string age)
-        {
-            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto") };
-
-            var box = new TextBlock
-            {
-                Text = "📦",
-                FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 7, 0),
-            };
-            Grid.SetColumn(box, 0);
-            grid.Children.Add(box);
-
-            var title = new TextBlock { Text = name, Theme = TabTheme("SdTakeawayRowTitle") };
-            Grid.SetColumn(title, 1);
-            grid.Children.Add(title);
-
-            var mins = new TextBlock { Text = Loc.GetF("takeaway_row_min", minutes), MinWidth = 58, Theme = TabTheme("SdTakeawayRowMeta") };
-            Grid.SetColumn(mins, 2);
-            grid.Children.Add(mins);
-
-            var when = new TextBlock { Text = date, MinWidth = 62, Theme = TabTheme("SdTakeawayRowMeta") };
-            Grid.SetColumn(when, 3);
-            grid.Children.Add(when);
-
-            var howLong = new TextBlock { Text = age, MinWidth = 78, Theme = TabTheme("SdTakeawayRowAge") };
-            Grid.SetColumn(howLong, 4);
-            grid.Children.Add(howLong);
-
-            return new Border { Theme = TabTheme("SdTakeawayRow"), Child = grid };
+            TakeawayShelf.Children.Clear();
+            TakeawayTray.Children.Clear();
+            TakeawayTrayHost.IsVisible = false;
+            TxtTakeawayCount.Text = "";
+            TakeawayShelf.IsVisible = false;
+            TxtTakeawayEmpty.IsVisible = true;
         }
 
         // ---- shared shapes (MakeRackPill / MakeRackMeta) ---------------------------

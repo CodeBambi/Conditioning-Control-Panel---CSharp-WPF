@@ -2,8 +2,8 @@
 // (1,379 lines) and ChasterTabView.Mood.cs. Real: OnTabShown / Refresh / RefreshHero (:119-260),
 // the live hero clock (:301), the ends line (:277), the pills (:372), the account chip (:871),
 // the link flow (:830-863) on the Core loopback OAuth, the lock pick (:962-1053) and the fact cap.
-// ponytail: Circe's mood is a line (WPF chaster_mood_peek wording), not the CircesMoodMeter heat
-// row, and CirceSays lines are not shown. The ground (spiral/glow/ambient), hero art, paper tag,
+// Circe's mood is the CircesMoodMeter heat row and her lines land in PageSays (WPF ChasterTabView.Mood.cs).
+// ponytail: the ground (spiral/glow/ambient), hero art, paper tag,
 // LockTitle letters, limits, menu, trailer and most Fx. The numbers + receipt (Numbers.cs), calendar (Calendar.cs) and keys (Keys.cs) are partials.
 // The heads-up clock, raffle card and ladder scrap are ChasterTabView.Ladder.cs (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
 // bursts included) are later slices. Unlink, the switch + consent and pause are real (slice 2).
@@ -342,14 +342,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         internal IEnumerable<string> PillTexts => HeroPills.Children.OfType<Border>().Select(b => (b.Child as TextBlock)?.Text ?? "");
 
-        /// <summary>Circe's mood (null with the heat row off, as WPF hides the meter).</summary>
+        /// <summary>Circe's mood (null with the heat row off, which hides the meter).</summary>
         private void RefreshMood(ChasterService? chaster)
         {
-            var mood = chaster?.Mood;
-            TxtMood.IsVisible = mood != null;
-            if (mood is not { } m) return;
-            TxtMood.Text = Loc.GetF("chaster_mood_peek", Loc.Get(m.WordKey), m.FactorText);
-            TxtMood.Foreground = new SolidColorBrush(ChasterRailChip.MoodColour(m.Level));
+            try { MoodMeter.Apply(chaster?.Mood); }
+            catch (Exception ex) { Serilog.Log.Debug("[Chaster] mood meter: {E}", ex.Message); }
+        }
+
+        /// <summary>Circe says a line on the page (Core CirceLines, picked by the shell).</summary>
+        internal void SayLine(string text)
+        {
+            try { PageSays.Say(text); }
+            catch (Exception ex) { Serilog.Log.Debug("[Chaster] page line: {E}", ex.Message); }
         }
 
 
