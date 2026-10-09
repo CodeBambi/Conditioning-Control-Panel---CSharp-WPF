@@ -1989,7 +1989,7 @@
                         </ComboBox.ItemContainerTheme>
                     </ComboBox>
                     <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v7_0_5_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip.Tip="{loc:Str tooltip_v6_11_3_locktober}"
+                            Click="BtnUpdateAvailable_Click" ToolTip.Tip="{loc:Str tooltip_v7_0_5_stay_tuned}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Theme>
                             <ControlTheme TargetType="Button">

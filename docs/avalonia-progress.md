@@ -1554,3 +1554,18 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/audit-fix-safety: +257
 - Closes 7 still-open P1/P2 audit findings (#1790, #1987 x2, #1982, #1956, #1833, #1937): rebind double-capture, a CRLF scan test, a late follow-up reply's effects after a panic (both heads), a refused pink filter overwriting settings, Lockdown counted as busy, a held lock card replaying on stop, and remote session-end stops moved to the UI thread.
 - Each fix has a fail-proven headless or Core test.
+
+## avalonia-port/audit-fix-misc: +273
+- Closes seven open P0-P2 audit findings (#2096 #1763 #1908 #1456 #1318 #1313 #1289): the update tooltip key, the passive recap no longer staying on top, the rack toolbar layout, locked sessions shown as "Coming Soon", `**bold**` in help text, and the freeze pre-tick in the bug report.
+- Each Avalonia fix has a test that was seen to fail when the fix was broken; #1763 was checked with a string script.
+
+## avalonia-port/flake-followup: +12
+- Fixes the intermittent Core test `AiCommandGateTests.AFollowUpThatIsNotCancelledStillRunsItsReplysCommands`, which failed in the rows-roadmap and rows-takeaway push gates. The test now waits for the reply's flash instead of asserting the moment it releases the AI. Test-only change.
+
+## avalonia-port/rows-roadmap: +149
+- shell-roadmap stub -> wired: completion chime (WPF Exclamation) and keyboard-reachable nodes with a focus border; RoadmapNodeTests (2, fail-proven); live nodes screenshot in evidence/avalonia-port/rows-roadmap.
+- Mod-gated Roadmap sub-tab visibility recorded as missing under shell-ui-updates.
+
+## avalonia-port/rows-takeaway: +70
+- shell-takeaway: sample Takeaway orders replaced with WPF's empty state (no drawer/door on this head); headless test fail-proven, live sandbox check, binding errors 0.
+- Row stays stub: drawer, door, chips, tray and actions still missing.

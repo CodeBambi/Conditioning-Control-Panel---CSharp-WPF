@@ -24,6 +24,20 @@ public sealed class ReleaseButtonKeyTests
         Assert.Equal(wpf.Groups[1].Value, ava.Groups[1].Value);
     }
 
+    // Audit #2096 P2: the button read v7.0.5 while its tooltip still said v6.11.3 (WPF MainWindow.xaml:1992).
+    private static readonly Regex Tip = new(@"x:Name=""BtnUpdateAvailable""[^>]*?ToolTip(?:\.Tip)?=""\{loc:Str (\w+)\}""");
+
+    [Fact]
+    public void AvaloniaShellNamesTheSameReleaseTooltipKeyAsWpf()
+    {
+        var root = RepoRoot();
+        string Read(params string[] parts) => File.ReadAllText(Path.Combine(new[] { root }.Concat(parts).ToArray()));
+        var wpf = Tip.Match(Read("ConditioningControlPanel", "MainWindow", "MainWindow.xaml"));
+        var ava = Tip.Match(Read("CCP.Avalonia", "Views", "Windows", "MainShellWindow.axaml"));
+        Assert.True(wpf.Success && ava.Success, "BtnUpdateAvailable tooltip not found in one of the shells");
+        Assert.Equal(wpf.Groups[1].Value, ava.Groups[1].Value);
+    }
+
     private static string RepoRoot([CallerFilePath] string here = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", ".."));
 }
