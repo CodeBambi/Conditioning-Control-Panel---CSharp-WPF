@@ -59,10 +59,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // at rather than sit on. The language hook is the one addition: the two TextBlocks are
             // driven from code, so nothing else would re-render them after a language change.
             RefreshTierBadge();
+            RefreshProviderRows();
             var presence = this.FindControl<CheckBox>("ChkFriendsPresence")!;
             presence.IsCheckedChanged += ChkFriendsPresence_Changed;
             RefreshFriendsPresence();
-            EventHandler changed = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshTierBadge);
+            EventHandler changed = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() => { RefreshTierBadge(); RefreshProviderRows(); });
             AttachedToVisualTree += (_, _) => { LocalizationManager.Instance.LanguageChanged += changed; RefreshTierBadge(); };
             DetachedFromVisualTree += (_, _) => LocalizationManager.Instance.LanguageChanged -= changed;
         }
@@ -74,6 +75,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         public void OnSectionShown()
         {
             RefreshTierBadge();
+            RefreshProviderRows();
             RefreshFriendsPresence();
             PlansView.RefreshVault();   // the plates can move between visits (sign-in, tier change)
             // Throttled inside (30 s): the invites card lives on this copy (WPF RefreshVaultCore).
@@ -171,17 +173,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         private void OpenUrl(string url) => _ = Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), url);
 
-        // ponytail: the OAuth halves. Each needs a provider service this head does not have -
-        // PatreonService owns an HttpListener callback, and Discord/SubscribeStar the same shape.
-        // CoreAccount answers who is signed in; it deliberately carries no way to SIGN somebody in,
-        // because a login button that mints a session with no token store to keep it would leave
-        // the user logged in until they blink. CCP.Avalonia/Views/Dialogs/LoginDialog.axaml.cs is
-        // the surface to hang these on once a provider exists.
-        private void BtnPatreonLogin_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnSubscribeStarLogin_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDiscordLogin_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnLinkPatreon_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnLinkDiscord_Click(object? sender, RoutedEventArgs e) { }
+        // Live (social#2): the flows are in AccountSettingsSection.Providers.cs.
+        private void BtnPatreonLogin_Click(object? sender, RoutedEventArgs e) => _ = ProviderLoginAsync("patreon");
+        private void BtnSubscribeStarLogin_Click(object? sender, RoutedEventArgs e) => _ = ProviderLoginAsync("substar");
+        private void BtnDiscordLogin_Click(object? sender, RoutedEventArgs e) => _ = ProviderLoginAsync("discord");
+        private void BtnLinkPatreon_Click(object? sender, RoutedEventArgs e) => _ = LinkProviderAsync("patreon", "BtnLinkPatreon");
+        private void BtnLinkDiscord_Click(object? sender, RoutedEventArgs e) => _ = LinkProviderAsync("discord", "BtnLinkDiscord");
 
         // ponytail: cloud settings backup - ProfileSyncService.BackupSettingsAsync /
         // GetSettingsBackupInfoAsync / RestoreSettingsFromCloudAsync, all still in the WPF head and
@@ -190,11 +187,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         private void BtnBackupSettingsNow_Click(object? sender, RoutedEventArgs e) { }
         private void BtnRestoreSettings_Click(object? sender, RoutedEventArgs e) { }
 
-        // ponytail: GDPR export - ProfileSyncService.ExportDataAsync plus a save-file picker and a
-        // result message box. CoreAccount deliberately does not carry ExportDataAsync yet: it is
-        // one line to add, and adding it without the picker and the failure dialog would give the
-        // button a transport and no way to tell the user it failed.
-        private void BtnExportData_Click(object? sender, RoutedEventArgs e) { }
+        // Live (social#4): AccountSettingsSection.Providers.cs ExportDataAsync.
+        private void BtnExportData_Click(object? sender, RoutedEventArgs e) => _ = ExportDataAsync();
 
         // Live: WPF used Process.Start with UseShellExecute, Avalonia's Launcher is the
         // cross-platform equivalent. Same two URLs MainWindow.CloudBackup.cs and

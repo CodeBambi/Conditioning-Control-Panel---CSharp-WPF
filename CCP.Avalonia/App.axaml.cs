@@ -614,6 +614,8 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Brain = null; Serilog.Log.Error(ex, "CompanionBrain: initialization failed, falling back to the stateless AI path"); }
                 SeedCompanionTubeSeams();
                 CompanionEffects.Seed();
+                // ai#8: the BYO key at rest (DPAPI as WPF SecureStringHelper; the secret store where DPAPI is absent).
+                ConditioningControlPanel.Services.AIService.OpenAiCompatibleService.ApiKeyUnprotect = Platform.ApiKeyProtector.Unprotect;
                 // WPF App.xaml.cs:554 / 2786 / 2816: legacy adapters route through the brain, a brain wipe also
                 // clears the legacy local transcript, and a Local user gets the model warmed up in the background.
                 ConditioningControlPanel.Services.AIService.AiServiceStrategy.BrainProvider = () => Brain;

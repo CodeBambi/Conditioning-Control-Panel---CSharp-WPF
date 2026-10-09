@@ -27,13 +27,7 @@
 //                            submenu uses them: AvatarTube/AvatarTubeWindow.ContentGates.cs). What is
 //                            missing is a CALLER: the room's Z4 chip row / slut-mode cell are inert
 //                            (see NO CALLER YET below). Port both WITH the gate when those cells land.
-//   SetCustomApiKey        - Services.Auth.SecureStringHelper.Protect
-//                            (ConditioningControlPanel/Services/Auth/SecureStringHelper.cs).
-//                            CompanionPromptSettings.OpenAiCompatibleApiKey holds a DPAPI blob,
-//                            so writing the typed key there on this head would put a BYO API key
-//                            in settings.json IN THE CLEAR. CoreSecrets is the seam that fixes
-//                            this (CoreSecrets.ApiKey), but nothing READS the key from it yet, so
-//                            half the pair is worse than neither. Blocked on purpose.
+//   SetCustomApiKey        - PORTED (ai#8): Platform/ApiKeyProtector.SaveCustomKey, called by EngineRoomVm.
 //   the awareness observer - App.WindowAwareness.Start/Stop
 //                            (ConditioningControlPanel/Services/Awareness/). Dropped from
 //                            SetAwarenessEnabled and EnsureAwarenessV2Consent below: there is no

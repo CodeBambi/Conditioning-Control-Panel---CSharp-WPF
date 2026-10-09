@@ -106,6 +106,17 @@ namespace ConditioningControlPanel.Avalonia
                 CoreSettings.Save();
                 return !on || PinkFilterOverlay.IsShowing;
             });
+            // studio#16 / ai#2: WPF SpiralCommand writes the Spiral settings and refreshes the overlay. Same engine
+            // gate as the pink tint above (no BypassLevelCheck on this head); a first show still decoding counts.
+            SpiralCommand.Surface = (on, intensity) => Start(() =>
+            {
+                var s = CoreSettings.Current;
+                s.SpiralOpacity = intensity;
+                s.SpiralEnabled = on;
+                if (Host is { } host) SpiralOverlay.Refresh(host);
+                CoreSettings.Save();
+                return !on || SpiralOverlay.IsShowing || SpiralOverlay.Decoding is { IsCompleted: false };
+            });
             MediaCommand.VideoSurface = path => Start(() =>
                 CoreEngine.Video?.Trigger(path == null ? null : false, path) == true);
             MediaCommand.AudioSurface = PlayAudio;

@@ -807,6 +807,36 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// GDPR data access request (WPF ProfileSyncService.ExportDataAsync): POST /v2/user/export-data,
+        /// the server's JSON pretty-printed for the save file. Never throws.
+        /// </summary>
+        public async Task<(bool success, string? error, string? jsonData)> ExportDataAsync(string? unifiedId)
+        {
+            if (string.IsNullOrEmpty(unifiedId)) return (false, "You must be logged in to export your data", null);
+            try
+            {
+                var payload = new JObject { ["unified_id"] = unifiedId };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/user/export-data");
+                AddAuthHeader(request);
+                request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+                var response = await _http.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (await TryHandleMergedAsync(response, json)) return (false, Localization.Loc.Get("account_merged_retry_hint"), null);
+                    return (false, ServerError(json, response.StatusCode), null);
+                }
+                Log.Information("Data exported for user: {UnifiedId}", unifiedId);
+                return (true, null, JToken.Parse(json).ToString(Formatting.Indented));
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[V2Auth] Export data failed");
+                return (false, "Data export requires an internet connection", null);
+            }
+        }
+
+        /// <summary>
         /// Adds the X-Auth-Token header to a V2 API request if an auth token is available.
         /// </summary>
         private void AddAuthHeader(HttpRequestMessage request)

@@ -166,6 +166,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
             TxtProfileViewerName.Text = s.UserDisplayName ?? "You";
             ShowOwnActions(true);
+            ShowOwnDiscordDm();
+            RefreshProfileChrome();
             SetOnline(true, Loc.Get("label_online"));
             TxtProfileViewerLevel.Text = s.PlayerLevel.ToString();
             // WPF Browser.cs:1963-1981: the server rank, else your row by unified id, else by display name.
@@ -199,6 +201,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ApplyIdentityBadges(false, null, isOwn && CoreAccount.IsWhitelisted);
             TxtProfileViewerName.Text = entry.DisplayName;
             ShowOwnActions(isOwn);
+            ShowDiscordDm(entry.HasDiscord ? entry.DiscordId : null, entry.DisplayName);
+            RefreshProfileChrome();
             SetOnline(entry.IsOnline, entry.IsOnline ? "Online" : "Offline"); // WPF's literals
             TxtProfileViewerLevel.Text = entry.Level.ToString();
             TxtProfileViewerRank.Text = TrainerCardText.Rank(entry.Rank);
@@ -343,14 +347,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnChangeDisplayName.IsVisible = show;
             BtnDeleteProfile.IsVisible = show;
         }
-        private void BtnProfileDiscord_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnProfileDiscord_Click(object? sender, RoutedEventArgs e) => OpenDiscordDm(sender);
 
         private void BtnProfileSearch_Click(object? sender, RoutedEventArgs e) => _ = SearchAsync(TxtProfileSearch.Text);
         private void BtnViewMyProfile_Click(object? sender, RoutedEventArgs e) => _ = ViewMyProfileAsync();
 
         /// <summary>The link-notice button reuses the Privacy panel's login/link flow verbatim on
         /// WPF — that handler drives BtnDiscordTabLogin on the long-lived panel instance.</summary>
-        private void BtnDiscordTabLogin_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnDiscordTabLogin_Click(object? sender, RoutedEventArgs e) => _ = DiscordTabLoginAsync(sender);
 
         /// <summary>Opens the relocated sharing controls, exactly as the WPF handler does
         /// (<c>mw.OpenProfilePrivacyDialog()</c>). The dialog borrows <see cref="PrivacyPanel"/>,
@@ -364,7 +368,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The hero's Share Profile CTA. Same door as the header account menu's
         /// "Public profile" row — MainWindow owns the URL and the launcher.</summary>
-        private void BtnProfileShare_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnProfileShare_Click(object? sender, RoutedEventArgs e) => OpenPublicProfilePage();
 
         private void TxtProfileSearch_KeyDown(object? sender, KeyEventArgs e)
         {
@@ -373,7 +377,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The Trainer Card's spiral plate. Opens the expanded map window — the same door
         /// the nav rail's miniature uses (MainWindow.ProfileSpiral.cs).</summary>
-        private void ProfileSpiralPlate_Click(object? sender, PointerReleasedEventArgs e) { }
+        private void ProfileSpiralPlate_Click(object? sender, PointerReleasedEventArgs e) => Host?.ShowTab(global::ConditioningControlPanel.Services.Descent.SpiralRoom.TabKey);
 
         /// <summary>Left-click on a badge pins or unpins it (own card only). The tile is reached
         /// through the sender's DataContext exactly as the WPF handler reads it.</summary>
