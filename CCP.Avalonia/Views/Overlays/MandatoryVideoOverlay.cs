@@ -355,8 +355,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         internal bool GracePaused => _gracePaused;
 
         /// <summary>The first Esc/panic press of a clip pauses it behind the card for up to 60 s; the
-        /// panic key only when panic does not override everything (PanicOverridesAll off).</summary>
+        /// panic key only when panic does not override everything (PanicOverridesAll off).
+        /// Never throws: a failure here returns false so the panic press still stops everything.</summary>
         internal bool TryGracePause(bool fromPanicKey)
+        {
+            try { return GracePause(fromPanicKey); }
+            catch (Exception ex) { Log.Warning(ex, "VideoService: grace pause failed; panic proceeds"); return false; }
+        }
+
+        private bool GracePause(bool fromPanicKey)
         {
             if (!ConditioningControlPanel.Services.Safety.PanicPolicy.AllowGracePause(fromPanicKey,
                     ConditioningControlPanel.Services.Safety.PanicPolicy.OverrideEnabled(CoreSettings.Current))) return false;
