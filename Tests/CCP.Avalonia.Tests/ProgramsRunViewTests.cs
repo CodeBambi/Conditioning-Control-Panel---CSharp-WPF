@@ -101,6 +101,15 @@ public sealed class ProgramsRunViewTests
             Assert.Equal(Loc.Get("programs_today_header"), F<TextBlock>("TxtTodayHeader").Text);
             Assert.True(F<TextBlock>("TxtTodayCloses").IsVisible);
 
+            // The app stays open past the day boundary: a read-only service raises no TodayChanged,
+            // so the next reveal of the tab must notice and relabel the day.
+            ProgramsTabView.Clock = new FixedClock(savedDay.AddDays(1).AddHours(12));
+            tab.IsVisible = false;
+            tab.IsVisible = true;
+            Assert.Equal(Loc.GetF("programs_last_saved_header", savedDay.ToShortDateString()),
+                F<TextBlock>("TxtTodayHeader").Text);
+            Assert.False(F<TextBlock>("TxtTodayCloses").IsVisible);
+
             // Nothing moved, nothing written.
             Assert.Equal(2, AvApp.Programs.ActiveEnrollment!.CurrentDay);
             Assert.Equal(ProgramEnrollmentState.Active, AvApp.Programs.ActiveEnrollment.State);

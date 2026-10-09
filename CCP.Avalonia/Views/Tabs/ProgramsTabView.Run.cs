@@ -34,6 +34,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private ProgramService? _subscribed;
         private bool _refreshPending;
 
+        /// <summary>The stale verdict the shown run panel was built with; null when no run panel is up.
+        /// A read-only service raises no TodayChanged, so crossing the day boundary is noticed here.</summary>
+        private bool? _builtStale;
+
         /// <summary>
         /// True when the program clock has moved past the saved day: the state is then a snapshot,
         /// not today. Display only - ProgramClock.ProgramDate is pure and nothing is written back.
@@ -73,8 +77,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
-            if (change.Property == IsVisibleProperty && IsVisible && _refreshPending && VisualRoot is not null)
-                RefreshPrograms();
+            if (change.Property != IsVisibleProperty || !IsVisible || VisualRoot is null) return;
+            var enrollment = AvApp.Programs?.ActiveEnrollment;
+            var boundaryCrossed = _builtStale is { } built && enrollment != null &&
+                                  built != IsSnapshotStale(enrollment, Clock.GetLocalNow().DateTime);
+            if (_refreshPending || boundaryCrossed) RefreshPrograms();
         }
 
         /// <summary>WPF RefreshProgramsUI + RebuildProgramsTab (:490-584): pick the panel, build it, reveal it.</summary>
@@ -96,6 +103,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var lapsed = !browse && enrollment!.State == ProgramEnrollmentState.Lapsed;
             var graduated = !browse && enrollment!.State == ProgramEnrollmentState.Graduated;
             var run = !browse && !lapsed && !graduated;
+            _builtStale = null;
 
             try
             {
@@ -133,6 +141,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var accent = MainShellWindow.AccentBrush(
                 !string.IsNullOrWhiteSpace(chapter?.AccentColor) ? chapter!.AccentColor : program.AccentColor);
             var stale = IsSnapshotStale(enrollment, Clock.GetLocalNow().DateTime);
+            _builtStale = stale;
 
             Find<Border>("RunAccentBar").Background = accent;
             var sigilPath = ProgramArtPaths.Sigil(program);
@@ -301,7 +310,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 plate.OpacityMask = new ImageBrush(hero) { Stretch = Stretch.UniformToFill };
                 plate.Fill = accent;
             }
-            Find<Rectangle>("TodayHeroGlow").Fill = MainShellWindow.ProgramRadialGlowBrush(accent, 70);
+            Find<Rectangle>("TodayHeroGlow").Fill = MainShellWindow.ProgramRadialGlowBrush(accent, 70, 0.78, 0.2, 0.9);
 
             Find<TextBlock>("TxtTodayTitle").Text = day.Title;
             Find<TextBlock>("TxtTodayBlurb").Text = day.Blurb;

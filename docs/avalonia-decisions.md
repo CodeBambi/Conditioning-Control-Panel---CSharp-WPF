@@ -698,7 +698,8 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   ends in `Save()` (ctor repair :561/:585, rollover :685/:709/:728, `TrackVerifier` :1094, nudge :1524, `Dispose`
   :1718), and `LoadState` also writes (recovering a leftover `.tmp` it `File.Move`s it over `programs.json`, ~:1593).
   Risk carried to slice 2: without rollover the loaded state can be days stale, so the run view must not present
-  `Today` as current, or must compute the date for display only without changing state.
+  `Today` as current, or must compute the date for display only without changing state. Also: a cloud sync can
+  replace the file while Linux is running; read-only makes that harmless here, but it matters for slice 3.
 - Chose (a) on oracle-deep's advice via the supervisor (P44). Checkpoint B must decide JsonExtensionData vs a version
   lock for schema skew before this head writes. Reviewer checks: WPF path byte-identical (`public ProgramService()`
   chains to the same path, readOnly false); no write/move under readOnly; startup uses CreateReadOnly + Dispose.
