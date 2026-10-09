@@ -30,7 +30,8 @@
 //     dialogs themselves DO exist here (CCP.Avalonia/Views/Dialogs/WhatsNewDialog.axaml.cs,
 //     Views/Controls/SeasonRecapCard); what is missing is the "has this launch already shown a
 //     modal" arbitration those read from App.
-//   CheckServerUpdateBanner / CheckServerAnnouncement and their DTOs (UpdateBannerResponse,
+//   (CheckServerUpdateBanner / CheckServerAnnouncement are PORTED: MainShellWindow.ServerBanners.cs.)
+//   was: CheckServerUpdateBanner / CheckServerAnnouncement and their DTOs (UpdateBannerResponse,
 //     AnnouncementResponse), plus _serverUpdateUrl and _serverAnnouncementShownThisLaunch - the
 //     banner needs the in-app updater, the announcement the startup popup arbitration.
 //     (RefreshMarqueeFromSettings + MarqueeResponse are PORTED: MainShellWindow.MarqueeStrip.cs.)
@@ -101,6 +102,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 InitializeBannerRotation();
                 InitializeMarqueeBanner();
                 InitializeBannerLinks();
+                InitializeServerBanners();
                 InitializeHeaderHud();
                 UpdateQuickLoginUI();
                 RefreshSessionFeatureLock();
