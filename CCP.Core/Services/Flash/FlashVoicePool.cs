@@ -26,6 +26,15 @@ namespace ConditioningControlPanel.Services.Flash
         private static readonly Random Rng = new();
         private static Queue<string> _queue = new();
 
+        /// <summary>A mod switch drops the shuffled cycle: the queue holds the OLD mod's clips, so
+        /// without this a switch kept speaking them (Infection Control's lines under CCP Default,
+        /// which has no voice) until the cycle ran dry - an engine restart did not help. WPF never
+        /// cleared its _soundQueue on a switch either; the port does it on purpose.</summary>
+        static FlashVoicePool()
+        {
+            CoreMods.ModChanged += (_, _) => Reset();
+        }
+
         /// <summary>Pool builder (tests swap it).</summary>
         internal static Func<AppSettings?, List<string>> Build = BuildPool;
 

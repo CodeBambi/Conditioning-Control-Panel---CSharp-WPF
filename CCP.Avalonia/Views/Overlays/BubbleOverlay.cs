@@ -47,6 +47,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static bool _pending;   // a frame is requested; the loop idles while the field is empty
         internal static Bitmap? Image;
 
+        /// <summary>The sprite was decoded once (<c>Image ??=</c>) and never again, so a mod switch
+        /// kept the old mod's bubble (Infection Control's pills under CCP Default) for the life of
+        /// the process. WPF resolves bubble.png through ModResourceResolver, whose cache ActivateMod
+        /// clears, so a switch repaints at once.</summary>
+        static BubbleOverlay()
+        {
+            CoreMods.ModChanged += (_, _) =>
+            {
+                if (Dispatcher.UIThread.CheckAccess()) ReloadImage();
+                else Dispatcher.UIThread.Post(ReloadImage);
+            };
+        }
+
+        /// <summary>Re-read the active mod's bubble.png now while bubbles fly, else on the next Start.</summary>
+        internal static void ReloadImage() => Image = _running ? Helpers.ModArt.TryLoad("bubble.png") : null;
+
         /// <summary>The "N/300 today" line listens to this (WPF AmbientXpBudgetChanged).</summary>
         internal static event Action? XpBudgetChanged;
 

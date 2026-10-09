@@ -163,6 +163,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeModSelector();
             RefreshThemeAwareElements();
 
+            // WPF: the personality picked in this mod comes back, like the look does (tester, 6.11.3).
+            try { ConditioningControlPanel.Services.PersonalityService.Shared.RestoreForActiveMod(); }
+            catch (Exception ex) { Log.Warning(ex, "Mod switch: personality restore failed"); }
+
             Log.Information("Mod changed to {ModId}", mods.ActiveModId);
         }
 

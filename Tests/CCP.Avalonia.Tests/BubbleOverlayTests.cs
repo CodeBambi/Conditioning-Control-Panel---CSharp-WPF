@@ -66,4 +66,47 @@ public sealed class BubbleOverlayTests
         Assert.False(Win32Overlay.Hits(rects, 2, 300, 300));   // the third rect is past count
         Assert.False(Win32Overlay.Hits(rects, 0, 120, 120));   // empty field: fully click-through
     }
+
+    /// <summary>Owner, 2026-10-09: Infection Control -> CCP Default kept the pills on screen. A mod
+    /// switch re-reads bubble.png at once while bubbles fly, and drops the cached sprite when idle.</summary>
+    [Fact]
+    public async Task Mod_switch_repaints_the_bubble_sprite()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+            var dir = System.IO.Directory.CreateTempSubdirectory("ccp-bubble-");
+            var png = System.IO.Path.Combine(dir.FullName, "pill.png");
+            using (var bmp = new global::Avalonia.Media.Imaging.WriteableBitmap(new PixelSize(7, 3), new Vector(96, 96)))
+                bmp.Save(png);
+            var running = typeof(BubbleOverlay).GetField("_running", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            var previous = CoreModArt.OverridePathProvider;
+            var oldImage = BubbleOverlay.Image;
+            try
+            {
+                // Idle: the old mod's sprite is dropped, the next Start reads the new one.
+                BubbleOverlay.Image = new global::Avalonia.Media.Imaging.WriteableBitmap(new PixelSize(2, 2), new Vector(96, 96));
+                CoreMods.RaiseModChanged(null, new ConditioningControlPanel.Models.ModPackage(new ConditioningControlPanel.Models.ModManifest(), null, true));
+                global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                Assert.Null(BubbleOverlay.Image);
+
+                // Running: the new mod's bubble.png is decoded straight away.
+                running.SetValue(null, true);
+                CoreModArt.OverridePathProvider = p => p == "bubble.png" ? png : null;
+                CoreMods.RaiseModChanged(null, new ConditioningControlPanel.Models.ModPackage(new ConditioningControlPanel.Models.ModManifest(), null, false));
+                global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                Assert.Equal(7, BubbleOverlay.Image!.PixelSize.Width);
+            }
+            finally
+            {
+                running.SetValue(null, false);
+                CoreModArt.OverridePathProvider = previous;
+                BubbleOverlay.Image = oldImage;
+                dir.Delete(true);
+            }
+            return Task.CompletedTask;
+        });
+    }
 }

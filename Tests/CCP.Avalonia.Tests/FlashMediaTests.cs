@@ -68,6 +68,50 @@ public sealed class FlashMediaTests
         finally { FlashVoicePool.Build = old; FlashVoicePool.Reset(); }
     }
 
+    /// <summary>Owner, 2026-10-09: Infection Control -> CCP Default kept speaking the old mod's
+    /// lines. The shuffled cycle is the old mod's; a switch must drop it so the next flash
+    /// rebuilds from the new mod's voice folder (none for CCP Default: silent).</summary>
+    [Fact]
+    public void Mod_switch_drops_the_old_mods_voice_cycle()
+    {
+        var old = FlashVoicePool.Build;
+        try
+        {
+            var active = "infection-control";
+            FlashVoicePool.Build = _ => active == "infection-control"
+                ? new List<string> { "nurse1.mp3", "nurse2.mp3", "nurse3.mp3" }
+                : new List<string>();
+            FlashVoicePool.Reset();
+            Assert.StartsWith("nurse", FlashVoicePool.Next(null));   // two nurse lines left in the cycle
+
+            active = BuiltInMods.CCPDefaultId;
+            ConditioningControlPanel.CoreMods.RaiseModChanged(null, new ModPackage(new ModManifest(), null, true));
+            Assert.Null(FlashVoicePool.Next(null));   // CCP Default has no voice: silent at once
+        }
+        finally { FlashVoicePool.Build = old; FlashVoicePool.Reset(); }
+    }
+
+    /// <summary>Hard rule 5 / ModAudioPolicy: the bundled baseline voice is Bambi Sleep's own, so
+    /// CCP Default (as in WPF 7.1.5) gets no voice-line rung from it; Bambi Sleep does.</summary>
+    [Fact]
+    public void Ccp_default_never_borrows_the_baseline_flash_voice()
+    {
+        var root = System.IO.Directory.CreateTempSubdirectory("ccp-voice-").FullName;
+        try
+        {
+            var dir = System.IO.Path.Combine(root, "Resources", "sounds", "flashes_audio");
+            System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, "line.mp3"), new byte[] { 1 });
+            bool Has(string mod) => ConditioningControlPanel.Services.Companion.CompanionContentResolver
+                .Candidates(ConditioningControlPanel.Services.Companion.CompanionChannel.VoiceLines, mod, null, root, root)
+                .Any(c => System.IO.Directory.Exists(c.Path));
+            Assert.True(Has(BuiltInMods.BambiSleepId));
+            Assert.False(Has(BuiltInMods.CCPDefaultId));
+            Assert.False(Has(BuiltInMods.LockedId));
+        }
+        finally { System.IO.Directory.Delete(root, true); }
+    }
+
     [Fact]
     public void Clip_decodes_at_most_480_on_the_long_side_and_clamps_the_rate()
     {
