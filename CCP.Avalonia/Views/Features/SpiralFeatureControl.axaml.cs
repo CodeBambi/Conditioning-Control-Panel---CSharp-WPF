@@ -61,13 +61,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             SliderOpacity.ValueChanged += SliderOpacity_Changed;
             CmbMonitor.DropDownOpened += (_, _) => PopulateMonitors();
             CmbMonitor.SelectionChanged += CmbMonitor_Changed;
-            BtnOpenLoom.Click += (_, _) =>
-            {
-                // ponytail: needs Services.Chaos.LoomHostService.Launch()
-                // (ConditioningControlPanel/Services/Chaos/), still in the WPF head. Its live-save
-                // feed, Services.Chaos.DtrhLoomStore.Changed, is in the same place - which is why
-                // this panel does not subscribe to it either.
-            };
+            // BtnOpenLoom is hidden in the markup: the Loom host (WPF Services.Chaos.LoomHostService)
+            // and its live-save feed (DtrhLoomStore.Changed) are not ported.
             BtnCornerGifs.Click += BtnCornerGifs_Click;
             BtnSelectGif.Click += BtnSelectGif_Click;
             BtnOpenSpiralFolder.Click += BtnOpenSpiralFolder_Click;
