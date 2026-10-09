@@ -1375,9 +1375,7 @@
                          row, ChromeFx never lights it, CacheNavDoorRows never walks it, and it must
                          not contribute the 40px door Viewbox markup NavRailFlyoutTests counts.
                          See Controls/DescentFuseRailChip.cs. -->
-                    <!-- ponytail: Controls/DescentFuseRailChip.cs (803 lines) is not on this base and is out of scope
-                         for this layer; collapsed stand-in, which is its shipped default state. -->
-                    <Border x:Name="FuseRailChip" IsVisible="False"/>
+                    <fx:DescentFuseRailChip x:Name="FuseRailChip"/>
                     <!-- v6.8.0 Web App door: a LAUNCHER, not a tab (same rule as the four Library
                          launchers) - it opens app.cclabs.app in the default browser, so it has its
                          own Click and deliberately no NavDoorMap row: NavDoor_Click on this Tag
