@@ -48,6 +48,9 @@ public sealed class EmiRingPickerTests
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(EmiSuggester.MaxPins, pins.Count);
             Assert.All(free, t => Assert.Contains((string)t.Tag!, pins));
+            // SaveNow, not the debounced save: the pin is on disk the moment the tile flips.
+            var onDisk = System.IO.File.ReadAllText(EmiState.FilePath);
+            Assert.All(free, t => Assert.Contains("\"" + (string)t.Tag! + "\"", onDisk));
             // Full: every unchecked tile is out of reach, so the seventh is seen coming.
             Assert.All(tiles.Where(t => t.IsChecked != true), t => Assert.False(t.IsEnabled));
             Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("emi_desk_ring_full"), picker.HintText);
