@@ -23,5 +23,10 @@
   </Application.Resources>
   <Application.Styles>
     <FluentTheme />
+    <!-- Every window wears the app icon in the taskbar (WPF: ApplicationIcon on the exe). Without
+         it Windows showed a generic window icon for the shell (owner, 2026-10-09). -->
+    <Style Selector=":is(Window)">
+      <Setter Property="Icon" Value="avares://CCP.Avalonia/Resources/app.ico"/>
+    </Style>
   </Application.Styles>
 </Application>

@@ -14,6 +14,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>            <!-- 'WinExe' just suppresses the console window; it is not Windows-specific -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Assets\app.ico</ApplicationIcon>   <!-- the exe's own icon (Explorer, pinned taskbar) -->
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
