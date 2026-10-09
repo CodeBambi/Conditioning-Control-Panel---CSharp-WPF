@@ -31,7 +31,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// to it. None of that needed a service on WPF either: it is view logic over
     /// <c>_leaderboardRanked</c>, which here is the fetched board (<see cref="RefreshLeaderboardAsync"/>, read-only).
     ///
-    /// What is still stubbed: the Discord DM, the season recap and the row double-click. Each is named at its call site.
+    /// What is still stubbed: the season recap and the jump-to-me flare. Each is named at its call site.
     ///
     /// Dropped: LstLeaderboard_PreviewMouseWheel and its ScrollViewer/row-pitch measuring. Its
     /// whole reason was that WPF's VirtualizingPanel.ScrollUnit=Pixel - forced on so "Jump to me"
@@ -113,19 +113,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnViewSeasonRecap_Click(s, e);
 
             this.FindControl<Button>("BtnRefreshLeaderboard")!.Click += (_, _) => _ = RefreshLeaderboardAsync();
-            // ponytail: the row double-click (profile lookup on the Discord tab) and the per-row Discord chip (a
-            // browser hop) are still unhooked.
-
-            // WPF derives this from the viewer's own skills: UpdateTrophyCaseColumns
-            // (MainWindow.Leaderboard.cs:1432) sets it from App.SkillTree.HasSkill("trophy_case")
-            // and re-runs the moment the skill is bought. Core has no skill seam to ask - it
-            // carries AddXP and TrackBubbleCountResult and nothing else - so this head cannot
-            // derive it. Forced ON rather than off on purpose: the Streak column and the
-            // tooltip's Best Session line are then covered by the render proof instead of
-            // sitting invisible, and neither is a gate on anything.
-            // ponytail: needs ConditioningControlPanel/Services/Progression/SkillTreeService.cs
-            // behind a Core seam.
-            ShowTrophyStats = true;
+            // WPF UpdateTrophyCaseColumns (MainWindow.Leaderboard.cs:1432): the Streak column and the tooltip's Best
+            // Session line belong to players who bought the trophy_case skill.
+            UpdateTrophyCaseColumns();
 
             Loaded += OnLeaderboardTabLoaded;
             PropertyChanged += OnLeaderboardTabPropertyChanged;
@@ -146,6 +136,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             get => GetValue(ShowTrophyStatsProperty);
             set => SetValue(ShowTrophyStatsProperty, value);
+        }
+
+        /// <summary>
+        /// WPF MainWindow.UpdateTrophyCaseColumns. Re-read on every show and every refresh, so a skill bought on the
+        /// Enhancements page is on the board the next time it is looked at.
+        /// </summary>
+        internal void UpdateTrophyCaseColumns()
+        {
+            try { ShowTrophyStats = ConditioningControlPanel.Models.SkillTreeRules.HasSkill(CoreSettings.Current, "trophy_case"); }
+            catch (Exception ex) { Log.Debug(ex, "Failed to update trophy case columns"); }
+        }
+
+        /// <summary>WPF BtnLeaderboardDiscord_Click: the row or podium Discord chip opens that player's Discord profile
+        /// (the same door as the Profile page's chip, DiscordTabView.OpenDiscordDm).</summary>
+        private void BtnLeaderboardDiscord_Click(object? sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            if ((sender as Button)?.Tag is not string id || string.IsNullOrEmpty(id)) return;
+            _ = Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), DiscordTabView.DiscordProfileUrl(id));
+            Log.Information("Opened Discord profile for a leaderboard entry");
         }
 
         /// <summary>True while the All-Time board is showing.</summary>
@@ -245,6 +255,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnLeaderboardTabPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
         {
             if (e.Property != IsVisibleProperty || !IsVisible) return;
+            UpdateTrophyCaseColumns();
             SettleDefaultMode();
             RefreshSeasonHeader();
         }
@@ -296,8 +307,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// MainWindow.Leaderboard.cs:953 RefreshLeaderboardAsync + RankLeaderboardEntries. Offline or a failed fetch leaves
         /// the board empty and says so in the status line, as WPF does. Never throws.
-        /// ponytail: no profile push before the fetch (write, unit 7), no rank snapshot (LeaderboardRankSnapshotService
-        /// is WPF-only), so every arrow is the muted dash; no Bark hook.
+        /// The profile is pushed first (WPF :977) so your own row is not a sync behind. ponytail: no Bark hook.
         /// </summary>
         internal async Task RefreshLeaderboardAsync()
         {
@@ -307,10 +317,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var stale = false;
             var status = this.FindControl<TextBlock>("TxtLeaderboardStatus")!;
             var button = this.FindControl<Button>("BtnRefreshLeaderboard")!;
-            status.Text = Loc.Get("label_loading_2");
+            status.Text = Loc.Get("label_syncing");
             button.IsEnabled = false;
             try
             {
+                // WPF :977: sync local stats to the cloud first so the board shows the latest numbers. PushAsync
+                // carries its own gates (signed in, loaded this session, cooldown) and never throws.
+                if (!CoreSettings.Current.OfflineMode) await PushBeforeFetch();
+                status.Text = Loc.Get("label_loading_2");
                 // WPF LeaderboardService.RefreshAsync: offline returns false with no error text.
                 var (page, error) = CoreSettings.Current.OfflineMode
                     ? (null, null)
@@ -326,6 +340,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 _page = page;
                 _ranked.Clear();
                 _ranked.AddRange(LeaderboardClient.Rank(page.Entries!, allTime));
+                BakeRankDeltas(allTime ? "all-time" : "monthly");
+                UpdateTrophyCaseColumns();
                 _sortKey = "rank";
                 RebuildLeaderboardView();
                 status.Text = Loc.GetF("lb_online_and_total", page.OnlineUsers, page.TotalUsers);
@@ -344,6 +360,90 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         private bool _fetching;
+
+        /// <summary>Tests only: the push every refresh makes before it fetches.</summary>
+        internal static Func<Task> PushBeforeFetch = async () =>
+        {
+            try
+            {
+                if (Platform.AccountSeed.Sync is { Loaded: true } sync) await sync.PushAsync("leaderboard-refresh");
+            }
+            catch (Exception ex) { Log.Debug(ex, "Leaderboard pre-fetch profile push failed"); }
+        };
+
+        private int? _youPreviousRank;
+        private bool _youPreviousRankKnown;
+
+        /// <summary>
+        /// The delta half of WPF RankLeaderboardEntries (:1046). Order is load-bearing: RecordIfDue rewrites the
+        /// baseline in memory as well as on disk, so every previous rank is READ into its row first and only then is
+        /// the board re-recorded.
+        /// </summary>
+        private void BakeRankDeltas(string mode)
+        {
+            _youPreviousRankKnown = false;
+            _youPreviousRank = null;
+            foreach (var entry in _ranked)
+            {
+                // Nothing to key a snapshot on: a muted dash, not a false "NEW".
+                if (string.IsNullOrEmpty(entry.UnifiedId)) { entry.ApplyRankDelta(null, known: false); continue; }
+                entry.ApplyRankDelta(LeaderboardRankSnapshots.GetPreviousRank(mode, entry.UnifiedId), known: true);
+            }
+
+            var myId = CoreAccount.UnifiedUserId;
+            if (!string.IsNullOrEmpty(myId))
+            {
+                _youPreviousRankKnown = true;
+                _youPreviousRank = LeaderboardRankSnapshots.GetPreviousRank(mode, myId);
+            }
+
+            LeaderboardRankSnapshots.RecordIfDue(mode, _ranked);
+        }
+
+        /// <summary>WPF SetLeaderboardStatus.</summary>
+        private void SetLeaderboardStatus(string text) => this.FindControl<TextBlock>("TxtLeaderboardStatus")!.Text = text;
+
+        /// <summary>
+        /// WPF OutsideBoardMessage (MainWindow.Leaderboard.cs:722): where you stand when your row is not on screen.
+        /// The server rank only, never a row's Rank (#693).
+        /// </summary>
+        internal string OutsideBoardMessage()
+        {
+            var rank = _page?.YourRank;
+            if (rank is not > 0) return Loc.Get("label_your_rank_unavailable");
+            var total = _page?.YourTotal;
+            if (rank.Value <= LeaderboardClient.FetchLimit)
+                return total is > 0
+                    ? Loc.GetF("label_your_rank_0_of_1", rank.Value, total.Value)
+                    : Loc.GetF("label_your_rank_0", rank.Value);
+            return total is > 0
+                ? Loc.GetF("label_rank_outside_board_3", rank.Value, total.Value, LeaderboardClient.FetchLimit)
+                : Loc.GetF("label_rank_outside_board_2", rank.Value, LeaderboardClient.FetchLimit);
+        }
+
+        /// <summary>
+        /// WPF LeaderboardService.GetPlayerPercentile: the server rank when it came, else your position in the fetched
+        /// slice (by unified id, then display name) over the board's total. 0 = unknown.
+        /// ponytail: WPF also matches the slice by Discord id; this head keeps no Discord id of its own to match on.
+        /// </summary>
+        internal int GetPlayerPercentile()
+        {
+            if (_page == null) return 0;
+            if (_page.YourRank.HasValue && _page.YourTotal is > 0)
+                return Math.Clamp((int)Math.Ceiling((double)_page.YourRank.Value / _page.YourTotal.Value * 100), 1, 99);
+
+            var rows = _page.Entries;
+            if (rows == null || rows.Count == 0 || _page.TotalUsers == 0) return 0;
+            var (id, name) = (CoreAccount.UnifiedUserId, CoreAccount.DisplayName);
+            var position = -1;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if ((!string.IsNullOrEmpty(id) && rows[i].UnifiedId == id)
+                    || (!string.IsNullOrEmpty(name) && string.Equals(rows[i].DisplayName, name, StringComparison.OrdinalIgnoreCase)))
+                { position = i + 1; break; }
+            }
+            return position <= 0 ? 0 : Math.Clamp((int)Math.Ceiling((double)position / _page.TotalUsers * 100), 1, 99);
+        }
 
         /// <summary>MainWindow.Leaderboard.cs:930: double-clicking a row opens that trainer's card on the Profile tab.</summary>
         private void LstLeaderboard_DoubleTapped(object? sender, global::Avalonia.Input.TappedEventArgs e)
@@ -371,8 +471,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// MainWindow.Leaderboard.cs:1263 UpdateYouBar. Reads the ranked board, not the filtered view, so a filter that
         /// hides you does not blank it.
-        /// ponytail: delta is always the dash (no snapshot); off the board, achievements show 0 and the percentile only
-        /// the server-rank branch of GetPlayerPercentile.
         /// </summary>
         private void UpdateYouBar()
         {
@@ -387,7 +485,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var s = CoreSettings.Current;
 
             F<TextBlock>("TxtYouRankNumber").Text = rank > 0 ? rank.ToString(CultureInfo.InvariantCulture) : "\u2013";
-            F<TextBlock>("TxtYouDelta").Text = "\u2013";
+            // WPF :1299: unknown or unranked = dash; no previous rank = NEW; else the move since the snapshot.
+            var delta = F<TextBlock>("TxtYouDelta");
+            var moved = _youPreviousRankKnown && rank > 0 && _youPreviousRank is > 0 ? _youPreviousRank.Value - rank : 0;
+            var isNew = _youPreviousRankKnown && rank > 0 && _youPreviousRank is not > 0;
+            delta.Text = isNew ? Loc.Get("lb_delta_new")
+                : moved > 0 ? "\u25B2" + moved
+                : moved < 0 ? "\u25BC" + (-moved) : "\u2013";
+            delta.Classes.Set("up", moved > 0);
+            delta.Classes.Set("down", moved < 0);
+            delta.Classes.Set("isnew", isNew);
             F<TextBlock>("TxtYouName").Text = name ?? "";
             F<TextBlock>("TxtYouInitials").Text = LeaderboardEntryData.BuildInitials(name);
             F<Ellipse>("EllYouAvatar").Fill = LeaderboardRow.BuildAvatarBrush(name);
@@ -397,7 +504,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             F<TextBlock>("TxtYouXp").Text = me?.XpColumnDisplay
                 ?? (IsAllTimeMode ? "\u2013" : FormatCompact(XpCurve.GetTotalXP(s.PlayerLevel, s.PlayerXP, s.DescentEpoch)));
 
-            var earned = me?.AchievementsCount ?? 0;
+            // Off the board the count is this install's own (WPF: App.Achievements.GetUnlockedCount()).
+            var earned = me?.AchievementsCount ?? (App.Achievements?.Progress?.UnlockedAchievements?.Count ?? 0);
             var earnable = Math.Max(1, ConditioningControlPanel.Models.Achievement.All.Values.Count(a => !a.IsHidden));
             F<TextBlock>("TxtYouAchievements").Text = $"{earned} / {earnable}";
             var bar = F<ProgressBar>("BarYouAchievements");
@@ -418,8 +526,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             F<TextBlock>("TxtYouGap").Text = gap ?? "";
             F<TextBlock>("TxtYouGap").IsVisible = !string.IsNullOrEmpty(gap);
 
-            var pct = _page?.YourRank is > 0 && _page.YourTotal is > 0
-                ? Math.Clamp((int)Math.Ceiling((double)_page.YourRank.Value / _page.YourTotal.Value * 100), 1, 99) : 0;
+            var pct = GetPlayerPercentile();
             F<TextBlock>("TxtYouPercent").Text = pct > 0 ? Loc.GetF("lb_top_percent", pct) : "";
             F<TextBlock>("TxtYouPercent").IsVisible = pct > 0;
         }
@@ -511,15 +618,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// this head, so this is the scroll without the flare - the row lands on screen, which is
         /// the whole promise of the button.
         ///
-        /// <para>ponytail: the off-the-board branch needs LeaderboardService.YourRank for its
-        /// message; with no service, and with your row merely filtered out rather than absent, the
-        /// honest thing is to do nothing rather than bounce the list at you.</para>
+        /// <para>Off the board, or with your row filtered out, the status line says where you stand
+        /// (<see cref="OutsideBoardMessage"/>). ponytail: no bounce off the end of travel and no You bar flare.</para>
         /// </summary>
         private void BtnJumpToMe_Click(object? sender, RoutedEventArgs e)
         {
-            if (_roster.ItemsSource is not IEnumerable<object> items) return;
-            var me = items.OfType<LeaderboardRow>().FirstOrDefault(r => r.IsCurrentUser);
-            if (me != null) _roster.ScrollIntoView(me);
+            try
+            {
+                // No slice at all (offline, or the fetch failed): not a dead button, the message says so.
+                if (_roster.ItemsSource is not IEnumerable<object> items || _ranked.Count == 0)
+                {
+                    SetLeaderboardStatus(OutsideBoardMessage());
+                    return;
+                }
+
+                var rows = items.OfType<LeaderboardRow>().ToList();
+                var me = rows.FirstOrDefault(r => r.IsCurrentUser);
+                // #693 fallback: a row that shipped a blank unified id is still on screen at its server rank.
+                var serverRank = _page?.YourRank ?? 0;
+                if (me == null && serverRank > 0 && serverRank <= LeaderboardClient.FetchLimit)
+                    me = rows.FirstOrDefault(r => r.Rank == serverRank);
+
+                if (me != null) _roster.ScrollIntoView(me);
+                else SetLeaderboardStatus(OutsideBoardMessage());
+            }
+            catch (Exception ex) { Log.Warning(ex, "Jump-to-me failed"); }
         }
 
         /// <summary>MainWindow.Leaderboard.cs:1412.</summary>
@@ -567,9 +690,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ------------------------------------------------------------------
         // What is still MainWindow's
         // ------------------------------------------------------------------
-        // ponytail: the row double-click needs DiscordTabView's profile search, which is itself a stub here; the
-        // per-row Discord chip opens a browser from inside a DataTemplate, so it needs a Click in
-        // LeaderboardTabView.axaml as well as a launcher. BtnViewSeasonRecap is revealed by the shell's
+        // BtnViewSeasonRecap is revealed by the shell's
         // BtnLeaderboard_Click (MainShellWindow.AchievementsTab.cs) when a snapshot exists.
     }
 
