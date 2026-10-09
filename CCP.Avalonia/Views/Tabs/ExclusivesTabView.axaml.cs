@@ -58,6 +58,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private bool _zonesQueued;
         private readonly List<DispatcherTimer> _entranceTimers = new();
         private readonly List<CancellationTokenSource> _sheens = new();
+        private readonly List<CardSheenAdorner> _cardSheens = new();
+        private int _cardSheenRetries;
 
         /// <summary>Gold of the BASIC SUBJECT plate, cyan of PRIME's, lilac for the free doors.
         /// Commerce colours: they never follow the mod accent.</summary>
@@ -269,7 +271,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             var spot = new ExclusiveCardRow(ExclusiveFeature.All[0]);
             Find<TextBlock>("TxtSpotArtGlyph").Text = spot.Art == null ? spot.Feature.Emoji : "";
-            Find<Image>("SpotArtImage").Source = ModArt.TryLoad(ArtName(spot.Feature.BannerArtResource), 1400) ?? spot.Art;
+            var banner = ModArt.TryLoad(ArtName(spot.Feature.BannerArtResource), 1400);
+            var spotArt = Find<Image>("SpotArtImage");
+            spotArt.Source = banner ?? spot.Art;
+            // WPF ApplySpotlightArt: banner art drifts from its centre; card art used as a fallback
+            // drifts from the feature's focal point, which pushes the subject back into view.
+            spotArt.RenderTransformOrigin = banner != null
+                ? new RelativePoint(0.5, 0.5, RelativeUnit.Relative)
+                : new RelativePoint(spot.Feature.FocalX, spot.Feature.FocalY, RelativeUnit.Relative);
             Find<TextBlock>("TxtSpotTitle").Text = spot.Title;
             Find<TextBlock>("TxtSpotTagline").Text = spot.Tagline;
             Find<Border>("SpotBadge").IsVisible = spot.HasBadge;
@@ -351,6 +360,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             // Sign shimmer: a band crosses each tier sign, staggered by group.
             StopSheens();
+            ApplyAmbientFlair();
             if (level == MotionLevel.Off) { QueueZones(); return; }
             int i = 0;
             double cross = level == MotionLevel.Full ? 1.1 : 2.2;
@@ -383,6 +393,48 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             foreach (var cts in _sheens) cts.Cancel();
             _sheens.Clear();
+            foreach (var sheen in _cardSheens) CardSheenAdorner.Detach(sheen);
+            _cardSheens.Clear();
+        }
+
+        /// <summary>
+        /// WPF StartExclusivesMotion + ApplyFreeTodayPulse + AttachExclusiveSheens: the spotlight's
+        /// Ken Burns drift, the FREE TODAY pills' breath and every card's glass sheen run only under
+        /// AllowAmbientLoops; the pills keep their gold glow wherever the tier allows glow.
+        /// </summary>
+        private void ApplyAmbientFlair()
+        {
+            bool loops = AmbientFxCanvas.Env.AllowAmbientLoops;
+            bool glow = AmbientFxCanvas.Env.AllowGlow(AmbientFxCanvas.Env.CurrentTier);
+            Find<Image>("SpotArtImage").Classes.Set("kenburns", loops);
+            var pills = Shelf<Border>("free-pill").Append(Find<Border>("SpotFreeToday"));
+            foreach (var pill in pills)
+            {
+                pill.Classes.Set("pulse", loops);
+                pill.Classes.Set("glow", glow);
+            }
+            if (loops) AttachCardSheens();
+        }
+
+        /// <summary>WPF AttachExclusiveSheens: adorner layers exist only once the shelf has rendered,
+        /// so a card without one retries a bounded number of times at Background priority.</summary>
+        private void AttachCardSheens()
+        {
+            foreach (var sheen in _cardSheens) CardSheenAdorner.Detach(sheen);
+            _cardSheens.Clear();
+            bool missing = false;
+            foreach (var card in Shelf<Border>("vault-card"))
+            {
+                var sheen = CardSheenAdorner.Attach(card, 12);
+                if (sheen == null) { missing = true; continue; }
+                _cardSheens.Add(sheen);
+            }
+            if (!missing) { _cardSheenRetries = 0; return; }
+            if (_cardSheenRetries++ >= 5) return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_motionOn && !_plansMode && AmbientFxCanvas.Env.AllowAmbientLoops) AttachCardSheens();
+            }, DispatcherPriority.Background);
         }
 
         private void StopFlair()
@@ -392,6 +444,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             StopSheens();
             if (this.FindControl<ItemsControl>("ExclusivesShelf") == null) return;
             foreach (var aura in Shelf<Border>("aura")) aura.Classes.Set("breathe", false);
+            foreach (var pill in Shelf<Border>("free-pill").Append(Find<Border>("SpotFreeToday"))) pill.Classes.Set("pulse", false);
+            Find<Image>("SpotArtImage").Classes.Set("kenburns", false);
             foreach (var card in Shelf<Border>("vault-card")) { card.Transitions = null; card.Opacity = 1; card.RenderTransform = null; }
         }
 
