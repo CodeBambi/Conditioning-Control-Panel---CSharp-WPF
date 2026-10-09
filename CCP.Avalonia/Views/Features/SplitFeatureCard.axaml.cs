@@ -200,6 +200,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// <summary>WPF RefreshFx: re-applies the motion/tier/focus gates (settings changed).</summary>
         internal void RefreshFx() => ApplyActiveState();
 
+        /// <summary>True while the breath clock runs (test seam).</summary>
+        internal bool IsBreathing => _breath != null;
+
         private void HookWindow(Window? window)
         {
             if (ReferenceEquals(_hostWindow, window)) return;
