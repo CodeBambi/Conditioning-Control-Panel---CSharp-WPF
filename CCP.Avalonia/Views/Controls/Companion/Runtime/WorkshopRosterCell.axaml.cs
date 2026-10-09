@@ -2,7 +2,10 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia;
+using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
 {
@@ -52,6 +55,59 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
                     (_, _) => PersonalityAssignRequested?.Invoke(this, index);
             }
         }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            Refresh();
+        }
+
+        /// <summary>
+        /// WPF MainWindow.CompanionTab.cs:85 UpdateCompanionCardsUI, the five cards' half: hidden
+        /// when the mod does not support the companion, mod-aware name, "MAX"/"Lv.N", flavour +
+        /// XP-mechanic tooltip, accent ring on the active one, lock visuals off. Every input is in
+        /// Core (CoreSettings progress/active id, CompanionDefinition, CoreMods.Service), read the
+        /// way CompanionService.GetProgress/ActiveCompanion read them. Called on attach and when
+        /// the room's tab is shown again (CompanionRoomView.ResumeClocks).
+        /// </summary>
+        public void Refresh()
+        {
+            var s = CoreSettings.Current;
+            if (s == null) return;
+            var mods = CoreMods.Service;
+            var activeId = (CompanionId)s.ActiveCompanionId;
+            var colors = new[] { mods?.GetAccentColorHex() ?? "#FF69B4", "#9370DB", "#50C878", "#FF6B6B", "#F5DEB3" };
+
+            for (int i = 0; i < 5; i++)
+            {
+                var id = (CompanionId)i;
+                var card = this.FindControl<Border>($"CompanionCard{i}")!;
+                if (mods?.IsCompanionSupported(id) == false)
+                {
+                    card.IsVisible = false;
+                    continue;
+                }
+                card.IsVisible = true;
+
+                var def = CompanionDefinition.GetById(id);
+                var name = def.GetDisplayName(s.SlutModeEnabled);
+                this.FindControl<TextBlock>($"TxtCompanion{i}Name")!.Text = mods?.MakeModAware(name) ?? name;
+
+                // Read-only, unlike CompanionService.GetProgress, which also seeds a missing entry.
+                var progress = s.CompanionProgressData.TryGetValue(i, out var saved) ? saved : CompanionProgress.CreateNew(id);
+                this.FindControl<TextBlock>($"TxtCompanion{i}Level")!.Text = progress.IsMaxLevel ? "MAX" : $"Lv.{progress.Level}";
+
+                var mechanic = mods?.MakeModAware(def.XPMechanicDescription) ?? def.XPMechanicDescription;
+                var flavor = mods?.MakeModAware(def.Description) ?? def.Description;
+                ToolTip.SetTip(card, string.IsNullOrWhiteSpace(mechanic) ? flavor : $"{flavor}\n{mechanic}");
+
+                card.BorderBrush = id == activeId && Color.TryParse(colors[i], out var c)
+                    ? new SolidColorBrush(c) : Brushes.Transparent;
+
+                this.FindControl<TextBlock>($"TxtCompanion{i}Lock")!.IsVisible = false;
+                card.Opacity = 1.0;
+            }
+        }
     }
 
     /// <summary>Strings from CCP.Core's Loc. See the porting notes in the repo-root CLAUDE.md
@@ -59,15 +115,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
     public sealed class WorkshopRosterCellViewModel
     {
         public string LocBeta => Loc.Get("label_beta");
-        public string LocSyntheticBlowdoll => Loc.Get("label_synthetic_blowdoll");
-        public string LocPerfectFuckpuppet => Loc.Get("label_perfect_fuckpuppet");
-        public string LocBrainwashedSlavedoll => Loc.Get("label_brainwashed_slavedoll");
-        public string LocPlatinumPuppet => Loc.Get("label_platinum_puppet");
-        public string LocBambiCow => Loc.Get("label_bambi_cow");
         public string LocTooltipAssignAiPersonality => Loc.Get("tooltip_assign_ai_personality");
-        // Placeholder only, exactly as in WPF: the host overwrites TxtCompanionNLevel.Text with
-        // "MAX" or $"Lv.{progress.Level}" (MainWindow.CompanionTab.cs:117). The five card names and
-        // the prompt labels are likewise re-written from there once mods and progress are known.
-        public string LocLv1 => Loc.Get("label_lv_1");
     }
 }

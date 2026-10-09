@@ -3184,27 +3184,11 @@ namespace ConditioningControlPanel
                 {
                     // Drop non-video "browse" links (e.g. a stray /videos/ listing) — they're not
                     // videos, so they don't belong in the pool and won't be re-saved.
-                    if (IsListingUrl(kvp.Value)) continue;
+                    if (VideoLinkPool.IsListingUrl(kvp.Value)) continue;
                     AddVideoLinkRow(kvp.Key, kvp.Value);
                 }
 
             UpdateNoVideoLinksPlaceholder();
-        }
-
-        /// <summary>
-        /// True for a HypnoTube browse/listing page (e.g. /videos/ or the site root) rather than a
-        /// specific video. Deliberately narrow: a /video/... page — even a typo'd one missing .html —
-        /// is still a video and stays editable.
-        /// </summary>
-        private static bool IsListingUrl(string? url)
-        {
-            if (string.IsNullOrWhiteSpace(url)) return false;
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
-            var host = uri.Host.ToLowerInvariant();
-            if (host != "hypnotube.com" && !host.EndsWith(".hypnotube.com", StringComparison.Ordinal))
-                return false;
-            var path = uri.AbsolutePath.TrimEnd('/').ToLowerInvariant();
-            return path == "" || path == "/videos" || path == "/video";
         }
 
         internal void BtnAddVideoLink_Click(object sender, RoutedEventArgs e)
@@ -3350,25 +3334,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void PersistVideoLinks()
         {
-            var pool = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var (nameBox, urlBox) in _videoLinkRows)
-            {
-                var url = urlBox.Text?.Trim() ?? "";
-                if (string.IsNullOrWhiteSpace(url)) continue; // a row with no URL isn't a link yet
-                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-                    continue;
-
-                var name = nameBox.Text?.Trim() ?? "";
-                if (string.IsNullOrWhiteSpace(name))
-                    name = HtUrlHelper.DeriveTitleFromUrl(url);
-
-                var unique = name;
-                int n = 2;
-                while (pool.ContainsKey(unique) && !string.Equals(pool[unique], url, StringComparison.OrdinalIgnoreCase))
-                    unique = $"{name} ({n++})";
-                pool[unique] = url;
-            }
+            var pool = VideoLinkPool.Build(_videoLinkRows.Select(r => ((string?)r.NameBox.Text, (string?)r.UrlBox.Text)));
 
             App.Mods?.SetUserVideoLinks(pool);
             App.Settings?.Save();
