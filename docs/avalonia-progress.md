@@ -1538,3 +1538,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-deeper-editor: +583
 - Deeper editor plays local audio through LibVLC (clock, seek, end, real length, panic surface). Editor and player previews use Core's host allowlist on every hop.
 - Player: Create new and Open in editor work (re-read, one editor per file, recent). The dialog picker remembers the last folder.
+
+## avalonia-port/audit-fix-media: +382
+- Audit fixes for #1778/#1843/#1933/#1932/#1935: overlap layer loop, media-folder fallback, panic-safe grace pause, bubble count LibVLC skip, hermetic Buttplug test.
+- Each fix has a real-path test proven red by a break (evidence/audit-fix-media/fail-proofs.txt); gate GATE-OK.
