@@ -122,4 +122,49 @@ public sealed class PanicKeyTests
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>Audit #1790: WPF's rebind click only raises a flag, so clicking it twice is one
+    /// capture. Two handlers here would leave the second attached after the first key, and the
+    /// NEXT key press anywhere would silently rebind the panic key again.</summary>
+    [Fact]
+    public async Task ClickingRebindTwiceCapturesOnlyTheNextKey()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var s = CoreSettings.Current;
+            var oldKey = s.PanicKey;
+            var section = new DevicesSettingsSection();
+            var window = new Window { Content = section };
+            try
+            {
+                s.PanicKey = "F8";
+                window.Show();
+                window.Activate();
+                var button = section.GetVisualDescendants().OfType<Button>().First(b => b.Name == "BtnPanicKey");
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+                void Press(global::Avalonia.Input.Key key) => window.RaiseEvent(new global::Avalonia.Input.KeyEventArgs
+                {
+                    RoutedEvent = global::Avalonia.Input.InputElement.KeyDownEvent,
+                    Key = key,
+                });
+                Press(global::Avalonia.Input.Key.F9);
+                Assert.Equal("F9", s.PanicKey);
+                Press(global::Avalonia.Input.Key.F10);
+                Assert.Equal("F9", s.PanicKey);
+            }
+            finally
+            {
+                window.Close();
+                s.PanicKey = oldKey;
+                MainShellWindow.CapturingPanicKey = false;
+            }
+            return Task.CompletedTask;
+        });
+    }
 }

@@ -78,15 +78,49 @@ public sealed class HapticsCoreTests
         }
     }
 
-    /// <summary>Intiface not running: connect reports false, never throws, stays disconnected.</summary>
+    /// <summary>Intiface not running: connect reports false, never throws, stays disconnected.
+    /// The Buttplug provider dials CoreSettings.Current.Haptics.ButtplugUrl (else Intiface's real
+    /// 12345), not the service's own settings, so the dead address goes there - and a loopback
+    /// listener that resets the connection proves it is the one dialled (audit #1935).</summary>
     [Fact]
     public async Task ConnectToAnAbsentIntifaceFailsGracefully()
     {
-        using var haptics = new HapticService(Settings(mock: false, buttplug: true));
-        var connect = haptics.ConnectAsync();
-        Assert.Same(connect, await Task.WhenAny(connect, Task.Delay(TimeSpan.FromSeconds(30))));
-        Assert.False(await connect);
-        Assert.False(haptics.IsConnected);
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        // Reset EVERY connection (a retry left in the backlog would hang the handshake).
+        var dialled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    var c = await listener.AcceptTcpClientAsync();
+                    c.Client.LingerState = new System.Net.Sockets.LingerOption(true, 0);
+                    c.Dispose();
+                    dialled.TrySetResult(true);
+                }
+            }
+            catch { dialled.TrySetResult(false); }
+        });
+        var url = $"ws://127.0.0.1:{((System.Net.IPEndPoint)listener.LocalEndpoint).Port}";
+        var global = CoreSettings.Current.Haptics;
+        var saved = global.ButtplugUrl;
+        global.ButtplugUrl = url;
+        try
+        {
+            using var haptics = new HapticService(Settings(mock: false, buttplug: true, url));
+            var connect = haptics.ConnectAsync();
+            Assert.Same(connect, await Task.WhenAny(connect, Task.Delay(TimeSpan.FromSeconds(30))));
+            Assert.False(await connect);
+            Assert.False(haptics.IsConnected);
+            Assert.True(await dialled.Task.WaitAsync(TimeSpan.FromSeconds(5)), "the test's address was dialled, not Intiface's 12345");
+        }
+        finally
+        {
+            global.ButtplugUrl = saved;
+            listener.Stop();
+        }
     }
 
     /// <summary>WPF App.AutoConnectHapticsAsync: never for the mock alone (the legacy default).</summary>

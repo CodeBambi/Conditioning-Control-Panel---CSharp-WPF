@@ -30,10 +30,11 @@
 //     dialogs themselves DO exist here (CCP.Avalonia/Views/Dialogs/WhatsNewDialog.axaml.cs,
 //     Views/Controls/SeasonRecapCard); what is missing is the "has this launch already shown a
 //     modal" arbitration those read from App.
-//   RefreshMarqueeFromSettings / CheckServerUpdateBanner / CheckServerAnnouncement and their
-//     three response DTOs (MarqueeResponse, UpdateBannerResponse, AnnouncementResponse), plus
-//     _serverUpdateUrl and _serverAnnouncementShownThisLaunch - all three are HttpClient calls
-//     to the CC Labs API. Networking is not a Core seam and this head has no API client.
+//   RefreshMarqueeFromSettings / CheckServerUpdateBanner and their two response DTOs
+//     (MarqueeResponse, UpdateBannerResponse), plus _serverUpdateUrl and
+//     _serverAnnouncementShownThisLaunch (only the intake nudge reads it) - HttpClient calls to
+//     the CC Labs API with no Core client yet. CheckServerAnnouncement is ported:
+//     MainShellWindow.Announcement.cs over Core V2AuthService.
 //   CheckIntakePassNudge / StartIntakeFromNudge - App.Programs (the weekly intake pass); the
 //     accepted nudge then wants ShowTab("gradedintake"), which does exist here.
 //   BannerWebLink_Click - Helpers.BrowserLauncher (ConditioningControlPanel/Helpers/
