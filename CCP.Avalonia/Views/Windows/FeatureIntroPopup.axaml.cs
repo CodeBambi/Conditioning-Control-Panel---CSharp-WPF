@@ -144,12 +144,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// The premium celebration rides the same card and seen-list but skips the pacing
-        /// cooldown: it fires at most once per install and has retry points on every launch,
-        /// so suppressing it (unspent) is always safe and delaying it never is. It belongs to no
-        /// door, so it neither claims nor is blocked by the per-door budget.
+        /// cooldown: each <paramref name="key"/> (<see cref="CelebrationKey"/> or a per-tier
+        /// <c>TierCelebration.KeyT1</c>/<c>KeyT2</c>, so a Basic -> Prime upgrade celebrates again)
+        /// fires at most once per install and has retry points on every launch, so suppressing it
+        /// (unspent) is always safe and delaying it never is. It belongs to no door, so it neither
+        /// claims nor is blocked by the per-door budget.
         /// </summary>
-        internal static void ShowCelebrationIfFirstTime(Window? owner) =>
-            ShowCore(CelebrationKey, owner, paced: false, doorKey: null);
+        internal static void ShowCelebrationIfFirstTime(Window? owner, string key = CelebrationKey) =>
+            ShowCore(key, owner, paced: false, doorKey: null);
 
         /// <summary>
         /// For the ONE card whose surface the app lands on by itself: the Dashboard is visible
@@ -746,24 +748,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
             },
 
-            [FeatureIntroPopup.CelebrationKey] = new FeatureIntroContent
+            [FeatureIntroPopup.CelebrationKey] = Celebration(FeatureIntroPopup.CelebrationKey, "Premium"),
+            // WPF FeatureIntroPopup.xaml.cs:734: one card per tier (TierCelebration), so a Basic -> Prime upgrade celebrates again.
+            [global::ConditioningControlPanel.Services.TierCelebration.KeyT1] = Celebration(global::ConditioningControlPanel.Services.TierCelebration.KeyT1, "Premium"),
+            [global::ConditioningControlPanel.Services.TierCelebration.KeyT2] = Celebration(global::ConditioningControlPanel.Services.TierCelebration.KeyT2, "Prime"),
+        };
+
+        private static FeatureIntroContent Celebration(string key, string tierName) => new()
+        {
+            Key = key,
+            Glyph = "💖",
+            RailTitle = "Thank You",
+            Title = "💖  " + tierName + " Unlocked",
+            Tagline = "Your support keeps the Lab running - and it just opened every door.",
+            Accent = "#FF69B4",
+            Bullets = new[]
             {
-                Key = FeatureIntroPopup.CelebrationKey,
-                Glyph = "💖",
-                RailTitle = "Thank You",
-                Title = "💖  Premium Unlocked",
-                Tagline = "Your support keeps the Lab running - and it just opened every door.",
-                Accent = "#FF69B4",
-                Bullets = new[]
-                {
-                    "All the exclusive tabs are yours: Takeover, Remote Control, She's Listening, Blink Trainer, Haptics, Awareness, Lockdown, Graded Intake.",
-                    "Your companion's AI limits go up, and premium quests, programs and exclusive achievements switch on.",
-                    "Look for the Premium Rail on the Dashboard - one flip per feature, all in one strip.",
-                    "Each exclusive tab introduces itself the first time you open it. Wander."
-                },
-                Footer = "Everything lives under the Exclusives menu. Enjoy - you earned it.",
-                DismissLabel = "Let's go 💖"
-            }
+                "All the exclusive tabs are yours: Takeover, Remote Control, She's Listening, Blink Trainer, Haptics, Awareness, Lockdown, Graded Intake.",
+                "Your companion's AI limits go up, and premium quests, programs and exclusive achievements switch on.",
+                "Look for the Premium Rail on the Dashboard - one flip per feature, all in one strip.",
+                "Each exclusive tab introduces itself the first time you open it. Wander."
+            },
+            Footer = "Everything lives under the Exclusives menu. Enjoy - you earned it.",
+            DismissLabel = "Let's go 💖"
         };
     }
 }
