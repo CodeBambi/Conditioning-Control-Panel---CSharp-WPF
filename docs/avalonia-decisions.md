@@ -669,3 +669,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Chose A on the supervisor's advice (P44). WPF behaviour changes for safety only: after a panic the late follow-up
   reply's effects no longer fire. Tests: `Tests/CCP.Core.Tests/AiCommandGateTests.cs` (panic drops, uncancelled runs,
   chat reply runs).
+
+## 2026-10-09: window-wide drop, single media file offers only "Add to Asset Library" (avalonia-port/rows-session-io)
+- Question: WPF `ImportDroppedFilesAsync` (MainWindow.SessionIO.cs:1470) asks Play / Edit / Add-to-Library for a single
+  playable file, and imports enhancements into `App.EnhancementLibrary`. This head has no Deeper player, editor or
+  enhancement library yet.
+- Option A (chosen): the same prompt with the library choice only (`dlg_media_drop_library` / `dlg_media_drop_cancel`),
+  then Core `AssetImportService` (copies, never moves); an enhancement drop shows `deeper_import_library_not_ready`,
+  WPF's own string for a missing library. Option B (rejected): import media without asking. Option C (rejected): ignore
+  media and enhancement drops.
+- Chose A on the supervisor's advice (P44). No file format changes; WPF has no Lockdown refusal on drops, so none is
+  added. Play/Edit stay missing until the Deeper player/editor rows land. Tests: `Tests/CCP.Avalonia.Tests/WindowDropTests.cs`.
