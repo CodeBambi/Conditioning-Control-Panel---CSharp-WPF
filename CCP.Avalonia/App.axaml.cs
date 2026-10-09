@@ -838,6 +838,8 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Warning(ex, "Tray icon unavailable; X closes the app"); }
                 // The panic key (WPF MainWindow.xaml.cs:363 installs its hook at startup the same way).
                 shell.StartPanicKey();
+                // platform#1: typed keyword triggers ride the panic hook's key events (WPF KeywordTriggerService).
+                Platform.KeywordTriggerHead.Start();
                 // Linux: one toast naming the distro's install command for any missing runtime library
                 // (docs/avalonia-linux-install.md). dlopen off the UI thread; nothing when all load.
                 Dispatcher.UIThread.Post(async () =>

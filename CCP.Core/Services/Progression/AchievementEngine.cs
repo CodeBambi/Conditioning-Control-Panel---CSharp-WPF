@@ -270,6 +270,16 @@ internal sealed class AchievementEngine
         _isDirty = true;
     }
 
+    /// <summary>One keyword trigger fired (WPF GamificationBridge.OnKeywordTriggerFired): the lifetime
+    /// counter, "magic_word" on the first, "pavlov" at <see cref="AchievementRules.PavlovKeywordTriggers"/>.</summary>
+    public void TrackKeywordTriggerFired()
+    {
+        Progress.KeywordTriggersFired++;
+        _isDirty = true;
+        TryUnlockExclusive("magic_word");
+        if (Progress.KeywordTriggersFired >= AchievementRules.PavlovKeywordTriggers) TryUnlockExclusive("pavlov");
+    }
+
     /// <summary>
     /// Unlock count filtered by exclusivity. The free (false) and patron (true) counts are
     /// deliberately separate and must never be summed. An earned IsPremiumFeature badge counts
