@@ -2389,30 +2389,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: EmiDeskWindow.Alive.cs - stops the poll when she goes.</summary>
         private void StopAlive() { }
 
-        /// <summary>
-        /// The click pat (WPF EmiDeskWindow.React.cs:119): disarms the hover pet so one gesture
-        /// cannot pat twice, plays the pat cue on every touch (EmiSfx's 130 ms floor stops a
-        /// double click machine-gunning it), and past the 6 s cooldown plays the pet chain and
-        /// counts the pat. ponytail: WPF's ChainLive guard, summon-cut, poke ladder (NotePoke /
-        /// PlayPokeFlick / glee streak) and the flick inside the cooldown are not on this head.
-        /// </summary>
-        private void PetFromClick()
-        {
-            try
-            {
-                if (_transiting || InputLocked) return;
-                DisarmPet();
-                _petArmed = true;
-                RaiseActivity();
-                PlayPatSfx();
-                if (DateTime.UtcNow < _petCooldownUntil) return;
-                _petCooldownUntil = DateTime.UtcNow.AddMilliseconds(PetCooldownMs);
-                PlayChain("pet");
-                CountPat();
-                FireDeskEvent("petted");
-            }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pat failed"); }
-        }
+        // The click pat + poke ladder: EmiDeskWindow.Poke.cs (E9).
 
         /// <summary>WPF EmiDeskWindow.React.cs:198 - the pat counter behind her affection state.</summary>
         private void CountPat()

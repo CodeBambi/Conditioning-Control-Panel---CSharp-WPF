@@ -78,4 +78,39 @@ public sealed class EmiDeskChainTests
             service.SaveImmediate(); CoreSettings.ServiceProvider = oldSettings;
         }
     });
+
+    [Fact]
+    public Task PokeLadder_ThirdGlee_FourthAnnoyed_FifthRage() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var oldSettings = CoreSettings.ServiceProvider;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var w = new EmiDeskWindow();
+        try
+        {
+            w.Show();
+            Dispatcher.UIThread.RunJobs();
+            var seen = new System.Collections.Generic.List<string?>();
+            for (int i = 0; i < 5; i++)
+            {
+                w.PetFromClick();
+                seen.Add(w.ChainId);
+                for (int t = 0; t < 8000 && w.ChainLive; t += 20)
+                {
+                    await Task.Delay(20);
+                    Dispatcher.UIThread.RunJobs();
+                }
+            }
+            Assert.Equal(new[] { "pet", "petFlick", "petStreak", "pokeAnnoy", "pokeRage" }, seen);
+        }
+        finally
+        {
+            w.ShutDown();
+            service.SaveImmediate(); CoreSettings.ServiceProvider = oldSettings;
+        }
+    });
 }
