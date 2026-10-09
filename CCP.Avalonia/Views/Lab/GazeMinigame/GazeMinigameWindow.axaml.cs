@@ -17,6 +17,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ConditioningControlPanel.Lab.GazeMinigame;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
@@ -32,31 +33,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
     /// Every screen, the round builder, the difficulty presets, the pass-time warning and the
     /// results list are ported whole; what needs a service is stubbed. Deviations:
     ///
-    ///  - <c>GazeMinigameSettings</c>, <c>GazePackRole</c>, <c>GazeVibrationMode</c>,
-    ///    <c>GazeRewardEffect</c> and <c>GazePackLibrary</c> still live in the WPF head (only
-    ///    <c>AssetPack</c> has moved to Core), so this file carries private twins of the enums
-    ///    and of the settings record — presets, clamps and bundled-audio list copied verbatim,
-    ///    because the chips, sliders and warning ARE view logic. Load/Save/Discover are stubs.
-    ///  - The library is seeded with <see cref="SampleLibrary"/> so the render exercises the
-    ///    card builder, both drop zones, the library strip and an enabled Start button.
-    ///  - The reward CLIP plays through <c>CoreAudio.PlayOneShot</c> (WPF's master^1.5 curve
-    ///    carried over); its folder is not linked into this head's csproj, so it currently logs
-    ///    a miss. The other four reward effects have no seam yet.
-    ///  - <c>App.Webcam</c> / <c>App.Flash</c> / <c>App.Haptics</c> / <c>App.Bubbles</c> /
-    ///    <c>App.MindWipe</c> / <c>App.Overlay</c>, LibVLC (<c>VideoView</c> + the whole
-    ///    stop/detach/dispose dance and its message pump), NAudio and XamlAnimatedGif are all
-    ///    head-side; each is a stub. <c>WebcamCalibrationWindow</c> is NOT - this head ships it,
-    ///    with the same <c>ShowDialogWithRecalibrate</c> static, so the banner's calibrate action
-    ///    is wired.
-    ///  - <b>Start is disabled, deliberately.</b> The gaze tracker is the whole game and it is
-    ///    head-side. Without it <c>_currentSide</c> is never anything but <c>None</c>, so neither
-    ///    accumulator moves, every round runs to its display cap and resolves on
-    ///    <c>_correctMs >= _wrongMs</c> - which is <c>0 >= 0</c>. That is not "resolves on the
-    ///    cap": it is GOOD GIRL, the reward effect and the jingle on every round, for a stare that
-    ///    never happened. So the setup screen, its packs, sliders, chips, warnings and the
-    ///    calibration dialog are all live, and Start states why it cannot run. Everything past it
-    ///    (countdown, gameplay, feedback, results, the ESC quit confirmation) is intact but
-    ///    unreachable until a tracker seam exists.
+    ///  - Settings, pack roles and discovery are the Core <c>GazeMinigameSettings</c> /
+    ///    <c>GazePackLibrary</c> (moved from the WPF head), so both heads share the same JSON.
+    ///  - <c>App.Webcam</c> -> <see cref="Platform.WebcamTracker"/>: consent, off-thread start,
+    ///    calibration check, then OnGazeSide / OnFaceLost / OnFaceFound drive the rounds.
+    ///    <c>App.Flash</c> suspend/resume -> <c>CoreFlash</c>; <c>App.Haptics</c> -> <c>CoreHaptics</c>.
+    ///  - Panic closes the game (PanicSurfaces "gaze-minigame"): panic also closes the camera here.
+    ///  - ponytail: still missing - video rounds (no pane player; not built, see
+    ///    <c>VideoRoundsPlayable</c>), animated GIFs (first frame only), the Flashes / Bubbles /
+    ///    MindWipe / OverlayPulse reward effects, and the reward clip folder (not linked).
     ///  - <c>MessageBox.Show</c> -> this head's <c>Views/Dialogs/MessageDialog.ConfirmAsync</c>,
     ///    so the mid-run "quit the session?" confirmation is raised again (awaited, hence the
     ///    re-test of <c>_gameRunning</c> after it).
@@ -78,19 +63,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         private enum AssetType { Image, Video }
         private enum RoundOutcome { Correct, Wrong, Timeout }
 
-        /// <summary>ponytail: a copy of GazePackRole from
-        /// ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs. Deleted when that
-        /// file moves to CCP.Core/Lab/GazeMinigame/ - see the twin below for why it has not.</summary>
-        private enum GazePackRole { Off, Focus, Ignore }
-
-        /// <summary>ponytail: a copy of GazeVibrationMode from
-        /// ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs. Deleted with the twin.</summary>
-        private enum GazeVibrationMode { None, OnCorrect, OnWrong }
-
-        /// <summary>ponytail: a copy of GazeRewardEffect from
-        /// ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs. Deleted with the twin.</summary>
-        private enum GazeRewardEffect { None, Flashes, Bubbles, Audio, MindWipe, OverlayPulse }
-
         private sealed record RoundSpec(AssetType Type, string CorrectPath, string NoisePath,
                                         GameSide CorrectSide, int DurationSec);
 
@@ -101,97 +73,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             public RoundOutcome Outcome;
             public double CorrectMs;
             public double WrongMs;
-        }
-
-        /// <summary>
-        /// Field-for-field twin of the head's <c>GazeMinigameSettings</c>, minus the JSON
-        /// attributes. The presets, the clamps and the bundled-audio list are copied verbatim:
-        /// they drive the difficulty chips and the sliders, which are view logic.
-        /// <para>ponytail: this whole class and the three enums above are a SECOND COPY of
-        /// <c>ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs</c>, which CLAUDE.md
-        /// forbids - they exist only because that file is still in the WPF head. It is portable
-        /// today: Newtonsoft plus <c>CorePaths</c>, and the only head-ism is two
-        /// <c>App.Logger</c> calls that become Serilog's static <c>Log</c>. <b>Move it to
-        /// CCP.Core/Lab/GazeMinigame/ and DELETE this twin</b>, which also restores Load/Save (and
-        /// with them the persisted difficulty, chips, sliders and pack roles).</para>
-        /// <para>Do NOT instead teach this twin to read and write the real file. Both heads share
-        /// <c>{UserData}/gaze-minigame-settings.json</c>, and the twin is not shape-compatible with
-        /// it: it has no <c>Packs</c> list, so a Save would silently drop the user's remembered
-        /// Focus/Ignore assignments, and it carries no <c>StringEnumConverter</c>, so the two enums
-        /// would round-trip as integers the WPF head reads back as the wrong members. A losing
-        /// writer is worse than the defaults.</para>
-        /// </summary>
-        private sealed class GazeMinigameSettings
-        {
-            public int ImageCount = 8;
-            public int VideoCount = 2;
-            public int ImageDurationSec = 5;
-            public int VideoMaxDurationSec = 30;
-            public int PassTimeSec = 3;
-            // 0 = strict mode: any glance at the noise side fires WRONG immediately.
-            public int WrongHoldMs;
-            public GazeVibrationMode VibrationMode = GazeVibrationMode.None;
-            public GazeRewardEffect RewardEffect = GazeRewardEffect.None;
-            public string RewardAudioFile = "bell.wav";
-            public string Difficulty = "Normal";
-
-            public void ApplyDifficulty(string name)
-            {
-                switch (name)
-                {
-                    case "Easy":
-                        PassTimeSec = 3; ImageDurationSec = 6; VideoMaxDurationSec = 30;
-                        WrongHoldMs = 600; ImageCount = 6; VideoCount = 1;
-                        Difficulty = "Easy";
-                        break;
-                    case "Normal":
-                        PassTimeSec = 3; ImageDurationSec = 5; VideoMaxDurationSec = 30;
-                        WrongHoldMs = 200; ImageCount = 8; VideoCount = 2;
-                        Difficulty = "Normal";
-                        break;
-                    case "Hard":
-                        PassTimeSec = 5; ImageDurationSec = 4; VideoMaxDurationSec = 20;
-                        WrongHoldMs = 0; ImageCount = 10; VideoCount = 3;
-                        Difficulty = "Hard";
-                        break;
-                    default:
-                        Difficulty = "Custom";
-                        break;
-                }
-                Clamp();
-            }
-
-            public static readonly string[] BundledAudioFiles =
-            {
-                "bell.wav", "chime.wav", "clicker.mp3", "lock-click.mp3"
-            };
-
-            public const int ImageCountMin = 0, ImageCountMax = 20;
-            public const int VideoCountMin = 0, VideoCountMax = 10;
-            public const int ImageDurationMin = 2, ImageDurationMax = 10;
-            public const int VideoDurationMin = 10, VideoDurationMax = 120;
-            public const int PassTimeMin = 3, PassTimeMax = 30;
-            public const int WrongHoldMinMs = 0, WrongHoldMaxMs = 2000;
-
-            /// <summary>ponytail: the real Load is in
-            /// ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs and reads the
-            /// shared gaze-minigame-settings.json. Defaults until that file is in Core; see the
-            /// class remarks for why this twin must not read it instead.</summary>
-            public static GazeMinigameSettings Load() => new();
-
-            /// <summary>Clamp only. ponytail: the real Save is in the same head file; writing the
-            /// shared JSON from this shape would drop the user's Packs list - see the class remarks.</summary>
-            public void Save() => Clamp();
-
-            private void Clamp()
-            {
-                ImageCount = Math.Clamp(ImageCount, ImageCountMin, ImageCountMax);
-                VideoCount = Math.Clamp(VideoCount, VideoCountMin, VideoCountMax);
-                ImageDurationSec = Math.Clamp(ImageDurationSec, ImageDurationMin, ImageDurationMax);
-                VideoMaxDurationSec = Math.Clamp(VideoMaxDurationSec, VideoDurationMin, VideoDurationMax);
-                PassTimeSec = Math.Clamp(PassTimeSec, PassTimeMin, PassTimeMax);
-                WrongHoldMs = Math.Clamp(WrongHoldMs, WrongHoldMinMs, WrongHoldMaxMs);
-            }
         }
 
         // ── XAML parts ──
@@ -248,6 +129,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         private DispatcherTimer? _roundTicker;
 
         private bool _gameRunning;
+        private bool _closed;
+        private bool _suspendedFlashServiceForGame;
+        /// <summary>Round timing and the countdown's waits; tests step them.</summary>
+        internal static TimeProvider Clock = TimeProvider.System;
+        internal static Func<TimeSpan, Task> Delay = t => Task.Delay(t);
 
         // Saved windowed state so ToggleFullscreen() can restore cleanly.
         private WindowState _savedState;
@@ -345,6 +231,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             _settings = GazeMinigameSettings.Load();
             ApplySettingsToSliders();
             InitSetupScreen();
+            Open.Add(this);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -365,45 +252,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
         private void InitSetupScreen()
         {
+            // Restore remembered custom folders (those that live outside the assets
+            // tree) so they reappear in the library, then discover + apply roles.
             _customPaths.Clear();
+            foreach (var p in _settings.Packs)
+                if (!string.IsNullOrWhiteSpace(p.Path)) _customPaths.Add(p.Path);
 
             DiscoverLibrary();
             UpdateDifficultyChips();
 
-            // WPF showed a "run a calibration first" nudge here, gated on
-            // App.Webcam?.Calibration == null. On this head the blocker is one step earlier -
-            // there is no tracker at all - so the banner states that instead. The calibrate
-            // action still opens the real calibration window.
-            ShowReadyBanner(NoTrackerReason, showCalibrateAction: true);
+            // Proactive calibration nudge so the user fixes it before staring at a
+            // Start button that would otherwise bounce them (the actual hard check
+            // still runs in BtnStartGame_Click).
+            if (Tracker.Calibration == null)
+                ShowReadyBanner("Tip: run a 16-point gaze calibration before playing so the game can tell which side you're looking at.", showCalibrateAction: true);
         }
 
         /// <summary>Rescan content folders, preserving the current role assignments.</summary>
         private void DiscoverLibrary()
         {
             _library.Clear();
-            // ponytail: needs ConditioningControlPanel/Lab/GazeMinigame/GazePackLibrary.cs, still
-            // in the WPF head. It is portable today - it already calls CorePaths.EffectiveAssets
-            // and Core's AssetPack, and its only head-ism is one App.Logger call. Move it to
-            // CCP.Core/Lab/GazeMinigame/ and this becomes GazePackLibrary.Discover(_customPaths).
-            // Until then the strip shows the sample library so the gallery, both zones and the
-            // Start gating all draw.
-            _library.AddRange(SampleLibrary());
+            _library.AddRange(GazePackLibrary.Discover(_customPaths));
 
-            // The extraPaths branch of GazePackLibrary.Discover, inlined so "+ Add folder" is not
-            // a button that validates a folder and then throws it away. Dies with the twin when
-            // GazePackLibrary moves to Core.
-            foreach (var custom in _customPaths)
-            {
-                var full = NormPath(custom);
-                if (_library.Any(p => NormPath(p.Path) == full)) continue;
-                var pack = AssetPack.FromFolder(full);
-                if (pack != null) _library.Add(pack);
-            }
-
+            // Apply saved roles by path; drop assignments whose folder vanished.
+            var saved = _settings.Packs.ToDictionary(p => NormPath(p.Path), p => p.Role, StringComparer.OrdinalIgnoreCase);
             foreach (var pack in _library)
             {
                 var key = NormPath(pack.Path);
-                if (!_roles.ContainsKey(key)) _roles[key] = SampleRole(pack);
+                if (!_roles.ContainsKey(key))
+                    _roles[key] = saved.TryGetValue(key, out var r) ? r : GazePackRole.Off;
             }
             // Forget roles for packs no longer present.
             var live = new HashSet<string>(_library.Select(p => NormPath(p.Path)), StringComparer.OrdinalIgnoreCase);
@@ -412,42 +289,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
             RenderPacks();
         }
-
-        /// <summary>Placeholder packs standing in for a real discovery pass: one image set, one
-        /// mixed set, one video-only set, so both card shapes (thumbnail path and glyph) and all
-        /// three panels are exercised by the render.</summary>
-        private static IEnumerable<AssetPack> SampleLibrary()
-        {
-            var root = CorePaths.EffectiveAssets;
-            yield return new AssetPack
-            {
-                Name = "goodgirl",
-                Path = System.IO.Path.Combine(root, "images", "goodgirl"),
-                ImagePaths = Enumerable.Range(1, 24).Select(i => $"goodgirl-{i:00}.png").ToList(),
-            };
-            yield return new AssetPack
-            {
-                Name = "spirals",
-                Path = System.IO.Path.Combine(root, "images", "spirals"),
-                ImagePaths = Enumerable.Range(1, 11).Select(i => $"spiral-{i:00}.png").ToList(),
-                VideoPaths = Enumerable.Range(1, 3).Select(i => $"spiral-{i:00}.mp4").ToList(),
-            };
-            yield return new AssetPack
-            {
-                Name = "static-noise",
-                Path = System.IO.Path.Combine(root, "videos", "static-noise"),
-                VideoPaths = Enumerable.Range(1, 6).Select(i => $"noise-{i:00}.mp4").ToList(),
-            };
-        }
-
-        /// <summary>ponytail: needs the persisted GazePackRef list; the sample assignment stands
-        /// in so Focus, Ignore and the library strip each hold a card.</summary>
-        private static GazePackRole SampleRole(AssetPack pack) => pack.Name switch
-        {
-            "goodgirl" => GazePackRole.Focus,
-            "spirals" => GazePackRole.Ignore,
-            _ => GazePackRole.Off,
-        };
 
         private static string NormPath(string p)
         {
@@ -634,27 +475,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         /// <summary>ponytail: the Packs list (GazePackRef) that would persist these roles is on the
         /// head's GazeMinigameSettings, not on this twin, so a role survives the session only. The
         /// in-memory _roles map is authoritative while the window is open.</summary>
-        private void SaveSelection() => _settings.Save();
+        private void SaveSelection()
+        {
+            // Persist only assigned packs (Focus/Ignore); Off packs are rediscovered.
+            // Keep any remembered custom folder even when Off so it survives a restart.
+            var customSet = new HashSet<string>(_customPaths.Select(NormPath), StringComparer.OrdinalIgnoreCase);
+            _settings.Packs = _library
+                .Select(p => new { Key = NormPath(p.Path), Pack = p })
+                .Where(x => _roles.TryGetValue(x.Key, out var r) && r != GazePackRole.Off || customSet.Contains(x.Key))
+                .Select(x => new GazePackRef
+                {
+                    Path = x.Pack.Path,
+                    Role = _roles.TryGetValue(x.Key, out var r) ? r : GazePackRole.Off,
+                })
+                .ToList();
+            _settings.Save();
+        }
 
-        /// <summary>Whether a gaze tracker is reachable from this head. Constant false; a single
-        /// named gate so restoring one is one edit, not a hunt.
-        /// <para>Checked against the WPF original before leaving it false: there is no mouse or
-        /// keyboard fallback to restore. GameSide has exactly one writer there, OnGazeSideChanged,
-        /// fed by App.Webcam.OnGazeSide - so with no tracker no input can move a round.</para>
-        /// <para><b>NOT <c>CoreWebcam.IsAvailable</c>, which is now true on this head (a blink-only
-        /// tracker) while this stays false.</b> This
-        /// gate stands for "a gaze-SIDE stream reaches this window", which is strictly more than
-        /// "this head has a camera engine". Binding it to the capability flag would enable Start the
-        /// moment any head seeded one, on a game whose rounds still could not advance. Point it at
-        /// the stream when the stream exists.</para></summary>
-        private static bool HasGazeTracker => false;
+        /// <summary>The camera engine (WPF App.Webcam). Its OnGazeSide is the game's only input.</summary>
+        private static Platform.WebcamTracker Tracker => Platform.WebcamTracker.Instance;
 
-        /// <summary>Why Start is disabled on this head, stated once so the summary line, the
-        /// opening banner and the post-calibration banner cannot drift apart. Phrased as a
-        /// missing capability rather than something the user forgot to do - there is no
-        /// calibration they could run that would make the game playable here.</summary>
-        private const string NoTrackerReason =
-            "This build has no webcam gaze tracker yet, so the game can't tell which side you're looking at — Start stays off until one is available.";
+        /// <summary>ponytail: no side-by-side video player on this head yet (the panes would show a
+        /// 🎬 glyph, a round nobody can play), so video rounds are not built and video-only
+        /// selections are refused with the shared-content message. True once the panes play video.</summary>
+        private const bool VideoRoundsPlayable = false;
 
         private void RefreshSetupState()
         {
@@ -669,14 +513,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 // Both buckets must be able to supply at least one shared content
                 // type, or the round builder dead-ends.
                 bool sharedImages = focus.ImageCount > 0 && ignore.Any(p => p.ImageCount > 0);
-                bool sharedVideos = focus.VideoCount > 0 && ignore.Any(p => p.VideoCount > 0);
+                bool sharedVideos = VideoRoundsPlayable && focus.VideoCount > 0 && ignore.Any(p => p.VideoCount > 0);
                 if (!sharedImages && !sharedVideos)
                     reason = "Focus and Ignore don't share a content type — pick sets that both have images, or both have videos.";
             }
-
-            // The last gate, and on this head the permanent one: the gaze tracker. Checked after
-            // the selection reasons so the user still gets useful feedback while picking packs.
-            if (reason == null && !HasGazeTracker) reason = NoTrackerReason;
 
             _btnStartGame.IsEnabled = reason == null;
             if (reason == null)
@@ -848,12 +688,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 _txtVibrationStatus.Text = "";
                 return;
             }
-            // ponytail: needs App.Haptics.IsConnected - HapticService lives in
-            // ConditioningControlPanel/Services/Haptics/HapticService.cs and does NOT move: it owns
-            // BLE/websocket devices. Core carries the provider INTERFACES only
-            // (CCP.Core/Services/Haptics/IHapticProvider.cs), no instance and no seam. Until one
-            // exists the not-connected line is the honest answer, and it matches FireVibration.
-            _txtVibrationStatus.Text = "Haptic device not connected — setting saved but no vibration will fire.";
+            _txtVibrationStatus.Text = CoreHaptics.Service?.IsConnected == true
+                ? "Haptic device connected."
+                : "Haptic device not connected — setting saved but no vibration will fire.";
         }
 
         private void UpdateRewardAudioVisibility()
@@ -946,14 +783,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             }
             catch (Exception ex) { Log.Warning(ex, "GazeMinigame: calibration dialog failed"); }
 
-            // WPF re-read App.Webcam?.Calibration here and hid the banner when it was set. There
-            // is nothing to re-read, and the calibration window's own sampling loop is stubbed, so
-            // saying "still not calibrated" would blame the user for the head's gap. Restate the
-            // real reason instead.
-            ShowReadyBanner(NoTrackerReason, showCalibrateAction: true);
+            if (Tracker.Calibration == null)
+                ShowReadyBanner("Still not calibrated — run a 16-point gaze calibration so the game can read which side you're looking at.", showCalibrateAction: true);
+            else
+                HideReadyBanner();
         }
 
-        private void BtnStartGame_Click(object? sender, RoutedEventArgs e)
+        private async void BtnStartGame_Click(object? sender, RoutedEventArgs e)
         {
             // Materialise the gaze packs from the Focus/Ignore assignment: the round
             // builder consumes _packs[0] as the correct target and the rest as noise,
@@ -971,18 +807,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             _packs.Add(focusPack);
             _packs.AddRange(ignorePacks);
 
-            // WPF's webcam preconditions sat here, in order: consent (WebcamConsentDialog),
-            // App.Webcam != null, an off-UI-thread App.Webcam.Start(), then a loaded gaze
-            // calibration — each failure staying on this screen with a banner. All four collapse
-            // to the single HasGazeTracker gate below, which runs after round generation so a bad
-            // Advanced-settings combination still reports itself.
-            //
-            // ponytail: needs WebcamTrackingService (ConditioningControlPanel/Services/Webcam/).
-            // The consent prompt is deliberately NOT restored ahead of it: WebcamConsentGiven /
-            // WebcamConsentVersion live in the shared AppSettings, so asking here would record a
-            // grant for a camera this head never opens and pre-consent the WPF head. Restore it
-            // with the tracker, as WebcamConsent.IsCurrent(CoreSettings.Current) plus this head's
-            // Views/Dialogs/WebcamConsentDialog — awaited, since the answer must land first.
+            // Webcam preconditions, in order. Each failure stays on the setup screen
+            // with a friendly banner — no modal interruption mid-flow.
+            if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
+            {
+                var dlg = new Views.Dialogs.WebcamConsentDialog();
+                await dlg.ShowDialogSafe(this);
+                if (!dlg.ConsentGiven)
+                {
+                    ShowReadyBanner("Camera consent is required for the gaze minigame.");
+                    return;
+                }
+            }
+
+            // Off the UI thread: camera open + model load can take seconds (WPF BUG-T3HE68DHXY).
+            if (!Tracker.IsRunning)
+            {
+                ShowReadyBanner("Starting the webcam…");
+                if (!await Tracker.StartAsync())
+                {
+                    ShowReadyBanner($"Couldn't start the webcam ({Tracker.LastError}). Check that no other app is using the camera.");
+                    return;
+                }
+                HideReadyBanner();
+            }
+
+            if (Tracker.Calibration == null)
+            {
+                ShowReadyBanner("No gaze calibration loaded yet. Run a 16-point calibration first so the minigame can tell which side you're looking at.", showCalibrateAction: true);
+                return;
+            }
 
             // All good — generate rounds, persist settings, advance.
             try
@@ -1002,20 +856,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
             _settings.Save();
 
-            // The tracker gate. Deliberately AFTER round generation so a bad Advanced-settings
-            // combination still surfaces its own message; the run itself stops here.
-            if (!HasGazeTracker)
-            {
-                ShowReadyBanner(NoTrackerReason, showCalibrateAction: true);
-                return;
-            }
-
             HideReadyBanner();
 
-            // WPF also suspended the main-session FlashService here so its random flashes
-            // don't pop over the gaze targets (bug #202), restoring it in Window_Closing.
-            // ponytail: needs App.Flash (ConditioningControlPanel/Services/Flash/FlashService.cs), which
-            // owns the flash overlay windows and has no seam. Unreachable anyway - Start is gated.
+            // Suspend the ambient flash schedule for the duration of the minigame so its
+            // random flashes don't pop over the gaze targets (bug #202). Restored in Window_Closing.
+            if (CoreFlash.IsRunning)
+            {
+                CoreFlash.Stop();
+                _suspendedFlashServiceForGame = true;
+                Log.Information("GazeMinigame: suspended main FlashService for the duration of the game");
+            }
 
             BeginCountdown();
         }
@@ -1036,7 +886,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 throw new InvalidOperationException("Both round counts are 0. Set at least one image or video round in Advanced settings (or pick a difficulty).");
 
             bool imagesViable = correct.ImageCount > 0 && noise.Any(p => p.ImageCount > 0);
-            bool videosViable = correct.VideoCount > 0 && noise.Any(p => p.VideoCount > 0);
+            bool videosViable = VideoRoundsPlayable && correct.VideoCount > 0 && noise.Any(p => p.VideoCount > 0);
             int imageRounds = imagesViable ? _settings.ImageCount : 0;
             int videoRounds = videosViable ? _settings.VideoCount : 0;
 
@@ -1093,7 +943,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 foreach (var label in new[] { "3", "2", "1", "GO" })
                 {
                     _txtCountdown.Text = label;
-                    await Task.Delay(700);
+                    await Delay(TimeSpan.FromMilliseconds(700));
+                    if (_closed) return;   // panic/ESC during the countdown: no round starts on a closed window
                 }
 
                 _results.Clear();
@@ -1149,7 +1000,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 // .csproj change. This head's actual video path is the WebHost control (a real
                 // Avalonia WebView playing a file:// page's <video>), which DeeperEditorWindow
                 // proves for ONE pane; two side-by-side WebHosts are untested. A glyph holds the
-                // pane meanwhile - and nothing reaches it, because Start is gated.
+                // pane meanwhile; video rounds are not built (VideoRoundsPlayable).
                 var leftView = GlyphBlock("🎬");
                 var rightView = GlyphBlock("🎬");
                 _leftPane.Children.Add(leftView);
@@ -1162,8 +1013,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             _correctMs = 0;
             _wrongMs = 0;
             _currentSide = GameSide.None;
-            _roundStartedAt = DateTime.UtcNow;
-            _roundIgnoreGazeUntil = DateTime.UtcNow.AddMilliseconds(GraceMs);
+            _roundStartedAt = Clock.GetUtcNow().UtcDateTime;
+            _roundIgnoreGazeUntil = Clock.GetUtcNow().UtcDateTime.AddMilliseconds(GraceMs);
             _gameRunning = true;
             StartRoundTicker();
         }
@@ -1213,15 +1064,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             _roundTicker = null;
         }
 
-        private void RoundTicker_Tick(object? sender, EventArgs e)
+        internal void RoundTicker_Tick(object? sender, EventArgs e)
         {
             if (!_gameRunning) return;
             // Round-start grace: pause BOTH gaze accumulation and the duration timeout. The
             // duration is the visible-and-decisional window — the ~1s warm-up shouldn't eat
             // into it.
-            if (DateTime.UtcNow < _roundIgnoreGazeUntil)
+            if (Clock.GetUtcNow().UtcDateTime < _roundIgnoreGazeUntil)
             {
-                _roundStartedAt = DateTime.UtcNow;
+                _roundStartedAt = Clock.GetUtcNow().UtcDateTime;
                 return;
             }
             var spec = _rounds[_currentRoundIdx];
@@ -1256,7 +1107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             }
 
             var maxDisplayMs = spec.DurationSec * 1000.0;
-            var elapsedTotal = (DateTime.UtcNow - _roundStartedAt).TotalMilliseconds;
+            var elapsedTotal = (Clock.GetUtcNow().UtcDateTime - _roundStartedAt).TotalMilliseconds;
             if (elapsedTotal >= maxDisplayMs)
             {
                 // Resolve from observed dwell instead of returning a third "no-decision"
@@ -1347,13 +1198,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         }
 
         /// <summary>
-        /// WPF posted HapticEventKind.GazeReward so the Haptics tab's "Gaze reward" routing row
-        /// decides how it feels. ponytail: needs a seam over App.Haptics
-        /// (ConditioningControlPanel/Services/Haptics/HapticService.cs); it owns the device, so it
-        /// does not move to Core. UpdateVibrationStatus already tells the user nothing will fire.
+        /// Posts the GAZE event kind, so the Haptics tab's "Gaze reward" routing row decides how
+        /// this feels. A no-op when haptics are off or nothing is connected.
         /// </summary>
         private static void FireVibration(string tag)
-            => Log.Debug("GazeMinigame: vibration {Tag} suppressed (haptics not on this head)", tag);
+        {
+            try { _ = CoreHaptics.Service?.PostEvent(Services.Haptics.Core.HapticEventKind.GazeReward); }
+            catch (Exception ex) { Log.Warning(ex, "GazeMinigame: vibration trigger threw ({Tag})", tag); }
+        }
 
         /// <summary>The short reward clip, through the audio seam. WPF spun up its own
         /// self-disposing NAudio pair here; <c>CoreAudio.PlayOneShot</c> is that pattern already,
@@ -1524,20 +1376,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         //  Webcam events
         // ─────────────────────────────────────────────────────────────────────
 
-        // WPF subscribed to App.Webcam's OnGazeSide / OnFaceLost / OnFaceFound. OnGazeSide
-        // rather than the screen-projected OnGazeMove, because it already runs through the
-        // calibrated left/right classifier with hysteresis and a 3-frame stability filter.
-        // ponytail: needs WebcamTrackingService. It owns a camera, so it does not "move to
-        // Core" - it needs a seam. CoreWebcam is now that seam, but it carries capability +
-        // consent-revoke only and NOT OnGazeSide, on purpose: this window's only input writer is
-        // that stream, so a capability flag would open Start onto a game nothing can play. Restore
-        // the gate and the stream in the same layer. Until then _currentSide is None forever,
-        // which is why Start is gated (see the class header for what that silently produced).
-        // OnFaceFound/OnFaceLost were the only writers of _faceLost; without the service the
-        // face is simply never lost.
-        private void EnsureWebcamSubscribed() => _faceLost = false;
+        private bool _webcamSubscribed;
 
-        private void UnsubscribeWebcam() => _faceLost = false;
+        private void EnsureWebcamSubscribed()
+        {
+            if (_webcamSubscribed) return;
+            Tracker.OnGazeSide += OnGazeSideChanged;
+            Tracker.OnFaceLost += OnFaceLost;
+            Tracker.OnFaceFound += OnFaceFound;
+            _webcamSubscribed = true;
+        }
+
+        private void UnsubscribeWebcam()
+        {
+            if (!_webcamSubscribed) return;
+            Tracker.OnGazeSide -= OnGazeSideChanged;
+            Tracker.OnFaceLost -= OnFaceLost;
+            Tracker.OnFaceFound -= OnFaceFound;
+            _webcamSubscribed = false;
+        }
+
+        // OnGazeSide rather than the screen-projected OnGazeMove: it already runs through the
+        // calibrated left/right classifier with hysteresis and a 3-frame stability filter, and
+        // does not depend on the window's screen position during the fullscreen dance.
+        private void OnGazeSideChanged(GazeSide side)
+        {
+            if (!_gameRunning) return;
+            _currentSide = side switch
+            {
+                GazeSide.Left => GameSide.Left,
+                GazeSide.Right => GameSide.Right,
+                _ => GameSide.None,
+            };
+        }
+
+        private void OnFaceLost() => _faceLost = true;
+        private void OnFaceFound() => _faceLost = false;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Results
@@ -1695,14 +1569,48 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
         private void Window_Closing(object? sender, WindowClosingEventArgs e)
         {
+            _closed = true;
             _gameRunning = false;
             StopRoundTicker();
             DisposeCurrentRoundPlayers(synchronous: true);
             UnsubscribeWebcam();
-            // WPF also resumed the main-session FlashService here, but only when the engine was
-            // still running (bug #221). ponytail: needs App.Flash (FlashService.Start/Stop), still
-            // in the WPF head - BtnStartGame_Click has the matching suspend stub. The #221 gate
-            // itself no longer blocks: CoreSession.IsEngineRunning answers it.
+            Open.Remove(this);
+
+            if (_suspendedFlashServiceForGame)
+            {
+                _suspendedFlashServiceForGame = false;
+                // Only resume if the main session engine is still running (bug #221): blindly
+                // restarting leaves flashes firing with no session to stop them.
+                if (CoreSession.IsEngineRunning)
+                {
+                    CoreFlash.Start();
+                    Log.Information("GazeMinigame: resumed main FlashService after game ended");
+                }
+                else Log.Information("GazeMinigame: skipped FlashService resume — engine is no longer running");
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Panic (P06/P30): WPF had no entry - its panic left the camera on. Here panic closes the
+        //  camera (decision C), which would freeze _currentSide mid-round, so the game ends with it.
+        // ─────────────────────────────────────────────────────────────────────
+
+        private static readonly List<GazeMinigameWindow> Open = new();
+
+        /// <summary>The countdown or a round owns the (fullscreen) screen: panic ends it without arming the exit ladder.</summary>
+        /// <summary>Tests: which half holds the Focus asset this round (the builder picks it at random).</summary>
+        internal bool CorrectIsLeftForTest => _rounds[_currentRoundIdx].CorrectSide == GameSide.Left;
+
+        internal static bool IsAnyRunning() => Open.Any(w => w._gameRunning || w.WindowState == WindowState.FullScreen);
+
+        /// <summary>Closes every open game window; the countdown and ticker die in Window_Closing.</summary>
+        internal static void CloseAllForPanic()
+        {
+            foreach (var w in Open.ToList())
+            {
+                w._gameRunning = false;
+                w.Close();
+            }
         }
     }
 }
