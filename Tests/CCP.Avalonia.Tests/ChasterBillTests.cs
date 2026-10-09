@@ -46,7 +46,7 @@ public sealed class ChasterBillTests
     }
 
     /// <summary>A linked service, the tab on with prices, and a shown shell.</summary>
-    private static async Task Run(Func<ChasterService, MainShellWindow, Task> body)
+    internal static async Task Run(Func<ChasterService, MainShellWindow, Task> body)
     {
         if (Application.Current is null)
             AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
@@ -90,7 +90,7 @@ public sealed class ChasterBillTests
         }
     }
 
-    private static void Click(Window w, Control c)
+    internal static void Click(Window w, Control c)
     {
         var p = c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), w)!.Value;
         w.MouseDown(p, MouseButton.Left);
@@ -326,7 +326,7 @@ public sealed class ChasterBillTests
             Assert.True(custom.IsChecked);
 
             // Gentle has no heat row, so Circe's mood hides; Strict has one, so the key shows it (WPF RefreshPresets :1123).
-            var mood = tab.FindControl<TextBlock>("TxtMood")!;
+            var mood = tab.FindControl<CircesMoodMeter>("MoodMeter")!;
             Click(w, tab.FindControl<ToggleButton>("BtnPresetGentle")!);
             Assert.False(mood.IsVisible);
 
@@ -339,7 +339,8 @@ public sealed class ChasterBillTests
             Click(w, strict);
             Assert.Equal(TabPresets.Apply(TabPresets.Strict), CoreSettings.Current.ChasterPrices);
             Assert.True(mood.IsVisible);
-            Assert.Equal(Loc.GetF("chaster_mood_peek", Loc.Get(chaster.Mood!.Value.WordKey), chaster.Mood!.Value.FactorText), mood.Text);
+            Assert.Equal(Loc.Get(chaster.Mood!.Value.WordKey), mood.Word);
+            Assert.Equal(chaster.Mood!.Value.FactorText, mood.Factor);
             Assert.Equal((day.Minutes, day.PendingMinutes), (CoreSettings.Current.ChasterDayLimit.Minutes, CoreSettings.Current.ChasterDayLimit.PendingMinutes));
             Assert.Equal((backlog.Minutes, backlog.PendingMinutes), (CoreSettings.Current.ChasterBacklogLimit.Minutes, CoreSettings.Current.ChasterBacklogLimit.PendingMinutes));
             Assert.True(strict.IsChecked);

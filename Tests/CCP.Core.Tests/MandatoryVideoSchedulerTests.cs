@@ -477,4 +477,35 @@ public sealed class MandatoryVideoSchedulerTests
         Assert.Equal(new[] { ("/ai/named.mp4", false) }, host.Shown);
         Assert.False(v.Trigger(path: "/ai/other.mp4"));      // one already playing
     });
+
+    [Fact]   // WPF VideoService :3007: a do-not-disturb app in front reschedules (SkipRetrySeconds), never drops
+    public void Dnd_app_in_front_reschedules_the_scheduled_clip() => With(60, false, () =>
+    {
+        var s = CoreSettings.Current;
+        var (list, on, provider) = (s.DndProcessList, s.DndSuppressVideos, ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess);
+        var front = "mpv";
+        try
+        {
+            s.DndProcessList = new List<string> { "mpv" };
+            s.DndSuppressVideos = true;
+            ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess = () => front;
+            ConditioningControlPanel.Services.UI.DndGuard.ResetCacheForTests();
+            var clock = new FakeClock(); var host = new Host();
+            var v = new MandatoryVideoScheduler(host, clock, () => Clips);
+            v.Start();
+            clock.Advance(TimeSpan.FromHours(2));               // many ticks, every one skipped
+            Assert.False(v.IsPlaying);
+            front = "firefox";                                  // the user alt-tabs away
+            ConditioningControlPanel.Services.UI.DndGuard.ResetCacheForTests();
+            clock.Advance(TimeSpan.FromSeconds(MandatoryVideoScheduler.SkipRetrySeconds + 5));
+            Assert.Single(host.Shown);
+            v.Stop();
+        }
+        finally
+        {
+            (s.DndProcessList, s.DndSuppressVideos) = (list, on);
+            ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess = provider;
+            ConditioningControlPanel.Services.UI.DndGuard.ResetCacheForTests();
+        }
+    });
 }

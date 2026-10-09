@@ -57,6 +57,33 @@ public sealed class AvatarTubeWindowingTests
         Assert.Equal(Docked(main, tube), tube.Position);
     });
 
+    /// <summary>audit #1847: the input cut follows the dock side, so her clear margin never sits over
+    /// (and steals clicks from) the shell, docked left or right.</summary>
+    [Fact]
+    public Task InputRectNeverCoversTheShellOnEitherDockSide() => Run(detached: false, (main, tube) =>
+    {
+        void AssertClear()
+        {
+            var r = tube.InputRect!.Value;
+            var shell = new PixelRect(main.Position, PixelSize.FromSize(main.ClientSize, 1));
+            Assert.False(r.Translate(new PixelVector(tube.Position.X, tube.Position.Y)).Intersects(shell));
+            Assert.True(r.Width > tube.Width / 4);   // her art still takes clicks
+        }
+        AssertClear();
+        Assert.True(tube.Position.X < main.Position.X);           // left dock
+        main.Position = new PixelPoint(0, 200);                    // no room on the left: right dock
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(tube.Position.X > main.Position.X);
+        AssertClear();
+
+        // Float (no room either side, she hangs over the shell): both clear margins are cut, her art keeps input.
+        main.Width = 4000;
+        Dispatcher.UIThread.RunJobs();
+        var f = tube.InputRect!.Value;
+        Assert.True(f.X > 0 && f.Right < (int)Math.Round(tube.Width), $"float rect {f}");
+        Assert.True(f.Width > tube.Width / 4);
+    });
+
     [Fact]
     public Task AttachFromMenu_RestoresTheShellFirst() => Run(detached: true, (main, tube) =>
     {

@@ -1,5 +1,7 @@
 // PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.Exclusives.cs (1296 lines).
 //
+// Restored in ExclusivesTabView (rows-exclusives): BuildComingSoonCard, ApplyVeilLockBreath, ApplyFreeTodayPulse,
+// RefreshExclusiveTierPlates, Start/StopExclusivesMotion, Restart/AttachExclusiveSheens, VaultLivery.Apply.
 // ponytail: stub except RefreshExclusivesTab (the roster/gate repaint now lives in ExclusivesTabView). Every member below reaches App.*, a service, a device, a
 // WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
 // move services"). The file exists and each member is NAMED so nothing disappears
