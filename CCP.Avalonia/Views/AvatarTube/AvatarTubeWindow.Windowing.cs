@@ -195,7 +195,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             }
 
             ApplyTubeArtFlip(plan.Side == DockSide.Right);
-            string decision = $"{plan.Side}|{plan.Left},{plan.Top}|{pr}|{size}";
+            // Side or size changes only: a drag moves main every frame and must not flood the log.
+            string decision = $"{plan.Side}|{size}";
             if (decision != _lastDockDecision)
             {
                 _lastDockDecision = decision;
