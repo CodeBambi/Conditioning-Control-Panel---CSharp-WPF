@@ -669,3 +669,15 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Chose A on the supervisor's advice (P44). WPF behaviour changes for safety only: after a panic the late follow-up
   reply's effects no longer fire. Tests: `Tests/CCP.Core.Tests/AiCommandGateTests.cs` (panic drops, uncancelled runs,
   chat reply runs).
+## 2026-10-09: cloud settings backup/restore/export stays unwired on Avalonia (avalonia-port/rows-cloud-remember)
+- Question: the Settings door's Backup now / Restore from cloud / Export my data buttons need WPF `ProfileSyncService`
+  (`BackupSettingsAsync`, `GetSettingsBackupInfoAsync`, `RestoreSettingsFromCloudAsync`, `ExportDataAsync`). Wiring them
+  means Linux starts uploading settings and restoring backups made on Windows (and the reverse).
+- Option A (chosen): no wiring. `shell-cloud-backup` stays stub with the exact missing list and the cross-OS risk.
+- Option B (rejected for now): extract a Core backup client with the same endpoints and payload
+  (`ExcludedBackupProperties`, `SettingsBackupBudget`, `PreserveLocalOnlyFields` + the manual-restore keep list), WPF
+  delegating to it, Avalonia buttons wired, fake-HTTP tests.
+- Option C (rejected): GDPR export only, no upload/restore.
+- Chose A on the supervisor's advice (P44). Reason: the server sync contract is pending owner confirmation, and cross-OS
+  path translation (Windows `CustomAssetsPath`/asset lists restored onto Linux and the reverse) is not designed.
+- Follow-up: B needs an oracle-deep design for path translation before any lane takes it.

@@ -3376,6 +3376,8 @@
   "lab_ai_effects_memory_subtitle": "Let your companion fire app effects from chat (flashes, audio, overlays), and decide what they remember between sessions.",
   "tooltip_lab_ai_effects": "Master switch for AI-driven effects. When on, the local AI can fire flashes, audio, bubbles, overlays, haptics and other app effects from inside chat. Each effect type is opt-in below. Cloud AI cannot drive effects, only a local Ollama model can.",
   "tooltip_lab_ai_memory": "When on, the AI remembers your past chats across restarts so conversations feel continuous. When off, every chat starts fresh. 'Forget everything' wipes the saved memory immediately.",
+  "tooltip_remember_save": "Remember my current setup",
+  "tooltip_remember_recall": "Recall my saved setup (right-click to re-save)",
   "btn_forget_everything": "Forget everything",
   "tooltip_forget_everything": "Clears the local AI's saved conversation memory (in-memory + on-disk)",
   "dialog_forget_everything_prompt": "This will erase your Companion's local memory of your past conversation. They'll start fresh next time you chat. Continue?",
