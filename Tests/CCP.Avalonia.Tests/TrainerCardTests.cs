@@ -103,6 +103,8 @@ public sealed partial class AccountSeedTests
                 await tab.OpenProfileAsync("nobody_by_that_name");
                 Assert.False(F<Grid>("ProfileCardWrapper").IsVisible);
                 Assert.True(F<Border>("NoProfileSelected").IsVisible);
+                // A name that misses the board is asked for directly; a reply naming someone else is no match.
+                Assert.Contains("GET /user/lookup?display_name=nobody_by_that_name", wire.Seen);
                 // One board GET for the own card and all three searches: the board is cached for 60 s.
                 Assert.Single(wire.Seen, r => r.Contains("/v3/leaderboard"));
 

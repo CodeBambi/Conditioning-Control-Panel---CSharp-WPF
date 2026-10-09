@@ -142,6 +142,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 var u = await LookupByName(name);
                 if (u == null || string.IsNullOrWhiteSpace(u.DisplayName)) return null;
+                // Only the player asked for: a reply naming someone else is not a match.
+                if (!string.Equals(u.DisplayName!.Trim(), name, StringComparison.OrdinalIgnoreCase)) return null;
                 return new LeaderboardRow
                 {
                     DisplayName = u.DisplayName!, Level = u.Level, Xp = u.Xp, BubblesPopped = u.BubblesPopped, GifsSpawned = u.GifsSpawned,
