@@ -264,18 +264,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// between them. CCP.Avalonia/Views/Chaos/ChaosSlotPickerWindow.axaml.cs IS ported, so the
         /// picker is the one part that would work; the gate and both hosts are head-side, and a
         /// picker that opens a save and then descends into nothing is the wrong half to ship.</summary>
-        private void BtnStartChaos_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnStartChaos_Click(object? sender, RoutedEventArgs e) => Games.GameWindow.Launch("dtrh");
 
         /// <summary>ponytail: MainWindow.Lab.cs:390 - the same TierGate.DemandLab door, then
         /// DtrhHostService.Launch() or App.Chaos.StartRun against ChaosMeta's already-live slot.
         /// Quick Start skips the picker, never the gate, which is why this cannot be the one
         /// launch path that ships first.</summary>
-        private void BtnQuickStartChaos_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnQuickStartChaos_Click(object? sender, RoutedEventArgs e) => Games.GameWindow.Launch("dtrh");
 
         // ---- TOGETHER --------------------------------------------------------------------
 
         /// <summary>ponytail: needs ConditioningControlPanel/Services/Goon/GoonHostService.cs.</summary>
-        private void BtnStartGoon_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnStartGoon_Click(object? sender, RoutedEventArgs e) => LaunchGame("goon");
 
         private void BtnPlayRemoteControl_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("remotecontrol");
 
@@ -344,7 +344,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>ponytail: needs ArcademyHostService.Launch, which owns the door, the T2 check
         /// and the AudioOnlySession refusal. A launch, not navigation - the Arcademy has no tab.</summary>
-        private void BtnStartArcademy_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnStartArcademy_Click(object? sender, RoutedEventArgs e) => Games.GameWindow.Launch("arcademy");
+
+        /// <summary>WPF MainWindow.PlayTab.cs LaunchPlayGoon: every game but the Breakout demo and chess needs an
+        /// account (LauncherCatalogue.NeedsAccount), so a signed-out click opens the sign-in dialog instead.</summary>
+        private async void LaunchGame(string id)
+        {
+            bool free = id is "breakoutdemo" or "piecebypiece";
+            if (!free && !ConditioningControlPanel.CoreAccount.IsLoggedIn)
+            {
+                if (Owner is { } shell)
+                    try { await shell.OpenUnifiedLoginDialog(shell); }
+                    catch (Exception ex) { Log.Warning(ex, "[Play] sign-in dialog failed"); }
+                return;
+            }
+            Games.GameWindow.Launch(id);
+        }
 
         /// <summary>Loom NAVIGATES; a Launch() here would be a second editor. WPF calls
         /// <c>OpenStudioModule("spiral")</c> = ShowTab("studio") + StudioTab.FocusRackEntry("spiral").
