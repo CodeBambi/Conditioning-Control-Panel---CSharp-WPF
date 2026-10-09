@@ -44,15 +44,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private const double OwnedNodeGlowMinOpacity = 0.38, OwnedNodeGlowMaxOpacity = 0.72, OwnedNodeGlowSeconds = 3.8;
         private const double SkillNodeHoverScale = 1.25;
         private const int SkillNodeHoverInMs = 250, SkillNodeHoverOutMs = 200;
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;   // the shared beat (WPF 24 judders on 60 Hz)
 
         /// <summary>The FX clock. Tests swap in a stepped clock and call <see cref="StepFx"/>.</summary>
         internal static TimeProvider Time = TimeProvider.System;
 
-        private readonly List<DropShadowEffect> _ownedGlows = new();
+        // Owned-node glows: BoxShadow layers behind the nodes whose Opacity breathes. WPF breathed a
+        // DropShadowEffect; an Effect under the drifting gradients re-rendered every node every tick
+        // (AGENTS.md EFFECT/CACHE RULE).
+        private readonly List<Border> _ownedGlows = new();
         private readonly Dictionary<string, Bitmap?> _art = new();
         private LinearGradientBrush? _treeBrush, _headerBrush;
-        private DispatcherTimer? _fxTimer;
+        private global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock? _fxTimer;
         private long _fxStarted;
         private IDisposable? _visibilityWatch;
         private Window? _window;
@@ -73,7 +76,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal bool FxRunning => _fxTimer?.IsEnabled == true;
 
         /// <summary>The owned nodes' glows the breath drives. Test seam.</summary>
-        internal IReadOnlyList<DropShadowEffect> OwnedGlows => _ownedGlows;
+        internal IReadOnlyList<Border> OwnedGlows => _ownedGlows;
 
         // WPF repaints from SkillTreeService events and on every ShowTab; here AppSettings
         // PropertyChanged, the tab becoming visible, a mod switch and a language switch.
@@ -199,8 +202,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (!AmbientFxCanvas.Env.AllowAmbientLoops) { StopFx(rest: true); return; }
                 bool onScreen = IsEffectivelyVisible && _window is { IsActive: true } w && w.WindowState != WindowState.Minimized;
                 if (!onScreen) { StopFx(rest: false); return; }
-                _fxTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(1000.0 / AmbientFrameRate),
-                    DispatcherPriority.Background, (_, _) => Tick());
+                if (_fxTimer == null)
+                {
+                    _fxTimer = new global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock(this)
+                    { Interval = TimeSpan.FromSeconds(1.0 / AmbientFrameRate) };
+                    _fxTimer.Tick += (_, _) => Tick();
+                }
                 if (!_fxTimer.IsEnabled) { _fxTimer.Start(); Tick(); }
             }
             catch (Exception ex) { Serilog.Log.Debug("Enhancements EvaluateFx: {E}", ex.Message); }
@@ -331,6 +338,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static IBrush AccentLight => new SolidColorBrush(Color.Parse(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1"));
         private static IBrush Rgb(byte r, byte g, byte b) => new SolidColorBrush(Color.FromRgb(r, g, b));
 
+        /// <summary>A node glow: WPF's DropShadowEffect as a BoxShadow layer behind the node.</summary>
+        private static Border NodeGlow(Color colour, double blur, double opacity) => new()
+        {
+            Width = NodeWidth, Height = NodeHeight, CornerRadius = new CornerRadius(10), IsHitTestVisible = false,
+            BoxShadow = new BoxShadows(new BoxShadow { Blur = blur, Color = colour }), Opacity = opacity,
+        };
+
         /// <summary>DrawConnectionLines: green + glow when the child is owned, accent when only
         /// the parent is.</summary>
         private static Control Connector(double x1, double y1, double x2, double y2, bool childOwned, bool parentOwned) => new Line
@@ -341,6 +355,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             StrokeThickness = childOwned ? 3 : 2,
             Opacity = childOwned || parentOwned ? 1.0 : 0.3,
             Effect = childOwned ? new DropShadowEffect { Color = Colors.LimeGreen, BlurRadius = 8, OffsetX = 0, OffsetY = 0, Opacity = 0.6 } : null,
+            // Static glow under the drifting gradients: rasterised once, not re-blurred every tick.
+            CacheMode = childOwned ? new BitmapCache() : null,
         };
 
         /// <summary>CreateSkillTreeHeader, minus the four PRO expanders (AddProSection).</summary>
@@ -552,7 +568,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             art = bitmap != null
                 ? new Image { Source = bitmap, Stretch = Stretch.UniformToFill }
                 : new Border { CornerRadius = new CornerRadius(8, 8, 0, 0), Background = Placeholder(skill.Tier) };
-            if (locked) art.Effect = new BlurEffect { Radius = 8 };
+            if (locked) { art.Effect = new BlurEffect { Radius = 8 }; art.CacheMode = new BitmapCache(); }   // blurred once, not per tick
             grid.Children.Add(art);
 
             var name = new Border
@@ -602,15 +618,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Child = grid,
             };
             var wrapper = new Panel { Tag = skill.Id, RenderTransformOrigin = RelativePoint.Center, RenderTransform = TransformOperations.Parse("scale(1)") };
-            wrapper.Children.Add(node);
             if (owned)
             {
-                var glow = new DropShadowEffect { Color = Colors.LimeGreen, BlurRadius = 18, OffsetX = 0, OffsetY = 0, Opacity = 0.6 };
-                wrapper.Effect = glow;
+                var glow = NodeGlow(Colors.LimeGreen, 18, 0.6);
+                wrapper.Children.Add(glow);
                 _ownedGlows.Add(glow);
             }
             else if (canPurchase)
-                wrapper.Effect = new DropShadowEffect { Color = Colors.HotPink, BlurRadius = 15, OffsetX = 0, OffsetY = 0, Opacity = 0.7 };
+                wrapper.Children.Add(NodeGlow(Colors.HotPink, 15, 0.7));
+            wrapper.Children.Add(node);
 
             wrapper.PointerEntered += (_, _) => ApplyNodeHover(wrapper, true);
             wrapper.PointerExited += (_, _) => ApplyNodeHover(wrapper, false);
@@ -739,6 +755,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             card.Tag = skill.Id;
             if (owned) card.Effect = new DropShadowEffect { Color = Colors.Purple, BlurRadius = 12, OffsetX = 0, OffsetY = 0, Opacity = 0.5 };
             else if (canPurchase) card.Effect = new DropShadowEffect { Color = Colors.MediumPurple, BlurRadius = 10, OffsetX = 0, OffsetY = 0, Opacity = 0.4 };
+            if (card.Effect != null) card.CacheMode = new BitmapCache();   // static glow, rasterised once
 
             var tip = new StackPanel { MaxWidth = 280 };
             tip.Children.Add(new TextBlock { Text = CoreMods.MakeModAware(skill.LocalizedFlavorText), Foreground = Rgb(200, 150, 255), FontStyle = FontStyle.Italic, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });

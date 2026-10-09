@@ -3,7 +3,8 @@
 //
 // MotionFx is AmbientFxCanvas.Env here (AllowTransitions / AllowAmbientLoops / GlowColor). The OG
 // border's 3 s storyboard spun the gradient's RelativeTransform; Avalonia brushes carry a Transform
-// (origin 50%,50%), so the same RotateTransform turns 0 -> 360 forever - only while the gold frame
+// (origin 50%,50%), so a RotateTransform turns 0 -> 360 every 3 s on the window's 30 fps beat
+// (Helpers/BeatLoop; an Animation on the Transform threw and left it still) - only while the gold frame
 // shows, the Profile tab is visible, ambient loops are allowed and the window is active and not
 // minimised (WPF ApplyOgBorderLoop's gate, P01). Every input to that gate re-runs it.
 //
@@ -31,11 +32,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private const int ProfileStaggerMs = 40, ProfileStaggerCap = 6;   // MotionFx.StaggerMs / StaggerCap
 
         private bool _profileFxInitialized;
-        private CancellationTokenSource? _ogBorderLoop;
+        private const double OgBorderTurnSeconds = 3;   // WPF storyboard Duration
+        private global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop? _ogBorderLoop;
         private RotateTransform? _ogBorderRotation;
 
-        /// <summary>True while the OG border spins (tests read it; the loop itself is an Animation).</summary>
-        internal bool OgBorderLoopRunning => _ogBorderLoop != null;
+        /// <summary>True while the OG border spins (tests read it).</summary>
+        internal bool OgBorderLoopRunning => _ogBorderLoop?.IsRunning == true;
 
         /// <summary>WPF InitializeProfileFx: search focus glow + the window-state hooks that re-gate the loop.</summary>
         private void InitializeProfileFx()
@@ -97,32 +99,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                               && WindowState != WindowState.Minimized
                               && page.IsEffectivelyVisible;
                 if (!wanted) { StopOgBorderLoop(); return; }
-                if (_ogBorderLoop != null || container.Background is not Brush brush) return;
+                if (OgBorderLoopRunning || container.Background is not Brush brush) return;
 
-                _ogBorderRotation ??= new RotateTransform();
+                var rotation = _ogBorderRotation ??= new RotateTransform();
                 brush.TransformOrigin = RelativePoint.Center;
-                brush.Transform = _ogBorderRotation;
-                _ogBorderLoop = new CancellationTokenSource();
-                _ = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(3),
-                    IterationCount = IterationCount.Infinite,
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0), Setters = { new Setter(RotateTransform.AngleProperty, 0.0) } },
-                        new KeyFrame { Cue = new Cue(1), Setters = { new Setter(RotateTransform.AngleProperty, 360.0) } },
-                    },
-                }.RunAsync(_ogBorderRotation, _ogBorderLoop.Token);
+                brush.Transform = rotation;
+                _ogBorderLoop ??= new global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop(container,
+                    t => rotation.Angle = t / OgBorderTurnSeconds * 360 % 360);
+                _ogBorderLoop.Start();
             }
             catch (Exception ex) { Log.Debug("ApplyOgBorderLoop: {E}", ex.Message); }
         }
 
-        private void StopOgBorderLoop()
-        {
-            _ogBorderLoop?.Cancel();
-            _ogBorderLoop?.Dispose();
-            _ogBorderLoop = null;
-        }
+        private void StopOgBorderLoop() => _ogBorderLoop?.Stop();
 
         /// <summary>WPF StaggerProfileCards -> MotionFx.StaggerIn: visible cards fade in from a 10 px rise,
         /// 40 ms apart, capped at 6 slots.</summary>
@@ -136,28 +125,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 foreach (var card in stack.Children.Where(c => c.IsVisible))
                 {
                     var delay = TimeSpan.FromMilliseconds(ProfileStaggerMs * Math.Min(i++, ProfileStaggerCap));
-                    if (card.RenderTransform is not TranslateTransform)
-                        card.RenderTransform = new TranslateTransform();
-                    Entrance(card, delay, 220, OpacityProperty, 0.0, 1.0);
-                    Entrance(card, delay, 260, TranslateTransform.YProperty, 10.0, 0.0);
+                    if (card.RenderTransform is not TranslateTransform rise)
+                        card.RenderTransform = rise = new TranslateTransform();
+                    Entrance(card, rise, delay);
                 }
             }
             catch (Exception ex) { Log.Debug("StaggerProfileCards: {E}", ex.Message); }
         }
 
-        private static void Entrance(Control target, TimeSpan delay, int ms, AvaloniaProperty property, double from, double to) =>
-            _ = new Animation
-            {
-                Delay = delay,
-                Duration = TimeSpan.FromMilliseconds(ms),
-                Easing = new QuadraticEaseOut(),
-                FillMode = FillMode.Backward,   // holds "from" through the delay, then hands back to the local value
-                Children =
+        /// <summary>WPF MotionFx.StaggerIn for one card: opacity 0 -> 1 over 220 ms and a 10 px rise over
+        /// 260 ms, QuadraticEaseOut, after <paramref name="delay"/> (held at the start meanwhile). The
+        /// rise is written to the card's TranslateTransform: the old Animation put a TranslateTransform.Y
+        /// setter on the Control, which threw and aborted the stagger after the first card.</summary>
+        private static void Entrance(Control card, TranslateTransform rise, TimeSpan delay)
+        {
+            static double QuadOut(double p) => 1 - (1 - p) * (1 - p);
+            card.Opacity = 0;
+            rise.Y = 10;
+            // The clock starts at the first tick, so a busy dispatcher never skips the fade.
+            DateTime? start = null;
+            global::Avalonia.Threading.DispatcherTimer? timer = null;
+            timer = new global::Avalonia.Threading.DispatcherTimer(TimeSpan.FromMilliseconds(16),
+                global::Avalonia.Threading.DispatcherPriority.Render, (_, _) =>
                 {
-                    new KeyFrame { Cue = new Cue(0), Setters = { new Setter(property, from) } },
-                    new KeyFrame { Cue = new Cue(1), Setters = { new Setter(property, to) } },
-                },
-            }.RunAsync(target);
+                    start ??= DateTime.UtcNow + delay;
+                    var ms = (DateTime.UtcNow - start.Value).TotalMilliseconds;
+                    if (ms < 0) return;
+                    double o = Math.Min(1, ms / 220), y = Math.Min(1, ms / 260);
+                    card.Opacity = QuadOut(o);
+                    rise.Y = 10 * (1 - QuadOut(y));
+                    if (o >= 1 && y >= 1) timer!.Stop();
+                });
+            timer.Start();
+        }
 
         private static Color GlowAt(byte alpha)
         {

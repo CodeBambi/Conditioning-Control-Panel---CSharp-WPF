@@ -10,6 +10,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Chaster;
@@ -41,7 +42,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private readonly TextBlock _factor;
         private readonly SolidColorBrush _wordBrush = new(CalmMint);
         private readonly ScaleTransform _pop = new(1, 1);
-        private readonly DropShadowEffect _glow = new() { Color = CalmMint, BlurRadius = 14, OffsetX = 0, OffsetY = 0, Opacity = 0.45 };
+        // WPF's rim DropShadowEffect (blur 14, 0.45) as a BoxShadow layer behind the rim: a mood change
+        // flares the LAYER's Opacity, never an Effect property (AGENTS.md EFFECT/CACHE RULE).
+        private readonly Border _glowLayer;
         private CircesMood? _shown;
         private System.Threading.CancellationTokenSource? _anim;
 
@@ -76,11 +79,25 @@ namespace ConditioningControlPanel.Avalonia.Controls
             body.Children.Add(_cover);
             // Round the ends of what is inside the rim, not just the rim.
             body.Clip = new RectangleGeometry(new Rect(0, 0, TrackWidth, TrackHeight), TrackWidth / 2, TrackWidth / 2);
-            Children.Add(new Border
+            _glowLayer = new Border
             {
                 Width = TrackWidth + 3, Height = TrackHeight + 3, CornerRadius = new CornerRadius((TrackWidth + 3) / 2),
-                BorderThickness = new Thickness(1.5), BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
-                HorizontalAlignment = HorizontalAlignment.Center, ClipToBounds = true, Effect = _glow, Child = body,
+                HorizontalAlignment = HorizontalAlignment.Center, IsHitTestVisible = false,
+                BoxShadow = Shadow(CalmMint), Opacity = 0.45,
+            };
+            Children.Add(new Panel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children =
+                {
+                    _glowLayer,
+                    new Border
+                    {
+                        Width = TrackWidth + 3, Height = TrackHeight + 3, CornerRadius = new CornerRadius((TrackWidth + 3) / 2),
+                        BorderThickness = new Thickness(1.5), BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+                        HorizontalAlignment = HorizontalAlignment.Center, ClipToBounds = true, Child = body,
+                    },
+                },
             });
 
             _word = new TextBlock
@@ -103,6 +120,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
         internal string Factor => _factor.Text ?? "";
         internal Color WordColour => _wordBrush.Color;
         internal Border Cover => _cover;
+        internal Border GlowLayer => _glowLayer;
+
+        private static BoxShadows Shadow(Color c) => new(new BoxShadow { Blur = 14, Color = c });
 
         /// <summary>The dark cover's height at rest (the fill is the rest of the track).</summary>
         internal static double CoverHeight(CircesMood mood) => TrackHeight * (1 - mood.Fill);
@@ -124,7 +144,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _label.Text = Loc.Get("chaster_mood_label");
             _word.Text = Loc.Get(m.WordKey);
             _wordBrush.Color = colour;
-            _glow.Color = colour;
+            _glowLayer.BoxShadow = Shadow(colour);
             _factor.Text = m.FactorText;
             ToolTip.SetTip(this, Loc.GetF("chaster_mood_tip", m.FactorText));
 
@@ -137,9 +157,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 var from = _cover.Height;
                 _cover.Height = target;   // the rest value; the animation plays over it
                 _ = Tween(_cover, HeightProperty, from, target, 420, new BackEaseOut(), run);
-                _ = Tween(_word, ScaleTransform.ScaleXProperty, 1.35, 1d, 420, new ElasticEaseOut(), run);
-                _ = Tween(_word, ScaleTransform.ScaleYProperty, 1.35, 1d, 420, new ElasticEaseOut(), run);
-                _ = Tween(_glow, DropShadowEffect.OpacityProperty, 1d, 0.45, 600, new LinearEasing(), run);
+                _ = Tween(_pop, ScaleTransform.ScaleXProperty, 1.35, 1d, 420, new ElasticEaseOut(), run);
+                _ = Tween(_pop, ScaleTransform.ScaleYProperty, 1.35, 1d, 420, new ElasticEaseOut(), run);
+                _ = Tween(_glowLayer, OpacityProperty, 1d, 0.45, 600, new LinearEasing(), run);
             }
             else _cover.Height = target;
             _shown = m;
@@ -148,6 +168,24 @@ namespace ConditioningControlPanel.Avalonia.Controls
         internal static System.Threading.Tasks.Task Tween(Animatable target, AvaloniaProperty property, object from, object to, int ms,
             Easing easing, System.Threading.CancellationTokenSource run)
         {
+            if (target is Transform && from is double f && to is double t)
+            {
+                // Animation.RunAsync on a Transform throws (AGENTS.md TRANSFORM TRAP), so a pop on a
+                // ScaleTransform is written from a 16 ms timer. The ease runs unclamped: an elastic pop
+                // overshoots on purpose (scale, not opacity).
+                var started = DateTime.UtcNow;
+                target.SetValue(property, f);
+                DispatcherTimer? timer = null;
+                timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) =>
+                {
+                    if (run.IsCancellationRequested) { timer!.Stop(); return; }
+                    var p = Math.Min(1, (DateTime.UtcNow - started).TotalMilliseconds / ms);
+                    target.SetValue(property, f + (t - f) * easing.Ease(p));
+                    if (p >= 1) timer!.Stop();
+                });
+                timer.Start();
+                return System.Threading.Tasks.Task.CompletedTask;
+            }
             var a = new Animation { Duration = TimeSpan.FromMilliseconds(ms), Easing = easing };
             a.Children.Add(new KeyFrame { Cue = new Cue(0), Setters = { new Setter(property, from) } });
             a.Children.Add(new KeyFrame { Cue = new Cue(1), Setters = { new Setter(property, to) } });
