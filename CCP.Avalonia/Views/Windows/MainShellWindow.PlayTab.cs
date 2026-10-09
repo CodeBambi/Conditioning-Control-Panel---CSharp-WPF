@@ -58,8 +58,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             catch (System.Exception ex)
             {
-                // ponytail: WPF also shows a MessageBox here; logged only on this head.
                 Serilog.Log.Error(ex, "StartMantraSession failed");
+                // WPF MainWindow.PlayTab.cs:316: the same words (English there too, no loc key).
+                try
+                {
+                    _ = global::ConditioningControlPanel.Avalonia.Views.Dialogs.MessageDialog.ShowAsync(
+                        this, "Mantras", "Couldn't start the mantra session:\n\n" + ex.Message);
+                }
+                catch (System.Exception shown) { Serilog.Log.Debug("StartMantraSession notice: {E}", shown.Message); }
             }
         }
     }
