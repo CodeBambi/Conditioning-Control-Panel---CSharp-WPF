@@ -147,14 +147,21 @@ public sealed class LeashDrawerSectionTests
         await AvaloniaTestDispatcher.RunAsync(() =>
         {
             Setup();
+            // The drawer's constructor mounts the section itself, once, in its own slot.
             var drawer = new FriendsDrawer();
-            var slot = new StackPanel();
-            var mount = typeof(FriendsDrawer).GetMethod("MountLeash", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            mount.Invoke(drawer, new object[] { slot });
-            mount.Invoke(drawer, new object[] { slot });
+            var section = drawer.LeashSection;
+            Assert.NotNull(section);
+            var slot = Assert.IsAssignableFrom<Panel>(section!.Parent);
             Assert.Single(slot.Children);
-            Assert.IsType<LeashDrawerSection>(slot.Children[0]);
-            Assert.Same(drawer.LeashSection, slot.Children[0]);
+            Assert.Same(section, slot.Children[0]);
+            // A second mount adds nothing, in the same slot or another.
+            var mount = typeof(FriendsDrawer).GetMethod("MountLeash", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var other = new StackPanel();
+            mount.Invoke(drawer, new object[] { slot });
+            mount.Invoke(drawer, new object[] { other });
+            Assert.Single(slot.Children);
+            Assert.Empty(other.Children);
+            Assert.Same(section, drawer.LeashSection);
             return Task.CompletedTask;
         });
     }

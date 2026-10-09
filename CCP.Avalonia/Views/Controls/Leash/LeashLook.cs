@@ -1,7 +1,7 @@
 // PORTED from WPF 7.1.5 Controls/Leash/LeashLook.cs (the parts the drawer section uses): the
 // leash colours, the chunky plate button, the caption and the segmented switch. Flat on this head:
 // no Effect, no bevel (Avalonia effect/cache rule); the drawer palette is FriendsDrawer's.
-// ponytail: Chain, HeartTag, StickerDisc, WeekCell, Icon glyph art and LeashLook.Help ("?").
+// Art lives in LeashLook.Art.cs, the holder card's pieces in LeashLook.Holder.cs.
 using System;
 using System.Collections.Generic;
 using Avalonia;
@@ -13,7 +13,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Leash;
 
 internal static partial class LeashLook
 {
-    internal enum Tone { Gold, Mint, Pink, Ghost }
+    internal enum Tone { Gold, Mint, Pink, Ghost, Red }
 
     private static IBrush Rgb(byte r, byte g, byte b, byte a = 0xFF) => new SolidColorBrush(Color.FromArgb(a, r, g, b));
 

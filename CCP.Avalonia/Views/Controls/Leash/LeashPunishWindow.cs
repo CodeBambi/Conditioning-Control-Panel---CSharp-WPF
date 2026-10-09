@@ -341,7 +341,7 @@ internal sealed class LeashPunishWindow : Window
             _hint.Foreground = FriendsDrawer.Muted;
         };
         _refuseTimer.Start();
-        // FX: LeashFx.Denied();
+        LeashFx.Denied();
         var level = CoreSettings.Current?.MotionLevel ?? global::ConditioningControlPanel.Models.MotionLevel.Full;
         if (level != global::ConditioningControlPanel.Models.MotionLevel.Off) Shake(level == global::ConditioningControlPanel.Models.MotionLevel.Reduced ? 7.0 : 16.0);
     }

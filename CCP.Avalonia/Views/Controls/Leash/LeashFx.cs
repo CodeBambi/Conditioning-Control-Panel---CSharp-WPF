@@ -109,6 +109,28 @@ internal static class LeashFx
         if (tag.IsAttachedToVisualTree()) timer.Start();
     }
 
+    /// <summary>WPF MotionFx.StaggerIn on one opened sheet: fades in over 220 ms from a 10 px rise
+    /// (260 ms), quadratic ease out. Opacity stays inside 0..1; one-shot timer, stops itself.</summary>
+    public static void SheetIn(Control el)
+    {
+        if (Amount <= 0) return;
+        var rise = new TranslateTransform(0, 10);
+        el.RenderTransform = rise;
+        el.Opacity = 0;
+        DateTime? start = null;
+        DispatcherTimer? timer = null;
+        timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) =>
+        {
+            start ??= DateTime.UtcNow;
+            double ms = (DateTime.UtcNow - start.Value).TotalMilliseconds;
+            double o = Math.Clamp(ms / 220, 0, 1), y = Math.Clamp(ms / 260, 0, 1);
+            el.Opacity = 1 - (1 - o) * (1 - o);
+            rise.Y = 10 * (1 - y) * (1 - y);
+            if ((o >= 1 && y >= 1) || !el.IsAttachedToVisualTree()) { el.Opacity = 1; rise.Y = 0; timer!.Stop(); }
+        });
+        timer.Start();
+    }
+
     /// <summary>A soft pop on a pressed chip.</summary>
     public static void Pop(Control el)
     {
@@ -174,7 +196,7 @@ internal static class LeashFx
     private static readonly LeashSfxRules Rules = new();
 
     /// <summary>Seam: true while the punishment window is up (r10's LeashPunishWindow fills it).</summary>
-    internal static Func<bool> PunishWindowOpen = () => false;
+    internal static Func<bool> PunishWindowOpen = () => LeashPunishWindow.Current != null;
 
     /// <summary>Test seam: the last cue that reached the player (tag), or null.</summary>
     internal static string? LastPlayed { get; private set; }

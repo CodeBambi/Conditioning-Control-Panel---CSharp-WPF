@@ -225,11 +225,10 @@ public sealed class LeashSelfCard : Border
             i => _ = SetDndAsync(i switch { 1 => LeashDnd.OneHour, 2 => LeashDnd.FourHours, 3 => LeashDnd.Today, _ => LeashDnd.Off }),
             "leash-dnd", 11.5));
 
-        // CAP SLIDER: WPF puts the video cap here, between Do not disturb and the hold hint:
-        //   var cap = new LeashCapSlider(Loc.Get("leash_video_max"), _me.VideoMax, "leash-video-max")
-        //   { Margin = new Thickness(2, 10, 2, 0) }; ToolTip.SetTip(cap, Loc.Get("leash_video_max_hint"));
-        //   cap.Committed += m => _ = SetVideoMaxAsync(m); sp.Children.Add(cap);
-        // (r10 owns LeashCapSlider; SetVideoMaxAsync below is ready for it.)
+        var cap = new LeashCapSlider(Loc.Get("leash_video_max"), _me.VideoMax, "leash-video-max") { Margin = new Thickness(2, 10, 2, 0) };
+        ToolTip.SetTip(cap, Loc.Get("leash_video_max_hint"));
+        cap.Committed += m => _ = SetVideoMaxAsync(m);
+        sp.Children.Add(cap);
 
         string? panicKey = null;
         try { panicKey = CoreSettings.Current?.PanicKey; } catch { }
@@ -311,9 +310,7 @@ public sealed class LeashSelfCard : Border
         var me = new LeashPerson("me", Loc.Get("leash_you"), null);
         var held = new HeldLeash(me, true, _me.Intensity, _me.Since, _me.Day, _me.DndUntil, r,
             Array.Empty<WeekDay>(), _me.Pending, _me.Assignment, 0);
-        // SEAM (r10 merge): WPF passes readOnly: true; until r10's ctor has it, the null service and
-        // the hit-test off keep every button inert.
-        var card = new LeashHolderCard(held, () => null) { IsHitTestVisible = false, Opacity = 0.92, Margin = new Thickness(0, 8, 0, 0), Tag = "leash-preview" };
+        var card = new LeashHolderCard(held, () => null, readOnly: true) { IsHitTestVisible = false, Opacity = 0.92, Margin = new Thickness(0, 8, 0, 0), Tag = "leash-preview" };
         var box = new StackPanel();
         box.Children.Add(card);
         var note = LeashLook.Wrap(FriendsDrawer.Label(Loc.GetF("leash_self_preview_note", _me.Holder.Name), 10.5, FriendsDrawer.Dim));

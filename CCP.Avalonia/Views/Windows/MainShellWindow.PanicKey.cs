@@ -51,7 +51,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Serilog.Log.Information("Panic trigger: XInput2 key press");
                     var s = CoreSettings.Current;
                     if (!s.PanicKeyEnabled || CapturingPanicKey || LockdownActive)
+                    {
+                        // WPF LeashPanicKeyWhilePanicOff: panic always works on a leash.
+                        if ((!s.PanicKeyEnabled || LockdownActive) && Platform.LeashHead.IsLeashed)
+                            Dispatcher.UIThread.Post(() => Platform.LeashTaskHost.OnPanicPress(panicRuns: false));
                         Dispatcher.UIThread.Post(() => HandlePanicKeyPress(DateTime.Now));
+                    }
                     else
                         PanicWatchdog.QueueWatched(() => HandlePanicKeyPress(DateTime.Now));   // #919b
                 });

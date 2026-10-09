@@ -139,6 +139,7 @@ public sealed class LeashDrawerSection : StackPanel
             if (!_cards.TryGetValue(h.Who.Id, out var card))
             {
                 card = new LeashHolderCard(h, () => _svc);
+                card.ReplaySnapRequested += held => LeashSnapCard.Replay(this, held.Who);
                 _cards[h.Who.Id] = card;
             }
             else card.Update(h);

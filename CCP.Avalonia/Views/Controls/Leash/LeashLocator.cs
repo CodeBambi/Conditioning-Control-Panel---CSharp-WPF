@@ -1,8 +1,6 @@
 // PORTED from WPF 7.1.5 Controls/Leash/LeashLocator.cs: where the leash surfaces find the task
 // runner and the leashed side's own day report. The DEBUG FakeLeashService demo is not ported.
-// SEAM (main session): set Runner when the port's AppLeashTaskHost / LeashTaskRunner lands
-// (WPF App.xaml.cs wires LeashLocator.Runner = () => App.LeashTasks), and LocalReport to the
-// service's report builder (WPF: () => App.Leash?.LocalReport()).
+// Runner is Platform.LeashTaskHost's (WPF App.xaml.cs: LeashLocator.Runner = () => App.LeashTasks).
 using System;
 using ConditioningControlPanel.Services.Leash;
 using ILeashTaskRunner = ConditioningControlPanel.Controls.Leash.ILeashTaskRunner;
@@ -11,7 +9,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Leash;
 
 public static class LeashLocator
 {
-    private static Func<ILeashTaskRunner?> _runner = () => null;
+    private static Func<ILeashTaskRunner?> _runner = () => Platform.LeashTaskHost.Runner;
     private static Func<DayReport?> _report = () => (Platform.LeashHead.Service as LeashService)?.LastReport;
 
     /// <summary>The leash service (the head's LeashHead.Service).</summary>
