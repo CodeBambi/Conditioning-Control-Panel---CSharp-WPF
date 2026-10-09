@@ -111,6 +111,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
         public event Action<double, double>? OnRawIris;
         public event Action<double, double>? OnHeadPose;
         public event Action<GazeSide>? OnGazeSide;
+        /// <summary>Tests: what a classified frame publishes, without a face in front of a camera.</summary>
+        internal void RaiseGazeSideForTest(GazeSide side) => OnGazeSide?.Invoke(side);
         /// <summary>Gaze in DIPs of the calibrated monitor; fires only with a calibration.</summary>
         public event Action<ScreenPoint>? OnGazeMove;
         /// <summary>Start's stage and status text, 1.0 when tracking is up (WPF OnStartupProgress, same

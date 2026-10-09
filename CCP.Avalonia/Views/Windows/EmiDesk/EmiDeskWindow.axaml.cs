@@ -804,9 +804,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // text in the same pink, so the glass is never blank and the cadence is still visible.
         public void DrawFace(string? text, bool small = false, bool flat = false)
         {
-            try { _faceView.Text = string.IsNullOrEmpty(text) ? RestFace : text; }
+            try
+            {
+                var face = string.IsNullOrEmpty(text) ? RestFace : text;
+                if (_faceView.Text == face) return;
+                _faceView.Text = face;
+                FaceChanged?.Invoke(this, face);
+            }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] DrawFace failed"); }
         }
+
+        /// <summary>The face on the glass right now. The dock chip's mini face mirrors it.</summary>
+        public string Face => _faceView.Text ?? RestFace;
+
+        /// <summary>Raised with the new face string on every frame that changes it (WPF binds
+        /// EmiDock.MiniFace onto EmiFace.Face; Avalonia has no such property, so this is the feed).</summary>
+        public event EventHandler<string>? FaceChanged;
 
         /// <summary>Swap the body pose PNG. A no-op when that pose is already up (this runs per sway step).</summary>
         // ponytail: needs EmiChains.FrameKey / EmiChains.BodyPath (Services/EmiDesk/EmiChains.cs) to

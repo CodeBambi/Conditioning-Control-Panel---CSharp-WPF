@@ -1,8 +1,8 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.Chaster.cs (InitializeChasterFlash,
 // OnChasterBooked, ShowBookedFlash): a booked price floats off the rail padlock, coalesced by Core
 // BookedFlashPlan. ponytail: WPF first tries ChasterBookedPop, a topmost window at the cause/cursor
-// (desktop-wide topmost is Bucket E, not permitted on Wayland), and pulses the chip ring; this head
-// always takes WPF's rail fallback and the chip has no Pulse yet.
+// (desktop-wide topmost is Bucket E, not permitted on Wayland); this head always takes WPF's rail
+// fallback. The chip ring pulses in the figure's colour, as WPF. No CapRefused tag (it is a pop too).
 using System;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Controls;
@@ -20,6 +20,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             chaster.BookedAt += OnChasterBooked;
             Closed += (_, _) => chaster.BookedAt -= OnChasterBooked;
+            InitializeCirceLines(chaster); // MainShellWindow.CirceLines.cs
         }
 
         /// <summary>Raised on whatever thread booked it, so marshalled first.</summary>
@@ -47,6 +48,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     _chasterFlash?.Dismiss();
                     _chasterFlash = IsVisible ? ChasterBookedFlash.Show(Named<ChasterRailChip>("ChasterRail"), fresh) : null;
                 }
+                // The ring takes the figure's colour for a beat; a net-zero merge has no pulse.
+                if (IsVisible && look is { } pulse) Named<ChasterRailChip>("ChasterRail")?.Pulse(global::Avalonia.Media.Color.FromUInt32(pulse.Colour));
             }
             catch (Exception ex) { Serilog.Log.Debug("[Chaster] booked flash: {E}", ex.Message); }
         }

@@ -17,8 +17,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     ///
     /// PORTED from ConditioningControlPanel/Controls/EmiDock.xaml.cs. Deviations:
     ///  - <c>App.EmiDesk</c> is the head's <c>EmiDeskService.Instance</c> (Toggle, OutChanged,
-    ///    AvatarMuted). Its KnockRequested and the live face binding are not ported yet (ponytail:
-    ///    need EmiKnock + EmiFace/EmiChains), so <see cref="StartKnock"/> stays public.
+    ///    AvatarMuted). The mini face mirrors the widget's <c>FaceChanged</c> feed while she is out
+    ///    (WPF binds EmiFace.Face), as text: EmiFace's pixel glyphs are not ported on either surface.
+    ///    KnockRequested is not ported yet (ponytail: needs EmiKnockMachine/EmiKnockWorld from
+    ///    ConditioningControlPanel/Services/EmiDesk/EmiKnock.cs + TryKnock), so <see cref="StartKnock"/>
+    ///    stays public and nothing calls it.
     ///  - The four WPF keyframe timelines become one Avalonia <see cref="Animation"/> on the ring
     ///    (stroke colour, thickness) plus one on its glow. Both run three times and stop.
     ///  - The frozen-brush guard is gone: Avalonia brushes do not freeze.
@@ -28,6 +31,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         private readonly Button _btnChip;
         private readonly Ellipse _ring;
         private readonly TextBlock _txtMuted;
+        private readonly TextBlock _miniFace;
+
+        /// <summary>The widget whose face the mini face is mirroring, or null while it rests.</summary>
+        private Windows.EmiDesk.EmiDeskWindow? _faceSource;
 
         /// <summary>True only while the six seconds of pulses are running.</summary>
         private bool _knocking;
@@ -39,12 +46,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             _btnChip = this.FindControl<Button>("BtnChip")!;
             _ring = this.FindControl<Ellipse>("Ring")!;
             _txtMuted = this.FindControl<TextBlock>("TxtMuted")!;
+            _miniFace = this.FindControl<TextBlock>("MiniFace")!;
 
             _btnChip.Click += OnChipClick;
             // WPF EmiDock.xaml.cs:57-107: follow the service while loaded, let go when unloaded.
             var svc = Windows.EmiDesk.EmiDeskService.Instance;
             Loaded += (_, _) => { svc.OutChanged += OnOutChanged; Refresh(svc.IsOut, svc.AvatarMuted); };
-            Unloaded += (_, _) => { svc.OutChanged -= OnOutChanged; StopKnock(); };
+            Unloaded += (_, _) => { svc.OutChanged -= OnOutChanged; MirrorFace(null); StopKnock(); };
         }
 
         private void OnOutChanged(object? sender, bool isOut) =>
@@ -53,15 +61,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
         /// <summary>Show or hide the muted pill. The pill states a FACT about right now, so the
         /// host asks the same gate the tube asks: it is never shown just because the setting is on.
-        /// ANY route out answers the knock, so the pulses stop here too.</summary>
+        /// The pulses SURVIVE her arrival (WPF :141-147): the knock summons her itself, so stopping
+        /// here would kill them in the frame they start. A click still cuts them short.</summary>
         public void Refresh(bool isOut, bool avatarMuted = false)
         {
-            if (isOut) StopKnock();
-            // ponytail: the live face needs ConditioningControlPanel/Services/EmiDesk/EmiDeskService.cs
-            // (its EmiChannels face feed); the stub face rests. The muted pill below is real - the
-            // host passes the fact in rather than this chip reading a setting.
+            // WPF :150-163: point the mini face at the live widget, or let it rest.
+            MirrorFace(isOut ? Windows.EmiDesk.EmiDeskService.Instance.Window : null);
             _txtMuted.IsVisible = avatarMuted;
         }
+
+        /// <summary>Follow <paramref name="desk"/>'s face (null: rest). Pushed, never polled, and
+        /// let go when she leaves or the rail drops the chip, so a torn-down widget is not kept alive.</summary>
+        private void MirrorFace(Windows.EmiDesk.EmiDeskWindow? desk)
+        {
+            if (!ReferenceEquals(_faceSource, desk))
+            {
+                if (_faceSource != null) _faceSource.FaceChanged -= OnFaceChanged;
+                _faceSource = desk;
+                if (desk != null) desk.FaceChanged += OnFaceChanged;
+            }
+            _miniFace.Text = desk?.Face ?? RestFace;
+        }
+
+        private void OnFaceChanged(object? sender, string face) => _miniFace.Text = face;
+
+        /// <summary>EmiChains.RestFace.</summary>
+        private const string RestFace = "0_0";
 
         private void OnChipClick(object? sender, RoutedEventArgs e)
         {

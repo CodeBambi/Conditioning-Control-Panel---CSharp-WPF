@@ -70,6 +70,16 @@ public sealed class TakeoverTabUiTests
             Dispatcher.UIThread.RunJobs();
             Assert.Contains(launched, p => SpeechEngine.DefaultModelRoots.Contains(p));
 
+            // audit #1974: a language switch re-translates the code-set hints instead of leaving them stale.
+            try
+            {
+                LocalizationManager.Instance.SetLanguage("de");
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(Loc.Get("takeover_voice_hint_model_missing"), Named<TextBlock>("TxtAutonomyVoiceHint").Text);
+                Assert.Equal(Loc.Get("desc_mantra_chant_none"), Named<TextBlock>("TxtMantraChantHint").Text);
+            }
+            finally { LocalizationManager.Instance.SetLanguage("en"); Dispatcher.UIThread.RunJobs(); }
+
             // No mic: a folder will not help, so the button goes (WPF ShowSpeechModelFolderButton).
             CoreSpeech.HasCaptureDeviceProvider = () => false;
             tab.RefreshAutonomyVoiceHint();
