@@ -1,33 +1,13 @@
-// PARTIALLY PORTED from ConditioningControlPanel/MainWindow/MainWindow.Roadmap.cs (500 lines).
-// What this file now carries is the head's single RoadmapService instance. What it still does not
-// carry is the node painting, and the reasons are unchanged:
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.Roadmap.cs (500 lines), split by owner:
 //
-// 1. THE VIEW ALREADY DOES THE VIEW HALF. WPF's three chrome handlers hung off the shell because
-//    the Quests markup was inline in MainWindow.xaml. CCP.Avalonia/Views/Tabs/QuestsTabView.axaml.cs
-//    now owns them: ShowDailyWeekly() / ShowRoadmap() swap DailyWeeklyPanel and RoadmapPanel and
-//    restyle the two sub-tab buttons, and the three track buttons restyle themselves. Restoring
-//    BtnQuestSubDaily_Click / BtnQuestSubRoadmap_Click / BtnTrack_Click here would be a second copy
-//    nothing routes to; _currentRoadmapTrack belongs with them, in that view.
-//
-// 2. THE SERVICE IS NOW IN CORE, so the old note's "needs a CoreRoadmap seam" is wrong and this
-//    file no longer waits on Core. RoadmapService lives at CCP.Core/Services/RoadmapService.cs and
-//    is head-agnostic: it reads and writes roadmap.json and the diary folder under
-//    CorePaths.UserData. What remains is a straight VIEW port - the node-per-step painting and the
-//    photo-submission flow - and it is a UI layer, not a Core one:
-//
-//   RefreshRoadmapUI()          numbers, the locked overlay and the badge, from Roadmap below.
-//                               Controls exist in QuestsTabView.axaml (TrackLockedOverlay,
-//                               RoadmapScrollContainer, TxtLockReason, BadgeIndicator).
-//   GenerateRoadmapNodes() / CreateRoadmapNode(…)   node-per-step, driven by per-step completion.
-//   RoadmapNode_Click(…) / ShowPhotoConfirmation(…) file picker plus Roadmap.SubmitPhoto. Note the
-//                               picker is async on Avalonia: SubmitPhoto must be awaited behind the
-//                               answer, never fired beside it.
-//   RefreshRoadmapStats()       aggregates across all three tracks.
-//   OnRoadmapStepCompleted is below; the node repaint it triggered in WPF is QuestsTabView's own
-//                               RefreshRoadmapUI after SubmitPhoto (SubmitPhoto is the only
-//                               completer, and it raises TrackUnlocked synchronously inside it, so
-//                               that one repaint also covers WPF's OnRoadmapTrackUnlocked).
-//                               SystemSounds.Exclamation becomes App.PlayExclamationChime.
+// - The VIEW half (sub-tab and track swaps, RefreshRoadmapUI, node painting, the click/photo
+//   submission flow, stats) lives in CCP.Avalonia/Views/Tabs/QuestsTabView(.Roadmap).cs, because
+//   on this head the Quests markup is that view's own and its x:Name fields are private to it.
+// - This file carries the head's single RoadmapService instance (Core, CCP.Core/Services/
+//   RoadmapService.cs) and OnRoadmapStepCompleted (WPF :452): popup, chime, milestone messages.
+//   The node repaint WPF did there and in OnRoadmapTrackUnlocked is QuestsTabView's own
+//   RefreshRoadmapUI after SubmitPhoto (SubmitPhoto is the only completer, and it raises
+//   TrackUnlocked synchronously inside it). SystemSounds.Exclamation becomes App.PlayExclamationChime.
 
 using System;
 using Avalonia;

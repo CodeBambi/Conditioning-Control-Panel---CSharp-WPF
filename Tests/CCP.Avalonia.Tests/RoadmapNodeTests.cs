@@ -55,12 +55,17 @@ public sealed class RoadmapNodeTests
 
             var roadmap = MainShellWindow.Roadmap;
             var locked = nodes.First(n => !roadmap.IsStepCompleted((string)n.Tag!) && !roadmap.IsStepActive((string)n.Tag!));
+            var resting = locked.BorderBrush;
+            Assert.True(locked.Focus(NavigationMethod.Tab));        // keyboard focus is visible
+            Assert.Same(global::Avalonia.Media.Brushes.White, locked.BorderBrush);
             Press(locked, Key.Enter);
             Dispatcher.UIThread.RunJobs();
             Assert.Single(opened.OfType<MessageDialog>());          // "Step Locked", not the start dialog
             Assert.Empty(opened.OfType<RoadmapStartDialog>());
 
             var active = nodes.First(n => roadmap.IsStepActive((string)n.Tag!));
+            active.Focus(NavigationMethod.Tab);
+            Assert.Same(resting, locked.BorderBrush);                // and leaves with the focus
             Press(active, Key.Space);
             Dispatcher.UIThread.RunJobs();
             Assert.Single(opened.OfType<RoadmapStartDialog>());

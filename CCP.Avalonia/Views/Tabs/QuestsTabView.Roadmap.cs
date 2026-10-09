@@ -314,6 +314,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             container.PointerReleased += RoadmapNode_Click;
             // P17: WPF's node is mouse-only; here it is also reachable by Tab and opened by Enter/Space.
             container.Focusable = true;
+            // A plain Border has no focus visual: show keyboard focus as a white border.
+            var restingBrush = container.BorderBrush;
+            container.GotFocus += (_, e) =>
+            {
+                if (e.NavigationMethod == NavigationMethod.Tab) container.BorderBrush = Brushes.White;
+            };
+            container.LostFocus += (_, _) => container.BorderBrush = restingBrush;
             container.KeyDown += (_, e) =>
             {
                 if (e.Key is not (Key.Enter or Key.Space)) return;
