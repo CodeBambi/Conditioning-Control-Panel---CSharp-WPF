@@ -72,6 +72,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var screens = ScreenList.Enumerate(host);
             if (screens.Count == 0) return;
             _busy = true;
+            CoreTubeEvents.RaiseFlashAboutToDisplay();   // WPF FlashService.FlashAboutToDisplay (tube#T5)
             var generation = _generation;
             var scheduled = false;
             try

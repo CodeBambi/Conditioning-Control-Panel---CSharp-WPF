@@ -35,6 +35,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(PanicSilence); return; }
 
+            _panicSilencedUtc = DateTime.UtcNow;   // reactions to the stop panic caused stay unsaid
             try { StopSpokenAudio(); } catch { }
             try { StopThinkingAnimation(); } catch { }
             try { _speechTimer?.Stop(); } catch { }

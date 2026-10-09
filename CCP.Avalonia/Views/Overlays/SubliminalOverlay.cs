@@ -53,6 +53,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (screens.Count == 0) return;
 
             CloseAll();
+            CoreTubeEvents.RaiseSubliminalDisplayed();   // WPF SubliminalService.SubliminalDisplayed (tube#T5)
             var s = CoreSettings.Current;
             var primary = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
             var hold = TimeSpan.FromMilliseconds(HoldMs(s.SubliminalDuration));

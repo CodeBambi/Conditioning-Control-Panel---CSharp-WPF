@@ -101,4 +101,40 @@ public sealed class AvatarTubeSpeechQueueTests
         finally { tube.Close(); service.SealForReset(); }
         return Task.CompletedTask;
     });
+    [Fact]
+    public Task AppMomentsReachTheTubeButNeverRightAfterPanic() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var tube = new AvatarTubeWindow(null);
+        try
+        {
+            tube.Show();
+            Dispatcher.UIThread.RunJobs();
+            var text = tube.FindControl<TextBlock>("TxtSpeech")!;
+            CoreTubeEvents.RaiseAchievementUnlocked("Good Start");
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Achievement unlocked: Good Start! *giggles*", text.Text);
+
+            tube.PanicSilence();
+            Dispatcher.UIThread.RunJobs();
+            CoreTubeEvents.RaiseAchievementUnlocked("Too Late");   // inside the panic quiet window
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(tube.IsSpeaking);
+            Assert.NotEqual("Achievement unlocked: Too Late! *giggles*", text.Text);
+
+            // tube#T12: the default mod's only avatar is its one emote set (WPF IsSingleEmoteAvatarMod): no arrows.
+            Assert.Single(tube.EffectiveAvatarSets());
+            Assert.False(tube.FindControl<Border>("BtnPrevAvatar")!.IsVisible);
+            Assert.False(tube.FindControl<Border>("BtnNextAvatar")!.IsVisible);
+            Assert.Equal(7, AvatarTubeWindow.GetAvatarSetForLevel(1));   // 7.1.5: every set at level 1
+            Assert.True(AvatarTubeWindow.IsAvatarSetUnlocked(6, 1));
+        }
+        finally { tube.Close(); service.SealForReset(); }
+        return Task.CompletedTask;
+    });
 }

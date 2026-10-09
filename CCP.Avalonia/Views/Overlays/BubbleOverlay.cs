@@ -142,6 +142,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (paid > 0) CoreProgression.AddXP(paid, "Bubble");
             XpBudgetChanged?.Invoke();
             App.NoteFeatureUsed(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureBubbles);   // WPF OnBubblePopped
+            CoreTubeEvents.RaiseBubblePopped();   // WPF BubbleService.OnBubblePopped -> the tube (tube#T5)
             var master = s.MasterVolume / 100f;
             var vol = (float)Math.Pow(master * (s.BubblesVolume / 100f), 1.5);
             var dir = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds");

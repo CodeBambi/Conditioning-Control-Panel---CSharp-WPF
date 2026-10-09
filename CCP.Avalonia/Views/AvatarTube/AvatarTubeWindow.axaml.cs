@@ -122,7 +122,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         // actually loaded never starts the timer, which is the WPF rule verbatim.
         private readonly DispatcherTimer _poseTimer;
         private int _currentPoseIndex;
-        private readonly int _currentAvatarSet = Math.Max(1, CoreSettings.Current.SelectedAvatarSet);
+        private int _currentAvatarSet = Math.Max(1, CoreSettings.Current.SelectedAvatarSet);
+        private readonly Border _btnPrevAvatar, _btnNextAvatar;
         private Bitmap?[] _avatarPoses = new Bitmap?[4];
 
         // The bubble's auto-hide. One timer, replaced per bubble; the hover hold re-arms it at 1s.
@@ -241,8 +242,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             WireContentPolicyWarning();   // the warning half (AvatarTubeWindow.ContentGates.cs)
 
             _avatarBorder.PointerPressed += OnAvatarPointerPressed;
-            this.FindControl<Border>("BtnPrevAvatar")!.PointerPressed += (_, _) => SelectAvatarSet(-1);
-            this.FindControl<Border>("BtnNextAvatar")!.PointerPressed += (_, _) => SelectAvatarSet(+1);
+            _btnPrevAvatar = this.FindControl<Border>("BtnPrevAvatar")!;
+            _btnNextAvatar = this.FindControl<Border>("BtnNextAvatar")!;
+            _btnPrevAvatar.PointerPressed += (_, _) => StepAvatarSet(-1);   // WPF BtnPrevAvatar_Click
+            _btnNextAvatar.PointerPressed += (_, _) => StepAvatarSet(+1);
             this.FindControl<ContextMenu>("AvatarContextMenu")!.Opened += (_, _) => { UpdateQuickMenuState(); PopulatePersonalityMenu(); };
 
             // Pose switching for static avatars. ApplyAvatarSet below starts it only when more than
@@ -260,6 +263,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // The animated avatar (AvatarTubeWindow.Emotes.cs): CCP Default / Bambi Sleep / Sissy play
             // the avatar0 cel set, a mod its own resources/emotes set. Its clock starts in OnOpened.
             TryUpdateEmoteMode();
+            UpdateNavigationArrows();   // tube#T12
             // The caption is Loc-driven and set from code (a persona name has no static key), so it
             // has to be re-run rather than bound - see the porting note about {loc:Str} and .Text.
             LocalizationManager.Instance.LanguageChanged += OnTubeLanguageChanged;
@@ -325,6 +329,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             RefreshTubeLayout();
 
             AttachAwareness();   // WPF xaml.cs:317-322 (Reactions.cs)
+            AttachAppReactions();   // WPF xaml.cs:261-340 (tube#T5)
             StartSpeechLoops();  // greeting, idle chatter, Trigger Mode, random bubble (Speech.cs)
 
             InitTakeoverCountdownBar();   // WPF xaml.cs:565 (AvatarTubeWindow.TakeoverBar.cs)
@@ -341,6 +346,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (OpenChatSink == (Action)OpenChatInput) OpenChatSink = null;
             ReleaseWindowing();
             DetachAwareness();
+            DetachAppReactions();
             UnwireContentPolicyWarning();
 
             // Every timer this window starts is stopped here. --render-all constructs ~180 windows
@@ -1436,26 +1442,6 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             var all = (CoreMods.GetPhrases("Generic") ?? Array.Empty<string>())
                 .Concat(CoreMods.GetPhrases("RandomFloating") ?? Array.Empty<string>()).ToArray();
             return all.Length == 0 ? "*giggles*" : all[Random.Shared.Next(all.Length)];
-        }
-
-        /// <summary>Step through the unlocked avatar sets with the title-box arrows.</summary>
-        private void SelectAvatarSet(int delta)
-        {
-            // The old note here named App.Mods.IsAvatarSetSupported / GetCustomAvatarSets as the
-            // blocker. That is STALE: both are one-liners over ModManifest.SupportedAvatarSets and
-            // .CustomAvatarSets (ModService.cs:1268/1289), and the whole manifest is in Core -
-            // CoreMods.InstalledMods[ActiveModId].Manifest answers both today. The list of sets is
-            // not what is missing.
-            //
-            // ponytail: what is missing is the COMPANION COUPLING. WPF's SwitchToAvatarSet
-            // (AvatarTubeWindow.Avatar.cs:395) persists SelectedAvatarSet and switches the active
-            // companion in the same beat for sets 4+, because the tube's caption reads the persona
-            // behind the SET. CoreModsHooks.SwitchCompanion is the seam and no head seeds it, so an
-            // arrow here would write a shared setting and leave the app's active companion pointing
-            // somewhere else - a second writer for one setting, which is the trap this port keeps
-            // hitting. Both arrows are IsVisible=False in the XAML (WPF's UpdateNavigationArrows is
-            // what reveals them), so nothing reaches this today: the tube shows
-            // CoreSettings.Current.SelectedAvatarSet and stays on it.
         }
 
         /// <summary>Refresh the context menu's checkmarks and the remote-emote item swap.</summary>

@@ -596,6 +596,9 @@ namespace ConditioningControlPanel.Avalonia
                 Sessions = new SessionRunner(new SessionLogService());
                 // WPF App.xaml.cs:2566: the media recap. FlashOverlay feeds images; the video scheduler feeds clips.
                 MediaHistory = new MediaHistoryService();
+                // tube#T5: the companion's reactions to video start and level up (WPF App.Video / App.Progression).
+                if (CoreEngine.Video is { } tubeVideo) tubeVideo.VideoStarted += CoreTubeEvents.RaiseVideoAboutToStart;
+                ProgressionBank.LevelUp += CoreTubeEvents.RaiseLevelUp;
                 if (CoreEngine.Video is { } recapVideo)
                     recapVideo.VideoStarted += () => MediaHistory?.RecordVideo(recapVideo.LastVideoPath);
                 //
@@ -917,6 +920,7 @@ namespace ConditioningControlPanel.Avalonia
             engine.Unlocked += (_, a) => Dispatcher.UIThread.Post(() => ShowAchievementPopup(a));
             engine.Unlocked += (_, a) => ShowWardrobeRewardToasts(a);
             engine.Unlocked += (_, a) => AnnounceAchievement(a, discord ?? Platform.AccountSeed.Discord);
+            engine.Unlocked += (_, a) => CoreTubeEvents.RaiseAchievementUnlocked(a.Name);   // tube#T5
         }
 
         /// <summary>WPF PlayAchievementSound + the DiscordShareAchievements post (App.xaml.cs:4180-4205).
