@@ -189,6 +189,36 @@ public sealed class ProgramRunLifecycleTests : IDisposable
         }
     }
 
+    // CHECKPOINT B: a read-only service (newer-schema file) refuses every lifecycle call; nothing moves or is written.
+    [Fact]
+    public void ReadOnlyRefusesEveryLifecycleCall()
+    {
+        using (var writer = NewService()) writer.Enroll(FirstWeek(writer));
+        var bytes = File.ReadAllBytes(StatePath);
+        using var svc = new ProgramService(StatePath, readOnly: true, now: () => _now);
+        var enrollment = svc.ActiveEnrollment!;
+
+        using (var empty = new ProgramService(Path.Combine(_dir, "empty.json"), readOnly: true, now: () => _now))
+            Assert.Null(empty.Enroll(FirstWeek(empty)));   // nothing standing in the way but read-only
+        Assert.False(svc.Pause());
+        enrollment.State = ProgramEnrollmentState.Paused;
+        svc.Resume();
+        Assert.Equal(ProgramEnrollmentState.Paused, enrollment.State);
+        enrollment.State = ProgramEnrollmentState.Active;
+        Assert.False(svc.SubmitRitualTask(FirstWeek(svc).GetDay(1)!.Tasks[0].Id));
+        svc.Withdraw();
+        Assert.Same(enrollment, svc.ActiveEnrollment);
+        enrollment.State = ProgramEnrollmentState.Lapsed;
+        svc.RestartAfterLapse();
+        Assert.Equal(ProgramEnrollmentState.Lapsed, enrollment.State);
+        enrollment.State = ProgramEnrollmentState.Graduated;
+        svc.DismissGraduated();
+        Assert.Same(enrollment, svc.ActiveEnrollment);
+        Assert.Empty(svc.State.History);
+        svc.Save();
+        Assert.Equal(bytes, File.ReadAllBytes(StatePath));
+    }
+
     // 3a-prereq test 6.
     [Fact]
     public void ALoadedRunOfAnUnavailableProgramIsNeverLapsedAndCanStillBeWithdrawn()

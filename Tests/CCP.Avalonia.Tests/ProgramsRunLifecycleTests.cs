@@ -51,6 +51,8 @@ public sealed class ProgramsRunLifecycleTests
             var svc = AvApp.Programs = new ProgramService(path, readOnly: false);
             var runner = AvApp.Sessions = new SessionRunner(new SessionLogService());
             shell = new MainShellWindow();
+            runner.SessionLog.LogReady += shell.OnSessionLogReady;   // as App startup wires both
+            CoreEngine.StoppedHook = shell.OnEngineStopped;
             shell.Show();
             shell.ShowTab("programs");
             Dispatcher.UIThread.RunJobs();
@@ -81,12 +83,13 @@ public sealed class ProgramsRunLifecycleTests
             Assert.Equal(Loc.Get("programs_session_in_progress"), F<TextBlock>("TxtStartTodaySession").Text);
             Assert.False(F<Button>("BtnStartTodaySession").IsEnabled);
 
-            // Panic ends it, uncredited.
+            // Panic ends it, uncredited, with no "ended early" recap on top; the row repaints.
             PanicSurfaces.StopAll("test", shell);
             Dispatcher.UIThread.RunJobs();
             Assert.False(runner.IsRunning);
             Assert.False(svc.TodayRecord!.SessionCompleted);
-            CloseOwned(shell);
+            Assert.Empty(shell.OwnedWindows.OfType<SessionCompleteWindow>());
+            Assert.Equal(Loc.Get("btn_program_start_session"), F<TextBlock>("TxtStartTodaySession").Text);
 
             // A run to the end credits the day (SessionRunner.Stopped -> OnEngineSessionCompleted).
             await shell.StartProgramSessionAsync();
@@ -94,6 +97,7 @@ public sealed class ProgramsRunLifecycleTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(svc.TodayRecord!.SessionCompleted);
             Assert.Equal(Loc.Get("programs_session_done"), F<TextBlock>("TxtStartTodaySession").Text);
+            Assert.Single(shell.OwnedWindows.OfType<SessionCompleteWindow>());   // a real end still recaps
             CloseOwned(shell);
 
             // Withdraw: confirm, then browse; the ledger keeps the run in History.
@@ -108,7 +112,8 @@ public sealed class ProgramsRunLifecycleTests
         }
         finally
         {
-            if (shell != null) { CloseOwned(shell); shell.Close(); }
+            CoreEngine.StoppedHook = null;
+            if (shell != null) { AvApp.Sessions!.SessionLog.LogReady -= shell.OnSessionLogReady; CloseOwned(shell); shell.Close(); }
             Dispatcher.UIThread.RunJobs();
             AvApp.Sessions?.Stop();
             AvApp.Programs?.Dispose();

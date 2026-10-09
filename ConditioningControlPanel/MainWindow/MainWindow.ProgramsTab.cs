@@ -1436,6 +1436,17 @@ namespace ConditioningControlPanel
                 : $"{(int)span.TotalMinutes}:{span.Seconds:D2}";
         }
 
+        /// <summary>programs.json stamped by a newer build loads read-only (ProgramService.IsReadOnly,
+        /// docs/avalonia-decisions.md programs 3a): every lifecycle control greys, since Core refuses them.</summary>
+        private static bool ApplyProgramsReadOnly(ProgramsTabView tab)
+        {
+            if (App.Programs?.IsReadOnly != true) return false;
+            foreach (var b in new UIElement[] { tab.BtnProgramPauseResume, tab.BtnProgramWithdraw, tab.BtnStartTodaySession,
+                                                tab.BtnProgramRestart, tab.BtnProgramDismissGraduated, tab.ProgramsLapsedPanel })
+                if (b != null) b.IsEnabled = false;
+            return true;
+        }
+
         /// <summary>
         /// Repaints the Session row's live state: the glyph, the button and the progress strip.
         ///
@@ -1450,17 +1461,6 @@ namespace ConditioningControlPanel
         /// ProgramService.IsProgramSession is the discriminator, the same one that decides whether a
         /// completed session may tick the day.
         /// </summary>
-        /// <summary>programs.json stamped by a newer build loads read-only (ProgramService.IsReadOnly,
-        /// docs/avalonia-decisions.md programs 3a): every lifecycle control greys, since Core refuses them.</summary>
-        private static bool ApplyProgramsReadOnly(ProgramsTabView tab)
-        {
-            if (App.Programs?.IsReadOnly != true) return false;
-            foreach (var b in new UIElement[] { tab.BtnProgramPauseResume, tab.BtnProgramWithdraw, tab.BtnStartTodaySession,
-                                                tab.BtnProgramRestart, tab.BtnProgramDismissGraduated, tab.ProgramsLapsedPanel })
-                if (b != null) b.IsEnabled = false;
-            return true;
-        }
-
         internal void UpdateProgramSessionRow()
         {
             try

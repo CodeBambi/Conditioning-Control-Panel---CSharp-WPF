@@ -29,8 +29,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             _stopped = (session, completed) =>
             {
                 if (completed) service.OnEngineSessionCompleted(session.Id);
-                service.OnEngineSessionEnded();
-                RaiseSessionChanged();
+                service.OnEngineSessionEnded();   // the row repaints from MainShellWindow.OnEngineStopped
             };
             runner.Stopped += _stopped;
             _attached = runner;

@@ -807,6 +807,9 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   - Panic ENDS a program session (`program-session` surface before `engine`, SafetyCritical) instead of WPF's pause; a
     foreign session still pauses. Lockdown refuses Enroll, Withdraw and Start (P05 rows); WPF has no gate there, so this is
     an Avalonia-only refusal with the existing "no escape" text.
+  - Review fix: Withdraw and the panic end OUR session without the "ended early" recap (WPF SuppressNextSessionSummary,
+    ProgramsTab.cs:2111; `MainShellWindow.EndProgramSessionQuietly`). The session row repaints on the runner's real start
+    (inside StartSession's effect, after the portal bind) and on every engine stop (`OnEngineStopped`), not per tick.
   - Locked premium cards stay disabled (no App Info route yet): no premium program is finishable on this head at 3a.
   - ShareLevel: the Avalonia dialog has no picker, so enrollments use WPF's default (Private).
 - Risks: last-writer-wins on hand-synced profiles (30 s timer can overwrite a synced-in file); WPF releases older than 3-0

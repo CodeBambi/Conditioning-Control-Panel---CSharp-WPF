@@ -68,7 +68,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // A refused card never blames a missing pledge (programs_locked_hint promises a
                     // pledge unlocks it, and no premium program is finishable here yet); a program
                     // this head can never finish says what it is missing (programs-3a decision).
-                    ReasonText = canEnroll ? "" : ProgramService.UnavailableReason(definition, Platform.ProgramCapabilities.IsAvailable)
+                    ReasonText = canEnroll ? null : ProgramService.UnavailableReason(definition, Platform.ProgramCapabilities.IsAvailable)
                                  ?? Loc.Get("programs_unavailable"),
                     ReasonVisible = !canEnroll,
                     CardOpacity = locked ? 0.72 : 1.0
@@ -88,6 +88,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!LockdownActive) return false;
             await MessageDialog.ShowAsync(this, Loc.Get("title_lockdown"), Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"));
             return true;
+        }
+
+        /// <summary>WPF SuppressNextSessionSummary (MainWindow.ProgramsTab.cs:2111): ends OUR session without
+        /// the "ended early" recap on top of a confirm (withdraw) or a panic. Foreign sessions are untouched.</summary>
+        internal void EndProgramSessionQuietly(string reason)
+        {
+            if (App.Programs is not { } svc || App.Sessions is not { IsRunning: true } r || !svc.IsProgramSession(r.CurrentSession)) return;
+            _suppressNextSessionSummary = true;
+            svc.StopProgramSessionIfRunning(reason, suppressAbandonTracking: true);
         }
 
         private void RefreshProgramsTab() => Named<ProgramsTabView>("ProgramsTab")?.RefreshPrograms();
@@ -129,6 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Loc.Get(sessionLive ? "programs_withdraw_confirm_body_session" : "programs_withdraw_confirm_body"),
                     okText: Loc.Get("btn_program_withdraw_confirm"), cancelText: Loc.Get("btn_program_withdraw_keep"));
                 if (!confirmed) return;
+                EndProgramSessionQuietly("withdraw");   // WPF :2111: the confirm already said it stops
                 svc.Withdraw();
                 RefreshProgramsTab();
             }
@@ -158,8 +168,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     return;
                 }
                 svc.AttachSessionRunner(runner);
-                StartSession(session);
-                ProgramEngineBridge.RaiseSessionChanged();
+                StartSession(session);   // the row repaints when the runner really starts (StartSession)
                 Serilog.Log.Information("[Programs] Started program session: {Name}", session.Name);
             }
             catch (Exception ex) { Serilog.Log.Error(ex, "[Programs] Failed to start today's session"); }

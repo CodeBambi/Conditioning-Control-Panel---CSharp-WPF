@@ -248,7 +248,7 @@
                                                            FontSize="11" FontStyle="Italic" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                             </StackPanel>
 
-                                            <!-- Execution is intentionally unavailable in this browse-only layer. -->
+                                            <!-- Enroll (MainShellWindow.EnrollProgramAsync); disabled with its reason when refused. -->
                                             <Button Grid.Row="3" Margin="18,16,18,16"
                                                     HorizontalAlignment="Stretch"
                                                     HorizontalContentAlignment="Center"
