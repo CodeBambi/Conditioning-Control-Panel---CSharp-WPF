@@ -2,8 +2,8 @@
 // list. An incoming offer row ("Juno wants to hold your leash" + Look, which opens the ask card),
 // the leashed side's own card, then one holder card per account held. Also the source of the Offer
 // chip on a friend's card. Cards are kept between repaints so an open menu survives a poll.
-// ponytail: LeashFx (pop / sent / denied sounds), the offer explainer (LeashExplainer.BeforeOffer),
-// the "?" help button and the snap replay.
+// Juice as WPF: LeashFx Pop on the Offer chip, Sent / Denied sounds, the "?" (Offer) beside it.
+// ponytail: the offer explainer (LeashExplainer.BeforeOffer) and the snap replay.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -226,6 +226,9 @@ public sealed class LeashDrawerSection : StackPanel
         if (state == LeashUiRules.OfferChip.Greyed) ToolTip.SetTip(chip, Loc.Get("leash_offer_greyed"));
         chip.Click += async (_, _) =>
         {
+            LeashFx.Pop(chip);
+            // SEAM: WPF wraps the send in Explain.LeashExplainer.BeforeOffer(owner, f.Name, send)
+            // (the "read first" explainer on a first offer); LeashExplainer is not on this head yet.
             var r = await OfferAsync(f.Id);
             if (LeashUiRules.IsGood(r)) label.Text = Loc.Get("leash_offer_sent");
             else
@@ -234,7 +237,14 @@ public sealed class LeashDrawerSection : StackPanel
                 chip.IsEnabled = false;
             }
         };
-        return new Border { Margin = new Thickness(0, 0, 0, 6), Tag = "leash-offer-chip:" + state.ToString().ToLowerInvariant(), Child = chip };
+        // WPF: the chip and the round "?" (Offer) side by side.
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        row.Children.Add(chip);
+        var help = LeashLook.Help(LeashExplainRole.Offer);
+        help.Margin = new Thickness(6, 0, 0, 0);
+        Grid.SetColumn(help, 1);
+        row.Children.Add(help);
+        return new Border { Margin = new Thickness(0, 0, 0, 6), Tag = "leash-offer-chip:" + state.ToString().ToLowerInvariant(), Child = row };
     }
 
     private LeashStep? OfferStep(string friendId)
@@ -249,7 +259,8 @@ public sealed class LeashDrawerSection : StackPanel
         LeashSendStatus s;
         try { s = _svc == null ? LeashSendStatus.Off : (await _svc.OfferAsync(friendId)).Status; }
         catch { s = LeashSendStatus.Failed; }
-        if (LeashUiRules.IsGood(s)) SentOffers.Add(friendId);
+        if (LeashUiRules.IsGood(s)) { SentOffers.Add(friendId); LeashFx.Sent(); }
+        else if (s is LeashSendStatus.TooFast or LeashSendStatus.Dnd or LeashSendStatus.Failed) LeashFx.Denied();
         return s;
     }
 }
