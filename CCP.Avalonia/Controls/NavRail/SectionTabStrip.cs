@@ -10,9 +10,10 @@
 // Left/Right/Home/End/Enter/Space, a tier sign on a locked pill (PillLocked), "Moved" note.
 //
 // ponytail (not this wave): the "?" help badges + the Just Drop ask-first card
-// (SectionTabStrip.Help.cs), the hover lift/scale/glyph wiggle/sheen/burst (SectionTabStrip.Fx.cs)
-// and the per-pill depth travel + drop band (SectionTabStrip.Depth.cs). The pill PLATE (raised
-// tint gradient + bevelled outline) and the sunken tray fill are here, because they are paint.
+// (SectionTabStrip.Help.cs), the hover lift/scale/glyph wiggle/sheen/burst (SectionTabStrip.Fx.cs).
+// The pill PLATE (raised tint gradient + bevelled outline) and the tray fill are here; the
+// depth (sunken tray well, hue drop band under each raised pill, face travel, lit pill pressed
+// in its socket) is SectionTabStrip.Depth.cs, as WPF.
 //
 // Glyphs: Segoe MDL2 Assets, as WPF. A glyph the font lacks draws nothing, never a box, which is
 // what Linux gets (no Segoe MDL2 there): the pill shows its label only. Noted in the hand-back.
@@ -38,7 +39,7 @@ using MotionLevel = ConditioningControlPanel.Models.MotionLevel;
 
 namespace ConditioningControlPanel.Avalonia.Controls.NavRail
 {
-    public sealed class SectionTabStrip : UserControl
+    public sealed partial class SectionTabStrip : UserControl
     {
         private static readonly IBrush FocusRing = NavPaint.Solid(0xCCFFFFFF);
         private static readonly IBrush BadgePlate = NavPaint.Solid(NavStripRules.WithAlpha(NavStripRules.DarkInk, 0.85));
@@ -62,6 +63,15 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
             public IBrush Plate = Brushes.Transparent;
             public IBrush Hover = Brushes.Transparent;
             public Thickness RestPadding;
+            // Depth (SectionTabStrip.Depth.cs): the drop band under the pill, the face's travel.
+            public Border? Drop;
+            public TranslateTransform? FaceShift;
+            public bool Pressed, Hovered;
+            public DispatcherTimer? DepthTimer;
+            public long DepthStarted;
+            public int DepthMs;
+            public double DepthFrom;
+            public global::ConditioningControlPanel.Motion.Keyframe[] DepthTrack = Array.Empty<global::ConditioningControlPanel.Motion.Keyframe>();
         }
 
         private readonly List<PillParts> _pills = new();
@@ -157,17 +167,15 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                 MinHeight = 49,
                 Child = new Panel { Children = { ActiveFill, PillRow } },
             };
-            var wellTop = new Border { CornerRadius = new CornerRadius(21), IsHitTestVisible = false };
             TrayHost = new Panel
             {
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
-                Children = { wellTop, PillTrack },
+                Children = { TrayFloor, TrayWellTop, TrayWellLeft, TrayWellFoot, PillTrack },
             };
             Grid.SetColumn(TrayHost, 1);
-            // The well's inner top band (Depth law: one lamp above, a sunken tray takes it on top).
-            wellTop.Background = NavPaint.Depth("DepthWellTop");
-            wellTop.Opacity = 0.6;
+            // The well's floor and inner bands are painted per section in PaintDepthPages
+            // (SectionTabStrip.Depth.cs): one lamp above, a sunken tray takes it on top and left.
 
             MovedNoteText = new TextBlock { FontSize = 12.5, FontWeight = FontWeight.SemiBold };
             MovedNote = new Border
@@ -322,6 +330,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
             _hue = hue;
             PillTrack.Background = NavPaint.Solid(NavStripRules.TrackFill(hue));
             PillTrack.BorderBrush = NavPaint.Vertical(NavStripRules.TrackBorderStops(hue));
+            PaintDepthPages(hue);
         }
 
         // ------------------------------------------------------------------ pills
@@ -427,6 +436,18 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                     BorderThickness = new Thickness(NavStripRules.RestFaceThickness),
                     BorderBrush = parts.Outline,
                     Child = content,
+                    // Depth: the face travels (lit = sunk, pressed = down); the ring keeps its place.
+                    RenderTransform = parts.FaceShift = new TranslateTransform(),
+                };
+                // Depth: the raised pill's drop band, under the face, on the sheet (it does not
+                // travel). Length and paint per state in DepthSettle; the negative foot margin keeps
+                // the pill 38 px tall.
+                parts.Drop = new Border
+                {
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    IsHitTestVisible = false,
+                    CornerRadius = new CornerRadius(4),
+                    Height = 0,
                 };
                 var ring = new Border
                 {
@@ -438,7 +459,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                 var pill = new Button
                 {
                     Template = PillTemplate,
-                    Content = ring,
+                    Content = new Panel { Children = { parts.Drop, ring } },
                     Background = Brushes.Transparent,
                     BorderThickness = new Thickness(0),
                     Padding = new Thickness(0),
@@ -456,8 +477,9 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                 global::Avalonia.Automation.AutomationProperties.SetAutomationId(pill, "NavPill_" + tab.Key);
 
                 var captured = parts;
-                pill.PointerEntered += (_, _) => { if (!IsActive(tab.Key)) face.Background = captured.Hover; };
-                pill.PointerExited += (_, _) => face.Background = IsActive(tab.Key) ? Brushes.Transparent : captured.Plate;
+                pill.PointerEntered += (_, _) => { if (!IsActive(tab.Key)) face.Background = captured.Hover; DepthHover(captured, true); };
+                pill.PointerExited += (_, _) => { face.Background = IsActive(tab.Key) ? Brushes.Transparent : captured.Plate; DepthHover(captured, false); };
+                pill.PropertyChanged += (_, e) => { if (e.Property == Button.IsPressedProperty) DepthPress(captured, pill.IsPressed); };
                 pill.Click += (_, e) => { e.Handled = true; Choose(tab, focus: false); };
                 pill.GotFocus += (_, _) => ring.BorderBrush = FocusRing;
                 pill.LostFocus += (_, _) => ring.BorderBrush = Brushes.Transparent;
@@ -470,6 +492,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                 parts.Label = label;
                 parts.Glyph = glyph;
                 _pills.Add(parts);
+                DepthSettle(parts, animate: false);
                 PillCreated?.Invoke(tab, pill);
             }
 
@@ -640,6 +663,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                 p.Face.Padding = new Thickness(Math.Max(0, pad.Left - grow), pad.Top, Math.Max(0, pad.Right - grow), pad.Bottom);
                 p.Face.Background = on ? Brushes.Transparent : (p.Pill.IsPointerOver ? p.Hover : p.Plate);
                 KeyboardNavigation.SetIsTabStop(p.Pill, on);
+                DepthSettle(p, animate);
             }
             if (key == null && _pills.Count > 0) KeyboardNavigation.SetIsTabStop(_pills[0].Pill, true);
             PositionFill(animate);

@@ -80,6 +80,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// <summary>0 = normal card, 1 = gold tease livery, 2+ = diamond. Blurs the art, veils it, wears a "?".</summary>
         public int TeaseTier { get => GetValue(TeaseTierProperty); set => SetValue(TeaseTierProperty, value); }
 
+        /// <summary>WPF DashboardDepth: the Home mosaic tile sits in a sunken socket and takes the
+        /// shared lamp (DashboardCardDepth); the hover scale stands down so travel is the one motion.</summary>
+        public bool DashboardDepth { get; set; }
+
         public event EventHandler<RoutedEventArgs> Click { add => AddHandler(ClickEvent, value); remove => RemoveHandler(ClickEvent, value); }
         /// <summary>Raised on right-click so the dashboard can quick-toggle the feature without opening its popup.</summary>
         public event EventHandler<RoutedEventArgs> ToggleRequested { add => AddHandler(ToggleRequestedEvent, value); remove => RemoveHandler(ToggleRequestedEvent, value); }
@@ -93,6 +97,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private CancellationTokenSource? _breath;
         private IDisposable? _visibilityWatch;
         private bool _hovered;
+        private readonly global::ConditioningControlPanel.Avalonia.Controls.Depth.DashboardCardDepth _depth;
 
         public FeatureCard()
         {
@@ -113,6 +118,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _txtTierBadge = this.FindControl<TextBlock>("TxtTierBadge")!;
             _btnHelp = this.FindControl<Button>("BtnHelp")!;
             _activeGlow = (DropShadowEffect)_rootBorder.Effect!;
+            var depthSocket = this.FindControl<Border>("DepthSocket")!;
+            _depth = new global::ConditioningControlPanel.Avalonia.Controls.Depth.DashboardCardDepth(this,
+                this.FindControl<Panel>("PressFace")!, this.FindControl<Border>("DepthBevel")!,
+                () => DashboardDepth, () => IsActive && !IsLocked,
+                e => !IsLocked && !(e.Source is Visual src && (src == _btnHelp || _btnHelp.IsVisualAncestorOf(src))));
+            Loaded += (_, _) => depthSocket.IsVisible = DashboardDepth;
 
             // Hover lift (WPF: MotionFx.HoverLift) as a transition on the root scale (the art pop is
             // Controls/HoverPop, driven from ApplyHover as WPF does); the 6px margin on RootBorder is the headroom the lift paints into.
@@ -258,6 +269,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var showActive = IsActive && !IsLocked;
             _activeBorder.IsVisible = showActive;
             ApplyActiveBreath(showActive);
+            _depth?.Refresh();
         }
 
         /// <summary>The glow and the ring share one 3.5s clock so the tile pulses as one object.</summary>
@@ -309,8 +321,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _hovered = on;
             // A locked tile is not an affordance; lighting it up promises a click that does nothing.
             if (IsLocked) on = false;
-            _rootScale.ScaleX = _rootScale.ScaleY = on ? HoverLiftScale : 1;
-            if (on) HoverPop.Enter(_imgIconHost); else HoverPop.Leave(_imgIconHost);
+            _rootScale.ScaleX = _rootScale.ScaleY = on && !DashboardDepth ? HoverLiftScale : 1;
+            if (on && !DashboardDepth) HoverPop.Enter(_imgIconHost); else HoverPop.Leave(_imgIconHost);
             _rimLight.Opacity = on ? RimLightOpacity : 0;
         }
 

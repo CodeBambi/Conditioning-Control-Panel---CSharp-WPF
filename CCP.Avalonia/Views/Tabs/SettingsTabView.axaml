@@ -433,15 +433,15 @@
            (RefreshMysteryTile) and the tease tile (ApplyTeaseCard). -->
 
       <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
-      <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" Icon="/Resources/features/flash.png"
+      <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="0" x:Name="CardFlash" Icon="/Resources/features/flash.png"
                             Title="Flash Images"
                             HelpSectionId="FlashImages"/>
       <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" IconB="/Resources/features/Bubble_count.png" IconA="/Resources/features/mandatory_videos.png"
                                  TitleA="Mandatory Video" TitleB="Bubble Count" DashboardDepth="True" HelpSectionIdA="Video" HelpSectionIdB="BubbleCount"/>
-      <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" Icon="/Resources/features/subliminal.png"
+      <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" Icon="/Resources/features/subliminal.png"
                             Title="Subliminals"
                             HelpSectionId="Subliminals"/>
-      <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" Icon="/Resources/features/bouncing_text.png"
+      <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" Icon="/Resources/features/bouncing_text.png"
                             Title="Bouncing Text"
                             HelpSectionId="BouncingText"/>
 
@@ -451,7 +451,7 @@
            ShowTab("deeper") and nothing else, right-click does nothing (an editor has no on/off),
            no price tag. Just Drop itself did not move: it is on the Studio rail row, the
            Exclusives shelf and in Ctrl+K. -->
-      <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardDeeperEditor"
+      <features:FeatureCard DashboardDepth="True" Grid.Row="1" Grid.Column="0" x:Name="CardDeeperEditor"
                             Title="{loc:Str dash_deeper_editor_title}"
                             Icon="/Resources/features/deeper_editor.png">
         <ToolTip.Tip>
@@ -693,7 +693,7 @@
           </TransformGroup>
         </Grid.RenderTransform>
 
-        <features:FeatureCard x:Name="CardMystery" Icon="/Resources/features/mysterybox.png"
+        <features:FeatureCard DashboardDepth="True" x:Name="CardMystery" Icon="/Resources/features/mysterybox.png"
                               Title="FREE TODAY"/>
 
         <!-- The reveal face: today's feature, full-bleed. Art + name are painted by
@@ -784,7 +784,7 @@
       <!-- Row 4: the vault (double-wide) + the two games -->
       <!-- THE VAULT: the Exclusives storefront (Velvet Vault + the premium T2 shelf).
            Double-wide because it is a billboard as much as a door. -->
-      <features:FeatureCard Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault" Icon="/Resources/features/vault.png"
+      <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault" Icon="/Resources/features/vault.png"
                             Title="The Vault"/>
       <!-- The vault's animated CTA: big, slightly diagonal, breathing. Overlaid on the CELL
            rather than inside FeatureCard so the card control stays generic. IsHitTestVisible
@@ -809,10 +809,10 @@
                             BlurRadius="14" OffsetX="0" OffsetY="0" Opacity="0.95"/>
         </TextBlock.Effect>
       </TextBlock>
-      <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" Icon="/Resources/features/Bubble_pop.png"
+      <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" Icon="/Resources/features/Bubble_pop.png"
                             Title="Bubble Pop"
                             HelpSectionId="BubblePop"/>
-      <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" Icon="/Resources/features/Phrase_Lock.png"
+      <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" Icon="/Resources/features/Phrase_Lock.png"
                             Title="Lock Card"
                             HelpSectionId="LockCard"/>
 
