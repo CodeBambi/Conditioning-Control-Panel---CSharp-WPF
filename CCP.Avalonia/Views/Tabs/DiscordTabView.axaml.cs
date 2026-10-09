@@ -119,8 +119,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var entry = await FindOnBoardAsync(name);
             if (req != _cardRequest) return;
             if (entry != null) { DisplayProfileEntry(entry); return; }
+            // The board is the month's top 200 (all WPF searches). Anyone else, a friend included, is asked
+            // for by name: /user/lookup answers an exact display name and honours their sharing choices.
+            if (!CoreSettings.Current.OfflineMode && await LookupAsRowAsync(name.Trim()) is { } found)
+            {
+                if (req != _cardRequest) return;
+                DisplayProfileEntry(found);
+                return;
+            }
+            if (req != _cardRequest) return;
             NoProfileSelected.IsVisible = true;
             ProfileCardWrapper.IsVisible = false;
+        }
+
+        /// <summary>Test seam: the by-name lookup behind a search that missed the board.</summary>
+        internal static Func<string, Task<UserLookupResult?>> LookupByName { get; set; } =
+            name => LeaderboardTabView.NewClient().LookupUserAsync(name);
+
+        private static async Task<LeaderboardRow?> LookupAsRowAsync(string name)
+        {
+            try
+            {
+                var u = await LookupByName(name);
+                if (u == null || string.IsNullOrWhiteSpace(u.DisplayName)) return null;
+                return new LeaderboardRow
+                {
+                    DisplayName = u.DisplayName!, Level = u.Level, Xp = u.Xp, BubblesPopped = u.BubblesPopped, GifsSpawned = u.GifsSpawned,
+                    VideoMinutes = u.VideoMinutes, LockCardsCompleted = u.LockCardsCompleted, AchievementsCount = u.AchievementsCount,
+                    IsOnline = u.IsOnline, IsPatreon = u.IsPatreon, PatreonTier = u.PatreonTier, DiscordId = u.DiscordId,
+                };
+            }
+            catch (Exception ex) { Log.Debug("profile lookup by name failed: {E}", ex.Message); return null; }
         }
 
         /// <summary>WPF searches LeaderboardService's cached board. This tab keeps its own monthly board for 60 s (one

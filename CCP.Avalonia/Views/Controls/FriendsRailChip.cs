@@ -57,8 +57,23 @@ public sealed class FriendsRailChip : Grid
         Children.AddRange(new Control[] { _face, _nameLine });
         RefreshPlate();
         // WPF Hover: the face wears the raised wash and lifts 2% (MotionFx.HoverLift, 150 ms).
-        PointerEntered += (_, _) => Hover(true);
-        PointerExited += (_, _) => Hover(false);
+        PointerEntered += (_, _) => { Hover(true); ShowNamePill(true); };
+        PointerExited += (_, _) => { Hover(false); ShowNamePill(false); };
+        // Owner, 2026-10-09: the rail is too narrow for a name, which was cut mid-word. The name line
+        // shows only when it fits whole; otherwise a hover shows it in a pill beside the chip.
+        (_namePillText.FontFamily, _namePillText.FontWeight, _namePillText.FontSize, _namePillText.Foreground) = (FriendsDrawer.Display, FontWeight.SemiBold, 13, FriendsDrawer.Text);
+        _namePillLine.Children.Add(_namePillText);
+        _namePill = new Popup
+        {
+            Placement = PlacementMode.Right, PlacementTarget = this, HorizontalOffset = 6, IsLightDismissEnabled = false, IsHitTestVisible = false, Focusable = false,
+            Child = new Border
+            {
+                Tag = "friends-chip-name", Child = _namePillLine, Background = FriendsDrawer.Raised, CornerRadius = new CornerRadius(999),
+                Padding = new Thickness(12, 5), BorderThickness = new Thickness(1), BorderBrush = FriendsDrawer.Mint, IsHitTestVisible = false,
+            },
+        };
+        Children.Add(_namePill);
+        SizeChanged += (_, _) => FitName();
         ToolTip.SetTip(this, Loc.Get("friends_chip_tooltip"));
         _popup = new Popup
         {
@@ -66,7 +81,7 @@ public sealed class FriendsRailChip : Grid
             IsLightDismissEnabled = true,
         };
         Children.Add(_popup);
-        _popup.Opened += (_, _) => OnPopupOpened();
+        _popup.Opened += (_, _) => { ShowNamePill(false); OnPopupOpened(); };
         _popup.Closed += (_, _) => OnPopupClosed();
         Drawer.OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
         // WPF OnDrawerMouseDown: a popup never activates its owner on a click.
@@ -84,10 +99,35 @@ public sealed class FriendsRailChip : Grid
         // The feed is built after the shell at startup: follow it while on screen (a static event must not hold a dead chip).
         Action feedBuilt = () => global::Avalonia.Threading.Dispatcher.UIThread.Post(RebindFeed);
         AttachedToVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged += feedBuilt; Rebind(); };
-        DetachedFromVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged -= feedBuilt; _popup.IsOpen = false; Unwire(); UnwireFeed(); Drawer.Unsubscribe(); };
+        DetachedFromVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged -= feedBuilt; _popup.IsOpen = false; _namePill.IsOpen = false; Unwire(); UnwireFeed(); Drawer.Unsubscribe(); };
         Rebind();
     }
     internal FriendsDrawer Drawer { get; }
+
+    private readonly Popup _namePill;
+    private readonly TextBlock _namePillText = new();
+    private readonly StackPanel _namePillLine = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Spacing = 6 };
+    internal Popup NamePill => _namePill;
+    /// <summary>True while the rail has room for the whole name beside the face.</summary>
+    internal bool NameFits { get; private set; }
+
+    /// <summary>The name line shows whole or not at all (never cut mid-word).</summary>
+    private void FitName()
+    {
+        _nameLine.Measure(Size.Infinity);
+        NameFits = Bounds.Width - 56 >= _nameLine.DesiredSize.Width && Bounds.Width > 56;
+        _nameLine.Opacity = NameFits ? 1 : 0;
+        if (NameFits) ShowNamePill(false);
+    }
+
+    private void ShowNamePill(bool on)
+    {
+        if (!on || NameFits || _popup.IsOpen) { _namePill.IsOpen = false; return; }
+        _namePillText.Text = Drawer.MeName();
+        while (_namePillLine.Children.Count > 1) _namePillLine.Children.RemoveAt(1);
+        if (FriendsDrawer.TierPlate(Drawer.MeTier(), 13) is { } plate) _namePillLine.Children.Add(plate);
+        _namePill.IsOpen = true;
+    }
     /// <summary>Room around the drawer inside its popup so the BoxShadow (blur 30, 10 down) is not cut off;
     /// the popup offsets take it back, so the drawer sits where it did.</summary>
     internal const double ShadowRoom = 24;
