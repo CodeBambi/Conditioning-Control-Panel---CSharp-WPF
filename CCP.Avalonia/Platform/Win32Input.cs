@@ -65,6 +65,8 @@ internal static class Win32Input
         if (!s.PanicKeyEnabled || MainShellWindow.CapturingPanicKey || MainShellWindow.LockdownActive
             || Views.Controls.AppSettings.DevicesSettingsSection.CapturingPauseKey)
         {
+            // SEAM: LeashTaskHost.OnPanicPress(false)   (WPF LeashPanicKeyWhilePanicOff: while leashed,
+            // a press the panic cannot run still parks the leash task; posted to the UI thread.)
             Dispatcher.UIThread.Post(onPanicPress);
             return;
         }

@@ -40,7 +40,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF EscapeClaim surfaces (TAB-8 / DESK-3): the focus snapshot the hook thread reads.
             EscapeClaim.MarkType(typeof(Views.Controls.FriendsDrawer));
             EscapeClaim.StartTracking();
-            if (OperatingSystem.IsWindows()) return Win32Input.Start(() => HandlePanicKeyPress(DateTime.Now));   // WH_KEYBOARD_LL twin
+            if (OperatingSystem.IsWindows())
+            {
+                WireLeashHold();   // WPF hold-to-cut: timing only, the press path is unchanged
+                return Win32Input.Start(() => HandlePanicKeyPress(DateTime.Now));   // WH_KEYBOARD_LL twin
+            }
             return X11PanicKey.Start(() => CoreSettings.Current.PanicKey,
                 () =>
                 {

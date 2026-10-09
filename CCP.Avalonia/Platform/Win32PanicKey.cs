@@ -70,6 +70,20 @@ internal static class Win32PanicKey
     /// name (null for an unnamed code). Handlers must return at once (post, never work).</summary>
     internal static event Action<int, string?>? KeyDown, KeyUp;
 
+    /// <summary>WPF hold-to-cut: true while this account is leashed (read on the listener thread).</summary>
+    internal static Func<bool> Leashed = () => false;
+
+    /// <summary>The panic key has been held five seconds while leashed (once per hold). Listener
+    /// thread: post, never work.</summary>
+    internal static event Action? LeashHoldDue;
+
+    /// <summary>A swallowed repeat of a held panic key while leashed, with how long it has been held
+    /// (the 5..1 ring and the tick). Listener thread: post, never work.</summary>
+    internal static event Action<TimeSpan>? LeashHolding;
+
+    /// <summary>The held panic key came up (the ring goes). Listener thread.</summary>
+    internal static event Action? PanicReleased;
+
     /// <summary>A Lockdown system key was eaten (the Possession tripwire). Listener thread.</summary>
     internal static event Action? SystemKeyBlocked;
 
@@ -197,8 +211,22 @@ internal static class Win32PanicKey
     {
         _boundVk = VirtualKeys.Of(_currentKey());
         // Panic first: no listener (keyword triggers, push-to-talk) may ever stand between a press and panic.
-        if (vk != 0 && vk == _boundVk && !HeldPanic.Down(nowUtc, leashed: false).Repeat)
-            _onPress();
+        if (vk != 0 && vk == _boundVk)
+        {
+            // WPF LeashHoldSwallows (DESK-5 + hold-to-cut): the first down is THE panic press, every
+            // repeat is swallowed, leashed or not. The leashed flag only times the hold; it never
+            // changes which down is a press, so the leash cannot delay or weaken panic.
+            bool leashed;
+            try { leashed = Leashed(); } catch { leashed = false; }
+            var (repeat, due) = HeldPanic.Down(nowUtc, leashed);
+            if (!repeat) _onPress();
+            try
+            {
+                if (due) LeashHoldDue?.Invoke();
+                else if (leashed && repeat && HeldPanic.HeldFor(nowUtc) is { } held) LeashHolding?.Invoke(held);
+            }
+            catch (Exception ex) { Log.Debug("Panic key: leash hold listener threw: {E}", ex.Message); }
+        }
         try { KeyDown?.Invoke(vk, VirtualKeys.NameOf(vk)); }
         catch (Exception ex) { Log.Debug("Panic key: a key listener threw: {E}", ex.Message); }
         // She's Listening push-to-talk rides the same hook (WPF GlobalKeyboardHook), as on X11.
@@ -209,7 +237,11 @@ internal static class Win32PanicKey
     /// <summary>One key-up on the listener thread.</summary>
     internal static void OnUp(int vk)
     {
-        if (vk == _boundVk) HeldPanic.Up();
+        if (vk == _boundVk)
+        {
+            HeldPanic.Up();
+            try { PanicReleased?.Invoke(); } catch { }
+        }
         KeyUp?.Invoke(vk, VirtualKeys.NameOf(vk));
     }
 }
