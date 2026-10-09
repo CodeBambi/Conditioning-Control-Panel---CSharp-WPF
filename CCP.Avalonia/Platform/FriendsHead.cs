@@ -33,6 +33,7 @@ internal static class FriendsHead
         var url = BaseUrl(userDataDir, overrideUrl);
         Services.Invites.InviteApi.DefaultIdentity = Identity;
         Services.Invites.InviteApi.DefaultBaseUrl = () => url;
+        ContentPackService.DefaultBaseUrl = () => url;   // the pack catalogue + signed install ride the same proxy rule
     }
 
     internal static FriendsService? Create(string? userDataDir, string? overrideUrl)

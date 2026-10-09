@@ -28,9 +28,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// the path.
     ///
     /// The asset browser (scan, selection, presets) is ported in AssetsTabView.Browser.cs.
-    /// ponytail: pack install still needs ContentPackService on this head. Unwired, named in the XAML:
-    ///   BtnRefreshAssets / BtnRefreshPacks / BtnGetPacks /
-    ///   BtnDeleteDownloadedPacks /
+    /// The pack strip, Get Packs, Refresh/Delete packs and the card buttons are AssetsTabView.PackCards.cs
+    /// (Core ContentPackService). Older note, may be partly stale:
+    ///   BtnRefreshAssets /
     ///   BtnSelectAllAssets / BtnDeselectAllAssets / BtnSaveAssetPreset / BtnUpdateAssetPreset /
     ///   BtnDeleteAssetPreset / CmbAssetPresets.SelectionChanged / AssetTreeView.SelectionChanged /
     ///   FolderCheckBox / ThumbnailCheckBox / ThumbnailItem click + context menu /
@@ -50,6 +50,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             DataContext = Browser;
             InitializeLibraryPicker();   // the media picker + Folders chip (AssetsTabView.MediaPicker.cs)
             InitializeAssetBrowser();    // folder tree, thumbnails, presets (AssetsTabView.Browser.cs)
+            InitializePackCards();       // pack strip + Get Packs (AssetsTabView.PackCards.cs)
         }
 
         /// <summary>
@@ -110,9 +111,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public event PropertyChangedEventHandler? PropertyChanged;
         private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        /// <summary>The packs strip is IsVisible="False" on 7.1.5 and the pack service is not on
-        /// this head: empty, never sample cards.</summary>
-        public IReadOnlyList<PackCardViewModel> Packs { get; } = Array.Empty<PackCardViewModel>();
+        /// <summary>The packs strip (IsVisible="False" on 7.1.5, PacksSectionEnabled). Filled by
+        /// AssetsTabView.PackCards.cs from the Core ContentPackService, never sample cards.</summary>
+        public ObservableCollection<PackCardViewModel> Packs { get; } = new();
 
         public ObservableCollection<AssetTreeItem> Folders { get; } = new();
 
@@ -141,37 +142,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             get => _countsText;
             set { if (_countsText != value) { _countsText = value; Raise(nameof(CountsText)); } }
         }
-    }
-
-    /// <summary>One card in the (hidden) content-packs strip.</summary>
-    public sealed class PackCardViewModel
-    {
-        public string Name { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string SizeDisplay { get; set; } = "";
-        public int ImageCount { get; set; }
-        public int VideoCount { get; set; }
-        public bool IsDownloaded { get; set; }
-        public bool IsExternal { get; set; }
-        public bool IsDownloading { get; set; }
-        public double DownloadProgress { get; set; }
-
-        /// <summary>WPF used a MultiBinding with StringFormat "{0} images, {1} videos"; Avalonia has
-        /// no MultiBinding StringFormat, and the string was hardcoded English there too.</summary>
-        public string CountsDisplay => $"{ImageCount} images, {VideoCount} videos";
-
-        public bool ShowExternalButtons => IsExternal && !IsDownloaded;
-        public bool IsNotDownloading => !IsDownloading;
-        public string DownloadButtonText => IsDownloaded ? "Uninstall" : "Install";
-        public string ActivateButtonText => "Deactivate";
-
-        // IImage, not a URL string: Avalonia will not convert one, and pack:// is WPF-only. Null
-        // until the pack service (and its image cache) moves to Core - the "No Preview" branch
-        // is what draws meanwhile, which is also the honest state for a pack with no preview.
-        public IImage? CurrentPreviewImage => null;
-        public IImage? PreviewImage => null;
-        public bool HasPreviewImages => false;
-        public bool HasAnyPreview => false;
     }
 
     /// <summary>One tile in the thumbnail grid (WPF AssetFileItem).</summary>
