@@ -12,8 +12,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// PORTED from ConditioningControlPanel/Dialogs/AttentionTargetEditorDialog.xaml.cs. Deviations:
     ///  - Settings load/save run for real against <see cref="CoreSettings"/>; the colour buttons
     ///    open this head's <see cref="ColorPickerDialog"/> instead of WinForms' ColorDialog.
-    ///  - The test target (Services.FloatingText on a Win32 screen) is still a stub - see BtnTest.
-    ///  - <c>PreviewTextShadow</c> is gone with the DropShadowEffect it coloured.
+    ///  - The test target is <see cref="Overlays.AttentionTestTarget"/> (WPF Services.FloatingText).
+    ///  - <c>PreviewTextShadow</c> is the TextBlock's Effect, reached through <c>_previewText.Effect</c>.
     ///  - <c>DialogResult = x; Close()</c> becomes <c>Close(x)</c>. WPF's picker was modal and
     ///    inline; Avalonia's is awaited, so the four colour handlers are async void.
     /// </summary>
@@ -161,6 +161,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 // Text
                 _previewText.Foreground = new SolidColorBrush(textColor);
                 _previewText.FontFamily = new FontFamily(_font);
+
+                // Text shadow - darker version of text color for floating, or primary color otherwise
+                var shadowBase = _floatingText ? textColor : color1;
+                ((DropShadowEffect)_previewText.Effect!).Color = Color.FromRgb(
+                    (byte)(shadowBase.R * 0.4), (byte)(shadowBase.G * 0.4), (byte)(shadowBase.B * 0.4));
             }
             catch { }
         }
@@ -269,12 +274,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void BtnTest_Click()
         {
-            // ponytail: needs ConditioningControlPanel/Services/Video/VideoService.cs:8130
-            // (internal class FloatingText : IAttentionTarget - a Win32 layered
-            // click-through window, bucket E) and System.Windows.Forms.Screen.PrimaryScreen. The
-            // settings half is ready - WPF applies these seven fields, spawns the target on the
-            // primary screen and restores the old values in a finally - so this is one window
-            // reimplementation away, not a settings problem.
+            // WPF: apply the unsaved values for the spawn only (the target reads its style once,
+            // when built), then restore them - nothing is saved until Save.
+            var settings = CoreSettings.Current;
+            var old = (settings.AttentionColor1, settings.AttentionColor2, settings.AttentionTextColor,
+                settings.AttentionBorderColor, settings.AttentionShowBorder, settings.AttentionFloatingText, settings.AttentionFont);
+            try
+            {
+                settings.AttentionColor1 = _color1;
+                settings.AttentionColor2 = _color2;
+                settings.AttentionTextColor = _textColor;
+                settings.AttentionBorderColor = _borderColor;
+                settings.AttentionShowBorder = _showBorder;
+                settings.AttentionFloatingText = _floatingText;
+                settings.AttentionFont = _font;
+
+                // The first enabled pool phrase, "EYES HERE" when none is (WPF).
+                var text = "EYES HERE";
+                foreach (var kvp in settings.AttentionPool)
+                    if (kvp.Value) { text = kvp.Key; break; }
+
+                Overlays.AttentionTestTarget.Spawn(text, settings.AttentionSize, this);
+            }
+            finally
+            {
+                (settings.AttentionColor1, settings.AttentionColor2, settings.AttentionTextColor,
+                    settings.AttentionBorderColor, settings.AttentionShowBorder, settings.AttentionFloatingText, settings.AttentionFont) = old;
+            }
         }
 
         private void BtnSave_Click()

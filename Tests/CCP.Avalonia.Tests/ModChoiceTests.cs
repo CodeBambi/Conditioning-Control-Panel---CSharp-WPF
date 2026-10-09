@@ -142,7 +142,7 @@ public sealed class ModChoiceTests
     public Task ReturningUserStartupOpensNoPickerAndFetchesNothing() => Run(async (shell, svc, server) =>
     {
         // Run's profile is a returning user (Welcomed, age accepted, ModPickerShown=false). WPF 6.11.x
-        // removed the standalone popup (MainWindow.xaml.cs:610-611), so nothing opens or fetches.
+        // removed the standalone popup (MainWindow.xaml.cs:587-588), so nothing opens or fetches.
         for (var i = 0; i < 10; i++) { Dispatcher.UIThread.RunJobs(); await Task.Delay(50); }
         Assert.Empty(shell.OwnedWindows.OfType<ModPickerDialog>());
         Assert.False(CoreSettings.Current.ModPickerShown);

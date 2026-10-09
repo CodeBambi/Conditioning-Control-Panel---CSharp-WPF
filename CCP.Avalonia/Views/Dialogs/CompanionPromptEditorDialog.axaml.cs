@@ -8,7 +8,10 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Companion;
 using ConditioningControlPanel.Services.Moderation;
+using ConditioningControlPanel.Avalonia.Views.Deeper;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
@@ -25,15 +28,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    The community-prompt lookup is the one stub left (see <c>UpdateActivePromptBadge</c>).
     ///  - <c>PromptValidator</c> lives in Core and runs for real on Save.
     ///  - <c>MessageBox.Show</c> becomes this head's <see cref="MessageDialog"/>, which is awaited,
-    ///    so Remove / Reset All / Cancel are async void. Its two-button shape covers the Yes/No
-    ///    confirms; the X button's three-way Save/Discard/Cancel prompt is not portable and is
-    ///    noted at the bottom of this file instead.
+    ///    so Remove / Reset All / Cancel are async void. The X button's three-way
+    ///    Save/Discard/Cancel prompt uses <see cref="UnsavedChangesDialog"/> (see OnClosing).
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>.
     /// </summary>
     public partial class CompanionPromptEditorDialog : Window
     {
         private readonly CompanionPromptSettings _defaults;
         private bool _hasUnsavedChanges;
+        /// <summary>WPF's <c>DialogResult.HasValue</c>: set by Save/Cancel (and by an answered X
+        /// prompt) so their Close(x) skips the unsaved-changes prompt in OnClosing.</summary>
+        private bool _closeDecided;
         private readonly ObservableCollection<KnowledgeBaseLink> _knowledgeLinks = new();
 
         private readonly CheckBox _chkUseCustom;
@@ -56,7 +61,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _txtContextReactions = this.FindControl<TextBox>("TxtContextReactions")!;
             _txtOutputRules = this.FindControl<TextBox>("TxtOutputRules")!;
 
-            _defaults = CompanionPromptSettings.GetDefaults();
+            _defaults = ActivePersonaPromptText.Resolve(ActivePersonaPrompt(), CompanionPromptSettings.GetDefaults());
             LoadCurrentSettings();
             LoadKnowledgeLinks();
             UpdateActivePromptDisplay();
@@ -65,7 +70,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // Handlers wired after the loads so the initial Text assignments do not count as edits.
             _chkUseCustom.IsCheckedChanged += (_, _) => ChkUseCustom_Changed();
             foreach (var box in new[] { _txtPersonality, _txtExplicitReaction, _txtSlutMode, _txtKnowledgeBase, _txtContextReactions, _txtOutputRules })
-                box.TextChanged += (_, _) => _hasUnsavedChanges = true;
+                // Not TextChanged: Avalonia raises it on a later dispatcher pass, so the loads above
+                // would mark a clean dialog dirty and its X would ask about edits nobody made.
+                box.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty) _hasUnsavedChanges = true; };
 
             this.FindControl<Button>("BtnPolicyGotIt")!.Click += (_, _) => BtnPolicyGotIt_Click();
             this.FindControl<Button>("BtnPolicyReadFull")!.Click += (_, _) => BtnPolicyRead_Click();
@@ -81,6 +88,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnResetAll")!.Click += (_, _) => ResetAll_Click();
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => BtnCancel_Click();
             this.FindControl<Button>("BtnSave")!.Click += (_, _) => BtnSave_Click();
+        }
+
+        /// <summary>The running persona's prompt text, or null when it carries none (WPF
+        /// ActivePersonaPrompt, read from Core's PersonalityService instead of App.Personality).</summary>
+        private static CompanionPromptSettings? ActivePersonaPrompt()
+        {
+            try { return PersonalityService.Shared.GetActivePreset()?.PromptSettings; }
+            catch { return null; }
         }
 
         /// <summary>
@@ -217,18 +232,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // panel; we only persist personality-related fields here.
             // Coalesced: WPF's TextBox.Text is never null, Avalonia's is null when empty, and
             // the settings model's fields are non-nullable strings.
-            settings.Personality = _txtPersonality.Text ?? string.Empty;
-            settings.ExplicitReaction = _txtExplicitReaction.Text ?? string.Empty;
-            settings.SlutModePersonality = _txtSlutMode.Text ?? string.Empty;
-            settings.KnowledgeBase = _txtKnowledgeBase.Text ?? string.Empty;
-            settings.ContextReactions = _txtContextReactions.Text ?? string.Empty;
-            settings.OutputRules = _txtOutputRules.Text ?? string.Empty;
+            // ONLY what the user changed: a box still showing the persona's text persists blank
+            // (WPF Persist -> ActivePersonaPromptText.PersistedField, which also coalesces null).
+            settings.Personality = ActivePersonaPromptText.PersistedField(_txtPersonality.Text, _defaults.Personality);
+            settings.ExplicitReaction = ActivePersonaPromptText.PersistedField(_txtExplicitReaction.Text, _defaults.ExplicitReaction);
+            settings.SlutModePersonality = ActivePersonaPromptText.PersistedField(_txtSlutMode.Text, _defaults.SlutModePersonality);
+            settings.KnowledgeBase = ActivePersonaPromptText.PersistedField(_txtKnowledgeBase.Text, _defaults.KnowledgeBase);
+            settings.ContextReactions = ActivePersonaPromptText.PersistedField(_txtContextReactions.Text, _defaults.ContextReactions);
+            settings.OutputRules = ActivePersonaPromptText.PersistedField(_txtOutputRules.Text, _defaults.OutputRules);
 
-            // ponytail: un-ticking "use custom prompt" must also drop the community id, through
-            // ConditioningControlPanel/Services/Companion/CommunityPromptService.ClearCustomPromptOverride,
-            // or the Companion tab keeps reporting "Custom: <name>" off an override that is no
-            // longer on the wire. That service is head-only. Its body is NOT inlined here on
-            // purpose: one shared call is what keeps the two call sites from drifting apart.
+            // Un-ticking "use custom prompt" also drops the community id (WPF SaveSettings).
+            if (!settings.UseCustomPrompt)
+                PersonalityService.ClearCustomPromptOverride(CoreSettings.Current);
 
             // Save global knowledge base links
             SaveKnowledgeLinks();
@@ -283,7 +298,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // These two strings are hardcoded English in the WPF original, not loc keys; ported as
             // literals rather than inventing key names no catalogue carries.
             var confirmed = await MessageDialog.ConfirmAsync(this, "Reset All Prompts",
-                "Reset all prompts to their default values?\n\nThis cannot be undone.");
+                "Put every box back to your companion's own text?\n\nThis cannot be undone.");
             if (!confirmed) return;
 
             _txtPersonality.Text = _defaults.Personality;
@@ -302,6 +317,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             RunPromptValidation();
 
             SaveSettings();
+            _closeDecided = true;
             Close(true);
         }
 
@@ -372,15 +388,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 if (!discard) return;
             }
 
+            _closeDecided = true;
             Close(false);
         }
 
-        // ponytail: WPF's OnClosing prompts Save / Discard / CANCEL-THE-CLOSE on the X button when
-        // there are unsaved changes. MessageDialog (CCP.Avalonia/Views/Dialogs/MessageDialog.axaml.cs)
-        // is two-button, so the three-way answer cannot be expressed and the X still just closes.
-        // Whoever adds a three-button dialog also needs two things Avalonia forces: Closing is
-        // SYNCHRONOUS, so the shape is `e.Cancel = true; await ...; Close()` behind a re-entry
-        // flag; and WPF's `!DialogResult.HasValue` guard has no twin, because Close(x) raises
-        // Closing too - it needs a "closed by a button" flag set in BtnSave_Click/BtnCancel_Click.
+        /// <summary>
+        /// WPF OnClosing: the X with unsaved changes asks Save / Discard / Cancel (the WPF
+        /// strings are hardcoded English). Avalonia's Closing is synchronous, so the close is
+        /// cancelled, the prompt awaited, and the window re-closed with the decision recorded.
+        /// </summary>
+        protected override void OnClosing(WindowClosingEventArgs e)
+        {
+            if (!_closeDecided && _hasUnsavedChanges)
+            {
+                e.Cancel = true;
+                _ = AskBeforeCloseAsync();
+            }
+            base.OnClosing(e);
+        }
+
+        private bool _asking;
+
+        internal async System.Threading.Tasks.Task AskBeforeCloseAsync()
+        {
+            if (_asking) return;
+            _asking = true;
+            try
+            {
+                var choice = await UnsavedChangesDialog.AskAsync(this, "Unsaved Changes",
+                    "You have unsaved changes. Save before closing?");
+                if (choice == UnsavedChangesDialog.Choice.Cancel) return;
+                if (choice == UnsavedChangesDialog.Choice.Save) SaveSettings();
+                _closeDecided = true;
+                Close();
+            }
+            finally { _asking = false; }
+        }
     }
 }

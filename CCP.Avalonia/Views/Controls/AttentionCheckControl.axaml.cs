@@ -24,16 +24,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     ///   StartPulse() / StopPulse() — gentle scale-pulse animation, useful
     ///                                 to signal "look here" on first appear.
     ///
-    /// <para><b>Nothing on this head constructs this control, and that is not an oversight.</b>
-    /// Its only caller is <c>AttentionCheckService.EnsureWindow()</c>
-    /// (ConditioningControlPanel/Services/AttentionCheckService.cs:339), which is not ported and
-    /// cannot be until three things exist here: the gaze feed it drives the ring from
-    /// (<c>App.Webcam.OnGazeMove</c> / WebcamTrackingService — no webcam engine on this head at
-    /// all), a topmost, non-activating, hit-test-invisible transparent window to host it, and the
-    /// <c>HwndSource</c> WM_DPICHANGED swallow hook that keeps a re-show off the render thread.
-    /// Giving it any other entry point would put a ring on screen that fills from nothing and
-    /// scores a check the user was never actually measured on, so it stays unreached. Wire it
-    /// from the ported AttentionCheckService, not from a view.</para>
+    /// <para><b>Nothing on this head constructs this control, matching WPF.</b> Its only caller is
+    /// <c>AttentionCheckService.EnsureWindow()</c> (ConditioningControlPanel/Services/AttentionCheckService.cs:339),
+    /// and WPF scrapped that mechanic pre-ship: App.xaml.cs constructs the service for BarkService's
+    /// OnPass/OnFail wiring and never starts it, so WPF never shows the ring. If WPF revives it,
+    /// <c>AttentionCheckParityScanTests</c> fails; then port the service (gaze feed from the head's
+    /// WebcamTracker, topmost click-through host, panic stop, Lockdown) and wire this from it.</para>
     /// </summary>
     public partial class AttentionCheckControl : UserControl
     {

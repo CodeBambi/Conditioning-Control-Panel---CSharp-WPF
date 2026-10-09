@@ -8,7 +8,8 @@ namespace ConditioningControlPanel
     /// The engine half of WPF <c>ProgressionService.AddXP</c> / <c>SpendXPOnLevels</c>, for a head that seeds
     /// <see cref="CoreProgression.AddXPProvider"/> with <see cref="Add"/>: the login gate, the XP add and the
     /// level loop with <c>HighestLevelEver</c>.
-    /// ponytail: no skill multiplier (skill-tree owners are under-awarded, which errs safe), no skill
+    /// ponytail: of the skill multiplier only Pink Rush's 3x is applied (sparkle boosts, streak power, night
+    /// shift, early bird and event boost are not, so owners are under-awarded, which errs safe), no skill
     /// points or companion XP - each lands with its ported feature. Level achievements listen to <see cref="LevelUp"/>; quests listen to <see cref="Awarded"/>
     /// (the Avalonia head feeds it to QuestService.TrackXPEarned, as WPF AddXP:120 does).
     /// </summary>
@@ -38,7 +39,8 @@ namespace ConditioningControlPanel
             }
             // WPF ProgressionService.AddXP:90: the lasting Descent bonus for a migrated account (1.0 otherwise).
             // Awarded still carries the base amount: WPF feeds quests the base too (AddXP:120).
-            var adjusted = amount * Services.Descent.DescentCycleXp.XpBonusFor(s);
+            // WPF AddXP:89 skill multiplier: only Pink Rush's 3x term so far (decisions 2026-10-08).
+            var adjusted = amount * Models.PinkRushRules.XpFactor(s) * Services.Descent.DescentCycleXp.XpBonusFor(s);
             s.PlayerXP += adjusted;
             Log.Information("XP awarded: +{Amount} from {Source} (now {Now})", adjusted, source, s.PlayerXP);
             var epoch = ProfileAdopt.Epoch(s);
