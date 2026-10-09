@@ -222,8 +222,15 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 ApplyState(); StartMotion();
                 _visibilityWatch?.Dispose();
                 _visibilityWatch = EffectiveVisibility.Watch(this, OnEffectiveVisibilityChanged);
+                // Live motion kill-switch (WPF CmbMotionLevel_SelectionChanged re-arms/stops the badges).
+                AmbientFxCanvas.Env.MotionGateChanged -= StartMotion;
+                AmbientFxCanvas.Env.MotionGateChanged += StartMotion;
             };
-            Unloaded += (_, _) => { StopMotion(); _visibilityWatch?.Dispose(); _visibilityWatch = null; };
+            Unloaded += (_, _) =>
+            {
+                AmbientFxCanvas.Env.MotionGateChanged -= StartMotion;
+                StopMotion(); _visibilityWatch?.Dispose(); _visibilityWatch = null;
+            };
         }
 
         // =====================================================================================
@@ -289,10 +296,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// <summary>
         /// MotionFx.AllowAmbientLoops, through this head's copy of it
         /// (<see cref="AmbientFxCanvas.Env"/> over the real <c>CoreSettings.Current</c>).
-        /// Read at Loaded / a state change / IsVisible, never polled: a live MotionLevel change
-        /// reaches a badge that re-shows, and a host wanting more must call
-        /// <see cref="StartMotion"/> the way WPF re-armed from
-        /// MainWindow.UiUpdates.CmbMotionLevel_SelectionChanged.
+        /// Read at Loaded / a state change / IsVisible / <c>Env.MotionGateChanged</c>, never polled,
+        /// the way WPF re-armed from MainWindow.UiUpdates.CmbMotionLevel_SelectionChanged.
         /// </summary>
         private bool AmbientAllowed => MotionOverride ?? AmbientFxCanvas.Env.AllowAmbientLoops;
 
@@ -810,7 +815,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private static Bitmap? _artT1, _artT2, _artStamp;
         private static bool _artT1Tried, _artT2Tried, _artStampTried;
 
-        private static Bitmap? TierArt(int tier)
+        internal static Bitmap? TierArt(int tier)
         {
             if (tier >= 2)
             {

@@ -7814,5 +7814,16 @@
   "vaultgate_yearly_note": "按年付费目前仅支持 Patreon。其他支付方式为按月。",
   "vaultgate_sale_first": "/ 首月",
   "vaultgate_sale_line": "首月减免 {0}%，之后每月 {1}。",
-  "vaultgate_sale_ends": "优惠截止 {0}。"
+  "vaultgate_sale_ends": "优惠截止 {0}。",
+  "kwt_no_audio": "无音频",
+  "kwt_cd": "冷却:",
+  "kwt_vol": "音量:",
+  "kwt_effect_none": "无",
+  "kwt_effect_highlight_only": "仅高亮",
+  "kwt_effect_subliminal": "潜意识",
+  "kwt_effect_exact_subliminal": "精确潜意识",
+  "kwt_effect_image_flash": "图片闪现",
+  "kwt_effect_overlay_pulse": "叠加层脉冲",
+  "kwt_effect_mind_wipe": "思维清除",
+  "kwt_effect_bubbles": "泡泡"
 }

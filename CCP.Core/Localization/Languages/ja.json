@@ -7302,5 +7302,16 @@
   "vaultgate_yearly_note": "年額払いは今のところPatreonのみです。他の支払い方法は月額です。",
   "vaultgate_sale_first": "/ 初月",
   "vaultgate_sale_line": "初月{0}%オフ、その後は月{1}。",
-  "vaultgate_sale_ends": "セールは{0}まで。"
+  "vaultgate_sale_ends": "セールは{0}まで。",
+  "kwt_no_audio": "音声なし",
+  "kwt_cd": "CD:",
+  "kwt_vol": "音量:",
+  "kwt_effect_none": "なし",
+  "kwt_effect_highlight_only": "ハイライトのみ",
+  "kwt_effect_subliminal": "サブリミナル",
+  "kwt_effect_exact_subliminal": "正確なサブリミナル",
+  "kwt_effect_image_flash": "画像フラッシュ",
+  "kwt_effect_overlay_pulse": "オーバーレイパルス",
+  "kwt_effect_mind_wipe": "マインドワイプ",
+  "kwt_effect_bubbles": "バブル"
 }

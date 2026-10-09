@@ -1,17 +1,22 @@
 // PORTED from ConditioningControlPanel/Controls/ChasterRailChip.cs: the padlock at the foot of the
 // rail with the lock's clock under it; opens Circe's tab; dimmed, never hidden, while unlinked.
 // The hover peek (WPF FillPeek :546) and the glow following the ring colour (:429) are real.
-// ponytail: no peek spring-in (:516), idle breath/swing (StartIdle), mood-pip pop or Pulse
-// (the booked flash floats off it: MainShellWindow.ChasterFlash.cs); the glow's colour follows, its opacity does not breathe.
+// Peek spring-in (:516), idle breath/swing (StartIdle :645), mood-pip pop (:492) and Pulse (:681)
+// are real; the booked flash floats off it (MainShellWindow.ChasterFlash.cs), which calls Pulse.
 using System;
 using System.Linq;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Rendering.Composition;
+using Avalonia.Rendering.Composition.Animations;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Windows;
@@ -48,14 +53,6 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private static readonly Color DebtRed = Color.FromRgb(0xFF, 0x6B, 0x8A);
         private static readonly Color PeekMuted = Color.FromRgb(0xB8, 0xB0, 0xCC);
 
-        /// <summary>WPF CircesMoodMeter.ColourOf, shared with the tab's mood line.</summary>
-        internal static Color MoodColour(MoodLevel level) => level switch
-        {
-            MoodLevel.Warm => Color.FromRgb(0xE0, 0xB0, 0x52),
-            MoodLevel.Hot => Color.FromRgb(0xFF, 0x6B, 0x8A),
-            MoodLevel.Smoking => Color.FromRgb(0xFF, 0x3D, 0x71),
-            _ => CreditMint,
-        };
 
         private readonly SolidColorBrush _inkBrush = new(Ink);
         private readonly GradientStop _bodyTop = new(Color.FromRgb(0xFF, 0xC4, 0xE4), 0);
@@ -70,6 +67,19 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private readonly Border _badge;
         private readonly TextBlock _badgeText;
         private readonly Border _moodPip;
+        private readonly ScaleTransform _moodPop = new(1, 1);
+        private readonly DropShadowEffect _glow = new() { Color = Color.FromRgb(0xFF, 0x69, 0xB4), BlurRadius = 12, OffsetX = 0, OffsetY = 0, Opacity = 0.8 };
+        // The glow lives on a disc behind the ring whose Opacity breathes: animating the effect itself
+        // re-renders the effect every frame (and stalled headless hit tests). 0.69 x 0.8 = WPF's 0.55 rest.
+        private readonly Border _glowHost;
+        private global::Avalonia.Rendering.Composition.CompositionVisual? _breath;
+        private readonly RotateTransform _swing = new();
+        private readonly Canvas _art;
+        private readonly ScaleTransform _peekScale = new(1, 1);
+        private readonly Border _peekCard;
+        private System.Threading.CancellationTokenSource? _idle, _pulse, _pop, _peekRun;
+        private CircesMood? _mood;
+        private Color _ringRest = RingPink;
         private DispatcherTimer? _tick;
         private ChasterService? _wired;
         private readonly Popup _peek;
@@ -84,7 +94,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             Background = Brushes.Transparent; // the whole row takes the click, not just the ring
             ClipToBounds = true;
 
-            var art = new Canvas { Width = 24, Height = 24 };
+            var art = _art = new Canvas { Width = 24, Height = 24, RenderTransformOrigin = new RelativePoint(0.5, 0.2, RelativeUnit.Relative), RenderTransform = _swing };
             _shackle = new Path
             {
                 Data = ShackleShut, Stroke = _inkBrush, StrokeThickness = 2.8, StrokeLineCap = PenLineCap.Round,
@@ -99,6 +109,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
             art.Children.Add(new Path { Data = BodyGeometry, Fill = bodyFill, Stroke = Keyline, StrokeThickness = 0.6 });
             art.Children.Add(new Path { Data = BodyGlint, Fill = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)) });
 
+            _glowHost = new Border
+            {
+                Width = RingSize, Height = RingSize, CornerRadius = new CornerRadius(RingSize / 2), Background = Keyline,
+                HorizontalAlignment = HorizontalAlignment.Center, Effect = _glow, Opacity = 0.55 / 0.8,
+            };
             _ring = new Border
             {
                 Width = RingSize, Height = RingSize, CornerRadius = new CornerRadius(RingSize / 2),
@@ -109,7 +124,6 @@ namespace ConditioningControlPanel.Avalonia.Controls
                     GradientStops = { new GradientStop(Color.FromRgb(0x3A, 0x22, 0x4E), 0), new GradientStop(Color.FromRgb(0x17, 0x12, 0x2A), 1) },
                 },
                 HorizontalAlignment = HorizontalAlignment.Center,
-                BoxShadow = BoxShadows.Parse("0 0 12 0 #8CFF69B4"),
                 Child = new Viewbox { Width = 27, Height = 27, Child = art },
             };
             _clock = new TextBlock
@@ -121,7 +135,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             var column = new StackPanel
             {
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false,
-                Children = { _ring, _clock },
+                Children = { new Panel { Children = { _glowHost, _ring } }, _clock },
             };
             Children.Add(column);
 
@@ -145,6 +159,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 BorderBrush = Keyline, BorderThickness = new Thickness(1.2),
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(0, 5, RingSize - 8, 0), IsVisible = false, IsHitTestVisible = false,
+                RenderTransformOrigin = RelativePoint.Center, RenderTransform = _moodPop,
             };
             Children.Add(_moodPip);
 
@@ -179,11 +194,12 @@ namespace ConditioningControlPanel.Avalonia.Controls
             {
                 PlacementTarget = this, Placement = PlacementMode.Right, VerticalOffset = -40, HorizontalOffset = 6,
                 IsLightDismissEnabled = false, Focusable = false, IsHitTestVisible = false,
-                Child = new Border
+                Child = _peekCard = new Border
                 {
                     Background = paper, BorderBrush = rim, BorderThickness = new Thickness(1.5), CornerRadius = new CornerRadius(18),
                     Padding = new Thickness(22, 14, 26, 16), Margin = new Thickness(6, 16, 24, 24), IsHitTestVisible = false,
                     BoxShadow = BoxShadows.Parse("0 0 22 0 #73FF69B4"),
+                    RenderTransformOrigin = new RelativePoint(0, 0.5, RelativeUnit.Relative), RenderTransform = _peekScale,
                     Child = new StackPanel { Children = { _peekTitle, _peekNumber, _peekLead, _peekEnds, _peekPending, _peekMood, _peekNote } },
                 },
             };
@@ -205,7 +221,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
         internal Popup Peek => _peek;
         internal string PeekText => string.Join("|", new[] { _peekTitle }.Concat(_peekNumber.Children.OfType<TextBlock>())
             .Concat(new[] { _peekLead, _peekEnds, _peekPending, _peekMood, _peekNote }).Where(t => t.IsVisible && !string.IsNullOrEmpty(t.Text)).Select(t => t.Text));
-        internal Color GlowColour => _ring.BoxShadow.Count > 0 ? _ring.BoxShadow[0].Color : default;
+        internal Color GlowColour => _glow.Color;
+        internal Color RingColour => _ringBrush.Color;
+        internal bool Idling => _idle != null;
+        internal bool Breathing => _breath != null;
+        /// <summary>The tint the last pulse started from. For the tests.</summary>
+        internal Color? LastPulse { get; private set; }
+        internal bool MoodPipShown => _moodPip.IsVisible;
 
         private void OpenPeek()
         {
@@ -214,6 +236,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 FillPeek();
                 _peek.IsOpen = true;
                 if (_tick != null && _tick.Interval != TimeSpan.FromSeconds(1)) _tick.Interval = TimeSpan.FromSeconds(1);
+                _peekRun?.Cancel();
+                _peekRun = null;
+                if (!AmbientFxCanvas.Env.AllowTransitions) return;
+                var run = _peekRun = new System.Threading.CancellationTokenSource();
+                _ = CircesMoodMeter.Tween(_peekCard, ScaleTransform.ScaleXProperty, 0.55, 1d, 460, new ElasticEaseOut(), run);
+                _ = CircesMoodMeter.Tween(_peekCard, ScaleTransform.ScaleYProperty, 0.55, 1d, 460, new ElasticEaseOut(), run);
+                _ = CircesMoodMeter.Tween(_peekCard, OpacityProperty, 0d, 1d, 140, new LinearEasing(), run);
             }
             catch (Exception ex) { Serilog.Log.Debug("[Chaster] rail chip peek: {E}", ex.Message); }
         }
@@ -316,6 +345,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _tick.Tick += (_, _) => Apply();
             _tick.Start();
             Apply();
+            StartIdle();
         }
 
         private void Unwire()
@@ -329,6 +359,78 @@ namespace ConditioningControlPanel.Avalonia.Controls
             }
             _tick?.Stop();
             _tick = null;
+            StopIdle();
+        }
+
+        /// <summary>WPF StartIdle (:645): a slow breath on the rim glow and a small swing of the
+        /// padlock every 7 s. Ambient loops only; stopped when the chip leaves the tree.</summary>
+        private void StartIdle()
+        {
+            if (_idle != null || !AmbientFxCanvas.Env.AllowAmbientLoops) return;
+            var run = _idle = new System.Threading.CancellationTokenSource();
+            var swing = new Animation
+            {
+                Duration = TimeSpan.FromSeconds(7), IterationCount = IterationCount.Infinite, Easing = new LinearEasing(),
+                Children =
+                {
+                    Key(0, RotateTransform.AngleProperty, 0d), Key(5600 / 7000d, RotateTransform.AngleProperty, 0d),
+                    Key(5780 / 7000d, RotateTransform.AngleProperty, -9d), Key(6000 / 7000d, RotateTransform.AngleProperty, 7d),
+                    Key(6220 / 7000d, RotateTransform.AngleProperty, -4d), Key(6500 / 7000d, RotateTransform.AngleProperty, 0d),
+                    Key(1, RotateTransform.AngleProperty, 0d),
+                },
+            };
+            try
+            {
+                TryBreathe();
+                _ = swing.RunAsync(_art, run.Token);
+            }
+            catch (Exception ex) { Serilog.Log.Debug("[Chaster] rail chip idle: {E}", ex.Message); }
+        }
+
+        /// <summary>The breath needs the composition visual, which exists only once the chip has
+        /// been rendered; StartIdle runs at attach, so Apply retries until it takes.</summary>
+        private void TryBreathe()
+        {
+            // The breath runs in the compositor (no UI-thread work per frame): a UI-thread opacity
+            // loop kept every headless frame busy and stalled the content hit-test proof.
+            if (_idle == null || _breath != null) return;
+            if (ElementComposition.GetElementVisual(_glowHost) is { } v)
+            {
+                var breath = v.Compositor.CreateScalarKeyFrameAnimation();
+                breath.InsertKeyFrame(0f, 0.35f / 0.8f, new SineEaseInOut());
+                breath.InsertKeyFrame(1f, 1f, new SineEaseInOut());
+                breath.Duration = TimeSpan.FromMilliseconds(2200);
+                breath.IterationBehavior = AnimationIterationBehavior.Forever;
+                breath.Direction = PlaybackDirection.Alternate;
+                breath.Target = "Opacity";
+                v.StartAnimation("Opacity", breath);
+                _breath = v;
+            }
+        }
+
+        private void StopIdle()
+        {
+            _idle?.Cancel();
+            _idle = null;
+            // a detached chip drops its composition visual, and the breath with it
+            _breath = null;
+        }
+
+        private static KeyFrame Key(double cue, AvaloniaProperty p, double v) => new() { Cue = new Cue(cue), Setters = { new Setter(p, v) } };
+
+        /// <summary>WPF Pulse (:681): a 250 ms tint on the ring for whoever just booked something
+        /// at this chip. Silent under MotionLevel Off, where the resting colour is all there is.</summary>
+        public void Pulse(Color tint)
+        {
+            try
+            {
+                if (!AmbientFxCanvas.Env.AllowTransitions) return;
+                _pulse?.Cancel();
+                var run = _pulse = new System.Threading.CancellationTokenSource();
+                LastPulse = tint;
+                _ = CircesMoodMeter.Tween(_ringBrush, SolidColorBrush.ColorProperty, tint, _ringRest, 250, new QuadraticEaseOut(), run);
+            }
+            catch (Exception ex) { Serilog.Log.Debug("[Chaster] rail chip pulse: {E}", ex.Message); }
         }
 
         private void OnServiceChanged() => Dispatcher.UIThread.Post(Apply, DispatcherPriority.Background);
@@ -367,8 +469,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 _inkBrush.Color = ink;
                 _bodyBottom.Color = ink;
                 _bodyTop.Color = Color.FromRgb((byte)(ink.R + (255 - ink.R) * 0.55), (byte)(ink.G + (255 - ink.G) * 0.55), (byte)(ink.B + (255 - ink.B) * 0.55));
-                _ringBrush.Color = ring;
-                _ring.BoxShadow = new BoxShadows(new BoxShadow { Blur = 12, Color = Color.FromArgb(0x8C, ring.R, ring.G, ring.B) });
+                _ringBrush.Color = _ringRest = ring;
+                _glow.Color = Color.FromRgb(ring.R, ring.G, ring.B);
                 // A safety hold is not a lock state: the shackle keeps what the lookup said.
                 _shackle.Data = clock.State is LockClockState.Locked or LockClockState.Frozen or LockClockState.Hidden
                     or LockClockState.Away or LockClockState.Held or LockClockState.Paused ? ShackleShut : ShackleOpen;
@@ -386,12 +488,25 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 _badgeBrush.Color = balance > 0 ? BadgeRed : CreditMint;
                 _badgeInk.Color = balance > 0 ? Colors.White : Color.FromRgb(0x10, 0x20, 0x1A);
 
-                var mood = chaster?.Mood;
-                if (mood is { } m) _moodBrush.Color = MoodColour(m.Level);
-                _moodPip.IsVisible = mood is { Level: not MoodLevel.Calm };
+                ApplyMood(chaster?.Mood);
+                TryBreathe();
                 if (_peek.IsOpen) FillPeek();
             }
             catch (Exception ex) { Serilog.Log.Debug("[Chaster] rail chip paint: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF ApplyMood (:492): the pip, popping when the mood moves, at MotionLevel Full only.</summary>
+        private void ApplyMood(CircesMood? mood)
+        {
+            var changed = _mood is { } was && mood is { } now && was != now;
+            _mood = mood;
+            if (mood is { } m) _moodBrush.Color = CircesMoodMeter.ColourOf(m.Level);
+            _moodPip.IsVisible = mood is { Level: not MoodLevel.Calm };
+            if (!_moodPip.IsVisible || !changed || AmbientFxCanvas.Env.Level != Models.MotionLevel.Full) return;
+            _pop?.Cancel();
+            var run = _pop = new System.Threading.CancellationTokenSource();
+            _ = CircesMoodMeter.Tween(_moodPip, ScaleTransform.ScaleXProperty, 1.8, 1d, 420, new ElasticEaseOut(), run);
+            _ = CircesMoodMeter.Tween(_moodPip, ScaleTransform.ScaleYProperty, 1.8, 1d, 420, new ElasticEaseOut(), run);
         }
 
         private static string LiveText(LockSnapshot? snapshot, int balance, DateTime now, string fallback)

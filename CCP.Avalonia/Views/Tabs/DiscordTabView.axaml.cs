@@ -364,7 +364,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The hero's Share Profile CTA. Same door as the header account menu's
         /// "Public profile" row — MainWindow owns the URL and the launcher.</summary>
-        private void BtnProfileShare_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnProfileShare_Click(object? sender, RoutedEventArgs e) =>
+            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OpenPublicProfilePage();
 
         private void TxtProfileSearch_KeyDown(object? sender, KeyEventArgs e)
         {

@@ -33,7 +33,9 @@ namespace ConditioningControlPanel.Avalonia.Helpers
     /// <c>Views/Features/PinkFilterFeatureControl.axaml.cs</c>. Neither is reachable from
     /// Helpers/, so the layer that owns them makes the swap.</para>
     ///
-    /// <para>ponytail: no decode cache, and that is now a measured decision rather than a guess.
+    /// <para>ponytail: <see cref="TryLoad"/> keeps no decode cache, and that is a measured decision.
+    /// The one exception is <see cref="FirstOf"/> (program art chains), which caches hits AND
+    /// misses per (active mod, path, width), so a mod switch reads fresh without invalidation.
     /// All 42 call sites on this head were read: every one sits in a constructor, a one-shot
     /// build (BubbleCountWindow.LoadBubbleImage, AvatarTubeWindow.LoadAvatarPoses), or a
     /// user-driven repaint (SetTubeStyle, a ModChanged handler) that stores the Bitmap it gets.
@@ -148,7 +150,30 @@ namespace ConditioningControlPanel.Avalonia.Helpers
             }
         }
 
-            /// <summary>WPF's DecodePixelWidth: decode straight to the width a surface shows, never larger.</summary>
+        private static readonly System.Collections.Generic.Dictionary<(string, string, int?), Bitmap?> FirstOfCache = new();
+
+        /// <summary>
+        /// The first of <paramref name="resourceNames"/> that loads (mod override, then built-in), or
+        /// null - WPF ProgramArt's resolver chain. Cached per active mod like WPF ModResourceResolver,
+        /// so repainting a list of cards decodes each file once.
+        /// </summary>
+        internal static Bitmap? FirstOf(System.Collections.Generic.IEnumerable<string> resourceNames, int? decodeWidth = null)
+        {
+            var mod = CoreMods.ActiveModId;
+            foreach (var name in resourceNames)
+            {
+                Bitmap? art;
+                lock (FirstOfCache)
+                {
+                    if (!FirstOfCache.TryGetValue((mod, name, decodeWidth), out art))
+                        FirstOfCache[(mod, name, decodeWidth)] = art = TryLoad(name, decodeWidth);
+                }
+                if (art != null) return art;
+            }
+            return null;
+        }
+
+        /// <summary>WPF's DecodePixelWidth: decode straight to the width a surface shows, never larger.</summary>
         private static Bitmap Decode(Stream stream, int? width)
             => width is int w ? Bitmap.DecodeToWidth(stream, w) : new Bitmap(stream);
 

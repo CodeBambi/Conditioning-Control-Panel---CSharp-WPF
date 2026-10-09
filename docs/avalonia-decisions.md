@@ -637,6 +637,17 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   calls `StopSpawnedServer` on exit, which stops only a server this app spawned.
 - Tests: `Tests/CCP.Avalonia.Tests/LocalAiSetupWizardTests.cs`, `Tests/CCP.Core.Tests/OllamaSetupServiceTests.cs`
   (fake binary and loopback API; no real ollama, pull or network).
+## 2026-10-09: Cosmetics ride every sync; an empty loadout goes only as the explicit clear (avalonia-port/audit-fix-ui, #1914)
+- Question: WPF `ProfileSyncService.BuildCosmeticsPayload` sends the sanitized settings loadout on every sync, and after a
+  load it sends an empty one too. This head kept a Customize save only in memory, so a logout, a cooldown or backoff
+  followed by exit, or a restart could lose it. Which empty-loadout rule should the fix use?
+- Options: (A) match WPF and send the empty loadout after a load; (B) send any non-empty loadout on every push, and an
+  empty one only while an in-memory `PendingCosmeticsClear` is set (an empty Customize save).
+- Chosen: B, advised by the supervisor (P44). Reason: WPF sends the empty loadout safely only because it adopts the cloud
+  loadout first (`AdoptCloudCosmetics`). This head does not adopt, so with A a fresh install would wipe the account's
+  cosmetics. Like WPF's, the flag is not persisted. Logout (`SyncPush.Reset`) drops it so it cannot reach the next account.
+- Tests: `Tests/CCP.Avalonia.Tests/ProfileCosmeticsSyncTests.cs` and the golden body in `SyncPushTests.FreshLinuxInstall_*`
+  (fake wire only). Pending owner confirmation of the sync contract (`server-sync-contract` row).
 ## 2026-10-09: Program enrollment stays disabled until the run panel exists (avalonia-port/rows-program-enroll)
 - Question: the ProgramEnrollDialog is fully ported; should the shell Enroll button now call ProgramService.CanEnroll ->
   dialog -> Enroll (writes programs.json, starts the day clock and nudges) although Avalonia has no run panel or
@@ -658,3 +669,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Chose A on the supervisor's advice (P44). WPF behaviour changes for safety only: after a panic the late follow-up
   reply's effects no longer fire. Tests: `Tests/CCP.Core.Tests/AiCommandGateTests.cs` (panic drops, uncancelled runs,
   chat reply runs).
+
+## 2026-10-09: window-wide drop, single media file offers only "Add to Asset Library" (avalonia-port/rows-session-io)
+- Question: WPF `ImportDroppedFilesAsync` (MainWindow.SessionIO.cs:1470) asks Play / Edit / Add-to-Library for a single
+  playable file, and imports enhancements into `App.EnhancementLibrary`. This head has no Deeper player, editor or
+  enhancement library yet.
+- Option A (chosen): the same prompt with the library choice only (`dlg_media_drop_library` / `dlg_media_drop_cancel`),
+  then Core `AssetImportService` (copies, never moves); an enhancement drop shows `deeper_import_library_not_ready`,
+  WPF's own string for a missing library. Option B (rejected): import media without asking. Option C (rejected): ignore
+  media and enhancement drops.
+- Chose A on the supervisor's advice (P44). No file format changes; WPF has no Lockdown refusal on drops, so none is
+  added. Play/Edit stay missing until the Deeper player/editor rows land. Tests: `Tests/CCP.Avalonia.Tests/WindowDropTests.cs`.

@@ -142,7 +142,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "GazeMinigameSettings.Load: failed, using defaults");
+                Serilog.Log.Warning(ex, "GazeMinigameSettings.Load: failed, using defaults");
                 return new GazeMinigameSettings();
             }
         }
@@ -157,7 +157,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "GazeMinigameSettings.Save: failed");
+                Serilog.Log.Warning(ex, "GazeMinigameSettings.Save: failed");
             }
         }
 

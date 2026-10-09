@@ -55,6 +55,29 @@ public sealed class SheListeningTests
                 Assert.Equal("She's listening", tab.SL_StatusTitle.Text);
                 Assert.Equal("The mic is open. Call her, then say a command.", tab.SL_StatusSub.Text);
                 Assert.NotEqual(Loc.Get("set2_chip_off"), tab.TxtSL_WakeWordChip.Text);
+                // WPF UpdateMicPill / SetSheListeningStatusPulse: the pill lights and the disc breathes.
+                var pill = shell.FindControl<Border>("MicActivePill")!;
+                Assert.True(pill.IsVisible);
+                Assert.IsType<global::Avalonia.Media.DropShadowEffect>(tab.SL_StatusDot.Effect);
+                Assert.False(tab.BtnSL_OpenModels.IsVisible);
+
+                // The pill is the privacy stop, by mouse and by keyboard (P17).
+                var at = pill.TranslatePoint(new Point(pill.Bounds.Width / 2, pill.Bounds.Height / 2), shell)!.Value;
+                shell.MouseDown(at, global::Avalonia.Input.MouseButton.Left);
+                shell.MouseUp(at, global::Avalonia.Input.MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(s.SpeechWakeWordEnabled);
+                Assert.False(pill.IsVisible);
+                Assert.Null(tab.SL_StatusDot.Effect);
+                Assert.Equal("Mic off", tab.SL_StatusTitle.Text);
+                Master();
+                Assert.True(pill.IsVisible);
+                pill.RaiseEvent(new global::Avalonia.Input.KeyEventArgs
+                    { RoutedEvent = global::Avalonia.Input.InputElement.KeyDownEvent, Key = global::Avalonia.Input.Key.Enter });
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(s.SpeechWakeWordEnabled);
+                Assert.False(pill.IsVisible);
+                Master();
 
                 // Disarming is never barred.
                 CoreEntitlement.IsFreeTodayProvider = _ => false;
@@ -69,6 +92,45 @@ public sealed class SheListeningTests
                     CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider) = saved;
                 CoreSpeech.IsAvailableProvider = null;
                 CoreSpeech.HasCaptureDeviceProvider = null;
+            }
+        });
+    }
+
+    /// <summary>WPF SheListening.cs:445: the folder button is up exactly while the status line is
+    /// about a model (mic present, model missing), never when the mic itself is missing.</summary>
+    [Fact]
+    public void OpenModelsButtonFollowsTheModelStatus()
+    {
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var shell = new MainShellWindow();
+            shell.Show();
+            try
+            {
+                CoreSpeech.IsAvailableProvider = () => false;
+                CoreSpeech.HasCaptureDeviceProvider = () => true;
+                CoreSpeech.ModelStatusProvider = () => CoreSpeechModelStatus.NoModelFound;
+                shell.ShowTab("shelistening");
+                Dispatcher.UIThread.RunJobs();
+                var tab = shell.SheListeningPage!;
+                Assert.Equal("Microphone not ready", tab.SL_StatusTitle.Text);
+                Assert.True(tab.BtnSL_OpenModels.IsVisible);
+                Assert.Null(tab.SL_StatusDot.Effect);
+
+                CoreSpeech.HasCaptureDeviceProvider = () => false;
+                shell.RefreshSheListeningTab();
+                Assert.False(tab.BtnSL_OpenModels.IsVisible);
+            }
+            finally
+            {
+                shell.Close();
+                CoreSpeech.IsAvailableProvider = null;
+                CoreSpeech.HasCaptureDeviceProvider = null;
+                CoreSpeech.ModelStatusProvider = null;
             }
         });
     }

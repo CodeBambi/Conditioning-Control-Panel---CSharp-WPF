@@ -7302,5 +7302,16 @@
   "vaultgate_yearly_note": "La facturation annuelle n'existe pour l'instant que sur Patreon. Les autres moyens de paiement sont mensuels.",
   "vaultgate_sale_first": "/ premier mois",
   "vaultgate_sale_line": "-{0} % sur le premier mois, puis {1} par mois.",
-  "vaultgate_sale_ends": "Offre jusqu'au {0}."
+  "vaultgate_sale_ends": "Offre jusqu'au {0}.",
+  "kwt_no_audio": "Aucun audio",
+  "kwt_cd": "CD :",
+  "kwt_vol": "Vol :",
+  "kwt_effect_none": "Aucun",
+  "kwt_effect_highlight_only": "Surlignage seul",
+  "kwt_effect_subliminal": "Subliminal",
+  "kwt_effect_exact_subliminal": "Subliminal exact",
+  "kwt_effect_image_flash": "Flash d'image",
+  "kwt_effect_overlay_pulse": "Pulsation d'overlay",
+  "kwt_effect_mind_wipe": "Mind Wipe",
+  "kwt_effect_bubbles": "Bulles"
 }
