@@ -21,10 +21,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// heads cannot drift; the active transport follows the setting through Core AiServiceStrategy.
     ///
     /// <para>ponytail: no Live actions feed (AiCommandService.LiveActionSink is unseeded on this head),
-    /// so ShowLiveActions stays false and the placeholder shows. The BYO API key box writes nothing:
-    /// MainShellWindow.CompanionRoom.cs says why (no at-rest store reads it yet). The "offer setup when
-    /// Ollama is unreachable" prompt is not wired yet (OllamaSetupService.DetectAsync is in Core now). Login has
-    /// no account tab deep link here yet, so LoginCommand stays null.</para>
+    /// so ShowLiveActions stays false and the placeholder shows. The BYO API key box saves through
+    /// Platform/ApiKeyProtector (DPAPI as WPF, the secret store elsewhere). The "offer setup when
+    /// Ollama is unreachable" prompt is not wired yet (OllamaSetupService.DetectAsync is in Core now). Login opens Settings &gt; Account.</para>
     /// </summary>
     public sealed class EngineRoomVm : INotifyPropertyChanged
     {
@@ -42,10 +41,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             SamplerSettingsCommand = new RelayCommand(() => _ = (host as EngineRoomDrawer)?.OpenSamplerSettingsAsync());
             DailyLimitCommand = new RelayCommand(() => _ = DailyLimitAsync());
             ClearConversationCommand = new RelayCommand(() => _ = ClearConversationAsync());
+            LoginCommand = new RelayCommand(OpenAccountSettings);
             Sync();
         }
 
         private MainShellWindow? Window => TopLevel.GetTopLevel(_host) as MainShellWindow;
+
+        /// <summary>WPF ShowAppInfoPopup -> ShowAccountSettings: the Settings page, scrolled to Account.</summary>
+        internal void OpenAccountSettings()
+        {
+            if (Window is not { } w) return;
+            w.ShowTab("appsettings");
+            w.Named<Tabs.AppSettingsTabView>("AppSettingsTab")
+                ?.FindControl<AppSettings.AccountSettingsSection>("SectionAccount")?.BringIntoView();
+        }
 
         public bool IsExpanded { get => _isExpanded; set => Set(ref _isExpanded, value); }
 
@@ -92,8 +101,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             set { if (Set(ref _customEndpoint, value ?? "") && !_suppressWrite) Write(p => p.OpenAiCompatibleEndpoint = _customEndpoint.Trim()); }
         }
 
-        /// <summary>Never round-trips, never stored on this head (see the class remarks).</summary>
-        public string CustomApiKey { get => ""; set { } }
+        /// <summary>WPF EngineRoomRuntimeVm.CustomApiKey -> SetCustomApiKey (ai#8): one way, protected at rest
+        /// (Platform/ApiKeyProtector), never read back. An emptied box revokes the key. The OneWayToSource
+        /// binding pushes the box's initial "" on attach: only a CHANGE of the box writes, so that push can
+        /// never wipe a stored key.</summary>
+        public string CustomApiKey
+        {
+            get => "";
+            set
+            {
+                var v = value ?? "";
+                if (v == _customApiKeyBox) return;
+                _customApiKeyBox = v;
+                if (_suppressWrite) return;
+                ConditioningControlPanel.Avalonia.Platform.ApiKeyProtector.SaveCustomKey(v);
+            }
+        }
+        private string _customApiKeyBox = "";
 
         public string CustomModel
         {
@@ -106,7 +130,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public IReadOnlyList<string> LiveActions { get; } = Array.Empty<string>();
         public string LiveActionsPlaceholder => Loc.Get("companion_engine_live_actions_placeholder");
 
-        public ICommand? LoginCommand => null;
+        /// <summary>WPF LoginCommand = ShowTab("patreon"), which lands on Settings &gt; Account (ai#16).</summary>
+        public ICommand? LoginCommand { get; }
         public ICommand TestConnectionCommand { get; }
         public ICommand SetupLocalCommand { get; }
         public ICommand SamplerSettingsCommand { get; }
