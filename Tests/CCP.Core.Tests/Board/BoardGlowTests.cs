@@ -99,7 +99,7 @@ public class BoardGlowTests
     }
 
     // Core has no PNG encoder: the desk shots are raw Bgra32 dumps here; the head's
-    // Board render tests write real PNGs (C:/wt-par/progress/f-*.png).
+    // Board render tests write real PNGs.
     private static void SavePng(BoardRaster r, string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

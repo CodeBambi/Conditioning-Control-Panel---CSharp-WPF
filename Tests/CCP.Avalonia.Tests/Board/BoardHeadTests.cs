@@ -23,7 +23,7 @@ namespace CCP.Avalonia.Tests.Board;
 /// through, the 64x36 raised-tile view on its frame clock (arrival, ola, ripple, release), the
 /// card host's walk (the hold fill moves the deck on, hover holds it, snooze folds the card away
 /// with a toast) and the board's silence. Set CCP_BOARD_PNG_DIR to keep the frames
-/// (C:/wt-par/progress for the parity proof).
+/// (a local folder for the parity proof).
 /// </summary>
 public sealed class BoardHeadTests
 {

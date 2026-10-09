@@ -1,6 +1,6 @@
 // Home smoothness lane (owner, 2026-10-09: "as smooth as the WPF one; still a little bit laggy").
 //
-// What the owner's Release trace showed (C:/wt-par/progress/dash4-1009.speedscope.json, 30 s on
+// What the owner's Release trace showed (a 30 s sampled trace on
 // Home, engine on, RTX 5080 + Intel iGPU):
 //   - ImmutableBitmap.Draw: 1568 calls, 3 ms EACH (4.7 s of the render thread's 30 s). A cached GPU
 //     texture draws in microseconds; 3 ms is an UPLOAD. Every Home tile picture is 1376x768
