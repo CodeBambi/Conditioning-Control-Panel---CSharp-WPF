@@ -120,7 +120,7 @@ public sealed partial class FriendsDrawer
             {
                 var hiddenNew = lines.Skip(show).Count(IsNew);
                 var more = FeedLink(hiddenNew > 0 ? Loc.GetF("friends_feed_more_new", hidden, hiddenNew) : Loc.GetF("friends_feed_more", hidden), "friends-feed-more");
-                more.Click += (_, _) => ShowMoreFeed();
+                more.Click += (_, _) => { Friends.FriendsSfx.Click(); ShowMoreFeed(); };
                 foot.Children.Add(more);
             }
             if (_feedExtra > 0)

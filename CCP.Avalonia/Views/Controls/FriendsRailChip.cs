@@ -60,8 +60,8 @@ public sealed class FriendsRailChip : Grid
             IsLightDismissEnabled = true,
         };
         Children.Add(_popup);
-        _popup.Opened += (_, _) => { _face.Background = FriendsDrawer.Raised; Drawer.OnOpened(); };
-        _popup.Closed += (_, _) => { _face.Background = Brushes.Transparent; Drawer.OnClosed(); };
+        _popup.Opened += (_, _) => { Friends.FriendsSfx.DrawerOpen(); _face.Background = FriendsDrawer.Raised; Drawer.OnOpened(); };
+        _popup.Closed += (_, _) => { Friends.FriendsSfx.DrawerClose(); _face.Background = Brushes.Transparent; Drawer.OnClosed(); };
         Drawer.OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
         Drawer.CloseRequested += () => _popup.IsOpen = false;
         Drawer.SettingsRequested += () => (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab("appsettings");

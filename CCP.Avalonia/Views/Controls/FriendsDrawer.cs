@@ -4,7 +4,8 @@
 // report), request answers, add by code and your own code. Driven only by IFriendsService.
 // The send pickers (poke / invite / watch) are in FriendsDrawer.Pickers.cs.
 // The feed is FriendsDrawer.Feed.cs, the sent trail and lock chip FriendsDrawer.Trail.cs; the leash section mounts through MountLeash (FriendsDrawer.Leash.cs).
-// ponytail: no open tables, tier plates or juice (.Juice.cs); no per-PC block
+// Open tables are FriendsDrawer.Tables.cs, the juice FriendsDrawer.Juice.cs, the sounds Friends/FriendsSfx.cs.
+// ponytail: no per-PC block
 // list (the server's list only). A word WPF throws outside the drawer
 // (FriendsLanding.Tell) is a FloatingWord over the rail chip's window (OwnerWindow).
 using System;
@@ -63,9 +64,16 @@ public sealed partial class FriendsDrawer : Border
     /// <summary>WPF RefreshInviteLine: subscribers only (an invite week holds no codes).</summary>
     internal Func<bool> OffersInviteLink { get; set; } = () => ConditioningControlPanel.Services.Invites.InviteTicketRule.OffersInviteLink(
         CoreAccount.HasPremiumAccess, ConditioningControlPanel.Services.ProviderSubscription.IsInviteWeekOnly(AccountSeed.Patreon, AccountSeed.SubscribeStar, CoreSettings.Current));
+    public const double PageMaxWidth = 620;
+    /// <summary>True when this drawer is the body of the Social > Friends PAGE rather than the rail
+    /// chip's popup: it fills its column, leaves the leash to the Leash page and never claims Escape
+    /// (on a page Escape belongs to the panic key, there is nothing to fold).</summary>
+    internal bool AsPage { get; }
     public FriendsDrawer() : this(null) { }
-    internal FriendsDrawer(IFriendsService? service)
+    internal FriendsDrawer(IFriendsService? service) : this(service, false) { }
+    internal FriendsDrawer(IFriendsService? service, bool asPage)
     {
+        AsPage = asPage;
         _resolve = service != null ? () => service : () => FriendsHead.Service;
         _svc = _resolve();
         OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
@@ -122,9 +130,10 @@ public sealed partial class FriendsDrawer : Border
             Children = { Label(Loc.Get("friends_invite_line") + " ", 11.5, Muted, Display), inviteLink } };
         _addBox.Child = new StackPanel { Children = { addRow, _addResult, _inviteLine } };
         // Esc closes the add box, then the drawer (WPF OnKey).
+        if (asPage) (Width, MaxWidth, MaxHeight) = (double.NaN, PageMaxWidth, double.PositiveInfinity);
         KeyDown += (_, e) =>
         {
-            if (e.Key != Key.Escape) return;
+            if (e.Key != Key.Escape || AsPage) return;
             if (_addBox.IsVisible && _codeBox.IsFocused) _addBox.IsVisible = false;
             else if (_picker != null) { _picker = null; Render(); }
             else CloseRequested?.Invoke();
@@ -145,12 +154,16 @@ public sealed partial class FriendsDrawer : Border
         Rebind();
         try { _svc?.SetDrawerOpen(true); } catch { }
         if (_svc?.Available == true) _ = SafeRefreshAsync();
+        try { if (_svc?.Available == true) StartTables(); } catch { }
         Render();
+        PlayEntrance();
         Dispatcher.UIThread.Post(() => Focus());
     }
     public void OnClosed()
     {
         try { _svc?.SetDrawerOpen(false); } catch { }
+        StopTables();
+        StopAmbient();
         Unsubscribe(); // a folded drawer redraws nothing (OnOpened re-subscribes)
         FeedFolded();
         (_isOpen, _openId, _confirm, _picker, _addBox.IsVisible) = (false, null, null, null, false);
@@ -169,7 +182,14 @@ public sealed partial class FriendsDrawer : Border
         if (_subscribed && _svc != null) { _svc.SnapshotChanged -= OnSnapshot; _svc.SentTrailsChanged -= OnTrailsChanged; }
         _subscribed = false;
     }
-    private void OnSnapshot(FriendsSnapshot _) => Render();
+    private FriendsSnapshot _last = FriendsSnapshot.Empty;
+    private void OnSnapshot(FriendsSnapshot snap)
+    {
+        // WPF: a friend who just came online hops once after the repaint.
+        var hop = FriendsDrawerRules.CameOnline(_last, snap);
+        Render();
+        foreach (var id in hop) HopAvatar(id);
+    }
     private async Task SafeRefreshAsync()
     {
         try { if (_svc != null) await _svc.RefreshAsync(); }
@@ -179,10 +199,33 @@ public sealed partial class FriendsDrawer : Border
     {
         var snap = FriendsSnapshot.Empty;
         try { if (_svc?.Available == true) snap = _svc.Snapshot ?? FriendsSnapshot.Empty; } catch { }
+        _last = snap;
         RenderHead();
         RenderAsk();
         RenderList(snap);
         RenderFoot(snap);
+        if (_isOpen || AsPage) StartAmbient();
+    }
+
+    /// <summary>WPF MeTier: your plan as a plate in the header (2 Prime, 1 Basic, 0 none).</summary>
+    internal Func<int> MeTier { get; set; } = () =>
+    {
+        try { return CoreAccount.HasLabAccess ? 2 : CoreAccount.HasPremiumAccess ? 1 : 0; } catch { return 0; }
+    };
+
+    /// <summary>WPF FriendsLook.TierPlate: the tier badge art after a name, nothing for free accounts.</summary>
+    /// <summary>Test seam: the badge art (TierBadge.TierArt, the same files WPF reads).</summary>
+    internal static Func<int, IImage?> TierArt { get; set; } = t => global::ConditioningControlPanel.Avalonia.Controls.TierBadge.TierArt(t);
+    internal static Control? TierPlate(int tier, double height)
+    {
+        if (tier <= 0) return null;
+        var art = TierArt(tier);
+        if (art == null) return null;
+        return new Image
+        {
+            Source = art, Height = height, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0), Tag = tier >= 2 ? "friends-tier-2" : "friends-tier-1",
+        };
     }
     private bool Shared() { try { return _svc?.Available == true && _svc.PresenceShared; } catch { return false; } }
     private void RenderHead()
@@ -192,7 +235,10 @@ public sealed partial class FriendsDrawer : Border
         var avatar = Avatar(name, 40, _svc?.Available == true ? Shared() : null, MeAvatarUrl());
         avatar.Margin = new Thickness(0, 0, 10, 0);
         var who = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        who.Children.Add(Label(name, 16, Text, Display, FontWeight.SemiBold));
+        var nameLine = new StackPanel { Orientation = Orientation.Horizontal };
+        nameLine.Children.Add(Label(name, 16, Text, Display, FontWeight.SemiBold));
+        if (TierPlate(MeTier(), 15) is { } plate) nameLine.Children.Add(plate);
+        who.Children.Add(nameLine);
         if (_svc?.Available != true)
             who.Children.Add(Tagged(Label(Loc.Get("friends_signed_out"), 12, Muted), "friends-me-status"));
         else
@@ -257,7 +303,10 @@ public sealed partial class FriendsDrawer : Border
     }
     private void RenderList(FriendsSnapshot snap)
     {
+        StopAmbient();
         _list.Children.Clear();
+        _avatars.Clear();
+        _rowsInOrder.Clear();
         if (_svc?.Available != true)
         {
             var box = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(18, 28, 18, 28) };
@@ -273,9 +322,11 @@ public sealed partial class FriendsDrawer : Border
         }
         // WPF RenderList: the leash pinned on top, then "What happened", then the people.
         if (_leashSlot.Parent is Panel old) old.Children.Remove(_leashSlot);
-        _list.Children.Add(_leashSlot);
+        if (!AsPage) _list.Children.Add(_leashSlot);   // a page leaves the leash to the Leash page
         AddFeed();
         var (online, offline) = FriendsDrawerRules.Split(snap);
+        // A friend hosting an open table floats to the top (WPF FriendsDrawer.Tables.cs).
+        (online, offline) = FriendsDrawerRules.HostingFirst(online, offline, f => TableFor(f) != null);
         if (_openId != null && !Contains(snap, _openId)) (_openId, _picker) = (null, null);
         if (_confirm is { } c && !Contains(snap, c.Id)) _confirm = null;
         if (online.Count > 0)
@@ -296,7 +347,7 @@ public sealed partial class FriendsDrawer : Border
             Section("friends_section_offline", offline.Count);
             foreach (var f in offline) _list.Children.Add(FriendRow(f));
         }
-        if (online.Count + offline.Count + req == 0 && !_showBlocked) _list.Children.Add(EmptyLine(Loc.Get("friends_empty")));
+        if (online.Count + offline.Count + req == 0 && !_showBlocked) _list.Children.Add(AsPage ? PageEmptyBlock() : EmptyLine(Loc.Get("friends_empty")));
         if (!_showBlocked) return;
         var blocked = snap.Blocked ?? Array.Empty<BlockedFriend>();
         Section("friends_section_blocked", blocked.Count);
@@ -323,12 +374,17 @@ public sealed partial class FriendsDrawer : Border
     private Control FriendRow(Friend f)
     {
         bool open = _openId == f.Id;
+        var table = TableFor(f);
         var top = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*,Auto") };
-        var avatar = Avatar(f.Name, 38, f.Online, f.AvatarUrl);
-        if (!f.Online) avatar.Opacity = 0.55;
+        var avatar = Avatar(f.Name, 38, f.Online || table != null, f.AvatarUrl);
+        if (!f.Online && table == null) avatar.Opacity = 0.55;
+        avatar.RenderTransformOrigin = new RelativePoint(0.5, 1, RelativeUnit.Relative);
+        avatar.RenderTransform = new TranslateTransform();
+        _avatars[f.Id] = avatar;
         var mid = new StackPanel { Margin = new Thickness(10, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
         var nameLine = new StackPanel { Orientation = Orientation.Horizontal };
         nameLine.Children.Add(Label(f.Name, 14, f.Online ? Text : Muted, Display, FontWeight.Medium));
+        if (TierPlate(f.Tier, 12) is { } plate) nameLine.Children.Add(plate);
         if (f.Squelched)
         {
             var sq = Tagged(Label(Loc.Get("friends_squelched_tag"), 9, Dim, Mono), "friends-squelched");
@@ -336,13 +392,21 @@ public sealed partial class FriendsDrawer : Border
             nameLine.Children.Add(sq);
         }
         mid.Children.Add(nameLine);
-        mid.Children.Add(ActivityLine(f));
+        mid.Children.Add(table != null ? HostingLine() : ActivityLine(f));
         // What you last sent them and how far it got (sent, arrived, seen, answered).
         if (TrailLine(f) is { } trail) mid.Children.Add(trail);
         Grid.SetColumn(mid, 1);
         top.Children.Add(avatar);
         top.Children.Add(mid);
         if (LockChip(f) is { } lockChip) { Grid.SetColumn(lockChip, 2); top.Children.Add(lockChip); }
+        Button? join = null;
+        if (table != null)
+        {
+            top.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            join = TableJoinButton(f, table);
+            Grid.SetColumn(join, 3);
+            top.Children.Add(join);
+        }
         var outer = new StackPanel { Children = { top } };
         if (open) outer.Children.Add(Card(f));
         if (_results.TryGetValue(f.Id, out var res))
@@ -355,8 +419,11 @@ public sealed partial class FriendsDrawer : Border
         {
             CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 1),
             Background = open ? Raised : Brushes.Transparent, Cursor = Hand(),
-            Tag = "friends-row:" + f.Id, Child = outer, ContextMenu = Menu(f),
+            Tag = "friends-row:" + f.Id, Child = outer, ContextMenu = Menu(f), ClipToBounds = true,
         };
+        if (table != null && !open) DressHostingRow(row);
+        AttachSheen(row, open);
+        _rowsInOrder.Add(row);
         // A click on the row (not inside the open card) opens or folds its card.
         top.PointerReleased += (_, e) => { if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(f.Id); e.Handled = true; } };
         return row;
@@ -418,6 +485,7 @@ public sealed partial class FriendsDrawer : Border
         more.HorizontalContentAlignment = HorizontalAlignment.Center;
         more.Click += (_, _) =>
         {
+            Friends.FriendsSfx.Click();
             // WPF: PlacementTarget = more, Placement = Bottom (under the button, not over the list).
             var menu = Menu(f);
             menu.Placement = PlacementMode.Bottom;
@@ -620,11 +688,7 @@ public sealed partial class FriendsDrawer : Border
         var add = FootButton("\uE8FA", Loc.Get("friends_add_title"), "friends-add-open");
         add.HorizontalAlignment = HorizontalAlignment.Right;
         add.IsEnabled = _svc?.Available == true;
-        add.Click += (_, _) =>
-        {
-            _addBox.IsVisible = !_addBox.IsVisible;
-            if (_addBox.IsVisible) { _addResult.Text = ""; _inviteLine.IsVisible = OffersInviteLink(); _codeBox.Focus(); }
-        };
+        add.Click += (_, _) => { Friends.FriendsSfx.Click(); ToggleAddBox(!_addBox.IsVisible); };
         Grid.SetColumn(add, 1);
         var buttons = new Grid
         {
@@ -707,6 +771,7 @@ public sealed partial class FriendsDrawer : Border
         bool good = FriendsDrawerRules.IsGood(r);
         _addResult.Text = Loc.Get(FriendsDrawerRules.AddResultKey(r));
         _addResult.Foreground = good ? Mint : Gold;
+        if (good) Friends.FriendsSfx.Accepted(); else Friends.FriendsSfx.Denied();
         if (good) _codeBox.Text = "";
         else _addGo.IsEnabled = FriendsDrawerRules.NormaliseCode(_codeBox.Text).Length == FriendsDrawerRules.CodeLength;
         await SafeRefreshAsync();
@@ -734,6 +799,32 @@ public sealed partial class FriendsDrawer : Border
     };
     private static TextBlock Wrap(TextBlock t) { t.TextWrapping = TextWrapping.Wrap; t.TextTrimming = TextTrimming.None; return t; }
     private static T Tagged<T>(T c, string tag) where T : Control { c.Tag = tag; return c; }
+    /// <summary>WPF ToggleAddBox: the add-by-code box opens (fresh result, invite line, focus) or folds.</summary>
+    internal void ToggleAddBox(bool show)
+    {
+        _addBox.IsVisible = show;
+        if (!show) return;
+        _addResult.Text = "";
+        _inviteLine.IsVisible = OffersInviteLink();
+        _codeBox.Focus();
+    }
+
+    /// <summary>The page's empty state: one line and one button ("No friends yet. Add one").</summary>
+    private Control PageEmptyBlock()
+    {
+        var box = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(18, 28, 18, 28), Tag = "friends-page-empty" };
+        var line = EmptyLine(Loc.Get("social_friends_empty"));
+        line.Margin = new Thickness(0, 0, 0, 12);
+        box.Children.Add(line);
+        var btn = Pill(Loc.Get("social_friends_empty_add"), Mint, MintInk, "friends-page-empty-add", Mint);
+        btn.Padding = new Thickness(16, 6, 16, 6);
+        if (btn.Content is TextBlock tb) tb.FontSize = 13;
+        btn.HorizontalAlignment = HorizontalAlignment.Center;
+        btn.Click += (_, _) => ToggleAddBox(true);
+        box.Children.Add(btn);
+        return box;
+    }
+
     private static TextBlock EmptyLine(string text)
     {
         var t = Wrap(Label(text, 12.5, Muted));
@@ -768,7 +859,7 @@ public sealed partial class FriendsDrawer : Border
         if (dot is bool on)
             g.Children.Add(new Ellipse
             {
-                Width = size * 0.3, Height = size * 0.3, Fill = on ? Mint : OfflineDot, Stroke = Foot, StrokeThickness = 2,
+                Width = size * 0.3, Height = size * 0.3, Fill = on ? Mint : OfflineDot, Tag = on ? "friends-dot-on" : "friends-dot-off", Stroke = Foot, StrokeThickness = 2,
                 HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
             });
         return g;
