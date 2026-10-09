@@ -7325,5 +7325,13 @@
   "kwt_effect_image_flash": "이미지 플래시",
   "kwt_effect_overlay_pulse": "오버레이 펄스",
   "kwt_effect_mind_wipe": "마인드 와이프",
-  "kwt_effect_bubbles": "버블"
+  "kwt_effect_bubbles": "버블",
+  "label_asset_preset_default_0": "프리셋 {0}",
+  "msg_asset_preset_saved_0": "프리셋 '{0}' 저장됨!\n\n이미지 {1}개, 동영상 {2}개 활성화.\n에셋 {3}개 비활성화.",
+  "msg_asset_preset_updated_0": "프리셋 '{0}' 업데이트됨!\n\n이미지 {1}개, 동영상 {2}개 활성화.\n에셋 {3}개 비활성화.",
+  "msg_update_asset_preset_confirm_0": "현재 선택으로 프리셋 '{0}'을(를) 업데이트할까요?",
+  "title_no_preset_selected": "선택된 프리셋 없음",
+  "title_cannot_update_default": "기본값은 업데이트할 수 없음",
+  "title_cannot_delete_default": "기본값은 삭제할 수 없음",
+  "title_update_preset": "프리셋 업데이트"
 }

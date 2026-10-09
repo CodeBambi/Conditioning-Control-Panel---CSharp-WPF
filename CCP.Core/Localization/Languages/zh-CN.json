@@ -7834,5 +7834,13 @@
   "kwt_effect_image_flash": "图片闪现",
   "kwt_effect_overlay_pulse": "叠加层脉冲",
   "kwt_effect_mind_wipe": "思维清除",
-  "kwt_effect_bubbles": "泡泡"
+  "kwt_effect_bubbles": "泡泡",
+  "label_asset_preset_default_0": "预设 {0}",
+  "msg_asset_preset_saved_0": "预设“{0}”已保存！\n\n已启用 {1} 张图片、{2} 个视频。\n已禁用 {3} 个素材。",
+  "msg_asset_preset_updated_0": "预设“{0}”已更新！\n\n已启用 {1} 张图片、{2} 个视频。\n已禁用 {3} 个素材。",
+  "msg_update_asset_preset_confirm_0": "用当前选择更新预设“{0}”？",
+  "title_no_preset_selected": "未选择预设",
+  "title_cannot_update_default": "无法更新默认预设",
+  "title_cannot_delete_default": "无法删除默认预设",
+  "title_update_preset": "更新预设"
 }
