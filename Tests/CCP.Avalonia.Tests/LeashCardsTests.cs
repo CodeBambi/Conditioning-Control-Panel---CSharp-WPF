@@ -64,12 +64,15 @@ public sealed class LeashCardsTests
             var page = new LeashTabView { Resolve = () => svc };
             page.Rebuild();
             Assert.False(page.ShowingEmpty);
+            // WPF: the page hosts a LeashDrawerSection (offer row, own card); the gate stand-in follows.
             var tags = page.SectionHost.Children.Select(c => c.Tag as string).ToList();
-            Assert.Equal(new[] { "leash-offer-f2", "leash-self" }, tags);
+            Assert.Equal(new[] { "leash-section", "leash-gate-standin" }, tags);
+            Assert.Equal(new[] { "leash-offer-row:f2", "leash-self-card" }, page.Section.Children.Select(c => c.Tag as string).ToList());
             var buttons = page.SectionHost.GetLogicalDescendants().OfType<Button>().Select(b => b.Tag as string).ToList();
             Assert.Contains("leash-cut", buttons);
             Assert.Contains("leash-gate-pardon", buttons);
-            Assert.Contains("leash-ask-yes", buttons);
+            Assert.Contains("leash-offer-look", buttons);   // Look opens the ask card (Put it on lives there)
+            Assert.Contains("leash-help:leashed", buttons);
 
             var (oldDue, oldPresent, oldSvc) = (MainShellWindow.LeashGateDueProvider, MainShellWindow.PresentLeashGateProvider, LeashHead.Service);
             try
@@ -85,7 +88,8 @@ public sealed class LeashCardsTests
                 Assert.Equal("cut", api.LastOp);
                 Assert.False(MainShellWindow.LeashBlocksGames);
                 Dispatcher.UIThread.RunJobs();
-                Assert.DoesNotContain(page.SectionHost.Children, c => (c.Tag as string) == "leash-self");
+                Assert.DoesNotContain(page.Section.Children, c => (c.Tag as string) == "leash-self-card");
+                Assert.DoesNotContain(page.SectionHost.Children, c => (c.Tag as string) == "leash-gate-standin");
             }
             finally
             {

@@ -80,7 +80,7 @@ public sealed class LeashDrawerSectionTests
             // Own card: the scissors are the first button under the name, then the level and quiet switches.
             var self = section.SelfCard!;
             var buttons = self.GetLogicalDescendants().OfType<Button>().Select(b => b.Tag as string).ToList();
-            Assert.Equal("leash-cut", buttons[0]);
+            Assert.Equal("leash-cut", buttons.First(t => t?.StartsWith("leash-help") != true));   // the "?" sits in the head, as WPF
             Assert.Contains("leash-level:1:on", buttons);
             Assert.Contains("leash-dnd:0:on", buttons);
             Assert.Contains(self.GetLogicalDescendants().OfType<Control>(), c => (c.Tag as string) == "leash-self-line:pending");

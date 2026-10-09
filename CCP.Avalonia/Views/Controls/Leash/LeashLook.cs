@@ -11,7 +11,7 @@ using Avalonia.Media;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Leash;
 
-internal static class LeashLook
+internal static partial class LeashLook
 {
     internal enum Tone { Gold, Mint, Pink, Ghost }
 
