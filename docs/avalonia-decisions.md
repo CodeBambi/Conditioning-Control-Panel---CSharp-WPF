@@ -669,3 +669,44 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Chose A on the supervisor's advice (P44). WPF behaviour changes for safety only: after a panic the late follow-up
   reply's effects no longer fire. Tests: `Tests/CCP.Core.Tests/AiCommandGateTests.cs` (panic drops, uncancelled runs,
   chat reply runs).
+
+## 2026-10-09: window-wide drop, single media file offers only "Add to Asset Library" (avalonia-port/rows-session-io)
+- Question: WPF `ImportDroppedFilesAsync` (MainWindow.SessionIO.cs:1470) asks Play / Edit / Add-to-Library for a single
+  playable file, and imports enhancements into `App.EnhancementLibrary`. This head has no Deeper player, editor or
+  enhancement library yet.
+- Option A (chosen): the same prompt with the library choice only (`dlg_media_drop_library` / `dlg_media_drop_cancel`),
+  then Core `AssetImportService` (copies, never moves); an enhancement drop shows `deeper_import_library_not_ready`,
+  WPF's own string for a missing library. Option B (rejected): import media without asking. Option C (rejected): ignore
+  media and enhancement drops.
+- Chose A on the supervisor's advice (P44). No file format changes; WPF has no Lockdown refusal on drops, so none is
+  added. Play/Edit stay missing until the Deeper player/editor rows land. Tests: `Tests/CCP.Avalonia.Tests/WindowDropTests.cs`.
+## 2026-10-09: Z5 privacy card shows WPF's "older pipeline" band whenever awareness is on (avalonia-port/rows-awareness-privacy)
+- Question: the v2 observer/ledger (`AwarenessObserver`, `AwarenessLive`, `ActivityLedger`) is not on this head, so WPF's own
+  rule (`IsLegacyPipeline = on && !AwarenessObserver.IsEnabled`) puts the card in its legacy state whenever awareness is on.
+  The band says incognito, the deny list and page titles are not protected. Here page titles do reach the AI (true), but the
+  deny list and incognito drop ARE enforced by `WindowAwarenessService.PassesPrivacyRules`, so 2 of 3 claims over-warn.
+- Option A (chosen): show the WPF band verbatim. Over-warning is the safe direction; no new strings.
+- Option B: head-specific copy in 9 languages. Option C: enforce the title allow list on the legacy path (behaviour change).
+- Chose A on the supervisor's advice (P44). Nothing the card claims as protected is unenforced; the wire reads "not reported",
+  the JSON stays empty, known apps stay empty (no ledger). Wipe deletes `awareness_ledger.json` + `.tmp` only (the legacy poll
+  keeps no history beyond the window in front). Test `Tests/CCP.Avalonia.Tests/AwarenessPrivacyCardTests.cs`.
+- Follow-up: once the v2 observer is ported the band hides as on WPF, and B or C can be revisited then.
+
+## 2026-10-09: Linux reads programs.json load-only before the run panel exists (avalonia-port/programs-run-1)
+- Question (programs CHECKPOINT A, ~/ccp-port/briefs/programs-run-plan.md): slice 1 is the first time the Linux head
+  touches `<userdata>/programs.json`, a file it may share with the WPF head, while it still has no run panel and no
+  session runner. May it read it, write it, and run the startup repair/rollover (which can lapse a run)?
+- Option (a) (chosen): load-only and read-only. `ProgramService.CreateReadOnly()` (Core) loads the file (and the same
+  `.tmp` recovery as WPF, without moving the temp), skips RepairSpuriousLapse and EvaluateRollover, starts no timers and
+  never writes (WriteState returns before the temp; the dirty generation stays unsaved). WPF's parameterless ctor is
+  unchanged. `CoreQuests.TrackProgramVerifierProvider` stays unseeded (it mutates); SessionFeatureLock, Marquee nudge,
+  ProgramBanner, Chaster program_done and the Settings Today card stay unwired.
+  Option (b) (rejected): construct the full writing service now (timers, rollover) - a run could lapse on a head that
+  cannot run its days. Option (c) (rejected): load + rollover without writes - state shown would diverge from disk.
+  Option (d) (rejected): do not construct it until slice 3.
+- Chose (a) on oracle-deep's advice via the supervisor (P44). Checkpoint B must decide JsonExtensionData vs a version
+  lock for schema skew before this head writes. Reviewer checks: WPF path byte-identical (`public ProgramService()`
+  chains to the same path, readOnly false); no write/move under readOnly; startup uses CreateReadOnly + Dispose.
+  Tests: `Tests/CCP.Core.Tests/ProgramServiceReadOnlyTests.cs` (WPF-shape fixture byte round-trip under
+  TZ=Europe/Berlin; no write on Save/Dispose; temp recovery untouched; corrupt file untouched; no lapse after 10 days; startup lapse audit skipped),
+  `Tests/CCP.Avalonia.Tests/ProgramServiceStartupTests.cs`.

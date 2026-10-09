@@ -1,57 +1,184 @@
-// NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.ProfileFx.cs (239 lines).
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.ProfileFx.cs (238 lines): the Profile
+// tab's entrance stagger, the search box's focus glow and the OG card's spinning gold border.
 //
-// Sorted member by member against the fifteen Core seams: GENUINELY 100% head-side. Every one of
-// its fourteen members is either a WPF animation clock or a gate on two static services that have
-// not moved, and the file has no third concern hiding in it. Recorded as a finding rather than
-// padded with token methods.
+// MotionFx is AmbientFxCanvas.Env here (AllowTransitions / AllowAmbientLoops / GlowColor). The OG
+// border's 3 s storyboard spun the gradient's RelativeTransform; Avalonia brushes carry a Transform
+// (origin 50%,50%), so the same RotateTransform turns 0 -> 360 forever - only while the gold frame
+// shows, the Profile tab is visible, ambient loops are allowed and the window is active and not
+// minimised (WPF ApplyOgBorderLoop's gate, P01). Every input to that gate re-runs it.
 //
-// THE TWO SERVICES, and they are what block eleven of the fourteen:
-//   Services.MotionFx  (ConditioningControlPanel/Services/MotionFx.cs) - AllowAmbientLoops,
-//        AllowTransitions and StaggerIn, i.e. the reduced-motion and performance-tier gate plus
-//        the entrance choreography itself. This head has a partial stand-in, the private `Env`
-//        class inside CCP.Avalonia/Controls/AmbientFxCanvas.cs, which carries its own ponytail
-//        note saying it IS the missing MotionFx with the reduced-motion half absent. Reaching
-//        into it from here would spread a documented placeholder to a second consumer.
-//   Services.FxTheme   (ConditioningControlPanel/Services/FxTheme.cs) - GlowColor, the mod's
-//        accent that the search-box focus glow animates to. CoreMods.AccentColorHex answers a
-//        neighbouring question, not this one: FxTheme resolves a GLOW slot with its own fallback.
-//
-// THE ANIMATION CLOCKS, which have no direct Avalonia twin:
-//   ApplyOgBorderLoop      - gates Begin/Stop on a Storyboard read out of
-//                            OgBorderContainer.Resources by key ("OgBorderAnimation"). That
-//                            resource does not exist here and cannot: the WPF storyboard spins a
-//                            GradientBrush's RelativeTransform, which Avalonia's GradientBrush has
-//                            no equivalent of. DiscordTabView.axaml:145 carries the matching note
-//                            and draws the static gold frame; a restore is a DispatcherTimer
-//                            rotating the stops - a decision, not a copy.
-//   ApplyProfileSearchGlow - BeginAnimation(SolidColorBrush.ColorProperty) on a brush the window
-//   EnsureProfileSearchBrush owns. Avalonia has no per-object BeginAnimation; the twin is a
-//   ProfileSearch_GotFocus   BrushTransition. Cheap to write - but the colour it animates TO is
-//   ProfileSearch_LostFocus  FxTheme.GlowColor, so it would be motion toward an invented tint.
-//   StaggerProfileCards    - MotionFx.StaggerIn plus EnsureCardTransforms
-//                            (MainShellWindow.Animations.cs, still a stub). The three tuning
-//                            constants and three state fields exist only to serve these.
-//
-// THE LIFECYCLE MEMBERS, blocked on their own callees rather than on FX:
-//   OnProfileTabVisibilityChanged - UpdateProfileSharingSummary and RefreshProfileShareButton
-//                            (MainShellWindow.ProfileBubble.cs, a stub), EnsureProfileMeFirst
-//                            (named as head-side in MainShellWindow.ProfileCard.cs's own header),
-//                            IsIncomingTab (MainShellWindow.Animations.cs) and
-//                            OnProfileVatVisibilityChanged (MainShellWindow.ProfileVat.cs, whose
-//                            body needs App.Descent). Five callees, none of them here.
-//   InitializeProfileFx / OnProfileFxWindowStateish - Activated/Deactivated/StateChanged hooks
-//                            whose only purpose is to re-run ApplyOgBorderLoop and EvaluateVatPoll.
-//                            Both callees are blocked, so the hooks would fire into nothing.
-//
-// The controls this file drives ARE all on this head - ProfileColumnStack, OgBorderContainer,
-// ProfileSearchBox and TxtProfileSearch are in CCP.Avalonia/Views/Tabs/DiscordTabView.axaml - so
-// what is missing is the motion policy and the two clocks, never a surface to animate.
+// ponytail: the vat poll half of OnProfileTabVisibilityChanged / OnProfileFxWindowStateish
+// (EvaluateVatPoll, OnProfileVatVisibilityChanged) needs DescentService - row shell-profile-vat.
+
+using System;
+using System.Linq;
+using System.Threading;
+using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
+using Avalonia.Controls;
+using Avalonia.Media;
+using Avalonia.Styling;
+using ConditioningControlPanel.Avalonia.Controls;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // Deliberately empty - see the header. No member of this partial is referenced from
-        // MainShellWindow.axaml.
+        private const int ProfileSearchGlowMs = 150;
+        private const byte ProfileSearchGlowAlpha = 0xC0;
+        private const int ProfileStaggerMs = 40, ProfileStaggerCap = 6;   // MotionFx.StaggerMs / StaggerCap
+
+        private bool _profileFxInitialized;
+        private CancellationTokenSource? _ogBorderLoop;
+        private RotateTransform? _ogBorderRotation;
+
+        /// <summary>True while the OG border spins (tests read it; the loop itself is an Animation).</summary>
+        internal bool OgBorderLoopRunning => _ogBorderLoop != null;
+
+        /// <summary>WPF InitializeProfileFx: search focus glow + the window-state hooks that re-gate the loop.</summary>
+        private void InitializeProfileFx()
+        {
+            if (_profileFxInitialized) return;
+            _profileFxInitialized = true;
+            try
+            {
+                var page = ProfilePage;
+                if (page?.FindControl<TextBox>("TxtProfileSearch") is { } search)
+                {
+                    search.GotFocus += (_, _) => ApplyProfileSearchGlow(true);
+                    search.LostFocus += (_, _) => ApplyProfileSearchGlow(false);
+                }
+                if (page?.FindControl<Border>("ProfileSearchBox") is { } box)
+                    box.BorderBrush = new SolidColorBrush(GlowAt(0));
+
+                Activated += OnProfileFxWindowStateish;
+                Deactivated += OnProfileFxWindowStateish;
+                PropertyChanged += OnProfileFxWindowProperty;
+                if (page != null) page.PropertyChanged += OnProfileFxVisibility;
+                if (page?.FindControl<Border>("OgBorderContainer") is { } og) og.PropertyChanged += OnProfileFxVisibility;
+                if (page?.FindControl<Grid>("ProfileCardWrapper") is { } wrapper) wrapper.PropertyChanged += OnProfileFxVisibility;
+                AmbientFxCanvas.Env.MotionGateChanged += ApplyOgBorderLoop;
+                Closed += (_, _) => { AmbientFxCanvas.Env.MotionGateChanged -= ApplyOgBorderLoop; StopOgBorderLoop(); };
+            }
+            catch (Exception ex) { Log.Warning(ex, "InitializeProfileFx failed"); }
+        }
+
+        private void OnProfileFxWindowStateish(object? sender, EventArgs e) => ApplyOgBorderLoop();
+
+        private void OnProfileFxWindowProperty(object? sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == WindowStateProperty) ApplyOgBorderLoop();
+        }
+
+        private void OnProfileFxVisibility(object? sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == IsVisibleProperty) ApplyOgBorderLoop();
+        }
+
+        /// <summary>WPF OnProfileTabVisibilityChanged's incoming-tab half (OnTabShown "discord").</summary>
+        private void OnProfileTabShownFx()
+        {
+            ApplyOgBorderLoop();
+            StaggerProfileCards();
+        }
+
+        /// <summary>WPF ApplyOgBorderLoop: start or stop the spin from the full gate; idempotent.</summary>
+        internal void ApplyOgBorderLoop()
+        {
+            try
+            {
+                var page = ProfilePage;
+                if (page?.FindControl<Border>("OgBorderContainer") is not { } container) return;
+                bool wanted = container.IsEffectivelyVisible   // also off when only ProfileCardWrapper hides
+                              && AmbientFxCanvas.Env.AllowAmbientLoops
+                              && IsActive
+                              && WindowState != WindowState.Minimized
+                              && page.IsEffectivelyVisible;
+                if (!wanted) { StopOgBorderLoop(); return; }
+                if (_ogBorderLoop != null || container.Background is not Brush brush) return;
+
+                _ogBorderRotation ??= new RotateTransform();
+                brush.TransformOrigin = RelativePoint.Center;
+                brush.Transform = _ogBorderRotation;
+                _ogBorderLoop = new CancellationTokenSource();
+                _ = new Animation
+                {
+                    Duration = TimeSpan.FromSeconds(3),
+                    IterationCount = IterationCount.Infinite,
+                    Children =
+                    {
+                        new KeyFrame { Cue = new Cue(0), Setters = { new Setter(RotateTransform.AngleProperty, 0.0) } },
+                        new KeyFrame { Cue = new Cue(1), Setters = { new Setter(RotateTransform.AngleProperty, 360.0) } },
+                    },
+                }.RunAsync(_ogBorderRotation, _ogBorderLoop.Token);
+            }
+            catch (Exception ex) { Log.Debug("ApplyOgBorderLoop: {E}", ex.Message); }
+        }
+
+        private void StopOgBorderLoop()
+        {
+            _ogBorderLoop?.Cancel();
+            _ogBorderLoop?.Dispose();
+            _ogBorderLoop = null;
+        }
+
+        /// <summary>WPF StaggerProfileCards -> MotionFx.StaggerIn: visible cards fade in from a 10 px rise,
+        /// 40 ms apart, capped at 6 slots.</summary>
+        private void StaggerProfileCards()
+        {
+            try
+            {
+                if (!AmbientFxCanvas.Env.AllowTransitions) return;
+                if (ProfilePage?.FindControl<StackPanel>("ProfileColumnStack") is not { } stack) return;
+                int i = 0;
+                foreach (var card in stack.Children.Where(c => c.IsVisible))
+                {
+                    var delay = TimeSpan.FromMilliseconds(ProfileStaggerMs * Math.Min(i++, ProfileStaggerCap));
+                    if (card.RenderTransform is not TranslateTransform)
+                        card.RenderTransform = new TranslateTransform();
+                    Entrance(card, delay, 220, OpacityProperty, 0.0, 1.0);
+                    Entrance(card, delay, 260, TranslateTransform.YProperty, 10.0, 0.0);
+                }
+            }
+            catch (Exception ex) { Log.Debug("StaggerProfileCards: {E}", ex.Message); }
+        }
+
+        private static void Entrance(Control target, TimeSpan delay, int ms, AvaloniaProperty property, double from, double to) =>
+            _ = new Animation
+            {
+                Delay = delay,
+                Duration = TimeSpan.FromMilliseconds(ms),
+                Easing = new QuadraticEaseOut(),
+                FillMode = FillMode.Backward,   // holds "from" through the delay, then hands back to the local value
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0), Setters = { new Setter(property, from) } },
+                    new KeyFrame { Cue = new Cue(1), Setters = { new Setter(property, to) } },
+                },
+            }.RunAsync(target);
+
+        private static Color GlowAt(byte alpha)
+        {
+            var tint = AmbientFxCanvas.Env.GlowColor;
+            return Color.FromArgb(alpha, tint.R, tint.G, tint.B);
+        }
+
+        /// <summary>WPF ApplyProfileSearchGlow: the search border brightens to the glow tint on focus (150 ms).</summary>
+        private void ApplyProfileSearchGlow(bool on)
+        {
+            try
+            {
+                if (ProfilePage?.FindControl<Border>("ProfileSearchBox") is not { } box) return;
+                if (box.BorderBrush is not SolidColorBrush brush) box.BorderBrush = brush = new SolidColorBrush(GlowAt(0));
+                var to = GlowAt(on ? ProfileSearchGlowAlpha : (byte)0);
+                brush.Transitions = AmbientFxCanvas.Env.AllowTransitions
+                    ? new Transitions { new ColorTransition { Property = SolidColorBrush.ColorProperty, Duration = TimeSpan.FromMilliseconds(ProfileSearchGlowMs), Easing = new QuadraticEaseOut() } }
+                    : null;
+                brush.Color = to;
+            }
+            catch (Exception ex) { Log.Debug("ApplyProfileSearchGlow: {E}", ex.Message); }
+        }
     }
 }

@@ -24,9 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// (<see cref="DescentFuseTimeline"/>, <see cref="DescentIgnitionTimeline"/>,
     /// <see cref="DescentFuseHandoff"/>) already lives in Core, so the clock and every beat boundary
     /// are the real ones. Deviations:
-    ///  - <c>DescentFuseStageVisual</c> is a WPF <c>DrawingVisual</c> in the other head, so
-    ///    <c>StageHost</c> stays empty and the per-frame handoff to it is a no-op. The backdrop,
-    ///    the vignette, the line and the fades are all real.
+    ///  - <c>DescentFuseStageVisual</c> is redrawn for this head (Controls/DescentFuseStageVisual.cs).
     ///  - <c>DispatcherTimer</c> is Avalonia's; <c>DispatcherPriority.Render</c> exists on both.
     ///  - WPF's <c>BeginAnimation(OpacityProperty, …)</c> becomes an Avalonia <c>Animation</c>
     ///    run from code (<see cref="FadeTo"/>), with <c>FillMode.Forward</c> so the ramp sticks at
@@ -80,6 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly Stopwatch _clock = new();
         private readonly DescentFuseHandoff _handoff = new();
 
+        private readonly DescentFuseStageVisual _visual;
         private readonly Border _backdropLayer;
         private readonly TextBlock _showLine;
 
@@ -105,6 +104,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _backdropLayer.Opacity = 1.0;
             _showLine.Text = DescentFuseCopy.ShowAwaits;
             _showLine.Opacity = 1.0;
+            _visual.SetFrame(new DescentFuseFrame(DescentFuseStage.Held, 1, 0));
+        }
+
+        /// <summary>Test seam: the shows currently up.</summary>
+        internal static DescentFuseWindow[] OnScreen { get { lock (Live) return Live.ToArray(); } }
+
+        /// <summary>Test seam: the show's canvas.</summary>
+        internal DescentFuseStageVisual Stage => _visual;
+
+        /// <summary>WPF ResolveAccent: the mod's pink, or the app's own if the resource is missing.</summary>
+        private global::Avalonia.Media.Color ResolveAccent()
+        {
+            try
+            {
+                if (this.TryFindResource("PinkColor", out var c) && c is global::Avalonia.Media.Color color) return color;
+                if (this.TryFindResource("PinkBrush", out var b) && b is global::Avalonia.Media.ISolidColorBrush brush) return brush.Color;
+            }
+            catch (Exception ex) { Log.Debug("[Fuse] Accent lookup failed: {Error}", ex.Message); }
+            return global::Avalonia.Media.Color.FromRgb(0xFF, 0x69, 0xB4);
         }
 
         private DescentFuseWindow(DescentShowKind kind)
@@ -125,9 +143,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // that cap can only ever REMOVE motion, so its absence shows what the user picked.
             _reduced = AmbientFxCanvas.Env.Level != MotionLevel.Full;
 
-            // ponytail: needs ConditioningControlPanel/Controls/DescentFuseStageVisual.cs, a WPF
-            // DrawingVisual that cannot cross - it is redrawn for this head, not moved. StageHost
-            // is left empty; every other layer is real.
+            // THE MOD'S ACCENT, resolved once (WPF DescentFuseWindow.xaml.cs:120 ResolveAccent).
+            _visual = new DescentFuseStageVisual(ResolveAccent());
+            _visual.Begin(kind, _reduced);
+            this.FindControl<Grid>("StageHost")!.Children.Add(_visual);
 
             if (kind == DescentShowKind.Ignition)
             {
@@ -273,6 +292,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void FrameCrack(double elapsed)
         {
             var frame = DescentFuseTimeline.FrameAt(_kind, elapsed, _reduced);
+            _visual.SetFrame(frame);
 
             // The sting lands ON the crack, not before it. Reduced motion never reaches the Crack
             // stage, so the crossfade stays silent by construction.
@@ -367,6 +387,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void FrameIgnition(double elapsed)
         {
+            _visual.SetIgnition(elapsed);
             var lineOpacity = DescentIgnitionTimeline.LineOpacity(elapsed, _reduced);
             if (lineOpacity > 0 && (_showLine.Text?.Length ?? 0) == 0) _showLine.Text = DescentFuseCopy.IgnitionLine;
             _showLine.Opacity = lineOpacity;

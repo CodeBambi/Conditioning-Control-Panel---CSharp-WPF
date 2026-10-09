@@ -1,64 +1,22 @@
-// PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.ProfileBubble.cs (705 lines).
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.ProfileBubble.cs (719 lines).
 //
-// THE HOVER MENU IS LIVE. The header bubble's account menu opens on a 100ms hover delay, stays up
-// across the 250ms close grace while the cursor crosses the popup's transparent 12px shell, and
-// dismisses on deactivate, on minimise/maximise and on a click elsewhere in the window - the WPF
-// recipe, timing for timing. Its navigation rows are real: Profile, Achievements and Settings are
-// one ShowTab call each, exactly what they are on WPF, and a direct click on the bubble skips the
-// menu and lands on the Profile tab (key "discord" - "profile" matches no case; see
-// MainShellWindow.TabNavigation.cs).
+// The hover menu opens on a 100ms hover delay, survives a 250ms close grace and dismisses on
+// deactivate, minimise/maximise and a click elsewhere - the WPF recipe. RefreshProfileMenu paints
+// the name + tier emoji, the reachable achievement count and the Log out / Sign in caption from
+// CoreAccount and App.Achievements; the Level/XP rail is painted by UpdateLevelDisplay
+// (MainShellWindow.HeroFx.cs). RefreshProfileBubble paints the face (Discord photo when shared ->
+// initials on the roster gradient -> "?") and the tier badge on the rim, on sign-in/out
+// (UpdateQuickLoginUI) and tier changes (App RepaintVeils). XP / level-up / achievement events
+// pulse and glow the bubble (WPF OnBubble*).
 //
-// THE MENU IS PAINTED HONEST, NOT FULL. RefreshProfileMenu's identity half reads App.IsLoggedIn,
-// App.UserDisplayName, App.Patreon.HasLabAccess/HasPremiumAccess and App.Achievements - none of
-// which exist on this head - so the rows those would fill are HIDDEN rather than left showing the
-// XAML's placeholders:
-//   * ProfileMenuName + ProfileMenuBadge - no display name and no tier truth here.
-//   * ProfileMenuBadges - the achievement count reads App.Achievements. The Level/XP rail above it
-//     is LIVE, painted by UpdateLevelDisplay (MainShellWindow.HeroFx.cs) with the header's numbers.
-//   * ProfileMenuAccountBtn - the XAML ships it captioned "Log out". Whether that is even the
-//     right word needs App.IsLoggedIn, and acting on it needs BtnQuickLogout_Click
-//     (ConditioningControlPanel/MainWindow/MainWindow.Login.cs). A row that says "Log out" and
-//     does nothing is the exact state-lie this port refuses, so the row is hidden and
-//     ProfileMenuAccount_Click stays a stub.
-// The result is a menu that shows only what it can prove: four working doors.
+// ponytail: still missing vs WPF - the equipped preset bust (CosmeticsCatalog is WPF-only, row
+// shell-profile-cosmetics), the tier badge's hover blow-up (MainWindow.ProfileBubbleTierFx.cs),
+// the level-up spark burst (FireBurstAt, shell-event-fx), the flash wobble and subliminal shimmer
+// (no FlashDisplayed / SubliminalDisplayed event on this head), the spiral row (shell-profile-spiral,
+// no DescentService here) and BrowserLauncher's copy-the-link prompt when the browser cannot open.
+// PlaceProfileBubblePopup is dropped: Placement="BottomEdgeAlignedRight" is the same result.
 //
-// Controls are reached with Named<T>(name). MainShellWindow loads with AvaloniaXamlLoader.Load,
-// so a `ProfileBubblePopup` field would compile and be null forever.
-//
-// STILL HEAD-SIDE, each with the exact symbol and where it lives today:
-//   InitializeProfileBubble / CleanupProfileBubble - the WPF ctor's one-line wire-up. Its BODY is
-//     the service subscriptions below, so there is nothing for it to do yet; the two hover timers
-//     are created lazily on first hover instead, which needs no constructor line at all.
-//   RefreshProfileBubble, LoadProfileBubblePhotoAsync, _profileBubblePhotoBrush - the bubble FACE.
-//     Its resolution order is the Trainer Card's tri-state slot (shared Discord picture -> the
-//     equipped preset bust -> initials), which needs App.Discord, the ShareProfilePicture gate's
-//     owner and MainWindow.ProfileCosmetics.cs's bust resolver. Painting only the initials half
-//     would show "?" to a user whose photo is set and whose sharing is ON - a face that is wrong
-//     about who is signed in - so it is not half-ported.
-//   OnBubbleXPChanged / OnBubbleLevelUp / OnBubbleAchievementUnlocked / OnBubbleFlashDisplayed /
-//     OnBubbleSubliminalDisplayed / OnBubbleAuthChanged, and the four animations they drive
-//     (PulseProfileBubble, WobbleProfileBubble, ShimmerProfileBubble, FlashProfileBubbleGlow):
-//     blocked at the SOURCE, not at the animation. CCP.Core/CoreProgression.cs is an AddXP
-//     provider only - it raises no XPChanged, LevelUp or AchievementUnlocked event - so there is
-//     nothing on this head to subscribe to. ProfileBubbleVisual already carries its Scale/Rotate
-//     rig and ProfileBubbleGlowRing its parked gold ring, so each of the four is one keyframe
-//     Animation once those events exist.
-//   OpenPublicProfilePage / the outward half of ProfileMenuPublicProfile_Click - needs
-//     Helpers.BrowserLauncher.OpenUrlOrPrompt (ConditioningControlPanel/Helpers/BrowserLauncher.cs)
-//     and the ProfileSharingUrl constant (ConditioningControlPanel/MainWindow/
-//     MainWindow.TabNavigation.cs:646). Same blocker as MainShellWindow.Marquee.cs's web link and
-//     FeatureIntroPopup's "Open the web app". The row still CLOSES the menu, so it is not inert.
-//   RefreshProfileShareButton - DiscordTabView's BtnProfileShare plus App.IsLoggedIn; the gate is
-//     the same account truth as above.
-//   PlaceProfileBubblePopup - WPF's CustomPopupPlacementCallback. Avalonia has no such callback,
-//     and the XAML's Placement="BottomEdgeAlignedRight" + PlacementTarget is the same
-//     right-aligned result declaratively, so the method is DROPPED rather than stubbed.
-//   ProfileBubbleNeutralBrush / MakeFrozenBrush - Freeze() has no Avalonia twin, and the neutral
-//     fill is already #3D3D60 in the XAML.
-//
-// Members of the WPF file still dropped (31): the three reaction throttles
-// (_profileBubbleLastXpPulse / -LastWobble / -LastShimmer), _profileBubbleAvatarUrl,
-// ProfileBubbleGold, and every member named above.
+// Controls are reached with Named<T>(name): the window loads with AvaloniaXamlLoader.Load.
 
 using System;
 using Avalonia;
@@ -66,8 +24,23 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
+using Avalonia.Controls.Shapes;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Media.Immutable;
+using Avalonia.Styling;
 using Avalonia.Threading;
+using System.IO;
+using System.Net.Http;
+using System.Threading.Tasks;
+using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Avalonia.VisualTree;
+using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Localization;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -81,7 +54,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private DispatcherTimer? _profileBubbleOpenTimer;
         private DispatcherTimer? _profileBubbleCloseTimer;
         private bool _profileBubbleWatchersOn;
-        private bool _profileBubbleMenuPainted;
 
         private Popup? ProfileBubblePopupHost => Named<Popup>("ProfileBubblePopup");
 
@@ -141,7 +113,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CloseProfileBubbleMenu();
         }
 
-        private void OpenProfileBubbleMenu()
+        internal void OpenProfileBubbleMenu()
         {
             var popup = ProfileBubblePopupHost;
             if (popup == null) return;
@@ -173,34 +145,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (popup != null) popup.Closed -= OnProfileBubblePopupClosed;
         }
 
-        /// <summary>
-        /// Hides every row whose truth source is not on this head, so the menu offers only doors
-        /// it can honour. See the header for what each one needs. This is the menu's one paint
-        /// choke point, so restoring any of them is an edit here and nowhere else.
-        /// </summary>
+        /// <summary>WPF RefreshProfileMenu: name + tier emoji, achievements recap and the account
+        /// caption. The Level/XP rail is UpdateLevelDisplay's (OpenProfileBubbleMenu calls it).</summary>
         private void RefreshProfileMenu()
         {
-            if (_profileBubbleMenuPainted) return;   // the hidden set cannot change yet
-            _profileBubbleMenuPainted = true;
+            if (Named<TextBlock>("ProfileMenuName") is not { } nameText) return;
             try
             {
-                Hide("ProfileMenuName");
-                Hide("ProfileMenuBadge");
-                Hide("ProfileMenuBadges");
-                Hide("ProfileMenuAccountBtn");
+                var loggedIn = CoreAccount.IsLoggedIn;
+                var name = CoreAccount.DisplayName;
+                nameText.Text = loggedIn
+                    ? (string.IsNullOrWhiteSpace(name) ? Loc.Get("account_chip_signed_in") : name)
+                    : Loc.Get("account_chip_sign_in");
+
+                if (Named<TextBlock>("ProfileMenuBadge") is { } badge)
+                {
+                    // Same tier truth (and same emoji) as the account chip.
+                    badge.Text = CoreAccount.HasLabAccess ? "🧪" : CoreAccount.HasPremiumAccess ? "🔒" : "";
+                    badge.IsVisible = badge.Text.Length > 0;
+                }
+
+                if (Named<TextBlock>("ProfileMenuBadges") is { } badges)
+                {
+                    // The reachable pair, not the raw catalogue: 100% must be a place the user can get to.
+                    badges.IsVisible = App.Achievements != null;
+                    if (App.Achievements is { } engine)
+                    {
+                        var (got, reachable) = engine.GetReachableCounts();
+                        badges.Text = string.Format(Loc.Get("profile_bubble_achievements"), got, reachable);
+                    }
+                }
+
+                if (Named<Button>("ProfileMenuAccountBtn") is { } account)
+                    account.Content = loggedIn ? Loc.Get("btn_logout") : Loc.Get("account_chip_sign_in");
             }
             catch (Exception ex) { Log.Debug("RefreshProfileMenu: {E}", ex.Message); }
-
-            // Instrumented, not silently guarded. A Popup does not open a new namescope, so the
-            // window's FindControl reaches its children - but "the x:Name lookup quietly returned
-            // null" is this port's most expensive failure mode, and here it would mean the menu
-            // opens showing the very rows this method exists to hide.
-            void Hide(string name)
-            {
-                var c = Named<Control>(name);
-                if (c == null) { Log.Warning("[ProfileBubble] {Name} not in the window namescope - the menu will show it", name); return; }
-                c.IsVisible = false;
-            }
         }
 
         // ----- window-level watchers, live only while the menu is open --------------
@@ -283,20 +262,192 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ShowTab("appsettings");
         }
 
-        /// <summary>Closes the menu and stops there: the door OUT of the app needs a URL launcher
-        /// this head does not have yet. See OpenPublicProfilePage in the header.</summary>
         private void ProfileMenuPublicProfile_Click(object? sender, RoutedEventArgs e)
         {
             CloseProfileBubbleMenu();
+            OpenPublicProfilePage();
         }
 
-        /// <summary>
-        /// Deliberately inert, and its row is hidden by RefreshProfileMenu. Signed in it must run
-        /// the full quick-logout flow (sync-before-clear, provider logouts, repaint) in
-        /// MainWindow.Login.cs's BtnQuickLogout_Click; signed out it opens Settings scrolled to
-        /// Account. Which of the two it is needs App.IsLoggedIn, and guessing that branch either
-        /// drops a logout on the floor or sends a signed-in user to a sign-in page.
-        /// </summary>
-        private void ProfileMenuAccount_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF OpenPublicProfilePage: the dashboard's sharing page, never /u/&lt;slug&gt; (the app holds
+        /// no slug). Shared by the menu row and the Trainer Card's Share Profile button.</summary>
+        internal void OpenPublicProfilePage()
+        {
+            try { OpenProfileLink(ProfileSharingUrl); }
+            catch (Exception ex) { Log.Warning(ex, "OpenPublicProfilePage failed"); }
+        }
+
+        /// <summary>Test seam: the sandbox guard refuses web links under test.</summary>
+        internal static Func<string, bool> OpenProfileLink = ExternalOpener.Open;
+
+        /// <summary>WPF MainWindow.TabNavigation.cs:676.</summary>
+        internal const string ProfileSharingUrl = "https://app.cclabs.app/dashboard/profile-sharing";
+
+        /// <summary>WPF RefreshProfileShareButton: visible but disabled signed out, the tooltip says why.</summary>
+        internal void RefreshProfileShareButton()
+        {
+            if (ProfilePage?.FindControl<Button>("BtnProfileShare") is not { } btn) return;
+            bool signedIn = CoreAccount.IsLoggedIn;
+            btn.IsEnabled = signedIn;
+            btn.Opacity = signedIn ? 1.0 : 0.55;
+            ToolTip.SetTip(btn, Loc.Get(signedIn ? "profile_btn_share_tip" : "profile_btn_share_tip_locked"));
+        }
+
+        /// <summary>WPF ProfileMenuAccount_Click: signed in runs the quick logout; signed out opens
+        /// Settings at Account (the account chip's door).</summary>
+        private void ProfileMenuAccount_Click(object? sender, RoutedEventArgs e)
+        {
+            CloseProfileBubbleMenu();
+            if (CoreAccount.IsLoggedIn) Logout();
+            else OpenAppSettingsSection("account");
+        }
+
+        // ----- the bubble face ---------------------------------------------------------
+
+        private static readonly IBrush ProfileBubbleNeutralBrush = new ImmutableSolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x60));
+        private static readonly Color ProfileBubbleGold = Color.FromRgb(0xFF, 0xD7, 0x00);
+        private string? _profileBubbleAvatarUrl;
+        private IBrush? _profileBubblePhotoBrush;
+        private DateTime _profileBubbleLastXpPulse;
+
+        /// <summary>WPF InitializeProfileBubble's service half: the reaction events (static or app-lived,
+        /// so they come off when the window closes, P41) and the first paint.</summary>
+        private void InitializeProfileBubble()
+        {
+            Action<double, string> awarded = (_, _) => Dispatcher.UIThread.Post(OnBubbleXPChanged);
+            Action<int> levelUp = _ => Dispatcher.UIThread.Post(OnBubbleLevelUp);
+            EventHandler<Achievement> unlocked = (_, _) => Dispatcher.UIThread.Post(OnBubbleAchievementUnlocked);
+            var engine = App.Achievements;
+            ProgressionBank.Awarded += awarded;
+            ProgressionBank.LevelUp += levelUp;
+            if (engine != null) engine.Unlocked += unlocked;
+            Closed += (_, _) =>
+            {
+                ProgressionBank.Awarded -= awarded;
+                ProgressionBank.LevelUp -= levelUp;
+                if (engine != null) engine.Unlocked -= unlocked;
+            };
+            RefreshProfileBubble();
+        }
+
+        /// <summary>WPF RefreshProfileBubble: Discord photo (ShareProfilePicture on) beats initials on the
+        /// roster gradient; "?" on slate signed out. Then the tier badge and, if open, the menu.</summary>
+        internal void RefreshProfileBubble()
+        {
+            if (Named<Ellipse>("ProfileBubbleFill") is not { } fill || Named<TextBlock>("ProfileBubbleInitials") is not { } initials) return;
+            try
+            {
+                var loggedIn = CoreAccount.IsLoggedIn;
+                var name = CoreAccount.DisplayName;
+                initials.Text = loggedIn ? LeaderboardEntryData.BuildInitials(name) : "?";
+                fill.Fill = loggedIn ? Tabs.LeaderboardRow.BuildAvatarBrush(name) : ProfileBubbleNeutralBrush;
+                initials.IsVisible = true;
+
+                string? url = null;
+                if (CoreSettings.Current.ShareProfilePicture && AccountSeed.Discord?.IsAuthenticated == true)
+                    url = AccountSeed.Discord.GetAvatarUrl(128);
+                if (string.IsNullOrEmpty(url)) { _profileBubbleAvatarUrl = null; _profileBubblePhotoBrush = null; }
+                else if (url == _profileBubbleAvatarUrl && _profileBubblePhotoBrush != null) PaintBubblePhoto(_profileBubblePhotoBrush);
+                else _ = LoadProfileBubblePhotoAsync(url);
+
+                RefreshProfileBubbleTierBadge();
+                RefreshProfileShareButton();
+                if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
+            }
+            catch (Exception ex) { Log.Debug("RefreshProfileBubble: {E}", ex.Message); }
+        }
+
+        /// <summary>Basic / Prime badge on the rim, from the canonical gates.</summary>
+        private void RefreshProfileBubbleTierBadge()
+        {
+            if (Named<Image>("ProfileBubbleTierBadge") is not { } img) return;
+            var tier = CoreAccount.HasLabAccess ? 2 : CoreAccount.HasPremiumAccess ? 1 : 0;
+            var art = tier > 0 ? TierBadge.TierArt(tier) : null;
+            img.Source = art;
+            img.IsVisible = art != null;
+        }
+
+        private void PaintBubblePhoto(IBrush brush)
+        {
+            if (Named<Ellipse>("ProfileBubbleFill") is { } fill) fill.Fill = brush;
+            if (Named<TextBlock>("ProfileBubbleInitials") is { } initials) initials.IsVisible = false;
+        }
+
+        /// <summary>Fetch + decode off the UI thread; any failure keeps the initials face.</summary>
+        private async Task LoadProfileBubblePhotoAsync(string url)
+        {
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var bytes = await http.GetByteArrayAsync(url);
+                var bitmap = await Task.Run(() => { using var ms = new MemoryStream(bytes); return new Bitmap(ms); });
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _profileBubbleAvatarUrl = url;
+                    _profileBubblePhotoBrush = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
+                    PaintBubblePhoto(_profileBubblePhotoBrush);
+                });
+            }
+            catch (Exception ex) { Log.Debug("Profile bubble avatar load failed: {E}", ex.Message); }
+        }
+
+        // ----- live reactions (WPF OnBubble*) -------------------------------------------
+
+        private void OnBubbleXPChanged()
+        {
+            if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
+            if ((DateTime.UtcNow - _profileBubbleLastXpPulse).TotalMilliseconds < 900) return;
+            _profileBubbleLastXpPulse = DateTime.UtcNow;
+            PulseProfileBubble(1.10, 260);
+        }
+
+        private void OnBubbleLevelUp()
+        {
+            PulseProfileBubble(1.35, 560);
+            FlashProfileBubbleGlow();
+            if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
+        }
+
+        private void OnBubbleAchievementUnlocked()
+        {
+            FlashProfileBubbleGlow();
+            PulseProfileBubble(1.18, 380);
+            if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
+        }
+
+        /// <summary>1 -> peak -> 1 over <paramref name="durationMs"/>, QuadraticEaseOut, auto-reversed.</summary>
+        private void PulseProfileBubble(double peak, int durationMs)
+        {
+            if (!AmbientFxCanvas.Env.AllowTransitions || Named<Grid>("ProfileBubbleVisual") is not { } visual) return;
+            _ = new Animation
+            {
+                Duration = TimeSpan.FromMilliseconds(durationMs / 2.0),
+                IterationCount = new IterationCount(2),
+                PlaybackDirection = PlaybackDirection.Alternate,
+                Easing = new QuadraticEaseOut(),
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0), Setters = { new Setter(ScaleTransform.ScaleXProperty, 1.0), new Setter(ScaleTransform.ScaleYProperty, 1.0) } },
+                    new KeyFrame { Cue = new Cue(1), Setters = { new Setter(ScaleTransform.ScaleXProperty, peak), new Setter(ScaleTransform.ScaleYProperty, peak) } },
+                },
+            }.RunAsync(visual);
+        }
+
+        /// <summary>Gold ring: up in 120ms, held to 450ms, out by 1200ms.</summary>
+        private void FlashProfileBubbleGlow()
+        {
+            if (!AmbientFxCanvas.Env.AllowTransitions || Named<Ellipse>("ProfileBubbleGlowRing") is not { } ring) return;
+            ring.Stroke = new ImmutableSolidColorBrush(ProfileBubbleGold);
+            _ = new Animation
+            {
+                Duration = TimeSpan.FromMilliseconds(1200),
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0), Setters = { new Setter(OpacityProperty, 0.0) } },
+                    new KeyFrame { Cue = new Cue(0.1), Setters = { new Setter(OpacityProperty, 1.0) } },
+                    new KeyFrame { Cue = new Cue(0.375), Setters = { new Setter(OpacityProperty, 1.0) } },
+                    new KeyFrame { Cue = new Cue(1), Setters = { new Setter(OpacityProperty, 0.0) } },
+                },
+            }.RunAsync(ring);
+        }
     }
 }

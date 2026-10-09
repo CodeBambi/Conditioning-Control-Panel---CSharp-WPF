@@ -7301,6 +7301,9 @@
   "vaultgate_ending_keep": "Оставить Basic",
   "vaultgate_ending_let_close": "Пусть закроется",
   "vaultgate_ending_inbox": "Твоя неделя по приглашению скоро закончится",
+  "premium_celebration_inbox_t1": "Премиум твой",
+  "premium_celebration_inbox_t2": "Прайм твой",
+  "premium_celebration_inbox_summary": "Всё, что было закрыто, теперь открыто.",
   "vaultgate_price_year": "/ год · {0} в месяц",
   "vaultgate_yearly_hint": "Или {0} в год на Patreon: 2 месяца бесплатно.",
   "vaultgate_billing_monthly": "Помесячно",
@@ -7308,5 +7311,16 @@
   "vaultgate_yearly_note": "Годовая оплата пока доступна только через Patreon. Остальные способы оплаты помесячные.",
   "vaultgate_sale_first": "/ первый месяц",
   "vaultgate_sale_line": "Скидка {0}% на первый месяц, затем {1} в месяц.",
-  "vaultgate_sale_ends": "Акция до {0}."
+  "vaultgate_sale_ends": "Акция до {0}.",
+  "kwt_no_audio": "Нет аудио",
+  "kwt_cd": "КД:",
+  "kwt_vol": "Громк.:",
+  "kwt_effect_none": "Нет",
+  "kwt_effect_highlight_only": "Только подсветка",
+  "kwt_effect_subliminal": "Сублиминал",
+  "kwt_effect_exact_subliminal": "Точный сублиминал",
+  "kwt_effect_image_flash": "Вспышка изображения",
+  "kwt_effect_overlay_pulse": "Пульс оверлея",
+  "kwt_effect_mind_wipe": "Mind Wipe",
+  "kwt_effect_bubbles": "Пузыри"
 }

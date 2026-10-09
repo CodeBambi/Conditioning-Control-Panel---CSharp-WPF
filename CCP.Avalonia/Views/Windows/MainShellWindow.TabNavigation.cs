@@ -200,17 +200,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                             MaybeShowFeatureIntro("descent-spiral", "spiral");
                         break;
 
-                    // WPF gets here through DiscordTabView's IsVisibleChanged ->
-                    // MainWindow.ProfileFx.cs:OnProfileTabVisibilityChanged, which refreshes the
-                    // community rail's sharing footer on every show because a toggle can be
-                    // flipped from Settings or the Goon tab in between. That FX partial is a stub
-                    // on this head, so the one line of it that resolves lands here instead - this
-                    // is the head's home for per-tab entry side effects, and "the Profile tab
-                    // became visible" is exactly the event WPF is reacting to.
-                    // ponytail: the rest of OnProfileTabVisibilityChanged (the OG border loop, the
-                    // vat poll, RefreshProfileShareButton, StaggerProfileCards) needs
-                    // MainShellWindow.ProfileFx.cs / .ProfileVat.cs. EnsureProfileMeFirst is here.
-                    case "discord": UpdateProfileSharingSummary(); ProfilePage?.EnsureProfileMeFirst(); MaybeShowFeatureIntro("profile-hub", "discord"); break;
+                    // WPF DiscordTabView IsVisibleChanged -> MainWindow.ProfileFx.cs:OnProfileTabVisibilityChanged
+                    // (incoming tab): sharing footer, share-button gate, me-first, OG loop + card stagger.
+                    // ponytail: its vat poll half needs MainShellWindow.ProfileVat.cs (DescentService).
+                    case "discord": UpdateProfileSharingSummary(); RefreshProfileShareButton(); ProfilePage?.EnsureProfileMeFirst(); OnProfileTabShownFx(); MaybeShowFeatureIntro("profile-hub", "discord"); break;
 
                     // WPF MainWindow.TabNavigation.cs:292/367: throttled share-status polls on tab open.
                     case "presets":
