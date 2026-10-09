@@ -189,11 +189,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _isChecked = isChecked;
         }
 
+        /// <summary>A file inside an encrypted content pack (WPF AssetFileItem IsPackFile): no path on
+        /// disk, keyed <c>pack:&lt;id&gt;/&lt;OriginalName&gt;</c>.</summary>
+        public AssetThumbnailViewModel(string packId, ConditioningControlPanel.Services.PackFileEntry file, bool isChecked)
+        {
+            FullPath = "";
+            RelativePath = ConditioningControlPanel.Services.ContentPackStore.SelectionKey(packId, file);
+            PackId = packId;
+            PackFile = file;
+            _isChecked = isChecked;
+        }
+
         public string FullPath { get; }
         /// <summary>The key in DisabledAssetPaths: path under the assets root, forward slashes.</summary>
         public string RelativePath { get; }
-        public string Name => Path.GetFileName(FullPath);
-        public bool IsVideo => Array.IndexOf(VideoExtensions, Path.GetExtension(FullPath).ToLowerInvariant()) >= 0;
+        public string? PackId { get; }
+        public ConditioningControlPanel.Services.PackFileEntry? PackFile { get; }
+        public bool IsPackFile => PackFile != null;
+        public string Name => PackFile?.OriginalName ?? Path.GetFileName(FullPath);
+        public bool IsVideo => PackFile != null
+            ? PackFile.FileType == ConditioningControlPanel.Services.ContentPackStore.VideoType
+            : Array.IndexOf(VideoExtensions, Path.GetExtension(FullPath).ToLowerInvariant()) >= 0;
         public long SizeBytes { get; set; }
 
         private bool _isChecked;
