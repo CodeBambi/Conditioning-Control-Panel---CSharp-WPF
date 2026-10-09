@@ -169,20 +169,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _shimmerHost.IsVisible = true;
 
                 var sweep = ShimmerSweep.TotalSeconds / ShimmerCycle.TotalSeconds;
-                var anim = new Animation
+                // Not Animation.RunAsync: a Transform target throws (see Helpers/TransformTween).
+                var shimmer = Helpers.TransformTween.Run(slide, ShimmerCycle, new (double, AvaloniaProperty, double)[]
                 {
-                    Duration = ShimmerCycle,
-                    IterationCount = IterationCount.Infinite,
-                    Easing = new SineEaseInOut(),
-                    Children =
-                    {
-                        Frame(0.0, ShimmerFromX),
-                        Frame(sweep, ShimmerToX),
-                        // Hold off-frame for the rest of the cycle: the dwell IS the effect.
-                        Frame(1.0, ShimmerToX),
-                    },
-                };
-                _ = anim.RunAsync(slide);
+                    (0.0, TranslateTransform.XProperty, ShimmerFromX),
+                    (sweep, TranslateTransform.XProperty, ShimmerToX),
+                    // Hold off-frame for the rest of the cycle: the dwell IS the effect.
+                    (1.0, TranslateTransform.XProperty, ShimmerToX),
+                }, new SineEaseInOut(), loop: true);
+                Closed += (_, _) => shimmer.Stop();
             }
             catch (Exception ex)
             {
@@ -190,11 +185,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Log.Debug("TeaseRevealPopup.StartShimmer: {E}", ex.Message);
             }
         }
-
-        private static KeyFrame Frame(double cue, double x) => new()
-        {
-            Cue = new Cue(cue),
-            Setters = { new Setter(TranslateTransform.XProperty, x) },
-        };
     }
 }

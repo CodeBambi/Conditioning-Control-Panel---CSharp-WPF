@@ -14,6 +14,7 @@
 // Numbers come from Core HudDepthRules / DepthRules; this head only draws.
 
 using System;
+using System.Linq;
 using System.Threading;
 using Avalonia;
 using Avalonia.Animation;
@@ -274,16 +275,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _xpSheenLoop = new CancellationTokenSource();
                 // The stops start 0.30 left of the fill and travel 1.30 of its width per pass.
                 var width = Math.Max(1, sheen.Bounds.Width);
-                _ = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(HudDepthRules.XpSheenSeconds),
-                    IterationCount = IterationCount.Infinite,
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0), Setters = { new Setter(TranslateTransform.XProperty, 0.0) } },
-                        new KeyFrame { Cue = new Cue(1), Setters = { new Setter(TranslateTransform.XProperty, width * 1.30) } },
-                    },
-                }.RunAsync(slide, _xpSheenLoop.Token);
+                // Not Animation.RunAsync: a Transform target throws (see Helpers/TransformTween).
+                Helpers.TransformTween.Run(slide, TimeSpan.FromSeconds(HudDepthRules.XpSheenSeconds),
+                    new (double, AvaloniaProperty, double)[] { (0, TranslateTransform.XProperty, 0.0), (1, TranslateTransform.XProperty, width * 1.30) },
+                    loop: true, token: _xpSheenLoop.Token);
             }
             catch (Exception ex) { Log.Debug("ApplyXpSheen: {E}", ex.Message); }
         }
@@ -302,24 +297,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _levelChipPop?.Cancel();
                 _levelChipPop = new CancellationTokenSource();
                 var span = TimeSpan.FromMilliseconds(HudDepthRules.LevelChipPopMs);
-                Animation Make(AvaloniaProperty p, double peak, double rest)
+                (double, AvaloniaProperty, double)[] Make(AvaloniaProperty p, double peak, double rest)
                 {
                     // Quadratic out to the peak in the first 30%, BackEase out (amplitude 0.6) home.
-                    var anim = new Animation { Duration = span };
                     const int steps = 12;
+                    var keys = new (double, AvaloniaProperty, double)[steps + 1];
                     for (int i = 0; i <= steps; i++)
                     {
                         var u = (double)i / steps;
                         double v;
                         if (u <= 0.3) { var k = u / 0.3; v = rest + (peak - rest) * (1 - (1 - k) * (1 - k)); }
                         else { var k = (u - 0.3) / 0.7; var t = 1 - k; v = peak + (rest - peak) * (1 - (t * t * t - t * 0.6 * Math.Sin(t * Math.PI))); }
-                        anim.Children.Add(new KeyFrame { Cue = new Cue(u), Setters = { new Setter(p, v) } });
+                        keys[i] = (u, p, v);
                     }
-                    return anim;
+                    return keys;
                 }
-                _ = Make(ScaleTransform.ScaleXProperty, HudDepthRules.LevelChipPopScale, 1).RunAsync(scale, _levelChipPop.Token);
-                _ = Make(ScaleTransform.ScaleYProperty, HudDepthRules.LevelChipPopScale, 1).RunAsync(scale, _levelChipPop.Token);
-                _ = Make(RotateTransform.AngleProperty, HudDepthRules.LevelChipPopDegrees, 0).RunAsync(rotate, _levelChipPop.Token);
+                // Not Animation.RunAsync: a Transform target throws (see Helpers/TransformTween).
+                Helpers.TransformTween.Run(scale, span,
+                    Make(ScaleTransform.ScaleXProperty, HudDepthRules.LevelChipPopScale, 1)
+                        .AsEnumerable().Concat(Make(ScaleTransform.ScaleYProperty, HudDepthRules.LevelChipPopScale, 1)).ToArray(),
+                    token: _levelChipPop.Token);
+                Helpers.TransformTween.Run(rotate, span, Make(RotateTransform.AngleProperty, HudDepthRules.LevelChipPopDegrees, 0),
+                    token: _levelChipPop.Token);
             }
             catch (Exception ex) { Log.Debug("PopLevelChip: {E}", ex.Message); }
         }
