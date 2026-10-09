@@ -5,9 +5,11 @@
 // px throughout, as WPF's physical route did (GetWindowRect/SetWindowPos). The saved
 // AvatarTubeLeft/Top stay in WPF's DIPs, so a WPF-written file reads unchanged: px = dip * DesktopScaling.
 //
-// ponytail: skipped from WPF - make-room (moving main so she fits), the mirrored art on a right
-// dock, measured mod-art insets (stock 239/353 are used), Ctrl+scroll zoom (so AvatarTubeScale is
-// neither applied nor written) and the floating bob. Add each when a user misses it.
+// The mirrored art on a right dock and the Win32 owner pairing live in AvatarTubeWindow.Flip.cs.
+//
+// ponytail: skipped from WPF - make-room (moving main so she fits), measured mod-art insets (stock
+// 239/353 are used), Ctrl+scroll zoom (so AvatarTubeScale is neither applied nor written) and the
+// floating bob. Add each when a user misses it.
 
 using System;
 using System.Linq;
@@ -106,7 +108,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             RefreshTubeGlass();
             RefreshTubeLayout();
             ApplyModeChrome();
+            if (!attached) ApplyTubeArtFlip(false);   // WPF Detach: the free tube reads unmirrored
             UpdatePosition();
+            ApplyNativeOwner(attached);
             if (attached && _parentWindow != null) Platform.X11Overlay.RestackAbove(this, _parentWindow);
             if (!attached) Platform.X11Overlay.SetInputRect(this, null);
             Log.Information("Avatar tube {Mode}", attached ? "attached" : "detached");
@@ -174,14 +178,50 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             double art = _scaleFactor * DesktopScaling, day = DockDaylight * DesktopScaling;
             var size = TubePixelSize;
             int rightInset = (int)Math.Round(Math.Max(0, (TubeArtRightPadding - SeamOverlapOverMain) * art - day));
+            int leftInset = (int)Math.Round(Math.Max(0, TubeArtLeftPadding * art - day));
+            // Docked right the art is mirrored about her centre (WPF Windowing.cs:866-871).
+            int mirroredLeftInset = (int)Math.Round(Math.Max(0, MirroredLeftInsetUnits() * art - day));
             var plan = TubeDockPlacement.Place(ToBox(pr), size.Width, size.Height,
-                (int)Math.Round(Math.Max(0, TubeArtLeftPadding * art - day)), rightInset,
-                (int)Math.Round(VerticalOffset * art), ToBox(work));
+                leftInset, rightInset, (int)Math.Round(VerticalOffset * art), ToBox(work), mirroredLeftInset);
+
+            // WPF sanity check: reject positions far off the virtual desktop (transitional garbage
+            // during minimise churn, e.g. Windows parks a minimised window at -32000,-32000).
+            var vs = VirtualDesktop();
+            if (plan.Left < vs.X - 2000 || plan.Left > vs.Right + 2000 || plan.Top < vs.Y - 1000 || plan.Top > vs.Bottom + 1000)
+            {
+                Log.Information("AvatarTube dock rejected off-desktop: tube=({L},{T}) main=({ML},{MT} {MW}x{MH}) desktop=({DL},{DT},{DR},{DB})",
+                    plan.Left, plan.Top, pr.X, pr.Y, pr.Width, pr.Height, vs.X, vs.Y, vs.Right, vs.Bottom);
+                return;
+            }
+
+            ApplyTubeArtFlip(plan.Side == DockSide.Right);
+            string decision = $"{plan.Side}|{plan.Left},{plan.Top}|{pr}|{size}";
+            if (decision != _lastDockDecision)
+            {
+                _lastDockDecision = decision;
+                Log.Information("AvatarTube dock: side={Side} tube=({L},{T} {W}x{H}) main=({ML},{MT} {MW}x{MH}) work=({WL},{WT},{WR},{WB}) insets={IL}/{IR}/{IM}",
+                    plan.Side, plan.Left, plan.Top, size.Width, size.Height, pr.X, pr.Y, pr.Width, pr.Height,
+                    work.X, work.Y, work.Right, work.Bottom, leftInset, rightInset, mirroredLeftInset);
+            }
             Position = new PixelPoint(plan.Left, plan.Top);
             // WPF's transparent margin was click-through (layered window); an X11 window takes
-            // clicks on every pixel, so cut her input down to everything left of the seam or the
-            // shell's rail under that margin goes dead. Detach gives the whole window back.
-            Platform.X11Overlay.SetInputRect(this, new PixelRect(0, 0, size.Width - rightInset, size.Height));
+            // clicks on every pixel, so cut her input down to her side of the seam or the shell
+            // under that margin goes dead: left of it on a left dock, right of the mirrored art's
+            // left edge on a right dock. Detach gives the whole window back.
+            var input = plan.Side == DockSide.Right
+                ? new PixelRect(mirroredLeftInset, 0, Math.Max(0, size.Width - mirroredLeftInset), size.Height)
+                : new PixelRect(0, 0, size.Width - rightInset, size.Height);
+            Platform.X11Overlay.SetInputRect(this, input);
+        }
+
+        private string? _lastDockDecision;
+
+        /// <summary>The union of every screen's bounds (px); a huge box when there is no screen answer.</summary>
+        private PixelRect VirtualDesktop()
+        {
+            PixelRect? u = null;
+            foreach (var sc in Screens.All) u = u is { } r ? r.Union(sc.Bounds) : sc.Bounds;
+            return u ?? new PixelRect(-100000, -100000, 200000, 200000);
         }
 
         /// <summary>WPF RestoreSavedPlacement: a detached tube comes back where it was left, with at

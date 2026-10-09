@@ -309,7 +309,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // The z-order pairing the WPF head got from native (GWL_HWNDPARENT) ownership. Safe to
             // call unconditionally - the shim returns false off X11 and on the headless render.
             if (_parentWindow is not null && _isAttached)
+            {
+                ApplyNativeOwner(true);   // the Windows half (WPF ApplyNativeOwner)
                 X11Overlay.RestackAbove(this, _parentWindow);
+            }
 
             // The live tube owns the static chat command for as long as it is open. WPF routed the
             // RoutedUICommand up the tree to whichever window handled it; there is no routed-command
@@ -330,6 +333,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
         protected override void OnClosed(EventArgs e)
         {
+            Log.Information("AvatarTube window closed");
             // Never leave the static command pointing at a closed window. Delegate == compares
             // target and method, which is what makes "is the sink still MINE?" answerable at all;
             // ReferenceEquals would be false every time because the conversion allocates.
@@ -381,13 +385,33 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             else Dispatcher.UIThread.Post(action, priority);
         }
 
+        /// <summary>WPF ShowTube: show, then re-dock when main is up (Windowing.cs:1443-1479).</summary>
         public void ShowSafe() => RunOnAvatar(() =>
         {
-            try { Show(); } catch (Exception ex) { Log.Debug("AvatarTube ShowSafe failed: {Error}", ex.Message); }
+            try
+            {
+                bool was = IsVisible;
+                Show();
+                if (_parentWindow is { IsVisible: true, WindowState: not WindowState.Minimized }) UpdatePosition();
+                if (!was) Log.Information("AvatarTube shown ({Mode}) at {Pos}", _isAttached ? "attached" : "detached", Position);
+            }
+            catch (Exception ex) { Log.Warning("AvatarTube ShowSafe failed: {Error}", ex.Message); }
+        });
+
+        /// <summary>WPF HideTube. Every hide of the tube goes through here so it is in the log.</summary>
+        public void HideSafe(string reason) => RunOnAvatar(() =>
+        {
+            try
+            {
+                if (IsVisible) Log.Information("AvatarTube hidden: {Reason}", reason);
+                Hide();
+            }
+            catch (Exception ex) { Log.Warning("AvatarTube HideSafe failed: {Error}", ex.Message); }
         });
 
         public void CloseSafe() => RunOnAvatar(() =>
         {
+            Log.Information("AvatarTube closing");
             try { Close(); } catch (Exception ex) { Log.Debug("AvatarTube CloseSafe failed: {Error}", ex.Message); }
         });
 
@@ -882,6 +906,19 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             else
             {
                 right = 425 - dx;
+            }
+
+            if (useAttached && _tubeArtFlipped)
+            {
+                // Right dock: the seam is on her LEFT now, so the bubble mirrors about her centre
+                // (the art's flip axis) and grows rightward, away from main.
+                var maxWidth = _speechBubble.MaxWidth;
+                double left = Math.Max(0, 2 * TubeFlipAxisDesign() - (DesignWidth - right));
+                if (double.IsFinite(maxWidth) && maxWidth > 0)
+                    left = Math.Min(left, Math.Max(0, DesignWidth - maxWidth));
+                _speechBubble.HorizontalAlignment = HorizontalAlignment.Left;
+                _speechBubble.Margin = new Thickness(left, 0, 0, 550);
+                return;
             }
 
             _speechBubble.HorizontalAlignment = useAttached ? HorizontalAlignment.Right
