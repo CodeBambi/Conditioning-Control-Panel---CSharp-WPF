@@ -46,6 +46,10 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
             double ms, Func<double, double>? ease = null, double delayMs = 0, Action? done = null)
         {
             _runs.Remove((target, name));
+            // An overshooting ease (Thud) carries opacity past 1. WPF clamps it; Avalonia drew the
+            // card's words nearly transparent for the overshoot frames, so each line blinked out as
+            // it landed (owner, 2026-10-09: "this text here flickers when the card comes").
+            if (name == "opacity") { var raw = set; set = v => raw(Math.Clamp(v, 0, 1)); }
             double start = from ?? get();
             if (ms <= 0 && delayMs <= 0)
             {

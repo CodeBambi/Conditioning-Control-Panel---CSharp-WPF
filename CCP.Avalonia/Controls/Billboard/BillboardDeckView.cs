@@ -126,14 +126,16 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
             _title.FontSize = 30;
             _title.Margin = new Thickness(0, 2, 0, 0);
             _title.TextWrapping = TextWrapping.Wrap;
-            _title.MaxHeight = 90;
+            // Two lines, as WPF's MaxHeight 90 gave at 34 px; Avalonia's taller line box fitted only one
+            // and cut the Tip title to "The app can read t..." (owner, 2026-10-09).
+            _title.MaxLines = 2;
             _title.TextTrimming = TextTrimming.CharacterEllipsis;
             Res(_title, TextBlock.ForegroundProperty, "TextLightBrush");
             _line.FontSize = 14;
             _line.Margin = new Thickness(0, 4, 0, 0);
             _line.Foreground = new SolidColorBrush(Color.FromRgb(0xc9, 0xc7, 0xee));
             _line.TextWrapping = TextWrapping.Wrap;
-            _line.MaxHeight = 42;
+            _line.MaxLines = 2;
             _line.TextTrimming = TextTrimming.CharacterEllipsis;
             foreach (var t in new[] { _eyebrow, _title, _line })
             {
