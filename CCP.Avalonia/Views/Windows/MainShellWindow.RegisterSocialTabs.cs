@@ -204,12 +204,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!row.CanJoin || string.IsNullOrEmpty(row.Key)) return;
             var gates = CurrentLobbyGates();
             if (!gates.SignedIn || !gates.CanJoin(row.Game)) { await OpenUnifiedLoginDialog(); return; }
-            // ponytail: chess -> PieceByPieceHostService.JoinOpenTable(key), Goon ->
-            // GoonHostService.Launch(joinCode: key), Remote -> ClaimRemoteSubjectAsync(key)
-            // (AvailableSubjectsService.TryClaimAsync + the session url). None of the three games or
-            // the claim is hosted on this head yet; the click is logged and the page stays.
-            Log.Information("[Lobby] join {Game} not hosted on this head yet", row.Game);
+            try
+            {
+                switch (row.Game)
+                {
+                    // INTERIM: the game hosts are not ported (WPF PieceByPieceHostService.JoinOpenTable(key),
+                    // GoonHostService.Launch(joinCode: key)), so Join opens the GAME on its own lobby, not the table,
+                    // exactly as the friends drawer's Join does.
+                    case LobbyGame.Chess:
+                        Log.Information("[Lobby] join chess: the game opens on its own lobby (no table join on this head yet)");
+                        LobbyLaunchGame("piecebypiece");
+                        break;
+                    case LobbyGame.Goon:
+                        Log.Information("[Lobby] join Goon: the game opens on its own lobby (no join code on this head yet)");
+                        LobbyLaunchGame("goon");
+                        break;
+                    case LobbyGame.Remote:
+                        // ponytail: ClaimRemoteSubjectAsync(key) (AvailableSubjectsService.TryClaimAsync + the
+                        // session url) is not on this head; the click is logged and the page stays.
+                        Log.Information("[Lobby] join Remote not hosted on this head yet");
+                        break;
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Lobby] join {Game} failed", row.Game); }
         }
+
+        /// <summary>Test seam: what a Lobby Join / Host press opens (the game window, by game id).</summary>
+        internal static Action<string> LobbyLaunchGame { get; set; } = id => Games.GameWindow.Launch(id);
 
         /// <summary>The host bar (and the empty state's buttons): each game's own host door.</summary>
         internal void LobbyHost(LobbyGame game)
@@ -220,12 +241,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 switch (game)
                 {
                     case LobbyGame.Chess:
-                        // ponytail: PieceByPieceHostService.HostOpenTable() (chess is not hosted here).
-                        Log.Information("[Lobby] host chess not hosted on this head yet");
+                        // INTERIM: WPF PieceByPieceHostService.HostOpenTable(). The host is not ported, so this
+                        // opens the game; the player hosts from the game's own door.
+                        Log.Information("[Lobby] host chess: the game opens on its own lobby (no host door on this head yet)");
+                        LobbyLaunchGame("piecebypiece");
                         break;
                     case LobbyGame.Goon:
-                        // Patrons host; everyone else sees the gate. ponytail: GoonHostService.LaunchToHost().
-                        if (TierGate.DemandPremium("Goon Game")) Log.Information("[Lobby] host Goon not hosted on this head yet");
+                        // Patrons host; everyone else sees the gate. INTERIM: WPF GoonHostService.LaunchToHost();
+                        // here the game opens on its own lobby.
+                        if (TierGate.DemandPremium("Goon Game"))
+                        {
+                            Log.Information("[Lobby] host Goon: the game opens on its own lobby (no host door on this head yet)");
+                            LobbyLaunchGame("goon");
+                        }
                         break;
                     case LobbyGame.Remote:
                         // Hosting a Remote table = opting in to the directory from the Remote tab,

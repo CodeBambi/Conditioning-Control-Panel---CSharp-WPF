@@ -300,7 +300,8 @@
                     <!-- SP5 layer 3: Available Subjects directory opt-in. Visible while
                          configuring; collapses on session start. The opt-in checkbox itself
                          never persists across sessions - re-opt every time. -->
-                    <Border x:Name="OptInSectionPanel" Theme="{StaticResource SettingCardStyle}">
+                    <!-- Hidden: waits for /v2/directory/opt-in on the port relay (a tick here would list nobody). -->
+                    <Border x:Name="OptInSectionPanel" IsVisible="False" Theme="{StaticResource SettingCardStyle}">
                         <Grid>
                             <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
                             <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
@@ -428,7 +429,8 @@
                     </Grid>
 
                     <!-- Emote picker: 5 user-editable presets + 1 custom slot. -->
-                    <Border x:Name="EmotePickerPanel" Theme="{StaticResource SettingCardStyle}">
+                    <!-- Hidden: waits for /v2/remote/emote on the port relay (every button here would send nothing). -->
+                    <Border x:Name="EmotePickerPanel" IsVisible="False" Theme="{StaticResource SettingCardStyle}">
                         <Grid>
                             <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
                             <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
