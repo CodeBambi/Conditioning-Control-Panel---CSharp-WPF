@@ -76,12 +76,67 @@ public sealed class PanicSurfacesTests
         finally { PanicSurfaces.All = prev; }
     }
 
-    /// <summary>Deleting or reordering a line fails here: the order is part of the contract (mic first,
-    /// camera last; the engine before lock cards).</summary>
+    /// <summary>Surfaces a panic must never lose. Dropping one fails here; a new surface needs no edit.</summary>
+    private static readonly string[] SafetyCritical =
+    {
+        "intake", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics",
+        "remote-haptics", "takeover", "engine", "pink-rush", "corner-gif", "lock-cards", "camera",
+    };
+
+    /// <summary>The order that is contract: (stops first, stops later). WPF refs are
+    /// ConditioningControlPanel/MainWindow/MainWindow.xaml.cs unless named otherwise. Only surfaces that
+    /// carry an ordering constraint belong here; register anything else with one line in PanicSurfaces.</summary>
+    private static readonly (string First, string Then, string Why)[] Before =
+    {
+        // Avalonia decision (PanicSurfaces.cs "intake" comment): say-it loops end before the capture abort reads as silence.
+        ("intake", "voice-capture", "intake loops end before the mic abort"),
+        // decisions "Panic <-> mic": capture and the command chain end before anything can react to them.
+        ("voice-capture", "ai-followups", "mic first"),
+        // WPF :1543 CancelPendingAi() is the first stop in HandlePanicKeyPress, long before the tail's StopEngine (:1827).
+        ("ai-followups", "engine", "AI cancel early"),
+        // WPF :1714-1721 game surfaces + Lab minigames close BEFORE RunPanicStopTail (:1722); the engine stop never reaches them.
+        ("blink-trainer", "engine", "Lab minigames before the engine"),
+        ("gaze-minigame", "engine", "Lab minigames before the engine"),
+        ("chaos", "engine", "WPF GameSurfaces.cs:50 'chaos' closes before the tail"),
+        // WPF :1808 KillAllAudio (App.xaml.cs:1780 Mantra.Dispose) runs before StopEngine (:1827).
+        ("mantra", "engine", "audio killed before the engine stop"),
+        // WPF :1786 remote haptics and :1992 haptics PanicStop come before StopEngine (:1827).
+        ("haptics", "engine", "toys to zero before the engine stop"),
+        ("remote-haptics", "engine", "toys to zero before the engine stop"),
+        // WPF :1811 Autonomy.CancelActivePulses before StopEngine (:1827).
+        ("takeover", "engine", "takeover pulses cancelled before the engine stop"),
+        // WPF StopEngine -> SkillTree.Stop: the 3x ends with/after the engine.
+        ("engine", "pink-rush", "pink rush ends after the engine"),
+        // WPF :1963-1967: session corner GIF (engine-owned) first, standalone slots LAST as the final word.
+        ("engine", "corner-gif", "standalone corner slots after the session's"),
+        // WPF :2030 StopAdHocEffects closes lock cards after the media stops; engine before lock cards.
+        ("engine", "lock-cards", "engine before lock cards"),
+        // gaze minigame ends before the camera it reads (PanicSurfaces.cs comment).
+        ("gaze-minigame", "camera", "gaze ends before the camera stops"),
+    };
+
     [Fact]
-    public void TheSurfaceListIsExactAndOrdered() =>
-        Assert.Equal(new[] { "intake", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics", "remote-haptics",
-            "takeover", "engine", "pink-rush", "corner-gif", "lock-cards", "attention-test", "deeper-editor-audio", "camera" }, PanicSurfaces.All.Select(x => x.Id));
+    public void EveryIdIsUniqueAndEverySafetyCriticalIdIsRegistered()
+    {
+        var ids = PanicSurfaces.All.Select(x => x.Id).ToList();
+        var dupes = ids.GroupBy(x => x).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        Assert.True(dupes.Count == 0, "Duplicate panic surface ids: " + string.Join(", ", dupes));
+        var missing = SafetyCritical.Except(ids).ToList();
+        Assert.True(missing.Count == 0, "Safety-critical surfaces missing: " + string.Join(", ", missing));
+    }
+
+    /// <summary>Reordering two constrained lines fails here. Intake first and camera last (decision C:
+    /// fire-and-forget, nothing after it may wait on it) are exact.</summary>
+    [Fact]
+    public void TheOrderingConstraintsHold()
+    {
+        var ids = PanicSurfaces.All.Select(x => x.Id).ToList();
+        Assert.Equal("intake", ids[0]);
+        Assert.Equal("camera", ids[^1]);
+        var broken = Before.Where(c => !(ids.IndexOf(c.First) is >= 0 and var a && ids.IndexOf(c.Then) is var b && a < b))
+            .Select(c => $"{c.First} before {c.Then} ({c.Why})").ToList();
+        Assert.True(broken.Count == 0, "Panic order broken: " + string.Join("; ", broken));
+    }
 
     /// <summary>P23: comments and string literals never count as code.</summary>
     private static string Code(string src) => Regex.Replace(src,
