@@ -581,6 +581,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 CoreProgression.AddXP(xpAmount, "LockCard");
                 // WPF AchievementService.TrackLockCardCompletion's quest call (:759), same !_isTest gate (progression#41).
                 try { App.Quests?.TrackLockCardCompleted(); } catch (Exception ex) { Log.Debug("lock card quest credit: {E}", ex.Message); }
+                try { Completed?.Invoke(); } catch (Exception ex) { Log.Debug("lock card completed handler: {E}", ex.Message); }   // WPF TotalLockCardsCompleted, read by the leash task host
             }
 
             // ponytail: the rest stays stubbed and has no Core seam to reach through.
@@ -1161,6 +1162,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>The last card left the screen: a pop quiz deferred behind it replays (#763).</summary>
         public static event Action? AllClosed;
+
+        /// <summary>A real (non-test) card was completed: the leash lines task counts these (WPF TotalLockCardsCompleted).</summary>
+        internal static event Action? Completed;
 
         private static Action? _heldForQuiz;
 

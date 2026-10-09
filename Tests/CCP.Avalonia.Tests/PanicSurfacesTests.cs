@@ -168,6 +168,7 @@ public sealed class PanicSurfacesTests
         ["MiniPlayerWindow"] = "only --video-check (a CLI diagnostic) opens it",
         ["DeeperLocalAudio"] = "the Deeper editor's transport: the 'deeper-editor-audio' surface pauses every open editor",
         ["MediaHistoryWindow"] = "WPF parity: the Media Log's muted preview of a user-picked row; WPF panic leaves that window alone",
+        ["LeashTaskHost"] = "registers itself at startup (LeashTaskHost.HookPanic: the leash-task stop, right after intake)",
     };
 
     [Fact]

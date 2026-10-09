@@ -569,8 +569,9 @@ namespace ConditioningControlPanel.Avalonia
                         // WPF App.xaml.cs LEASH: rides the friends poll (report out, block in, 20 s while leashed).
                         try
                         {
-                            Platform.LeashHead.Start(friends, Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"),
+                            var leash = Platform.LeashHead.Start(friends, Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"),
                                 Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
+                            if (leash != null) Platform.LeashTaskHost.Start(leash);   // WPF AppLeashTaskHost + LeashTaskRunner
                             (desktop.MainWindow as Views.Windows.MainShellWindow)?.InitializeLeash();
                         }
                         catch (Exception exLeash) { Serilog.Log.Warning(exLeash, "[Leash] service could not be built"); }
