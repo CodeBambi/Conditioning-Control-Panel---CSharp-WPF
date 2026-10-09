@@ -133,13 +133,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 // Layout first. On the first ever open the stack has never been measured and every
                 // section would transform to offset 0. UpdateLayout is synchronous; the deferred
                 // retry covers the case where the view is still hidden (nothing to measure yet).
-                if (!TryScrollTo(target))
+                // Even a "successful" first try can be clamped back to 0: a page that has just become
+                // visible reports its old (empty) extent until the next layout pass, and the ScrollViewer
+                // coerces the offset into it (desk 2026-10-09: Sign in landed on General with the
+                // Account pill lit). Re-apply after layout and once more after the late sections grow.
+                TryScrollTo(target);
+                foreach (var delay in new[] { 0, 250 })
                 {
-                    Dispatcher.UIThread.Post(() =>
+                    DispatcherTimer.RunOnce(() =>
                     {
                         try { TryScrollTo(SectionElementFor(key)); }
                         catch { /* the retry is best-effort; a navigation must not throw */ }
-                    }, DispatcherPriority.Normal);
+                    }, TimeSpan.FromMilliseconds(delay), DispatcherPriority.Background);
                 }
             }
             catch { /* see above */ }

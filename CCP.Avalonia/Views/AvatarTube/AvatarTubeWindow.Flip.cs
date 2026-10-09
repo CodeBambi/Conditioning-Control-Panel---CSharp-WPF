@@ -103,6 +103,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 }
                 SetWindowLongPtr(me.Handle, GwlHwndParent, owner);
                 SetWindowPos(me.Handle, IntPtr.Zero, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+                SlotBubbleAboveTube();   // re-owning can restack the tube over its own bubble
                 Log.Information("AvatarTube native owner {State}", owned ? "set to main" : "cleared");
             }
             catch (Exception ex) { Log.Warning("AvatarTube native owner failed: {Error}", ex.Message); }

@@ -32,8 +32,11 @@ internal static class SecretStore
     /// <summary>Tests only: replaces the OS write, and makes OS reads return an empty store.</summary>
     internal static Func<string, string?, bool>? OsWriteOverride;
 
-    /// <summary>A CCP_USERDATA_DIR sandbox (tests, kc) does not isolate the keyring, so it never touches it: memory only.</summary>
-    internal static bool Sandboxed = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR") != null;
+    /// <summary>A CCP_USERDATA_DIR sandbox (tests, kc) does not isolate the keyring, so it never touches it: memory only.
+    /// Exception: the owner-approved online desk sandbox (CCP_SANDBOX_ONLINE=1) on Windows, whose DPAPI files live
+    /// inside the sandbox folder itself (under CorePaths.UserData), so a sign-in survives a restart there.</summary>
+    internal static bool Sandboxed = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR") != null
+        && !(OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("CCP_SANDBOX_ONLINE") == "1");
 
     internal static void Seed()
     {

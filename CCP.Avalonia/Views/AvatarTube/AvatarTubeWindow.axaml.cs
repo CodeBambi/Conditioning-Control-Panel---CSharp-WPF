@@ -242,6 +242,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             WireContentPolicyWarning();   // the warning half (AvatarTubeWindow.ContentGates.cs)
 
             _avatarBorder.PointerPressed += OnAvatarPointerPressed;
+            AttachTubeInputRules();   // chat box closes on a click outside it; clicks fall through empty glass (InputRules.cs)
             _btnPrevAvatar = this.FindControl<Border>("BtnPrevAvatar")!;
             _btnNextAvatar = this.FindControl<Border>("BtnNextAvatar")!;
             _btnPrevAvatar.PointerPressed += (_, _) => StepAvatarSet(-1);   // WPF BtnPrevAvatar_Click

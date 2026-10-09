@@ -99,10 +99,27 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     PlaceBubbleWindow();   // position the hidden window first: no flash at 0,0
                     _bubbleWindow.Show(this);
                     PlaceBubbleWindow();
+                    SlotBubbleAboveTube();
                 }
                 else _bubbleWindow.Hide();
             }
             catch (Exception ex) { Log.Debug(ex, "Speech bubble window show/hide failed"); }
+        }
+
+        /// <summary>WPF BubbleWndProc's rule: the bubble sits directly above the tube, never under its art
+        /// (the tube's native owner is re-set to main on every show, which can restack it over the bubble).
+        /// Puts the TUBE right below the bubble, so nothing is lifted over the user's other apps.</summary>
+        private void SlotBubbleAboveTube()
+        {
+            if (!OperatingSystem.IsWindows() || _bubbleWindow is not { IsVisible: true }) return;
+            try
+            {
+                var tube = TryGetPlatformHandle();
+                var bubble = _bubbleWindow.TryGetPlatformHandle();
+                if (tube is not { HandleDescriptor: "HWND" } || bubble is not { HandleDescriptor: "HWND" }) return;
+                SetWindowPos(tube.Handle, bubble.Handle, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+            }
+            catch (Exception ex) { Log.Debug("Speech bubble restack: {E}", ex.Message); }
         }
 
         /// <summary>WPF ApplySpeechBubblePlacement, window half: everything in physical px.</summary>
