@@ -62,6 +62,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF MainWindow.xaml.cs:888: Lockdown ignores every GLOBAL key, whatever LockdownDisablePanicKey
             // says. Only this listener layer: window and TextBox input (the secret phrase) are untouched.
             if (LockdownActive) { Serilog.Log.Information("Panic key ignored under Lockdown"); return; }
+            // WPF TryRacePauseOnEscape, BEFORE everything below: Escape in front of Breakout, the chess board
+            // or the race is that game's pause (a second Escape within 2 s is a full panic). A pause is not
+            // a panic, so it arms nothing and stops nothing.
+            if (Games.GameWindow.TryKeepEscapeAsPause(s.PanicKey, CoreEngine.IsRunning, LockCardWindow.IsAnyOpen(), DateTime.UtcNow)) return;
             IntakeHostWindow.StopMicsForPanic();   // every press, before the lock-card stop or the capture abort reads as silence
             CancelPendingAi();   // every press, even one a lock card or the palette consumes
 

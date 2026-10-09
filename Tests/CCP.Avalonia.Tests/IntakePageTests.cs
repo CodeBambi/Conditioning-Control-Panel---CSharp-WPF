@@ -145,8 +145,9 @@ public sealed class IntakePageTests
             File.WriteAllText(Path.Combine(web, "settings.json"), "{}");
             File.WriteAllText(Path.Combine(web, "w.png"), "x");
             Directory.CreateDirectory(Path.Combine(assets, "images"));
-            Directory.CreateDirectory(Path.Combine(assets, ".temp"));
-            foreach (var f in new[] { "images/a.gif", "images/off.png", "images/page.html", ".temp/t.png" })
+            Directory.CreateDirectory(Path.Combine(assets, ".temp", "sub"));
+            Directory.CreateDirectory(Path.Combine(assets, ".packs"));
+            foreach (var f in new[] { "images/a.gif", "images/off.png", "images/page.html", ".temp/t.png", ".temp/sub/s.png", ".packs/p.png" })
                 File.WriteAllText(Path.Combine(assets, f), "x");
             File.WriteAllText(Path.Combine(outside, "secret.png"), "x");
             try { File.CreateSymbolicLink(Path.Combine(assets, "images", "link.png"), Path.Combine(outside, "secret.png")); }
@@ -161,7 +162,10 @@ public sealed class IntakePageTests
             string P(string rel) => "/" + WebAssetServer.AssetsPrefix + rel;
             Assert.Equal(Path.Combine(assets, "images", "a.gif"), server.ResolveFile(P("images/a.gif")));
             Assert.Null(server.ResolveFile(P("images/page.html")));     // not media
-            Assert.Null(server.ResolveFile(P(".temp/t.png")));          // the app's own folder
+            // WPF maps ccp.assets over the whole folder: the warm Scrolller clips in .temp are legal urls.
+            Assert.Equal(Path.Combine(assets, ".temp", "t.png"), server.ResolveFile(P(".temp/t.png")));
+            Assert.Null(server.ResolveFile(P(".temp/sub/s.png")));      // only .temp's own top-level files
+            Assert.Null(server.ResolveFile(P(".packs/p.png")));         // any other app dot-folder
             Assert.Null(server.ResolveFile(P("images/off.png")));       // unchecked in the Assets tree
             Assert.Null(server.ResolveFile(P("../settings.json")));
             Assert.Null(server.ResolveFile(P("../" + Path.GetFileName(web) + "/w.png")));
