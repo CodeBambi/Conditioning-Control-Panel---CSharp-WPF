@@ -32,6 +32,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     internal static class CornerGifOverlay
     {
         internal static bool SkipPlatformChecksForTests;
+        /// <summary>Tests step frames with <see cref="Advance(int)"/>; the real-time frame timer would tick
+        /// whenever the test dispatcher yields (P08).</summary>
+        internal static bool ManualFramesForTests;
         internal static TimeProvider Clock = TimeProvider.System;
 
         private const int SpawnDeferMaxAttempts = 8;
@@ -261,7 +264,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 SyncSentinel();
                 return;
             }
-            if (frames.Count > 1)
+            if (frames.Count > 1 && !ManualFramesForTests)
             {
                 shown.Timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = delay };
                 shown.Timer.Tick += (_, _) => Advance(shown);

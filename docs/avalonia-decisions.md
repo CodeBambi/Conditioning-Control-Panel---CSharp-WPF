@@ -616,6 +616,16 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Option A (chosen): `MessageDialog.ConfirmAsync` with WPF's copy and buttons, Enter on Cancel (the only extra over WPF).
 - Option B (rejected): keep the stricter dialog and record the divergence.
 - Chose A on the supervisor's advice (P44).
+## 2026-10-08: Pink Rush pays 3x on this head (avalonia-port/rows-pink-rush)
+- Question: the Avalonia `ProgressionBank` applied no skill multiplier at all, so porting the Pink Rush trigger and popup
+  would announce "3x XP for 60 seconds!" without paying it.
+- Option A: apply WPF's Pink Rush term (`GetTotalXpMultiplier`'s `*= 3.0`) in `ProgressionBank.Add`, at WPF AddXP's
+  point (base amount x skill factor x Descent cycle bonus; quests still get the base amount). Option B: leave XP untouched
+  and list "3x not applied" in the row stub.
+- Chosen: A, advised by the supervisor. Gating is WPF's: skill owned (`SkillTreeRules.HasSkill`), checks only while the
+  engine runs, 50% roll per 10 minutes, 60 s window; engine stop, panic and exit end it and the 3x with it. Rules are
+  Core `PinkRushRules`, which WPF `SkillTreeService` now calls too. The additive skill terms (sparkle boosts, streak
+  power, night shift, early bird, event boost) are still missing on this head, so owners remain under-awarded.
 ## 2026-10-09: Linux has no Ollama auto-install; manual install, then Continue re-detects (avalonia-port/rows-local-ai-wizard)
 - WPF LocalAiSetupWizard downloads OllamaSetup.exe (Windows NSIS) to %TEMP% and runs it with `/S`. There is no Linux
   equivalent that does not need root or piping a remote script into a shell.
@@ -627,3 +637,13 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   calls `StopSpawnedServer` on exit, which stops only a server this app spawned.
 - Tests: `Tests/CCP.Avalonia.Tests/LocalAiSetupWizardTests.cs`, `Tests/CCP.Core.Tests/OllamaSetupServiceTests.cs`
   (fake binary and loopback API; no real ollama, pull or network).
+## 2026-10-09: Program enrollment stays disabled until the run panel exists (avalonia-port/rows-program-enroll)
+- Question: the ProgramEnrollDialog is fully ported; should the shell Enroll button now call ProgramService.CanEnroll ->
+  dialog -> Enroll (writes programs.json, starts the day clock and nudges) although Avalonia has no run panel or
+  session runner yet?
+- Option A (chosen): no persistence change. Test the dialog headless, keep the row stub listing the caller, the run panel
+  and the session runner; the Enroll caller lands together with the run panel, never without it.
+- Option B (rejected): wire Enroll now. The user would hold a running program with no way to complete its days, so it
+  would lapse.
+- Chose A on the supervisor's advice (P44). Reason: no lapsing enrollments.
+- Tests: `Tests/CCP.Avalonia.Tests/ProgramEnrollDialogTests.cs`.

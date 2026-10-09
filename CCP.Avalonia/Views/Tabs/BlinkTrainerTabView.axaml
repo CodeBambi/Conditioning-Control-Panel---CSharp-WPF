@@ -143,7 +143,7 @@
               </StackPanel>
             </StackPanel>
 
-            <!-- Help button: HelpPopover.Attach in code-behind Refresh (WPF MainWindow.Presets.cs:118
+            <!-- Help button: attached by MainShellWindow.HelpButtons.cs (WPF MainWindow.Presets.cs:118
                  SetHelpContent(BlinkTrainerTab.HelpBtnBlinkTrainer, "BlinkTrainer")). -->
             <Button x:Name="HelpBtnBlinkTrainer" Theme="{StaticResource HelpButtonStyle}"
                     HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"

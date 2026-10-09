@@ -319,5 +319,12 @@
                 </StackPanel>
             </StackPanel>
         </Border>
+
+        <!-- Verify's live gaze cursor: WPF shows GazeDebugCursorService's idle pink dot (its overlay
+             window); here it is drawn in this full-screen window, which covers the calibrated monitor. -->
+        <Canvas IsHitTestVisible="False">
+            <Ellipse x:Name="VerifyCursor" Width="26" Height="26" IsVisible="False"
+                     Fill="#FF69B4" Stroke="#D2FFFFFF" StrokeThickness="1.6" Opacity="0.9"/>
+        </Canvas>
     </Grid>
 </Window>

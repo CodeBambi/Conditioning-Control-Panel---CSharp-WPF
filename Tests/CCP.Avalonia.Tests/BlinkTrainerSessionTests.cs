@@ -318,7 +318,7 @@ public sealed class BlinkTrainerSessionTests
     /// an image pick stops it; hiding the page parks everything (no subscription, video or tick);
     /// the help button carries the BlinkTrainer card (WPF MainWindow.Presets.cs:118).</summary>
     [Fact]
-    public void Stage_PlaysAVideoPick_ParksWhenHidden_AndHelpIsAttached()
+    public void Stage_PlaysAVideoPick_ParksWhenHidden()
     {
         WithSession((dir, _) =>
         {
@@ -335,8 +335,7 @@ public sealed class BlinkTrainerSessionTests
                 tab.IsVisible = true;
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(tab.LivePreview);
-                Assert.Equal(HelpContentService.GetContent("BlinkTrainer").Title,
-                    global::Avalonia.Automation.AutomationProperties.GetName(tab.FindControl<Button>("HelpBtnBlinkTrainer")!));
+                // Its "?" is attached by the shell (MainShellWindow.HelpButtons.cs; HelpButtonsTests).
 
                 var a = tab.FindControl<Image>("BlinkTrainerStageImageA")!;
                 var b = tab.FindControl<Image>("BlinkTrainerStageImageB")!;
