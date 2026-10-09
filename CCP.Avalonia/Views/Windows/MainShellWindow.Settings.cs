@@ -31,8 +31,6 @@
 //     the handler (_allPresets, the "save as preset" offer, FlashSaveAbsorb) is preset machinery
 //     that is stubbed in MainShellWindow.Presets.cs.
 //   - LoadSettings / UpdateSliderTexts: same reason - each Settings section seeds itself.
-//   - The pack migration inside BtnPickAssetsFolder_Click: Services/PackEncryptionService.cs and
-//     Services/ContentPacks are not on this head, so no .packs folder is discovered to move.
 //   - The post-change rescan (App.Flash/Video/BubbleCount/ContentPacks RefreshImagesPath etc. and
 //     RefreshAssetTree): those four services and the assets tree are not on this head.
 //   - Services/Auth/SecurityHelper.IsPersonalFolderRoot: the #1053 refusal. Not in Core, so the
@@ -129,8 +127,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     return null;
                 }
 
+                // WPF: offer to move the installed packs from the old folder (and any stranded in the
+                // default one) before the switch; No leaves them where they are.
+                var oldAssets = CorePaths.EffectiveAssets;
+                var defaultAssets = Path.Combine(CorePaths.UserData, "assets");
+                var toMove = ConditioningControlPanel.Services.PackFolderMover.Find(oldAssets, defaultAssets, selected);
+                var movePacks = false;
+                if (toMove.Count > 0)
+                {
+                    long total = 0;
+                    foreach (var c in toMove) total += c.Bytes;
+                    movePacks = await MessageDialog.ConfirmAsync(owner, Loc.Get("title_move_downloaded_packs"),
+                        Loc.GetF("msg_move_packs_confirm", toMove.Count, ConditioningControlPanel.Services.PackFolderMover.FormatSize(total),
+                            string.Join("\n• ", toMove.ConvertAll(c => c.PackName)),
+                            total > 500_000_000 ? Loc.Get("msg_may_take_a_moment") : ""));
+                }
+
                 Directory.CreateDirectory(Path.Combine(selected, "images"));
                 Directory.CreateDirectory(Path.Combine(selected, "videos"));
+
+                if (movePacks)
+                {
+                    try
+                    {
+                        // Decrypts under the old .temp belong to the old folder; drop them first.
+                        ConditioningControlPanel.Services.ContentPackStore.Current?.CleanupTempFiles();
+                        ConditioningControlPanel.Services.PackFolderMover.Move(toMove, selected, CoreSettings.Current);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Failed to move packs to new location");
+                        await MessageDialog.ShowAsync(owner, Loc.Get("label_warning"), Loc.GetF("msg_could_not_move_packs_0", ex.Message));
+                    }
+                }
 
                 CoreSettings.Current.CustomAssetsPath = selected;
                 CoreSettings.Save();

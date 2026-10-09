@@ -135,3 +135,40 @@ public sealed class PackMediaPoolTests : IDisposable
         public void ShowMessage(AttentionVerdict verdict, int ms, Action then) { }
     }
 }
+
+public sealed class PackFolderMoverTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "ccp-packmove-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, true); } catch { }
+    }
+
+    [Fact]
+    public void Move_CopiesEachPackAcross_AndRegistersItActive()
+    {
+        var oldAssets = Path.Combine(_root, "old");
+        var newAssets = Path.Combine(_root, "new");
+        var (guid, _) = ContentPackStoreTests.WritePack(oldAssets, "p1", "Pack One", ("a.png", "image"));
+        Directory.CreateDirectory(newAssets);
+
+        var found = PackFolderMover.Find(oldAssets, Path.Combine(_root, "default"), newAssets);
+        var c = Assert.Single(found);
+        Assert.Equal("Pack One", c.PackName);
+        Assert.True(c.Bytes > 0);
+
+        var settings = new AppSettings();
+        var (moved, registered) = PackFolderMover.Move(found, newAssets, settings);
+        Assert.Equal((1, 1), (moved, registered));
+        Assert.False(Directory.Exists(Path.Combine(oldAssets, ".packs", guid)));
+        Assert.True(File.Exists(Path.Combine(newAssets, ".packs", guid, ContentPackStore.ManifestFileName)));
+        Assert.Contains("p1", settings.InstalledPackIds);
+        Assert.Contains("p1", settings.ActivePackIds);
+        Assert.Equal(guid, settings.PackGuidMap["p1"]);
+
+        // The destination's own packs are never offered again.
+        Assert.Empty(PackFolderMover.Find(newAssets, newAssets, newAssets));
+        Assert.Equal("1.5 KB", PackFolderMover.FormatSize(1536));
+    }
+}
