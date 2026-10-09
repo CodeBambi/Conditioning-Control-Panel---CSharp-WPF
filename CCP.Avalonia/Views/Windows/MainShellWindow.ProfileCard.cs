@@ -88,6 +88,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                 var back = page.FindControl<Button>("BtnProfileBackToMe");
                 if (back is not null) back.IsVisible = !isSelf;
+
+                // WPF MainWindow.ProfileCard.cs:98: the spiral plate is yours alone, so it follows the same switch.
+                RefreshProfileSpiralPlate();
             }
             catch (Exception ex) { Log.Debug("SetProfileViewingSelf: {E}", ex.Message); }
         }
@@ -120,6 +123,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (page.FindControl<TextBlock>("ProfileDescentReceiptText") is { } text) text.Text = label;
             ToolTip.SetTip(pill, tip);
             pill.IsVisible = true;
+        }
+
+        /// <summary>First still-locked achievement in declaration order, mod-aware, hidden and
+        /// patron-exclusive entries skipped (they are not "next up" for everyone). WPF FindNextAchievementName.</summary>
+        internal static string? FindNextAchievementName(HashSet<string> unlockedIds)
+        {
+            try
+            {
+                var next = global::ConditioningControlPanel.Models.Achievement.All.Values
+                    .FirstOrDefault(a => !a.IsHidden && !a.IsExclusive && !unlockedIds.Contains(a.Id));
+                return next == null ? null : CoreMods.MakeModAware(next.Name);
+            }
+            catch { return null; }
         }
 
         /// <summary>
@@ -165,12 +181,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var nextUp = page.FindControl<TextBlock>("TxtProfileNextUp");
                 if (nextUp is not null)
                 {
-                    // ponytail: FindNextAchievementName needs Models.Achievement.All
-                    // (ConditioningControlPanel/Models/Achievement.cs). Until it is reachable the
-                    // answer is "unknown", and WPF's own rule for unknown is to say nothing.
-                    _ = unlockedIds;
-                    nextUp.Text = string.Empty;
-                    nextUp.IsVisible = false;
+                    // WPF MainWindow.ProfileCard.cs:315: unknown (someone else's card) says nothing.
+                    var next = unlockedIds == null ? null : FindNextAchievementName(unlockedIds);
+                    nextUp.Text = string.IsNullOrEmpty(next) ? string.Empty : Loc.GetF("profile_showcase_next_up", next);
+                    nextUp.IsVisible = !string.IsNullOrEmpty(next);
                 }
 
                 // The four empty pin plates step aside as soon as something is pinned - and never

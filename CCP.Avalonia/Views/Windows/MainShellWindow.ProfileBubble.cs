@@ -116,6 +116,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 RefreshProfileMenu();
+                RefreshProfileMenuSpiral();   // WPF RefreshProfileMenu paints the spiral row on the way in
                 UpdateLevelDisplay();   // the rail's "Level"/"XP" words follow a language switch
                 SubscribeProfileBubbleWatchers();
                 // Subscribed per open and dropped again inside the handler, so this never
