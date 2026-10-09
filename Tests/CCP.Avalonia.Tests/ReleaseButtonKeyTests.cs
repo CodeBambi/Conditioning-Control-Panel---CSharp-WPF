@@ -43,10 +43,11 @@ public sealed class ReleaseButtonKeyTests
     {
         var root = RepoRoot();
         string Read(params string[] parts) => File.ReadAllText(Path.Combine(new[] { root }.Concat(parts).ToArray()));
-        var wpf = Tip.Match(Read("ConditioningControlPanel", "MainWindow", "MainWindow.xaml"));
+        // The parity target is WPF 7.1.5 (C:/wt-715/release), not the older WPF tree in this checkout,
+        // so the tooltip is pinned to the 7.1.5 key the same way WpfReleaseKey pins the label.
         var ava = Tip.Match(Read("CCP.Avalonia", "Views", "Windows", "MainShellWindow.axaml"));
-        Assert.True(wpf.Success && ava.Success, "BtnUpdateAvailable tooltip not found in one of the shells");
-        Assert.Equal(wpf.Groups[1].Value, ava.Groups[1].Value);
+        Assert.True(ava.Success, "BtnUpdateAvailable tooltip not found in the Avalonia shell");
+        Assert.Equal("tooltip_v7_1_5_stay_tuned", ava.Groups[1].Value);
     }
 
     private static string RepoRoot([CallerFilePath] string here = "") =>

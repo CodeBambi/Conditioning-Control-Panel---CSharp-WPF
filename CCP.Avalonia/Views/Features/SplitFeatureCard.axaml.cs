@@ -202,7 +202,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         internal void RefreshFx() => ApplyActiveState();
 
         /// <summary>True while the breath clock runs (test seam).</summary>
-        internal bool IsBreathing => _breath != null;
+        internal bool IsBreathing => _breathClock?.IsRunning == true;
 
         private void HookWindow(Window? window)
         {

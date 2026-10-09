@@ -807,9 +807,9 @@
                     <!-- 2026-09-21 (owner): CIRCE'S TAB. See Controls/ChasterRailChip.cs. -->
                     <fx:ChasterRailChip x:Name="ChasterRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,4,10,4"/>
-                    <!-- ponytail: Controls/DescentFuseRailChip.cs is not on this base; collapsed
-                         stand-in, which is its shipped default state. -->
-                    <Border x:Name="FuseRailChip" IsVisible="False"/>
+                    <!-- THE FUSE RAIL CHIP (Mich, rows-login-phone; CONTRACT-FUSE-0816 2.2): self-wiring
+                         and collapsed unless a ceremony timestamp is cached, so it measures as absent. -->
+                    <fx:DescentFuseRailChip x:Name="FuseRailChip"/>
                     <!-- THE GEAR. Tag "appsettings" (the tab key "settings" is the dashboard). -->
                     <Button x:Name="DoorSettings" Tag="appsettings" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_door_settings}"

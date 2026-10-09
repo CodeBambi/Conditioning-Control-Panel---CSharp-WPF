@@ -279,7 +279,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         internal void RefreshFx() => ApplyActiveState();
 
         /// <summary>True while the breath clock runs (test seam).</summary>
-        internal bool IsBreathing => _breath != null;
+        internal bool IsBreathing => _breathClock?.IsRunning == true;
 
         /// <summary>WPF AmbientAllowed (:622): visibility + window focus + motion + tier.</summary>
         private bool AmbientAllowed =>
@@ -298,6 +298,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             {
                 _activeGlow.Opacity = 0;
                 _activeBorder.Opacity = 1;
+                return;
+            }
+            if (!AmbientAllowed)
+            {
+                // Mich's funnel gate (WPF :643): minimised, unfocused, reduced motion or the
+                // Performance tier park both at PEAK (no glow at all where the tier forbids it).
+                var tier = Env.CurrentTier;
+                _activeGlow.Opacity = Env.AllowGlow(tier) && Env.Level != Models.MotionLevel.Off ? ActiveGlowMaxOpacity : 0;
+                _activeBorder.Opacity = ActiveRingMaxOpacity;
                 return;
             }
             _breathClock ??= new BreathClock(this, ActiveBreathSeconds);

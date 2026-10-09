@@ -73,7 +73,7 @@ public sealed class DashboardFxLoopsTests
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(MotionLevel.Reduced, s.MotionLevel);
             AllBreathing(false);
-            var glow = (DropShadowEffect)card.FindControl<Border>("RootBorder")!.Effect!;
+            var glow = card.FindControl<Border>("GlowLayer")!;   // the glow is a sibling BoxShadow layer (AVALONIA EFFECT/CACHE RULE), not an Effect
             Assert.Equal(0.90, glow.Opacity, 3);                       // parked at PEAK, WPF :660
             Assert.Equal(1.0, card.FindControl<Border>("ActiveBorder")!.Opacity, 3);
 

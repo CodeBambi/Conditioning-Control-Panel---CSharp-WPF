@@ -236,7 +236,7 @@ public sealed class EmiDeskSummonTests
             Assert.Equal(">_<", mini.Text);
 
             svc.Dismiss();
-            await Pump(2000);
+            await Pump(5000);   // the parity dismiss runs the real exit chain
             Assert.False(svc.IsOut);
             Assert.Equal("0_0", mini.Text);
             svc.Window!.DrawFace("^_^");

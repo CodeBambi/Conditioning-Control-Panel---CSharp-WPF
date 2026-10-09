@@ -65,7 +65,8 @@ public sealed class StudioPresetsWireTests
         Assert.True(dash.CardFlash.IsActive);
 
         // The breath parks while the tab is hidden and resumes when it is shown (better than WPF).
-        object? Breath(Control c) => c.GetType().GetField("_breath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(c);
+        // The cards breathe on a BreathClock now (AVALONIA EFFECT/CACHE RULE); IsBreathing is the seam.
+        object? Breath(Control c) => (bool)c.GetType().GetProperty("IsBreathing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(c)! ? c : null;
         Assert.NotNull(Breath(dash.CardFlash));
         dash.IsVisible = false;
         Assert.Null(Breath(dash.CardFlash));
