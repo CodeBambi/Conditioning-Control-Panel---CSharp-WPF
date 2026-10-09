@@ -40,7 +40,7 @@ public sealed class FriendsRailChip : Grid
         (_badge.Child, _badge.Background, _badge.CornerRadius, _badge.Padding, _badge.MinWidth) = (_badgeText, FriendsDrawer.Pink, new CornerRadius(999), new Thickness(5, 0), 18);
         (_badge.BorderThickness, _badge.BorderBrush) = (new Thickness(2), new SolidColorBrush(Color.FromRgb(0x0E, 0x09, 0x19)));
         (_badge.HorizontalAlignment, _badge.VerticalAlignment, _badge.Margin, _badge.IsVisible, _badge.Tag) = (HorizontalAlignment.Right, VerticalAlignment.Bottom, new Thickness(0, 0, -4, -2), false, "friends-chip-unread");
-        Drawer = new FriendsDrawer(service);
+        Drawer = new FriendsDrawer(service) { Margin = new Thickness(ShadowRoom, ShadowRoom, ShadowRoom, ShadowRoom + 10) };
         (Height, Margin, Background, Cursor) = (48, new Thickness(0, 2, 0, 4), Brushes.Transparent, FriendsDrawer.Hand());
         ColumnDefinitions = new ColumnDefinitions("56,*");
         (_pillText.FontFamily, _pillText.FontWeight, _pillText.FontSize, _pillText.Foreground) = (FriendsDrawer.Display, FontWeight.SemiBold, 11, FriendsDrawer.MintInk);
@@ -62,7 +62,7 @@ public sealed class FriendsRailChip : Grid
         ToolTip.SetTip(this, Loc.Get("friends_chip_tooltip"));
         _popup = new Popup
         {
-            Child = Drawer, Placement = PlacementMode.Top, PlacementTarget = this, HorizontalOffset = 4, VerticalOffset = -6,
+            Child = Drawer, Placement = PlacementMode.Top, PlacementTarget = this, HorizontalOffset = 4 - ShadowRoom, VerticalOffset = -6 + ShadowRoom + 10,
             IsLightDismissEnabled = true,
         };
         Children.Add(_popup);
@@ -86,6 +86,9 @@ public sealed class FriendsRailChip : Grid
         Rebind();
     }
     internal FriendsDrawer Drawer { get; }
+    /// <summary>Room around the drawer inside its popup so the BoxShadow (blur 30, 10 down) is not cut off;
+    /// the popup offsets take it back, so the drawer sits where it did.</summary>
+    internal const double ShadowRoom = 24;
 
     /// <summary>Your face and name again: sign-in, sign-out and a Discord link all change them
     /// (the shell calls this beside RefreshProfileBubble). The picture follows ShareProfilePicture.</summary>

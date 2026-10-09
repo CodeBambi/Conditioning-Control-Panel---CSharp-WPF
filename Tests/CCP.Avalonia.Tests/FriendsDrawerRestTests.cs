@@ -299,7 +299,9 @@ public sealed class FriendsDrawerRestTests
             Assert.Equal(1, d.Opacity);
             var row = Tagged<Border>(d, "friends-row:u_on")!;
             Assert.IsAssignableFrom<Grid>(row.Child);
-            Assert.Contains(d.GetLogicalDescendants().OfType<global::Avalonia.Controls.Shapes.Ellipse>(), e => e.Tag as string == "friends-dot-on");
+            Assert.Contains(d.GetLogicalDescendants().OfType<Border>(), e => e.Tag as string == "friends-dot-on" && e.Effect == null);
+            Assert.Equal(1, d.BoxShadow.Count);   // the popup's drop shadow is a BoxShadow, never an Effect
+            Assert.Null(d.Effect);
             d.OnClosed();
 
             FriendsDrawer.MotionLevelNow = () => MotionLevel.Full;

@@ -30,13 +30,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls;
 
 public sealed partial class FriendsDrawer : Border
 {
-    // WPF FriendsLook's palette.
-    internal static readonly IBrush Raised = Rgb(0x2C, 0x14, 0x50), Line = Rgb(0x3A, 0x2A, 0x5E), Line2 = Rgb(0x4D, 0x3A, 0x78),
-        Text = Rgb(0xF1, 0xEA, 0xFF), Muted = Rgb(0xA3, 0x95, 0xC4), Dim = Rgb(0x6F, 0x62, 0x9A), Lilac = Rgb(0xB9, 0x9C, 0xFF),
-        Pink = Rgb(0xFF, 0x5F, 0xB4), Mint = Rgb(0x5F, 0xFF, 0xD0), Gold = Rgb(0xFF, 0xCF, 0x6B), Red = Rgb(0xFF, 0x5F, 0x7A),
-        MintInk = Rgb(0x06, 0x2A, 0x1F), Foot = Rgb(0x16, 0x0E, 0x29), OfflineDot = Rgb(0x4A, 0x3F, 0x66);
-    internal static readonly FontFamily Display = new("Fredoka, Segoe UI"), Mono = new("Consolas, Courier New");
-    private static IBrush Rgb(byte r, byte g, byte b) => new SolidColorBrush(Color.FromRgb(r, g, b));
+    // The palette is FriendsLook's (Friends/FriendsLook.cs, WPF's values); these names keep the drawer's code short.
+    internal static readonly IBrush Raised = FriendsLook.RaisedBrush, Line = FriendsLook.LineBrush, Line2 = FriendsLook.Line2Brush,
+        Text = FriendsLook.TextBrush, Muted = FriendsLook.MutedBrush, Dim = FriendsLook.DimBrush, Lilac = FriendsLook.LilacBrush,
+        Pink = FriendsLook.PinkBrush, Mint = FriendsLook.MintBrush, Gold = FriendsLook.GoldBrush, Red = FriendsLook.RedBrush,
+        MintInk = FriendsLook.MintInkBrush, Foot = FriendsLook.FootBrush, OfflineDot = FriendsLook.OfflineDotBrush;
+    internal static readonly FontFamily Display = FriendsLook.Display, Mono = FriendsLook.Mono;
+    private static IBrush Rgb(byte r, byte g, byte b) => FriendsLook.Frozen(Color.FromRgb(r, g, b));
     public const double DrawerWidth = 300, DrawerMaxHeight = 548;
 
     internal static Cursor? Hand() { try { return new Cursor(StandardCursorType.Hand); } catch { return null; } }
@@ -79,17 +79,14 @@ public sealed partial class FriendsDrawer : Border
         _svc = _resolve();
         OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
         (Width, MaxHeight, CornerRadius) = (DrawerWidth, DrawerMaxHeight, new CornerRadius(16));
-        Background = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative), EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops = { new GradientStop(Color.FromRgb(0x24, 0x17, 0x42), 0), new GradientStop(Color.FromRgb(0x1C, 0x12, 0x33), 1) },
-        };
+        Background = FriendsLook.GlassBrush;
         (BorderBrush, BorderThickness, Focusable) = (Line2, new Thickness(1), true);
+        BoxShadow = FriendsLook.DrawerShadow;   // WPF DropShadowEffect, as a BoxShadow (never an Effect)
         var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,Auto") };
         var (scroll, top, line) = (new ScrollViewer { Content = _list, Padding = new Thickness(6, 4, 6, 8), MinHeight = 120 }, new Thickness(0, 1, 0, 0), Line);
         (_ask.Margin, _ask.IsVisible) = (new Thickness(10, 8, 10, 0), false);
         Grid.SetRow(_ask, 1);
-        (_head.Background, _head.CornerRadius, _head.BorderBrush, _head.BorderThickness, _head.Padding) = (Raised, new CornerRadius(15, 15, 0, 0), line, new Thickness(0, 0, 0, 1), new Thickness(12, 12, 12, 10));
+        (_head.Background, _head.CornerRadius, _head.BorderBrush, _head.BorderThickness, _head.Padding) = (FriendsLook.HeadBrush, new CornerRadius(15, 15, 0, 0), line, new Thickness(0, 0, 0, 1), new Thickness(12, 12, 12, 10));
         (_addBox.IsVisible, _addBox.Padding, _addBox.BorderBrush, _addBox.BorderThickness) = (false, new Thickness(10, 8, 10, 8), line, top);
         (_foot.Background, _foot.BorderBrush, _foot.BorderThickness, _foot.CornerRadius, _foot.Padding) = (Foot, line, top, new CornerRadius(0, 0, 15, 15), new Thickness(8));
         Grid.SetRow(scroll, 2);
@@ -133,7 +130,7 @@ public sealed partial class FriendsDrawer : Border
             Children = { Label(Loc.Get("friends_invite_line") + " ", 11.5, Muted, Display), inviteLink } };
         _addBox.Child = new StackPanel { Children = { addRow, _addResult, _inviteLine } };
         // Esc closes the add box, then the drawer (WPF OnKey).
-        if (asPage) (Width, MaxWidth, MaxHeight) = (double.NaN, PageMaxWidth, double.PositiveInfinity);
+        if (asPage) (Width, MaxWidth, MaxHeight, BoxShadow) = (double.NaN, PageMaxWidth, double.PositiveInfinity, default);   // a page has no shadow
         KeyDown += (_, e) =>
         {
             if (e.Key != Key.Escape || AsPage) return;
@@ -217,20 +214,10 @@ public sealed partial class FriendsDrawer : Border
         try { return CoreAccount.HasLabAccess ? 2 : CoreAccount.HasPremiumAccess ? 1 : 0; } catch { return 0; }
     };
 
-    /// <summary>WPF FriendsLook.TierPlate: the tier badge art after a name, nothing for free accounts.</summary>
-    /// <summary>Test seam: the badge art (TierBadge.TierArt, the same files WPF reads).</summary>
-    internal static Func<int, IImage?> TierArt { get; set; } = t => global::ConditioningControlPanel.Avalonia.Controls.TierBadge.TierArt(t);
-    internal static Control? TierPlate(int tier, double height)
-    {
-        if (tier <= 0) return null;
-        var art = TierArt(tier);
-        if (art == null) return null;
-        return new Image
-        {
-            Source = art, Height = height, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 0, 0), Tag = tier >= 2 ? "friends-tier-2" : "friends-tier-1",
-        };
-    }
+    /// <summary>Test seam over FriendsLook.TierArt (kept here for the suite).</summary>
+    internal static Func<int, IImage?> TierArt { get => FriendsLook.TierArt; set => FriendsLook.TierArt = value; }
+    /// <summary>WPF FriendsLook.TierPlate.</summary>
+    internal static Control? TierPlate(int tier, double height) => FriendsLook.TierPlate(tier, height);
     private bool Shared() { try { return _svc?.Available == true && _svc.PresenceShared; } catch { return false; } }
     private void RenderHead()
     {
@@ -537,7 +524,7 @@ public sealed partial class FriendsDrawer : Border
             Foreground = Text, FontFamily = Display, FontSize = 13.5, Padding = new Thickness(4),
         };
     }
-    private static readonly IBrush MenuGlass = Rgb(0x22, 0x16, 0x41);
+    private static readonly IBrush MenuGlass = FriendsLook.MenuBrush;
     /// <summary>One menu line. Every line names its brush: an explicit null Foreground in Avalonia is
     /// "no brush", which drew Squelch and Remove as empty lines (owner report, 2026-10-09).</summary>
     private static MenuItem MenuItem(string id) => new()
@@ -821,11 +808,8 @@ public sealed partial class FriendsDrawer : Border
     /// <summary>WPF TellOutside(always) -> FriendsLanding.Say: a floating word over the window.</summary>
     private void Say(string text, bool good) =>
         Overlays.FloatingWord.Throw(OwnerWindow(), text, pink: !good, small: true);
-    internal static TextBlock Label(string text, double size, IBrush fg, FontFamily? font = null, FontWeight weight = FontWeight.Normal) => new()
-    {
-        Text = text, FontSize = size, Foreground = fg, FontFamily = font ?? FontFamily.Default, FontWeight = weight,
-        TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
-    };
+    internal static TextBlock Label(string text, double size, IBrush fg, FontFamily? font = null, FontWeight weight = FontWeight.Normal) =>
+        FriendsLook.Label(text, size, fg, font, weight);
     private static TextBlock Wrap(TextBlock t) { t.TextWrapping = TextWrapping.Wrap; t.TextTrimming = TextTrimming.None; return t; }
     private static T Tagged<T>(T c, string tag) where T : Control { c.Tag = tag; return c; }
     /// <summary>WPF ToggleAddBox: the add-by-code box opens (fresh result, invite line, focus) or folds.</summary>
@@ -865,35 +849,11 @@ public sealed partial class FriendsDrawer : Border
         return t;
     }
 
-    /// <summary>A pill button. Text goes in a TextBlock: Avalonia reads "_" in a Button's Content as an access key.</summary>
-    internal static Button Pill(object content, IBrush bg, IBrush fg, string tag, IBrush? border = null) => new()
-    {
-        Content = content is string s ? new TextBlock { Text = s, FontFamily = Display, FontSize = 12 } : content,
-        Background = bg, Foreground = fg, BorderBrush = border ?? Brushes.Transparent, BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(8), Padding = new Thickness(9, 3, 9, 3), Tag = tag, VerticalAlignment = VerticalAlignment.Center,
-    };
+    /// <summary>WPF FriendsLook.Pill (hover wash and lift, press squish, 40% disabled).</summary>
+    internal static Button Pill(object content, IBrush bg, IBrush fg, string tag, IBrush? border = null) => FriendsLook.Pill(content, bg, fg, tag, border);
 
-    /// <summary>Initials on a lilac disc, with a presence dot (mint on, grey off, none for null). A picture
-    /// url (WPF FriendsLook.Avatar) replaces the initials once it loads; null keeps them.</summary>
-    internal static Control Avatar(string name, double size, bool? dot, string? url = null)
-    {
-        var g = new Grid { Width = size, Height = size };
-        var initials = new TextBlock
-        {
-            Text = FriendsDrawerRules.Initials(name), FontFamily = Display, FontWeight = FontWeight.SemiBold, FontSize = size * 0.4,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x0B, 0x07, 0x16)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-        };
-        var disc = new Border { CornerRadius = new CornerRadius(size / 2), Background = Lilac, ClipToBounds = true, Child = initials };
-        g.Children.Add(disc);
-        Helpers.AvatarPhotos.Paint(disc, initials, url, (int)Math.Ceiling(size * 2));
-        if (dot is bool on)
-            g.Children.Add(new Ellipse
-            {
-                Width = size * 0.3, Height = size * 0.3, Fill = on ? Mint : OfflineDot, Tag = on ? "friends-dot-on" : "friends-dot-off", Stroke = Foot, StrokeThickness = 2,
-                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
-            });
-        return g;
-    }
+    /// <summary>WPF FriendsLook.Avatar: the name's gradient disc, a picture once it loads, the presence dot.</summary>
+    internal static Control Avatar(string name, double size, bool? dot, string? url = null) => FriendsLook.Avatar(name, size, dot, url);
 }
 
 /// <summary>WPF PresenceAsk: the once-only presence question's marker, beside the settings. The ask

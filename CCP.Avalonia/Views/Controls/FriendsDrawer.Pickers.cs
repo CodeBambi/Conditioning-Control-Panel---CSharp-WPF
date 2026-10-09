@@ -22,8 +22,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls;
 
 public sealed partial class FriendsDrawer
 {
-    private static readonly IBrush ButtonBg = new SolidColorBrush(Color.FromRgb(0x1C, 0x12, 0x33)),
-        ButtonHover = new SolidColorBrush(Color.FromRgb(0x3A, 0x1F, 0x66)), Ground = new SolidColorBrush(Color.FromRgb(0x10, 0x0A, 0x1E)),
+    private static readonly IBrush ButtonBg = Friends.FriendsLook.ButtonBrush,
+        ButtonHover = Friends.FriendsLook.ButtonHoverBrush, Ground = Friends.FriendsLook.GroundBrush,
         PokeInk = new SolidColorBrush(Color.FromRgb(0x2A, 0x0A, 0x1C));
 
     /// <summary>The picker open inside the open card: "poke", "invite", "watch" or null.</summary>

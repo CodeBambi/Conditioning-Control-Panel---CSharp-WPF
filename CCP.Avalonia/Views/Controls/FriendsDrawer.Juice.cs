@@ -31,8 +31,7 @@ public sealed partial class FriendsDrawer
     private readonly Dictionary<string, Control> _avatars = new();
     private readonly List<Control> _rowsInOrder = new();
     private BreathClock? _breath;
-    internal static readonly Color MintC = Color.FromRgb(0x5F, 0xFF, 0xD0), PinkC = Color.FromRgb(0xFF, 0x5F, 0xB4),
-        LilacC = Color.FromRgb(0xB9, 0x9C, 0xFF), GoldC = Color.FromRgb(0xFF, 0xCF, 0x6B);
+    internal static readonly Color MintC = Friends.FriendsLook.Mint, PinkC = Friends.FriendsLook.Pink, LilacC = Friends.FriendsLook.Lilac, GoldC = Friends.FriendsLook.Gold;
 
     /// <summary>The spring the card opens with: up from the chip, a little overshoot, rows staggering in.</summary>
     private void PlayEntrance()
@@ -86,7 +85,7 @@ public sealed partial class FriendsDrawer
         if (MotionLevelNow() != MotionLevel.Full) return;
         var dots = new List<(Visual, double, double)>();
         foreach (var av in _avatars.Values)
-            if (av is Panel g) foreach (var c in g.Children) if (c is Ellipse e && e.Tag is "friends-dot-on") dots.Add((e, 0.45, 1.0));
+            if (av is Panel g) foreach (var c in g.Children) if (c is Control e && e.Tag is "friends-dot-on") dots.Add((e, 0.45, 1.0));
         if (dots.Count == 0) return;
         _breath ??= new BreathClock(this, 1.8);
         _breath.Start(dots.ToArray());
@@ -97,7 +96,7 @@ public sealed partial class FriendsDrawer
         if (_breath == null) return;
         _breath.Stop();
         foreach (var av in _avatars.Values)
-            if (av is Panel g) foreach (var c in g.Children) if (c is Ellipse e && e.Tag is "friends-dot-on") e.Opacity = 1;
+            if (av is Panel g) foreach (var c in g.Children) if (c is Control e && e.Tag is "friends-dot-on") e.Opacity = 1;
     }
 
     /// <summary>The hover wash and a soft lilac band that crosses the row once on the way in. The band
@@ -115,7 +114,7 @@ public sealed partial class FriendsDrawer
     }
 
     /// <summary>WPF FriendsLook.HoverBrush.</summary>
-    internal static readonly IBrush HoverWash = new SolidColorBrush(Color.FromArgb(0x14, 0xB9, 0x9C, 0xFF));
+    internal static readonly IBrush HoverWash = Friends.FriendsLook.HoverBrush;
 
     private sealed class SheenHost : Grid { }
 
