@@ -142,6 +142,9 @@ public sealed class WebAssetServer : IDisposable
     /// (IntakeHostService maps it over App.EffectiveAssetsPath): same server, same token rule.</summary>
     public const string AssetsPrefix = "ccp.assets/";
 
+    /// <summary>The assets folder's temp dir (WPF App.GetMediaTempPath): its top-level files are served.</summary>
+    public const string TempFolder = ".temp";
+
     /// <summary>The URL a page loads a library file by (WPF DtrhAssetManifest.AssetUrl's https://ccp.assets/&lt;rel&gt;):
     /// same origin as the page, so the token cookie covers it; each path segment escaped.</summary>
     public string AssetUrl(string rel) =>
@@ -162,9 +165,13 @@ public sealed class WebAssetServer : IDisposable
             if (AssetsRoot?.Invoke() is not { Length: > 0 } assets) return null;
             root = Path.GetFullPath(assets).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             rel = rel[AssetsPrefix.Length..];
-            // Media only, never the app's own dot-folders (.temp, .packs), never the profile itself.
+            // Media only, never the app's own dot-folders (.packs, ...), never the profile itself. The one
+            // exception is a file directly in .temp: WPF maps ccp.assets over the whole assets folder, and the
+            // Back Room's warm Scrolller clips (and pack decrypts) land there (AGENTS.md: a legal ccp.assets url).
+            var segs = rel.Split('/', '\\');
+            bool tempFile = segs.Length == 2 && segs[0] == TempFolder && segs[1].Length > 0 && !segs[1].StartsWith('.');
             if (!MediaTypeSniffer.MediaExtensions.Contains(Path.GetExtension(rel))
-                || rel.Split('/', '\\').Any(seg => seg.StartsWith('.'))
+                || (!tempFile && segs.Any(seg => seg.StartsWith('.')))
                 || HoldsUserData(root)) return null;
         }
         if (rel.Length == 0 || rel.EndsWith('/')) rel += "index.html";

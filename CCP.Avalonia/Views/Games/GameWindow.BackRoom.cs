@@ -19,8 +19,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// BANK: the server's settled <c>sp</c> is the debited receipt, adopted into SkillPoints exactly
     /// as WPF does (BackRoomApi.Read -> AdoptSp -> SetSp); a balance change from elsewhere goes to
     /// the page as <c>balance</c>. The Breakout doors ride the same bridge (they are Back Room pages).
-    /// ponytail: fx, media deals and the word voice run on WPF's null seams (BackRoomStubs: the four
-    /// bundled loops, effects acked as skipped, words silent); haptics, Circe's tab slot lines and
+    /// media deals are WPF BackRoomMedia (local folders + the warm Scrolller pool, urls on loopback); fx and the word voice run on WPF's null seams (BackRoomStubs:
+    /// effects acked as skipped, words silent); haptics, Circe's tab slot lines and
     /// the race handoff are not wired yet.
     /// </summary>
     internal sealed partial class GameWindow
@@ -28,8 +28,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         private BackRoomBridge? _backRoom;
         private AppSettings? _backRoomSettings;
 
+        /// <summary>WPF BackRoomHostService.Media: one live deal for every room and Breakout window (the
+        /// warm Scrolller pool outlives a window, as in WPF), its urls moved onto the loopback server.</summary>
+        private static IBackRoomMedia? _roomMedia;
+        internal static IBackRoomMedia RoomMedia => _roomMedia ??= new LoopbackBackRoomMedia(
+            new BackRoomMedia((key, fallback) => { var s = Loc.Get(key); return string.IsNullOrWhiteSpace(s) || s == key ? fallback : s; }),
+            rel => Platform.WebAssetServer.Shared.Url(rel), rel => Platform.WebAssetServer.Shared.AssetUrl(rel));
+
         private void OpenBackRoom()
         {
+            // WPF LaunchCore: start filling the remote picture pool now (a no-op for a local-only room).
+            try { RoomMedia.WarmForRoomOpen(); } catch (Exception ex) { Log.Debug("[BackRoom] warm: {E}", ex.Message); }
             var roomAccount = BackRoomApi.AppIdentity()?.UnifiedId;
             (string UnifiedId, string Token)? RoomIdentity()
             {
@@ -42,7 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             {
                 Post = Post,
                 Relay = api,
-                Media = new NullBackRoomMedia(Loc.Get),
+                Media = RoomMedia,
                 BuildInit = BackRoomInit,
                 CloseWindow = () => Dispatcher.UIThread.Post(() => { if (!IsClosedOrClosing) Close(); }),
                 Schedule = ScheduleOnUi,
@@ -68,6 +77,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             if (e.PropertyName == nameof(AppSettings.SkillPoints) && sender is AppSettings s)
                 _backRoom?.OnSpChanged(s.SkillPoints, "earn");
+            // WPF OnSettingsChanged: a niche / source / consent change makes the warm pool stale.
+            if (e.PropertyName is nameof(AppSettings.BackRoomMediaSubs) or nameof(AppSettings.BackRoomMediaSubsOff)
+                or nameof(AppSettings.BackRoomMediaSource) or nameof(AppSettings.MediaSource)
+                or nameof(AppSettings.RemoteMediaConsented) or nameof(AppSettings.FypOnlineConsented))
+            {
+                try { RoomMedia.ReleaseWarmPool(); RoomMedia.WarmForRoomOpen(); }
+                catch (Exception ex) { Log.Debug("[BackRoom] repool: {E}", ex.Message); }
+            }
         }
 
         /// <summary>The page frames the room owns. Shell frames (log, boot-error) fall through.</summary>
