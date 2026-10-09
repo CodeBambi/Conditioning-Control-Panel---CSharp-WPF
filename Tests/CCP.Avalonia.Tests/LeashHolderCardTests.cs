@@ -314,6 +314,52 @@ public sealed class LeashHolderCardTests
     }
 
     [Fact]
+    public async Task PunishWindow_RefusesAClose_TaskClosesNormally_AndTheCutAlwaysWorks()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            Setup();
+            var (oldWeb, oldCut) = (LeashPunishWindow.CreateWeb, LeashPunishWindow.CutLeash);
+            int cuts = 0;
+            LeashPunishWindow.CreateWeb = false;
+            LeashPunishWindow.CutLeash = () => cuts++;
+            try
+            {
+                Assert.False(LeashPunishWindow.OpenUrl("http://example.com/v/1", "Vex", true));   // https only
+                Assert.Null(LeashPunishWindow.Current);
+
+                Assert.True(LeashPunishWindow.OpenUrl("https://hypnotube.com/video/1", "Vex", true));
+                var w = LeashPunishWindow.Current!;
+                Assert.True(w.Locked);
+                var tags = w.GetLogicalDescendants().OfType<Control>().Select(c => c.Tag as string).ToList();
+                Assert.Contains("leash-punish-cut", tags);
+                Assert.Contains("leash-punish-hint", tags);
+                Assert.True(w.Allowed(new Uri("https://www.hypnotube.com/video/1/")));
+                Assert.False(w.Allowed(new Uri("https://hypnotube.com/video/2")));
+
+                w.Close();   // a punishment refuses a plain close
+                Assert.Same(w, LeashPunishWindow.Current);
+                Assert.Contains("Vex", w.TitleLine);
+
+                Click(w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "leash-punish-cut"));
+                Assert.Equal(1, cuts);
+                Assert.Null(LeashPunishWindow.Current);   // the cage goes first, then the cut
+
+                Assert.True(LeashPunishWindow.OpenUrl("https://hypnotube.com/video/3", "Vex", false));
+                var task = LeashPunishWindow.Current!;
+                task.Close();
+                Assert.Null(LeashPunishWindow.Current);
+            }
+            finally
+            {
+                LeashPunishWindow.CloseNow();
+                (LeashPunishWindow.CreateWeb, LeashPunishWindow.CutLeash) = (oldWeb, oldCut);
+            }
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
     public async Task HoldRing_CountsDownOncePerSecond_AndDismisses()
     {
         await AvaloniaTestDispatcher.RunAsync(() =>
