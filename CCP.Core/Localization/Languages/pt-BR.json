@@ -4739,6 +4739,7 @@
   "programs_locked_hint": "Programas de apoiadora liberam com um apoio ativo.",
   "programs_unavailable": "Este programa não pode ser iniciado agora.",
   "programs_unavailable_title": "Indisponível",
+  "programs_needs_feature": "Ainda não disponível nesta versão: precisa de {0}.",
   "programs_day_counter": "Dia {0} / {1}",
   "programs_attempt": "Tentativa {0}",
   "programs_days_off_left": "Folgas restantes: {0}",

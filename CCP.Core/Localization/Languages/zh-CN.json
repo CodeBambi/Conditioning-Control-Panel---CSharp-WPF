@@ -5248,6 +5248,7 @@
   "programs_locked_hint": "支持者计划需要有效的赞助才能解锁。",
   "programs_unavailable": "此训练计划现在无法开始。",
   "programs_unavailable_title": "暂不可用",
+  "programs_needs_feature": "此版本暂不可用：需要 {0}。",
   "programs_day_counter": "第 {0} / {1} 天",
   "programs_attempt": "第 {0} 次尝试",
   "programs_days_off_left": "剩余休息日：{0}",

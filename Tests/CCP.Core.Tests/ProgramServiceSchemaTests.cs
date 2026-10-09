@@ -14,6 +14,7 @@ namespace CCP.Core.Tests;
 /// fields a newer build wrote survive this build's save, a file stamped with a newer SchemaVersion
 /// loads read-only, and the service's clock is a seam tests can step.
 /// </summary>
+[Collection(ProgramStatics.Name)]   // Enroll reads CoreProgram.TaskAvailableProvider
 public sealed class ProgramServiceSchemaTests : IDisposable
 {
     private static readonly DateTime FixtureNow = new(2026, 3, 12, 23, 0, 0, DateTimeKind.Local);

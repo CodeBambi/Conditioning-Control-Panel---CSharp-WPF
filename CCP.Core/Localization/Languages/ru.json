@@ -4739,6 +4739,7 @@
   "programs_locked_hint": "Программы для спонсоров открываются при активной подписке.",
   "programs_unavailable": "Эту программу сейчас нельзя начать.",
   "programs_unavailable_title": "Недоступно",
+  "programs_needs_feature": "Пока недоступно в этой сборке: нужно {0}.",
   "programs_day_counter": "День {0} / {1}",
   "programs_attempt": "Попытка {0}",
   "programs_days_off_left": "Осталось выходных: {0}",

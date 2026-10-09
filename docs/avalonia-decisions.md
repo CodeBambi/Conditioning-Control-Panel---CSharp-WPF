@@ -752,3 +752,26 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   as JSON; a SchemaVersion 1 file and a SchemaVersion 1 `.tmp` are left byte-identical, with an unchanged directory listing
   after Save/Dispose; stepped-clock enroll, rollover and lapse) plus the existing full-ctor golden byte round-trip
   in `ProgramServiceReadOnlyTests`. Fail-proofs: ~/ccp-port/evidence/review-programs-run-3-0/fail-proofs.log.
+
+## 2026-10-09: CanEnroll refuses programs this head can never finish (avalonia-port/programs-signals)
+- Context: on Linux no built-in program could be finished: every one has a required LockCard task, and nothing on the head raised
+  LockCard, Pink Filter/Spiral minutes or a completed Lockdown. A Linux enrollment would lapse on work nobody could do.
+- Decision (a), oracle-deep via the supervisor (P44; full text ~/ccp-port/evidence/oracle/programs-3a-canenroll.md):
+  - Wire the three cheap signals exactly like WPF: `App.Quests.TrackLockCardCompleted()` on a non-test card
+    (WPF AchievementService:544), Pink Filter/Spiral quest minutes on a 1 s tick that runs only while the overlay windows show
+    (WPF AchievementService:239/276, same < 6 s interval ceiling; `Platform/OverlayQuestMinutes.cs`), and
+    `TrackLockdownCompleted(LastActiveDuration)` on `LockdownDeactivated` (WPF App.xaml.cs:3295).
+  - Core: `CoreProgram.TaskAvailableProvider` (null = everything available; WPF never seeds it, so WPF is unchanged) and the pure
+    `ProgramService.UnavailableTasks` (required tasks only; a day's Ambient layer is not a task). `CanEnroll` refuses after the
+    tier check with `programs_needs_feature` ("Not available on this build yet: needs {0}.", 9 languages).
+  - Head: static table `CCP.Avalonia/Platform/ProgramCapabilities.cs` (raised categories + `RitualsAvailable`, flipped by 3b),
+    seeded at startup. A static table, not runtime registration: a signal that has not fired yet must not look unavailable.
+  - Programs stay read-only on Avalonia (no Enroll). Enrollable once 3a lands: first_week; +presentation, the_takeover at 3b;
+    kept and firmware_install refused until the keyword engine is ported.
+- Not done here: the loaded-run rule (an Active run of an unavailable program opens with rollover suppressed, Withdraw enabled)
+  lands with 3a's writing service (oracle test 6); the achievement half of the counters (totals and their badges) is not ported.
+- Risks: the table can claim a signal that never fires at runtime (e.g. no tint on Wayland, so Pink Filter minutes never count
+  there); the source scan only proves the call exists.
+- Tests: `Tests/CCP.Core.Tests/ProgramCanEnrollCapabilityTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramCapabilitiesTests.cs`,
+  `ProgramsBrowseTests.RefusedCardRendersTheMissingFeature`, `OverlayQuestMinutesTests`. Fail-proofs:
+  ~/ccp-port/evidence/review-programs-signals/fail-proofs.log.
