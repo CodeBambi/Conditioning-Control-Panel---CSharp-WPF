@@ -1620,3 +1620,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-programs-tab: +362
 - Programs browse cards + intro popup show WPF's banner/sigil/plate art via new Core ProgramArtPaths (shared with WPF ProgramArt).
 - Enroll/run panel still unwired (decision A); slice plan in briefs/programs-run-plan.md.
+
+## avalonia-port/rows-she-listening: +132
+- She's Listening: title-bar mic privacy pill (click/Enter = disarm), armed-disc pulse, open-models button; 5 fail-proven assertions in SheListeningTests.
+- Rows shell-she-listening / views-tab-she-listening stay stub (sherpa KWS, bark lines, grammar gaps).
