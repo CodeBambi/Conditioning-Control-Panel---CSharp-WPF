@@ -258,6 +258,7 @@
                     <TextBlock Text="{Binding LegacyBody}" Theme="{StaticResource CmpFaintTextStyle}"
                                TextWrapping="Wrap" Margin="0,0,0,7"/>
                     <Button Content="{Binding LegacyAction}" Command="{Binding ReviewConsentCommand}"
+                            IsVisible="{Binding CanReviewConsent}"
                             Theme="{StaticResource CmpLinkButtonStyle}" HorizontalAlignment="Left"
                             Padding="0,2,0,2"/>
                 </StackPanel>

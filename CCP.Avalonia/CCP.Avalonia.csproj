@@ -157,7 +157,7 @@
         - Twemoji (4,009 files, 19 MB) is not needed at all. Avalonia renders COLR/CPAL colour
           emoji natively, which is why the ported views draw a plain TextBlock where WPF needed
           an SVG. Packaging it would ship a fallback nothing reaches for.
-        - skills/ is 27 files; one is referenced, so it is listed file by file. achievements/
+        - skills/ (27 files, 4 MB) is globbed: every tree node draws its art. achievements/
           (70 files, 38 MB) is globbed: AchievementPopup can show any of them.
         - Audio, video, models and mod assets are Content in the WPF head - loaded off disk at
           runtime, not compiled in - so they are not resources here either.
@@ -199,7 +199,8 @@
     <AvaloniaResource Include="..\Assets\programs\banner_*.png;..\Assets\programs\sigil_*.png;..\Assets\programs\plate_*.png;..\Assets\programs\hero_*.png"
                       Link="Resources\programs\%(Filename)%(Extension)" />
     <!-- Sparse folders: only what a view names. -->
-    <AvaloniaResource Include="..\Assets\skills\pink_rush.png" Link="Resources\skills\pink_rush.png" />
+    <!-- Every skill node draws its art (WPF CreateSkillNode skills/{id}.png). -->
+    <AvaloniaResource Include="..\Assets\skills\*.png" Link="Resources\skills\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

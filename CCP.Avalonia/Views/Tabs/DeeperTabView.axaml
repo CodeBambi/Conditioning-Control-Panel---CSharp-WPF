@@ -181,7 +181,7 @@
         <!-- Per-row template. DataContext = DeeperLibraryRowVm; the original
              EnhancementLibraryEntry hangs off vm.Entry for action handlers. -->
         <DataTemplate x:Key="DeeperLibraryRowTemplate" x:DataType="vm:DeeperLibraryRowVm">
-            <Border x:Name="RowBorder" Classes="deeper-row"
+            <Border x:Name="RowBorder" Classes="deeper-row" Classes.selected="{Binding IsSelected}"
                     Background="{DynamicResource PanelBgBrush}"
                     BorderBrush="{DynamicResource DeeperAccentTransparent20Brush}"
                     BorderThickness="1" CornerRadius="6"
@@ -191,6 +191,20 @@
                     PointerEntered="DeeperRow_MouseEnter"
                     PointerExited="DeeperRow_MouseLeave"
                     ToolTip.Tip="{loc:Str deeper_hub_tip_row_open}">
+                <Border.ContextMenu>
+                    <ContextMenu Background="{DynamicResource PanelBgBrush}" Foreground="{DynamicResource TextLightBrush}"
+                                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                                 CornerRadius="6" Padding="4" FontSize="12">
+                        <MenuItem Header="{loc:Str deeper_hub_menu_open}" Click="DeeperRowMenuOpen_Click"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_play}" Click="DeeperRowPlay_Click"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_reveal}" Click="DeeperRowMenuReveal_Click"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_copy_path}" Click="DeeperRowMenuCopyPath_Click"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_submit}" Click="DeeperRowSubmit_Click"
+                                  IsVisible="{Binding ShowSubmitButton}" IsEnabled="{Binding SubmitEnabled}"/>
+                        <MenuItem Header="{loc:Str deeper_hub_menu_delete}" Click="DeeperRowDelete_Click"
+                                  Foreground="{DynamicResource DangerBrush}"/>
+                    </ContextMenu>
+                </Border.ContextMenu>
                 <Grid ColumnDefinitions="Auto,*,Auto">
 
                     <!-- LEFT: type badge -->
@@ -299,6 +313,11 @@
         </Style>
         <!-- WPF gave the row Border its own Style with an IsMouseOver border-brush reveal. -->
         <Style Selector="Border.deeper-row:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+        </Style>
+        <!-- WPF DataTrigger IsSelected: keyboard/click selection. -->
+        <Style Selector="Border.deeper-row.selected">
+            <Setter Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
         </Style>
     </UserControl.Styles>
@@ -476,6 +495,16 @@
                                                 Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
                                                 BorderThickness="0" Margin="0,0,8,0">
                                             <TextBlock Text="{loc:Str deeper_welcome_card_take_tour}"/>
+                                        </Button>
+                                        <Button x:Name="BtnDeeperWelcomeDemo"
+                                                Theme="{StaticResource DeeperRoundButton}"
+                                                Click="BtnDeeperWelcomeDemo_Click"
+                                                Padding="14,7" Cursor="Hand"
+                                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                                BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                                Margin="0,0,8,0">
+                                            <TextBlock Text="{loc:Str deeper_welcome_card_open_demo}"/>
                                         </Button>
                                         <Button x:Name="BtnDeeperWelcomeDismiss"
                                                 Theme="{StaticResource DeeperRoundButton}"
@@ -679,6 +708,7 @@
                                      top via the wrapping Grid, controlled from the VM. -->
                                 <Grid>
                                     <ItemsControl x:Name="DeeperLibraryList" x:FieldModifier="internal"
+                                                  Focusable="True" KeyDown="DeeperLibraryList_KeyDown"
                                                   ItemsSource="{Binding FilteredEntries}"
                                                   ItemTemplate="{StaticResource DeeperLibraryRowTemplate}"/>
                                     <TextBlock x:Name="TxtDeeperLibraryEmpty" x:FieldModifier="internal"

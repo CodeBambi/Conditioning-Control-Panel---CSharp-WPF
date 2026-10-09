@@ -1620,3 +1620,35 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-programs-tab: +362
 - Programs browse cards + intro popup show WPF's banner/sigil/plate art via new Core ProgramArtPaths (shared with WPF ProgramArt).
 - Enroll/run panel still unwired (decision A); slice plan in briefs/programs-run-plan.md.
+
+## avalonia-port/rows-she-listening: +132
+- She's Listening: title-bar mic privacy pill (click/Enter = disarm), armed-disc pulse, open-models button; 5 fail-proven assertions in SheListeningTests.
+- Rows shell-she-listening / views-tab-she-listening stay stub (sherpa KWS, bark lines, grammar gaps).
+
+## avalonia-port/rows-keyword-triggers: +606
+- Awareness custom trigger list (add/import/9 row editors), OCR combos persisted, OCR access gate + panel resync; 9-language strings; 3 fail-proven tests.
+- Rows stay stub: KeywordTriggerService/ScreenOcr/KeywordHighlight runtime (no Linux keystroke source) not ported.
+
+## avalonia-port/rows-patreon-subscribestar: +234
+- Premium celebration is back: a Patreon or SubscribeStar tier change, or the launch re-check, shows one card per tier (none for an invite week), via the presenter or Inbox. 2 fail-proven tests; live sandbox run showed the card.
+- shell-patreon and shell-subscribestar stay stub, with an exact missing list (live tier rise, unlockables/programs/profile-bubble repaint).
+
+## avalonia-port/rows-descent-fuse: +933
+- Fuse rail chip (tiers, flash-out at zero, Spiral Room door) and the zero-show stage visual are ported; both rows are now wired.
+- 2 fail-proven headless tests and a sandbox Keincheck run. win/shell descent-fuse rows stay stub (openers, sounds, dimming).
+
+## avalonia-port/rows-awareness-privacy: +661
+- Z5 privacy card on real settings: consent-gated dial, deny/allow chips, pause, wipe; WPF older-pipeline band whenever awareness is on (v2 observer still missing; decision logged).
+- "Set up local" opens the local-AI wizard (untested); tests can no longer read the real desktop (X11ActiveWindow.Disabled); duplicate awareness ledger rows merged.
+
+## avalonia-port/programs-run-1: +346
+- Avalonia builds ProgramService at startup in load-only, read-only mode (CHECKPOINT A). It never writes programs.json, does no rollover and runs no timers, and it is disposed on exit. WPF's ctor path is unchanged.
+- 7 tests, all fail-proven: a byte round-trip of a WPF-shape fixture under a pinned time zone, plus no-write, temp-recovery, corrupt-file, no-lapse, startup-audit-skipped and startup-scan checks.
+
+## avalonia-port/rows-deeper-hub: +883
+- Deeper hub: open/play/context menu/keyboard selection/two-step delete with undo + trash, submission badge, welcome Demo/Tour/Dismiss, row hover lift; shell-deeper-fx now wired.
+- Still stub: import, watcher, duration probe, demo seeding, tutorial, webcam card, sticky accepted toast.
+
+## avalonia-port/rows-enhancements: +846
+- Enhancements tab draws WPF node states, header, secret cards, owned-glow breath, gradient drift and hover pop. XP multiplier and time math moved to Core SkillTreeRules (WPF delegates).
+- shell-enhancements-fx is wired. Still missing: purchase click, the PRO panels, the lucky toast.
