@@ -80,16 +80,20 @@ internal sealed class LeashTaskHost : ILeashTaskHost, IDisposable
     private static void OnPanicPressCore(bool panicRuns)
     {
         var r = Runner;
-        bool live = false;
+        bool live = false, linesCard = false;
         try
         {
             live = r?.IsRunning == true || LeashPunishWindow.Current != null;
+            // WPF: with the panic not running nothing else takes the task's lock card down, so a
+            // lines task closes its own card here. A card the leash did not open is left alone.
+            linesCard = !panicRuns && r?.RunningKind == PunishKind.Lines;
             if (live)
                 Serilog.Log.Information("Leash: panic press stops the running task (kept pending, panic runs={Runs})", panicRuns);
             if (panicRuns) r?.Park();
             else r?.ParkAndStopItsSession();
         }
         catch (Exception ex) { Serilog.Log.Debug("Leash park failed: {E}", ex.Message); }
+        if (linesCard) { try { LockCardWindow.ForceCloseAll(); } catch { } }
         LeashPunishWindow.CloseNow();
         // WPF: the gate stands back ten minutes (LeashUiRules.PanicSnooze) and hides.
         try { GatePanic?.Invoke(panicRuns, live); }
