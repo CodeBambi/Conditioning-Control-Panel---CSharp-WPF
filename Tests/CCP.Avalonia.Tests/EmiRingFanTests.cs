@@ -112,6 +112,7 @@ public sealed class EmiRingFanTests
             Assert.Equal(pets + 1, st.PetsTotal);
 
             clock.Now += TimeSpan.TicksPerSecond;   // past the sfx floor, inside the 6 s pet cooldown
+            desk.CancelChain();   // the pet chain has run out (LAW 3: a pat never cuts a live chain)
             pat.Invoke(desk, null);
             Assert.Equal(2, played.Count);
             Assert.Equal(pets + 1, st.PetsTotal);

@@ -30,6 +30,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static readonly object Gate = new();
         private static DateTimeOffset _lastPat = DateTimeOffset.MinValue;
         private static DateTimeOffset _lastRing = DateTimeOffset.MinValue;
+        private static DateTimeOffset _lastChime = DateTimeOffset.MinValue;
+
+        /// <summary>WPF EmiSfx.Chime: the pet streak's glee chime.</summary>
+        public static void Chime()
+        {
+            if (Throttle(ref _lastChime))
+                Play(new[] { "emi/chime.mp3", "chaos/reveal_chime.mp3", "chime1.mp3" }, 0.15f, "emi-sfx-chime");
+        }
 
         public static void Pat()
         {
