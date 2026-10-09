@@ -16,8 +16,8 @@
      Buttons carry a TextBlock child rather than Content, the repo convention (CLAUDE.md trap 1);
      neither label has an underscore, so that is convention here, not necessity.
      Strings carry the WPF loc keys; "Close" stays a literal as in WPF. TxtStatus has no
-     markup text because code owns it (a loc binding would undo code-set text on a language
-     switch). No bindings, hence no x:DataType. -->
+     markup text because code owns every state of it (WPF sets it from code too). No
+     bindings, hence no x:DataType. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
