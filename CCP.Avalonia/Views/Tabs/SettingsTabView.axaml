@@ -433,15 +433,15 @@
            (RefreshMysteryTile) and the tease tile (ApplyTeaseCard). -->
 
       <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
-      <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="0" x:Name="CardFlash" Icon="/Resources/features/flash.png"
+      <features:FeatureCard DashboardDepth="True" DimWhenInactive="True" Grid.Row="0" Grid.Column="0" x:Name="CardFlash" Icon="/Resources/features/flash.png"
                             Title="Flash Images"
                             HelpSectionId="FlashImages"/>
       <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" IconB="/Resources/features/Bubble_count.png" IconA="/Resources/features/mandatory_videos.png"
                                  TitleA="Mandatory Video" TitleB="Bubble Count" DashboardDepth="True" HelpSectionIdA="Video" HelpSectionIdB="BubbleCount"/>
-      <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" Icon="/Resources/features/subliminal.png"
+      <features:FeatureCard DashboardDepth="True" DimWhenInactive="True" Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" Icon="/Resources/features/subliminal.png"
                             Title="Subliminals"
                             HelpSectionId="Subliminals"/>
-      <features:FeatureCard DashboardDepth="True" Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" Icon="/Resources/features/bouncing_text.png"
+      <features:FeatureCard DashboardDepth="True" DimWhenInactive="True" Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" Icon="/Resources/features/bouncing_text.png"
                             Title="Bouncing Text"
                             HelpSectionId="BouncingText"/>
 
@@ -809,10 +809,10 @@
                             BlurRadius="14" OffsetX="0" OffsetY="0" Opacity="0.95"/>
         </TextBlock.Effect>
       </TextBlock>
-      <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" Icon="/Resources/features/Bubble_pop.png"
+      <features:FeatureCard DashboardDepth="True" DimWhenInactive="True" Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" Icon="/Resources/features/Bubble_pop.png"
                             Title="Bubble Pop"
                             HelpSectionId="BubblePop"/>
-      <features:FeatureCard DashboardDepth="True" Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" Icon="/Resources/features/Phrase_Lock.png"
+      <features:FeatureCard DashboardDepth="True" DimWhenInactive="True" Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" Icon="/Resources/features/Phrase_Lock.png"
                             Title="Lock Card"
                             HelpSectionId="LockCard"/>
 

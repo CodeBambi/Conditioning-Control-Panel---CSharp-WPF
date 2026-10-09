@@ -29,8 +29,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// FX plumbing is deliberately copied from <see cref="FeatureCard"/> rather than shared
     /// through a base class, as in WPF. Motion/tier/window-focus/visibility gates read
     /// <see cref="Env"/> (the head's MotionFx/PerformanceProfile twin).
-    /// ponytail: DashboardCardDepth (face/bevel/socket, inverted clicks) and the greyscale
-    /// HalfMute (ArtDesaturate) are not ported; off halves only dim.
+    /// ponytail: DashboardCardDepth (face/bevel/socket, inverted clicks) is not ported. An off half
+    /// dims to 62% and drains to grey (HalfMuteA/B, CardMute.cs), as in WPF since 6.9.4.
     /// </summary>
     public partial class SplitFeatureCard : UserControl
     {
@@ -122,7 +122,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public event EventHandler<RoutedEventArgs> ToggleA { add => AddHandler(ToggleAEvent, value); remove => RemoveHandler(ToggleAEvent, value); }
         public event EventHandler<RoutedEventArgs> ToggleB { add => AddHandler(ToggleBEvent, value); remove => RemoveHandler(ToggleBEvent, value); }
 
-        private readonly Border _rootBorder, _halfHostA, _halfHostB, _titlePillA, _titlePillB, _rimLight;
+        private readonly Border _rootBorder, _halfHostA, _halfHostB, _halfMuteA, _halfMuteB, _titlePillA, _titlePillB, _rimLight;
         private readonly Grid _contentRoot;
         private readonly Path _hoverWashA, _hoverWashB, _peekScrimA, _peekScrimB, _seamLine, _activeRingA, _activeRingB;
         private readonly TextBlock _txtTitleA, _txtTitleB;
@@ -145,6 +145,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _rootBorder = this.FindControl<Border>("RootBorder")!;
             _halfHostA = this.FindControl<Border>("HalfHostA")!;
             _halfHostB = this.FindControl<Border>("HalfHostB")!;
+            _halfMuteA = this.FindControl<Border>("HalfMuteA")!;
+            _halfMuteB = this.FindControl<Border>("HalfMuteB")!;
+            _halfA = this.FindControl<Panel>("HalfA")!;
+            _halfB = this.FindControl<Panel>("HalfB")!;
             _titlePillA = this.FindControl<Border>("TitlePillA")!;
             _titlePillB = this.FindControl<Border>("TitlePillB")!;
             _rimLight = this.FindControl<Border>("RimLight")!;
@@ -262,8 +266,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// <summary>An OFF half rests dim unless the pointer has committed a non-dashboard card to it.</summary>
         private void ApplyHalfRestOpacity()
         {
-            _halfHostA.Opacity = IsActiveA || (!DashboardDepth && _halfHover == true) ? 1.0 : InactiveHalfOpacity;
-            _halfHostB.Opacity = IsActiveB || (!DashboardDepth && _halfHover == false) ? 1.0 : InactiveHalfOpacity;
+            _halfA.Opacity = IsActiveA || (!DashboardDepth && _halfHover == true) ? 1.0 : InactiveHalfOpacity;
+            _halfB.Opacity = IsActiveB || (!DashboardDepth && _halfHover == false) ? 1.0 : InactiveHalfOpacity;
+            ApplyHalfMute(CardMuteRule.TransitionMs(Env.AllowTransitions, IsLoaded));
         }
 
         /// <summary>WPF SweepAllowed: the sweep costs a geometry per frame, so it wants Full motion
@@ -292,13 +297,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (_rootBorder is null) return; // fired before the XAML loaded
             if (change.Property == TitleAProperty) _txtTitleA.Text = TitleA ?? "";
             else if (change.Property == TitleBProperty) _txtTitleB.Text = TitleB ?? "";
-            else if (change.Property == IconAProperty) ApplyIcon(_halfHostA, IconA);
-            else if (change.Property == IconBProperty) ApplyIcon(_halfHostB, IconB);
+            else if (change.Property == IconAProperty) { ApplyIcon(_halfHostA, IconA); ApplyIcon(_halfMuteA, ArtDesaturate.Of(IconA)); }
+            else if (change.Property == IconBProperty) { ApplyIcon(_halfHostB, IconB); ApplyIcon(_halfMuteB, ArtDesaturate.Of(IconB)); }
             else if (change.Property == IsActiveAProperty || change.Property == IsActiveBProperty) ApplyActiveState();
             else if (change.Property == HelpSectionIdAProperty || change.Property == HelpSectionIdBProperty) RefreshHelp();
             else if (change.Property == SplitProgressProperty) RebuildGeometry();
             else if (change.Property == IsVisibleProperty && !IsVisible) ResetSplit();
         }
+
+        private readonly Panel _halfA, _halfB;
+
+        /// <summary>WPF ApplyHalfMute (SplitFeatureCard.xaml.cs:757): the ONE writer for the two grey
+        /// layers, on <see cref="CardMuteRule.ShouldMuteHalf"/>'s per-half verdict.</summary>
+        private void ApplyHalfMute(int ms)
+        {
+            bool a = CardMuteRule.ShouldMuteHalf(IsActiveA, !DashboardDepth && _halfHover == true);
+            bool b = CardMuteRule.ShouldMuteHalf(IsActiveB, !DashboardDepth && _halfHover == false);
+            CardMuteRule.Fade(_halfMuteA, a, ms);
+            CardMuteRule.Fade(_halfMuteB, b, ms);
+            HalfMuted = (a, b);
+        }
+
+        /// <summary>Test seams: each half's resting opacity and its mute verdict (the grey layer may
+        /// still be mid-fade).</summary>
+        internal (double A, double B) HalfRestOpacity => (_halfA.Opacity, _halfB.Opacity);
+        internal (bool A, bool B) HalfMuted { get; private set; }
 
         private static void ApplyIcon(Border host, IImageBrushSource? src)
         {
@@ -337,8 +360,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var regionA = RegionGeometry(true, k, w, h, 0);
             var regionB = RegionGeometry(false, k, w, h, 0);
 
-            _halfHostA.Clip = regionA;
-            _halfHostB.Clip = regionB;
+            _halfA.Clip = regionA;
+            _halfB.Clip = regionB;
             _hoverWashA.Data = regionA;
             _hoverWashB.Data = regionB;
 

@@ -56,6 +56,12 @@
             <!-- Full-bleed background image via ImageBrush (respects parent CornerRadius) -->
             <Border x:Name="ImgIconHost" CornerRadius="11"
                     RenderOptions.BitmapInterpolationMode="HighQuality"/>
+            <!-- The same art in greyscale (CardMute.cs ArtDesaturate) over the colour, faded in
+                 while the feature is off (WPF FeatureCard.xaml ImgIconMute): an off tile is grey,
+                 an on tile is the only one wearing its palette. Opacity is written only by
+                 FeatureCard.ApplyMute. -->
+            <Border x:Name="ImgIconMute" CornerRadius="11" IsHitTestVisible="False" Opacity="0"
+                    RenderOptions.BitmapInterpolationMode="HighQuality"/>
 
             <!-- Glyph fallback (for cards without an image) -->
             <Border x:Name="GlyphHost"
