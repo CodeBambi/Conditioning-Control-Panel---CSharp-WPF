@@ -100,6 +100,7 @@ public sealed class PanicSurfacesTests
         ["BlinkTrainerTabView"] = "camera: the 'camera' and 'blink-trainer' surfaces",
         ["LibVlcAudio"] = "the CoreAudio sink: Core services stop their clips on the 'engine' surface",
         ["MandatoryVideoOverlay"] = "Core video sink: the 'engine' surface (CoreEngine.Stop) closes it",
+        ["FlashClipPlayer"] = "a flash's muted clip: the 'engine' surface (FlashOverlay.CloseAll) closes the window, which disposes it",
         ["BubbleCountWindow"] = "Core bubble-count sink: the 'engine' surface closes it",
         ["BubbleCountHost"] = "Core bubble-count sink: the 'engine' surface closes it",
         ["PopQuizHost"] = "OnEngineStopped closes it after the 'engine' surface",
