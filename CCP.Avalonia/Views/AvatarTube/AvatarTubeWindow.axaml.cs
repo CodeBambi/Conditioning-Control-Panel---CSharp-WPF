@@ -1351,7 +1351,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     }
                     if (!File.Exists(phraseAudioPath)) return;
                     handedOff = true;
-                    CoreAudio.PlayOneShot(phraseAudioPath!, curved * (barkVoice ? 0.85f : 0.56f),
+                    StopSpokenAudio();   // WPF PlaySpokenAudio: cut the previous line, no overlap
+                    _stopSpoken = CoreAudio.PlayStoppable(phraseAudioPath!, curved * (barkVoice ? 0.85f : 0.56f),
                                           barkVoice ? "bark-voice" : "phrase-audio", onFinished: onSpoken);
                     return;
                 }

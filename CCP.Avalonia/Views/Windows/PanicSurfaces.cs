@@ -45,6 +45,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("pink-rush", _ => PinkRushHost.Stop()),                 // WPF StopEngine -> SkillTree.Stop: the 3x ends
             // WPF :1967 "corner GIFs": the standalone Spiral-card slots close (settings untouched) and queued ones cancel.
             new("corner-gif", _ => Overlays.CornerGifOverlay.StopAll()),
+            // WPF :2005 "tube speech": voice line, bubble, thinking + listening dots (tube#T2).
+            new("tube", _ => AvatarTube.AvatarTubeWindow.PanicSilenceLive()),
             new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
             new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
         };
