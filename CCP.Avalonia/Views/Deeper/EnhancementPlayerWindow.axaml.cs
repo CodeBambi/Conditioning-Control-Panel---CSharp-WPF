@@ -1326,7 +1326,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             {
                 var fresh = EnhancementSerializer.LoadFromFile(path!);
                 DeeperEditorWindow.TouchRecent(path!);
-                new DeeperEditorWindow(fresh, path).Show();
+                // WPF Owner=MainWindow (OpenDeeperEditor); the shell owns it when it is up.
+                var editor = new DeeperEditorWindow(fresh, path);
+                if (Windows.MainShellWindow.Current is { IsVisible: true } shell) editor.Show(shell);
+                else editor.Show();
             }
             catch (Exception ex)
             {

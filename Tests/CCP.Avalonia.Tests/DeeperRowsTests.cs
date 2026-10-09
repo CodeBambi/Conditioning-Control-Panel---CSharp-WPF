@@ -119,6 +119,55 @@ public sealed class DeeperRowsTests
         return Task.CompletedTask;
     });
 
+    /// <summary>MediaPlayer as the transport sees it: Playing fires on every start AND resume.</summary>
+    private sealed class FakeEngine : DeeperLocalAudio.IEngine
+    {
+        public LibVLCSharp.Shared.VLCState State { get; set; } = LibVLCSharp.Shared.VLCState.NothingSpecial;
+        public long Time { get; set; }
+        public long Length => 6000;
+        public int Stops;
+        public void Play() => State = LibVLCSharp.Shared.VLCState.Opening;
+        public void SetPause(bool pause) => State = pause ? LibVLCSharp.Shared.VLCState.Paused : LibVLCSharp.Shared.VLCState.Playing;
+        public void Stop() { Stops++; State = LibVLCSharp.Shared.VLCState.Stopped; }
+    }
+
+    [Fact]
+    public void TransportAppliesASeekOnceAndStopsAClipStillOpening()
+    {
+        var e = new FakeEngine();
+        var t = new DeeperLocalAudio.Transport(e, 12000, () => { });
+        Assert.Equal(12, t.DurationSeconds);              // header estimate until playing
+
+        // Seek before playback: taken by the first Playing, never again.
+        t.PositionSeconds = 3;
+        t.Play();
+        e.State = LibVLCSharp.Shared.VLCState.Playing;
+        t.OnPlaying();
+        Assert.Equal(3000, e.Time);
+        Assert.Equal(6, t.DurationSeconds);               // exact length once playing
+        e.Time = 4000;
+        t.Pause();
+        t.Play();
+        t.OnPlaying();
+        Assert.Equal(4000, e.Time);
+
+        // Seek while playing, play on, pause, resume: resume must not jump back to the seek.
+        t.PositionSeconds = 5;
+        Assert.Equal(5000, e.Time);
+        e.Time = 7000;
+        t.Pause();
+        t.Play();
+        t.OnPlaying();
+        Assert.Equal(7000, e.Time);
+
+        // Pause (or panic) while the clip is still opening stops it rather than letting it start.
+        e.State = LibVLCSharp.Shared.VLCState.Stopped;
+        t.Play();
+        Assert.Equal(LibVLCSharp.Shared.VLCState.Opening, e.State);
+        t.Pause();
+        Assert.Equal(LibVLCSharp.Shared.VLCState.Stopped, e.State);
+    }
+
     [Fact]
     public Task PlayerOpensTheEditorForNewAndExistingEnhancements() => AvaloniaTestDispatcher.RunAsync(() =>
     {
