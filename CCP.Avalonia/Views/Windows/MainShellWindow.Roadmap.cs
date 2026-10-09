@@ -24,7 +24,10 @@
 //                               answer, never fired beside it.
 //   RefreshRoadmapStats()       aggregates across all three tracks.
 //   OnRoadmapStepCompleted is below; the node repaint it triggered in WPF is QuestsTabView's own
-//                               RefreshRoadmapUI after SubmitPhoto. The system sound is not ported.
+//                               RefreshRoadmapUI after SubmitPhoto (SubmitPhoto is the only
+//                               completer, and it raises TrackUnlocked synchronously inside it, so
+//                               that one repaint also covers WPF's OnRoadmapTrackUnlocked).
+//                               SystemSounds.Exclamation becomes App.PlayExclamationChime.
 
 using System;
 using Avalonia;
@@ -73,6 +76,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try
                 {
                     new RoadmapStepPopup(e.StepDefinition, e.StepProgress).Show();
+                    // WPF :459 SystemSounds.Exclamation; no stock sound on Linux, so the quest chime.
+                    App.PlayExclamationChime("roadmap-step");
 
                     var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
                     if (owner is not { IsVisible: true }) return;

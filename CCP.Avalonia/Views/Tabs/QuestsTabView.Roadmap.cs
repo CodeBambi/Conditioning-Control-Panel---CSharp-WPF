@@ -312,6 +312,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             container.Child = stack;
             container.PointerReleased += RoadmapNode_Click;
+            // P17: WPF's node is mouse-only; here it is also reachable by Tab and opened by Enter/Space.
+            container.Focusable = true;
+            container.KeyDown += (_, e) =>
+            {
+                if (e.Key is not (Key.Enter or Key.Space)) return;
+                e.Handled = true;
+                _ = OpenStepAsync(step.Id);
+            };
             return container;
         }
 
@@ -320,11 +328,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private async void RoadmapNode_Click(object? sender, PointerReleasedEventArgs e)
         {
             if (e.InitialPressMouseButton != MouseButton.Left) return;
+            if ((sender as Border)?.Tag is string stepId && stepId.Length > 0)
+                await OpenStepAsync(stepId);
+        }
 
+        private async Task OpenStepAsync(string stepId)
+        {
             try
             {
-                if ((sender as Border)?.Tag is not string stepId || stepId.Length == 0) return;
-
                 var stepDef = RoadmapStepDefinition.GetById(stepId);
                 if (stepDef == null) return;
 
