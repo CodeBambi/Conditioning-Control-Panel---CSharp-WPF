@@ -45,8 +45,9 @@ public sealed class BoardShellTests
             var card = host!.CurrentCard;
             Assert.NotNull(card);
             Assert.Contains(card!.Spec.Kind, new[] { BillboardCardKind.House, BillboardCardKind.Tip, BillboardCardKind.Waiting, BillboardCardKind.Resume, BillboardCardKind.Event });
-            // No Back Room host on this head: its house card never reaches the deck.
-            Assert.DoesNotContain(BillboardWiring.Providers.SelectMany(p => p.Current(BillboardWiring.Context())), c => c.Id == "house.backroom");
+            // Back Room is hosted on this head (Views/Games/GameWindow), so its house card is in the deck.
+            Assert.True(LauncherWindow.Destinations.ContainsKey("backroom"));
+            Assert.Contains(BillboardWiring.Providers.SelectMany(p => p.Current(BillboardWiring.Context())), c => c.Id == "house.backroom");
 
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             Dispatcher.UIThread.RunJobs();
