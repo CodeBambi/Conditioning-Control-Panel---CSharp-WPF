@@ -753,9 +753,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var card = SecretBorder(owned ? Rgb(40, 30, 50) : canPurchase ? Rgb(50, 30, 60) : Rgb(35, 25, 45),
                 owned ? Rgb(180, 100, 255) : canPurchase ? Rgb(153, 50, 204) : Rgb(100, 70, 130), owned ? 2 : 1, body, opacity: 1);
             card.Tag = skill.Id;
-            if (owned) card.Effect = new DropShadowEffect { Color = Colors.Purple, BlurRadius = 12, OffsetX = 0, OffsetY = 0, Opacity = 0.5 };
-            else if (canPurchase) card.Effect = new DropShadowEffect { Color = Colors.MediumPurple, BlurRadius = 10, OffsetX = 0, OffsetY = 0, Opacity = 0.4 };
-            if (card.Effect != null) card.CacheMode = new BitmapCache();   // static glow, rasterised once
+            // WPF DropShadowEffect -> a BoxShadow on the card itself: an Effect here made each card an offscreen layer.
+            if (owned) card.BoxShadow = new BoxShadows(new BoxShadow { Blur = 12, Color = Color.FromArgb(128, 128, 0, 128) });
+            else if (canPurchase) card.BoxShadow = new BoxShadows(new BoxShadow { Blur = 10, Color = Color.FromArgb(102, 147, 112, 219) });
 
             var tip = new StackPanel { MaxWidth = 280 };
             tip.Children.Add(new TextBlock { Text = CoreMods.MakeModAware(skill.LocalizedFlavorText), Foreground = Rgb(200, 150, 255), FontStyle = FontStyle.Italic, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });
