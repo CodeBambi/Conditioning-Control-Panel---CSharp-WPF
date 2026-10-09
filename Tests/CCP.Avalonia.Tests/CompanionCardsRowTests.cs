@@ -49,6 +49,10 @@ public sealed class CompanionCardsRowTests
         try
         {
             shell.Show();
+            if (shell.CurrentTab == "companion") shell.ShowTab("achievements");
+            Dispatcher.UIThread.RunJobs();
+            // never swept while the Companion tab has not been shown
+            Assert.False(shell.GetLogicalDescendants().OfType<RelationshipConstellation>().Single().ShimmerStarted);
             shell.ShowTab("companion");
             Dispatcher.UIThread.RunJobs();
 
@@ -69,8 +73,10 @@ public sealed class CompanionCardsRowTests
             Assert.True(gauge.ShowFloorNote);
             Assert.Equal(Loc.GetF("companion_attention_detail_fmt", 1), gauge.DetailLine);
             Assert.True(gauge.ShowUpsell);
-            Assert.Same(shell, gauge.Shell);   // the upsell's ShowTab("patreon") target
-            gauge.UpsellCommand.Execute(null);
+            Assert.Same(shell, gauge.Shell);
+            gauge.UpsellCommand.Execute(null);   // WPF ShowTab("patreon"): Settings, Account section
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("appsettings", shell.CurrentTab);
 
             // local model picked in the Engine Room: unlimited, no meter, no upsell (WPF SyncBrain)
             shell.ShowTab("companion");
@@ -112,6 +118,36 @@ public sealed class CompanionCardsRowTests
             s.AiChatEnabled = oldAiOn;
             service.SaveImmediate();
             CoreSettings.ServiceProvider = null;
+        }
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task ConstellationSweepWaitsUntilTheBandIsSeen() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<AvApp>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var band = new RelationshipConstellation();
+        var host = new global::Avalonia.Controls.Panel { Children = { band } };
+        var window = new global::Avalonia.Controls.Window { Content = host, Width = 800, Height = 400 };
+        try
+        {
+            window.Show();
+            host.IsVisible = false;          // hidden before the posted intro runs (a hidden tab)
+            Dispatcher.UIThread.RunJobs();
+            band.PlayIntro();
+            Assert.False(band.ShimmerStarted);   // not spent unseen
+            host.IsVisible = true;           // the tab is shown: CompanionRoomView.ResumeClocks plays it
+            Dispatcher.UIThread.RunJobs();
+            band.PlayIntro();
+            Assert.True(band.ShimmerStarted);
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
         }
         return Task.CompletedTask;
     });

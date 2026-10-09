@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
+using Avalonia.LogicalTree;
+using System.Linq;
 using Avalonia.Threading;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
@@ -131,6 +133,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 ChatZone.ViewModel?.Sync();
                 MemoryZone.ViewModel?.Sync();
                 AttentionZone.ViewModel?.Sync();
+                // The constellation's one-shot dormant sweep waits for the first time the tab is seen.
+                HeroZone.GetLogicalDescendants().OfType<RelationshipConstellation>().FirstOrDefault()?.PlayIntro();
                 // ponytail: WPF also calls ChatZone.SyncThinking() here. This head's
                 // ChatThresholdView has no thinking clock to sync - WPF's dots are three
                 // RepeatBehavior=Forever Storyboards (CmpThinkingDotsStoryboard) and the port

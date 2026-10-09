@@ -27,22 +27,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             AvaloniaXamlLoader.Load(this);
             DataContext = RelationshipConstellationViewModel.Runtime();
-            // One-shot: re-entering the tab must not stack a second sweep. Normal, never Loaded priority.
-            Loaded += (_, _) =>
-            {
-                if (_introPlayed) return;
-                _introPlayed = true;
-                Dispatcher.UIThread.Post(PlayIntro, DispatcherPriority.Normal);
-            };
+            // Normal, never Loaded priority. The shell attaches the Companion tab hidden, so a Loaded
+            // play would spend the one-shot unseen: PlayIntro waits for effective visibility and
+            // CompanionRoomView.ResumeClocks calls it again when the tab is shown.
+            Loaded += (_, _) => Dispatcher.UIThread.Post(PlayIntro, DispatcherPriority.Normal);
         }
 
         /// <summary>True once the dormant sweep has been started (tests).</summary>
         internal bool ShimmerStarted { get; private set; }
 
-        /// <summary>WPF PlayIntro: the dormant shimmer, once, from a loaded tree.</summary>
+        /// <summary>WPF PlayIntro: the dormant shimmer, once, from a loaded and visible tree.</summary>
         public void PlayIntro()
         {
-            if (!IsLoaded || ViewModel is not { IsLive: false }) return;
+            // One-shot (re-entering the tab must not stack a second sweep), and only where it is seen.
+            if (_introPlayed || !IsLoaded || !IsEffectivelyVisible || ViewModel is not { IsLive: false }) return;
             var band = this.FindControl<Border>("DormantShimmer");
             var host = this.FindControl<Border>("DormantHost");
             if (band?.RenderTransform is not TransformGroup group) return;
@@ -65,6 +63,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             };
             band.Opacity = 1;
             shift.X = travel;
+            _introPlayed = true;
             ShimmerStarted = true;
         }
 
