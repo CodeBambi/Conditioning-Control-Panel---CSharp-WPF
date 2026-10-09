@@ -8,9 +8,9 @@
 // Deviations (each a ponytail):
 //   - LIVE face only. The PREVIEW face (another mod's companion, read-only) is the mod manager's;
 //     it lands with that host.
-//   - Look: the tube's PickableAvatarSets / AvatarSetTitle / SelectAvatarSet(int) are not on this
-//     head (the tube's SelectAvatarSet is inert until CoreModsHooks.SwitchCompanion is seeded; see
-//     AvatarTubeWindow.axaml.cs). The combo shows the set the tube is on, disabled.
+//   - Look: filled from the tube's EffectiveAvatarSets (WPF PickableAvatarSets) and picked through
+//     its SelectAvatarSet(int). The tube has no AvatarSetTitle on this head, so the titles are
+//     worked out here by the same rule (custom label, the set's persona, the legacy title).
 //   - Portrait: the glyph only. Needs AvatarTubeWindow.EmoteIdleClipUri (first frame of the idle
 //     emote) or a mod-folder pose resolver on this head.
 //   - "More personality options" (PersonalityStudio) and the perk picker (V2.PerkPicker) are not
@@ -84,6 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
             CmbAvatar = new ComboBox { MinHeight = 30, HorizontalAlignment = HorizontalAlignment.Stretch, Name = "CmbAvatar" };
             CmbPersonality = new ComboBox { MinHeight = 30, HorizontalAlignment = HorizontalAlignment.Stretch, Name = "CmbPersonality" };
             CmbPersonality.SelectionChanged += CmbPersonality_SelectionChanged;
+            CmbAvatar.SelectionChanged += CmbAvatar_SelectionChanged;
 
             var lookCol = new StackPanel { Children = { Label("modmgr_label_look"), CmbAvatar } };
             var persCol = new StackPanel { Children = { Label("modmgr_label_personality"), CmbPersonality } };
@@ -199,11 +200,74 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
                 TxtAvatarHint.IsVisible = true;
                 return;
             }
-            TxtAvatarHint.IsVisible = false;
-            // ponytail: one item, the live set, until the tube exposes PickableAvatarSets + SelectAvatarSet(int).
-            var item = new ComboBoxItem { Content = new TextBlock { Text = TxtLiveName.Text }, Tag = tube.CurrentAvatarSet };
-            CmbAvatar.Items.Add(item);
-            CmbAvatar.SelectedItem = item;
+            FillLooks(tube.EffectiveAvatarSets(), tube.CurrentAvatarSet);
+        }
+
+        /// <summary>The look list: one item per pickable set, the live one selected. One look
+        /// means nothing to pick, so the combo greys and the hint says why (WPF FillAvatars).</summary>
+        internal void FillLooks(int[] sets, int current)
+        {
+            bool single = sets.Length <= 1;
+            bool wasSyncing = _syncing;
+            _syncing = true;   // selecting the live set below is not a pick
+            try
+            {
+                CmbAvatar.Items.Clear();
+                foreach (var set in sets)
+                {
+                    // A TextBlock, not a string: Avalonia reads "_" in a string as an access key.
+                    var item = new ComboBoxItem { Content = new TextBlock { Text = SetTitle(set, single) }, Tag = set };
+                    CmbAvatar.Items.Add(item);
+                    if (set == current) CmbAvatar.SelectedItem = item;
+                }
+            }
+            finally { _syncing = wasSyncing; }
+            CmbAvatar.IsEnabled = !single;
+            TxtAvatarHint.IsVisible = single;
+            if (single) TxtAvatarHint.Text = Loc.Get("modmgr_avatar_single_hint");
+        }
+
+        /// <summary>Test seam: the tube's SelectAvatarSet. Null = the live tube.</summary>
+        internal Func<int, bool>? SelectLook { get; set; }
+
+        private void CmbAvatar_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_syncing || CmbAvatar.SelectedItem is not ComboBoxItem { Tag: int set }) return;
+            try
+            {
+                // The tube's own door: the same switch its arrows take (saves the pick, switches
+                // the persona behind sets 3+, reloads the art).
+                bool switched = SelectLook != null ? SelectLook(set) : Shell?.Invoke()?.Tube?.SelectAvatarSet(set) == true;
+                if (switched) Refresh();
+            }
+            catch (Exception ex) { Log.Warning(ex, "[CompanionPicker] look switch failed"); Refresh(); }
+        }
+
+        // WPF AvatarTubeWindow.AvatarSetTitle, minus the portrait-skin branch (portrait mode is not
+        // on this head): a one-look mod reads as the companion, then the mod's own label, the
+        // persona the set belongs to, the legacy title. Mod-aware, not upper-cased.
+        private static readonly string[] SetTitleKeys =
+        {
+            "avatar_title_basic_bimbo", "avatar_title_dumb_airhead", "avatar_title_synthetic_blowdoll",
+            "avatar_title_perfect_fuckpuppet", "avatar_title_brainwashed_slavedoll",
+            "avatar_title_platinum_puppet", "avatar_title_bambi_cow",
+        };
+
+        internal static string SetTitle(int set, bool single)
+        {
+            if (single) return LiveName();
+            string title;
+            var custom = CoreMods.ActiveModPackage?.Manifest?.CustomAvatarSets?.FirstOrDefault(c => c.SetNumber == set);
+            CompanionId? persona = set switch
+            {
+                3 => CompanionId.OGBambiSprite, 4 => CompanionId.CultBunny, 5 => CompanionId.BrainParasite,
+                6 => CompanionId.BambiTrainer, 7 => CompanionId.BimboCow, _ => null,
+            };
+            if (custom != null && !string.IsNullOrWhiteSpace(custom.Label)) title = custom.Label;
+            else if (persona.HasValue)
+                title = CompanionDefinition.GetById(persona.Value).GetDisplayName(CoreSettings.Current?.SlutModeEnabled ?? false);
+            else title = Loc.Get(SetTitleKeys[Math.Clamp(set - 1, 0, SetTitleKeys.Length - 1)]);
+            return CoreMods.MakeModAware(title ?? string.Empty);
         }
 
         private void FillPersonalities()
