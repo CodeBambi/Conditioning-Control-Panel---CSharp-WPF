@@ -47,6 +47,7 @@ public sealed class FriendsRailChip : Grid
         Children.Add(_popup);
         _popup.Opened += (_, _) => { _face.Background = FriendsDrawer.Raised; Drawer.OnOpened(); };
         _popup.Closed += (_, _) => { _face.Background = Brushes.Transparent; Drawer.OnClosed(); };
+        Drawer.OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
         Drawer.CloseRequested += () => _popup.IsOpen = false;
         Drawer.SettingsRequested += () => (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab("appsettings");
         Drawer.SignInRequested += () => { _popup.IsOpen = false; _ = (TopLevel.GetTopLevel(this) as MainShellWindow)?.OpenUnifiedLoginDialog(); };

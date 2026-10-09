@@ -30,7 +30,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// ponytail: needs JustDropOrdersService and the tab FX clock, wired when those move to
     /// Core. Reveal spoilers and the Catalogue chip are wired. The remaining wiring points,
     /// all named in the XAML, are:
-    ///   BtnSharePreset /
     ///   BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
     ///   preset chip clicks and IsVisibleChanged -> OnPresetsTabVisibilityChanged (the card-sheen
@@ -54,6 +53,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CmbRackSort.SelectionChanged += CmbRackSort_SelectionChanged;
             TxtRackSearch.TextChanged += TxtRackSearch_TextChanged;
             BtnExportPreset.Click += BtnExportPreset_Click;
+            // WPF BtnSharePreset_Click (MainWindow.PresetIO.cs:192).
+            BtnSharePreset.Click += async (_, _) =>
+            {
+                if (_selectedPreset is { IsDefault: false } p && Shell is { } owner) await owner.SharePresetToCatalogueAsync(p);
+            };
             BtnLoadPreset.Click += BtnLoadPreset_Click;
             BtnSaveOverPreset.Click += BtnSaveOverPreset_Click;
             BtnDeletePreset.Click += BtnDeletePreset_Click;
@@ -351,8 +355,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 PresetCardsPanel.Children.Insert(at++, PresetChip(preset));
         }
 
-        /// <summary>WPF's SelectPreset (MainWindow.Presets.cs:461). Share stays disabled: the
-        /// preset Share-to-catalogue submission is split out (shell-preset-io).</summary>
+        /// <summary>WPF's SelectPreset (MainWindow.Presets.cs:461).</summary>
         private void SelectPreset(Preset preset)
         {
             _selectedPreset = preset;
@@ -383,6 +386,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnSaveOverPreset.IsEnabled = !preset.IsDefault;
             BtnDeletePreset.IsEnabled = !preset.IsDefault;
             BtnExportPreset.IsEnabled = true;
+            BtnSharePreset.IsEnabled = !preset.IsDefault;
             UpdatePresetShareStatusBadge(preset);
             RefreshSessionRackSelection();
         }
@@ -899,9 +903,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             export.Click += (_, e) => { e.Handled = true; ExportSession(session); };
             actions.Children.Add(export);
             // WPF SessionIO.cs:453-457: delete only where SessionManager.DeleteSession can succeed.
-            // ponytail: the share (☁) button needs the catalogue submission write path on this head.
             if (session.Source != SessionSource.BuiltIn)
             {
+                // WPF SessionBtn_Share (MainWindow.SessionIO.cs:1827).
+                var share = RowAction("☁", Loc.Get("tooltip_share_to_catalogue"), danger: false);
+                share.IsEnabled = true;
+                share.Click += async (_, e) =>
+                {
+                    e.Handled = true;
+                    if (Shell is { } owner) await owner.ShareSessionToCatalogueAsync(session);
+                };
+                actions.Children.Add(share);
                 var delete = RowAction("\U0001F5D1", Loc.Get("tooltip_delete_session"), danger: true);
                 delete.IsEnabled = true;
                 delete.Click += (_, e) => { e.Handled = true; ConfirmDeleteSession(session); };

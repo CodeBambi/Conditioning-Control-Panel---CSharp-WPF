@@ -23,6 +23,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Another fullscreen interaction (mandatory video, lock card, pop quiz) is on screen:
         /// the game waits for it (WPF InteractionQueue.CanStart / TryStart(queue: true)).</summary>
         bool OtherInteractionActive => false;
+        /// <summary>The game can play at all (Avalonia: the shared LibVLC loaded). False skips it,
+        /// as WPF skips before counting it started (BubbleCountService.cs:373).</summary>
+        bool CanPlay => true;
     }
 
     /// <summary>
@@ -187,6 +190,14 @@ namespace ConditioningControlPanel.Services
         {
             var path = PickNext();
             if (path == null) return false;
+            if (!_host.CanPlay)
+            {
+                // WPF's skip: not a loss - a failed count would start the strict WRONG! WATCH AGAIN loop.
+                Log.Warning("BubbleCountService: skipping game - video playback is not available");
+                _retryCount = 0;
+                Idle();
+                return true;
+            }
             CoreProgression.TrackBubbleCountGameStarted();
             try { _host.Show(path, CoreSettings.Current.BubbleCountDifficulty, strict, OnComplete); }
             catch (Exception ex) { Log.Error(ex, "Failed to start bubble count game"); Idle(); _retryCount = 0; }

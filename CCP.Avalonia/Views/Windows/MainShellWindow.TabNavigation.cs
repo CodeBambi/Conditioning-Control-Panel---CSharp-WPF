@@ -27,9 +27,9 @@
 //       * HasSeenProgramsTab and ProgramsIntroPopup.ShowIfFirstTime on "programs".
 //   - EmiDesk (EmiTargets.NoteTabOpened). The Bark hook is REAL now, through CoreBark, and fires
 //     in the same place WPF fires it - see ShowTab.
-//   - The keys that are WINDOWS, not tabs, and the one launcher door: "patreon" is wired (it
-//     opens Settings · Account, as WPF's ShowAppInfoPopup), "fyp" (OpenFypFeed), "justdrop" (the shop host)
-//     Each other is a documented no-op below until its service exists here. The "webapp" door is
+//   - The keys that are WINDOWS, not tabs, and the one launcher door: "patreon" (Settings · Account,
+//     as WPF ShowAppInfoPopup - wired), "fyp" (OpenFypFeed), "justdrop" (the shop host).
+//     fyp and justdrop are documented no-ops below until their service exists here. The "webapp" door is
 //     wired (DoorWebApp_Click opens it through the Launcher).
 //   - An "active" state on the rail. NavDoorButton has no :checked/.active selector on this
 //     head, so nothing is highlighted yet.
@@ -140,8 +140,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void ShowTab(string? tab)
         {
             tab = (tab ?? string.Empty).ToLowerInvariant();
-            // WPF MainWindow.TabNavigation.cs:126: the eliminated "patreon" tab redirects to
-            // Settings · Account (ShowAppInfoPopup -> ShowAccountSettings).
+            // WPF ShowTab("patreon") -> ShowAppInfoPopup -> ShowAccountSettings (MainWindow.TabNavigation.cs:126,
+            // MainWindow.AccountShell.cs:73): Settings, scrolled to Account. Before the bark, as there.
             if (tab == "patreon") { OpenAppSettingsSection("account"); return; }
             if (WindowKeys.Contains(tab)) return;                 // a window, not a tab - see header
 

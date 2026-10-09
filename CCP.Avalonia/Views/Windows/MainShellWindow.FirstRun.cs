@@ -26,7 +26,7 @@
 //     has nothing to hold back on this head. Nothing talks over the wizard here either way.
 //   * `QueueEmiKnock(knockSeenVersion)`, listed as dropped in MainShellWindow.axaml.cs already.
 //   * The rest of the `else` branch (ShowWhatsNewIfNeeded / TryPresentSeasonRecap). Returning users
-//     get no mod popup: WPF removed it (MainWindow.xaml.cs:610-611). MainShellWindow.Marquee.cs documents
+//     get no mod popup: WPF removed it (MainWindow.xaml.cs:587-588). MainShellWindow.Marquee.cs documents
 //     why those two are still stubs: they need App.Achievements, App.Seasons and App.xaml.cs's startup-dialog queue. One
 //     consequence worth naming: LastSeenVersion is therefore only ever stamped by the first-run
 //     gate below, never on an upgrade launch. That is pre-existing and this file does not
