@@ -74,9 +74,6 @@ namespace ConditioningControlPanel.Services
         /// <summary>Legacy rack width. The slideshow explicitly requests one slot.</summary>
         public const int RackSlots = 4;
 
-        /// <summary>Where a poster's pack URI is rooted.</summary>
-        private const string PackRoot = "pack://application:,,,/Resources/";
-
         /// <summary>The support page the rest of the app already links to.</summary>
         public const string PatreonUrl = "https://www.patreon.com/CodeBambi";
 
@@ -130,8 +127,8 @@ namespace ConditioningControlPanel.Services
         /// <summary>The roster, in the order the rack walks it.</summary>
         public static IReadOnlyList<BillboardCard> Roster => Cards;
 
-        /// <summary>The pack URI for a card's art.</summary>
-        public static string PosterUri(BillboardCard card) => PackRoot + card.Poster;
+        // The poster URI is the head's: WPF composes pack://application:,,,/Resources/{Poster}
+        // (BillboardPoster in MainWindow.DashboardBillboard.cs), Avalonia avares://.../Resources/{Poster}.
 
         /// <summary>Manual slide navigation wraps in both directions.</summary>
         public static int SlideIndex(int current, int direction, int count)

@@ -20,7 +20,7 @@ public class DeviceCodeInitiatePayloadTests
         Assert.Null(payload.AuthToken);
         Assert.Equal(new[] { "client", "version" }, payload.Body.Properties().Select(p => p.Name).ToArray());
         Assert.Equal("ccp-desktop", payload.Body["client"]!.Value<string>());
-        Assert.Equal(UpdateService.AppVersion, payload.Body["version"]!.Value<string>());
+        Assert.Equal(CoreReleaseContent.AppVersion, payload.Body["version"]!.Value<string>());
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class DeviceCodeInitiatePayloadTests
         Assert.Equal(Token, payload.AuthToken);
         Assert.Equal(Uid, payload.Body["unified_id"]!.Value<string>());
         Assert.Equal("ccp-desktop", payload.Body["client"]!.Value<string>());
-        Assert.Equal(UpdateService.AppVersion, payload.Body["version"]!.Value<string>());
+        Assert.Equal(CoreReleaseContent.AppVersion, payload.Body["version"]!.Value<string>());
         Assert.Equal(3, payload.Body.Count);
     }
 
