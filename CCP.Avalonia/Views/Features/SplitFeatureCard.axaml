@@ -37,10 +37,21 @@
                  Home fog repainting underneath does not re-sample the art every frame. -->
             <Panel x:Name="StaticFace">
               <Panel.CacheMode><BitmapCache/></Panel.CacheMode>
-            <Border x:Name="HalfHostA" CornerRadius="11"
-                    RenderOptions.BitmapInterpolationMode="HighQuality"/>
-            <Border x:Name="HalfHostB" CornerRadius="11"
-                    RenderOptions.BitmapInterpolationMode="HighQuality"/>
+            <!-- Each half = its art plus the greyscale twin over it (WPF HalfMuteA/B, CardMute.cs):
+                 the half panel carries the off dim and the triangle clip, so the grey layer is
+                 dimmed and clipped with the colour exactly as WPF's child layer is. -->
+            <Panel x:Name="HalfA">
+                <Border x:Name="HalfHostA" CornerRadius="11"
+                        RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                <Border x:Name="HalfMuteA" CornerRadius="11" IsHitTestVisible="False" Opacity="0"
+                        RenderOptions.BitmapInterpolationMode="HighQuality"/>
+            </Panel>
+            <Panel x:Name="HalfB">
+                <Border x:Name="HalfHostB" CornerRadius="11"
+                        RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                <Border x:Name="HalfMuteB" CornerRadius="11" IsHitTestVisible="False" Opacity="0"
+                        RenderOptions.BitmapInterpolationMode="HighQuality"/>
+            </Panel>
             </Panel>
 
             <!-- Per-half hover wash: opacity flips on pointer move, geometry rides the seam. -->
