@@ -243,7 +243,7 @@ internal sealed class ConversationPageVm : CompanionObservable
     public void OpenLink(ConversationLine line)
     {
         if (!line.HasLink || !CompanionLinkIndex.IsSanctioned(line.LinkUrl)) return;
-        _ = Platform.AppUpdater.OpenUrl(AvatarTubeWindow.Live, line.LinkUrl!);
+        Runtime.CompanionLinkLauncher.Open(line.LinkUrl);
     }
 
     public void OpenActivity(ConversationAction action)

@@ -266,7 +266,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     if (!handled) onSpoken?.Invoke();
 
                     bool typed = !SpeechInstant;
-                    if (typed) StartTypewriter(text, slow); else { StopTypewriter(); _txtSpeech.Text = StripLinks(text); }
+                    if (typed) StartTypewriter(text, slow); else { StopTypewriter(); _txtSpeech.Text = StripLinks(text); LinkSpeech(text); }
                     _txtSpeech.FontSize = StripLinks(text).Length > 250 ? 14 : 15;   // WPF AdjustBubbleSize
                     _speechScroller.Offset = default;
                     _speechBubble.MaxWidth = SpeechBubbleMaxWidth;
@@ -360,6 +360,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             StopTypewriter();
             _typewriterFullText = StripLinks(fullText);
+            _typewriterSourceText = fullText;
             _typewriterIndex = 0;
             var generation = ++_typewriterGeneration;
             _txtSpeech.Text = string.Empty;
@@ -386,7 +387,19 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             {
                 _typewriterTimer?.Stop();
                 _typewriterTimer = null;
+                LinkSpeech(_typewriterSourceText);
             }
+        }
+
+        private string _typewriterSourceText = string.Empty;
+
+        /// <summary>WPF PopulateSpeechBubble: once the line is fully on screen, the titles and urls
+        /// in it become pink underlined links (markdown, known titles, fuzzy hits, raw urls). While
+        /// it types it is plain text; any later write to the bubble's Text drops the links again.</summary>
+        private void LinkSpeech(string? sourceText)
+        {
+            try { ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime.CompanionLinkedText.Apply(_txtSpeech, sourceText); }
+            catch (Exception ex) { Log.Warning("[Speech] link pass failed: {Type}", ex.GetType().Name); }
         }
 
         private void StopTypewriter()
@@ -402,6 +415,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (_typewriterTimer == null) return;
             StopTypewriter();
             _txtSpeech.Text = _typewriterFullText;
+            LinkSpeech(_typewriterSourceText);
         }
 
         // ------------------------------------------------------------------ voice

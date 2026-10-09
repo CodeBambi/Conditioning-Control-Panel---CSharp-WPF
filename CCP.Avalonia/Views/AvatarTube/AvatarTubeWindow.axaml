@@ -47,9 +47,7 @@
        ItemsControl DataTrigger IsUser -> Classes.user="{Binding IsUser}" + a Style selector.
                                           Avalonia has no DataTriggers.
        Tag="{Binding Text}" +
-       Loaded="ChatHistoryText_Loaded" -> Text="{Binding Text}".
-                                          ponytail: the WPF loader re-rendered each history line as
-                                          Inlines with clickable video links; link detection is lost.
+       Loaded="ChatHistoryText_Loaded" -> crt:CompanionLinkedText.Text="{Binding Text}" (same links as the bubble).
        Window.CommandBindings          -> dropped. Avalonia has no CommandBindings.
                                           The user's chat shortcut is NOT lost with them:
                                           ApplyChatShortcutTo (code-behind) builds the KeyBinding
@@ -61,6 +59,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         xmlns:at="clr-namespace:ConditioningControlPanel.Avalonia.Views.AvatarTube"
+        xmlns:crt="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime"
         x:Class="ConditioningControlPanel.Avalonia.Views.AvatarTube.AvatarTubeWindow"
         Title="{loc:Str dialog_avatar_tube}"
 
@@ -270,7 +269,7 @@
                                                     Classes.user="{Binding IsUser}"
                                                     CornerRadius="10" Padding="9,6" Margin="2,3" MaxWidth="380">
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Text}"
+                                                    <TextBlock crt:CompanionLinkedText.Text="{Binding Text}"
                                                                Foreground="White"
                                                                FontSize="14"
                                                                TextWrapping="Wrap"/>

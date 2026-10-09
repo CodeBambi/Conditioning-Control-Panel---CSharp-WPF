@@ -180,11 +180,10 @@ namespace ConditioningControlPanel.Avalonia
                 || Views.Windows.BubbleCountWindow.IsAnyOpen() || Views.Windows.PopQuizWindow.IsAnyOpen()
                 || ConditioningControlPanel.Services.LockdownService.Current?.IsActive == true;   // WPF App.xaml.cs:696
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.OpenLink = url =>
-            {
-                if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
-                    _ = Platform.AppUpdater.OpenUrl(Views.AvatarTube.AvatarTubeWindow.Live, url!);
-                else Serilog.Log.Warning("Companion watch chip refused a non-https link");
-            };
+                // WPF CompanionAskService: an ask choice opens its link through the one launcher.
+                // Posted: the shell and its browser are UI-thread only.
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    Views.Controls.Companion.Runtime.CompanionLinkLauncher.Open(url));
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.Start();
         }
 
