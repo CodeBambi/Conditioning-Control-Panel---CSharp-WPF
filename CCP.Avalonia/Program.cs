@@ -228,7 +228,12 @@ namespace ConditioningControlPanel.Avalonia
             var builder = AppBuilder.Configure<App>()
                 .UsePlatformDetect()      // Win32 on Windows, X11 on Linux (12.1.2 has no Wayland backend)
                 .WithInterFont()
-                .LogToTrace();
+                .LogToTrace()
+                // Home keeps ~85 MB of tile pictures on the GPU; Avalonia's default 28 MB Skia cache
+                // re-uploaded them every frame (Platform/RenderBudget.cs has the trace numbers).
+                .With(new SkiaOptions { MaxGpuResourceSizeBytes = Platform.RenderBudget.GpuResourceCacheBytes });
+            if (OperatingSystem.IsWindows())
+                builder = builder.With(Win32Options());
             // Pinned, not detected: every desktop overlay is an X11 override-redirect window
             // (Platform/X11Overlay.cs), and under a future native Wayland backend those calls would
             // silently no-op. On a Wayland session this runs through XWayland.
@@ -237,6 +242,47 @@ namespace ConditioningControlPanel.Avalonia
             return OperatingSystem.IsLinux()
                 ? builder.UseX11().With(new X11PlatformOptions { WmClass = AppId })
                 : builder;
+        }
+
+        /// <summary>The Win32 presentation path. Avalonia's defaults (WinUI composition over ANGLE on
+        /// the primary adapter) unless CCP_WIN32_COMPOSITION / CCP_WIN32_RENDERING / CCP_GPU_ADAPTER
+        /// say otherwise (Platform/RenderBudget.cs); the adapter list is logged once either way, so a
+        /// log says which GPU drew the frames.</summary>
+        private static global::Avalonia.Win32PlatformOptions Win32Options()
+        {
+            var o = new global::Avalonia.Win32PlatformOptions();
+            var comp = Platform.RenderBudget.ParseModes<global::Avalonia.Win32CompositionMode>(
+                Environment.GetEnvironmentVariable("CCP_WIN32_COMPOSITION"), s => s switch
+                {
+                    "winui" => global::Avalonia.Win32CompositionMode.WinUIComposition,
+                    "dcomp" => global::Avalonia.Win32CompositionMode.DirectComposition,
+                    "swapchain" => global::Avalonia.Win32CompositionMode.LowLatencyDxgiSwapChain,
+                    "redirection" => global::Avalonia.Win32CompositionMode.RedirectionSurface,
+                    _ => null,
+                });
+            if (comp != null) o.CompositionMode = comp;
+            var rend = Platform.RenderBudget.ParseModes<global::Avalonia.Win32RenderingMode>(
+                Environment.GetEnvironmentVariable("CCP_WIN32_RENDERING"), s => s switch
+                {
+                    "angle" => global::Avalonia.Win32RenderingMode.AngleEgl,
+                    "wgl" => global::Avalonia.Win32RenderingMode.Wgl,
+                    "vulkan" => global::Avalonia.Win32RenderingMode.Vulkan,
+                    "software" => global::Avalonia.Win32RenderingMode.Software,
+                    _ => null,
+                });
+            if (rend != null) o.RenderingMode = rend;
+            if (comp != null || rend != null)
+                Serilog.Log.Information("Win32 presentation override: composition {C}, rendering {R}",
+                    comp == null ? "default" : string.Join(",", comp), rend == null ? "default" : string.Join(",", rend));
+            o.GraphicsAdapterSelectionCallback = adapters =>
+            {
+                var names = adapters.Select(a => a.Description).ToList();
+                int pick = Platform.RenderBudget.ChooseAdapter(names, Environment.GetEnvironmentVariable("CCP_GPU_ADAPTER"));
+                Serilog.Log.Information("GPU adapters: {List}; rendering on #{Pick} {Name}",
+                    string.Join(" | ", names.Select((n, i) => $"#{i} {n}")), pick, names.Count > pick ? names[pick] : "?");
+                return pick;
+            };
+            return o;
         }
     }
 

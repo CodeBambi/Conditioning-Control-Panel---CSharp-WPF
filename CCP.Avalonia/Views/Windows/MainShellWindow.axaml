@@ -1120,17 +1120,22 @@
                          Effect on it (that rendered the whole banner subtree into an intermediate
                          surface every breath). MainShellWindow.BannerFx.cs breathes its opacity
                          (ambient, Full motion + window active) and flares it on every beat change. -->
+                    <!-- The halo is a BoxShadow on its own layer (smoothness lane, 2026-10-09), not a
+                         DropShadowEffect: an Effect made the host an offscreen layer re-blurred on
+                         every breath frame, and its breath ran as a 60 Hz Avalonia Animation that
+                         composed the whole window 60 times a second. CardGlow pattern: the blur is
+                         bound in code (BannerFx.cs), the Opacity breathes on the shared 30 fps beat. -->
+                    <Border Grid.Column="3" x:Name="HeaderBannerGlowLayer"
+                            CornerRadius="16" Height="31" Margin="12,0,12,0"
+                            Width="{Binding #HeaderBannerHost.Bounds.Width}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            IsHitTestVisible="False" Opacity="0.35"/>
                     <Border Grid.Column="3" x:Name="HeaderBannerGlowHost"
                             Background="{DynamicResource SurfaceBgBrush}"
                             CornerRadius="16" Height="31" Margin="12,0,12,0"
                             Width="{Binding #HeaderBannerHost.Bounds.Width}"
                             HorizontalAlignment="Center" VerticalAlignment="Center"
-                            IsHitTestVisible="False">
-                        <Border.Effect>
-                            <DropShadowEffect Color="{DynamicResource PinkColor}"
-                                              BlurRadius="12" OffsetX="0" OffsetY="0" Opacity="0.35"/>
-                        </Border.Effect>
-                    </Border>
+                            IsHitTestVisible="False"/>
                     <!-- Polish wave 13 (owner, 2026-10-07: "the marquee could use some three
                          dimensionality"): the pill is a SUNKEN screen under the depth law. The floor
                          is the well floor; the drum shade behind the text darkens the top (the lamp is

@@ -33,14 +33,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class MainShellWindow
     {
         private DispatcherTimer? _bannerSparkleTimer;
-        private CancellationTokenSource? _bannerBreath, _bannerFlash, _bannerSheenRun;
+        private CancellationTokenSource? _bannerFlash, _bannerSheenRun;
         private int _bannerSparkleSeed = Environment.TickCount;
         private DateTime _lastBannerSheenUtc = DateTime.MinValue;
         // Lazy: a static Geometry needs the render interface, and the shell type is touched before it exists in tests.
         private static Geometry? _bannerStar;
         private static Geometry BannerStar => _bannerStar ??= Geometry.Parse(BannerRules.SparkleStarPath);
 
-        private DropShadowEffect? BannerGlow => Named<Border>("HeaderBannerGlowHost")?.Effect as DropShadowEffect;
+        /// <summary>The halo layer behind the banner pill: a BoxShadow in PinkColor whose Opacity
+        /// breathes on the shared beat and whose blur flares on a beat change (never an Effect).</summary>
+        private Border? BannerGlow
+        {
+            get
+            {
+                if (Named<Border>("HeaderBannerGlowLayer") is not { } layer) return null;
+                if (layer.BoxShadow.Count == 0)
+                    layer.BoxShadow = Features.CardGlow.Shadow(this.FindResource("PinkColor"), BannerRules.GlowBlur);
+                return layer;
+            }
+        }
+
+        private Features.BreathClock? _bannerBreathClock;
+        private global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock? _bannerFlareClock;
+
+        /// <summary>The halo breath rides the shared beat (tests).</summary>
+        internal bool BannerBreathRunning => _bannerBreathClock?.IsRunning == true;
 
         /// <summary>Starts or parks the banner's two ambient loops (the halo's breath and the
         /// sparkle repeat). Called on load, on activation changes and on a motion-level change.</summary>
@@ -52,23 +69,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var host = Named<Border>("HeaderBannerGlowHost");
                 if (host != null)
                 {
-                    _bannerBreath?.Cancel();
-                    _bannerBreath = null;
-                    if (BannerRules.Breathe(ambient) && BannerGlow != null)
+                    _bannerBreathClock?.Stop();
+                    if (BannerRules.Breathe(ambient) && BannerGlow is { } glow)
                     {
-                        _bannerBreath = new CancellationTokenSource();
-                        _ = new Animation
-                        {
-                            Duration = TimeSpan.FromSeconds(BannerRules.BreathSeconds),
-                            IterationCount = IterationCount.Infinite,
-                            PlaybackDirection = PlaybackDirection.Alternate,
-                            Easing = new SineEaseInOut(),
-                            Children =
-                            {
-                                new KeyFrame { Cue = new Cue(0), Setters = { new Setter(DropShadowEffect.OpacityProperty, BannerRules.BreathMin) } },
-                                new KeyFrame { Cue = new Cue(1), Setters = { new Setter(DropShadowEffect.OpacityProperty, BannerRules.BreathMax) } },
-                            },
-                        }.RunAsync(BannerGlow, _bannerBreath.Token);
+                        // Same curve as the Animation it replaces (Alternate + SineEaseInOut over
+                        // BreathSeconds), stepped on the shared 30 fps beat with the Home loops.
+                        _bannerBreathClock ??= new Features.BreathClock(glow, BannerRules.BreathSeconds);
+                        _bannerBreathClock.Start((glow, BannerRules.BreathMin, BannerRules.BreathMax));
                     }
                     else if (BannerGlow is { } rest) rest.Opacity = BannerRules.GlowRest;
                 }
@@ -79,7 +86,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     {
                         _bannerSparkleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(BannerRules.SparkleRepeatSeconds) };
                         _bannerSparkleTimer.Tick += BannerSparkleTimer_Tick;
-                        Closed += (_, _) => { _bannerSparkleTimer?.Stop(); _bannerBreath?.Cancel(); };
+                        Closed += (_, _) => { _bannerSparkleTimer?.Stop(); _bannerBreathClock?.Stop(); _bannerFlareClock?.Stop(); };
                     }
                     if (!_bannerSparkleTimer.IsEnabled) _bannerSparkleTimer.Start();
                 }
@@ -182,10 +189,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (BannerGlow is { } glow)
             {
                 double flareAt = (double)BannerRules.GlowFlarePeakMs / BannerRules.FlashMs;
-                _ = SampledAnimation(DropShadowEffect.BlurRadiusProperty, BannerRules.FlashMs, u =>
+                double Blur(double u) =>
                     u <= flareAt ? BannerRules.GlowBlur + (BannerRules.GlowFlareBlur - BannerRules.GlowBlur) * u / flareAt
-                                 : BannerRules.GlowFlareBlur - (BannerRules.GlowFlareBlur - BannerRules.GlowBlur) * QuadOut((u - flareAt) / (1 - flareAt)))
-                    .RunAsync(glow, _bannerFlash.Token);
+                                 : BannerRules.GlowFlareBlur - (BannerRules.GlowFlareBlur - BannerRules.GlowBlur) * QuadOut((u - flareAt) / (1 - flareAt));
+                // The blur flare steps on the frame clock (a BoxShadow is not animatable), IN and OUT
+                // within FlashMs, and lands exactly on GlowBlur.
+                _bannerFlareClock?.Stop();
+                var started = DateTime.UtcNow;
+                var clock = _bannerFlareClock = new global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock(glow) { Interval = TimeSpan.FromSeconds(1.0 / 30) };
+                clock.Tick += (_, _) =>
+                {
+                    double u = Math.Min(1, (DateTime.UtcNow - started).TotalMilliseconds / BannerRules.FlashMs);
+                    Features.CardGlow.SetBlur(glow, Blur(u));
+                    if (u >= 1) clock.Stop();
+                };
+                clock.Start();
             }
         }
 

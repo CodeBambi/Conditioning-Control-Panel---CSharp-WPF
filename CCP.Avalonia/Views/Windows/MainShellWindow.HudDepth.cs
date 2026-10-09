@@ -34,7 +34,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     {
         private bool _hudInitialized;
         private double _xpMeniscusFillWidth;
-        private CancellationTokenSource? _xpMeniscusPulse, _xpSheenLoop, _levelChipPop;
+        private CancellationTokenSource? _xpSheenLoop, _levelChipPop;
+        private Features.BreathClock? _xpMeniscusBreath;
+
+        /// <summary>The meniscus pulse rides the shared beat (tests).</summary>
+        internal bool XpMeniscusBreathRunning => _xpMeniscusBreath?.IsRunning == true;
 
         /// <summary>One-time wiring for the header and XP row (OnLoaded). Guarded as a whole: a
         /// chrome flourish that cannot build must never stop the shell from opening.</summary>
@@ -77,7 +81,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Closed += (_, _) =>
                 {
                     AmbientFxCanvas.Env.MotionGateChanged -= OnHudMotionGateChanged;
-                    _xpMeniscusPulse?.Cancel();
+                    _xpMeniscusBreath?.Stop();
                     _xpSheenLoop?.Cancel();
                 };
 
@@ -235,24 +239,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 if (Named<Border>("XPMeniscus") is not { } dot) return;
-                _xpMeniscusPulse?.Cancel();
-                _xpMeniscusPulse = null;
                 var ambient = HudAmbientAllowed;
                 var rest = HudDepthRules.XpMeniscusOpacity(_xpMeniscusFillWidth, ambientAllowed: false);
+                _xpMeniscusBreath?.Stop();
                 if (rest <= 0 || !ambient) { dot.Opacity = rest; return; }
-                _xpMeniscusPulse = new CancellationTokenSource();
-                _ = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(HudDepthRules.XpMeniscusPulseSeconds),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Easing = new SineEaseInOut(),
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0), Setters = { new Setter(OpacityProperty, HudDepthRules.XpMeniscusMinOpacity) } },
-                        new KeyFrame { Cue = new Cue(1), Setters = { new Setter(OpacityProperty, HudDepthRules.XpMeniscusMaxOpacity) } },
-                    },
-                }.RunAsync(dot, _xpMeniscusPulse.Token);
+                // On the shared 30 fps beat (smoothness lane, 2026-10-09): an infinite Avalonia
+                // Animation ticks at 60 Hz and makes the whole window compose 60 frames a second
+                // (each one a full-window layer blit) for a dot nobody can see pulse that fast.
+                _xpMeniscusBreath ??= new Features.BreathClock(dot, HudDepthRules.XpMeniscusPulseSeconds);
+                _xpMeniscusBreath.Start((dot, HudDepthRules.XpMeniscusMinOpacity, HudDepthRules.XpMeniscusMaxOpacity));
             }
             catch (Exception ex) { Log.Debug("ApplyXpMeniscusPulse: {E}", ex.Message); }
         }

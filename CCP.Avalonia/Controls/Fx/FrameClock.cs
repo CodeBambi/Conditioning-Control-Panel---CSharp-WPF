@@ -171,8 +171,31 @@ namespace ConditioningControlPanel.Avalonia.Controls.Fx
             return beat.Due;
         }
 
+        // ---- CCP_FRAME_STATS=1 (smoothness lane, 2026-10-09) --------------------------------
+        // One animation-frame callback = one composed frame of this window while any clock listens,
+        // so counting them is the composed frame rate a trace cannot show per window. Logged every
+        // 5 s at Information: "frames 150 in 5.0 s = 30.0/s (4 clocks)". Off unless the variable is set.
+
+        private static readonly bool StatsOn = Environment.GetEnvironmentVariable("CCP_FRAME_STATS") == "1";
+        private int _statFrames;
+        private TimeSpan _statSince = TimeSpan.MinValue;
+
+        private void CountFrame(TimeSpan now)
+        {
+            if (_statSince == TimeSpan.MinValue) { _statSince = now; _statFrames = 0; return; }
+            _statFrames++;
+            var span = now - _statSince;
+            if (span < TimeSpan.FromSeconds(5)) return;
+            var name = _top.TryGetTarget(out var top) ? top.GetType().Name : "window";
+            Serilog.Log.Information("FrameStats {Window}: frames {N} in {S:0.0} s = {Fps:0.0}/s ({Clocks} clocks)",
+                name, _statFrames, span.TotalSeconds, _statFrames / span.TotalSeconds, _subs.Count);
+            _statSince = now;
+            _statFrames = 0;
+        }
+
         private void OnFrame(TimeSpan now)
         {
+            if (StatsOn) CountFrame(now);
             foreach (var s in _snapshot)
             {
                 try { s(now); }
