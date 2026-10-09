@@ -26,6 +26,16 @@ internal sealed class DashboardLogoRenderer : IDisposable
     private readonly SKImageFilter _waveBlur, _badgeBlur, _arcBlur, _sparkBlur;
     private readonly SKShader _waveSweep, _arcSweep, _sheen;
     private readonly SKRoundRect _frame;
+    // Static layers, built once (perf pass 2026-10-09: the dial cost 8 s of the UI thread's minute).
+    // The badge and arc glows are pre-blurred in the same 1024 px space the live filters ran in,
+    // so each frame composites them instead of running a blur; the artwork is resampled once per
+    // dial size instead of once per frame.
+    private readonly Blurred[] _badgeBlurred;
+    private readonly Blurred _arcBlurred;
+    private readonly SKBitmap _arcBlurWork;
+    private readonly SKCanvas _arcBlurCanvas;
+    private SKImage? _base;
+    private int _baseW, _baseH;
     private bool _disposed;
 
     public DashboardLogoRenderer(Stream artwork)
@@ -55,6 +65,11 @@ internal sealed class DashboardLogoRenderer : IDisposable
                 var radius = Math.Sqrt((x - 512) * (x - 512) + (y - 503) * (y - 503));
                 return radius > 209 && radius < 245;
             });
+            _badgeBlurred = new Blurred[_badges.Length];
+            for (var i = 0; i < _badges.Length; i++) _badgeBlurred[i] = Blur(_badges[i].Part.Glow, _badgeBlur, 8);
+            _arcBlurred = Blur(_arc.Glow, _arcBlur, 9);
+            _arcBlurWork = Own(new SKBitmap(_arcBlurred.Image.Width, _arcBlurred.Image.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+            _arcBlurCanvas = Own(new SKCanvas(_arcBlurWork));
             _waveSweep = Own(SKShader.CreateLinearGradient(new SKPoint(-72, 0), new SKPoint(72, 0),
                 new[] { SKColors.Transparent, SKColors.White, SKColors.Transparent }, new[] { 0f, .5f, 1f }, SKShaderTileMode.Clamp));
             _arcSweep = Own(SKShader.CreateSweepGradient(new SKPoint(267, 259),
@@ -74,11 +89,26 @@ internal sealed class DashboardLogoRenderer : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (width <= 0 || height <= 0) return;
         canvas.Clear(SKColors.Transparent);
-        canvas.Save();
-        canvas.Scale(width / 1024f, height / 1024f);
-        canvas.ClipRoundRect(_frame, SKClipOperation.Intersect, true);
-        canvas.DrawImage(_artImage, 0, 0, Linear, _image);
-        canvas.Restore();
+        canvas.DrawImage(Base(width, height), 0, 0, Linear, _image);
+    }
+
+    /// <summary>The clipped artwork at the dial's pixel size, resampled once per size.</summary>
+    private SKImage Base(int width, int height)
+    {
+        if (_base != null && _baseW == width && _baseH == height) return _base;
+        _base?.Dispose();
+        _base = null;
+        using var surface = SKSurface.Create(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        var c = surface.Canvas;
+        c.Clear(SKColors.Transparent);
+        c.Scale(width / 1024f, height / 1024f);
+        c.ClipRoundRect(_frame, SKClipOperation.Intersect, true);
+        c.DrawImage(_artImage, 0, 0, Linear, _image);
+        c.Flush();
+        _base = surface.Snapshot();
+        _baseW = width;
+        _baseH = height;
+        return _base;
     }
 
     /// <summary>Draws one frame. <paramref name="energy"/> is the drive, 0..1: the control never sends
@@ -92,10 +122,10 @@ internal sealed class DashboardLogoRenderer : IDisposable
         if (phase < 0) phase += Tau;
         energy = double.IsFinite(energy) ? Math.Clamp(energy, 0, 1) : 0;
         canvas.Clear(SKColors.Transparent);
+        canvas.DrawImage(Base(width, height), 0, 0, Linear, _image);
         canvas.Save();
         canvas.Scale(width / 1024f, height / 1024f);
         canvas.ClipRoundRect(_frame, SKClipOperation.Intersect, true);
-        canvas.DrawImage(_artImage, 0, 0, Linear, _image);
         for (var i = 0; i < _waves.Length; i++) DrawWave(canvas, _waves[i], i, phase, energy);
         DrawWord(canvas, phase);
         DrawArc(canvas, phase, energy);
@@ -168,7 +198,21 @@ internal sealed class DashboardLogoRenderer : IDisposable
         part.WorkCanvas.DrawPaint(_mask);
         _mask.Shader = null;
         part.WorkCanvas.Restore();
-        Glow(canvas, part.Work, part.X, part.Y, .45 + .68 * energy, .55, _arcBlur);
+        // The bloom: the PRE-blurred glow under the same rotating sweep (the sweep is ~170 px wide
+        // at this radius against a 9 px blur, so masking after the blur reads the same).
+        var pad = _arcBlurred.Pad;
+        _arcBlurCanvas.Clear(SKColors.Transparent);
+        _arcBlurCanvas.DrawImage(_arcBlurred.Image, 0, 0);
+        _arcBlurCanvas.Save();
+        _arcBlurCanvas.RotateDegrees((float)((phase * 2 + .4) * 180 / Math.PI), 267 + pad, 259 + pad);
+        _arcBlurCanvas.Translate(pad, pad);
+        _mask.Shader = _arcSweep;
+        _arcBlurCanvas.DrawPaint(_mask);
+        _mask.Shader = null;
+        _arcBlurCanvas.Restore();
+        var alpha = .45 + .68 * energy;
+        Screen(canvas, part.Work, part.X, part.Y, alpha);
+        Screen(canvas, _arcBlurWork, part.X - pad, part.Y - pad, alpha * .55);
     }
 
     private void DrawBadges(SKCanvas canvas, double phase, double energy)
@@ -179,7 +223,11 @@ internal sealed class DashboardLogoRenderer : IDisposable
             var pulse = i < 3 ? Periodic(phase * 2, i * .57, .36)
                 : Periodic(phase * 3, i == 3 ? .45 : 3.75, .60);
             var strength = (i < 3 ? .22 : .46) + energy * .48;
-            Glow(canvas, part.Glow, part.X, part.Y, pulse * strength, .55, _badgeBlur);
+            var alpha = Math.Clamp(pulse * strength, 0, 1);
+            if (Alpha(alpha) == 0) continue;   // a dark badge draws nothing either way
+            Screen(canvas, part.Glow, part.X, part.Y, alpha);
+            var b = _badgeBlurred[i];
+            ScreenImage(canvas, b.Image, part.X - b.Pad, part.Y - b.Pad, alpha * .55);
         }
     }
 
@@ -195,6 +243,39 @@ internal sealed class DashboardLogoRenderer : IDisposable
         _image.ImageFilter = null;
         _image.Color = SKColors.White;
         _image.BlendMode = SKBlendMode.SrcOver;
+    }
+
+    /// <summary>A bitmap screened onto the dial at <paramref name="alpha"/> (the sharp half of Glow).</summary>
+    private void Screen(SKCanvas canvas, SKBitmap bitmap, float x, float y, double alpha)
+    {
+        _image.BlendMode = SKBlendMode.Screen;
+        _image.Color = SKColors.White.WithAlpha(Alpha(Math.Clamp(alpha, 0, 1)));
+        Blit(canvas, bitmap, x, y, _image);
+        _image.Color = SKColors.White;
+        _image.BlendMode = SKBlendMode.SrcOver;
+    }
+
+    private void ScreenImage(SKCanvas canvas, SKImage image, float x, float y, double alpha)
+    {
+        _image.BlendMode = SKBlendMode.Screen;
+        _image.Color = SKColors.White.WithAlpha(Alpha(Math.Clamp(alpha, 0, 1)));
+        canvas.DrawImage(image, x, y, Linear, _image);
+        _image.Color = SKColors.White;
+        _image.BlendMode = SKBlendMode.SrcOver;
+    }
+
+    /// <summary>A bitmap blurred once by <paramref name="filter"/> (sigma <paramref name="sigma"/>),
+    /// padded by three sigma so the halo is not cut.</summary>
+    private Blurred Blur(SKBitmap source, SKImageFilter filter, int sigma)
+    {
+        var pad = sigma * 3;
+        using var surface = SKSurface.Create(new SKImageInfo(source.Width + pad * 2, source.Height + pad * 2,
+            SKColorType.Bgra8888, SKAlphaType.Premul));
+        surface.Canvas.Clear(SKColors.Transparent);
+        using (var paint = new SKPaint { ImageFilter = filter })
+            Blit(surface.Canvas, source, pad, pad, paint);
+        surface.Canvas.Flush();
+        return new Blurred(Own(surface.Snapshot()), pad);
     }
 
     private void DrawSparks(SKCanvas canvas, double phase, double energy)
@@ -301,8 +382,11 @@ internal sealed class DashboardLogoRenderer : IDisposable
         _disposed = true;
         for (var i = _owned.Count - 1; i >= 0; i--) _owned[i].Dispose();
         _owned.Clear();
+        _base?.Dispose();
+        _base = null;
     }
 
+    private sealed record Blurred(SKImage Image, int Pad);
     private sealed record Badge(int X, int Y, int Radius, Part Part);
     private sealed record Part(int X, int Y, int Width, int Height, SKBitmap Art, SKBitmap Glow,
         SKBitmap Work, SKBitmap Light, SKCanvas WorkCanvas, SKCanvas LightCanvas,

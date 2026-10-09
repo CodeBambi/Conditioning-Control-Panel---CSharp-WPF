@@ -33,7 +33,7 @@ public sealed class AnimatedLogoDial : Grid
     private readonly FrameClock _clock;
     private readonly Stopwatch _watch = new();
     private DashboardLogoRenderer? _renderer;
-    private IDisposable? _visWatch;
+    private IDisposable? _visWatch, _stateWatch;
     private double _last, _phase, _energy;
     private bool _failed, _hooked;
 
@@ -52,6 +52,11 @@ public sealed class AnimatedLogoDial : Grid
         {
             _visWatch?.Dispose();
             _visWatch = EffectiveVisibility.Watch(this, Refresh);
+            // A minimised window parks the dial (perf pass 2026-10-09); restoring restarts it.
+            _stateWatch?.Dispose();
+            _stateWatch = TopLevel.GetTopLevel(this) is Window w
+                ? w.GetObservable(Window.WindowStateProperty).Subscribe(new StatePing(this))
+                : null;
             if (!_hooked) { AmbientFxCanvas.Env.MotionGateChanged += Refresh; _hooked = true; }
             Refresh();
         };
@@ -59,6 +64,8 @@ public sealed class AnimatedLogoDial : Grid
         {
             _visWatch?.Dispose();
             _visWatch = null;
+            _stateWatch?.Dispose();
+            _stateWatch = null;
             if (_hooked) { AmbientFxCanvas.Env.MotionGateChanged -= Refresh; _hooked = false; }
             Stop();
         };
@@ -83,7 +90,15 @@ public sealed class AnimatedLogoDial : Grid
     /// <summary>The surface (tests read its paint count).</summary>
     internal FxSurface Surface => _surface;
 
-    private bool OnScreen => this.IsAttachedToVisualTree() && IsEffectivelyVisible;
+    private bool OnScreen => this.IsAttachedToVisualTree() && IsEffectivelyVisible
+        && TopLevel.GetTopLevel(this) is not Window { WindowState: WindowState.Minimized };
+
+    private sealed class StatePing(AnimatedLogoDial owner) : IObserver<WindowState>
+    {
+        public void OnNext(WindowState value) => owner.Refresh();
+        public void OnError(Exception error) { }
+        public void OnCompleted() { }
+    }
 
     private void Refresh()
     {

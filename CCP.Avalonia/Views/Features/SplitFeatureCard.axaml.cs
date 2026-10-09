@@ -298,9 +298,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
         private static void ApplyIcon(Border host, IImageBrushSource? src)
         {
-            host.Background = src == null
-                ? null
-                : new ImageBrush(src) { Stretch = Stretch.UniformToFill, AlignmentY = AlignmentY.Center };
+            // Direct draw, never an ImageBrush (see ArtFill): the mosaic repaints every frame.
+            ConditioningControlPanel.Avalonia.Controls.Fx.ArtFill.Paint(host, src, Stretch.UniformToFill, AlignmentY.Center);
         }
 
         // ============================== geometry ==============================
