@@ -1668,3 +1668,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-cloud-remember: +267
 - shell-remember stub -> wired (Core RememberedConfig, refusal mid-session, 9-language tooltips, fail-proven headless test, live ☆->★).
 - shell-cloud-backup kept as a stub by decision (P44): server contract pending, cross-OS path translation not designed; missing list recorded.
+
+## avalonia-port/programs-run-3-0: +220
+- Core schema-skew seam for programs.json: `Extra` at three levels, a `SchemaVersion` stamp that forces read-only, `IsReadOnly`, and a stepped `Now` clock. WPF's bytes are unchanged.
+- Logs checkpoint-B decision (c); Avalonia still calls `CreateReadOnly()`.
