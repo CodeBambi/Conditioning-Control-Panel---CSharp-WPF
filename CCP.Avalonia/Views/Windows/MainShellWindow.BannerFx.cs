@@ -148,8 +148,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var (scale, _) = BeatTransforms(beat);
             Func<double, double> pop = u => BannerRules.PopFrom + (1 - BannerRules.PopFrom) * BackOut(u, 0.6);
-            _ = SampledAnimation(ScaleTransform.ScaleXProperty, BannerRules.PopMs, pop).RunAsync(scale);
-            if (popY) _ = SampledAnimation(ScaleTransform.ScaleYProperty, BannerRules.PopMs, pop).RunAsync(scale);
+            SampledTween(scale, ScaleTransform.ScaleXProperty, BannerRules.PopMs, pop);
+            if (popY) SampledTween(scale, ScaleTransform.ScaleYProperty, BannerRules.PopMs, pop);
         }
 
         /// <summary>Polish wave 13: at Full motion the drum rolls one face - the old beat rolls up
@@ -168,10 +168,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var ms = BannerRules.RollMs;
             Func<double, double> awayIn = u => u * u;                      // QuadraticEase In
             Func<double, double> settle = u => BackOut(u, BannerRules.RollSettle);
-            _ = SampledAnimation(TranslateTransform.YProperty, ms, u => -BannerRules.RollTravelPx * awayIn(u)).RunAsync(outSlide);
-            _ = SampledAnimation(ScaleTransform.ScaleYProperty, ms, u => 1 + (BannerRules.RollSquash - 1) * awayIn(u)).RunAsync(outScale);
-            _ = SampledAnimation(TranslateTransform.YProperty, ms, u => BannerRules.RollTravelPx * (1 - settle(u))).RunAsync(inSlide);
-            _ = SampledAnimation(ScaleTransform.ScaleYProperty, ms, u => BannerRules.RollSquash + (1 - BannerRules.RollSquash) * settle(u)).RunAsync(inScale);
+            SampledTween(outSlide, TranslateTransform.YProperty, ms, u => -BannerRules.RollTravelPx * awayIn(u), rest: 0);
+            SampledTween(outScale, ScaleTransform.ScaleYProperty, ms, u => 1 + (BannerRules.RollSquash - 1) * awayIn(u), rest: 1);
+            SampledTween(inSlide, TranslateTransform.YProperty, ms, u => BannerRules.RollTravelPx * (1 - settle(u)), rest: 0);
+            SampledTween(inScale, ScaleTransform.ScaleYProperty, ms, u => BannerRules.RollSquash + (1 - BannerRules.RollSquash) * settle(u), rest: 1);
             return true;
         }
 
@@ -235,10 +235,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var delay = TimeSpan.FromSeconds(f.DelaySeconds);
                 Animation Delayed(Animation a) { a.Delay = delay; return a; }
                 double from = f.FromX - f.Size / 2, to = f.ToX - f.Size / 2;
-                _ = Delayed(SampledAnimation(TranslateTransform.XProperty, runMs, u => from + (to - from) * (0.5 - 0.5 * Math.Cos(Math.PI * u)))).RunAsync(slide);
-                _ = Delayed(SampledAnimation(ScaleTransform.ScaleXProperty, runMs, BannerRules.TwinkleAt)).RunAsync(scale);
-                _ = Delayed(SampledAnimation(ScaleTransform.ScaleYProperty, runMs, BannerRules.TwinkleAt)).RunAsync(scale);
-                _ = Delayed(SampledAnimation(RotateTransform.AngleProperty, runMs, u => f.Spin * u)).RunAsync(rotate);
+                SampledTween(slide, TranslateTransform.XProperty, runMs, u => from + (to - from) * (0.5 - 0.5 * Math.Cos(Math.PI * u)), delayMs: delay.TotalMilliseconds);
+                SampledTween(scale, ScaleTransform.ScaleXProperty, runMs, BannerRules.TwinkleAt, delayMs: delay.TotalMilliseconds);
+                SampledTween(scale, ScaleTransform.ScaleYProperty, runMs, BannerRules.TwinkleAt, delayMs: delay.TotalMilliseconds);
+                SampledTween(rotate, RotateTransform.AngleProperty, runMs, u => f.Spin * u, delayMs: delay.TotalMilliseconds);
                 Delayed(SampledAnimation(OpacityProperty, runMs, BannerRules.AlphaAt)).RunAsync(sprite)
                     .ContinueWith(_ => Dispatcher.UIThread.Post(() => layer.Children.Remove(sprite)));
             }
@@ -296,9 +296,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var ms = (int)(BannerRules.SheenSeconds * 1000);
                 _bannerSheenRun?.Cancel();
                 _bannerSheenRun = new CancellationTokenSource();
-                _ = SampledAnimation(TranslateTransform.XProperty, ms,
-                        u => -bandWidth + (width + bandWidth * 1.25) * (0.5 - 0.5 * Math.Cos(Math.PI * u)))
-                    .RunAsync(slide, _bannerSheenRun.Token);
+                SampledTween(slide, TranslateTransform.XProperty, ms,
+                    u => -bandWidth + (width + bandWidth * 1.25) * (0.5 - 0.5 * Math.Cos(Math.PI * u)),
+                    token: _bannerSheenRun.Token);
                 _ = SampledAnimation(OpacityProperty, ms, u =>
                         u < 0.20 ? BannerRules.SheenPeak * u / 0.20
                         : u <= 0.75 ? BannerRules.SheenPeak
@@ -321,6 +321,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 anim.Children.Add(new KeyFrame { Cue = new Cue(u), Setters = { new Setter(property, f(u)) } });
             }
             return anim;
+        }
+
+        /// <summary>The same sampled curve written straight onto a Transform. Animation.RunAsync on a
+        /// Transform throws (TransformAnimator casts its target to Visual), so every transform target
+        /// in this file goes through Helpers/TransformTween. <paramref name="rest"/> is where the
+        /// property lands when the run ends (the old FillMode.None); null holds the last sample.</summary>
+        internal static DispatcherTimer? SampledTween(AvaloniaObject target, AvaloniaProperty property, int ms,
+            Func<double, double> f, double? rest = null, double delayMs = 0, CancellationToken token = default, int steps = 16)
+        {
+            try
+            {
+                double total = Math.Max(1, ms + Math.Max(0, delayMs));
+                double lead = Math.Max(0, delayMs) / total;
+                var keys = new List<(double, AvaloniaProperty, double)>(steps + 3);
+                if (lead > 0) keys.Add((0, property, f(0)));
+                for (int i = 0; i <= steps; i++)
+                {
+                    var u = (double)i / steps;
+                    keys.Add((Math.Min(rest.HasValue ? 0.9999 : 1, lead + (1 - lead) * u), property, f(u)));
+                }
+                if (rest.HasValue) keys.Add((1, property, rest.Value));
+                return Helpers.TransformTween.Run(target, TimeSpan.FromMilliseconds(total), keys, null, false, token);
+            }
+            catch (Exception ex) { Log.Debug("SampledTween: {E}", ex.Message); return null; }
         }
 
         private static double QuadOut(double u) => 1 - (1 - u) * (1 - u);

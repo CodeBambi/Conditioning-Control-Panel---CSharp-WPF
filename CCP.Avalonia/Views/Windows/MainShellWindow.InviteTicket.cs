@@ -105,22 +105,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF WobbleInviteTicket: a 420 ms shake about the -8 degree rest and a small pop.</summary>
         private void WobbleInviteTicket()
         {
+          try
+          {
             if (_inviteTicketWobble != null) _inviteTicketWobble.Interval = InviteTicketRule.NextWobble(_inviteTicketRng);
             if (!AmbientFxCanvas.Env.AllowTransitions || !IsVisible || Named<Button>("BtnInviteTicket") is not { IsVisible: true } ticket
                 || ticket.Content is not Control { RenderTransform: TransformGroup g }
                 || g.Children[0] is not ScaleTransform scale || g.Children[1] is not RotateTransform tilt) return;
             const double rest = -8;
-            _ = Run(tilt, RotateTransform.AngleProperty, 420, (0.1667, rest - 14), (0.381, rest + 11), (0.595, rest - 8), (0.798, rest + 4), (1, rest));
-            _ = Run(scale, ScaleTransform.ScaleXProperty, 280, (0.5, 1.12), (1, 1.0));
-            _ = Run(scale, ScaleTransform.ScaleYProperty, 280, (0.5, 1.12), (1, 1.0));
-
-            static Task Run(Animatable target, global::Avalonia.AvaloniaProperty prop, int ms, params (double Cue, double Value)[] frames)
-            {
-                var a = new Animation { Duration = TimeSpan.FromMilliseconds(ms), Easing = new global::Avalonia.Animation.Easings.QuadraticEaseOut() };
-                foreach (var (cue, value) in frames) a.Children.Add(new KeyFrame { Cue = new Cue(cue), Setters = { new Setter(prop, value) } });
-                return a.RunAsync(target);
-            }
+            // Animation.RunAsync on a Transform throws (TransformAnimator casts to Visual) and this runs
+            // from a timer tick, so the keys go through TransformTween and the tick is guarded.
+            var ease = new global::Avalonia.Animation.Easings.QuadraticEaseOut();
+            _inviteTiltRun?.Stop();
+            _inviteTiltRun = Helpers.TransformTween.Run(tilt, TimeSpan.FromMilliseconds(420),
+                new (double, global::Avalonia.AvaloniaProperty, double)[]
+                {
+                    (0, RotateTransform.AngleProperty, rest), (0.1667, RotateTransform.AngleProperty, rest - 14),
+                    (0.381, RotateTransform.AngleProperty, rest + 11), (0.595, RotateTransform.AngleProperty, rest - 8),
+                    (0.798, RotateTransform.AngleProperty, rest + 4), (1, RotateTransform.AngleProperty, rest),
+                }, ease);
+            _invitePopRun?.Stop();
+            _invitePopRun = Helpers.TransformTween.Run(scale, TimeSpan.FromMilliseconds(280),
+                new (double, global::Avalonia.AvaloniaProperty, double)[]
+                {
+                    (0, ScaleTransform.ScaleXProperty, 1.0), (0.5, ScaleTransform.ScaleXProperty, 1.12), (1, ScaleTransform.ScaleXProperty, 1.0),
+                    (0, ScaleTransform.ScaleYProperty, 1.0), (0.5, ScaleTransform.ScaleYProperty, 1.12), (1, ScaleTransform.ScaleYProperty, 1.0),
+                }, ease);
+          }
+          catch (Exception ex) { Log.Debug("WobbleInviteTicket: {E}", ex.Message); }
         }
+
+        private DispatcherTimer? _inviteTiltRun, _invitePopRun;
+        /// <summary>Test seam: the wobble's two runs (tilt, pop), null until the first wobble.</summary>
+        internal (DispatcherTimer? Tilt, DispatcherTimer? Pop) InviteWobbleRuns => (_inviteTiltRun, _invitePopRun);
+        internal void WobbleInviteTicketForTest() => WobbleInviteTicket();
 
         internal void BtnInviteTicket_Click(object? sender, RoutedEventArgs e) => OpenInvitesCard();
 

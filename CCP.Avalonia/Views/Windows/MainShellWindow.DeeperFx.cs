@@ -101,21 +101,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             catch (Exception ex) { Log.Debug("ApplyDeeperGlyphDrift: {E}", ex.Message); }
 
+            // Animation.RunAsync on a Transform throws (TransformAnimator casts to Visual), so the drift
+            // was inert. An ambient loop steps on the 30 fps frame clock instead: the same sine
+            // there-and-back as the WPF AutoReverse pair, starting at one end.
             void Drift(AvaloniaProperty property, double amplitude, double seconds)
             {
-                var anim = new Animation
+                var drift = _deeperGlyphDrift!;
+                var token = _deeperGlyphClock!.Token;
+                var owner = Named<Tabs.DeeperTabView>("DeeperTab")?.FindControl<TextBlock>("DeeperWaveGlyph");
+                if (owner == null) return;
+                var started = DateTime.UtcNow;
+                var clock = new global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock(owner) { Interval = TimeSpan.FromSeconds(1.0 / 30) };
+                clock.Tick += (_, _) =>
                 {
-                    Duration = TimeSpan.FromSeconds(seconds),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Easing = new SineEaseInOut(),
-                    Children =
+                    try
                     {
-                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(property, -amplitude) } },
-                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(property, amplitude) } },
-                    },
+                        if (token.IsCancellationRequested) { clock.Stop(); return; }
+                        double u = (DateTime.UtcNow - started).TotalSeconds / seconds;
+                        drift.SetValue(property, -amplitude * Math.Cos(Math.PI * u));
+                    }
+                    catch (Exception ex) { clock.Stop(); Log.Debug("DeeperGlyphDrift: {E}", ex.Message); }
                 };
-                _ = anim.RunAsync(_deeperGlyphDrift!, _deeperGlyphClock!.Token);
+                drift.SetValue(property, -amplitude);
+                clock.Start();
             }
         }
 

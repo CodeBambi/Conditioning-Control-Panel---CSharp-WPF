@@ -8,8 +8,9 @@
 // ponytail: ApplyActiveModChange repaints what this head has - the selector, the palette. WPF also
 // reloads the logo/takeover/feature art, the achievement grid, skill tree, secret skills, BambiCloud
 // radio + browser URL, the Hypnotube link editor, the tube's quick menu and the per-mod default
-// presets; each joins here when its surface is live on this head. The combo's "Open Mod Manager"
-// footer row (ModManagerEntryId) is not ported; the MOD capsule next to it opens the manager.
+// presets; each joins here when its surface is live on this head. The combo ends with the one row
+// that is not a mod (ModManagerEntryId, WPF MainWindow.xaml.cs:83): it opens the Mod Manager, as in
+// 7.1.5, where the MOD capsule is gone.
 
 using System;
 using System.Linq;
@@ -93,6 +94,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (_suppressModSelectorChange) return;
             if ((sender as ComboBox)?.SelectedItem is not ModSelectorItem item) return;
+            if (item.Id == ModManagerEntryId)
+            {
+                // Not a mod: put the chip back on the active one, then open the manager (deferred,
+                // for the same reason as the repaint below).
+                Dispatcher.UIThread.Post(() =>
+                {
+                    InitializeModSelector();
+                    ModManagerRowPicks++;
+                    if (!SuppressModManagerForTest) BtnManageMods_Click(this, new global::Avalonia.Interactivity.RoutedEventArgs());
+                }, DispatcherPriority.Normal);
+                return;
+            }
             if (AvApp.Mods == null || AvApp.Mods.ActiveModId == item.Id) return;
 
             AvApp.Mods.ActivateMod(item.Id);
@@ -110,6 +123,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!string.Equals(AvApp.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase)) return;
             ApplyActiveModChange();
         }
+
+        internal const string ModManagerEntryId = "__open_mod_manager__";
+        /// <summary>Test seams: picks of the footer row, and a headless run that opens no dialog.</summary>
+        internal int ModManagerRowPicks { get; private set; }
+        internal static bool SuppressModManagerForTest;
 
         /// <summary>WPF OpenModManagerFromLauncher: the launcher's "Manage mods" row.</summary>
         internal void OpenModManagerFromLauncher() => BtnManageMods_Click(this, new global::Avalonia.Interactivity.RoutedEventArgs());
@@ -186,6 +204,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     .Concat(mods.InstalledMods.Values.Where(m => !m.IsBuiltIn)
                         .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase))
                     .Select(BuildSelectorItem).ToList();
+                // WPF :2606: the footer row that is an action, not a mod.
+                rows.Add(new ModSelectorItem(ModManagerEntryId,
+                    ConditioningControlPanel.Localization.Loc.Get("label_open_mod_manager"), Brushes.Transparent));
                 // Rebuild only when the mod set changed. Unlike WPF, clearing an Avalonia ComboBox's
                 // items from inside its own SelectionChanged leaves the closed chip blank.
                 if (!rows.Select(r => (r.Id, r.Name)).SequenceEqual(AvailableMods.Select(r => (r.Id, r.Name))))

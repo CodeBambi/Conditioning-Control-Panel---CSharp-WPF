@@ -221,6 +221,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnQuickLogout.Click += BtnQuickLogout_Click;
             BtnLinkPhone.Click += BtnLinkPhone_Click;
             BtnDiscord.Click += BtnDiscord_Click;
+            SyncQuickRichPresence();
             ChkQuickDiscordRichPresence.IsCheckedChanged += ChkDiscordRichPresence_Changed;
 
             // Quick-toggles row.
@@ -263,9 +264,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             else Shell?.OpenStudioModule(key);
         }
 
-        private void CardMystery_Click(object? sender, RoutedEventArgs e) { }         // mw.CardMystery_Click(...)
+        /// <summary>WPF CardMystery_Click (MainWindow.Presets.cs:1084): the ? box navigates to today's
+        /// free feature. Navigate, never launch; the gate stays with the destination.</summary>
+        internal void CardMystery_Click(object? sender, RoutedEventArgs e)
+        {
+            try { if (MysteryTabFor(TodayFreeKey()) is { } tab) Shell?.ShowTab(tab); }
+            catch (Exception ex) { Serilog.Log.Debug("CardMystery_Click: {E}", ex.Message); }
+        }
         /// <summary>Clicking the revealed face is clicking the box - one navigation, two faces.</summary>
-        private void MysteryRevealFace_Click(object? sender, PointerReleasedEventArgs e) { }   // mw.CardMystery_Click(...)
+        private void MysteryRevealFace_Click(object? sender, PointerReleasedEventArgs e) => CardMystery_Click(sender, e);
+
+        /// <summary>The rotation's keys in WPF order. The service instance is private to App, so today's
+        /// key is read back through the same provider TierGate asks (CoreEntitlement.IsFreeToday).</summary>
+        internal static readonly string[] MysteryKeys = { "takeover", "awareness", "haptics", "voice", "fyp", "remote", "dtrh" };
+
+        internal static string? TodayFreeKey()
+        {
+            foreach (var key in MysteryKeys)
+                if (ConditioningControlPanel.CoreEntitlement.IsFreeToday(key)) return key;
+            return null;
+        }
+
+        internal static string? MysteryTabFor(string? key) => key switch
+        {
+            "takeover" => "bambitakeover",
+            "awareness" => "awareness",
+            "haptics" => "haptics",
+            "voice" => "shelistening",
+            "fyp" => "fyp",
+            "remote" => "remotecontrol",
+            "dtrh" => "play",   // Drop days go to the Play door, where the game's card lives
+            _ => null,
+        };
         private void CardVault_Click(object? sender, RoutedEventArgs e) => Shell?.BtnPatreonExclusives_Click(sender, e);
         /// <summary>The Deeper editor tile: ShowTab("deeper") and nothing else (owner, 2026-09-12:
         /// "the deeper editor should link and open the deeper page, not the editor").</summary>
@@ -338,7 +368,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Weekly intake pass card face (the flipped-over centre logo tile). Sits INSIDE
         /// LogoBrandFrame, so the click would otherwise bubble on into the logo's click-pulse
         /// easter egg; MainWindow's handler marks the event handled to stop that.</summary>
-        private void IntakePassFace_MouseLeftButtonDown(object? sender, PointerPressedEventArgs e) { } // mw.IntakePassFace_MouseLeftButtonDown(...)
+        internal void IntakePassFace_MouseLeftButtonDown(object? sender, PointerPressedEventArgs e)
+        {
+            e.Handled = true;   // never a logo poke
+            // The "(?)" belongs to its help popover (WPF MainWindow.UiUpdates.cs:1922).
+            if (e.Source is Visual src && BtnIntakePassHelp is { } help
+                && (ReferenceEquals(src, help) || global::Avalonia.VisualTree.VisualExtensions.IsVisualAncestorOf(help, src))) return;
+            // WPF BtnStartIntake_Click: the intake page owns every gate, so the face only goes there.
+            try { Shell?.ShowTab("gradedintake"); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Intake pass tile: open failed"); }
+        }
 
         // -- browser card ---------------------------------------------------------------
         private void BrowserLoadingText_Click(object? sender, PointerPressedEventArgs e) { }   // mw.BrowserLoadingText_Click(...)
@@ -374,14 +413,88 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private async void BtnLinkPhone_Click(object? sender, RoutedEventArgs e)
             => await new Dialogs.LinkPhoneDialog().ShowDialogSafe(TopLevel.GetTopLevel(this) as Window);
         private void BtnDiscord_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnDiscord_Click(sender, e);
-        private void ChkDiscordRichPresence_Changed(object? sender, RoutedEventArgs e) { }   // mw.ChkDiscordRichPresence_Changed(...)
+        private bool _syncingRichPresence;
+
+        /// <summary>Seeds the quick checkbox from settings without running its handler.</summary>
+        internal void SyncQuickRichPresence()
+        {
+            _syncingRichPresence = true;
+            try { ChkQuickDiscordRichPresence.IsChecked = CoreSettings.Current.DiscordRichPresenceEnabled; }
+            finally { _syncingRichPresence = false; }
+        }
+
+        /// <summary>WPF ChkDiscordRichPresence_Changed (MainWindow.AccountShell.cs:279): refused, with
+        /// the reason, unless a Discord is linked; otherwise the setting is written and saved.
+        /// SEAM(core): App.DiscordRpc.IsEnabled has no seam on this head, so the presence client
+        /// itself picks the setting up when it is ported.</summary>
+        internal void ChkDiscordRichPresence_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_syncingRichPresence) return;
+            try
+            {
+                var s = CoreSettings.Current;
+                bool on = ChkQuickDiscordRichPresence.IsChecked == true;
+                if (on && !s.HasLinkedDiscord)
+                {
+                    SyncQuickRichPresenceTo(false);
+                    if (TopLevel.GetTopLevel(this) is Window { IsVisible: true } owner && !SuppressDialogsForTest)
+                        _ = Dialogs.MessageDialog.ShowAsync(owner, ConditioningControlPanel.Localization.Loc.Get("label_discord_rich_presence"),
+                            ConditioningControlPanel.Localization.Loc.Get("msg_discord_rich_presence_requires_a_linked_disco"));
+                    return;
+                }
+                if (s.DiscordRichPresenceEnabled == on) return;
+                s.DiscordRichPresenceEnabled = on;
+                CoreSettings.Save();
+                Serilog.Log.Information("Discord Rich Presence {Status}", on ? "enabled" : "disabled");
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "ChkDiscordRichPresence_Changed failed"); }
+        }
+
+        private void SyncQuickRichPresenceTo(bool value)
+        {
+            _syncingRichPresence = true;
+            try { ChkQuickDiscordRichPresence.IsChecked = value; }
+            finally { _syncingRichPresence = false; }
+        }
+
+        /// <summary>Test seam: a headless run answers no dialogs.</summary>
+        internal static bool SuppressDialogsForTest;
 
         // -- quick-toggles row -----------------------------------------------------------
-        private void VelvetBtnWebcam_Click(object? sender, RoutedEventArgs e) { }            // mw.VelvetBtnWebcam_Click(...)
+        /// <summary>WPF VelvetBtnWebcam_Click (MainWindow.Presets.cs:1475): the bark this pill always
+        /// fired, then Settings, Devices.</summary>
+        internal void VelvetBtnWebcam_Click(object? sender, RoutedEventArgs e)
+        {
+            try { CoreBark.NotifyFeatureOpened("Webcam"); } catch { /* a bark never breaks a navigation */ }
+            Shell?.OpenDeviceSettings();
+        }
         /// <summary>Quick-toggles row · "System". This pill is the ONLY route to
         /// <c>MainWindow.CardSystem_Click</c> since the mosaic tile was deleted.</summary>
-        private void VelvetBtnSystem_Click(object? sender, RoutedEventArgs e) { }            // mw.CardSystem_Click(...)
-        private void VelvetBtnAppInfo_Click(object? sender, RoutedEventArgs e) { }           // mw.VelvetBtnAppInfo_Click(...)
+        internal void VelvetBtnSystem_Click(object? sender, RoutedEventArgs e)
+        {
+            try { CoreBark.NotifyFeatureOpened("System"); } catch { /* a bark never breaks a navigation */ }
+            Shell?.OpenAppSettingsSection("monitors");
+        }
+
+        private Features.FeaturePopupWindow? _appInfoPopup;
+        internal Features.FeaturePopupWindow? AppInfoPopup => _appInfoPopup;
+
+        /// <summary>WPF VelvetBtnAppInfo_Click (MainWindow.Presets.cs:1482): About + support forms in
+        /// the feature popup. One at a time; a second click replaces the first.</summary>
+        internal void VelvetBtnAppInfo_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _appInfoPopup?.Close();
+                var popup = new Features.FeaturePopupWindow(new Features.AppInfoFeatureControl(),
+                    ConditioningControlPanel.Localization.Loc.Get("label_app_info"), glyph: "\u2139");
+                popup.Closed += (_, _) => { if (ReferenceEquals(_appInfoPopup, popup)) _appInfoPopup = null; };
+                _appInfoPopup = popup;
+                if (TopLevel.GetTopLevel(this) is Window { IsVisible: true } owner) popup.Show(owner);
+                else popup.Show();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "VelvetBtnAppInfo_Click failed"); }
+        }
         private void VelvetBtnSchedulerRamp_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("scheduler");
         private void VelvetBtnCatalogue_Click(object? sender, RoutedEventArgs e) => Shell?.BtnCatalogue_Click(sender, e);
 

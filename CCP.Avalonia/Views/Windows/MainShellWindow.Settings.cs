@@ -325,9 +325,62 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        /// <summary>ponytail: see the "Still blocked" note at the top of this file - restoring
-        /// SaveSettings() here would make the shell a second writer of settings each Settings
-        /// section already owns and saves.</summary>
-        private void BtnSave_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        /// <summary>WPF BtnSave_Click (MainWindow.Settings.cs:377): the tick + ripple, then the write.
+        /// Every editor on this head already writes Current as it changes, so the save here is the
+        /// flush to disk and nothing is read back from controls (no second writer). The WPF
+        /// "keep these as a preset?" offer is not ported: the name prompt lives in the Presets tab.</summary>
+        internal void BtnSave_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            FlashSaveAbsorb();
+            try { CoreSettings.Save(); SaveClicks++; }
+            catch (Exception ex) { Log.Warning(ex, "BtnSave_Click: save failed"); }
+        }
+
+        /// <summary>Test seam: saves the bottom bar has flushed.</summary>
+        internal int SaveClicks { get; private set; }
+        internal int SaveAbsorbRuns { get; private set; }
+
+        /// <summary>WPF FlashSaveAbsorb (MainWindow.HeroFx.cs:702): a tick that draws itself, holds
+        /// 1.6 s and fades, and one ring off the button's edge. Decoration only, wrapped end to end.</summary>
+        internal void FlashSaveAbsorb()
+        {
+            try
+            {
+                if (!global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowTransitions) return;
+                var quadOut = new global::Avalonia.Animation.Easings.QuadraticEaseOut();
+                if (Named<global::Avalonia.Controls.Shapes.Path>("SaveTick") is { } tick)
+                {
+                    var dash = global::Avalonia.Controls.Shapes.Shape.StrokeDashOffsetProperty;
+                    _saveTickDraw?.Stop();
+                    _saveTickDraw = Helpers.TransformTween.Run(tick, TimeSpan.FromMilliseconds(400),
+                        new (double, global::Avalonia.AvaloniaProperty, double)[] { (0, dash, 9), (1, dash, 0) }, quadOut);
+                    const double hold = 1600, fade = 260;
+                    _saveTickLife?.Stop();
+                    _saveTickLife = Helpers.TransformTween.Run(tick, TimeSpan.FromMilliseconds(hold + fade),
+                        new (double, global::Avalonia.AvaloniaProperty, double)[]
+                        {
+                            (0, OpacityProperty, 1), (hold / (hold + fade), OpacityProperty, 1), (1, OpacityProperty, 0),
+                        });
+                }
+                if (Named<global::Avalonia.Controls.Border>("SaveRipple") is { RenderTransform: global::Avalonia.Media.ScaleTransform rig } ripple)
+                {
+                    double width = Named<global::Avalonia.Controls.Grid>("SaveAbsorbHost")?.Bounds.Width ?? 0;
+                    static double Grow(double size) => size <= 1 ? 1.0 : (size + 14.0) / size;
+                    var span = TimeSpan.FromMilliseconds(520);
+                    _saveRippleFade?.Stop();
+                    _saveRippleFade = Helpers.TransformTween.Run(ripple, span,
+                        new (double, global::Avalonia.AvaloniaProperty, double)[] { (0, OpacityProperty, 0.75), (1, OpacityProperty, 0) }, quadOut);
+                    var sx = global::Avalonia.Media.ScaleTransform.ScaleXProperty;
+                    var sy = global::Avalonia.Media.ScaleTransform.ScaleYProperty;
+                    _saveRippleGrow?.Stop();
+                    _saveRippleGrow = Helpers.TransformTween.Run(rig, span,
+                        new (double, global::Avalonia.AvaloniaProperty, double)[] { (0, sx, 1), (1, sx, Grow(width)), (0, sy, 1), (1, sy, Grow(50)) }, quadOut);
+                }
+                SaveAbsorbRuns++;
+            }
+            catch (Exception ex) { Log.Debug("FlashSaveAbsorb: {E}", ex.Message); }
+        }
+
+        private global::Avalonia.Threading.DispatcherTimer? _saveTickDraw, _saveTickLife, _saveRippleFade, _saveRippleGrow;
     }
 }
