@@ -41,7 +41,7 @@ namespace ConditioningControlPanel.Services
     /// (<c>FinalizeWatchCredit</c> :7424) and the strict-key rules. Drawing is the head's
     /// <see cref="IMandatoryVideoHost"/>.
     /// ponytail: local library only - content-pack and remote clips, the duration filter
-    /// (MetadataCache; the max-length cap in <see cref="Guard"/> still holds the max), cascade/feed/DND/browser-media defers and the
+    /// (MetadataCache; the max-length cap in <see cref="Guard"/> still holds the max), cascade/feed/browser-media defers (DND = <see cref="ShouldDefer"/>) and the
     /// interaction queue are WPF-head services; add each here when it reaches Core.
     /// <para><b>Deliberate deviation:</b> a scheduled tick that finds an empty library re-arms the
     /// schedule. WPF returns from ContinueTriggerVideo (:2424) without ScheduleNext, so its schedule
@@ -99,6 +99,10 @@ namespace ConditioningControlPanel.Services
             _time = time ?? TimeProvider.System;
             _library = library ?? LocalLibrary;
         }
+
+        /// <summary>A SCHEDULED tick asks this first (WPF DoNotDisturbGuard.ShouldSuppressVideos at
+        /// VideoService.cs:3013); true = retry in <see cref="SkipRetrySeconds"/>. Hand triggers ignore it.</summary>
+        public Func<bool>? ShouldDefer { get; set; }
 
         public bool IsRunning => _running;
         /// <summary>A video is in pre-roll or on screen (WPF <c>_videoPlaying</c>).</summary>
@@ -281,7 +285,13 @@ namespace ConditioningControlPanel.Services
         {
             if (!_running || !ReferenceEquals(firedBy, _scheduler)) return;
             Dispose(ref _scheduler);
-            try { if (!_playing && !Trigger()) ScheduleNext(); }
+            try
+            {
+                if (_playing) return;
+                // WPF VideoService.cs:3013: the head's do-not-disturb rule reschedules, never drops.
+                if (ShouldDefer?.Invoke() == true) { ScheduleNext(SkipRetrySeconds); return; }
+                if (!Trigger()) ScheduleNext();
+            }
             catch (Exception ex)
             {
                 // WPF #388: a throwing trigger must not end the session's videos.

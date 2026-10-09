@@ -416,6 +416,7 @@ namespace ConditioningControlPanel.Avalonia
                 CoreFlash.ShowProvider = () =>
                 {
                     if (desktop.MainWindow is not { } host) return;
+                    if (Platform.DoNotDisturbGuard.HoldsScheduledFlash()) return;   // WPF FlashService.cs:689
                     Views.Overlays.FlashOverlay.TriggerOnce(host);
                     NoteFeatureUsed(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureFlash);
                 };
