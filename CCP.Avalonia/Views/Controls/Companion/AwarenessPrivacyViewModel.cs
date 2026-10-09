@@ -112,6 +112,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public string LegacyHead => Loc.Get("companion_awareness_legacy_head");
         public string LegacyBody => Loc.Get("companion_awareness_legacy_body");
         public string LegacyAction => Loc.Get("companion_awareness_legacy_action");
+        /// <summary>Hidden on this head: the dial's own consent already set AwarenessConsentShownV2, so
+        /// re-asking shows nothing and the band would stay - a button that cannot switch the v2
+        /// protections on (there is no v2 observer here) must not offer to. Show it when v2 lands.</summary>
+        public bool CanReviewConsent => false;
 
         // ------------------------------- the wire -------------------------------
 

@@ -29,6 +29,8 @@ namespace CCP.Avalonia.Tests;
 /// The desktop is never read: X11ActiveWindow is disabled for the whole test assembly.</summary>
 public sealed class AwarenessPrivacyCardTests
 {
+    /// <summary>Only fail-capable where DISPLAY is set (local runs): without an X display ReadTitle
+    /// returns "" anyway, so on headless CI this passes whether or not the guard is in place.</summary>
     [Fact]
     public void TestsNeverReadTheRealDesktop() => Assert.Equal("", X11ActiveWindow.ReadTitle());
 
