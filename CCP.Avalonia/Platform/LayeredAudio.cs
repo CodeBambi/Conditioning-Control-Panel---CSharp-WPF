@@ -222,7 +222,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     if (_disposed || _newest != c || !c.Playing) return;
                     var length = c.Player.Length;
                     if (length <= 0) return;   // unknown length: Retire restarts at the end
-                    var due = length - timeMs - OverlapMs;
+                    var due = Math.Max(100, length - OverlapMs) - timeMs;   // LoopVoice's 100 ms floor
                     if (due > 0)
                     {
                         _timerFor = c;

@@ -85,6 +85,8 @@ public sealed class BubbleCountQueueTests
         var shared = typeof(global::ConditioningControlPanel.Avalonia.Platform.LibVlcAudio).GetProperty("Shared",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
         var vlc = shared.GetValue(null);
+        var (prevStarted, started) = (CoreProgression.TrackBubbleCountGameStartedProvider, 0);
+        CoreProgression.TrackBubbleCountGameStartedProvider = () => started++;
         host.Scheduler = b;
         CoreEngine.BubbleCount = b;
         s.BubbleCountStrictLock = true;
@@ -97,10 +99,12 @@ public sealed class BubbleCountQueueTests
             Assert.Empty(BubbleCountWindow.OpenWindows);
             Assert.Empty(host.Messages);                           // no WRONG! WATCH AGAIN
             Assert.False(b.IsBusy);                                // skipped: the scheduler is free again
+            Assert.Equal(0, started);                              // WPF skips before counting it started
         }
         finally
         {
             shared.SetValue(null, vlc);
+            CoreProgression.TrackBubbleCountGameStartedProvider = prevStarted;
             b.ForceCleanup();
             host.CloseAll();
             (host.Scheduler, CoreEngine.BubbleCount, s.BubbleCountStrictLock) = (real, prevEngine, strict);

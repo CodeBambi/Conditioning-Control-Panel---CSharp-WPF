@@ -87,7 +87,22 @@ public sealed class HapticsCoreTests
     {
         var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         listener.Start();
-        var dialled = listener.AcceptTcpClientAsync().ContinueWith(t => { if (t.IsCompletedSuccessfully) { t.Result.Client.LingerState = new System.Net.Sockets.LingerOption(true, 0); t.Result.Dispose(); } return t.IsCompletedSuccessfully; });
+        // Reset EVERY connection (a retry left in the backlog would hang the handshake).
+        var dialled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    var c = await listener.AcceptTcpClientAsync();
+                    c.Client.LingerState = new System.Net.Sockets.LingerOption(true, 0);
+                    c.Dispose();
+                    dialled.TrySetResult(true);
+                }
+            }
+            catch { dialled.TrySetResult(false); }
+        });
         var url = $"ws://127.0.0.1:{((System.Net.IPEndPoint)listener.LocalEndpoint).Port}";
         var global = CoreSettings.Current.Haptics;
         var saved = global.ButtplugUrl;
@@ -99,7 +114,7 @@ public sealed class HapticsCoreTests
             Assert.Same(connect, await Task.WhenAny(connect, Task.Delay(TimeSpan.FromSeconds(30))));
             Assert.False(await connect);
             Assert.False(haptics.IsConnected);
-            Assert.True(await dialled.WaitAsync(TimeSpan.FromSeconds(5)), "the test's address was dialled, not Intiface's 12345");
+            Assert.True(await dialled.Task.WaitAsync(TimeSpan.FromSeconds(5)), "the test's address was dialled, not Intiface's 12345");
         }
         finally
         {
