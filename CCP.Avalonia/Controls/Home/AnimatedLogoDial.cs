@@ -63,6 +63,15 @@ public sealed class AnimatedLogoDial : Grid
             Stop();
         };
         PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) Refresh(); };
+        // Safety net for a missed visibility edge: the ancestor watch is captured at attach, and
+        // a page made visible by a host that swaps its own parent never reached it, so the dial
+        // sat on its still frame. Any layout pass that finds it on screen, parked and allowed to
+        // move starts it. Event-driven, never a loop; a running clock returns at the first test.
+        LayoutUpdated += (_, _) =>
+        {
+            if (_clock.IsEnabled || _failed || !OnScreen || !AmbientFxCanvas.Env.AllowAmbientLoops) return;
+            Refresh();
+        };
     }
 
     /// <summary>True while the clock runs (tests).</summary>
@@ -130,7 +139,9 @@ public sealed class AnimatedLogoDial : Grid
 
     private void Fail(Exception? ex)
     {
-        if (ex != null) Log.Debug("Logo dial fallback: {E}", ex.Message);
+        // Warning, not Debug: a still wordmark in the centre of Home is a visible regression and
+        // the only trace of why must survive the default log level.
+        Log.Warning("Logo dial fallback to the still wordmark: {E}", ex?.Message ?? "artwork not found");
         _failed = true;
         Stop();
         _renderer?.Dispose();

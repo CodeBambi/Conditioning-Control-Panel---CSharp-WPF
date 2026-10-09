@@ -233,4 +233,22 @@ public sealed class HomeLayoutTests
         tab.RefreshClickPreference();
         Assert.False(hint.IsVisible);
     }, s => { s.DashboardToggleHintUses = 0; s.DashboardInvertClicks = false; });
+
+    [Fact]
+    public Task The_logo_dial_moves_at_rest_on_the_live_shell() => WithHome((shell, tab) =>
+    {
+        var dial = tab.FindControl<AnimatedLogoDial>("ImgLogo")!;
+        int p0 = dial.Surface.PaintCount;
+        using var a = dial.Surface.CopyBacking();
+        for (int i = 0; i < 20; i++) { System.Threading.Thread.Sleep(25); Settle(); }
+        using var b = dial.Surface.CopyBacking();
+        Assert.NotNull(a); Assert.NotNull(b);
+        long diff = 0;
+        for (int y = 0; y < a!.Height; y += 2) for (int x = 0; x < a.Width; x += 2)
+        { var ca = a.GetPixel(x, y); var cb = b!.GetPixel(x, y); diff += Math.Abs(ca.Red - cb.Red) + Math.Abs(ca.Green - cb.Green) + Math.Abs(ca.Blue - cb.Blue); }
+        Assert.True(diff > 1000, $"two frames ~0.5 s apart must differ (diff {diff})");
+        Assert.True(dial.HasArtwork, "the dial art must load (else the still wordmark shows)");
+        Assert.True(dial.IsAnimating, "the clock must run at Full motion");
+        Assert.True(dial.Surface.PaintCount > p0 + 3, $"the dial must repaint over frames ({p0} -> {dial.Surface.PaintCount})");
+    });
 }
