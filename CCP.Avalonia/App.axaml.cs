@@ -649,6 +649,7 @@ namespace ConditioningControlPanel.Avalonia
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
                 Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
                 WireAchievementUnlocks(Achievements);
+                Platform.LoginStreak.Start(Achievements);   // progression#42: WPF AchievementService ctor + App.xaml.cs:2732 + CheckDayRollover
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 // WPF App.xaml.cs: the invite ladder's badges and the invites wire (friends' proxy and
