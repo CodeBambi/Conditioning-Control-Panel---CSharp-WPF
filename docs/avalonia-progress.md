@@ -1628,3 +1628,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-keyword-triggers: +606
 - Awareness custom trigger list (add/import/9 row editors), OCR combos persisted, OCR access gate + panel resync; 9-language strings; 3 fail-proven tests.
 - Rows stay stub: KeywordTriggerService/ScreenOcr/KeywordHighlight runtime (no Linux keystroke source) not ported.
+
+## avalonia-port/rows-patreon-subscribestar: +234
+- Premium celebration is back: a Patreon or SubscribeStar tier change, or the launch re-check, shows one card per tier (none for an invite week), via the presenter or Inbox. 2 fail-proven tests; live sandbox run showed the card.
+- shell-patreon and shell-subscribestar stay stub, with an exact missing list (live tier rise, unlockables/programs/profile-bubble repaint).
