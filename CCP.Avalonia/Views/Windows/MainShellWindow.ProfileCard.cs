@@ -88,6 +88,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                 var back = page.FindControl<Button>("BtnProfileBackToMe");
                 if (back is not null) back.IsVisible = !isSelf;
+
+                // WPF MainWindow.ProfileCard.cs:98: the spiral plate is yours alone, so it follows the same switch.
+                RefreshProfileSpiralPlate();
             }
             catch (Exception ex) { Log.Debug("SetProfileViewingSelf: {E}", ex.Message); }
         }
