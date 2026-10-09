@@ -341,6 +341,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     return;
                 }
                 _page = page;
+                // The header stat pills read the last page (WPF App.Leaderboard).
+                Windows.MainShellWindow.NoteLeaderboardPage(page.OnlineUsers, page.YourRank, page.YourTotal ?? page.TotalUsers);
                 _ranked.Clear();
                 _ranked.AddRange(LeaderboardClient.Rank(page.Entries!, allTime));
                 BakeRankDeltas(allTime ? "all-time" : "monthly");
