@@ -27,10 +27,19 @@ public class EmiDockRailFitTests
     }
 
     [Fact]
-    public void RootGridIsPinnedToTheRingHeight()
+    public void RootGridIsPinnedToTheRingAndItsLabel()
     {
+        // Nav polish wave 6 (2026-10-06): "EMI" moved UNDER the face like a door label, so the
+        // pinned height is the 40px ring + the label + the muted pill's line, the same whether
+        // she is out or not.
         var root = DockXaml().Root!.Elements().First(e => e.Name.LocalName == "Grid");
-        Assert.Equal("40", (string?)root.Attribute("Height"));
+        Assert.Equal("64", (string?)root.Attribute("Height"));
+        Assert.DoesNotContain(root.Elements(), e => e.Name.LocalName == "Grid.ColumnDefinitions");
+        var name = DockXaml().Descendants().First(e => (string?)e.Attribute(X + "Name") == "TxtName");
+        Assert.Equal("1", (string?)name.Attribute("Grid.Row"));
+        Assert.Equal("Center", (string?)name.Attribute("HorizontalAlignment"));
+        var muted = DockXaml().Descendants().First(e => (string?)e.Attribute(X + "Name") == "TxtMuted");
+        Assert.Equal("2", (string?)muted.Attribute("Grid.Row"));
     }
 
     [Fact]

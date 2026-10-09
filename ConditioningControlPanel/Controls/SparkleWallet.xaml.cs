@@ -33,11 +33,12 @@ public partial class SparkleWallet : UserControl
         {
             var sparkle = new System.Windows.Shapes.Polygon
             {
-                Points = new PointCollection { new(0, -5), new(3, 0), new(0, 5), new(-3, 0) },
+                Points = new PointCollection { new(0, -4), new(2.4, 0), new(0, 4), new(-2.4, 0) },
                 Fill = i % 2 == 0 ? Brushes.LightGoldenrodYellow : Brushes.HotPink,
                 Opacity = 0, RenderTransform = new TranslateTransform()
             };
-            Canvas.SetLeft(sparkle, 83 + i * 28); Canvas.SetTop(sparkle, 20 + i % 2 * 13);
+            // Placed over the balance of the 29 x 138 pill (nav polish wave 6 sized it natively).
+            Canvas.SetLeft(sparkle, 50 + i * 18); Canvas.SetTop(sparkle, 13 + i % 2 * 8);
             SparkleLayer.Children.Add(sparkle); _sparkles[i] = sparkle;
         }
         _gainTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromSeconds(1.6) };
@@ -200,7 +201,7 @@ public partial class SparkleWallet : UserControl
             fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
             fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(70 + i * 20))));
             fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(520))));
-            var rise = new DoubleAnimation(5, -12 - i % 2 * 6, TimeSpan.FromMilliseconds(520)) { FillBehavior = FillBehavior.Stop };
+            var rise = new DoubleAnimation(3, -8 - i % 2 * 4, TimeSpan.FromMilliseconds(520)) { FillBehavior = FillBehavior.Stop };
             Timeline.SetDesiredFrameRate(fade, 24); Timeline.SetDesiredFrameRate(rise, 24);
             sparkle.BeginAnimation(OpacityProperty, fade);
             ((TranslateTransform)sparkle.RenderTransform).BeginAnimation(TranslateTransform.YProperty, rise);

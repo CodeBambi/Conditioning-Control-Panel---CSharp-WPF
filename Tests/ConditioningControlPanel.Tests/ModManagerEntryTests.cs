@@ -54,10 +54,10 @@ public class ModManagerEntryTests
         Assert.DoesNotContain("x:Name=\"CmbLanguagePill\"", xaml);
         Assert.DoesNotContain("D MANAGER", xaml);
 
-        // The rail entry is the other door to the same dialog, and it keeps the same handler.
-        var rail = Regex.Match(xaml, "<Button x:Name=\"BtnNavMods\".*?>", RegexOptions.Singleline);
-        Assert.True(rail.Success, "BtnNavMods is gone from the rail");
-        Assert.Contains("Click=\"BtnManageMods_Click\"", rail.Value);
+        // Nav rework (2026-10-06): the rail row left; Library > Mods is a launcher pill in the
+        // section table, and the dialog keeps its one handler.
+        Assert.Contains(ConditioningControlPanel.Services.UI.NavSections.Find("library")!.Tabs,
+            t => t.Key == "mods" && t.Kind == ConditioningControlPanel.Services.UI.NavTabKind.Launcher);
 
         // No partial still reaches for the pill by name. Agent worktrees under .claude are other
         // branches' checkouts and are excluded, as in HeaderBannerTests.

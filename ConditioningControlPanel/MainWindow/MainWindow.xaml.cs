@@ -251,6 +251,9 @@ namespace ConditioningControlPanel
         public MainWindow()
         {
             InitializeComponent();
+            Services.Diagnostics.FxBisect.Watch(this);
+            // Nav rework: lane-owned pages register their ShowTab hosts (MainWindow.TabNavigation.cs).
+            RegisterLaneNavTabs();
 
             // Apply the user-configured chat shortcut. AvatarTubeWindow does the same
             // for itself; both windows respond to the same RoutedUICommand. We ALSO
@@ -302,6 +305,7 @@ namespace ConditioningControlPanel
                 // Nav rail collapse/hover-expand. After the FX inits on purpose: it caches a
                 // visual-tree walk of the rail, so every templated row has to be real first.
                 InitializeNavRail();
+                InitializeSectionEdge();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.UnregisterAll();
             // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
@@ -314,10 +318,10 @@ namespace ConditioningControlPanel
             var version = Services.UpdateService.GetCurrentVersion();
             // Phase 8: ProgressionTab.TxtVersion is gone. The two live version readouts seed
             // themselves - Settings · Updates (UpdatesSettingsSection.xaml.cs) and the System
-            // popup's AppInfoFeatureControl - alongside the three chrome labels below.
+            // popup's AppInfoFeatureControl - alongside the two chrome labels below. The header's
+            // own "vX.Y.Z" tag was cut in nav polish wave 4: the title bar already says it.
             Title = $"Conditioning Control Panel v{version}";
             TxtTitleBarVersion.Text = $"Conditioning Control Panel v{version}";
-            TxtHeaderVersion.Text = $"v{version}";
 
             // Center on primary monitor
             CenterOnPrimaryScreen();
@@ -558,6 +562,9 @@ namespace ConditioningControlPanel
                 // first launch and she does not get to talk over someone's first thirty seconds.
                 try { App.EmiDesk?.Fire("firstLaunchEver", null); } catch { }
 
+                // A fresh install never needs "What moved": the new layout is the only one it knows.
+                OfferWhatMovedIfNeeded(freshInstall: true);
+
                 // Priority 20 on the ladder. The three hand-rolled waits this replaces (30 s for
                 // the update dialog, 10 s for the window, then the open) all live in the presenter
                 // now, along with the give-up rule: five minutes without a free screen and the
@@ -607,6 +614,9 @@ namespace ConditioningControlPanel
             }
             else
             {
+                // Nav rework (2026-10-06): the one-time "What moved" card, upgrades only.
+                OfferWhatMovedIfNeeded(freshInstall: false);
+
                 // Not first launch - check if we need to show "What's New" after an update.
                 // Both of these now END in an EnqueueStartupModal (priorities 30 and 40); their
                 // own predicates still decide synchronously, right here, whether there is anything
@@ -766,13 +776,14 @@ namespace ConditioningControlPanel
                 if (failureCount >= 3)
                 {
                     App.Logger?.Warning("[SyncHealth] {Count} consecutive sync failures — notifying user", failureCount);
-                    // Show a subtle notification in the title bar area
-                    Title = $"Conditioning Control Panel — Cloud sync issue";
+                    // Show a subtle notification in the title bar area (composed with the
+                    // section crumb by UpdateNavTitle, so neither state wipes the other).
+                    SetSyncIssueTitle(true);
                 }
                 else if (failureCount == 0)
                 {
                     // Restore normal title
-                    Title = "Conditioning Control Panel";
+                    SetSyncIssueTitle(false);
                 }
             });
         }
@@ -2498,12 +2509,9 @@ namespace ConditioningControlPanel
                     if (TxtPlayerTitle.Effect is System.Windows.Media.Effects.DropShadowEffect glow)
                         glow.Color = accent;
                 }
-                if (TxtHeaderVersion != null)
-                    TxtHeaderVersion.Foreground = accentBrush;
-
                 // === XP/LEVEL DISPLAY ===
-                if (TxtLevelLabel != null)
-                    TxtLevelLabel.Foreground = accentBrush;
+                // The LVL chip is a filled pill with white text: the accent paints the pill.
+                PaintLevelChip(accent);
                 if (XPBar != null)
                 {
                     // Anchor 3: CCP Default gets BrandGradient, every other mod gets the solid accent it always had.
@@ -3522,8 +3530,13 @@ namespace ConditioningControlPanel
                     RelaxSizeFloorsTo(screenWidth, screenHeight);
 
                     if (SizeToContent != SizeToContent.Manual) SizeToContent = SizeToContent.Manual;
-                    if (screenWidth > 0) Width = Math.Min(Width, screenWidth);
-                    if (screenHeight > 0) Height = Math.Min(Height, screenHeight);
+                    // Uniform fit (nav polish wave 7): the canvas is Stretch="Fill", so capping each
+                    // axis on its own squashed the panel whenever only one axis overflowed, which the
+                    // 1954x1179 default does on every 1080p desk (height first). Both axes shrink by
+                    // the same factor; a window that already fits is left alone.
+                    var (fitW, fitH) = Services.UI.WindowFitRule.Fit(Width, Height, screenWidth, screenHeight);
+                    if (Math.Abs(fitW - Width) > 0.5) Width = fitW;
+                    if (Math.Abs(fitH - Height) > 0.5) Height = fitH;
 
                     Left = Math.Max(screenLeft, screenLeft + (screenWidth - Width) / 2);
                     Top = Math.Max(screenTop, screenTop + (screenHeight - Height) / 2);

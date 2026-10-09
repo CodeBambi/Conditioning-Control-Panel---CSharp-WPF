@@ -39,9 +39,6 @@ namespace ConditioningControlPanel
         private const double TabSlidePx = 12;
         private const double NavIconHoverScale = 1.06;
         private const int NavIconHoverMs = 150;
-        private const double NavGlowMinOpacity = 0.6;
-        private const double NavGlowMaxOpacity = 1.0;
-        private const double NavGlowBreathSeconds = 3.4;
         private const double StartGlowMinOpacity = 0.32;
         private const double StartGlowMaxOpacity = 0.72;
         private const double StartGlowBreathSeconds = 4.6;
@@ -63,9 +60,6 @@ namespace ConditioningControlPanel
         private string _pendingTabKey = "settings";
         private string _activeTabKey = "settings";
         private UIElement? _activeTabElement;
-        private Button? _navGlowButton;
-        private Button? _navGlowDoor;
-        private FrameworkElement? _navActiveBar;
         private DispatcherTimer? _startSheenTimer;
         private DateTime _lastBannerSheenUtc = DateTime.MinValue;
         private DispatcherTimer? _staggerCleanupTimer;
@@ -74,13 +68,10 @@ namespace ConditioningControlPanel
         private int _lastXpLevelShown = -1;
 
         /// <summary>
-        /// Every clickable row in the nav rail: seven door headers then the entries, rail order.
-        /// Null-tolerant: a couple are conditionally present.
-        ///
-        /// <para>This list is the ONLY thing that subscribes a rail row to the icon hover nudge
-        /// (§2.1). A row left out of it still gets the style's hover background, so the omission
-        /// reads as "that button feels slightly dead" rather than as a bug - keep it in sync with
-        /// the DoorEntries* panels in MainWindow.xaml whenever a row is added.</para>
+        /// Every clickable row in the nav rail: the seven sections then the Settings gear, rail
+        /// order. This list is the ONLY thing that subscribes a rail row to the icon hover nudge;
+        /// a row left out still gets the style's hover background, so the omission reads as
+        /// "that button feels slightly dead" rather than as a bug.
         /// </summary>
         private IEnumerable<Button> NavButtons
         {
@@ -88,14 +79,7 @@ namespace ConditioningControlPanel
             {
                 var all = new[]
                 {
-                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorWebApp, DoorSettings,
-                    BtnSettings,
-                    BtnNavStudio, BtnPresets, BtnNavHaptics, BtnNavJustDrop,
-                    BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
-                    BtnLab, BtnDeeper, BtnPatreonExclusives, BtnNavGradedIntake, BtnNavLockdown,
-                    BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,
-                    BtnDiscordTab, BtnNavSpiral, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
-                    BtnOpenAssetsTop, BtnNavMods, BtnNavCatalogue, BtnNavPhrases, BtnNavMediaLog,
+                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorSocial, DoorYou, DoorLibrary, DoorSettings,
                 };
                 return all.Where(b => b != null)!;
             }
@@ -137,7 +121,7 @@ namespace ConditioningControlPanel
                 // wait for a Loaded event to make its canvas eligible to tick.
                 EnsureEventBurstLayer();
 
-                ApplyNavActiveGlow(NavButtonForTab(_activeTabKey));
+                ApplyNavActiveGlow();
                 // Velvet Kit 2 lane B's hero moments (START charge + XP meniscus) ride this same
                 // lifecycle rather than hooking Activated / Deactivated / StateChanged again.
                 InitializeHeroFx();
@@ -150,7 +134,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var active = IsActive && WindowState != WindowState.Minimized;
+                var active = (IsActive || Services.Diagnostics.FxBisect.Off("forceactive")) && WindowState != WindowState.Minimized;
                 if (active == _chromeFxWindowActive) return;
                 _chromeFxWindowActive = active;
                 ApplyChromeFxLoops();
@@ -168,18 +152,17 @@ namespace ConditioningControlPanel
             if (!_chromeFxInitialized) return;
             try
             {
-                ApplyNavActiveGlow(_navGlowButton);
+                ApplyNavActiveGlow();
                 ApplyChromeFxLoops();
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshChromeFx: {E}", ex.Message); }
         }
 
         /// <summary>The single gate for every chrome ambient loop: window focus + motion + tier.</summary>
-        private bool ChromeAmbientAllowed => _chromeFxWindowActive && MotionFx.AllowAmbientLoops;
+        private bool ChromeAmbientAllowed => _chromeFxWindowActive && MotionFx.AllowAmbientLoops && !Services.Diagnostics.FxBisect.Off("chrome");
 
         private void ApplyChromeFxLoops()
         {
-            ApplyNavGlowBreath();
             ApplyStartButtonGlow();
             ApplyXpSheen();
             // PR-2's dashboard loops ride the same funnel rather than hooking Activated /
@@ -187,6 +170,8 @@ namespace ConditioningControlPanel
             ApplyDashboardFxLoops();
             // Velvet Kit 2 (FX lane B): START charge / ring exhale / heartbeat + XP meniscus pulse.
             ApplyHeroFxLoops();
+            // Nav polish wave 6: the header banner's glow breath + 12 s sparkle repeat.
+            ApplyBannerFxLoops();
 
             try
             {
@@ -531,130 +516,15 @@ namespace ConditioningControlPanel
             return scale;
         }
 
-        /// <summary>The rail entry that owns a tab key. Since Phase 1 every reachable key has
-        /// its own row, so nothing borrows the Exclusives launcher's highlight any more.</summary>
-        private Button? NavButtonForTab(string? tab) => (tab ?? string.Empty).ToLowerInvariant() switch
-        {
-            "settings" or "progression" => BtnSettings,
-            "studio" => BtnNavStudio,
-            "presets" => BtnPresets,
-            // Phase 4: haptics is a Studio rack module, but it keeps its own rail entry and its
-            // own tab key, so it keeps lighting its own row - not the rack's.
-            "haptics" => BtnNavHaptics,
-            "companion" => BtnCompanion,
-            "bambitakeover" => BtnNavBambiTakeover,
-            "shelistening" => BtnNavSheListening,
-            "awareness" => BtnNavAwareness,
-            // Phase 6: one rail row, two keys. "play" is the live key; "lab" is the permanent
-            // alias that ShowTab still answers to, and it has to light the same row or a legacy
-            // caller leaves the indicator wherever it was.
-            "play" or "lab" => BtnLab,
-            "deeper" => BtnDeeper,
-            "exclusives" => BtnPatreonExclusives,
-            "gradedintake" => BtnNavGradedIntake,
-            "lockdown" => BtnNavLockdown,
-            "blinktrainer" => BtnNavBlinkTrainer,
-            "remotecontrol" => BtnNavRemoteControl,
-            "availablesubjects" => BtnAvailableSubjects,
-            "discord" => BtnDiscordTab,
-            // The Spiral Room. The row is Collapsed for most accounts and that is fine here: a
-            // collapsed button still takes the indicator, and the only ways to reach the tab while
-            // the row is hidden are the fuse chip and the first-light reveal - both moments where a
-            // "you are here" bar pointing at an invisible row costs nothing.
-            "spiral" => BtnNavSpiral,
-            "quests" => BtnQuests,
-            "achievements" => BtnAchievements,
-            "enhancements" => BtnEnhancements,
-            "programs" => BtnPrograms,
-            "leaderboard" => BtnLeaderboard,
-            "assets" => BtnOpenAssetsTop,
-            // The pinned Settings door is its own entry: header and destination in one row.
-            "appsettings" => DoorSettings,
-            _ => null,
-        };
-
         /// <summary>
-        /// Moves the active-tab indicator: a 3px accent bar on the row's left edge plus a
-        /// tinted row background, on the entry AND on its door header (so a collapsed door
-        /// still says where you are). Both are template parts of the shared NavRailButton
-        /// template - "NavActiveBar" and "NavActiveFill" - not separate elements, so nothing
-        /// here depends on the rail's layout.
-        ///
-        /// This replaced an outer DropShadow, which only ever existed because the old 32px
-        /// header strip had no spare vertical room for a real indicator (PLAN decision #12).
-        /// The method name is unchanged: ~2 call sites plus RefreshChromeFx depend on it.
+        /// Lights the section row that owns the current tab. Nav rework (2026-10-06): the section
+        /// rail (RefreshSectionRail) is the one painter of the "you are here" row, and the
+        /// selected state is static: nothing on the rail loops (the old indicator breath is gone).
         /// </summary>
-        private void ApplyNavActiveGlow(Button? active)
+        private void ApplyNavActiveGlow(string? tab = null)
         {
-            try
-            {
-                if (_navGlowButton != null && !ReferenceEquals(_navGlowButton, active))
-                    SetNavIndicator(_navGlowButton, false);
-                _navGlowButton = active;
-
-                var door = NavDoorHeaderForTab(_activeTabKey);
-                if (_navGlowDoor != null && !ReferenceEquals(_navGlowDoor, door))
-                    SetNavIndicator(_navGlowDoor, false);
-                _navGlowDoor = door;
-                if (door != null) SetNavIndicator(door, true);
-
-                _navActiveBar = active == null ? null : SetNavIndicator(active, true);
-                ApplyNavGlowBreath();
-            }
+            try { RefreshSectionRail(tab ?? _activeTabKey); }
             catch (Exception ex) { App.Logger?.Debug("ApplyNavActiveGlow: {E}", ex.Message); }
-        }
-
-        /// <summary>
-        /// Paints (or clears) the indicator parts of one rail button and hands back the bar so
-        /// the breath has something to animate. Template parts, so ApplyTemplate has to have
-        /// run - it is called here rather than assumed, because InitializeChromeFx seeds the
-        /// indicator before the rail has necessarily been through a render pass.
-        /// </summary>
-        private static FrameworkElement? SetNavIndicator(Button btn, bool on)
-        {
-            try
-            {
-                btn.ApplyTemplate();
-                var bar = btn.Template?.FindName("NavActiveBar", btn) as FrameworkElement;
-                var fill = btn.Template?.FindName("NavActiveFill", btn) as FrameworkElement;
-                if (bar != null)
-                {
-                    // Always drop the breath clock first: a held Opacity would otherwise
-                    // outlive the indicator and dim the next row that reuses this part.
-                    bar.BeginAnimation(UIElement.OpacityProperty, null);
-                    bar.Opacity = NavGlowMaxOpacity;
-                    bar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-                }
-                if (fill != null) fill.Opacity = on ? 1 : 0;
-                return on ? bar : null;
-            }
-            catch { return null; }
-        }
-
-        /// <summary>Gentle breath on the active indicator bar only - no other row holds a clock.</summary>
-        private void ApplyNavGlowBreath()
-        {
-            try
-            {
-                var bar = _navActiveBar;
-                if (bar == null) return;
-                if (!ChromeAmbientAllowed)
-                {
-                    bar.BeginAnimation(UIElement.OpacityProperty, null);
-                    bar.Opacity = NavGlowMaxOpacity;
-                    return;
-                }
-                var anim = new DoubleAnimation(NavGlowMinOpacity, NavGlowMaxOpacity,
-                                               TimeSpan.FromSeconds(NavGlowBreathSeconds))
-                {
-                    AutoReverse = true,
-                    RepeatBehavior = RepeatBehavior.Forever,
-                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
-                };
-                Timeline.SetDesiredFrameRate(anim, AmbientFrameRate);
-                bar.BeginAnimation(UIElement.OpacityProperty, anim);
-            }
-            catch (Exception ex) { App.Logger?.Debug("ApplyNavGlowBreath: {E}", ex.Message); }
         }
 
         // ============================== 3. START button ==============================

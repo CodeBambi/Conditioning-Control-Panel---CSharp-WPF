@@ -198,7 +198,8 @@ namespace ConditioningControlPanel.Services
         private const int CACHE_EXPIRY_SECONDS = 60;  // Re-scan directories every 60 seconds
 
         private DispatcherTimer? _schedulerTimer;
-        private bool _heartbeatOn;                       // CompositionTarget.Rendering subscribed
+        private bool _waitingForEnable;                  // scheduler is on the switched-off recheck (#1377)
+        private bool _heartbeatOn;                      // CompositionTarget.Rendering subscribed
         private TimeSpan _lastHeartbeat = TimeSpan.MinValue;
         private CancellationTokenSource? _cancellationSource;
         
@@ -516,7 +517,13 @@ namespace ConditioningControlPanel.Services
 
         public void Start()
         {
-            if (_isRunning) return;
+            if (_isRunning)
+            {
+                // #1377: the flash switch calls Start() on a service the engine already started with
+                // flashes off. Re-arm now instead of waiting out the disabled recheck.
+                if (_waitingForEnable && App.Settings.Current.FlashEnabled) ScheduleNextFlash();
+                return;
+            }
 
             _runStartedUtc = DateTime.UtcNow;
             _isRunning = true;
@@ -901,21 +908,18 @@ namespace ConditioningControlPanel.Services
             if (!_isRunning) return;
 
             var settings = App.Settings.Current;
-            if (!settings.FlashEnabled)
-            {
-                App.Logger.Debug("FlashService: Flashes disabled in settings");
-                return;
-            }
-            
-            // flash_freq = flashes per HOUR (1-180)
-            var baseFreq = Math.Max(1, settings.FlashFrequency);
-            var baseInterval = 3600.0 / baseFreq; // seconds between flashes
-            
-            // Add ±30% variance
-            var variance = baseInterval * 0.3;
-            var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-            interval = Math.Max(3, interval); // Minimum 3 seconds
-            
+            // #1377: switched off is a slow recheck, never a dead end. The engine starts this service
+            // whatever FlashEnabled says; returning here used to leave no timer at all, so flashes
+            // switched on mid-run never came until the engine was restarted.
+            var enabled = settings.FlashEnabled;
+            if (!enabled && !_waitingForEnable)
+                App.Logger.Debug("FlashService: Flashes disabled in settings, rechecking every {Seconds}s",
+                    FlashScheduleRule.DisabledRecheck.TotalSeconds);
+            _waitingForEnable = !enabled;
+
+            // flash_freq = flashes per HOUR (1-180), +-30% variance, at least 3 seconds
+            var interval = FlashScheduleRule.IntervalSeconds(enabled, settings.FlashFrequency, _random.NextDouble());
+
             if (_schedulerTimer == null)
             {
                 _schedulerTimer = new DispatcherTimer();
@@ -929,7 +933,7 @@ namespace ConditioningControlPanel.Services
         private void SchedulerTimer_Tick(object? sender, EventArgs e)
         {
             _schedulerTimer?.Stop();
-            if (_isRunning && !_isBusy)
+            if (FlashScheduleRule.ShouldFire(_isRunning, _isBusy, App.Settings.Current.FlashEnabled))
             {
                 TriggerFlash();
             }

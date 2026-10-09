@@ -1,0 +1,68 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.KnowledgeLinksEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+    <!-- The global knowledge base links ("Links it knows"): one implementation, hosted by
+         CompanionPromptEditorDialog (saves with the dialog) and Companion > Links (saves at once). -->
+    <UserControl.Resources>
+        <Style x:Key="KbButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#55FF69B4"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#77FF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+    <StackPanel>
+        <Border Background="#1AFFFFFF" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+            <Grid>
+                <ListBox x:Name="LstKnowledgeLinks" MinHeight="120" MaxHeight="320"
+                         Background="Transparent" BorderThickness="0"
+                         Foreground="White" FontSize="12" SelectionMode="Single"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,3">
+                                <TextBlock Text="{Binding Title}" Foreground="#FF69B4" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Url}" Foreground="#909090" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="Desc" Text="{Binding Description}" Foreground="#B0B0C0" FontSize="11" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding Description}" Value="">
+                                    <Setter TargetName="Desc" Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Description}" Value="{x:Null}">
+                                    <Setter TargetName="Desc" Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock x:Name="TxtKnowledgeLinksEmpty" Text="{loc:Str companion_page_links_known_empty}"
+                           Foreground="#909090" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center"
+                           IsHitTestVisible="False"/>
+            </Grid>
+        </Border>
+        <StackPanel Orientation="Horizontal">
+            <Button x:Name="BtnAddKnowledgeLink" Content="{loc:Str btn_add_link}" Style="{StaticResource KbButton}" Click="AddKnowledgeLink_Click"/>
+            <Button x:Name="BtnRemoveKnowledgeLink" Content="{loc:Str btn_remove_selected}" Style="{StaticResource KbButton}" Margin="8,0,0,0" Click="RemoveKnowledgeLink_Click"/>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

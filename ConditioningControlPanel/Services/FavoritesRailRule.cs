@@ -30,7 +30,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const int RecentCap = 7;
 
-        private static readonly string[] DestinationPrefixes = { "door.", "tab.", "launch.", "card." };
+        // game.* joined 2026-10-06 (nav polish): every launcher game has tile art. rack.* rows
+        // (Studio modules) are destinations only where FavoritesRailArt has a picture for them,
+        // so a module with no art never lands on the rail as a bare emoji.
+        private static readonly string[] DestinationPrefixes = { "door.", "tab.", "launch.", "card.", "game." };
 
         /// <summary>
         /// ShowTab keys that never enter RECENT. "settings" is the dashboard itself - the page the
@@ -41,7 +44,8 @@ namespace ConditioningControlPanel.Services
 
         public static bool IsDestination(string? id) =>
             !string.IsNullOrWhiteSpace(id) &&
-            DestinationPrefixes.Any(p => id.StartsWith(p, StringComparison.Ordinal));
+            (DestinationPrefixes.Any(p => id.StartsWith(p, StringComparison.Ordinal))
+             || (id.StartsWith("rack.", StringComparison.Ordinal) && FavoritesRailArt.For(id) != null));
 
         /// <summary>
         /// The palette row a ShowTab key lands on, or null when the key is not a destination

@@ -10,6 +10,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion.V2;
 
 internal static class PerkPicker
 {
+    // #1379: a locked perk row used to look exactly like an open one (white text, same plate), so
+    // "the other options cant be selected" read as broken. Locked rows now sit back. PURE.
+    internal const double LockedRowOpacity = 0.45;
+    internal static double RowOpacity(bool unlocked) => unlocked ? 1.0 : LockedRowOpacity;
+
     internal static void Show(Window owner)
     {
         var panel = new StackPanel { Margin = new Thickness(22) };
@@ -29,7 +34,7 @@ internal static class PerkPicker
             text.Children.Add(new TextBlock { Text = Loc.Get(perk.LocKey), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,5,0,0) });
             if (!unlocked) text.Children.Add(new TextBlock { Text = Loc.GetF("companion_perk_unlock", CompanionPerks.RequiredLevel(type)), Margin = new Thickness(0,5,0,0) });
             var choice = new RadioButton { Content = text, IsChecked = App.Companion?.ActivePerk == type,
-                IsEnabled = unlocked,
+                IsEnabled = unlocked, Opacity = RowOpacity(unlocked || App.Companion?.ActivePerk == type),
                 Foreground = perk.Negative ? Brushes.Salmon : Brushes.White, Padding = new Thickness(10),
                 Margin = new Thickness(0,0,0,10), HorizontalContentAlignment = HorizontalAlignment.Stretch };
             choice.Checked += (_, _) => { if (App.Companion?.SetPerk(type) == true) window.Close(); };

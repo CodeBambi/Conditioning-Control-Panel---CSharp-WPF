@@ -50,6 +50,22 @@ public class CompanionOnSwitchTests
             "and its Hide twin while it is on");
     }
 
+    /// <summary>7.1.0 shipped with the switch only in the Settings sheet, which the nav rework made
+    /// unreachable (its opener now goes to the Personality page). The switch must sit in the page
+    /// itself, ahead of the sheet, so it shows without opening anything.</summary>
+    [Fact]
+    public void Companion_page_header_carries_the_on_switch_outside_the_sheet()
+    {
+        var page = Regex.Replace(ReadSource("Views", "Controls", "Companion", "V2", "ConversationPage.xaml"), @"\s+", " ");
+        int sheet = page.IndexOf("x:Name=\"SheetOverlay\"", StringComparison.Ordinal);
+        Assert.True(sheet > 0, "the conversation page still has its settings sheet");
+        string show = "Content=\"{loc:Str companion_v2_show}\" Command=\"{Binding Room.Hero.ToggleShownCommand}\"";
+        string hide = "Content=\"{loc:Str companion_v2_hide}\" Command=\"{Binding Room.Hero.ToggleShownCommand}\"";
+        int s = page.IndexOf(show, StringComparison.Ordinal), h = page.IndexOf(hide, StringComparison.Ordinal);
+        Assert.True(s >= 0 && s < sheet, "Show companion sits on the page, not only inside the sheet");
+        Assert.True(h >= 0 && h < sheet, "Hide companion sits on the page, not only inside the sheet");
+    }
+
     [Fact]
     public void Look_and_personality_offers_the_switch_where_it_says_the_companion_is_off()
     {

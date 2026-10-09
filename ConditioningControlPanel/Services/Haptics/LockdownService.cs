@@ -215,7 +215,22 @@ public class LockdownService : IDisposable
         _isActive = false;
 
         App.Logger?.Information("Lockdown deactivated after {Minutes:F1} minutes", LastActiveDuration.TotalMinutes);
-        LockdownDeactivated?.Invoke();
+        RaiseEach(LockdownDeactivated);
+    }
+
+    /// <summary>
+    /// Calls every subscriber on its own. A plain multicast Invoke stops at the first handler that
+    /// throws, and the quest credit (ccp-bugs #1388) subscribes after the Possession, dose and audio
+    /// layers, so one bad teardown would silently cost the player the Lockdown quest.
+    /// </summary>
+    internal static void RaiseEach(Action? handlers)
+    {
+        if (handlers == null) return;
+        foreach (var d in handlers.GetInvocationList())
+        {
+            try { ((Action)d)(); }
+            catch (Exception ex) { App.Logger?.Warning("Lockdown: a deactivation handler failed: {Error}", ex.Message); }
+        }
     }
 
     /// <summary>

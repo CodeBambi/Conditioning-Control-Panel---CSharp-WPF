@@ -276,7 +276,6 @@ public sealed partial class FriendsDrawer
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var box = new TextBox
         {
-            MaxLength = 8,
             FontFamily = FriendsLook.Mono,
             FontSize = 13,
             Foreground = FriendsLook.TextBrush,

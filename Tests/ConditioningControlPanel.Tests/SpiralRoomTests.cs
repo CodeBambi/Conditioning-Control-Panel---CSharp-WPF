@@ -483,9 +483,11 @@ public class SpiralRoomTests
 
         // The four pinned neighbours are exactly where ChromeFxNavTests left them.
         Assert.Equal(0, ChromeFxNav.IndexOf("settings"));
-        Assert.Equal(8, ChromeFxNav.IndexOf("lab"));
-        Assert.Equal(22, ChromeFxNav.IndexOf("assets"));
-        Assert.Equal(23, ChromeFxNav.IndexOf("appsettings"));
+        // Nav rework 2026-10-06: NavOrder is derived from NavSections (rail, then pills).
+        // Polish 12 (2026-10-07): Home's Premium pill moved everything after it one along. 7.1.2: Companion > AI, one more.
+        Assert.Equal(14, ChromeFxNav.IndexOf("lab"));
+        Assert.Equal(32, ChromeFxNav.IndexOf("assets"));
+        Assert.Equal(34, ChromeFxNav.IndexOf("appsettings"));
     }
 
     // ================================================================
@@ -595,17 +597,15 @@ public class SpiralRoomTests
         var xaml = AppFile("MainWindow", "MainWindow.xaml");
         Assert.Contains("<views:SpiralTabView x:Name=\"SpiralTab\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<controls:DescentFuseRailChip x:Name=\"FuseRailChip\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"BtnNavSpiral\"", xaml, StringComparison.Ordinal);
+        // Nav rework (2026-10-06): the You door's Spiral row left the rail; the tab strip draws
+        // the (fog-era-only) pill from the section table, and the fuse chip stays on the rail.
 
         var nav = AppFile("MainWindow", "MainWindow.TabNavigation.cs");
         Assert.Contains("SpiralTab.Visibility = Visibility.Collapsed", nav, StringComparison.Ordinal);
         Assert.Contains("case \"spiral\":", nav, StringComparison.Ordinal);
         Assert.Contains("SpiralTab.OnTabShown()", nav, StringComparison.Ordinal);
-        // The You door owns it, right after the profile.
-        Assert.Contains("\"discord\", \"spiral\"", nav, StringComparison.Ordinal);
-
-        Assert.Contains("\"spiral\" => BtnNavSpiral",
-            AppFile("MainWindow", "MainWindow.ChromeFx.cs"), StringComparison.Ordinal);
+        // The You section lists it, hidden unless fog era (nav rework: NavSections is the map).
+        Assert.Equal("you", ConditioningControlPanel.Services.UI.NavSections.SectionForTab("spiral"));
         Assert.Contains("BtnNavSpiral",
             AppFile("Services", "TutorialService.cs"), StringComparison.Ordinal);
     }

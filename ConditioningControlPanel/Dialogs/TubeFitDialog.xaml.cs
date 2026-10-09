@@ -38,7 +38,10 @@ namespace ConditioningControlPanel
         private int _detachedOffsetY;
 
         private bool _detachedMode;
-        private bool _suppressSliderEvents;
+        // Starts TRUE: InitializeComponent fires SldScale.ValueChanged (Minimum 0.1 coerces the 0
+        // default) before the readout TextBlocks exist, and UpdatePreview then threw an NRE in
+        // UpdateReadouts (#1379 log). The ctor lowers it once the controls are wired.
+        private bool _suppressSliderEvents = true;
 
         private readonly string _modId;
         private readonly int _avatarSet;

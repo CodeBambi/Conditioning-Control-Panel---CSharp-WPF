@@ -243,15 +243,13 @@ namespace ConditioningControlPanel.Controls
     /// </summary>
     public sealed class TierFxBorderAdorner : Adorner
     {
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;
 
         /// <summary>Share of the perimeter the band covers.</summary>
         private const double BandFraction = 0.25;
 
-        /// <summary>Quantisation of the band's soft edges. A Pen cannot carry a gradient along its
-        /// own path, so the ramp is drawn as this many constant-alpha dashes (the same trick, and
-        /// the same reasoning, as PerimeterCometAdorner's tail).</summary>
-        private const int BandSegments = 11;
+        /// <summary>Gradient stops in the band's alpha ramp (centre to tip).</summary>
+        private const int BandStops = 6;
 
         private const double RestLapT1 = 6.5;
         private const double RestLapT2 = 5.0;
@@ -274,9 +272,16 @@ namespace ConditioningControlPanel.Controls
         private readonly double _cornerRadius;
         private readonly double _thickness;
 
-        /// <summary>Band brushes, brightest at the band's centre. Two sets: resting and hover.</summary>
-        private readonly SolidColorBrush[] _restBand;
-        private readonly SolidColorBrush[] _hoverBand;
+        /// <summary>Band ramps, brightest at the band's centre. Two sets: resting and hover.</summary>
+        private readonly GradientStopCollection _restBand;
+        private readonly GradientStopCollection _hoverBand;
+
+        /// <summary>
+        /// The backing store (perf pass, 2026-10-07). OnRender only ever draws this, once; every lap
+        /// frame re-opens it from the phase callback. That updates the composed picture without
+        /// InvalidateVisual, so a frame no longer costs an arrange pass plus OnRender per card.
+        /// </summary>
+        private readonly DrawingGroup _drawing = new();
         private readonly Brush _glintBrush;
 
         // No AdornerLayer field: TierFxBorder owns adding and removing this from the layer, so an
@@ -291,13 +296,12 @@ namespace ConditioningControlPanel.Controls
         private Size _geometrySize;
         private double _perimeter;
 
-        /// <summary>Lap position, 0-1, and the whole mechanism: <c>AffectsRender</c> means animating
-        /// it re-runs <see cref="OnRender"/>, and the frame rate cap on the animation is what holds
-        /// that to 24 frames a second.</summary>
+        /// <summary>Lap position, 0-1, and the whole mechanism: every change repaints the backing
+        /// drawing, and the frame rate cap on the animation is what holds that to 30 a second.</summary>
         private static readonly DependencyProperty PhaseProperty =
             DependencyProperty.Register(
                 "Phase", typeof(double), typeof(TierFxBorderAdorner),
-                new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+                new PropertyMetadata(0.0, (d, _) => ((TierFxBorderAdorner)d).Repaint()));
 
         public TierFxBorderAdorner(UIElement adorned, int tier, double cornerRadius, double thickness)
             : base(adorned)
@@ -345,7 +349,7 @@ namespace ConditioningControlPanel.Controls
             try
             {
                 bool ambient;
-                try { ambient = MotionFx.AllowAmbientLoops; }
+                try { ambient = MotionFx.AllowAmbientLoops && !Services.Diagnostics.FxBisect.Off("tierfx"); }
                 catch { ambient = false; }
 
                 HookVisibility();
@@ -394,7 +398,7 @@ namespace ConditioningControlPanel.Controls
                     StopClock();
                     StartClock(phase);
                 }
-                else InvalidateVisual();
+                else Repaint();
             }
             catch (Exception ex) { App.Logger?.Debug("TierFxBorderAdorner.SetHover: {E}", ex.Message); }
         }
@@ -443,7 +447,7 @@ namespace ConditioningControlPanel.Controls
             _clockRunning = false;
             BeginAnimation(PhaseProperty, null);
             SetValue(PhaseProperty, 0.0);
-            InvalidateVisual();
+            Repaint();
         }
 
         private void HookVisibility()
@@ -470,7 +474,7 @@ namespace ConditioningControlPanel.Controls
                     // Re-read the gate on the way in: this is what makes the motion kill-switch
                     // reach a card that was already built when the setting changed.
                     bool ambient;
-                    try { ambient = MotionFx.AllowAmbientLoops; }
+                    try { ambient = MotionFx.AllowAmbientLoops && !Services.Diagnostics.FxBisect.Off("tierfx"); }
                     catch { ambient = false; }
                     _wantClock = ambient;
                     if (ambient) StartClock();
@@ -487,8 +491,18 @@ namespace ConditioningControlPanel.Controls
 
         protected override void OnRender(DrawingContext drawingContext)
         {
+            // Layout and size changes still come through here; lap frames never do.
+            Repaint();
+            drawingContext.DrawDrawing(_drawing);
+        }
+
+        /// <summary>Redraws the lap into the backing drawing. Cheap: one stroke, plus the glints.</summary>
+        private void Repaint()
+        {
             try
             {
+                using var dc = _drawing.Open();
+
                 // Motion off = the Border's own gradient rim, undecorated. No substitute stroke:
                 // one resting look, drawn by one thing.
                 if (!_clockRunning) return;
@@ -503,62 +517,69 @@ namespace ConditioningControlPanel.Controls
                 // Tier 1 laps clockwise, Tier 2 counter-clockwise: two tiers on one wall must not
                 // march in lockstep, and mirroring the phase is the cheapest way to say so.
                 double phase = _tier >= 2 ? 1.0 - clock : clock;
-                var band = _hover ? _hoverBand : _restBand;
-                double bandLength = _perimeter * BandFraction;
-                double segment = bandLength / BandSegments;
+                DrawBand(dc, phase, _perimeter * BandFraction, _hover ? _hoverBand : _restBand);
 
-                // Dimmest segments first so the bright core paints over its own falloff.
-                for (int i = 0; i < BandSegments; i++)
-                {
-                    int order = SegmentPaintOrder(i);
-                    DrawArc(drawingContext, geometry, phase,
-                            behind: order * segment,
-                            length: segment,
-                            brush: band[order],
-                            thickness: _thickness);
-                }
-
-                if (_tier >= 2) DrawGlints(drawingContext, phase);
+                if (_tier >= 2) DrawGlints(dc, phase);
             }
-            catch (Exception ex) { App.Logger?.Debug("TierFxBorderAdorner.OnRender: {E}", ex.Message); }
+            catch (Exception ex) { App.Logger?.Debug("TierFxBorderAdorner.Repaint: {E}", ex.Message); }
         }
 
-        /// <summary>Paint order 0,10,1,9,2,8,... - the two faint tips go down first and the bright
-        /// core paints last, over its own falloff.</summary>
-        private static int SegmentPaintOrder(int i) =>
-            (i % 2 == 0) ? i / 2 : BandSegments - 1 - (i / 2);
+        /// <summary>Spacing of the points the lit arc is sampled at, in DIPs. The corners are
+        /// quarter circles, so 4 px keeps them round at every card size.</summary>
+        private const double ArcSamplePx = 4.0;
 
         /// <summary>
-        /// One lit arc of the rim: a dashed pen whose single dash is <paramref name="length"/>
-        /// long, whose gap is the rest of the perimeter, and whose offset places it
-        /// <paramref name="behind"/> pixels back from the band's leading edge.
-        ///
-        /// <para>DashStyle counts in multiples of pen thickness, and a positive Offset shifts the
-        /// pattern BACKWARDS along the path (SVG's stroke-dashoffset convention) - hence the
-        /// negated start position, wrapped into one pattern length.</para>
+        /// The lit band (perf pass, 2026-10-07): ONE open polyline along the rim, stroked with a
+        /// radial ramp centred on the band's middle, so it is bright in the middle and fades out at
+        /// both tips. It used to be eleven constant-alpha strokes per card per frame (a Pen cannot
+        /// carry a gradient along its own path); the radial ramp gives the same falloff, smoother,
+        /// for one stroke. The radius reaches the farther tip in straight-line distance, so a band
+        /// wrapping a corner still fades to nothing at its ends.
         /// </summary>
-        private void DrawArc(DrawingContext dc, Geometry geometry, double phase,
-                             double behind, double length, Brush brush, double thickness)
+        private void DrawBand(DrawingContext dc, double phase, double length, GradientStopCollection ramp)
         {
-            if (length <= 0 || thickness <= 0) return;
+            if (length <= 0 || _perimeter <= 0) return;
 
-            double dash = length / thickness;
-            double gap = (_perimeter - length) / thickness;
-            if (gap <= 0) return;
+            double end = phase * _perimeter;
+            double start = end - length;
+            int steps = Math.Max(2, (int)Math.Ceiling(length / ArcSamplePx));
 
-            double pattern = dash + gap;
-            double startPx = (phase * _perimeter) - behind - length;
-            double offset = (-startPx / thickness) % pattern;
-            if (offset < 0) offset += pattern;
+            var mid = PointOnRim((start + (length / 2.0)) / _perimeter);
+            if (mid == null) return;
 
-            var pen = new Pen(brush, thickness)
+            var arc = new StreamGeometry();
+            double reach = 0;
+            using (var ctx = arc.Open())
             {
-                DashStyle = new DashStyle(new[] { dash, gap }, offset),
-                DashCap = PenLineCap.Round,
+                for (int i = 0; i <= steps; i++)
+                {
+                    var point = PointOnRim((start + (length * i / steps)) / _perimeter);
+                    if (point == null) return;
+                    reach = Math.Max(reach, (point.Value - mid.Value).Length);
+                    if (i == 0) ctx.BeginFigure(point.Value, false, false);
+                    else ctx.LineTo(point.Value, true, true);
+                }
+            }
+            arc.Freeze();
+            if (reach <= 0) return;
+
+            var brush = new RadialGradientBrush(ramp)
+            {
+                MappingMode = BrushMappingMode.Absolute,
+                Center = mid.Value,
+                GradientOrigin = mid.Value,
+                RadiusX = reach,
+                RadiusY = reach,
+            };
+            brush.Freeze();
+            var pen = new Pen(brush, _thickness)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
                 LineJoin = PenLineJoin.Round,
             };
             pen.Freeze();
-            dc.DrawGeometry(null, pen, geometry);
+            dc.DrawGeometry(null, pen, arc);
         }
 
         /// <summary>
@@ -667,18 +688,20 @@ namespace ConditioningControlPanel.Controls
         /// The band's alpha ramp: faint at both tips, full in the middle, so the highlight has soft
         /// edges instead of two hard ends chasing each other around the card.
         /// </summary>
-        private static SolidColorBrush[] BuildBand(Color hue, byte peak)
+        private static GradientStopCollection BuildBand(Color hue, byte peak)
         {
-            var brushes = new SolidColorBrush[BandSegments];
-            for (int i = 0; i < BandSegments; i++)
+            var stops = new GradientStopCollection(BandStops);
+            for (int i = 0; i < BandStops; i++)
             {
-                double k = Math.Sin(Math.PI * ((i + 0.5) / BandSegments));
+                // Offset 0 is the band's middle, 1 its tips: the same sin-squared ramp the band
+                // always had, read from the centre out.
+                double u = (double)i / (BandStops - 1);
+                double k = Math.Cos(Math.PI / 2.0 * u);
                 var alpha = (byte)Math.Round(peak * k * k);
-                var brush = new SolidColorBrush(Color.FromArgb(alpha, hue.R, hue.G, hue.B));
-                brush.Freeze();
-                brushes[i] = brush;
+                stops.Add(new GradientStop(Color.FromArgb(alpha, hue.R, hue.G, hue.B), u));
             }
-            return brushes;
+            stops.Freeze();
+            return stops;
         }
     }
 }

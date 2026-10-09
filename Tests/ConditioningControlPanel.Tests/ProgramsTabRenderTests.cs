@@ -182,7 +182,7 @@ public class ProgramsTabRenderTests
             // And the clock it starts is frame-capped like every other idle loop in the app.
             var begin = trigger.EnterActions.OfType<BeginStoryboard>().FirstOrDefault();
             Assert.True(begin?.Storyboard != null, "the halo storyboard is gone");
-            Assert.Equal(24, System.Windows.Media.Animation.Timeline.GetDesiredFrameRate(begin!.Storyboard));
+            Assert.Equal(MainWindow.AmbientFrameRate, System.Windows.Media.Animation.Timeline.GetDesiredFrameRate(begin!.Storyboard));
         });
     }
 

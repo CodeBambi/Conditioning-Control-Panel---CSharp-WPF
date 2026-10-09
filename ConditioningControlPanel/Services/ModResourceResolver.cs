@@ -107,12 +107,13 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Fallback to embedded resource
+            // Fallback to embedded resource: the active mod's embedded nav art first, then ours.
             if (result == null)
             {
                 try
                 {
-                    var packUri = new Uri($"pack://application:,,,/Resources/{resourcePath}", UriKind.Absolute);
+                    var embedded = EmbeddedPathFor(resourcePath, App.Mods?.ActiveModId);
+                    var packUri = new Uri($"pack://application:,,,/Resources/{embedded}", UriKind.Absolute);
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
                     bitmap.UriSource = packUri;
@@ -283,8 +284,56 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            return $"pack://application:,,,/Resources/{resourcePath}";
+            return $"pack://application:,,,/Resources/{EmbeddedPathFor(resourcePath, App.Mods?.ActiveModId)}";
         }
+
+        /// <summary>Embedded resources that exist, per Resources-relative path. Filled on first ask.</summary>
+        private static readonly ConcurrentDictionary<string, bool> _embeddedExists = new();
+
+        /// <summary>
+        /// The embedded per-mod twin of a nav path: <c>nav/door_social.png</c> under mod
+        /// <c>drone-mode</c> is <c>nav/mods/drone-mode/door_social.png</c>. Null when the path is not
+        /// nav art, there is no mod, or the mod id is not one safe path segment.
+        ///
+        /// <para>Why it exists (polish wave 11): a mod's own art ships inside its .ccpmod pack, and a
+        /// door added after a pack was built (Social, 2026-10-07) has nowhere to live until that pack
+        /// is rebuilt. The embedded twin is the bridge: the pack still wins whenever it carries the
+        /// file, the twin is next, our own default last. Any nav/ path gets the same treatment so the
+        /// next new door needs files, not code.</para>
+        /// </summary>
+        internal static string? EmbeddedModTwin(string resourcePath, string? modId)
+        {
+            if (string.IsNullOrEmpty(modId) || string.IsNullOrEmpty(resourcePath)) return null;
+            if (!resourcePath.StartsWith("nav/", StringComparison.Ordinal)) return null;
+            if (resourcePath.StartsWith("nav/mods/", StringComparison.Ordinal)) return null;
+            if (modId!.Contains("..") || modId.Contains('/') || modId.Contains('\\') || Path.IsPathRooted(modId)) return null;
+            return "nav/mods/" + modId + "/" + resourcePath.Substring("nav/".Length);
+        }
+
+        /// <summary>
+        /// The embedded path to load for this request: the mod's embedded twin when one was
+        /// compiled in, otherwise the path unchanged (our own default, or a miss as before).
+        /// </summary>
+        internal static string EmbeddedPathFor(string resourcePath, string? modId)
+        {
+            var twin = EmbeddedModTwin(resourcePath, modId);
+            return twin != null && EmbeddedExists(twin) ? twin : resourcePath;
+        }
+
+        private static bool EmbeddedExists(string path) => _embeddedExists.GetOrAdd(path, static p =>
+        {
+            try
+            {
+                var info = System.Windows.Application.GetResourceStream(
+                    new Uri($"pack://application:,,,/Resources/{p}", UriKind.Absolute));
+                info?.Stream?.Dispose();
+                return info != null;
+            }
+            catch
+            {
+                return false;
+            }
+        });
 
         /// <summary>
         /// Check whether anything above the embedded resources overrides this path — the

@@ -217,7 +217,8 @@ public static class EmiTargets
         ["remotecontrol"] = "remote",
         ["bambitakeover"] = "takeover",
         ["lockdown"] = "lockdown",
-        ["exclusives"] = "vault",
+        // Polish 12 (2026-10-07): "exclusives" redirects before the counter, "premium" is the page.
+        ["premium"] = "vault",
         ["discord"] = "profile",
         ["appsettings"] = "settings",
         ["progression"] = "progression",
@@ -361,7 +362,7 @@ public static class EmiTargets
             () => !PremiumOk("emi_desk_target_lockdown", null),
             () => Nav("lockdown"), PremiumFeature.Lockdown);
 
-        T("vault", "features/vault.png", Tile(0xD8, 0xB4, 0x6A), Always, Never, () => Nav("exclusives"));
+        T("vault", "features/vault.png", Tile(0xD8, 0xB4, 0x6A), Always, Never, () => Nav("premium"));
 
         T("goon", "features/goon_game.png", Tile(0x76, 0xC8, 0x93), Always, Never,
             () => GoonGame.GoonHostService.Launch());

@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using ConditioningControlPanel.Controls;
 
 namespace ConditioningControlPanel.Views.Tabs
@@ -38,5 +39,54 @@ namespace ConditioningControlPanel.Views.Tabs
             // Nothing composed here since the games left the wall (2026-09-18): the only
             // ambient canvas this view ever owned sat behind the Rabbit Hole hero.
         }
+
+        /// <summary>Zone keys the Play section strip reaches (nav rework contract 2).</summary>
+        public static readonly string[] ZoneKeys = { "games", "sessions", "eyes" };
+
+        /// <summary>
+        /// Brings a zone header to the top of the wall: "games" | "sessions" | "eyes". An unknown
+        /// key does nothing. The header glows once for 2 s so the eye lands on it; the glow is
+        /// skipped under reduced or no motion (MotionFx), the scroll is not.
+        /// </summary>
+        public void ScrollToZone(string zone)
+        {
+            var header = ZoneHeader(zone);
+            if (header == null) { App.Logger?.Debug("Play ScrollToZone({Zone}): unknown zone", zone); return; }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    // Games is the top of the wall: go to 0 so the intro line above it shows too.
+                    // Any other zone: its header sits ZoneTopGap under the strip, never clipped.
+                    double target = 0;
+                    if (!string.Equals(zone, "games", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (WallScroll.Content is Visual content && header.IsDescendantOf(content))
+                            target = Math.Max(0, header.TransformToAncestor(content).Transform(new Point(0, 0)).Y - ZoneTopGap);
+                        else { header.BringIntoView(); target = -1; }
+                    }
+                    if (target >= 0) WallScroll.ScrollToVerticalOffset(target);
+                    App.Logger?.Debug("Play ScrollToZone({Zone}) -> {Y}", zone, target);
+                    // Glow after the scroll has landed, so the ring is drawn where the eye goes.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                        global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(header, global::ConditioningControlPanel.Controls.NavRail.NavStripRules.Accent(global::ConditioningControlPanel.Services.UI.NavSections.Play), why: "play." + zone)),
+                        System.Windows.Threading.DispatcherPriority.Loaded);
+                }
+                catch (Exception ex) { App.Logger?.Debug("Play ScrollToZone({Zone}): {E}", zone, ex.Message); }
+            }), System.Windows.Threading.DispatcherPriority.Normal);
+        }
+
+        /// <summary>Gap kept above a zone header after a zone scroll (header fully visible).</summary>
+        internal const double ZoneTopGap = 16;
+
+        /// <summary>The header element a zone key names, or null.</summary>
+        internal FrameworkElement? ZoneHeader(string? zone) => (zone ?? "").Trim().ToLowerInvariant() switch
+        {
+            "games" => ZoneGames,
+            "sessions" => ZoneSessions,
+            "eyes" => ZoneEyes,
+            _ => null,
+        };
     }
 }

@@ -56,7 +56,8 @@ namespace ConditioningControlPanel
             var xp = s.PlayerXP;
             var xpNeeded = App.Progression.GetXPForLevel(level);
 
-            TxtLevel.Text = $"Lvl {level}";
+            // Nav polish wave 4: the XP bar's chip is the one level readout (the header's
+            // "Lvl N" pill was cut as a duplicate).
             TxtLevelLabel.Text = $"LVL {level}";
 
             // XP readout + bar fill (chrome FX): the number odometers from its previous value and
@@ -159,10 +160,6 @@ namespace ConditioningControlPanel
             if (BambiTakeoverTab.TxtAutoLockCards != null) BambiTakeoverTab.TxtAutoLockCards.Text = ML("Lock Cards", "label_lock_card");
             if (BambiTakeoverTab.TxtAutoBouncing != null) BambiTakeoverTab.TxtAutoBouncing.Text = ML("Bouncing", "label_bouncing_text");
             if (BambiTakeoverTab.TxtAutoMindwipe != null) BambiTakeoverTab.TxtAutoMindwipe.Text = ML("Mindwipe", "label_mind_wipe");
-
-            // Enhancement tab tooltip
-            if (BtnEnhancements != null)
-                BtnEnhancements.ToolTip = App.Mods?.GetTabTooltip() ?? Loc.Get("tooltip_enhancement_tree");
 
             // Stat pill tooltips
             if (PillConditioningTime != null)
@@ -440,6 +437,8 @@ namespace ConditioningControlPanel
             // The header profile bubble paints the same identity truth; it rides the same
             // choke point for the same reason (MainWindow.ProfileBubble.cs).
             RefreshProfileBubble();
+            // The header Premium spark wears the same tier (MainWindow.PremiumSpark.cs).
+            RefreshPremiumSpark();
         }
 
         // Tier colours for the account chip. Fixed brand values, not mod-owned: gold is the
@@ -2390,7 +2389,8 @@ namespace ConditioningControlPanel
             MessageBox.Show(Loc.Get("msg_assets_refreshed"), Loc.Get("title_success"));
         }
 
-        private void BtnViewLog_Click(object sender, RoutedEventArgs e)
+        // Settings > Data > Open logs folder (nav rework 2026-10-06); orphaned before that.
+        internal void BtnViewLog_Click(object sender, RoutedEventArgs e)
         {
             var logPath = Path.Combine(App.UserDataPath, "logs");
             if (Directory.Exists(logPath))
@@ -2536,6 +2536,20 @@ namespace ConditioningControlPanel
             };
             App.Settings.Current.MotionLevel = level;
             App.Logger?.Information("Motion level set to {Level}", level);
+            // Polish wave 9: the window edge (travelling lift, ember strips) follows the level
+            // now, not at the next section change.
+            try { PaintSectionEdge(_edgeHue, 0); SectionEdgeParticles?.Refresh(); }
+            catch (Exception ex) { App.Logger?.Debug("Edge motion refresh failed: {E}", ex.Message); }
+            // Review fix: the Home favourites handle glow and the fold-arrow glow are Forever
+            // breaths that read the gate only when they start, and the strip's sheen clock stops
+            // itself below Full and only Loaded restarted it. All three re-read the level here.
+            try
+            {
+                SettingsTab?.PaintFavoritesDrawer();
+                SettingsTab?.PaintFoldArrow(BrowserFolded);
+                SectionStrip?.UpdateSheenClock();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Chrome glow refresh failed: {E}", ex.Message); }
             // Loops read the gate when they start, so a switch to Reduced/Off needs the running ones
             // stopped now; a switch back to Full re-arms them on the next tab visit.
             if (!Services.MotionFx.AllowAmbientLoops)
@@ -2546,6 +2560,8 @@ namespace ConditioningControlPanel
                 StopLockdownPulse();
                 SwitchTabFx(string.Empty);
             }
+            // The Tonight Board: hold clock, art views and particles follow the level now.
+            RefreshBillboardMotion();
             StartMarqueeAnimation();
             // The OG border re-evaluates both ways too (PR-5 gave it a gate at last).
             ApplyOgBorderLoop();
@@ -2553,6 +2569,8 @@ namespace ConditioningControlPanel
             // code-built controls with no XAML storyboard for the stops above to reach -
             // they re-read the gate here (MainWindow.ProfileSpiral.cs).
             RefreshSpiralGlyphMotion();
+            // The header Premium spark re-reads the level too: Off stills it, Full re-arms it.
+            RefreshPremiumSpark();
             // Chrome loops (nav glow breath, START glow + sheen, XP gloss) re-evaluate both ways:
             // down to Reduced/Off stops them now, back up to Full re-arms them without a restart.
             // RefreshChromeFx also drives the dashboard loops (see ApplyChromeFxLoops).

@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Linq;
@@ -49,12 +50,28 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             if (App.Settings != null) App.Settings.CurrentReplaced += OnCurrentReplaced;
+            if (App.Settings?.Current is INotifyPropertyChanged inpc)
+            {
+                inpc.PropertyChanged -= OnSettingsPropertyChanged;
+                inpc.PropertyChanged += OnSettingsPropertyChanged;
+            }
             SyncFromSettings();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             if (App.Settings != null) App.Settings.CurrentReplaced -= OnCurrentReplaced;
+            if (App.Settings?.Current is INotifyPropertyChanged inpc)
+                inpc.PropertyChanged -= OnSettingsPropertyChanged;
+        }
+
+        /// <summary>Settings is one scrolling page, and VideoForceHardwareDecoding has a second
+        /// live editor on it (Monitors, ChkVideoGpuDecode). This box follows that one the way
+        /// Monitors already follows this box (review fix, 2026-10-06).</summary>
+        private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Models.AppSettings.VideoForceHardwareDecoding))
+                Dispatcher.BeginInvoke(new Action(SyncFromSettings));
         }
 
         /// <summary>

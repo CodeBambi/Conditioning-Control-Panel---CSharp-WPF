@@ -69,16 +69,23 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             if (e.Handled || sender is not FrameworkElement host) return;
 
-            var inner = FindDescendant<ScrollViewer>(host);
+            // The host may BE the bounded viewer (the video pool's LinkPoolScroll): a descendant
+            // search alone never found it, so that list swallowed every notch (nav polish 2026-10-06).
+            var inner = host as ScrollViewer ?? FindDescendant<ScrollViewer>(host);
             if (inner == null) return;
             if (!ShouldForward(inner.ScrollableHeight, inner.VerticalOffset, e.Delta)) return;
 
+            // Re-raise ABOVE the inner viewer: raised on a ScrollViewer itself, its own class
+            // handler would take the notch again and mark it handled.
+            var from = ReferenceEquals(inner, host) ? VisualTreeHelper.GetParent(host) as UIElement : host;
+            if (from == null) return;
+
             // Take the notch away from the inner viewer and hand it to whatever is above the host.
             e.Handled = true;
-            host.RaiseEvent(new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+            from.RaiseEvent(new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
             {
                 RoutedEvent = UIElement.MouseWheelEvent,
-                Source = host
+                Source = from
             });
         }
 

@@ -775,8 +775,16 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>The board a fresh panel opens on. Seasons are retired (owner, 2026-09-24), so
+        /// it is All-Time; Monthly stays one click away.</summary>
+        internal const string LeaderboardDefaultMode = "all-time";
+
+        /// <summary>False until the first refresh (or a mode click) has settled the mode.</summary>
+        private bool _leaderboardModeSettled;
+
         internal async void BtnLeaderboardMode_Click(object sender, RoutedEventArgs e)
         {
+            _leaderboardModeSettled = true;
             if (sender is System.Windows.Controls.Button btn && btn.Tag is string mode && mode != _leaderboardMode)
             {
                 _leaderboardMode = mode;
@@ -954,6 +962,13 @@ namespace ConditioningControlPanel
         {
             if (App.Leaderboard == null || LeaderboardTab?.TxtLeaderboardStatus == null || LeaderboardTab.BtnRefreshLeaderboard == null) return;
 
+            if (!_leaderboardModeSettled)
+            {
+                _leaderboardModeSettled = true;
+                _leaderboardMode = LeaderboardDefaultMode;
+                UpdateLeaderboardModeButtons();
+            }
+
             LeaderboardTab.TxtLeaderboardStatus.Text = Loc.Get("label_syncing");
             LeaderboardTab.BtnRefreshLeaderboard.IsEnabled = false;
 
@@ -992,7 +1007,7 @@ namespace ConditioningControlPanel
                     LeaderboardTab.TxtLeaderboardStatus.Text =
                         Loc.GetF("lb_online_and_total", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
 
-                    // Season name + countdown are derived locally by the tab.
+                    // The header title follows the board (no season name, no countdown).
                     LeaderboardTab.SetLeaderboardMode(_leaderboardMode == "all-time");
 
                     // Show/hide Trophy Case stats based on skill unlock

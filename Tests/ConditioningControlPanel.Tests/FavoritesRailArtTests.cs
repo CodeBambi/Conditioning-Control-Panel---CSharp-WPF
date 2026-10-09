@@ -68,12 +68,13 @@ public class FavoritesRailArtTests
     [Fact]
     public void Most_chips_are_cover_art()
     {
-        // Plate is for square icon art only. If it ever outgrows the fourteen door rows, the
+        // Plate is for square icon art only. If it ever outgrows the sixteen door rows (fourteen
+        // until polish wave 11 gave Social and its Lobby tab their own medallion), the
         // rail has quietly gone back to icons-beside-captions, which is the thing the desk
         // pass rejected.
         var plates = FavoritesRailArt.Map.Values.Count(a => a is { Fit: RailArtFit.Plate });
         var covers = FavoritesRailArt.Map.Values.Count(a => a is { Fit: RailArtFit.Cover });
-        Assert.Equal(14, plates);
+        Assert.Equal(16, plates);
         Assert.True(covers > plates, "cover art should be the rule and the plate the exception");
     }
 
@@ -402,5 +403,76 @@ public class FavoritesRailArtTests
         var (height, _) = ChipBox();
         var surface = ModArtFramingRegistry.FindSurface(ModArtFramingRegistry.SurfaceRailChip)!;
         Assert.Equal(69.0 / height, surface.AspectRatio, 3);
+    }
+
+    // ---------------------------------------------------------------- the drawer (nav polish wave 3)
+
+    private static double Num(string s) => double.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>The opening tag of the element named <paramref name="name"/>.</summary>
+    private static string Tag(string xaml, string name)
+    {
+        var at = xaml.IndexOf("x:Name=\"" + name + "\"", StringComparison.Ordinal);
+        Assert.True(at > 0, name + " is gone from SettingsTabView.xaml");
+        var open = xaml.LastIndexOf('<', at);
+        return xaml.Substring(open, xaml.IndexOf('>', at) - open);
+    }
+
+    [Fact]
+    public void The_open_drawer_is_the_old_column_and_the_chips_keep_their_69()
+    {
+        // #860's sum, re-done against the drawer: the body opens to what column 0 was, and the
+        // chip stack still gets 92 - 5 rail margin - 2 border - 8 scrollbar - 8 stack margin.
+        var xaml = RailXaml();
+        double body = ConditioningControlPanel.Views.Tabs.SettingsTabView.FavoritesDrawerWidth;
+        Assert.Equal(92, body);
+
+        var rail = Tag(xaml, "FavoritesRail");
+        var width = Regex.Match(rail, @"\sWidth=""([\d.]+)""");
+        var margin = Regex.Match(rail, @"Margin=""([\d.]+),[\d.]+,([\d.]+),[\d.]+""");
+        Assert.True(width.Success, "FavoritesRail lost its pinned Width, so a half-open drawer squeezes the chips");
+        Assert.True(margin.Success, "FavoritesRail no longer sets an l,t,r,b Margin");
+        double railMargin = Num(margin.Groups[1].Value) + Num(margin.Groups[2].Value);
+        Assert.Equal(body, Num(width.Groups[1].Value) + railMargin);
+
+        const double border = 1 + 1, scrollbar = 8;
+        var stack = Regex.Match(xaml, @"<StackPanel Margin=""([\d.]+),[\d.]+,([\d.]+),[\d.]+"" Width=""([\d.]+)""");
+        Assert.True(stack.Success, "the chip stack lost its Margin + Width pair");
+        double stackMargin = Num(stack.Groups[1].Value) + Num(stack.Groups[2].Value);
+        Assert.Equal(69, Num(stack.Groups[3].Value));
+        Assert.Equal(Num(stack.Groups[3].Value), body - railMargin - border - scrollbar - stackMargin);
+    }
+
+    [Fact]
+    public void The_column_left_of_the_mosaic_is_gone_and_the_drawer_owns_the_right_edge()
+    {
+        var xaml = RailXaml();
+        var root = xaml.Substring(0, xaml.IndexOf("</Grid.ColumnDefinitions>", StringComparison.Ordinal));
+        var cols = Regex.Matches(root, @"<ColumnDefinition Width=""([^""]+)""/>").Cast<Match>().Select(m => m.Groups[1].Value).ToList();
+        // 0 kept so the Grid.Column indices below do not move; 640 is the mosaic, which never
+        // moves when the drawer opens; * is the browser column the drawer pushes; Auto the drawer.
+        Assert.Equal(new[] { "0", "640", "*", "Auto" }, cols);
+
+        Assert.Contains("Grid.Column=\"3\"", Tag(xaml, "FavoritesDrawer"), StringComparison.Ordinal);
+        Assert.DoesNotContain("Grid.Column", Tag(xaml, "FavoritesRail"), StringComparison.Ordinal);
+        var body = Tag(xaml, "FavoritesDrawerBody");
+        Assert.Contains("Width=\"0\"", body, StringComparison.Ordinal);       // closed by default
+        Assert.Contains("ClipToBounds=\"True\"", body, StringComparison.Ordinal);
+        Assert.False(new ConditioningControlPanel.Models.AppSettings().FavoritesDrawerOpen);
+
+        var handle = Tag(xaml, "FavoritesDrawerHandle");
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str rail_favorites_drawer}\"", handle, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.HelpText=\"{loc:Str tooltip_rail_favorites_drawer}\"", handle, StringComparison.Ordinal);
+        // The drawer sits at the right edge now: the click-choice explainer opens INTO the page.
+        Assert.Contains("Placement=\"Left\"", Tag(xaml, "ClickChoicePopup"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_drawer_state_survives_a_save()
+    {
+        var s = new ConditioningControlPanel.Models.AppSettings { FavoritesDrawerOpen = true };
+        var saved = Newtonsoft.Json.JsonConvert.SerializeObject(s);
+        Assert.Contains("\"favorites_drawer_open\":true", saved, StringComparison.Ordinal);
+        Assert.True(Newtonsoft.Json.JsonConvert.DeserializeObject<ConditioningControlPanel.Models.AppSettings>(saved)!.FavoritesDrawerOpen);
     }
 }
