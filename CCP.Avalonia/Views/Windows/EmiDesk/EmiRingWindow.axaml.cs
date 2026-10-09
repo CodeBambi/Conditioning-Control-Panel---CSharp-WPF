@@ -895,8 +895,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         /// <summary>WPF EmiCardFace.AddArt (iconSize 50, strip reserve CardLabelLine + 6): a cover
         /// image, or for a nav icon a soft backdrop + dark wash + hue tint + the medallion; else the
-        /// flat hue tile. Art goes through ModArt, so a .ccpmod's own card art wins as on WPF.</summary>
-        private static void AddArt(Grid grid, EmiRingCard slot)
+        /// flat hue tile. Art goes through ModArt, so a .ccpmod's own card art wins as on WPF.
+        /// EmiRingPicker's tiles call it with WPF's iconSize 34 / stripReserve 14.</summary>
+        internal static void AddArt(Grid grid, EmiRingCard slot, double iconSize = 50, double stripReserve = CardLabelLine + 6)
         {
             double artOpacity = slot.Locked ? 0.42 : 0.92;
             var art = LoadThumb(slot, slot.ThumbIsIcon ? 128 : 192);
@@ -908,9 +909,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 grid.Children.Add(new Rectangle { Fill = new SolidColorBrush(slot.Hue) { Opacity = 0.14 }, IsHitTestVisible = false });
                 grid.Children.Add(new Image
                 {
-                    Source = art, Width = 50, Height = 50, Stretch = Stretch.Uniform,
+                    Source = art, Width = iconSize, Height = iconSize, Stretch = Stretch.Uniform,
                     HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(0, 0, 0, CardLabelLine + 6), Opacity = slot.Locked ? 0.5 : 1.0,
+                    Margin = new Thickness(0, 0, 0, stripReserve), Opacity = slot.Locked ? 0.5 : 1.0,
                     IsHitTestVisible = false,
                 });
                 return;
