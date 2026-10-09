@@ -3216,10 +3216,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// Nothing about it is editor-specific - the next layer that touches Views/Dialogs/ should
     /// move it there and point the two callers at the new namespace.</para>
     ///
-    /// <para>The Discard label is a hardcoded English constant: CCP.Core's language files carry
-    /// <c>btn_save</c> and <c>btn_cancel</c> but no <c>btn_discard</c>, and adding one is a Core
-    /// change this layer does not own. WPF's third button was localized by Windows itself, so this
-    /// is a real regression for the eight non-English languages - one JSON key wide.</para>
+    /// <para>All three labels are loc keys (<c>btn_save</c>, <c>btn_discard</c>, <c>btn_cancel</c>):
+    /// WPF's were localized by Windows itself. Also used by CompanionPromptEditorDialog's X prompt.</para>
     ///
     /// Built in code rather than XAML for the same ownership reason (a .axaml would be a second
     /// new file). Chrome copied from MessageDialog.axaml: DarkerBgBrush window, PinkBrush 18-bold
@@ -3229,9 +3227,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     internal sealed class UnsavedChangesDialog : Window
     {
         internal enum Choice { Save, Discard, Cancel }
-
-        // ponytail: hardcoded until CCP.Core's language files gain a btn_discard key.
-        private const string DiscardLabel = "Discard";
 
         /// <summary>Render/design constructor, on the real close-path strings so the PNG proves
         /// the localization lookups as well as the layout. Internal, like MessageDialog's.</summary>
@@ -3252,7 +3247,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
             var save = MakeButton(Loc.Get("btn_save"), "ActionButton", Choice.Save);
             save.IsDefault = true;
-            var discard = MakeButton(DiscardLabel, "SecondaryButton", Choice.Discard);
+            var discard = MakeButton(Loc.Get("btn_discard"), "SecondaryButton", Choice.Discard);
             discard.Margin = new Thickness(0, 0, 10, 0);
             var cancel = MakeButton(Loc.Get("btn_cancel"), "SecondaryButton", Choice.Cancel);
             cancel.IsCancel = true;

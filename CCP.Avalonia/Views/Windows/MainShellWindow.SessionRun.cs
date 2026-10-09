@@ -55,6 +55,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try
                 {
                     runner.Start(session);
+                    PinkRushHost.Start();          // WPF: a session starts through StartEngine -> SkillTree.Start()
                     PinkFilterOverlay.Refresh(this);
                     SpiralOverlay.Refresh(this);
                     Log.Information("Started session: {Name} ({Difficulty}, +{XP} XP)", session.Name, session.Difficulty, session.BonusXP);

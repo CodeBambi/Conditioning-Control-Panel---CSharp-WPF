@@ -6,9 +6,7 @@
        ToolTip="…"                    -> ToolTip.Tip="…"
        Click="…" / Checked / Unchecked / SelectionChanged -> wired in the constructor by x:Name
        Content="{loc:Str …}" on Button -> a TextBlock child (trap 1: "_" is an access key)
-       DropShadowEffect (x2)          -> dropped; Avalonia has no DropShadowEffect on a Border/TextBlock.
-                                         PreviewTextShadow's colour math is kept out of the code-behind
-                                         with it. -->
+       DropShadowEffect ShadowDepth=d -> OffsetX=OffsetY=d*0.707 (WPF's default Direction 315). -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -38,9 +36,16 @@
                 <TextBlock Text="{loc:Str section_preview}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
                 <Border x:Name="PreviewBorder" HorizontalAlignment="Center"
                         CornerRadius="20" Padding="20,10,20,10" Cursor="Hand">
+                    <Border.Effect>
+                        <DropShadowEffect Color="Black" BlurRadius="15" OffsetX="3.54" OffsetY="3.54" Opacity="0.6"/>
+                    </Border.Effect>
                     <TextBlock x:Name="PreviewText" Text="{loc:Str label_good_girl}"
                                FontSize="40" FontWeight="Bold"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock.Effect>
+                            <DropShadowEffect BlurRadius="3" OffsetX="1.41" OffsetY="1.41" Opacity="0.8"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
                 </Border>
             </StackPanel>
         </Border>

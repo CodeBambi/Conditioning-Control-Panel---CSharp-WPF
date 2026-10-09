@@ -154,7 +154,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 RefreshStatusRow();
                 ApplyStageMode();
                 SyncTick();
-                HelpPopover.Attach(HelpBtnBlinkTrainer, HelpContentService.GetContent("BlinkTrainer"));   // WPF MainWindow.Presets.cs:118
             }
             catch (Exception ex) { Log.Warning(ex, "RefreshBlinkTrainerTab failed"); }
         }

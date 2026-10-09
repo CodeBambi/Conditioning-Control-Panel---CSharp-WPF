@@ -233,4 +233,120 @@ public sealed class WebcamCalibrationTests
         Assert.Equal("Webcam tracking is not running. Start tracking before calibrating.", win.FindControl<TextBlock>("TxtErrorDetail")!.Text);
         win.Close();
     });
+
+    [Fact]
+    public void Verify_ShowsALiveGazeCursor_For15Seconds() => WithTracker(start: true, (tracker, _) =>
+    {
+        var win = OpenAndContinue();
+        var verify = win.FindControl<Border>("VerifyPanel")!;
+        Assert.True(Gaze(win, () => verify.IsVisible));
+        var cursor = win.FindControl<global::Avalonia.Controls.Shapes.Ellipse>("VerifyCursor")!;
+        var status = win.FindControl<TextBlock>("TxtVerifyStatus")!;
+        var gazeField = typeof(WebcamTracker).GetField("OnGazeMove", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        Action<global::Avalonia.Point>? Gazes() => (Action<global::Avalonia.Point>?)gazeField.GetValue(tracker);
+
+        Assert.Null(Gazes());
+        win.FindControl<Button>("BtnVerifyAccuracy")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal("Move your eyes around — the pink dot should track them. 15s left.", status.Text);
+        Gazes()!(new global::Avalonia.Point(400, 300));   // what the tracker raises for a projected gaze
+        Assert.True(cursor.IsVisible);
+        Assert.Equal(400 - cursor.Width / 2, Canvas.GetLeft(cursor));
+        Assert.Equal(300 - cursor.Height / 2, Canvas.GetTop(cursor));
+
+        Clock.Advance(1000); Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Move your eyes around — the pink dot should track them. 14s left.", status.Text);
+        for (int i = 0; i < 14; i++) { Clock.Advance(1000); Dispatcher.UIThread.RunJobs(); }
+        Assert.False(cursor.IsVisible);
+        Assert.Null(Gazes());
+        Assert.Equal("Click Verify to preview accuracy with a live gaze cursor, or close when ready.", status.Text);
+        win.FindControl<Button>("BtnVerifyDone")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    });
+
+    private sealed class ClosedSource : IFrameSource
+    {
+        public bool Open() => false;
+        public bool Read(Mat bgr) => false;
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public void StartingTracking_ShowsTheLoadingSplash_ThenClosesItAtReady() => WithTracker(start: false, (tracker, _) =>
+    {
+        var shell = new MainShellWindow();
+        shell.Show();
+        Dispatcher.UIThread.RunJobs();
+        var seen = new List<(double P, string? Text)>();
+        Action<double, string> spy = (p, _) => seen.Add((p, shell.WebcamLoadingSplashForTests?.FindControl<TextBlock>("TxtStatus")!.Text));
+        tracker.OnStartupProgress += spy;   // after the shell's handler, so it sees the splash the shell made
+        try
+        {
+            Assert.True(tracker.Start(), tracker.LastError);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(new[] { 0.08, 0.25, 0.55, 0.92, 1.0 }, seen.Select(x => x.P));
+            Assert.Equal("Opening camera…", seen[2].Text);
+            Assert.Equal("Ready", seen[4].Text);
+            var splash = shell.WebcamLoadingSplashForTests!;
+            for (int i = 0; i < 200 && shell.WebcamLoadingSplashForTests != null; i++)
+            { AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Dispatcher.UIThread.RunJobs(); }
+            Assert.Null(shell.WebcamLoadingSplashForTests);   // faded and closed
+            Assert.False(splash.IsVisible);
+
+            // A start that fails says why on the splash instead of vanishing (WPF #300).
+            tracker.Stop();
+            WebcamTracker.SourceFactory = () => new ClosedSource();
+            Assert.False(tracker.Start());
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(tracker.LastError, shell.WebcamLoadingSplashForTests!.FindControl<TextBlock>("TxtStatus")!.Text);
+        }
+        finally { tracker.OnStartupProgress -= spy; shell.Close(); }
+    });
+
+    /// <summary>Opens only when the test releases it, so a Stop can land mid-start deterministically.</summary>
+    private sealed class GatedSource : IFrameSource
+    {
+        public readonly ManualResetEventSlim Entered = new(), Release = new();
+        public bool Open() { Entered.Set(); Release.Wait(TimeSpan.FromSeconds(30)); return true; }
+        public bool Read(Mat bgr) => false;
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public void PanicDuringStart_ClosesTheSplash_WithoutAnError() => WithTracker(start: false, (tracker, _) =>
+    {
+        var shell = new MainShellWindow();
+        shell.Show();
+        Dispatcher.UIThread.RunJobs();
+        var src = new GatedSource();
+        WebcamTracker.SourceFactory = () => src;
+        try
+        {
+            var start = tracker.StartAsync();
+            Assert.True(src.Entered.Wait(TimeSpan.FromSeconds(30)));
+            Dispatcher.UIThread.RunJobs();
+            var splash = shell.WebcamLoadingSplashForTests!;
+            Assert.Equal("Opening camera…", splash.FindControl<TextBlock>("TxtStatus")!.Text);
+            tracker.Stop();   // what panic calls
+            src.Release.Set();
+            Assert.False(start.Result);
+            Assert.True(tracker.StartWasStopped);
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotEqual(tracker.LastError, splash.FindControl<TextBlock>("TxtStatus")!.Text);
+            for (int i = 0; i < 200 && shell.WebcamLoadingSplashForTests != null; i++)
+            { AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Dispatcher.UIThread.RunJobs(); }
+            Assert.Null(shell.WebcamLoadingSplashForTests);   // faded at once, no 2.8 s error hold
+        }
+        finally { src.Release.Set(); shell.Close(); }
+    });
+
+    [Fact]
+    public void QuickRecal_OpensOnTheCalibratedMonitor() => WithTracker(start: false, (tracker, _) =>
+    {
+        var screen = new global::Avalonia.Controls.Window().Screens.All[0];
+        tracker.Calibration = new WebcamCalibrationData { MonitorBounds = new MonitorBoundsRecord { X = screen.Bounds.X, Y = screen.Bounds.Y } };
+        var win = new WebcamQuickRecalWindow();
+        Assert.Equal(WindowStartupLocation.Manual, win.WindowStartupLocation);
+        Assert.Equal(screen.Bounds.Position, win.Position);
+        tracker.Calibration = new WebcamCalibrationData { MonitorBounds = new MonitorBoundsRecord { X = -99999, Y = 7 } };
+        Assert.Equal(WindowStartupLocation.CenterScreen, new WebcamQuickRecalWindow().WindowStartupLocation);   // unknown monitor: left alone
+    });
 }

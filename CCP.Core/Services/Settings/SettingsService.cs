@@ -29,6 +29,20 @@ namespace ConditioningControlPanel.Services
         // path, where SaveImmediate runs ON the UI thread.
         private readonly object _saveLock = new();
         private readonly object _timerLock = new();
+        // Instances with an armed debounce. Product code only adds/removes; the test isolation hook
+        // disarms them after each test so a dead test's private service cannot write settings.json
+        // into the next test (the 500 ms timer outlives the test that armed it).
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<SettingsService, byte> Armed = new();
+        internal bool HasPendingSave { get { lock (_timerLock) return _saveDebounceTimer != null; } }
+        internal static void DisarmAllPendingSaves()
+        {
+            foreach (var s in Armed.Keys)
+            {
+                s._savePending = false;
+                s._suppressCloudBackupPending = false;
+                lock (s._timerLock) { s._saveDebounceTimer?.Dispose(); s._saveDebounceTimer = null; Armed.TryRemove(s, out _); }
+            }
+        }
         private long _saveSequence;
         private long _lastWrittenSaveSequence;
 
@@ -811,6 +825,7 @@ namespace ConditioningControlPanel.Services
                         SaveImmediate(suppress);
                     }
                 }, null, SaveDebounceDueTimeMilliseconds, Timeout.Infinite);
+                Armed[this] = 0;
             }
         }
 
@@ -839,6 +854,7 @@ namespace ConditioningControlPanel.Services
             {
                 _saveDebounceTimer?.Dispose();
                 _saveDebounceTimer = null;
+                Armed.TryRemove(this, out _);
             }
             Log.Warning("Settings sealed for factory reset — every further save is a no-op");
         }
@@ -869,6 +885,7 @@ namespace ConditioningControlPanel.Services
             {
                 _saveDebounceTimer?.Dispose();
                 _saveDebounceTimer = null;
+                Armed.TryRemove(this, out _);
             }
 
             try

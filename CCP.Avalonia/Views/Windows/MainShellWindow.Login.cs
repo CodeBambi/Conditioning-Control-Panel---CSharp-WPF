@@ -82,7 +82,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF BtnQuickLogout_Click (AccountSeed.Logout carries the pre-logout sync and progression clear).</summary>
-        internal async void Logout()
+        internal async void Logout() => await LogoutAsync();
+
+        internal async Task LogoutAsync()
         {
             await AccountSeed.Logout();
             UpdateQuickLoginUI(accountChanged: true);
