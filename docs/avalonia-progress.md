@@ -1577,3 +1577,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-settings-perf-emidesk: +999
 - EMI Desk summon chord: Core rules (WPF delegates), X11 XGrabKey arm at startup/rebind, live rebind from Settings; row stays stub (Offers/Glass/Spice unread).
 - Performance: DND app picker (X11 window owners) + one Core DndGuard for both heads; TierBadge follows live motion change.
+
+## avalonia-port/rows-mod-creator: +759
+- Mod Creator Pools & Triggers + Personalities panels ported (manifest round-trip as WPF); achievement slots from Core ModAchievementSlots (registry, not 16 hand-listed).
+- Re-export keeps Advanced manifest sections; row still stub (Advanced/UiArt/ArtFraming/Barks/Mantras/EventAudio/Portraits/Emotes remain).
