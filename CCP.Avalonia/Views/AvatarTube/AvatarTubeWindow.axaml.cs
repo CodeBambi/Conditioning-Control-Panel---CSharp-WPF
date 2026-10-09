@@ -1058,10 +1058,16 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// is drawn smaller than its siblings so it gets 6%. WPF used LayoutTransform; the note on
         /// <see cref="ApplyTubeLayoutOffsets"/> covers why RenderTransform is the twin here.
         /// </summary>
+        /// <para>Deviation (owner, 2026-10-09: "Nurse Amber is still too big"): the 12% belongs to the
+        /// built-in poses. A mod that ships its own poses for the set AND sizes them itself
+        /// (tubeLayout.avatarScale, e.g. Infection Control's 0.9) keeps the author's size; WPF
+        /// stacked both and her cap crossed the glass rim.</para>
         private void ApplyAvatarTransform(int setNumber)
         {
             _avatarBorder.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
-            if (setNumber > 1)
+            if (setNumber > 1 && ModSizesItsOwnPoses(setNumber))
+                _avatarBorder.RenderTransform = null;
+            else if (setNumber > 1)
             {
                 _avatarBorder.RenderTransform = new TransformGroup
                 {
@@ -1073,6 +1079,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             else
                 _avatarBorder.RenderTransform = null;
         }
+
+        private static bool ModSizesItsOwnPoses(int setNumber) =>
+            EffectiveTubeLayout()?.AvatarScale is not null
+            && CoreModArt.HasOverride($"avatar{setNumber}_pose1.png");
 
         /// <summary>
         /// Captions the title box: the persona's own name and level for the sets that have one,
