@@ -144,9 +144,8 @@ public sealed class RealCatalogueFailureFallbackTests
                     Dispatcher.UIThread.RunJobs();
                     Dispatcher.UIThread.RunJobs();
 
-                    var expectedFallback = Session.GetAllSessions()
-                        .Where(session => session.IsAvailable)
-                        .ToArray();
+                    // Locked "Coming Soon" sessions are listed too, as WPF does (audit #1318).
+                    var expectedFallback = Session.GetAllSessions().ToArray();
                     var presets = Assert.IsType<PresetsTabView>(shell.FindControl<PresetsTabView>("PresetsTab"));
                     var rows = presets.FindControl<StackPanel>("SessionRackPanel")!
                         .Children.OfType<Border>()

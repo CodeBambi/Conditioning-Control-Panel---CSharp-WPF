@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Input;
@@ -311,14 +312,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
             var what = new StackPanel { Margin = new Thickness(12, 12, 12, 8) };
             what.Children.Add(Heading("help_heading_what_it_does", pink));
-            what.Children.Add(new TextBlock
+            what.Children.Add(Marked(_content.WhatItDoes, pink, new TextBlock
             {
-                Text = _content.WhatItDoes ?? string.Empty,
                 Foreground = Brush("TextSecondaryBrush", Color.FromRgb(0xD0, 0xD0, 0xD0)),
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 LineHeight = 18,
-            });
+            }));
             body.Children.Add(what);
 
             if (_content.HasTips)
@@ -352,14 +352,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
                         FontSize = 12,
                         Margin = new Thickness(0, 0, 6, 0),
                     });
-                    row.Children.Add(new TextBlock
+                    row.Children.Add(Marked(tip, pink, new TextBlock
                     {
-                        Text = tip ?? string.Empty,
                         Foreground = Brush("TextMutedBrush", Color.FromRgb(0xB0, 0xB0, 0xB0)),
                         FontSize = 11,
                         TextWrapping = TextWrapping.Wrap,
                         MaxWidth = 310,
-                    });
+                    }));
                     tips.Children.Add(row);
                 }
                 body.Children.Add(tips);
@@ -389,15 +388,14 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 howBody.Children.Add(Heading("help_heading_how_it_works", howForeground));
                 var howContent = new StackPanel();
                 howContent.Children.Add(howBody);
-                howContent.Children.Add(new TextBlock
+                howContent.Children.Add(Marked(_content.HowItWorks, pink, new TextBlock
                 {
-                    Text = _content.HowItWorks ?? string.Empty,
                     Foreground = howForeground,
                     FontSize = 10,
                     TextWrapping = TextWrapping.Wrap,
                     LineHeight = 14,
                     FontStyle = FontStyle.Italic,
-                });
+                }));
                 how.Child = howContent;
                 body.Children.Add(how);
             }
@@ -459,6 +457,24 @@ namespace ConditioningControlPanel.Avalonia.Controls
             });
             panel.Children.Add(new HelpLoops.HelpLoopSteps(view, pink));
             return panel;
+        }
+
+        /// <summary>WPF HelpTooltipBuilder.Marked (:44): <c>**word**</c> becomes a SemiBold run in the
+        /// accent; the rest stays plain body copy. The split is Core's <see cref="Services.UI.HelpMarkup"/>.</summary>
+        private static TextBlock Marked(string? text, IBrush accent, TextBlock block)
+        {
+            block.Inlines ??= new InlineCollection();
+            foreach (var (piece, emphasis) in Services.UI.HelpMarkup.Split(text))
+            {
+                var run = new Run(piece);
+                if (emphasis)
+                {
+                    run.FontWeight = FontWeight.SemiBold;
+                    run.Foreground = accent;
+                }
+                block.Inlines.Add(run);
+            }
+            return block;
         }
 
         private static TextBlock Heading(string key, IBrush foreground)

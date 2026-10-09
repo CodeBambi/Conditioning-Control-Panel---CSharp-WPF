@@ -220,7 +220,10 @@ public sealed class SpiralHelpPopoverTests
 
     private static string[] PopupTexts(Control popup) => Descendants(popup)
         .OfType<TextBlock>()
-        .Select(text => text.Text ?? string.Empty)
+        // Help body copy is built from HelpMarkup runs (WPF HelpTooltipBuilder.Marked), not Text.
+        .Select(text => text.Inlines is { Count: > 0 } inlines
+            ? string.Concat(inlines.OfType<global::Avalonia.Controls.Documents.Run>().Select(run => run.Text))
+            : text.Text ?? string.Empty)
         .Where(text => !string.IsNullOrWhiteSpace(text))
         .ToArray();
 

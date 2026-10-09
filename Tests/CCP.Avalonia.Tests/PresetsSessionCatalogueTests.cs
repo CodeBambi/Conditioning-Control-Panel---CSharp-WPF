@@ -47,10 +47,10 @@ public sealed class PresetsSessionCatalogueTests
                 var panel = view.FindControl<StackPanel>("SessionRackPanel");
                 Assert.NotNull(panel);
                 var rows = panel!.Children.OfType<Border>().ToArray();
-                Assert.Equal(available.Length, rows.Length);
-                Assert.Equal(available.Select(session => session.Id),
+                // Audit #1318: WPF lists locked sessions too and only disables Start (SessionIO.cs:971-972).
+                Assert.Equal(all.Count, rows.Length);
+                Assert.Equal(all.Select(session => session.Id),
                     rows.Select(row => (row.Tag as Session)?.Id));
-                Assert.DoesNotContain(rows, row => row.Tag is Session session && !session.IsAvailable);
 
                 var start = view.FindControl<Button>("BtnStartSession");
                 Assert.NotNull(start);
@@ -99,6 +99,17 @@ public sealed class PresetsSessionCatalogueTests
                 host.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
                 Dispatcher.UIThread.RunJobs();
                 AssertDetails(view, first);
+                Assert.True(start.IsEnabled);
+
+                // A locked row selects like any other; Start greys and reads "🔒 Coming Soon".
+                var locked = all.First(session => !session.IsAvailable);
+                Click(host, rows.Single(row => (row.Tag as Session)?.Id == locked.Id));
+                AssertDetails(view, locked);
+                Assert.False(start.IsEnabled);
+                Assert.Equal("🔒 " + Loc.Get("label_coming_soon"), ((TextBlock)start.Content!).Text);
+                Click(host, firstRow);
+                Assert.True(start.IsEnabled);
+                Assert.NotEqual("🔒 " + Loc.Get("label_coming_soon"), ((TextBlock)start.Content!).Text);
             }
             finally
             {
@@ -297,7 +308,6 @@ public sealed class PresetsSessionCatalogueTests
 
                 var manager = new SessionManager(service);
                 manager.LoadAllSessions();
-                var available = manager.AllSessions.Where(session => session.IsAvailable).ToArray();
                 var builtIn = manager.AllSessions.Single(session => session.Id == "fixture_builtin");
                 var custom = manager.AllSessions.Single(session => session.Id == "fixture_custom");
                 Assert.Equal(3, manager.AllSessions.Count);
@@ -316,9 +326,10 @@ public sealed class PresetsSessionCatalogueTests
 
                 var panel = view.FindControl<StackPanel>("SessionRackPanel")!;
                 var rows = panel.Children.OfType<Border>().ToArray();
-                Assert.Equal(available.Select(session => session.Id).OrderBy(id => id),
+                // Audit #1318: the locked session is listed (WPF SessionIO.cs:971-972 only disables Start).
+                Assert.Equal(manager.AllSessions.Select(session => session.Id).OrderBy(id => id),
                     rows.Select(row => (row.Tag as Session)?.Id).OrderBy(id => id));
-                Assert.DoesNotContain(rows, row => (row.Tag as Session)?.Id == "fixture_unavailable");
+                Assert.Contains(rows, row => (row.Tag as Session)?.Id == "fixture_unavailable");
                 Assert.Same(custom, rows.Single(row => (row.Tag as Session)?.Id == custom.Id).Tag);
 
                 var customRow = rows.Single(row => (row.Tag as Session)?.Id == custom.Id);
@@ -448,13 +459,6 @@ public sealed class PresetsSessionCatalogueTests
                     IsAvailable = true
                 };
                 manager.AllSessions.Add(imported);
-                manager.AllSessions.Add(new Session
-                {
-                    Id = "filter_imported_unavailable",
-                    Name = "Filter Unavailable",
-                    Source = SessionSource.Imported,
-                    IsAvailable = false
-                });
 
                 var view = new PresetsTabView { Width = 1100, Height = 760 };
                 view.UseSessionManager(manager);
@@ -659,8 +663,6 @@ public sealed class PresetsSessionCatalogueTests
                     20, 500, SessionSource.Imported, stamp.AddMinutes(40));
                 var delta = Add("query_delta", "Delta Name", "Other metadata", SessionDifficulty.Extreme,
                     10, 700, SessionSource.BuiltIn, stamp.AddMinutes(30));
-                Add("query_unavailable", "Unavailable", "Not shown", SessionDifficulty.Easy,
-                    1, 1, SessionSource.Custom, stamp.AddMinutes(50), available: false);
 
                 var view = new PresetsTabView { Width = 1100, Height = 760 };
                 view.UseSessionManager(manager);
@@ -807,11 +809,19 @@ public sealed class PresetsSessionCatalogueTests
                 // The normal shell proof above keeps the toolbar on one line. Resize the same
                 // mounted controls to a narrow rack and repeat the containment check in two
                 // localized metric sets; wrapping is the layout contract, not a test-only width.
+                // The shell's tab area: DesignCanvas 1585 - rail 96 - PresetsTab margin 20
+                // (MainShellWindow.axaml:321-325, :2502). There WPF's single 28px row holds.
+                view.Width = 1469;
+                host.Width = 1469;
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                AssertToolbarControlsContained(view, oneLine: true);
+
                 view.Width = 900;
                 host.Width = 900;
                 Dispatcher.UIThread.RunJobs();
                 Dispatcher.UIThread.RunJobs();
-                AssertToolbarControlsContained(view);
+                AssertToolbarControlsContained(view, oneLine: false);
 
                 LocalizationManager.Instance.SetLanguage("de");
                 Dispatcher.UIThread.RunJobs();
@@ -849,20 +859,34 @@ public sealed class PresetsSessionCatalogueTests
     private static string SortFace(ComboBox combo) =>
         ((combo.SelectedItem as ComboBoxItem)?.Content as TextBlock)?.Text ?? "<missing>";
 
-    private static void AssertToolbarControlsContained(PresetsTabView view)
+    /// <summary>Audit #1456: WPF is one 28px row with sort and search pushed right
+    /// (PresetsTabView.xaml:805-840, search 150px). Narrow, they drop under the chips, still inside.</summary>
+    private static void AssertToolbarControlsContained(PresetsTabView view, bool? oneLine = null)
     {
         var search = view.FindControl<TextBox>("TxtRackSearch")!;
         var sort = view.FindControl<ComboBox>("CmbRackSort")!;
-        var toolbar = Assert.IsType<WrapPanel>(search.Parent);
-        Assert.Same(toolbar, sort.Parent);
-        Assert.True(search.Bounds.Right <= toolbar.Bounds.Width + 0.5,
-            $"search={search.Bounds}, toolbar={toolbar.Bounds}");
-        Assert.True(search.Bounds.Bottom <= toolbar.Bounds.Height + 0.5,
-            $"search={search.Bounds}, toolbar={toolbar.Bounds}");
-        Assert.True(sort.Bounds.Right <= toolbar.Bounds.Width + 0.5,
-            $"sort={sort.Bounds}, toolbar={toolbar.Bounds}");
-        Assert.True(sort.Bounds.Bottom <= toolbar.Bounds.Height + 0.5,
-            $"sort={sort.Bounds}, toolbar={toolbar.Bounds}");
+        var chips = view.FindControl<StackPanel>("RackSourceChips")!;
+        var toolbar = view.FindControl<Control>("RackToolbar")!;
+        Rect In(Control c) => new(c.TranslatePoint(default, toolbar)!.Value, c.Bounds.Size);
+        var s = In(search);
+        var o = In(sort);
+        var c = In(chips);
+        foreach (var r in new[] { s, o })
+        {
+            Assert.True(r.Left >= -0.5 && r.Right <= toolbar.Bounds.Width + 0.5, $"control={r}, toolbar={toolbar.Bounds}");
+            Assert.True(r.Top >= -0.5 && r.Bottom <= toolbar.Bounds.Height + 0.5, $"control={r}, toolbar={toolbar.Bounds}");
+        }
+        Assert.Equal(150, search.Bounds.Width, 1);
+        Assert.Equal(s.Top, o.Top, 1);
+        Assert.True(o.Right <= s.Left + 0.5, $"sort={o}, search={s}");
+        Assert.Equal(toolbar.Bounds.Width, s.Right, 1);
+        if (oneLine == true)
+        {
+            Assert.Equal(28, toolbar.Bounds.Height, 1);
+            Assert.True(s.Top < c.Bottom && c.Top < s.Bottom, $"chips={c}, search={s}");
+        }
+        else if (oneLine == false)
+            Assert.True(s.Top >= c.Bottom - 0.5, $"chips={c}, search={s}");
     }
 
     [Fact]
