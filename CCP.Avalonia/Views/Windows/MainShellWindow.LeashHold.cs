@@ -3,9 +3,7 @@
 // press itself is untouched (Platform/Win32PanicKey: the first down is THE panic press, repeats are
 // swallowed, leashed or not), so the leash never delays or weakens panic. Windows hook only; the
 // X11 listener does not report repeats/key-ups yet (ponytail).
-// SEAMs for the merge (r10 owns the types; each sits at its exact WPF call site below):
-// LeashHoldRing.ShowHeld(held) / LeashHoldRing.Dismiss() (the 5..1 ring), LeashPunishWindow.CloseNow()
-// (before the cut). LeashTaskHost.OnPanicPress(false) is marked in Platform/Win32Input.OnPanicPress.
+// The hold shows LeashHoldRing's 5..1 ring; the cut hides the gate and closes the punish window first.
 using System;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.Controls.Leash;
@@ -27,7 +25,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Platform.Win32PanicKey.Leashed = () => Platform.LeashHead.IsLeashed;
             Platform.Win32PanicKey.LeashHoldDue += () => Dispatcher.UIThread.Post(() =>
             {
-                // SEAM: LeashHoldRing.Dismiss()
+                LeashHoldRing.Dismiss();
                 AskToCutFromHold();
             });
             Platform.Win32PanicKey.LeashHolding += held =>
@@ -38,7 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (left != _leashHoldShown)
                 {
                     _leashHoldShown = left;
-                    // SEAM: LeashHoldRing.ShowHeld(held)   (posted: Dispatcher.UIThread.Post)
+                    Dispatcher.UIThread.Post(() => LeashHoldRing.ShowHeld(held));
                 }
                 if (LeashHoldTick.Due(held, _leashHoldTicked) is int sec)
                 {
@@ -50,7 +48,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 _leashHoldTicked = 0;
                 _leashHoldShown = 0;
-                // SEAM: LeashHoldRing.Dismiss()   (posted: Dispatcher.UIThread.Post)
+                Dispatcher.UIThread.Post(LeashHoldRing.Dismiss);
             };
         }
 
@@ -63,8 +61,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Serilog.Log.Information("Leash: panic key held 5 s, asking to cut");
             LeashCutConfirmWindow.Ask(holder, () =>
             {
-                // WPF: HideLeashGate() (no gate overlay on this head yet)
-                // SEAM: LeashPunishWindow.CloseNow()
+                try { Current?.HideLeashGate(); } catch { }
+                LeashPunishWindow.CloseNow();
                 Platform.LeashHead.Cut();
             });
         }
