@@ -126,7 +126,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private readonly Grid _contentRoot;
         private readonly Path _hoverWashA, _hoverWashB, _peekScrimA, _peekScrimB, _seamLine, _activeRingA, _activeRingB;
         private readonly TextBlock _txtTitleA, _txtTitleB;
-        private readonly DropShadowEffect _activeGlow;
+        private readonly Border _activeGlow;   // the GlowLayer sibling (CardGlow)
         private readonly ScaleTransform _rootScale = new(1, 1), _titleScaleA = new(1, 1), _titleScaleB = new(1, 1);
         /// <summary>Drives SplitProgress. ONE instance, mutated per sweep: replacing it mid-flight
         /// drops the animated value and the seam snaps to the old target before the new sweep.</summary>
@@ -158,7 +158,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _activeRingB = this.FindControl<Path>("ActiveRingB")!;
             _txtTitleA = this.FindControl<TextBlock>("TxtTitleA")!;
             _txtTitleB = this.FindControl<TextBlock>("TxtTitleB")!;
-            _activeGlow = (DropShadowEffect)_rootBorder.Effect!;
+            _activeGlow = this.FindControl<Border>("GlowLayer")!;
+            CardGlow.Bind(_activeGlow, () => CardGlow.BlurRadius);
             _btnHelpA = this.FindControl<Button>("BtnHelpA")!;
             _btnHelpB = this.FindControl<Button>("BtnHelpB")!;
 
@@ -544,12 +545,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
             var tier = Env.CurrentTier;
             bool glow = Env.AllowGlow(tier) && Env.Level != MotionLevel.Off;
-            if (glow) _activeGlow.BlurRadius = Math.Min(18, Env.MaxGlowBlurRadius(tier));
+            if (glow) CardGlow.SetBlur(_activeGlow, Math.Min(CardGlow.BlurRadius, Env.MaxGlowBlurRadius(tier)));
             // Visibility + window focus + motion + tier, exactly WPF's AmbientAllowed: parked at peak.
             if (!AmbientAllowed) { _activeGlow.Opacity = glow ? ActiveGlowMaxOpacity : 0; return; }
 
             _breath = new CancellationTokenSource();
-            if (glow) _ = Breathe(DropShadowEffect.OpacityProperty, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
+            if (glow) _ = Breathe(OpacityProperty, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
             else _activeGlow.Opacity = 0;
             if (IsActiveA) _ = Breathe(OpacityProperty, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeRingA, _breath.Token);
             if (IsActiveB) _ = Breathe(OpacityProperty, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeRingB, _breath.Token);
