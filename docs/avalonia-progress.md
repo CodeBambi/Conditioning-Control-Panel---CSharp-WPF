@@ -1688,3 +1688,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-launcher: +83
 - Launcher speaker mute button (WPF Sound.cs), real-click test fail-proven, live sandbox checked.
 - win-launcher ledger: 5 duplicate rows merged into one (P21); still stub.
+
+## avalonia-port/programs-run-3a: +738
+- Linux now writes programs.json: full ProgramService (timers, startup rollover, Dispose flush), Enroll (first_week only), Withdraw and today's session through a SessionRunner bridge; a newer-schema file is read-only on both heads.
+- A panic ends a program session; Lockdown refuses each lifecycle control. Pause/Restart/Dismiss/Ritual/Mantras are left for 3b.

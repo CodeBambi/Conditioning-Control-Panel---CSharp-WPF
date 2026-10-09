@@ -84,8 +84,9 @@ public class ProgramService : IDisposable
 
     /// <summary>
     /// Load-only: no startup repair or rollover, no timers, never writes programs.json or moves a
-    /// leftover temp. The Avalonia head's mode until it can run a program's days
-    /// (docs/avalonia-decisions.md, 2026-10-09 programs CHECKPOINT A).
+    /// leftover temp, and every lifecycle call (Enroll, Pause, Resume, Withdraw, Restart, Dismiss,
+    /// SubmitRitualTask) is refused. Set by the internal ctor (tests) or a newer SchemaVersion stamp; both heads
+    /// grey their lifecycle controls (docs/avalonia-decisions.md, programs CHECKPOINT A/B and 3a).
     /// </summary>
     private readonly bool _readOnly;
 
@@ -162,10 +163,6 @@ public class ProgramService : IDisposable
     public ProgramService() : this(Path.Combine(CorePaths.UserData, "programs.json"), readOnly: false)
     {
     }
-
-    /// <summary>The Avalonia head's load-only instance; see <see cref="_readOnly"/>.</summary>
-    public static ProgramService CreateReadOnly() =>
-        new(Path.Combine(CorePaths.UserData, "programs.json"), readOnly: true);
 
     /// <summary>True when this instance never writes: the head asked for it, or programs.json was
     /// stamped by a newer build (<see cref="ProgramState.SchemaVersion"/>).</summary>
@@ -375,6 +372,7 @@ public class ProgramService : IDisposable
         int? dayBoundaryHour = null,
         int nudgeHour = 20)
     {
+        if (_readOnly) { Log.Warning("Program enrollment refused: programs.json is read-only here"); return null; }
         if (!CanEnroll(program, out var reason))
         {
             Log.Warning("Program enrollment refused ({Program}): {Reason}", program?.Id ?? "null", reason);
@@ -460,7 +458,7 @@ public class ProgramService : IDisposable
     public bool Pause()
     {
         var enrollment = State.Active;
-        if (enrollment is not { State: ProgramEnrollmentState.Active }) return false;
+        if (enrollment is not { State: ProgramEnrollmentState.Active } || _readOnly) return false;
 
         if (!CanPause(out var reason))
         {
@@ -483,7 +481,7 @@ public class ProgramService : IDisposable
     public void Resume()
     {
         var enrollment = State.Active;
-        if (enrollment is not { State: ProgramEnrollmentState.Paused }) return;
+        if (enrollment is not { State: ProgramEnrollmentState.Paused } || _readOnly) return;
 
         enrollment.State = ProgramEnrollmentState.Active;
         enrollment.PausedAt = null;
@@ -501,7 +499,7 @@ public class ProgramService : IDisposable
     public void Withdraw()
     {
         var enrollment = State.Active;
-        if (enrollment == null) return;
+        if (enrollment == null || _readOnly) return;   // read-only: the head greys Withdraw too
 
         // Before anything else, and before the enrollment is torn down: end today's session if it
         // is still on screen. "Withdraw" has to mean the program stops, not just that its bookkeeping
@@ -529,7 +527,7 @@ public class ProgramService : IDisposable
     {
         var enrollment = State.Active;
         var program = ActiveProgram;
-        if (enrollment == null || program == null) return;
+        if (enrollment == null || program == null || _readOnly) return;
         if (enrollment.State != ProgramEnrollmentState.Lapsed) return;
 
         enrollment.RestartForNewAttempt(Now(), program.Rules);
@@ -696,6 +694,10 @@ public class ProgramService : IDisposable
         var program = ActiveProgram;
         if (enrollment == null || program == null) return;
         if (enrollment.State != ProgramEnrollmentState.Active) return;
+
+        // programs-3a decision: a run of a program this head cannot finish (loaded from a synced
+        // file) is never lapsed here; Withdraw stays open. Unseeded (WPF) nothing is unavailable.
+        if (UnavailableTasks(program, CoreProgram.IsTaskAvailable).Count > 0) return;
 
         // Never judge a day while the user is still inside it. The 04:00 boundary lands in the
         // middle of the sessions this app is actually used for: a 03:30 start crosses it, and the
@@ -1215,7 +1217,7 @@ public class ProgramService : IDisposable
     {
         var enrollment = State.Active;
         var day = Today;
-        if (enrollment is not { State: ProgramEnrollmentState.Active } || day == null) return false;
+        if (enrollment is not { State: ProgramEnrollmentState.Active } || day == null || _readOnly) return false;
 
         var task = day.Tasks.FirstOrDefault(t =>
             t.Kind == ProgramTaskKind.Ritual && string.Equals(t.Id, taskId, StringComparison.OrdinalIgnoreCase));
@@ -1533,7 +1535,7 @@ public class ProgramService : IDisposable
     /// <summary>Clear a finished run so the user can browse and enroll again.</summary>
     public void DismissGraduated()
     {
-        if (State.Active is { State: ProgramEnrollmentState.Graduated } graduated)
+        if (!_readOnly && State.Active is { State: ProgramEnrollmentState.Graduated } graduated)
         {
             State.History.Add(graduated);
             State.Active = null;
