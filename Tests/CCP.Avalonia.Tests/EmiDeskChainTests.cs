@@ -71,6 +71,21 @@ public sealed class EmiDeskChainTests
             Assert.Equal("0_0", w.FaceText);
             Assert.Equal("idle", w.PoseKey);
             Assert.True(w.IdleBeatsRunning);
+
+            // E4: Say types . / .. / ... in the bubble, lands the line, then clears it.
+            bool said = false;
+            w.Say("hello you", "^_^", () => said = true);
+            Assert.Equal(".", w.BubbleText);
+            bool landed = false;
+            for (int t = 0; t < 12000 && !said; t += 20)
+            {
+                await Task.Delay(20);
+                Dispatcher.UIThread.RunJobs();
+                if (w.BubbleText == "hello you") landed = true;
+            }
+            Assert.True(landed);
+            Assert.True(said);
+            Assert.Null(w.BubbleText);
         }
         finally
         {
