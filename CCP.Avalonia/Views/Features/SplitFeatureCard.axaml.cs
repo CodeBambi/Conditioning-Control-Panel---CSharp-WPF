@@ -539,6 +539,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             _breath?.Cancel();
             _breath = null;
+            _breathClock?.Stop();
             _activeRingA.Opacity = ActiveRingMaxOpacity;
             _activeRingB.Opacity = ActiveRingMaxOpacity;
             if (!active) { _activeGlow.Opacity = 0; return; }
@@ -549,12 +550,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // Visibility + window focus + motion + tier, exactly WPF's AmbientAllowed: parked at peak.
             if (!AmbientAllowed) { _activeGlow.Opacity = glow ? ActiveGlowMaxOpacity : 0; return; }
 
-            _breath = new CancellationTokenSource();
-            if (glow) _ = Breathe(OpacityProperty, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
-            else _activeGlow.Opacity = 0;
-            if (IsActiveA) _ = Breathe(OpacityProperty, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeRingA, _breath.Token);
-            if (IsActiveB) _ = Breathe(OpacityProperty, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeRingB, _breath.Token);
+            // On the shared 30 fps beat, not an Animation (see BreathClock in CardGlow.cs).
+            if (!glow) _activeGlow.Opacity = 0;
+            var targets = new List<(Visual, double, double)>();
+            if (glow) targets.Add((_activeGlow, ActiveGlowMinOpacity, ActiveGlowMaxOpacity));
+            if (IsActiveA) targets.Add((_activeRingA, ActiveRingMinOpacity, ActiveRingMaxOpacity));
+            if (IsActiveB) targets.Add((_activeRingB, ActiveRingMinOpacity, ActiveRingMaxOpacity));
+            _breathClock ??= new BreathClock(this, ActiveBreathSeconds);
+            if (targets.Count > 0) _breathClock.Start(targets.ToArray());
         }
+
+        private BreathClock? _breathClock;
 
         private static Animation Breathe(AvaloniaProperty prop, double min, double max) => new()
         {

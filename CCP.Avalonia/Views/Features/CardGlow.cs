@@ -30,4 +30,49 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// <summary>Re-applies the shadow after a blur change (performance tier).</summary>
         public static void SetBlur(Border layer, double blur) => Bind(layer, () => blur);   // a new binding replaces the old
     }
+
+    /// <summary>
+    /// The tile breath on the window's shared 30 fps beat (owner, 2026-10-09: "still something
+    /// stealing frames"). An Avalonia Animation ticks at render rate, so one breathing tile kept
+    /// the whole window composing 60 frames a second, each paying a full-window blit; on the
+    /// FrameClock it ticks with the fog and the logo dial. Same curve as the old Animation
+    /// (Alternate + SineEaseInOut over the period): min + (max - min) * (1 - cos(pi t / period)) / 2.
+    /// </summary>
+    internal sealed class BreathClock
+    {
+        private readonly global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock _clock;
+        private readonly System.Diagnostics.Stopwatch _watch = new();
+        private readonly double _period;
+        private (Visual Target, double Min, double Max)[] _targets = Array.Empty<(Visual, double, double)>();
+
+        public BreathClock(Visual owner, double periodSeconds)
+        {
+            _period = periodSeconds;
+            _clock = new global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock(owner) { Interval = TimeSpan.FromSeconds(1.0 / 30) };
+            _clock.Tick += (_, _) => Step();
+        }
+
+        public bool IsRunning => _clock.IsEnabled;
+
+        public void Start(params (Visual Target, double Min, double Max)[] targets)
+        {
+            _targets = targets;
+            _watch.Restart();
+            Step();
+            _clock.Start();
+        }
+
+        public void Stop()
+        {
+            _clock.Stop();
+            _watch.Reset();
+            _targets = Array.Empty<(Visual, double, double)>();
+        }
+
+        private void Step()
+        {
+            double k = (1 - Math.Cos(Math.PI * _watch.Elapsed.TotalSeconds / _period)) / 2;
+            foreach (var (t, min, max) in _targets) t.Opacity = min + (max - min) * k;
+        }
+    }
 }

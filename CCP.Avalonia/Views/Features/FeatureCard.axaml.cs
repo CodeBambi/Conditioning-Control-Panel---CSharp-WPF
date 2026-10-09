@@ -278,16 +278,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             _breath?.Cancel();
             _breath = null;
+            _breathClock?.Stop();
             if (!active || !IsEffectivelyVisible)
             {
                 _activeGlow.Opacity = 0;
                 _activeBorder.Opacity = 1;
                 return;
             }
-            _breath = new CancellationTokenSource();
-            _ = Breathe(_activeGlow, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
-            _ = Breathe(_activeBorder, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeBorder, _breath.Token);
+            _breathClock ??= new BreathClock(this, ActiveBreathSeconds);
+            _breathClock.Start((_activeGlow, ActiveGlowMinOpacity, ActiveGlowMaxOpacity),
+                               (_activeBorder, ActiveRingMinOpacity, ActiveRingMaxOpacity));
         }
+
+        private BreathClock? _breathClock;
 
         private static Animation Breathe(Animatable target, double min, double max)
         {

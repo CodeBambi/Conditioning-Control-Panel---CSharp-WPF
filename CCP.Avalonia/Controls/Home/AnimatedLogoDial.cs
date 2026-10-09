@@ -219,6 +219,10 @@ public sealed class AnimatedLogoDial : Grid
                         c.Clear(SKColors.Transparent);
                         r.Draw(c, side, side, phase, drive);
                     }
+                    // Skia keys an uploaded bitmap on its generation id, and drawing through an
+                    // SKCanvas does not bump it: without this the paint kept showing the first two
+                    // frames forever (the dial looked frozen).
+                    _back.NotifyPixelsChanged();
                     lock (_frameGate) (_front, _back) = (_back, _front);
                 }
             }
