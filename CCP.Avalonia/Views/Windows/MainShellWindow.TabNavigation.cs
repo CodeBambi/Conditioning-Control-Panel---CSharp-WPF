@@ -431,7 +431,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             strip.SectionRequested += section =>
             {
                 if (section == NavSections.Settings) ShowTab("appsettings");
-                else ShowTab(NavLastTabFor(section));
+                else ShowTab(NavSections.DefaultTab(section) ?? "settings");
             };
 
             // Settings keeps its own left pill column; the breadcrumb follows it.

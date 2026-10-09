@@ -452,7 +452,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ============================== navigation ==============================
 
-        /// <summary>A row press: the section's last tab, else its default tab.</summary>
+        /// <summary>A row press: always the section's first tab (owner, 2026-10-09: never the last pill chosen).</summary>
         private void NavDoor_Click(object? sender, RoutedEventArgs e)
         {
             if (sender is not Button btn || btn.Tag is not string tag) return;
@@ -462,7 +462,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Opens a section the way its rail row does; logs and stays on an unknown key.</summary>
         internal void OpenNavSection(string section)
         {
-            var tab = NavRailRules.TargetTab(section, NavLastTabJson);
+            // No last-tab memory here (owner, 2026-10-09): a rail icon always opens the first pill.
+            var tab = NavRailRules.TargetTab(section, null);
             if (tab == null)
             {
                 Log.Warning("OpenNavSection: no section {Section}", section);
