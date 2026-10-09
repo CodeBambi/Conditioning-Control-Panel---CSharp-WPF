@@ -563,6 +563,7 @@ namespace ConditioningControlPanel.Avalonia
                     if (friends != null)
                     {
                         Platform.FriendsHead.Service = friends;
+                        Views.Controls.Friends.FriendsFeedHost.Attach(friends);
                         CoreAccount.UnifiedIdentityChanged += (_, _) => friends.Kick();
                         friends.Start(new Platform.FriendsHead.Timer());
                         // WPF App.xaml.cs LEASH: rides the friends poll (report out, block in, 20 s while leashed).

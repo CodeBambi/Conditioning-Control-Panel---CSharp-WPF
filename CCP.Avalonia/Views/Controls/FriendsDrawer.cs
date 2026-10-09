@@ -3,9 +3,9 @@
 // offline, blocked), a friend's card with the menu (squelch, remove and block after a confirm,
 // report), request answers, add by code and your own code. Driven only by IFriendsService.
 // The send pickers (poke / invite / watch) are in FriendsDrawer.Pickers.cs.
-// ponytail: no feed, trails,
-// open tables or leash section, no lock-day chip, no once-only presence ask, no juice (.Juice.cs), no bell (the corner notices are not on this
-// head), no per-PC block list (the server's list only). A word WPF throws outside the drawer
+// The feed is FriendsDrawer.Feed.cs, the sent trail and lock chip FriendsDrawer.Trail.cs; the leash section mounts through MountLeash (FriendsDrawer.Leash.cs).
+// ponytail: no open tables, tier plates or juice (.Juice.cs); no per-PC block
+// list (the server's list only). A word WPF throws outside the drawer
 // (FriendsLanding.Tell) is a FloatingWord over the rail chip's window (OwnerWindow).
 using System;
 using System.Collections.Generic;
@@ -13,6 +13,7 @@ using Avalonia.Input.Platform;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -43,7 +44,12 @@ public sealed partial class FriendsDrawer : Border
     private string? _openId;
     private (string Id, string What)? _confirm;
     private readonly Dictionary<string, (string Text, bool Good)> _results = new();
-    private readonly Border _head = new(), _addBox = new(), _foot = new();
+    private readonly Border _head = new(), _ask = new(), _addBox = new(), _foot = new();
+    /// <summary>The leash section's slot (WPF _leash): kept between repaints, filled once by MountLeash.</summary>
+    private readonly StackPanel _leashSlot = new() { Tag = "friends-leash-slot" };
+    internal Panel LeashSlot => _leashSlot;
+    /// <summary>Leash lane contract: implemented in FriendsDrawer.Leash.cs; called once, from the constructor.</summary>
+    partial void MountLeash(Panel slot);
     private readonly StackPanel _list = new();
     private readonly TextBox _codeBox = new();
     private readonly Button _addGo;
@@ -70,16 +76,20 @@ public sealed partial class FriendsDrawer : Border
             GradientStops = { new GradientStop(Color.FromRgb(0x24, 0x17, 0x42), 0), new GradientStop(Color.FromRgb(0x1C, 0x12, 0x33), 1) },
         };
         (BorderBrush, BorderThickness, Focusable) = (Line2, new Thickness(1), true);
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto") };
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,Auto") };
         var (scroll, top, line) = (new ScrollViewer { Content = _list, Padding = new Thickness(6, 4, 6, 8), MinHeight = 120 }, new Thickness(0, 1, 0, 0), Line);
+        (_ask.Margin, _ask.IsVisible) = (new Thickness(10, 8, 10, 0), false);
+        Grid.SetRow(_ask, 1);
         (_head.Background, _head.CornerRadius, _head.BorderBrush, _head.BorderThickness, _head.Padding) = (Raised, new CornerRadius(15, 15, 0, 0), line, new Thickness(0, 0, 0, 1), new Thickness(12, 12, 12, 10));
         (_addBox.IsVisible, _addBox.Padding, _addBox.BorderBrush, _addBox.BorderThickness) = (false, new Thickness(10, 8, 10, 8), line, top);
         (_foot.Background, _foot.BorderBrush, _foot.BorderThickness, _foot.CornerRadius, _foot.Padding) = (Foot, line, top, new CornerRadius(0, 0, 15, 15), new Thickness(8));
-        Grid.SetRow(scroll, 1);
-        Grid.SetRow(_addBox, 2);
-        Grid.SetRow(_foot, 3);
-        root.Children.AddRange(new Control[] { _head, scroll, _addBox, _foot });
+        Grid.SetRow(scroll, 2);
+        Grid.SetRow(_addBox, 3);
+        Grid.SetRow(_foot, 4);
+        root.Children.AddRange(new Control[] { _head, _ask, scroll, _addBox, _foot });
         Child = root;
+        // The leash, pinned above the list (WPF field _leash = new LeashDrawerSection(), re-added on every render).
+        MountLeash(_leashSlot);
         // The add box (WPF BuildAddBox): CCP- and five letters from the code alphabet.
         (_codeBox.MaxLength, _codeBox.FontFamily, _codeBox.Tag) = (9, Mono, "friends-code-box");
         ToolTip.SetTip(_codeBox, Loc.Get("friends_add_hint"));
@@ -142,6 +152,7 @@ public sealed partial class FriendsDrawer : Border
     {
         try { _svc?.SetDrawerOpen(false); } catch { }
         Unsubscribe(); // a folded drawer redraws nothing (OnOpened re-subscribes)
+        FeedFolded();
         (_isOpen, _openId, _confirm, _picker, _addBox.IsVisible) = (false, null, null, null, false);
     }
     private void Rebind()
@@ -150,11 +161,12 @@ public sealed partial class FriendsDrawer : Border
         if (!ReferenceEquals(next, _svc)) { Unsubscribe(); _svc = next; }
         if (_subscribed || _svc == null) return;
         _svc.SnapshotChanged += OnSnapshot;
+        _svc.SentTrailsChanged += OnTrailsChanged;
         _subscribed = true;
     }
     public void Unsubscribe()
     {
-        if (_subscribed && _svc != null) _svc.SnapshotChanged -= OnSnapshot;
+        if (_subscribed && _svc != null) { _svc.SnapshotChanged -= OnSnapshot; _svc.SentTrailsChanged -= OnTrailsChanged; }
         _subscribed = false;
     }
     private void OnSnapshot(FriendsSnapshot _) => Render();
@@ -168,6 +180,7 @@ public sealed partial class FriendsDrawer : Border
         var snap = FriendsSnapshot.Empty;
         try { if (_svc?.Available == true) snap = _svc.Snapshot ?? FriendsSnapshot.Empty; } catch { }
         RenderHead();
+        RenderAsk();
         RenderList(snap);
         RenderFoot(snap);
     }
@@ -202,6 +215,39 @@ public sealed partial class FriendsDrawer : Border
         _head.Child = g;
     }
 
+    /// <summary>WPF RenderAsk: the once-only "let friends see you?" strip, while hidden and not yet asked.</summary>
+    private void RenderAsk()
+    {
+        (_ask.Child, _ask.IsVisible) = (null, false);
+        if (_svc?.Available != true || Shared() || PresenceAsk.Asked()) return;
+        var q = Wrap(Label(Loc.Get("friends_presence_ask"), 12.5, Text, null, FontWeight.SemiBold));
+        var sub = Wrap(Label(Loc.Get("friends_presence_ask_sub"), 11, Muted));
+        sub.Margin = new Thickness(0, 2, 0, 0);
+        var yes = Pill(Loc.Get("friends_presence_yes"), Mint, MintInk, "friends-presence-yes", Mint);
+        yes.Click += (_, _) =>
+        {
+            try { if (_svc != null) _svc.PresenceShared = true; } catch { }
+            PresenceAsk.MarkAsked();
+            Render();
+        };
+        var no = Pill(Loc.Get("friends_presence_no"), Raised, Text, "friends-presence-no", Line2);
+        no.Margin = new Thickness(6, 0, 0, 0);
+        no.Click += (_, _) => { PresenceAsk.MarkAsked(); Render(); };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 0, 0), Children = { yes, no } };
+        Grid.SetColumn(buttons, 1);
+        _ask.Child = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x1F, 0x5F, 0xFF, 0xD0)), BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x5F, 0xFF, 0xD0)),
+            BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 6, 6, 6), Tag = "friends-presence-ask",
+            Child = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                Children = { new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { q, sub } }, buttons },
+            },
+        };
+        _ask.IsVisible = true;
+    }
+
     internal void TogglePresence()
     {
         if (_svc?.Available != true) return;
@@ -225,6 +271,10 @@ public sealed partial class FriendsDrawer : Border
             _list.Children.Add(box);
             return;
         }
+        // WPF RenderList: the leash pinned on top, then "What happened", then the people.
+        if (_leashSlot.Parent is Panel old) old.Children.Remove(_leashSlot);
+        _list.Children.Add(_leashSlot);
+        AddFeed();
         var (online, offline) = FriendsDrawerRules.Split(snap);
         if (_openId != null && !Contains(snap, _openId)) (_openId, _picker) = (null, null);
         if (_confirm is { } c && !Contains(snap, c.Id)) _confirm = null;
@@ -273,7 +323,7 @@ public sealed partial class FriendsDrawer : Border
     private Control FriendRow(Friend f)
     {
         bool open = _openId == f.Id;
-        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*") };
+        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*,Auto") };
         var avatar = Avatar(f.Name, 38, f.Online, f.AvatarUrl);
         if (!f.Online) avatar.Opacity = 0.55;
         var mid = new StackPanel { Margin = new Thickness(10, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -287,9 +337,12 @@ public sealed partial class FriendsDrawer : Border
         }
         mid.Children.Add(nameLine);
         mid.Children.Add(ActivityLine(f));
+        // What you last sent them and how far it got (sent, arrived, seen, answered).
+        if (TrailLine(f) is { } trail) mid.Children.Add(trail);
         Grid.SetColumn(mid, 1);
         top.Children.Add(avatar);
         top.Children.Add(mid);
+        if (LockChip(f) is { } lockChip) { Grid.SetColumn(lockChip, 2); top.Children.Add(lockChip); }
         var outer = new StackPanel { Children = { top } };
         if (open) outer.Children.Add(Card(f));
         if (_results.TryGetValue(f.Id, out var res))
@@ -362,7 +415,13 @@ public sealed partial class FriendsDrawer : Border
         var more = Pill(Loc.Get("friends_action_more"), Brushes.Transparent, Muted, "friends-action:more", Line2);
         more.HorizontalAlignment = HorizontalAlignment.Stretch;
         more.HorizontalContentAlignment = HorizontalAlignment.Center;
-        more.Click += (_, _) => Menu(f).Open(more);
+        more.Click += (_, _) =>
+        {
+            // WPF: PlacementTarget = more, Placement = Bottom (under the button, not over the list).
+            var menu = Menu(f);
+            menu.Placement = PlacementMode.Bottom;
+            menu.Open(more);
+        };
         card.Children.Add(more);
         if (_picker != null)
         {
@@ -379,7 +438,7 @@ public sealed partial class FriendsDrawer : Border
         var items = new List<Control>();
         foreach (var id in FriendsDrawerRules.MenuItems(f.Squelched))
         {
-            if (id == null) { items.Add(new Separator()); continue; }
+            if (id == null) { items.Add(new Separator { Background = Line, Tag = "friends-menu-separator" }); continue; }
             var mi = MenuItem(id);
             if (id == "report")
             {
@@ -395,12 +454,21 @@ public sealed partial class FriendsDrawer : Border
             else mi.Click += async (_, _) => await RunMenuAsync(f, id);
             items.Add(mi);
         }
-        return new ContextMenu { ItemsSource = items, Tag = "friends-menu:" + f.Id };
+        // WPF BuildMenu's look: dark glass, Line2 edge, Fredoka 13.5. Right-click opens at the pointer.
+        return new ContextMenu
+        {
+            ItemsSource = items, Tag = "friends-menu:" + f.Id, Placement = PlacementMode.Pointer,
+            Background = MenuGlass, BorderBrush = Line2, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
+            Foreground = Text, FontFamily = Display, FontSize = 13.5, Padding = new Thickness(4),
+        };
     }
+    private static readonly IBrush MenuGlass = Rgb(0x22, 0x16, 0x41);
+    /// <summary>One menu line. Every line names its brush: an explicit null Foreground in Avalonia is
+    /// "no brush", which drew Squelch and Remove as empty lines (owner report, 2026-10-09).</summary>
     private static MenuItem MenuItem(string id) => new()
     {
-        Header = new TextBlock { Text = Loc.Get("friends_menu_" + id) }, Tag = "friends-menu-item:" + id,
-        Foreground = id is "block" or "report" ? Red : null,
+        Header = new TextBlock { Text = Loc.Get("friends_menu_" + id), Foreground = id is "block" or "report" ? Red : Text, FontFamily = Display, FontSize = 13.5 },
+        Tag = "friends-menu-item:" + id, Foreground = id is "block" or "report" ? Red : Text, Background = Brushes.Transparent,
     };
 
     internal async Task RunMenuAsync(Friend f, string what)
@@ -529,13 +597,26 @@ public sealed partial class FriendsDrawer : Border
     internal void ToggleBlocked() { _showBlocked = !_showBlocked; Render(); }
     private void RenderFoot(FriendsSnapshot snap)
     {
-        var settings = Pill(Loc.Get("friends_settings"), Brushes.Transparent, Muted, "friends-settings");
+        // WPF RenderFoot: Settings (gear + words), the bell, the Blocked glyph; Add friend on the right.
+        var settings = FootButton("\uE713", Loc.Get("friends_settings"), "friends-settings");
         settings.Click += (_, _) => { SettingsRequested?.Invoke(); CloseRequested?.Invoke(); };
-        var blocked = Pill("\u26D4", Brushes.Transparent, _showBlocked ? Lilac : Dim, "friends-blocked-toggle");
+        // The bell: corner notices for pokes, knocks and requests. Off keeps the Inbox rows and the cue.
+        var bellGlyph = Glyph("\uE7ED", NoticesOn() ? Lilac : Dim);
+        var bell = Pill(bellGlyph, Brushes.Transparent, Muted, "friends-notices");
+        bell.Padding = new Thickness(8, 6, 8, 6);
+        ToolTip.SetTip(bell, Loc.Get(NoticesOn() ? "friends_notices_on" : "friends_notices_off"));
+        bell.Click += (_, _) =>
+        {
+            ToggleNotices();
+            bellGlyph.Foreground = NoticesOn() ? Lilac : Dim;
+            ToolTip.SetTip(bell, Loc.Get(NoticesOn() ? "friends_notices_on" : "friends_notices_off"));
+        };
+        var blocked = Pill(Glyph("\uE8F8", _showBlocked ? Lilac : Dim), Brushes.Transparent, Muted, "friends-blocked-toggle");
+        blocked.Padding = new Thickness(8, 6, 8, 6);
         ToolTip.SetTip(blocked, Loc.Get("friends_blocked_title"));
         blocked.IsEnabled = _svc?.Available == true;
         blocked.Click += (_, _) => ToggleBlocked();
-        var add = Pill("+ " + Loc.Get("friends_add_title"), Brushes.Transparent, Muted, "friends-add-open");
+        var add = FootButton("\uE8FA", Loc.Get("friends_add_title"), "friends-add-open");
         add.HorizontalAlignment = HorizontalAlignment.Right;
         add.IsEnabled = _svc?.Available == true;
         add.Click += (_, _) =>
@@ -547,8 +628,20 @@ public sealed partial class FriendsDrawer : Border
         var buttons = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Children = { new StackPanel { Orientation = Orientation.Horizontal, Children = { settings, blocked } }, add },
+            Children = { new StackPanel { Orientation = Orientation.Horizontal, Children = { settings, bell, blocked } }, add },
         };
+        // "Add friend" keeps its words while they fit beside the left buttons; in a longer language it is
+        // the glyph alone with the words as its tooltip (WPF RenderFoot).
+        var room = DrawerWidth - 2 - _foot.Padding.Left - _foot.Padding.Right;
+        var any = new Size(double.PositiveInfinity, double.PositiveInfinity);
+        buttons.Children[0].Measure(any);
+        add.Measure(any);
+        if (buttons.Children[0].DesiredSize.Width + add.DesiredSize.Width > room && add.Content is StackPanel parts && parts.Children.Count == 2)
+        {
+            parts.Children[0].Margin = new Thickness(0);
+            parts.Children[1].IsVisible = false;
+            ToolTip.SetTip(add, Loc.Get("friends_add_title"));
+        }
         var foot = new StackPanel();
         if (!string.IsNullOrEmpty(snap.MyCode))
         {
@@ -556,13 +649,15 @@ public sealed partial class FriendsDrawer : Border
             var code = snap.MyCode;
             var copied = Label(Loc.Get("friends_my_code"), 9, Dim, Mono);
             copied.VerticalAlignment = VerticalAlignment.Center;
-            var copy = Pill("\u2398", Brushes.Transparent, Muted, "friends-copy");
+            var copy = Pill(Glyph("\ue8c8", Muted, 11), Brushes.Transparent, Muted, "friends-copy");
+            (copy.Padding, copy.Margin) = (new Thickness(5, 3, 5, 3), new Thickness(4, 0, 0, 0));
             ToolTip.SetTip(copy, Loc.Get("friends_copy"));
             copy.Click += async (_, _) =>
             {
                 try { await (TopLevel.GetTopLevel(this)?.Clipboard?.SetTextAsync(code) ?? Task.CompletedTask); } catch { return; }
                 copied.Text = Loc.Get("friends_copied");
                 copied.Foreground = Mint;
+                DispatcherTimer.RunOnce(() => { copied.Text = Loc.Get("friends_my_code"); copied.Foreground = Dim; }, TimeSpan.FromSeconds(2));
             };
             var mine = new StackPanel { Orientation = Orientation.Horizontal, Children = { Tagged(Label(code, 12, Lilac, Mono, FontWeight.SemiBold), "friends-my-code"), copy } };
             mine.VerticalAlignment = VerticalAlignment.Center;
@@ -571,6 +666,34 @@ public sealed partial class FriendsDrawer : Border
         }
         foot.Children.Add(buttons);
         _foot.Child = foot;
+    }
+
+    /// <summary>The bell's state (AppSettings.FriendNotificationsEnabled). Swappable for the suite.</summary>
+    internal static Func<bool> NoticesOn { get; set; } = () => CoreSettings.Current?.FriendNotificationsEnabled != false;
+    internal static Action ToggleNotices { get; set; } = () =>
+    {
+        var s = CoreSettings.Current;
+        if (s == null) return;
+        s.FriendNotificationsEnabled = !s.FriendNotificationsEnabled;
+        try { CoreSettings.Save(); } catch { }
+    };
+    internal const string GlyphFont = "Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI";
+    private static TextBlock Glyph(string glyph, IBrush fg, double size = 13) => new()
+    {
+        Text = glyph, FontFamily = new FontFamily(GlyphFont), FontSize = size, Foreground = fg, VerticalAlignment = VerticalAlignment.Center,
+    };
+    /// <summary>WPF FootButton: an MDL2 glyph and the words, flat until hovered.</summary>
+    private static Button FootButton(string glyph, string text, string tag)
+    {
+        var g = Glyph(glyph, Muted);
+        g.Margin = new Thickness(0, 0, 6, 0);
+        var b = Pill(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children = { g, new TextBlock { Text = text, FontFamily = Display, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center } },
+        }, Brushes.Transparent, Muted, tag);
+        b.Padding = new Thickness(8, 6, 8, 6);
+        return b;
     }
 
     internal async Task<AddResult> AddByCodeAsync(string? typed = null)
