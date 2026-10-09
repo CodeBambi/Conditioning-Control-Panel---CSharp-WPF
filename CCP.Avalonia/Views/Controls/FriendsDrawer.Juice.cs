@@ -104,10 +104,10 @@ public sealed partial class FriendsDrawer
     private void AttachSheen(Border row, bool open)
     {
         var rest = row.Background;
-        if (row.Child is { } content && row.Child is not SheenHost)
+        if (row.Child is { } content && row.Child is not SheenLayer)
         {
             row.Child = null;
-            row.Child = new SheenHost { Children = { content } };
+            row.Child = new SheenLayer { Children = { content } };
         }
         row.PointerEntered += (_, _) => { if (!open) row.Background = HoverWash; Sweep(row); };
         row.PointerExited += (_, _) => { if (!open) row.Background = rest; };
@@ -116,12 +116,12 @@ public sealed partial class FriendsDrawer
     /// <summary>WPF FriendsLook.HoverBrush.</summary>
     internal static readonly IBrush HoverWash = Friends.FriendsLook.HoverBrush;
 
-    private sealed class SheenHost : Grid { }
+    private sealed class SheenLayer : Grid { }
 
     private static void Sweep(Border row)
     {
         double k = Amount;
-        if (k <= 0 || row.Child is not SheenHost host) return;
+        if (k <= 0 || row.Child is not SheenLayer host) return;
         double w = Math.Max(row.Bounds.Width, 200);
         var band = new Rectangle
         {

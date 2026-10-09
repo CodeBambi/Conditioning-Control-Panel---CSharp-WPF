@@ -120,8 +120,12 @@ public sealed class ProfileWardrobeTests
                     var edge = Assert.IsType<SolidColorBrush>(page.ProfileHeroCard.BorderBrush);
                     var want = Color.Parse(accent);
                     Assert.Equal((want.R, want.G, want.B), (edge.Color.R, edge.Color.G, edge.Color.B));
+                    var glow = page.FindControl<Border>("ProfileHeroGlow")!;
+                    Assert.True(glow.IsVisible);
+                    Assert.Equal(1, glow.BoxShadow.Count);
                     shell.ApplyViewedProfileWardrobe(null);
                     Assert.False(title.IsVisible);
+                    Assert.False(glow.IsVisible);
                 }
                 finally { shell.Close(); }
             });

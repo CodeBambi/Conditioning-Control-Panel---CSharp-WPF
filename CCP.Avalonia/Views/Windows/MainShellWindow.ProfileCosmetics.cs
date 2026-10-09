@@ -39,7 +39,9 @@ using System;
 using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Helpers;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
 
@@ -83,8 +85,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // The paint half of WPF ApplyProfileCosmetics: banner, accent, title and the four pins. The
         // art comes from Helpers/ModArt (banner brush, achievement PNGs) and the ids arrive already
         // sanitized (MainShellWindow.ProfileWardrobe.cs), which is what CosmeticsCatalog did in WPF.
-        // STILL OWED: ApplyProfileAvatarPreset (the claim rule above has no caller yet), the accent
-        // glow around the card (the card clips its own bounds) and ToggleOwnAchievementPin.
+        // The accent glow is a sibling Border (ProfileHeroGlow) wearing a BoxShadow: the card clips its
+        // own bounds, and an Effect is not allowed near looping FX on this head.
 
         /// <summary>The hero border at rest, i.e. no accent equipped (matches DiscordTabView.axaml).</summary>
         private static readonly Color DefaultHeroBorderColor = Color.Parse("#FF69B4");
@@ -95,6 +97,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ApplyProfileCardCosmetics(ProfileCosmetics cosmetics)
         {
             ApplyProfileBanner(cosmetics.BannerId);
+            ApplyProfileAvatarPreset(cosmetics.AvatarId);
             ApplyProfileAccent(cosmetics.Accent);
             ApplyProfileTitle(cosmetics.TitleId);
             ApplyProfilePins(cosmetics.PinnedAchievements);
@@ -114,6 +117,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Debug("ApplyProfileBanner: {E}", ex.Message); }
         }
 
+        /// <summary>The preset THIS code last put in the avatar disc, so a later apply can tell "our preset"
+        /// from "a real picture". Dropped by <see cref="SetProfilePictureLoad"/>.</summary>
+        private IImageBrushSource? _appliedPresetAvatar;
+        private ProfilePictureLoad _profilePictureLoad = ProfilePictureLoad.None;
+        /// <summary>The loadout's preset id, kept so a picture load that comes back empty can hand the slot over.</summary>
+        private string? _wantedPresetAvatarId;
+
+        /// <summary>Called by the picture load path right AFTER it writes the disc. A load that ended with
+        /// nothing hands the empty slot to the preset (bug #847: while it is Pending the slot is not ours).</summary>
+        internal void SetProfilePictureLoad(ProfilePictureLoad load)
+        {
+            _appliedPresetAvatar = null;
+            _profilePictureLoad = load;
+            if (load == ProfilePictureLoad.None) ApplyProfileAvatarPreset(_wantedPresetAvatarId);
+        }
+
+        /// <summary>Preset bust for the disc: real picture first, then the preset, then the blank circle.</summary>
+        private void ApplyProfileAvatarPreset(string? avatarId)
+        {
+            try
+            {
+                _wantedPresetAvatarId = avatarId;
+                var avatar = ProfilePage?.ProfileHeroAvatar;
+                if (avatar == null) return;
+                var current = avatar.AvatarImage;
+                var ours = _appliedPresetAvatar != null && ReferenceEquals(current, _appliedPresetAvatar);
+                if (!ProfileAvatarSlot.PresetMayClaim(ours, current != null, _profilePictureLoad)) return;
+                var art = ModArt.AvatarPreset(avatarId);
+                avatar.AvatarImage = art;
+                _appliedPresetAvatar = art;
+            }
+            catch (Exception ex) { Log.Debug("ApplyProfileAvatarPreset: {E}", ex.Message); }
+        }
+
         /// <summary>Tints the hero border and the three shelf headers. The OG ring is never touched.</summary>
         private void ApplyProfileAccent(string? accent)
         {
@@ -126,6 +163,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                 if (page.FindControl<Border>("ProfileHeroCard") is { } card)
                     card.BorderBrush = new SolidColorBrush(Color.FromArgb(0x99, color.R, color.G, color.B));
+
+                // Glow only when something is equipped: the default card is flat (WPF blur 22, opacity 0.5).
+                if (page.FindControl<Border>("ProfileHeroGlow") is { } glow)
+                {
+                    glow.IsVisible = hasAccent;
+                    glow.BoxShadow = hasAccent
+                        ? new BoxShadows(new BoxShadow { Blur = 22, Color = Color.FromArgb(0x80, color.R, color.G, color.B) })
+                        : default;
+                }
 
                 var header = new SolidColorBrush(hasAccent ? color : Colors.White);
                 foreach (var name in new[] { "TxtProfileRecordHeader", "TxtProfileShowcaseHeader", "TxtProfileCommunityHeader" })
@@ -182,6 +228,59 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     placeholders.IsVisible = PinPlaceholdersVisible(items.Count > 0);
             }
             catch (Exception ex) { Log.Debug("ApplyProfilePins: {E}", ex.Message); }
+        }
+
+        // ----- click-to-pin -----
+
+        /// <summary>Left-click on a Showcase tile pins or unpins that achievement. Own card only, unlocked only.</summary>
+        internal void ToggleOwnAchievementPin(string? achievementId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(achievementId) || !_profileViewingSelf) return;
+                var unlocked = App.Achievements?.Progress?.UnlockedAchievements;
+                if (unlocked == null || !unlocked.Contains(achievementId!)) return;
+
+                var current = SanitizeOwnWardrobe(CoreSettings.Current.ProfileCosmetics);
+                if (!current.PinnedAchievements.Remove(achievementId!))
+                {
+                    if (current.PinnedAchievements.Count >= ProfileCosmetics.MaxPinnedAchievements)
+                    {
+                        FlashPinCapNotice();
+                        return;
+                    }
+                    current.PinnedAchievements.Add(achievementId!);
+                }
+                PersistOwnCosmetics(current);
+            }
+            catch (Exception ex) { Log.Debug("ToggleOwnAchievementPin: {E}", ex.Message); }
+        }
+
+        private DispatcherTimer? _pinCapNoticeTimer;
+
+        /// <summary>A dead click at the pin cap reads as a broken tile, so the unlock line says why for a moment.</summary>
+        private void FlashPinCapNotice()
+        {
+            try
+            {
+                var summary = ProfilePage?.FindControl<TextBlock>("TxtProfileUnlockSummary");
+                if (summary == null) return;
+                if (_pinCapNoticeTimer != null) return;   // already showing; the saved text is the notice itself
+                var original = summary.Text;
+                var originalBrush = summary.Foreground;
+                summary.Text = Loc.GetF("profile_customize_pins_full", ProfileCosmetics.MaxPinnedAchievements);
+                summary.Foreground = new SolidColorBrush(Color.Parse("#FF5C7A"));
+                _pinCapNoticeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+                _pinCapNoticeTimer.Tick += (_, _) =>
+                {
+                    _pinCapNoticeTimer?.Stop();
+                    _pinCapNoticeTimer = null;
+                    summary.Text = original;
+                    summary.Foreground = originalBrush;
+                };
+                _pinCapNoticeTimer.Start();
+            }
+            catch (Exception ex) { Log.Debug("FlashPinCapNotice: {E}", ex.Message); }
         }
     }
 }

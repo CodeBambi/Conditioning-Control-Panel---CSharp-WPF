@@ -257,17 +257,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void ShowProfilePhoto(string name, string? url)
         {
             ProfileHeroAvatar.AvatarImage = null;
-            if (string.IsNullOrEmpty(url)) return;
-            _ = PaintProfilePhotoAsync(name, url);
+            // The preset bust shares this slot: it may take it only once the load has come back empty.
+            var none = string.IsNullOrEmpty(url);
+            Host?.SetProfilePictureLoad(none ? Views.Windows.ProfilePictureLoad.None : Views.Windows.ProfilePictureLoad.Pending);
+            if (none) return;
+            _ = PaintProfilePhotoAsync(name, url!);
         }
 
         private async Task PaintProfilePhotoAsync(string name, string url)
         {
             var bmp = await Helpers.AvatarPhotos.LoadAsync(url, 256);
-            if (bmp == null) return;
             global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (TxtProfileViewerName.Text == name) ProfileHeroAvatar.AvatarImage = bmp;
+                if (TxtProfileViewerName.Text != name) return;
+                if (bmp != null) ProfileHeroAvatar.AvatarImage = bmp;
+                Host?.SetProfilePictureLoad(bmp != null ? Views.Windows.ProfilePictureLoad.Loaded : Views.Windows.ProfilePictureLoad.None);
             });
         }
 
@@ -310,11 +314,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             WhitelistBadge.IsVisible = isWhitelisted;
         }
 
-        /// <summary>WPF LoadProfileAchievementImages. No achievement art on this head, so each tile draws as its plate.</summary>
+        /// <summary>WPF LoadProfileAchievementImages: each badge with its art (mod override first); a missing
+        /// picture leaves the bare plate.</summary>
         private void ShowAchievements(IEnumerable<string>? ids, string emptyText)
         {
             var tiles = ids?.Select(id => Achievement.All.Values.FirstOrDefault(a => a.Id == id)).OfType<Achievement>()
-                .Select(a => new ProfileAchievementTile(a.Id, CoreMods.MakeModAware(a.Name))).ToList();
+                .Select(a => new ProfileAchievementTile(a.Id, CoreMods.MakeModAware(a.Name),
+                    Helpers.ModArt.TryLoad($"achievements/{a.ImageName}", 116))).ToList();
             var any = tiles is { Count: > 0 };
             ProfileAchievementGrid.ItemsSource = any ? tiles : null;
             TxtNoAchievements.Text = emptyText;
@@ -410,7 +416,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// through the sender's DataContext exactly as the WPF handler reads it.</summary>
         private void ProfileAchievementTile_Click(object? sender, PointerReleasedEventArgs e)
         {
-            if (sender is Control { DataContext: ProfileAchievementTile }) { /* mw.ToggleOwnAchievementPin(tile.Id) */ }
+            if (sender is Control { DataContext: ProfileAchievementTile tile }) Host?.ToggleOwnAchievementPin(tile.Id);
         }
     }
 

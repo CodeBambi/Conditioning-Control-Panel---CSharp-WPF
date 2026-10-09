@@ -162,6 +162,10 @@
                              grow the card past 380px and the banner brush then filled the whole
                              page. Charms live on ProfileCharmLayer (overlay, out of layout) so
                              they can never add height again. -->
+                        <!-- Accent glow: a sibling under the card, because the card clips its own bounds.
+                             Lit by ApplyProfileAccent only while an accent is equipped. -->
+                        <Border x:Name="ProfileHeroGlow" Margin="8" CornerRadius="14" IsVisible="False"
+                                Background="#1A1A2E" IsHitTestVisible="False"/>
                         <Border x:Name="ProfileHeroCard" Margin="8"
                                 CornerRadius="14" ClipToBounds="True"
                                 MinHeight="275" MaxHeight="362"

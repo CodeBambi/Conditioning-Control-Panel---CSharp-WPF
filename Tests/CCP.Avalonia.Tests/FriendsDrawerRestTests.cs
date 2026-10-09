@@ -22,8 +22,13 @@ namespace CCP.Avalonia.Tests;
 /// tier plates, page mode, the drawer's sounds and juice seams. Swaps process-wide seams (motion
 /// level, sfx player), so it runs alone.</summary>
 [Collection(RunsAloneCollection.Name)]
-public sealed class FriendsDrawerRestTests
+public sealed class FriendsDrawerRestTests : IDisposable
 {
+    // A pressed button plays its click through CoreAudio unless a test says otherwise: real sound on the
+    // desk, and a live audio engine keeps the last shell of ShellMemoryTests alive. Silent by default here.
+    public FriendsDrawerRestTests() => FriendsSfx.Player = (_, _, _) => { };
+    public void Dispose() => FriendsSfx.Player = null;
+
     private const string State = """
         {"ok":true,"code":"CCP-ABCDE","me":{"activity":"panel","lock_day":null,"shared":true},
          "friends":[{"id":"u_on","name":"Mia","tier":2,"online":true,"activity":"panel","lock_day":null,"last_seen":null,"squelched":false},
