@@ -277,6 +277,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void ShowCard(bool og)
         {
+            RefreshProfileStatBadges();
             ProfileCardWrapper.IsVisible = true;
             NoProfileSelected.IsVisible = false;
             OgBorderContainer.IsVisible = og;
@@ -312,6 +313,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 StaffBadgeLabel.Foreground = SolidColorBrush.Parse(text);
             }
             WhitelistBadge.IsVisible = isWhitelisted;
+        }
+
+        /// <summary>WPF RefreshProfileStatBadges: The Record's six plates each wear an achievement badge
+        /// (mod override first). Painted with every card, so a mod switch is picked up on the next one.</summary>
+        internal void RefreshProfileStatBadges()
+        {
+            foreach (var (file, name) in new[]
+                     {
+                         ("lv_10.png", "ImgStatXp"), ("pop_the_Thought.png", "ImgStatBubbles"), ("10_hours_pink.png", "ImgStatVideos"),
+                         ("retinal_burn.png", "ImgStatGifs"), ("total_lockdown.png", "ImgStatLockCards"), ("spiral_eyes.png", "ImgStatAchievements"),
+                     })
+                if (this.FindControl<Image>(name) is { } image && Helpers.ModArt.TryLoad($"achievements/{file}", 68) is { } art)
+                    image.Source = art;
         }
 
         /// <summary>WPF LoadProfileAchievementImages: each badge with its art (mod override first); a missing

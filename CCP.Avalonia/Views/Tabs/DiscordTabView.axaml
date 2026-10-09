@@ -965,47 +965,16 @@
                                     </Button>
                                 </StackPanel>
 
-                                <!-- Friends: teaser plates only. No backend ships in this phase —
-                                     the Vault's coming-soon pattern, so the rail never reads as
-                                     broken. -->
+                                <!-- Friends live in the drawer on the friends chip (bottom left of the panel and the
+                                     launcher). This used to be a "coming soon" teaser; it only points there now. -->
                                 <TextBlock Text="{loc:Str profile_friends_title}" Foreground="#B478FF"
                                            FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
-                                <Border Height="46" CornerRadius="9" Margin="0,0,0,7"
-                                        Background="#1FFFFFFF" BorderBrush="#1FB478FF" BorderThickness="1">
-                                    <Grid Margin="9,0,9,0" ColumnDefinitions="Auto,*">
-                                        <Ellipse Grid.Column="0" Width="28" Height="28" Fill="#33B478FF" VerticalAlignment="Center"/>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
-                                            <Border Height="8" Width="96" CornerRadius="4" Background="#26FFFFFF" HorizontalAlignment="Left"/>
-                                            <Border Height="6" Width="62" CornerRadius="3" Background="#1AFFFFFF" HorizontalAlignment="Left" Margin="0,5,0,0"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                                <Border Height="46" CornerRadius="9" Margin="0,0,0,7"
-                                        Background="#1AFFFFFF" BorderBrush="#1FB478FF" BorderThickness="1">
-                                    <Grid Margin="9,0,9,0" ColumnDefinitions="Auto,*">
-                                        <Ellipse Grid.Column="0" Width="28" Height="28" Fill="#2BFF69B4" VerticalAlignment="Center"/>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
-                                            <Border Height="8" Width="78" CornerRadius="4" Background="#22FFFFFF" HorizontalAlignment="Left"/>
-                                            <Border Height="6" Width="50" CornerRadius="3" Background="#17FFFFFF" HorizontalAlignment="Left" Margin="0,5,0,0"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                                <Border Height="46" CornerRadius="9" Margin="0,0,0,10"
-                                        Background="#14FFFFFF" BorderBrush="#1FB478FF" BorderThickness="1">
-                                    <Grid Margin="9,0,9,0" ColumnDefinitions="Auto,*">
-                                        <Ellipse Grid.Column="0" Width="28" Height="28" Fill="#26FFD700" VerticalAlignment="Center"/>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
-                                            <Border Height="8" Width="88" CornerRadius="4" Background="#1FFFFFFF" HorizontalAlignment="Left"/>
-                                            <Border Height="6" Width="42" CornerRadius="3" Background="#14FFFFFF" HorizontalAlignment="Left" Margin="0,5,0,0"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                                <Border CornerRadius="9" Padding="10,7" Margin="0,0,0,14"
+                                                                <Border CornerRadius="9" Padding="10,7" Margin="0,0,0,14"
                                         Background="#1FB478FF" BorderBrush="#33B478FF" BorderThickness="1">
                                     <StackPanel>
-                                        <TextBlock Text="{loc:Str profile_friends_soon_title}" Foreground="#E7DEFF"
+                                        <TextBlock Text="{loc:Str profile_friends_where_title}" Foreground="#E7DEFF"
                                                    FontSize="11" FontWeight="Bold"/>
-                                        <TextBlock Text="{loc:Str profile_friends_soon_body}" Foreground="#9A93B8"
+                                        <TextBlock Text="{loc:Str profile_friends_where_body}" Foreground="#9A93B8"
                                                    FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
                                     </StackPanel>
                                 </Border>

@@ -68,6 +68,8 @@ public sealed class ProfileWardrobeTests
                         Dispatcher.UIThread.RunJobs();
                     }
                     var page = shell.ProfilePage!;
+                    Assert.NotNull(page.FindControl<Image>("ImgStatXp")!.Source);          // The Record wears its badges
+                    Assert.NotNull(page.FindControl<Image>("ImgStatAchievements")!.Source);
                     var deco = page.ProfileHeroAvatar.FindControl<Image>("DecoLayer")!;
                     Assert.True(deco.IsVisible);
                     Assert.NotNull(deco.Source);
