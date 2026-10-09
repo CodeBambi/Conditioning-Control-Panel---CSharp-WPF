@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -169,8 +170,13 @@ public sealed class LockdownVeilTests
         var host = new Window { Width = 900, Height = 900 };
         host.Show();
         var oldPremium = CoreEntitlement.HasPremiumProvider;
+        var oldPrograms = AvApp.Programs;
+        var programsDir = Directory.CreateTempSubdirectory("ccp-veil-programs-").FullName;
+        var programs = AvApp.Programs = new ConditioningControlPanel.Services.Program.ProgramService(
+            Path.Combine(programsDir, "programs.json"), readOnly: false);
         try
         {
+            Assert.NotNull(programs.Enroll(programs.Library.First(p => p.Id == "first_week")));
             CoreEntitlement.HasPremiumProvider = () => true;
             s.AutonomyConsentGiven = true;
             s.AutonomyResumeOnStartup = false;
@@ -225,6 +231,13 @@ public sealed class LockdownVeilTests
                           || ToolTip.GetTip(NoPanic(host)) as string != Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape")),
                 // WPF Lab.cs:612: the CC Labs door is greyed, not only refused
                 ("CC Labs button greyed", () => { }, () => shell.Named<Button>("BtnBackToLauncher")!.IsEnabled),
+                // programs 3a (P05; WPF has no gate): each lifecycle door says Lockdown before anything else
+                ("program Enroll", () => _ = shell.EnrollProgramAsync("first_week"),
+                    () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program Withdraw", () => _ = shell.WithdrawProgramAsync(),
+                    () => programs.ActiveEnrollment == null || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program Start session", () => _ = shell.StartProgramSessionAsync(),
+                    () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
                 // WPF LauncherHost.cs:413 and the launcher Stop link
                 ("launcher close", launcher.RequestClose, () => !launcher.IsVisible),
                 ("launcher Stop link", () => Click(launcher.FindControl<Button>("StopLink")!), () => !CoreEngine.IsRunning),
@@ -252,6 +265,9 @@ public sealed class LockdownVeilTests
         finally
         {
             CoreEntitlement.HasPremiumProvider = oldPremium;
+            programs.Dispose();
+            AvApp.Programs = oldPrograms;
+            Directory.Delete(programsDir, true);
             s.BubbleCountStrictLock = false;
             s.FlashEnabled = false;
             runner.Stop();

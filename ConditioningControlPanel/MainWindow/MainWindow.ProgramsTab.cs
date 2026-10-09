@@ -531,6 +531,7 @@ namespace ConditioningControlPanel
                 tab.ProgramsLapsedPanel.Visibility = lapsed ? Visibility.Visible : Visibility.Collapsed;
                 tab.ProgramsGraduatedPanel.Visibility = graduated ? Visibility.Visible : Visibility.Collapsed;
                 tab.ProgramsRunPanel.Visibility = run ? Visibility.Visible : Visibility.Collapsed;
+                ApplyProgramsReadOnly(tab);
             }
 
             // The ignition rig's edge glow is a sibling of the WHOLE view, not a child of the run
@@ -569,7 +570,8 @@ namespace ConditioningControlPanel
                 if (svc != null)
                 {
                     // The service's reason strings are diagnostics, not UI copy - log, show our own.
-                    canEnroll = svc.CanEnroll(def, out var reason);
+                    // A newer build's programs.json loads read-only: nothing may enroll over it.
+                    canEnroll = svc.CanEnroll(def, out var reason) && !svc.IsReadOnly;
                     if (!canEnroll && !locked)
                         App.Logger?.Debug("Program {Program} not enrollable: {Reason}", def.Id, reason);
                 }
@@ -1393,6 +1395,17 @@ namespace ConditioningControlPanel
                 : $"{(int)span.TotalMinutes}:{span.Seconds:D2}";
         }
 
+        /// <summary>programs.json stamped by a newer build loads read-only (ProgramService.IsReadOnly,
+        /// docs/avalonia-decisions.md programs 3a): every lifecycle control greys, since Core refuses them.</summary>
+        private static bool ApplyProgramsReadOnly(ProgramsTabView tab)
+        {
+            if (App.Programs?.IsReadOnly != true) return false;
+            foreach (var b in new UIElement[] { tab.BtnProgramPauseResume, tab.BtnProgramWithdraw, tab.BtnStartTodaySession,
+                                                tab.BtnProgramRestart, tab.BtnProgramDismissGraduated, tab.ProgramsLapsedPanel })
+                if (b != null) b.IsEnabled = false;
+            return true;
+        }
+
         /// <summary>
         /// Repaints the Session row's live state: the glyph, the button and the progress strip.
         ///
@@ -1421,6 +1434,7 @@ namespace ConditioningControlPanel
                 // by the dispatcher check above.
                 var tab = ProgramsTab;
                 if (tab?.TodaySessionProgressRow == null) return;
+                if (ApplyProgramsReadOnly(tab)) return;   // the row below would re-enable Start/Pause
 
                 var svc = App.Programs;
                 var enrollment = svc?.ActiveEnrollment;
