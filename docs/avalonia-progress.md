@@ -1593,3 +1593,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-chaster-tab: +679
 - Circe's mood meter, CirceSays bubbles (tab page + rail) and the shell's CirceLines picking; rail chip pulse/pip pop/peek spring-in/idle swing+breath.
 - Ledger: ctrl-chaster-rail-chip and views-chaster-circe-mood wired; duplicate views-tab-chaster row merged.
+
+## avalonia-port/rows-studio-lab: +195
+- Studio rack: 120ms panel crossfade and 260ms state-dot pop ported from WPF, tested on a stepped clock (fail-proven).
+- Lab, Lab-tab and Brain Drain rows re-audited with exact missing lists (still stub).
