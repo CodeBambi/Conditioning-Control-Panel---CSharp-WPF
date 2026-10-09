@@ -1612,3 +1612,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-play-tab: +487
 - Play wall matches WPF's 2026-09-18 layout: GAMES zone with Breakout covers, Graded Intake states and FREE TODAY stamps; Devices and Loom buttons open the right section. Game buttons stay disabled because this head has no host for them.
 - Start caret "Jump right in" (RandomizeAndStart) ported, refused while a session holds the lock; tests fail-proven and checked live.
+
+## avalonia-port/rows-session-io: +629
+- Window-wide file drop (session/preset/mod/assets/zip/folder/unrecognised + overlay) over a new Core `DropRules` that WPF also calls; a single media file offers Add to Library only (decision logged).
+- Session-lock ribbon pulses on a refused change; `WindowDropTests` (8, incl. session/preset/mod) + `SessionIoTests.RefusedChangePulsesTheLockRibbon`, all fail-proven.
