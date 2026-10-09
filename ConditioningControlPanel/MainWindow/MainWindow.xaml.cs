@@ -507,19 +507,19 @@ namespace ConditioningControlPanel
 
             // v6.0: fresh installs land on CCP Default (neutral baseline).
             // Content packs (docs/CONTENT_PACKS_PLAN.md §4 + §5): the mod media no longer ships in the
-            // installer, so the picker is back — for BOTH populations. First launch gets it as step 2
-            // of the wizard below, before the tour; every ALREADY-Welcomed install gets the standalone
-            // ModPickerDialog from the else branch, because the modular installer's [InstallDelete]
-            // sweep just took their bundled mod audio away and they would otherwise never be offered
-            // it back. The one-shot guards (ModPickerShown / ModPickerOfflineOffers / IsFullInstall /
-            // null service) are the SAME rules on both paths - the wizard's mod step reuses
-            // ModPickerDialog's own guard predicates rather than restating them - so each population
-            // is offered exactly once and nobody who should not see it does.
+            // installer, so first launch offers mods as step 2 of the wizard below, before the tour.
+            // Already-Welcomed installs no longer get the standalone ModPickerDialog (6.11.x, see the
+            // else branch, MainWindow.xaml.cs:587-588); they pick mods in the Mod Manager instead,
+            // which the modular installer's [InstallDelete] sweep makes necessary since it removed
+            // their bundled mod audio. The wizard's mod step keeps ModPickerDialog's one-shot guards
+            // (ModPickerShown / ModPickerOfflineOffers / IsFullInstall / null service), reusing its
+            // guard predicates rather than restating them, so nobody who should not see it does.
+            // ModPickerDialog.ShowIfNeeded itself has no caller.
 
             // Phase 8: one screen instead of the gauntlet. FirstRunWizard.ShouldRunAndClaim reads
             // (and latches) the same Welcomed flag WelcomeDialog.ShowIfNeeded did, at the same
-            // instant, so the else branch below - What's New, season recap, the upgrader's mod
-            // picker - is reached by exactly the same population as before. The wizard itself
+            // instant, so the else branch below - What's New, season recap (no mod picker since
+            // 6.11.x) - is reached by exactly the same population as before. The wizard itself
             // owns what used to be four separate modals: the age check, the welcome card, the first-run mod
             // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
             // "choose a content folder" MessageBox. The narrated show follows the wizard.

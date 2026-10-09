@@ -804,7 +804,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// Avalonia's ShowDialog is async and needs a non-null owner, so this is awaited.
         ///
         /// ponytail: no caller, on purpose. WPF 6.11.x removed the returning-user auto-open
-        /// (MainWindow.xaml.cs:610-611) and constructs ModPickerDialog nowhere; mods are offered by
+        /// (MainWindow.xaml.cs:587-588) and constructs ModPickerDialog nowhere; mods are offered by
         /// the first-run wizard and the Mod Manager. The dialog and its download flow stay ported
         /// (tested) so re-adding a caller is one line if WPF brings a caller back.
         /// </summary>
