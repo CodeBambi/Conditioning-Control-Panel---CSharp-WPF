@@ -354,8 +354,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         private void RebuildThread(CompanionBrain? brain)
         {
-            // ponytail: no link chip (WPF CompanionLinkIndex + CompanionLinkLauncher) - the launcher
-            // routes to the embedded browser and the remote-control guard, neither hosted here yet.
+            // She names titles; the app owns links. Only her own chat lines get a watch chip
+            // (WPF ChatThresholdRuntimeVm): never the user's message, never a bark echo.
             var projected = brain != null && CompanionBrain.ShouldRoute(brain)
                 ? CompanionRoomLogic.PickThread(brain.Session.Turns).Select(t => new ChatBubble(
                     t.Kind switch
@@ -365,16 +365,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                         _ => ChatBubble.BubbleKind.Her
                     },
                     CompanionRoomLogic.BubbleText(t), CompanionRoomLogic.IsAiBubble(t),
-                    CompanionRoomLogic.RelativeTime(t.Utc))).ToList()
+                    CompanionRoomLogic.RelativeTime(t.Utc),
+                    WatchLink(t)?.Title,
+                    WatchLink(t) is { } hit ? Runtime.CompanionLinkLauncher.CommandFor(hit.Url) : null)).ToList()
                 : new List<ChatBubble>();
 
-            var signature = string.Concat(projected.Select(b => $"{b.Kind}\u001F{b.IsAiGenerated}\u001F{b.Text}\u001F{b.Timestamp}\u001F"));
+            var signature = string.Concat(projected.Select(b => $"{b.Kind}\u001F{b.IsAiGenerated}\u001F{b.Text}\u001F{b.Timestamp}\u001F{b.LinkTitle}\u001F"));
             if (Turns.Count == projected.Count && signature == _threadSignature) return;
             _threadSignature = signature;
             Turns.Clear();
             foreach (var b in projected) Turns.Add(b);
             Raise(nameof(FooterCopy));
         }
+
+        internal static ConditioningControlPanel.Services.Companion.CompanionLinkIndex.Entry? WatchLink(CompanionTurn t) =>
+            t.Kind == TurnKind.AssistantChat
+                ? ConditioningControlPanel.Services.Companion.CompanionLinkIndex.FindMentionedTitle(t.Text)
+                : null;
 
         private void RefreshLastHeard(CompanionBrain? brain)
         {
