@@ -51,14 +51,19 @@ public sealed class CompanionEffectsTests
             CoreEntitlement.HasLabProvider = () => true;
             CoreAccount.IsLoggedInProvider = () => true;
             var all = CompanionEffects.Activities();
-            Assert.Equal(new[] { "game.intake", "page.studio", "page.presets", "page.quests", "page.assets" },
+            // WPF 7.1.5 CompanionActivities.Current: LauncherCatalogue.Games in launcher order, then the four
+            // pages. Race has no host on this head yet (no LauncherWindow.Destinations row), so it is never offered.
+            Assert.Equal(new[] { "game.backroom", "game.breakoutdemo", "game.breakout", "game.piecebypiece",
+                    "game.dtrh", "game.arcademy", "game.goon", "game.intake",
+                    "page.studio", "page.presets", "page.quests", "page.assets" },
                 all.Select(a => a.Id));
-            Assert.True(all[0].Allowed);
+            var intake = all.Single(a => a.Id == "game.intake");
+            Assert.True(intake.Allowed);
             CoreAccount.IsLoggedInProvider = () => false;          // the tile would ask to sign in
-            Assert.False(all[0].Allowed);
+            Assert.False(intake.Allowed);
             CoreAccount.IsLoggedInProvider = () => true;
             service.Current.AudioOnlySession = true;
-            Assert.False(all[0].Allowed);
+            Assert.False(intake.Allowed);
         }
         finally
         {
