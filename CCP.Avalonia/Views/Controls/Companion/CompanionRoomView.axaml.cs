@@ -129,6 +129,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 // The zone re-reads its own state rather than being told what to do: it may well
                 // have changed while the tab was hidden, and a resume that restored the state at
                 // park time would be a lie.
+                AwarenessZone.StartRefresh();   // WPF IsVisibleChanged -> StartRefresh (re-reads first)
                 AwarenessZone.SyncCursorBlink();
                 ChatZone.ViewModel?.Sync();
                 MemoryZone.ViewModel?.Sync();
@@ -154,6 +155,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             {
                 HeroZone.StopAmbientLoop();
                 AwarenessZone.StopCursorBlink();
+                AwarenessZone.StopRefresh();
             }
             catch (InvalidOperationException) { /* already torn down */ }
         }

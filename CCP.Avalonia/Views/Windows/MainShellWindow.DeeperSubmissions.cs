@@ -5,7 +5,7 @@
 //
 // The status side lives in MainShellWindow.CatalogueStatus.cs: CheckDeeperSubmissionStatusesAsync
 // (the /api/enhancements/mine poll) and the one-time accepted toast with a View action (15 s, not
-// WPF's sticky one). Still out: the library's submission badge (no library list on this head).
+// WPF's sticky one). The library row's badge: DeeperTabViewModel.ResolveSubmissionBadge.
 // WPF's IsAcceptedStatus / CanonicalSubmissionKey copies are the catalogue pair one file over
 // (byte-identical bodies).
 
@@ -43,6 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var dialog = new CatalogueSubmitDialog(label);
             if (!await dialog.ShowDialogSafe<bool>(this) || !dialog.Confirmed) return;
             ShowCatalogueSubmissionResultToast(await SubmitDeeperEntryAsync(entry.FilePath));
+            RefreshDeeperLibraryRows();   // WPF RecordDeeperSubmission: show the badge at once
         }
 
         /// <summary>The Core submit plus the record, without UI.</summary>

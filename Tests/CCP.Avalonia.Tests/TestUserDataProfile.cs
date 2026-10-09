@@ -15,6 +15,8 @@ internal static class TestUserDataProfile
     internal static void Initialize()
     {
         Directory.CreateDirectory(Root);
+        // Awareness polls the foreground window title; no test may ever read the real desktop.
+        ConditioningControlPanel.Avalonia.Platform.X11ActiveWindow.Disabled = true;
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", Root);
         _ = ConditioningControlPanel.CorePaths.UserData;   // installs the SandboxNet guard before any test runs
         // Every one-shot feature card already spent: a shown shell lands on the Dashboard, whose card

@@ -1,4 +1,10 @@
 {
+  "deeper_submission_badge_published": "已发布",
+  "deeper_submission_badge_published_tip": "此增强已在社区目录中上线。",
+  "deeper_submission_badge_pending": "待审核",
+  "deeper_submission_badge_pending_tip": "已提交：等待目录审核。",
+  "deeper_submission_badge_rejected": "已拒绝",
+  "deeper_submission_badge_rejected_tip": "此提交未被接受。编辑后重新提交。",
   "companion_v2_open_activity": "打开{0}",
   "companion_ask_watch_q_1": "要不要看这个，为我沉下去？“{0}”",
   "companion_ask_watch_q_2": "我挑了一个。你，这个，再加一次慢慢的、舒服的沉溺。“{0}”",
@@ -7804,6 +7810,9 @@
   "vaultgate_ending_keep": "保留 Basic",
   "vaultgate_ending_let_close": "让它关闭",
   "vaultgate_ending_inbox": "你的邀请周即将结束",
+  "premium_celebration_inbox_t1": "高级版归你了",
+  "premium_celebration_inbox_t2": "Prime 归你了",
+  "premium_celebration_inbox_summary": "所有锁定的内容都已开放。",
   "vaultgate_price_year": "/ 年 · 每月 {0}",
   "vaultgate_yearly_hint": "或在 Patreon 按年付 {0}：免 2 个月。",
   "vaultgate_billing_monthly": "按月",
@@ -7811,5 +7820,16 @@
   "vaultgate_yearly_note": "按年付费目前仅支持 Patreon。其他支付方式为按月。",
   "vaultgate_sale_first": "/ 首月",
   "vaultgate_sale_line": "首月减免 {0}%，之后每月 {1}。",
-  "vaultgate_sale_ends": "优惠截止 {0}。"
+  "vaultgate_sale_ends": "优惠截止 {0}。",
+  "kwt_no_audio": "无音频",
+  "kwt_cd": "冷却:",
+  "kwt_vol": "音量:",
+  "kwt_effect_none": "无",
+  "kwt_effect_highlight_only": "仅高亮",
+  "kwt_effect_subliminal": "潜意识",
+  "kwt_effect_exact_subliminal": "精确潜意识",
+  "kwt_effect_image_flash": "图片闪现",
+  "kwt_effect_overlay_pulse": "叠加层脉冲",
+  "kwt_effect_mind_wipe": "思维清除",
+  "kwt_effect_bubbles": "泡泡"
 }

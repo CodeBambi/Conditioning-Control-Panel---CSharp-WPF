@@ -154,7 +154,7 @@ public sealed class CoreStandInTests
     public Task EnhancementsTabDrawsCoreSkillDefinitionCatalogue() => Run(() =>
     {
         var tab = new EnhancementsTabView();
-        var nodes = tab.FindControl<Canvas>("SkillTreeCanvas")!.Children.OfType<Border>()
+        var nodes = tab.FindControl<Canvas>("SkillTreeCanvas")!.Children.OfType<Control>()
             .Where(b => b.Tag is string).ToArray();
         var expected = ConditioningControlPanel.Models.SkillDefinition.All.Where(s => !s.IsSecret).ToArray();
         Assert.Equal(expected.Select(s => s.Id), nodes.Select(b => (string)b.Tag!));
@@ -175,7 +175,7 @@ public sealed class CoreStandInTests
         settings.UnlockedSkills = new System.Collections.Generic.List<string> { "sparkle_boost_1" };
         try
         {
-            var nodes = new EnhancementsTabView().FindControl<Canvas>("SkillTreeCanvas")!.Children.OfType<Border>()
+            var nodes = new EnhancementsTabView().FindControl<Canvas>("SkillTreeCanvas")!.Children.OfType<Control>()
                 .Where(b => b.Tag is string).ToDictionary(b => (string)b.Tag!);
             string?[] Texts(string id) => nodes[id].GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
             Assert.Contains(Texts("sparkle_boost_1"), t => t!.EndsWith(Loc.Get("label_skill_permanent")));

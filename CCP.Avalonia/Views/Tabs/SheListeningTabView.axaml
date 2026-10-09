@@ -141,6 +141,17 @@
                                                    Foreground="{StaticResource TextLightBrush}" FontSize="15" FontWeight="Bold"/>
                                         <TextBlock x:Name="SL_StatusSub" Text=""
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <!-- WPF: up only while the status line is about a missing or unloadable
+                                             speech model; opens (and creates) the folder. -->
+                                        <Button x:Name="BtnSL_OpenModels" IsVisible="False"
+                                                HorizontalAlignment="Left" Margin="0,7,0,0"
+                                                Theme="{StaticResource OutlineButton}"
+                                                BorderBrush="{StaticResource SectionHueStudioBorderBrush}"
+                                                Foreground="{DynamicResource TextSecondaryBrush}"
+                                                FontSize="11" Padding="10,4"
+                                                ToolTip.Tip="{loc:Str tooltip_open_models_folder}">
+                                            <TextBlock Text="{loc:Str btn_open_models_folder}"/>
+                                        </Button>
                                     </StackPanel>
                                 </Grid>
                             </Grid>
