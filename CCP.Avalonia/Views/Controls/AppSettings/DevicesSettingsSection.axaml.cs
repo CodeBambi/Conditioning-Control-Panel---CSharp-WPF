@@ -634,6 +634,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             _loading = false;
         });
 
+        private bool _capturingPanicKey;
+
         /// <summary>
         /// WPF BtnPanicKey_Click (MainWindow.UiUpdates.cs:2440) + the capture branch of
         /// OnGlobalKeyPressed (MainWindow.xaml.cs:916): no dialog, the button reads "Press any
@@ -642,8 +644,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Capture stays set a beat after the key so the X11 listener's copy of that same press
         /// (queued on the UI thread in either order) is not also a panic.
         /// </summary>
-        private bool _capturingPanicKey;
-
         private void BtnPanicKey_Click(object? sender, RoutedEventArgs e)
         {
             // WPF's click only sets _isCapturingPanicKey, so a second click is a no-op; here it
