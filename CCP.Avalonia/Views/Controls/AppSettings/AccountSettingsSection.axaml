@@ -301,9 +301,8 @@
                                TextWrapping="Wrap" Margin="0,2,0,12"/>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <!-- Hidden until GDPR export is ported (needs ProfileSync's export call): a
-                             visible button that does nothing is worse than none. -->
-                        <Button x:Name="BtnExportData" IsVisible="False"
+                        <!-- GDPR export: live (AccountSettingsSection.Providers.cs ExportDataAsync). -->
+                        <Button x:Name="BtnExportData"
                                 Background="#555" Foreground="White"
                                 BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
                                 FontWeight="Bold" FontSize="12"

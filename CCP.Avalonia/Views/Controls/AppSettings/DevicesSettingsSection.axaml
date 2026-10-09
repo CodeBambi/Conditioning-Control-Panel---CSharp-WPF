@@ -101,10 +101,10 @@
 
                                 <!-- 6-blink → stop & recalibrate shortcut. THE toggle now. -->
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,20,4"
-                                            ToolTip.Tip="Blink fast 6 times in a row to stop everything and jump to recalibration.">
+                                            ToolTip.Tip="{loc:Str tooltip_devices_blink_recal}">
                                     <CheckBox x:Name="ChkBlinkRecalWebcamBar"
                                               Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Blink to recalibrate" Foreground="{DynamicResource TextSecondaryBrush}"
+                                    <TextBlock Text="{loc:Str set2_devices_blink_recal}" Foreground="{DynamicResource TextSecondaryBrush}"
                                                FontSize="11" VerticalAlignment="Center" Margin="7,0,0,0"/>
                                 </StackPanel>
 
@@ -115,9 +115,9 @@
                                     <ComboBox x:Name="CmbWebcamDevice" Width="170"
                                               Theme="{StaticResource DarkComboBoxStyle}"
                                               VerticalAlignment="Center"
-                                              ToolTip.Tip="Pick the capture device to use for blink / gaze tracking. If your physical webcam doesn't show its in-use light, you may have a virtual camera selected (OBS, Snap, etc.) — switch here, then hit Start."/>
+                                              ToolTip.Tip="{loc:Str tooltip_devices_cam_pick}"/>
                                     <Button x:Name="BtnWebcamDeviceRefresh" Content="↻"
-                                            ToolTip.Tip="Re-scan connected video-capture devices."
+                                            ToolTip.Tip="{loc:Str tooltip_devices_cam_refresh}"
                                             Padding="9,3" Margin="6,0,0,0" VerticalAlignment="Center"
                                             Background="Transparent" Foreground="{DynamicResource PinkBrush}"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
@@ -150,20 +150,20 @@
 
                                 <!-- actions -->
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,4">
-                                    <Button x:Name="BtnWebcamReviewPrivacy" Content="Privacy info"
+                                    <Button x:Name="BtnWebcamReviewPrivacy" Content="{loc:Str btn_devices_privacy_info}"
                                             ToolTip.Tip="{loc:Str tooltip_webcam_review_privacy}"
                                             Padding="10,6" Margin="0,0,6,0" VerticalAlignment="Center"
                                             Background="Transparent" Foreground="{DynamicResource TextSecondaryBrush}"
                                             BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
                                             FontSize="11" Cursor="Hand" CornerRadius="8"/>
-                                    <Button x:Name="BtnWebcamDebugCalibrate" Content="Calibrate"
+                                    <Button x:Name="BtnWebcamDebugCalibrate" Content="{loc:Str btn_devices_calibrate}"
                                             ToolTip.Tip="{loc:Str tooltip_webcam_calibrate}"
                                             Padding="11,6" Margin="0,0,6,0" VerticalAlignment="Center"
                                             Background="Transparent" Foreground="{DynamicResource PinkBrush}"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                             FontSize="11" FontWeight="SemiBold" Cursor="Hand" CornerRadius="8"/>
-                                    <Button x:Name="BtnWebcamDebugQuickRecal" Content="Quick Recal"
-                                            ToolTip.Tip="One-dot drift correction. Stare at the pink center dot for ~2 s — a constant nudge is added to the cursor so it lands where you're looking, no full recalibration needed."
+                                    <Button x:Name="BtnWebcamDebugQuickRecal" Content="{loc:Str btn_devices_quick_recal}"
+                                            ToolTip.Tip="{loc:Str tooltip_devices_quick_recal}"
                                             Padding="11,6" Margin="0,0,6,0" VerticalAlignment="Center"
                                             Background="Transparent" Foreground="{DynamicResource PinkBrush}"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
@@ -177,17 +177,17 @@
                             </WrapPanel>
 
                             <!-- Advanced / diagnostics (everything from the old card preserved) -->
-                            <Expander Header="Advanced" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,12,0,0">
+                            <Expander Header="{loc:Str label_devices_advanced}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,12,0,0">
                                 <StackPanel Margin="4,8,0,0">
                                     <WrapPanel Orientation="Horizontal">
-                                        <Button x:Name="BtnWebcamDebugTrackerTest" Content="Tracker Test"
+                                        <Button x:Name="BtnWebcamDebugTrackerTest" Content="{loc:Str btn_devices_tracker_test}"
                                                 ToolTip.Tip="{loc:Str tooltip_webcam_tracker_test}"
                                                 Padding="11,6" Margin="0,0,10,8" VerticalAlignment="Center"
                                                 Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
                                                 BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
                                                 FontSize="11" FontWeight="SemiBold" Cursor="Hand" CornerRadius="8"/>
-                                        <Button x:Name="BtnWebcamRevokeConsent" Content="Revoke consent"
-                                                ToolTip.Tip="Stops webcam tracking, deletes calibration data, and clears your consent. You'll be re-prompted next time you enable a webcam feature."
+                                        <Button x:Name="BtnWebcamRevokeConsent" Content="{loc:Str btn_devices_revoke_consent}"
+                                                ToolTip.Tip="{loc:Str tooltip_devices_revoke_consent}"
                                                 Padding="11,6" Margin="0,0,10,8" VerticalAlignment="Center"
                                                 Background="Transparent" Foreground="{DynamicResource DangerBrush}"
                                                 BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
@@ -213,7 +213,7 @@
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Show debug gaze cursor"
+                                                <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_debug_cursor}"
                                                            Foreground="{DynamicResource TextLightBrush}"
                                                            FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
                                                            VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -223,13 +223,13 @@
                                         </Border>
 
                                         <Border Grid.Row="0" Grid.Column="2" Theme="{StaticResource SettingChip}"
-                                                ToolTip.Tip="Keeps the calibration fresh automatically: when you click somewhere while looking at it, the gaze mapping gets a tiny nudge toward the click. Corrects the slow drift that used to need a Quick Recal.">
+                                                ToolTip.Tip="{loc:Str tooltip_devices_auto_drift}">
                                             <Grid MinHeight="22">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Auto drift correction"
+                                                <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_auto_drift}"
                                                            Foreground="{DynamicResource TextLightBrush}"
                                                            FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
                                                            VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -240,13 +240,13 @@
 
                                         <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
                                                 Theme="{StaticResource SettingChip}"
-                                                ToolTip.Tip="Advanced: leave on unless you know what you're doing. Affects how gaze-reactive effects map to your monitors.">
+                                                ToolTip.Tip="{loc:Str tooltip_devices_restrict_gaze}">
                                             <Grid MinHeight="22">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="Restrict gaze-reactive effects to the calibrated screen"
+                                                <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_restrict_gaze}"
                                                            Foreground="{DynamicResource TextLightBrush}"
                                                            FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
                                                            VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -303,7 +303,7 @@
 
                     <!-- Input device -->
                     <Grid MinHeight="34" Margin="0,0,0,6"
-                          ToolTip.Tip="Pick the microphone used for voice (Hey Bambi, mantras, lock cards).">
+                          ToolTip.Tip="{loc:Str tooltip_devices_mic_pick}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="150"/>
                             <ColumnDefinition Width="*"/>
@@ -315,17 +315,17 @@
                                   Theme="{StaticResource DarkComboBoxStyle}"
                                   Margin="6,0" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
                                   SelectedIndex="0"
-                                  ToolTip.Tip="Pick the microphone used for voice (Hey Bambi, mantras, lock cards).">
+                                  ToolTip.Tip="{loc:Str tooltip_devices_mic_pick}">
                             <!-- The fallback entry. PopulateMicDevices (code-behind) replaces the
                                  list from CoreSpeech.EnumerateInputDevices(); an empty enumeration
                                  means no speech head is attached, and this item stays. -->
-                            <ComboBoxItem Content="System default"/>
+                            <ComboBoxItem Content="{loc:Str set2_mic_system_default}"/>
                         </ComboBox>
                         <Button Grid.Column="2" x:Name="BtnMicRefresh" Content="↻"
                                 Padding="10,3" Background="#33FF69B4" Foreground="White" FontSize="12"
                                 BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
                                 VerticalAlignment="Center"
-                                ToolTip.Tip="Re-scan microphones."/>
+                                ToolTip.Tip="{loc:Str tooltip_devices_mic_refresh}"/>
                     </Grid>
 
                     <!-- Wake word -->
@@ -341,7 +341,7 @@
                                   Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                     </Grid>
                     <Grid Margin="22,0,0,8"
-                          ToolTip.Tip="Comma-separated wake phrases (e.g. hey bambi, hey bimbo). Short common-word phrases recognize best.">
+                          ToolTip.Tip="{loc:Str tooltip_devices_wake_phrases}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -353,7 +353,7 @@
                                  Text="hey bambi" FontSize="11"
                                  Foreground="{DynamicResource TextLightBrush}" Background="{DynamicResource SurfaceBgBrush}"
                                  BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1" Padding="6,3"
-                                 ToolTip.Tip="Comma-separated wake phrases (e.g. hey bambi, hey bimbo). Short common-word phrases recognize best."/>
+                                 ToolTip.Tip="{loc:Str tooltip_devices_wake_phrases}"/>
                     </Grid>
 
                     <!-- Wake sensitivity. Height="32" on both sliders: Theme/PinkSlider sets Height=18,
@@ -405,7 +405,7 @@
                                   Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                     </Grid>
                     <Grid Margin="22,0,0,8"
-                          ToolTip.Tip="Click, then press the key you want to use for push-to-talk.">
+                          ToolTip.Tip="{loc:Str tooltip_devices_ptt_key}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -420,7 +420,7 @@
                         <Button x:Name="BtnSetPttKey" Grid.Column="2"
                                 FontSize="11" Padding="10,3"
                                 Theme="{StaticResource OutlineButton}"
-                                ToolTip.Tip="Click, then press the key you want to use for push-to-talk.">
+                                ToolTip.Tip="{loc:Str tooltip_devices_ptt_key}">
                             <TextBlock Text="{loc:Str set2_btn_set_key}"/>
                         </Button>
                     </Grid>
