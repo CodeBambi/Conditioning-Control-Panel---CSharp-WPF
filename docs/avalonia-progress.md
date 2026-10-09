@@ -1680,3 +1680,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/programs-signals: +479
 - Quest signals now wired: LockCard, Pink Filter/Spiral minutes (1 s tick only while the overlay shows) and Lockdown completed, all as on WPF.
 - `CanEnroll` refuses programs with required tasks this head never raises (Core provider, unseeded on WPF, plus head `ProgramCapabilities` table); refused cards name what is missing.
+
+## avalonia-port/rows-companion-tab: +222
+- Companion tab visibility hook: drawer state persisted on leave/exit and restored on show, upgrader v2 consent offered on show, mod switch repaints the roster.
+- Rows stay stub; what remains needs CompanionService + CommunityPromptService in Core.
