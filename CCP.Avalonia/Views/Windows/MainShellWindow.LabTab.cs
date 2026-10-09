@@ -10,8 +10,9 @@
 //   RefreshDeviceSettingsLists genuinely is missing, and needs the camera/monitor enumeration
 //   below before it means anything.
 //
-// THE TWO STATUS PILLS ARE DELIBERATELY LEFT AS STUBS, and this is the file's one real judgement
-// call rather than a missing dependency:
+// UPDATE (wave A safety, platform#17): both pills and the 6-blink stop are now PORTED, in
+// MainShellWindow.SafetyPills.cs and MainShellWindow.BlinkStop.cs (DisarmVoiceMic and the tracker's
+// StopAsync exist on this head now). The note below is the history of why they waited:
 //
 //   MicActivePill_Click is WPF's DisarmVoiceMic - it clears wake-word and push-to-talk, cuts live
 //   capture, tears down the audio loop and the keyboard hook, and downgrades any open Voice Lock
@@ -112,16 +113,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // REFUSED, not pending - see the header. This is the mic's privacy stop (DisarmVoiceMic).
-        // The half that would port is the half that hides the pill; the half that cannot is the
-        // half that closes the capture device. Do not "wire" this one until App.Speech's disarm
-        // path exists on this head.
-        private void MicActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e) { }
-
-        // REFUSED for the same reason: the camera's panic stop (GazeFocus/BlinkTrainer/Webcam all
-        // released together). A pill that clears while the camera stays open is worse than one
-        // that does nothing.
-        private void WebcamActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e) { }
-
     }
 }

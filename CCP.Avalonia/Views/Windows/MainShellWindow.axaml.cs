@@ -118,6 +118,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeInviteTicket(); // MainShellWindow.InviteTicket.cs (WPF MainWindow.xaml.cs, main e2d4e35ef)
             InitializeInviteEnding(); // MainShellWindow.Patreon.cs (WPF MainWindow.xaml.cs:3590, main fbe161de2)
             InitializeWebcamLoadingSplash(); // MainShellWindow.WebcamSplash.cs (WPF MainWindow.xaml.cs:3631)
+            InitializeSafetyPills(); InitializeRapidBlinkStop(); // MainShellWindow.SafetyPills.cs / .BlinkStop.cs (WPF LabTab.cs)
             InitializeOfflineModeUI(); // MainShellWindow.OfflineMode.cs (WPF MainWindow.Settings.cs:122)
             InitializeHelpButtons(); // MainShellWindow.HelpButtons.cs (WPF MainWindow.Presets.cs:35 SetupHelpButtons)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
