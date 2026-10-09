@@ -38,6 +38,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             try { StopSpokenAudio(); } catch { }
             try { StopThinkingAnimation(); } catch { }
             try { _speechTimer?.Stop(); } catch { }
+            try { ClearSpeechQueue(); } catch { }
             try
             {
                 _isWaitingForAi = false;
