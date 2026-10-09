@@ -4,7 +4,8 @@
 // CompanionHeroCard.StartAmbientLoop (parked by CompanionRoomView off the tab's own visibility) and
 // the connect sheen was deleted with the AI-brain card it swept. What remains, and is ported here:
 //   * the tab's visibility hook - leaving writes the two drawers' open/closed state, entering
-//     restores it (WPF SyncCompanionTabUI -> RestoreCompanionSectionStates) and offers an upgrader
+//     restores it (WPF restores once at startup, InitializePatreonTab -> RestoreCompanionSectionStates,
+//     MainWindow.Patreon.cs:1266; here on every show, same result since each hide writes first) and offers an upgrader
 //     the Awareness v2 consent dialog (WPF EnsureAwarenessV2Consent, MainShellWindow.CompanionRoom.cs);
 //   * the mod repaint - CoreMods.ModChanged re-reads the roster (WPF UpdateCompanionCardsUI). The
 //     hero re-reads its own name/portrait off the same event (CompanionHeroCard.OnModChanged).
