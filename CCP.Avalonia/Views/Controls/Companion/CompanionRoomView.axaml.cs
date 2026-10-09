@@ -33,6 +33,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // Z2/Z3 over the brain (WPF CompanionRoomVm builds ChatThresholdRuntimeVm / MemoryDiaryRuntimeVm).
             ChatZone.ViewModel = ChatThresholdViewModel.CreateLive();
             MemoryZone.ViewModel = MemoryDiaryViewModel.CreateLive();
+            // WPF SetAiProviderMode -> CompanionRoom.SyncBrain (MainWindow.CompanionRoom.cs:300). Posted:
+            // the drawer raises Provider before it writes the settings these zones read.
+            if (EngineZone.DataContext is EngineRoomVm engine)
+                engine.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(EngineRoomVm.Provider)) Dispatcher.UIThread.Post(SyncBrain, DispatcherPriority.Normal);
+                };
+        }
+
+        /// <summary>WPF CompanionRoomRuntimeVm.SyncBrain: provider, entitlement and budget changed.</summary>
+        internal void SyncBrain()
+        {
+            HeroZone.ViewModel?.Sync();
+            ChatZone.ViewModel?.Sync();
+            AttentionZone.ViewModel?.Sync();
         }
 
         // =====================================================================================
@@ -115,6 +130,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 AwarenessZone.SyncCursorBlink();
                 ChatZone.ViewModel?.Sync();
                 MemoryZone.ViewModel?.Sync();
+                AttentionZone.ViewModel?.Sync();
                 // ponytail: WPF also calls ChatZone.SyncThinking() here. This head's
                 // ChatThresholdView has no thinking clock to sync - WPF's dots are three
                 // RepeatBehavior=Forever Storyboards (CmpThinkingDotsStoryboard) and the port

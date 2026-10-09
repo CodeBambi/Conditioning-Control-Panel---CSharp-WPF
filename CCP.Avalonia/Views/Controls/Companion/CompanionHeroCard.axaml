@@ -586,7 +586,7 @@
 
                     <!-- ========== constellation band ========== -->
                     <!-- WPF binds DataContext="{Binding Constellation}"; the band seeds itself
-                         from RelationshipConstellationViewModel.Live() in its own ctor here,
+                         from RelationshipConstellationViewModel.Runtime() (WPF RelationshipConstellationRuntimeVm) in its own ctor here,
                          because this head has no ICompanionRoomVm to hand it one. -->
                     <local:RelationshipConstellation Grid.Row="1" x:Name="ConstellationBand"/>
                 </Grid>

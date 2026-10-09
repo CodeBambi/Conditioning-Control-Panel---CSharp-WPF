@@ -15,9 +15,10 @@
        (MultiBinding)                     3 lines) and the two CmpFractionToStar twins do the rest
        CmpBoolToVis/-Inverse          ->  IsVisible="{Binding IsLive}" / "{Binding !IsLive}"
        DropShadowEffect               ->  DropShadowEffect (Avalonia.Media, ShadowDepth -> OffsetX/Y)
-       CmpShimmerSweepStoryboard /    ->  NOT ported. Both are one-shot intro flourishes played
-       CmpNodePulseStoryboard             from code-behind (CompanionTheme.axaml section 17 has the
-                                          numbers); the shimmer band and PlayIntro go with them.
+       CmpShimmerSweepStoryboard      ->  PlayIntro: one DoubleTransition on the band's X, as
+                                          ChatThresholdView's dormant sweep.
+       CmpNodePulseStoryboard         ->  NOT ported: it plays only when IsLive, and WPF's runtime
+                                          vm is always dormant (Train 4), so it never runs there.
        implicit ToolTip Style         ->  <Style Selector="ToolTip"> in UserControl.Styles; the
                                           template is left to Fluent, only the colours are set. -->
 <UserControl xmlns="https://github.com/avaloniaui"
@@ -56,9 +57,8 @@
             <!-- One node: glyph disc over a name. The three visual states are picked by the
                  classes on the Button (see UserControl.Styles) so the item template stays code-free. -->
             <DataTemplate x:Key="CmpConstellationNodeTemplate" x:DataType="local:ConstellationNodeViewModel">
-                <!-- ponytail: no Command. WPF binds the host's NodeCommand (the stage card, an
-                     achievement-toast-styled popup owned by the Companion tab); wire when that host
-                     view is ported. -->
+                <!-- No Command: WPF binds NodeCommand, which its runtime vm makes a no-op
+                     (CompanionRelayCommand.NoOp) until Train 4 owns the stages. -->
                 <Button Classes.filled="{Binding IsFilled}" Classes.current="{Binding IsCurrent}"
                         Background="Transparent" BorderThickness="0" Cursor="Hand"
                         HorizontalAlignment="Stretch" Padding="0"
@@ -193,11 +193,24 @@
                      Foreground="#FFFFD9A8" FontStyle="Normal" FontWeight="SemiBold"/>
             </TextBlock>
 
-            <!-- dormant promise: outlines above, this underneath -->
+            <!-- dormant promise: outlines above, this underneath, shimmer swept once on load -->
             <Grid Grid.Row="2" Margin="0,11,0,0" IsVisible="{Binding !IsLive}">
                 <Border x:Name="DormantHost" Theme="{StaticResource CmpDormantBlockStyle}">
-                    <TextBlock Text="{Binding DormantCopy}" TextAlignment="Center"
-                               Theme="{StaticResource CmpDormantCopyStyle}"/>
+                    <Grid>
+                        <TextBlock Text="{Binding DormantCopy}" TextAlignment="Center"
+                                   Theme="{StaticResource CmpDormantCopyStyle}"/>
+                        <!-- the sweep band; its X is animated once by the code-behind -->
+                        <Border x:Name="DormantShimmer" Width="46" HorizontalAlignment="Left"
+                                Background="{StaticResource CmpShimmerSoftBrush}"
+                                IsHitTestVisible="False" Opacity="0">
+                            <Border.RenderTransform>
+                                <TransformGroup>
+                                    <SkewTransform AngleX="-18"/>
+                                    <TranslateTransform X="-70"/>
+                                </TransformGroup>
+                            </Border.RenderTransform>
+                        </Border>
+                    </Grid>
                 </Border>
                 <Rectangle Theme="{StaticResource CmpDashedOutlineStyle}"/>
             </Grid>
