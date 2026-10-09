@@ -180,6 +180,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The comet on that row's tile, or null. Test seam.</summary>
         internal PerimeterCometAdorner? CometFor(string key) => _entries.FirstOrDefault(e => e.Key == key)?.Comet;
+        internal Control? HostFor(string key) => EntryFor(key)?.Host;
+        internal Ellipse? DotFor(string key) => EntryFor(key)?.DotShape;
 
         /// <summary>
         /// Every code-built brush on this page whose colour is the mod accent rather than a fixed
@@ -227,7 +229,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             catch (Exception ex) { Log.Debug(ex, "[Studio] the first art pass failed"); }
             // Land on the default without announcing it: nothing is on screen yet, and the
             // FeatureOpened bark belongs to the moment the user can actually see the panel.
-            SelectEntry(DefaultRackKey, announce: false);
+            SelectEntry(DefaultRackKey, announce: false, animate: false);
             // Seeds the accent for whichever mod is ALREADY active at construction; the same call
             // from RepaintModAwareChrome handles every switch after that.
             RetintChrome();
@@ -274,7 +276,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal void FocusRackEntry(string? rackKey)
         {
-            try { SelectEntry(rackKey, announce: true); }
+            try { SelectEntry(rackKey, announce: true, animate: true); }
             catch { /* a navigation must never throw */ }
         }
 
@@ -286,7 +288,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal void PreselectRackEntry(string? rackKey)
         {
-            try { SelectEntry(rackKey, announce: false); }
+            try { SelectEntry(rackKey, announce: false, animate: false); }
             catch { /* as above */ }
         }
 
@@ -301,7 +303,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 RefreshRackLabels();
                 RefreshDots();
-                SelectEntry(_selected, announce: true);
+                SelectEntry(_selected, announce: true, animate: false);
                 RefreshTileComets();
             }
             catch { /* a door open must never throw */ }
@@ -582,7 +584,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     if (CoreSettings.Current.SchedulerEnabled)
                         FlipMasterCheckBox(PanelScheduler?.Inner.FindControl<CheckBox>("ChkEnabled"));
                     else
-                        SelectEntry("scheduler", announce: true);
+                        SelectEntry("scheduler", announce: true, animate: true);
                 });
             Add("ramp", "📈", null, "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
                 () => CoreSettings.Current.IntensityRampEnabled,
@@ -1063,7 +1065,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void RackEntry_Click(object? sender, RoutedEventArgs e)
         {
             if (sender is RadioButton rb && rb.Tag is string key)
-                SelectEntry(key, announce: true);
+                SelectEntry(key, announce: true, animate: true);
         }
 
         // =====================================================================================
@@ -1100,6 +1102,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 {
                     RefreshDots();
                     var after = SafeDotState(entry);
+                    if (after != before) PingDot(entry.DotShape);
                     if (after != before)
                         Log.Information("[Studio] rack right-click toggled {Key}: {Before} -> {After}",
                             key, before, after);
@@ -1146,15 +1149,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// Shows exactly one module. Idempotent, and safe to call for the already-selected key —
         /// re-selecting deliberately re-announces, because opening a feature popup twice used to
-        /// fire its bark twice too.
-        /// <para>ponytail: WPF also crossfades the incoming panel over 120ms, gated on
-        /// <c>MotionFx.AllowTransitions</c>. The gate is reachable now -
-        /// <c>CoreSettings.Current.MotionLevel != MotionLevel.Off</c>, which is MotionFx's own
-        /// definition and what <c>AmbientFxCanvas.Env</c> reads for the ambient half - so what is
-        /// left is only the 120ms fade itself. Still dropped here deliberately: an instant swap on
-        /// a quiet surface is not a defect, and adding a clock is the change that needs a reason.</para>
+        /// fire its bark twice too. <paramref name="animate"/> crossfades the incoming panel over
+        /// 120ms, as WPF StudioTabView.xaml.cs:1313 (see StudioTabView.Fx.cs).
         /// </summary>
-        private void SelectEntry(string? key, bool announce)
+        private void SelectEntry(string? key, bool announce, bool animate)
         {
             var target = EntryFor(key);
             if (target == null) return;   // quiet no-op on an unknown key, by contract
@@ -1170,6 +1168,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
 
             RefreshDetailHeader();
+
+            if (animate && target.Host != null) FadeInDetail(target.Host);
+
             RefreshDots();
 
             if (announce) Announce(target);
