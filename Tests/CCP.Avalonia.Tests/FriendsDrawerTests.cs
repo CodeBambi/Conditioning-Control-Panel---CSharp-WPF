@@ -230,6 +230,41 @@ public sealed class FriendsDrawerTests
         Assert.NotNull(Tagged<Border>(d, "friends-blocked:u_bad"));
     });
 
+    /// <summary>audit #1976: a click inside the drawer routes through the Popup to the chip; it must
+    /// not toggle the drawer shut (WPF's HWND popup never reached the chip at all).</summary>
+    [Fact]
+    public Task AClickInsideTheDrawerKeepsItOpen() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var (svc, _) = Service();
+        var chip = new FriendsRailChip(svc);
+        await svc.RefreshAsync();
+        var w = new Window { Width = 400, Height = 600, Content = new StackPanel { VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Bottom, Children = { chip } } };
+        w.Show();
+        try
+        {
+            Click(w, chip);
+            Assert.True(chip.IsOpen);
+            var code = Tagged<TextBlock>(chip.Drawer, "friends-my-code")!;
+            Click(TopLevel.GetTopLevel(code)!, code);
+            Assert.True(chip.IsOpen);
+            Click(w, chip);
+            Assert.False(chip.IsOpen);
+        }
+        finally { w.Close(); }
+    });
+
+    private static void Click(TopLevel top, Control c)
+    {
+        var p = c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), top)!.Value;
+        top.MouseDown(p, global::Avalonia.Input.MouseButton.Left);
+        top.MouseUp(p, global::Avalonia.Input.MouseButton.Left);
+        global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+    }
+
     [Fact]
     public Task BlockAsksFirstAndAcceptAndUnblockGoToTheWire() => AvaloniaTestDispatcher.RunAsync(async () =>
     {

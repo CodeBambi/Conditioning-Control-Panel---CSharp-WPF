@@ -79,7 +79,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "GazePackLibrary: subfolder scan failed for {Root}", root);
+                Serilog.Log.Warning(ex, "GazePackLibrary: subfolder scan failed for {Root}", root);
             }
         }
     }

@@ -91,14 +91,20 @@ namespace ConditioningControlPanel.Avalonia
         /// the Haptics tab's "Quest complete" routing row decides how it feels.</summary>
         internal static void PlayQuestCompletionEffects()
         {
+            PlayExclamationChime("quest-complete");  // the haptic still posts if the chime fails
+            _ = CoreHaptics.Service?.PostEvent(ConditioningControlPanel.Services.Haptics.Core.HapticEventKind.QuestComplete);
+        }
+
+        /// <summary>Linux stand-in for WPF's SystemSounds.Exclamation: the bundled chime at master volume.</summary>
+        internal static void PlayExclamationChime(string tag)
+        {
             try
             {
                 CoreAudio.PlayOneShot(
                     System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "chime1.mp3"),
-                    Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), "quest-complete");
+                    Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), tag);
             }
-            catch (Exception ex) { Serilog.Log.Debug("Quest chime failed: {E}", ex.Message); } // the haptic still posts
-            _ = CoreHaptics.Service?.PostEvent(ConditioningControlPanel.Services.Haptics.Core.HapticEventKind.QuestComplete);
+            catch (Exception ex) { Serilog.Log.Debug("Chime failed: {E}", ex.Message); }
         }
 
         /// <summary>The mod service (WPF App.Mods), or null on the headless render path.</summary>
@@ -500,7 +506,8 @@ namespace ConditioningControlPanel.Avalonia
                     // Unit 7c, with the logout clear: the push, XP banking and its two triggers (WPF
                     // MainWindow OnLevelUp -> sync, ProfileSyncService.AttachXpNudge outside sessions).
                     var sync = Platform.AccountSeed.Sync = new SyncPush(
-                        () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true)
+                        () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true,
+                        sanitizeCosmetics: Views.Windows.MainShellWindow.SanitizeOwnWardrobe)
                         { Countdown = DescentCountdown };
                     CoreProgression.AddXPProvider = ProgressionBank.Add;
                     ProgressionBank.LevelUp += level => sync.PushAsync($"level-up {level}");
@@ -829,6 +836,10 @@ namespace ConditioningControlPanel.Avalonia
                 catch (Exception ex) { Serilog.Log.Warning(ex, "Tray icon unavailable; X closes the app"); }
                 // The panic key (WPF MainWindow.xaml.cs:363 installs its hook at startup the same way).
                 shell.StartPanicKey();
+                // EMI Desk summon chord (WPF MainWindow.xaml.cs:246 arms it from the shell's Loaded).
+                Views.Windows.EmiDesk.EmiDeskService.Instance.ApplyHotkey();
+                // Do-not-disturb reads the foreground app from X (WPF DoNotDisturbGuard: user32).
+                ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess = Platform.X11Windows.ForegroundProcess;
                 // Linux: one toast naming the distro's install command for any missing runtime library
                 // (docs/avalonia-linux-install.md). dlopen off the UI thread; nothing when all load.
                 Dispatcher.UIThread.Post(async () =>

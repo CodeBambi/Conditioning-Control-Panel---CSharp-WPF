@@ -80,7 +80,7 @@ public sealed class PanicSurfacesTests
     /// camera last; the engine before lock cards).</summary>
     [Fact]
     public void TheSurfaceListIsExactAndOrdered() =>
-        Assert.Equal(new[] { "intake", "voice-capture", "ai-followups", "blink-trainer", "mantra", "chaos", "haptics", "remote-haptics",
+        Assert.Equal(new[] { "intake", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics", "remote-haptics",
             "takeover", "engine", "pink-rush", "corner-gif", "lock-cards", "attention-test", "deeper-editor-audio", "camera" }, PanicSurfaces.All.Select(x => x.Id));
 
     /// <summary>P23: comments and string literals never count as code.</summary>
@@ -89,7 +89,7 @@ public sealed class PanicSurfacesTests
 
     /// <summary>What "starts something a panic must stop" looks like in source.</summary>
     private static readonly Regex Starts = new(
-        @"\.Recognize\w*Async\(|tracker\.StartAsync\(|WebcamTracker\.Instance\.StartAsync\(|new MediaPlayer\(" +
+        @"\.Recognize\w*Async\(|[Tt]racker\.StartAsync\(|WebcamTracker\.Instance\.StartAsync\(|new MediaPlayer\(" +
         @"|new X11\w*(Overlay|Window)\w*\(|\bclass \w+(Host|HostService)\b", RegexOptions.Compiled);
 
     /// <summary>Types that start something but need no entry of their own, and why.</summary>
