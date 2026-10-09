@@ -18,12 +18,14 @@ namespace ConditioningControlPanel.Services
     /// Pop quiz follows WPF: the user-level AppSettings toggle, not the per-session PopQuiz* fields
     /// (dead in WPF too, BuiltInPrograms.cs:430).
     ///
-    /// ponytail: not driven here - video, bubbles, bubble count, mind wipe, brain drain, spiral,
-    /// corner GIF, ducking, phase events,
+    /// Spiral, Brain Drain, bubbles (+ bursts), videos, bubble count, the session's escalating Mind Wipe
+    /// and ducking: SessionRunner.Phases.cs.
+    ///
+    /// ponytail: not driven here - corner GIF, phase events,
     /// EMI Desk, Discord, friends, season recap and achievement tracking. No settings are written for them,
     /// so the snapshot restore writes their own values back; each arrives with its Core service.
     /// </summary>
-    public sealed class SessionRunner
+    public sealed partial class SessionRunner
     {
         private readonly DeferredStartQueue _deferred = new();
         private readonly Stopwatch _stopwatch = new();
@@ -77,8 +79,7 @@ namespace ConditioningControlPanel.Services
             if (IsRunning) throw new InvalidOperationException("A session is already running. Stop it first.");
             if (!CoreEngine.IsRunning) CoreEngine.Start();
             // SessionEngine.cs:223 (#1304): the session owns Mind Wipe, so the global one the engine
-            // just started does not play through it. ponytail: the session's own escalating Mind Wipe
-            // (StartSession) is not ported; a session plays none.
+            // just started does not play through it; the session's own starts in StartPhases.
             CoreMindWipe.Stop();
 
             var s = CoreSettings.Current;
@@ -101,6 +102,7 @@ namespace ConditioningControlPanel.Services
             _snapshot = SessionSettingsSnapshot.Capture(s);
             _custody = PhrasePoolCustody.Begin(s, session.Settings, CoreMods.ActiveModId, session);
             Apply(session.Settings, s);
+            StartPhases(session);
 
             _timer = new Timer(_ => CoreDispatch.Post(() => Tick(Elapsed)), null, 1000, 1000);
             SessionLog.BeginSession(session);
@@ -176,6 +178,7 @@ namespace ConditioningControlPanel.Services
             // SessionEngine.cs:1479: a delayed tint stays off until its randomised minute (Tick).
             s.PinkFilterEnabled = ss.PinkFilterEnabled && ss.PinkFilterStartMinute == 0;
             if (s.PinkFilterEnabled) s.PinkFilterOpacity = ss.PinkFilterStartOpacity;
+            ApplyPhases(ss, s);
         }
 
         /// <summary>SessionEngine.RandomizeStartTimes (SessionEngine.cs:966): a delayed start moves by up to 3 min either way.
@@ -199,6 +202,7 @@ namespace ConditioningControlPanel.Services
             LockCardScheduler.Instance.Stop();
             CoreEngine.PopQuiz?.Stop();   // SessionEngine.cs:527, closes an open quiz
             CoreBouncingText.Stop();
+            PausePhases();
             Log.Information("Session paused (pause #{Count}, -100 XP penalty)", PauseCount);
         }
 
@@ -217,6 +221,7 @@ namespace ConditioningControlPanel.Services
             if (ss.LockCardEnabled && !_deferred.IsPending("lock cards")) LockCardScheduler.Instance.Start(Remaining.TotalMinutes);
             if (ss.BouncingTextEnabled && !_deferred.IsPending("bouncing text")) CoreBouncingText.Start();
             if (CoreSettings.Current.PopQuizEnabled) CoreEngine.PopQuiz?.Start();   // SessionEngine.cs:574
+            ResumePhases(ss);
             Log.Information("Session resumed");
         }
 
@@ -245,6 +250,7 @@ namespace ConditioningControlPanel.Services
             }
             UpdateRamps(session, minutes);
             _deferred.FireDue(minutes);
+            TickPhases(session, minutes);
 
             // Pink delayed start at its randomised minute (SessionEngine.cs:849); the head shows it.
             var s = CoreSettings.Current;
@@ -300,6 +306,7 @@ namespace ConditioningControlPanel.Services
             var s = CoreSettings.Current;
             s.ClearSessionFlashRamp();   // SessionEngine.cs:390, ahead of the restore
             PinkOpacity = null;
+            StopPhases();
             _snapshot?.RestoreTo(s);
             _snapshot = null;
             _custody?.Restore(s);

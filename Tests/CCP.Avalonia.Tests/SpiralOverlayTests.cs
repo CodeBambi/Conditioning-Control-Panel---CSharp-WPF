@@ -197,7 +197,8 @@ public sealed class SpiralOverlayTests(ITestOutputHelper output)
             try
             {
                 s.SkipPauseXpWarning = true;
-                shell.StartSession(new Session { Id = "spiral_test", Name = "Spiral Test", DurationMinutes = 1 });
+                shell.StartSession(new Session { Id = "spiral_test", Name = "Spiral Test", DurationMinutes = 1,
+                    Settings = new SessionSettings { SpiralEnabled = true } });   // a session owns the spiral (WPF ApplySessionSettings)
                 await Settle();
                 Assert.True(runner.IsRunning && SpiralOverlay.IsShowing && SpiralOverlay.IsAnimating, Why());
                 var pause = shell.Named<Button>("BtnPauseSession")!;

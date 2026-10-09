@@ -35,6 +35,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
             SliderLabel.Wire(this, "SliderBlurStrength", "TxtBlurStrength", v => $"{(int)v}%");
 
             RefreshClipCount();
+            WireAudioHalf();   // BrainDrainFeatureControl.Audio.cs
 
             // ponytail: needs App.BrainDrain, Services.BrainDrainService and OverlayService -
             // NOT App.Settings, which is CoreSettings.Current today. See the class summary for
@@ -53,8 +54,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
         /// </summary>
         private void RefreshClipCount()
         {
-            // ponytail: needs BrainDrainService.AudioFileCount, wired when it moves to Core.
-            const int clips = 0;
+            var clips = ClipCountNow();   // CoreBrainDrain (0 while no player is seeded)
             this.FindControl<TextBlock>("TxtClipCount")!.Text = Loc.GetF("st4_braindrain_clips_loaded_0", clips);
             this.FindControl<Border>("NoAudioHint")!.IsVisible = clips == 0;
         }
