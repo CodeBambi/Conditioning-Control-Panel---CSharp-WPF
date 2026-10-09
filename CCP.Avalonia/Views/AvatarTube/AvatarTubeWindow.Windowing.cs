@@ -174,15 +174,25 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             double art = _scaleFactor * DesktopScaling, day = DockDaylight * DesktopScaling;
             var size = TubePixelSize;
             int rightInset = (int)Math.Round(Math.Max(0, (TubeArtRightPadding - SeamOverlapOverMain) * art - day));
-            var plan = TubeDockPlacement.Place(ToBox(pr), size.Width, size.Height,
-                (int)Math.Round(Math.Max(0, TubeArtLeftPadding * art - day)), rightInset,
+            int leftInset = (int)Math.Round(Math.Max(0, TubeArtLeftPadding * art - day));
+            var plan = TubeDockPlacement.Place(ToBox(pr), size.Width, size.Height, leftInset, rightInset,
                 (int)Math.Round(VerticalOffset * art), ToBox(work));
             Position = new PixelPoint(plan.Left, plan.Top);
             // WPF's transparent margin was click-through (layered window); an X11 window takes
             // clicks on every pixel, so cut her input down to everything left of the seam or the
-            // shell's rail under that margin goes dead. Detach gives the whole window back.
-            Platform.X11Overlay.SetInputRect(this, new PixelRect(0, 0, size.Width - rightInset, size.Height));
+            // shell's rail under that margin goes dead. The cut follows the side she docked to: on a
+            // right dock her LEFT margin is the one over the shell. Detach gives the whole window back.
+            InputRect = plan.Side switch
+            {
+                DockSide.Left => new PixelRect(0, 0, size.Width - rightInset, size.Height),
+                DockSide.Right => new PixelRect(leftInset, 0, size.Width - leftInset, size.Height),
+                _ => new PixelRect(leftInset, 0, Math.Max(0, size.Width - leftInset - rightInset), size.Height),   // floating over the shell: both margins
+            };
+            Platform.X11Overlay.SetInputRect(this, InputRect);
         }
+
+        /// <summary>The attached tube's input region (window px) as last set by <see cref="UpdatePosition"/>.</summary>
+        internal PixelRect? InputRect { get; private set; }
 
         /// <summary>WPF RestoreSavedPlacement: a detached tube comes back where it was left, with at
         /// least half of it on a connected screen.</summary>

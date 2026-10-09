@@ -19,8 +19,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///
     /// <para>ponytail: not here yet, each a named WPF member: the moment bus (<c>Fire</c>, greeting,
     /// backSoon/weekend/bedtime beats, needs EmiLineEngine + EmiState), the nudge machine, the
-    /// knock (<c>TryKnock</c>), the tube hand-off (<c>TubeDeskVisibility</c>), and the system-wide chord (<c>ApplyHotkey</c>: a modifier
-    /// chord needs XGrabKey, which X11PanicKey's raw-key listener does not cover).</para>
+    /// knock (<c>TryKnock</c>) and the tube hand-off (<c>TubeDeskVisibility</c>). The system-wide chord
+    /// (<c>ApplyHotkey</c>) is here, grabbed through Platform/X11SummonChord.</para>
     /// </summary>
     internal sealed class EmiDeskService
     {
@@ -197,6 +197,68 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 Log.Warning(ex, "[EmiDesk] mute prompt failed, keeping the avatar");
                 _muteAccepted = false;
             }
+        }
+
+        // ---------------------------------------------------------------- hotkey (WPF :1633)
+
+        /// <summary>True while the summon chord is grabbed (WPF HotkeyArmed).</summary>
+        public bool HotkeyArmed { get; private set; }
+
+        /// <summary>The OS grab. Seams so tests never touch the X server.</summary>
+        internal Func<ChordMods, string, Action, bool> RegisterChord = Platform.X11SummonChord.Arm;
+        internal Action UnregisterChord = Platform.X11SummonChord.Disarm;
+
+        /// <summary>
+        /// Arm (or disarm) the system-wide summon chord, WPF <c>ApplyHotkey</c> one for one: off, an
+        /// unparseable chord, or a base key shared with the panic/pause hook all disarm with a log
+        /// line; a combo another client holds leaves it unarmed. The dock chip keeps working either way.
+        /// Called at startup (App, after the panic key) and whenever the settings section changes it.
+        /// </summary>
+        public void ApplyHotkey()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                if (!s.EmiDeskEnabled)
+                {
+                    Disarm();
+                    Log.Information("[EmiDesk] summon hotkey not armed: EMI Desk is off");
+                    return;
+                }
+                var chord = string.IsNullOrWhiteSpace(s.EmiDeskHotkey) ? EmiDeskChord.DefaultHotkey : s.EmiDeskHotkey;
+                if (EmiDeskChord.Parse(chord) is not { } parsed
+                    || !Enum.TryParse<global::Avalonia.Input.Key>(parsed.Key, ignoreCase: true, out _))
+                {
+                    Disarm();
+                    Log.Warning("[EmiDesk] summon hotkey NOT armed: {Chord} is not a valid chord. Use the dock chip in the nav rail.", chord);
+                    return;
+                }
+                // The panic/pause listener is modifier-blind and does not consume the press, so a
+                // chord on the same base key would summon EMI and stop everything in one keystroke.
+                if (ConditioningControlPanel.Services.Safety.PanicPolicy.FindHookClash(parsed.Key,
+                        ConditioningControlPanel.Services.Safety.PanicPolicy.HookBoundBaseKeys(s)) is { } clash)
+                {
+                    Disarm();
+                    Log.Warning("[EmiDesk] summon hotkey {Chord} NOT armed: it shares its base key with the {Binding} binding ({BoundKey}).",
+                        chord, clash.Name, clash.Key);
+                    return;
+                }
+                // X delivers the press on the listener thread: marshal before touching UI.
+                HotkeyArmed = RegisterChord(parsed.Mods, parsed.Key, () => Dispatcher.UIThread.Post(Toggle));
+                if (HotkeyArmed) Log.Information("[EmiDesk] summon hotkey armed: {Chord}", chord);
+                else Log.Warning("[EmiDesk] summon hotkey {Chord} could not be grabbed: another client holds it. " +
+                                 "The dock chip in the nav rail still summons her.", chord);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] ApplyHotkey failed");
+            }
+        }
+
+        private void Disarm()
+        {
+            UnregisterChord();
+            HotkeyArmed = false;
         }
 
         /// <summary>The mute question. A seam only so a test can hold the prompt open.</summary>

@@ -48,6 +48,7 @@ public sealed class AiCommandGateTests : IDisposable
         AiCommandService.LiveActionSink = null;
         GetBackToMeCommand.AiProvider = null;
         GetBackToMeCommand.SaySurface = null;
+        ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.CommandExecutor = null;
     }
 
     private static AiCommandData Flash(int amount = 3) =>
@@ -199,5 +200,88 @@ public sealed class AiCommandGateTests : IDisposable
         await Task.Delay(300);
         Assert.Empty(said);
         Assert.Empty(_flashes);
+    }
+
+    // ---- audit #1987: the follow-up's reply runs its own commands inside the AI call (CompanionBrain.CommandExecutor) ----
+
+    /// <summary>An AI stand-in that, like the real providers, executes its reply's commands inside
+    /// GetBambiReplyExAsync once the test releases it.</summary>
+    public class ActingAi : System.Reflection.DispatchProxy
+    {
+        public readonly TaskCompletionSource Asked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Asynchronous on purpose: the reply never runs inline on the releasing (test) thread. That forces
+        // the interleaving a loaded machine produces anyway, when Release completes before the reply reaches
+        // its await. Tests must therefore wait for the reply's side effect and never assert right after SetResult.
+        public readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public List<AiCommandData> ReplyCommands = new();
+        protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args)
+        {
+            if (method?.Name == "GetBambiReplyExAsync") return Reply();
+            var t = method?.ReturnType;
+            return t != null && t.IsValueType && t != typeof(void) ? Activator.CreateInstance(t) : null;
+        }
+        private async Task<ConditioningControlPanel.Services.Moderation.AiReplyResult> Reply()
+        {
+            Asked.TrySetResult();
+            await Release.Task;
+            ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.CommandExecutor?.Invoke(ReplyCommands);
+            return new ConditioningControlPanel.Services.Moderation.AiReplyResult("hi", true, null);
+        }
+    }
+
+    private ActingAi SeedActingAi()
+    {
+        var ai = System.Reflection.DispatchProxy.Create<ConditioningControlPanel.Services.AIService.IAiService, ActingAi>();
+        var acting = (ActingAi)(object)ai;
+        acting.ReplyCommands.Add(Flash(5));
+        GetBackToMeCommand.AiProvider = () => ai;
+        var service = new AiCommandService();
+        ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.CommandExecutor = commands =>
+        {
+            service.BeginBatch();
+            foreach (var c in commands) service.ExecuteCommand(c);
+        };
+        return acting;
+    }
+
+    [Fact]
+    public async Task PanicDuringTheFollowUpRoundTripDropsTheReplysOwnCommands()
+    {
+        var acting = SeedActingAi();
+        var reported = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        AiCommandService.LiveActionSink = l => { _feed.Add(l); if (l.Contains("getbacktome didn't fire")) reported.TrySetResult(); };
+        Run(FollowUp());
+        await acting.Asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        AiCommandService.CancelAll();             // panic while the AI is answering
+        acting.Release.SetResult();               // the late reply executes its commands inline
+        // The cancelled follow-up finishes on the posted continuation and reports "didn't fire" through the
+        // static LiveActionSink; wait for it here, or it lands in the next test's feed. Only after that
+        // has the reply's executor run, so only then does the assertion prove anything.
+        await reported.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.DoesNotContain(_flashes, f => f.Amount == 5);
+    }
+
+    [Fact]
+    public async Task AFollowUpThatIsNotCancelledStillRunsItsReplysCommands()
+    {
+        var acting = SeedActingAi();
+        var flashed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        FlashImageCommand.Surface = (a, ms, s) => { _flashes.Add((a, ms, s)); if (a == 5) flashed.TrySetResult(); return true; };
+        Run(FollowUp());
+        await acting.Asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        acting.Release.SetResult();
+        // The reply runs on another thread (always under ActingAi, and on a loaded machine regardless), so wait
+        // for its flash instead of asserting before it has run (flake: two push gates, 2026-10-09).
+        await flashed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Contains(_flashes, f => f.Amount == 5);
+    }
+
+    [Fact]
+    public void AChatReplysCommandsRunEvenAfterAnEarlierPanic()
+    {
+        SeedActingAi();
+        AiCommandService.CancelAll();             // an earlier panic does not poison later chat replies
+        ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.CommandExecutor!(new List<AiCommandData> { Flash(5) });
+        Assert.Contains(_flashes, f => f.Amount == 5);
     }
 }

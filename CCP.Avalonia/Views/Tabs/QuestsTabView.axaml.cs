@@ -16,8 +16,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// head. Two exceptions are genuinely view-only and are ported for real:
     ///
     ///  - the sub-tab swap (MainWindow.Roadmap.cs:37/48) is nothing but a panel IsVisible flip
-    ///    plus a theme swap on the two buttons; only its trailing RefreshRoadmapUI() needs a
-    ///    service, and that is the stubbed part.
+    ///    plus a theme swap on the two buttons; its trailing RefreshRoadmapUI() is ported in
+    ///    QuestsTabView.Roadmap.cs against the head's RoadmapService.
     ///  - the track swap (MainWindow.Roadmap.cs:62) is the same shape.
     ///
     /// Dropped outright:

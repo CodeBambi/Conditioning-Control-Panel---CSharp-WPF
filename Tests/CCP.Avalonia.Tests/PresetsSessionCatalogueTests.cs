@@ -47,10 +47,10 @@ public sealed class PresetsSessionCatalogueTests
                 var panel = view.FindControl<StackPanel>("SessionRackPanel");
                 Assert.NotNull(panel);
                 var rows = panel!.Children.OfType<Border>().ToArray();
-                Assert.Equal(available.Length, rows.Length);
-                Assert.Equal(available.Select(session => session.Id),
+                // Audit #1318: WPF lists locked sessions too and only disables Start (SessionIO.cs:971-972).
+                Assert.Equal(all.Count, rows.Length);
+                Assert.Equal(all.Select(session => session.Id),
                     rows.Select(row => (row.Tag as Session)?.Id));
-                Assert.DoesNotContain(rows, row => row.Tag is Session session && !session.IsAvailable);
 
                 var start = view.FindControl<Button>("BtnStartSession");
                 Assert.NotNull(start);
@@ -99,6 +99,17 @@ public sealed class PresetsSessionCatalogueTests
                 host.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
                 Dispatcher.UIThread.RunJobs();
                 AssertDetails(view, first);
+                Assert.True(start.IsEnabled);
+
+                // A locked row selects like any other; Start greys and reads "🔒 Coming Soon".
+                var locked = all.First(session => !session.IsAvailable);
+                Click(host, rows.Single(row => (row.Tag as Session)?.Id == locked.Id));
+                AssertDetails(view, locked);
+                Assert.False(start.IsEnabled);
+                Assert.Equal("🔒 " + Loc.Get("label_coming_soon"), ((TextBlock)start.Content!).Text);
+                Click(host, firstRow);
+                Assert.True(start.IsEnabled);
+                Assert.NotEqual("🔒 " + Loc.Get("label_coming_soon"), ((TextBlock)start.Content!).Text);
             }
             finally
             {
@@ -297,7 +308,6 @@ public sealed class PresetsSessionCatalogueTests
 
                 var manager = new SessionManager(service);
                 manager.LoadAllSessions();
-                var available = manager.AllSessions.Where(session => session.IsAvailable).ToArray();
                 var builtIn = manager.AllSessions.Single(session => session.Id == "fixture_builtin");
                 var custom = manager.AllSessions.Single(session => session.Id == "fixture_custom");
                 Assert.Equal(3, manager.AllSessions.Count);
@@ -316,9 +326,10 @@ public sealed class PresetsSessionCatalogueTests
 
                 var panel = view.FindControl<StackPanel>("SessionRackPanel")!;
                 var rows = panel.Children.OfType<Border>().ToArray();
-                Assert.Equal(available.Select(session => session.Id).OrderBy(id => id),
+                // Audit #1318: the locked session is listed (WPF SessionIO.cs:971-972 only disables Start).
+                Assert.Equal(manager.AllSessions.Select(session => session.Id).OrderBy(id => id),
                     rows.Select(row => (row.Tag as Session)?.Id).OrderBy(id => id));
-                Assert.DoesNotContain(rows, row => (row.Tag as Session)?.Id == "fixture_unavailable");
+                Assert.Contains(rows, row => (row.Tag as Session)?.Id == "fixture_unavailable");
                 Assert.Same(custom, rows.Single(row => (row.Tag as Session)?.Id == custom.Id).Tag);
 
                 var customRow = rows.Single(row => (row.Tag as Session)?.Id == custom.Id);
@@ -356,9 +367,9 @@ public sealed class PresetsSessionCatalogueTests
                 {
                     var rowGrid = Assert.IsType<Grid>(row.Child);
                     var actions = Assert.IsType<StackPanel>(rowGrid.Children[8]);
-                    // WPF SessionIO.cs:451-457: edit + export everywhere, delete off the built-ins.
+                    // WPF SessionIO.cs:451-457: edit + export everywhere, share + delete off the built-ins.
                     var builtIn = (row.Tag as Session)!.Source == SessionSource.BuiltIn;
-                    Assert.Equal(builtIn ? 2 : 3, actions.Children.Count);
+                    Assert.Equal(builtIn ? 2 : 4, actions.Children.Count);
                     Assert.All(actions.Children.OfType<Button>(), button => Assert.True(button.IsEnabled));
                 });
 
@@ -448,6 +459,8 @@ public sealed class PresetsSessionCatalogueTests
                     IsAvailable = true
                 };
                 manager.AllSessions.Add(imported);
+                // Audit #1318: a locked session is listed, counted and filtered like any other
+                // (WPF EnumerateRackSessions keeps it; only Start is disabled).
                 manager.AllSessions.Add(new Session
                 {
                     Id = "filter_imported_unavailable",
@@ -474,7 +487,8 @@ public sealed class PresetsSessionCatalogueTests
 
                 Assert.Equal(new[]
                 {
-                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme",
+                    "filter_imported_unavailable"
                 }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
                 Assert.Single(sourceChips, chip => (string)chip.Tag! == "all" && chip.IsChecked == true);
                 Assert.All(sourceChips, chip => Assert.True(chip.IsEnabled));
@@ -483,8 +497,8 @@ public sealed class PresetsSessionCatalogueTests
                     Assert.True(dot.IsEnabled);
                     Assert.True(dot.IsChecked);
                 });
-                Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
-                Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
+                Assert.Equal("5 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "All  5", "Built-in  2", "Yours  1", "Catalogue  2" },
                     sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
 
                 // The source control is a real ToggleButton: a keyboard activation selects Yours,
@@ -498,11 +512,13 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.Single(sourceChips, chip => (string)chip.Tag! == "yours" && chip.IsChecked == true);
 
                 Click(host, Source("catalogue"));
-                Assert.Equal(new[] { "filter_imported_extreme" }, RowIds(panel));
+                Assert.Equal(new[] { "filter_imported_extreme", "filter_imported_unavailable" },
+                    RowIds(panel).OrderBy(id => id));
                 Click(host, Source("all"));
                 Assert.Equal(new[]
                 {
-                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme",
+                    "filter_imported_unavailable"
                 }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
                 Click(host, Source("builtin"));
                 var builtInRow = Assert.Single(panel.Children.OfType<Border>(),
@@ -540,15 +556,15 @@ public sealed class PresetsSessionCatalogueTests
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(easy.IsChecked == true);
                 Assert.Equal(new[] { "filter_builtin_hard" }, RowIds(panel));
-                Assert.Equal("1 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
-                Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
+                Assert.Equal("1 of 5", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "All  5", "Built-in  2", "Yours  1", "Catalogue  2" },
                     sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
 
                 Click(host, Difficulty(SessionDifficulty.Hard));
                 Assert.Empty(panel.Children.OfType<Border>());
                 Assert.Equal("No sessions match - clear a filter.",
                     Assert.Single(panel.Children.OfType<TextBlock>()).Text);
-                Assert.Equal("0 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal("0 of 5", view.FindControl<TextBlock>("TxtRackCount")!.Text);
                 Assert.Equal("🔴 Filter Built In Hard", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
 
                 Click(host, Difficulty(SessionDifficulty.Medium));
@@ -561,9 +577,9 @@ public sealed class PresetsSessionCatalogueTests
                 Dispatcher.UIThread.RunJobs();
                 Assert.Same(empty, panel.Children.Single());
                 Assert.Equal(Loc.Get("rack_empty"), empty.Text);
-                Assert.Equal(Loc.GetF("rack_count_filtered", 0, 4),
+                Assert.Equal(Loc.GetF("rack_count_filtered", 0, 5),
                     view.FindControl<TextBlock>("TxtRackCount")!.Text);
-                Assert.Equal(new[] { "全部  4", "内置  2", "你的  1", "目录  1" },
+                Assert.Equal(new[] { "全部  5", "内置  2", "你的  1", "目录  2" },
                     sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
                 LocalizationManager.Instance.SetLanguage("en");
                 Dispatcher.UIThread.RunJobs();
@@ -573,9 +589,10 @@ public sealed class PresetsSessionCatalogueTests
                 Click(host, Source("all"));
                 Assert.Equal(new[]
                 {
-                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme",
+                    "filter_imported_unavailable"
                 }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
-                Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal("5 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
                 Assert.Equal(fallbackSource, CoreSettings.Current.SessionRackSourceFilter);
 
                 // Search and sort are live views; row edit/export/delete are live (share is not).
@@ -591,6 +608,27 @@ public sealed class PresetsSessionCatalogueTests
                     var actions = Assert.IsType<StackPanel>(Assert.IsType<Grid>(row.Child).Children[8]);
                     Assert.All(actions.Children.OfType<Button>(), button => Assert.True(button.IsEnabled));
                 });
+
+                // The locked session answers search and sort like any other row (WPF RackAccepts /
+                // SortRackSessions run over EnumerateRackSessions, locked included).
+                var search = view.FindControl<TextBox>("TxtRackSearch")!;
+                search.Text = "filter unavailable";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[] { "filter_imported_unavailable" }, RowIds(panel));
+                search.Text = "";
+                Dispatcher.UIThread.RunJobs();
+                var sort = view.FindControl<ComboBox>("CmbRackSort")!;
+                void Sort(string token) => sort.SelectedItem =
+                    sort.Items.OfType<ComboBoxItem>().Single(item => (string?)item.Tag == token);
+                Sort("name");
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[]
+                {
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_imported_extreme",
+                    "filter_imported_unavailable", "filter_custom_hard"
+                }, RowIds(panel));
+                Sort("recent");
+                Dispatcher.UIThread.RunJobs();
             }
             finally
             {
@@ -659,8 +697,6 @@ public sealed class PresetsSessionCatalogueTests
                     20, 500, SessionSource.Imported, stamp.AddMinutes(40));
                 var delta = Add("query_delta", "Delta Name", "Other metadata", SessionDifficulty.Extreme,
                     10, 700, SessionSource.BuiltIn, stamp.AddMinutes(30));
-                Add("query_unavailable", "Unavailable", "Not shown", SessionDifficulty.Easy,
-                    1, 1, SessionSource.Custom, stamp.AddMinutes(50), available: false);
 
                 var view = new PresetsTabView { Width = 1100, Height = 760 };
                 view.UseSessionManager(manager);
@@ -807,11 +843,19 @@ public sealed class PresetsSessionCatalogueTests
                 // The normal shell proof above keeps the toolbar on one line. Resize the same
                 // mounted controls to a narrow rack and repeat the containment check in two
                 // localized metric sets; wrapping is the layout contract, not a test-only width.
+                // The shell's tab area: DesignCanvas 1585 - rail 96 - PresetsTab margin 20
+                // (MainShellWindow.axaml:321-325, :2502). There WPF's single 28px row holds.
+                view.Width = 1469;
+                host.Width = 1469;
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+                AssertToolbarControlsContained(view, oneLine: true);
+
                 view.Width = 900;
                 host.Width = 900;
                 Dispatcher.UIThread.RunJobs();
                 Dispatcher.UIThread.RunJobs();
-                AssertToolbarControlsContained(view);
+                AssertToolbarControlsContained(view, oneLine: false);
 
                 LocalizationManager.Instance.SetLanguage("de");
                 Dispatcher.UIThread.RunJobs();
@@ -849,20 +893,34 @@ public sealed class PresetsSessionCatalogueTests
     private static string SortFace(ComboBox combo) =>
         ((combo.SelectedItem as ComboBoxItem)?.Content as TextBlock)?.Text ?? "<missing>";
 
-    private static void AssertToolbarControlsContained(PresetsTabView view)
+    /// <summary>Audit #1456: WPF is one 28px row with sort and search pushed right
+    /// (PresetsTabView.xaml:805-840, search 150px). Narrow, they drop under the chips, still inside.</summary>
+    private static void AssertToolbarControlsContained(PresetsTabView view, bool? oneLine = null)
     {
         var search = view.FindControl<TextBox>("TxtRackSearch")!;
         var sort = view.FindControl<ComboBox>("CmbRackSort")!;
-        var toolbar = Assert.IsType<WrapPanel>(search.Parent);
-        Assert.Same(toolbar, sort.Parent);
-        Assert.True(search.Bounds.Right <= toolbar.Bounds.Width + 0.5,
-            $"search={search.Bounds}, toolbar={toolbar.Bounds}");
-        Assert.True(search.Bounds.Bottom <= toolbar.Bounds.Height + 0.5,
-            $"search={search.Bounds}, toolbar={toolbar.Bounds}");
-        Assert.True(sort.Bounds.Right <= toolbar.Bounds.Width + 0.5,
-            $"sort={sort.Bounds}, toolbar={toolbar.Bounds}");
-        Assert.True(sort.Bounds.Bottom <= toolbar.Bounds.Height + 0.5,
-            $"sort={sort.Bounds}, toolbar={toolbar.Bounds}");
+        var chips = view.FindControl<StackPanel>("RackSourceChips")!;
+        var toolbar = view.FindControl<Control>("RackToolbar")!;
+        Rect In(Control c) => new(c.TranslatePoint(default, toolbar)!.Value, c.Bounds.Size);
+        var s = In(search);
+        var o = In(sort);
+        var c = In(chips);
+        foreach (var r in new[] { s, o })
+        {
+            Assert.True(r.Left >= -0.5 && r.Right <= toolbar.Bounds.Width + 0.5, $"control={r}, toolbar={toolbar.Bounds}");
+            Assert.True(r.Top >= -0.5 && r.Bottom <= toolbar.Bounds.Height + 0.5, $"control={r}, toolbar={toolbar.Bounds}");
+        }
+        Assert.Equal(150, search.Bounds.Width, 1);
+        Assert.Equal(s.Top, o.Top, 1);
+        Assert.True(o.Right <= s.Left + 0.5, $"sort={o}, search={s}");
+        Assert.Equal(toolbar.Bounds.Width, s.Right, 1);
+        if (oneLine == true)
+        {
+            Assert.Equal(28, toolbar.Bounds.Height, 1);
+            Assert.True(s.Top < c.Bottom && c.Top < s.Bottom, $"chips={c}, search={s}");
+        }
+        else if (oneLine == false)
+            Assert.True(s.Top >= c.Bottom - 0.5, $"chips={c}, search={s}");
     }
 
     [Fact]

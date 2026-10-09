@@ -9,6 +9,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
@@ -46,11 +47,17 @@ public sealed class FriendsRailChip : Grid
         Children.Add(_popup);
         _popup.Opened += (_, _) => { _face.Background = FriendsDrawer.Raised; Drawer.OnOpened(); };
         _popup.Closed += (_, _) => { _face.Background = Brushes.Transparent; Drawer.OnClosed(); };
+        Drawer.OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
         Drawer.CloseRequested += () => _popup.IsOpen = false;
         Drawer.SettingsRequested += () => (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab("appsettings");
         Drawer.SignInRequested += () => { _popup.IsOpen = false; _ = (TopLevel.GetTopLevel(this) as MainShellWindow)?.OpenUnifiedLoginDialog(); };
         Drawer.InvitesRequested += () => { _popup.IsOpen = false; (TopLevel.GetTopLevel(this) as MainShellWindow)?.OpenInvitesCard(); };
-        PointerReleased += (_, e) => { if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(); e.Handled = true; } };
+        // Avalonia routes the popup's input through the Popup to this chip; a click inside the drawer is not a chip click.
+        PointerReleased += (_, e) =>
+        {
+            if (e.Source is Visual s && (ReferenceEquals(s, Drawer) || Drawer.IsVisualAncestorOf(s))) return;
+            if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(); e.Handled = true; }
+        };
         AttachedToVisualTree += (_, _) => Rebind();
         DetachedFromVisualTree += (_, _) => { _popup.IsOpen = false; Unwire(); Drawer.Unsubscribe(); };
         Rebind();
