@@ -72,7 +72,8 @@
                            Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="11"/>
             </Button>
         </Grid>
-        <Grid Margin="0,0,0,9" ColumnDefinitions="*,Auto">
+        <!-- Hidden: waits for a webcam engine and its hotkey on this head. -->
+        <Grid x:Name="RowCameraShortcut" IsVisible="False" Margin="0,0,0,9" ColumnDefinitions="*,Auto">
             <TextBlock Grid.Column="0" Text="{loc:Str tooltip_change_camera_shortcut}" Theme="{StaticResource CmpCellLabelStyle}"
                        TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
             <Button x:Name="BtnCameraShortcut" Grid.Column="1" Theme="{StaticResource CmpCellButtonStyle}"
@@ -91,7 +92,8 @@
             <CheckBox x:Name="ChkMuteWhispersCompanion" Theme="{DynamicResource ToggleStyle}"
                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </Grid>
-        <Grid Margin="0,0,0,6">
+        <!-- Hidden: waits for a mute / suspend hook on the port's browser. -->
+        <Grid x:Name="RowPauseBrowser" IsVisible="False" Margin="0,0,0,6">
             <StackPanel Margin="0,0,44,0">
                 <TextBlock Text="{loc:Str label_pause_browser}" Theme="{StaticResource CmpCellLabelStyle}"/>
                 <TextBlock Text="{loc:Str label_pause_embedded_browser_audio}" Theme="{StaticResource CmpCellHintStyle}"/>
