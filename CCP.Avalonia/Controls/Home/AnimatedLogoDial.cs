@@ -20,6 +20,7 @@ using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls.Fx;
 using ConditioningControlPanel.Services;
 using Serilog;
+using SkiaSharp;
 
 namespace ConditioningControlPanel.Avalonia.Controls.Home;
 
@@ -159,8 +160,11 @@ public sealed class AnimatedLogoDial : Grid
         Log.Warning("Logo dial fallback to the still wordmark: {E}", ex?.Message ?? "artwork not found");
         _failed = true;
         Stop();
-        _renderer?.Dispose();
-        _renderer = null;
+        lock (_drawGate)
+        {
+            _renderer?.Dispose();
+            _renderer = null;
+        }
         _surface.IsVisible = false;
         try { _still.Source ??= new Bitmap(AssetLoader.Open(new Uri(FallbackUri))); }
         catch (Exception e2) { Log.Debug("Logo wordmark fallback failed: {E}", e2.Message); }
@@ -175,9 +179,52 @@ public sealed class AnimatedLogoDial : Grid
             _last = now;
             _energy = HomeDashboardRules.LogoEnergyStep(_energy, IsPointerOver ? 1 : 0, dt);
             _phase = (_phase + dt * HomeDashboardRules.LogoPhaseRate(_energy)) % Math.Tau;
+            RenderAhead(_phase, HomeDashboardRules.LogoDrive(_energy));
             _surface.Redraw();
         }
         catch (Exception ex) { Fail(ex); }
+    }
+
+    // ---- frames off the UI thread (owner, 2026-10-09: "still a bit of lag" on the dashboard) ----
+    // The dial is ~8 ms of CPU raster per frame; on the UI thread that stole a quarter of every
+    // second from input and the other loops. A worker now draws each frame into a back bitmap and
+    // the paint only blits the newest finished one (one frame behind, at 30 fps). The renderer is
+    // only ever touched under _drawGate; a busy worker drops the tick rather than queueing.
+
+    private readonly object _drawGate = new(), _frameGate = new();
+    private SKBitmap? _front, _back;
+    private int _side;
+    private bool _working;
+
+    private void RenderAhead(double phase, double drive)
+    {
+        int side = _side;
+        if (side <= 0 || _working || _renderer == null) return;
+        _working = true;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                lock (_drawGate)
+                {
+                    var r = _renderer;
+                    if (r == null) return;
+                    if (_back == null || _back.Width != side)
+                    {
+                        _back?.Dispose();
+                        _back = new SKBitmap(side, side, SKColorType.Bgra8888, SKAlphaType.Premul);
+                    }
+                    using (var c = new SKCanvas(_back))
+                    {
+                        c.Clear(SKColors.Transparent);
+                        r.Draw(c, side, side, phase, drive);
+                    }
+                    lock (_frameGate) (_front, _back) = (_back, _front);
+                }
+            }
+            catch (Exception ex) { Log.Debug("Logo dial worker frame failed: {E}", ex.Message); }
+            finally { _working = false; }
+        });
     }
 
     private void OnPaint(object? sender, FxPaintEventArgs e)
@@ -187,13 +234,22 @@ public sealed class AnimatedLogoDial : Grid
         // A square dial centred in whatever cell it is given (WPF Stretch=Uniform).
         int side = Math.Min(e.Info.Width, e.Info.Height);
         if (side <= 0) return;
+        _side = side;
         var canvas = e.Canvas;
         canvas.Save();
         canvas.Translate((e.Info.Width - side) / 2f, (e.Info.Height - side) / 2f);
         try
         {
-            if (_clock.IsEnabled) r.Draw(canvas, side, side, _phase, HomeDashboardRules.LogoDrive(_energy));
-            else r.DrawStill(canvas, side, side);
+            if (_clock.IsEnabled)
+            {
+                lock (_frameGate)
+                {
+                    if (_front != null && _front.Width == side) { canvas.DrawBitmap(_front, 0, 0); return; }
+                }
+                // No finished frame at this size yet (first tick, a resize): draw this one inline.
+                lock (_drawGate) r.Draw(canvas, side, side, _phase, HomeDashboardRules.LogoDrive(_energy));
+            }
+            else lock (_drawGate) r.DrawStill(canvas, side, side);
         }
         finally { canvas.Restore(); }
     }
