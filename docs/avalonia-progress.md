@@ -1561,3 +1561,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/flake-followup: +12
 - Fixes the intermittent Core test `AiCommandGateTests.AFollowUpThatIsNotCancelledStillRunsItsReplysCommands`, which failed in the rows-roadmap and rows-takeaway push gates. The test now waits for the reply's flash instead of asserting the moment it releases the AI. Test-only change.
+
+## avalonia-port/rows-roadmap: +149
+- shell-roadmap stub -> wired: completion chime (WPF Exclamation) and keyboard-reachable nodes with a focus border; RoadmapNodeTests (2, fail-proven); live nodes screenshot in evidence/avalonia-port/rows-roadmap.
+- Mod-gated Roadmap sub-tab visibility recorded as missing under shell-ui-updates.
