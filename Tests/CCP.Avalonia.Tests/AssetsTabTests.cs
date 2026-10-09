@@ -32,7 +32,7 @@ public sealed class AssetsTabTests
         var images = tab.AssetTree.Single(n => n.Name == "images");
         Assert.Equal(new[] { "images", "videos" }, tab.AssetTree.Select(n => n.Name));
         Assert.Equal(2, images.FileCount);
-        Assert.Equal(Loc.GetF("label_0_images_1_videos_active", 3, 1), tab.TxtAssetCounts.Text);
+        Assert.Equal(Loc.GetF("label_0_images_1_videos_active", 3, 2), tab.TxtAssetCounts.Text);
 
         var cb = await Realized(shell, () => tab.AssetTreeView.GetVisualDescendants().OfType<CheckBox>()
             .FirstOrDefault(c => c.DataContext == images));
@@ -42,7 +42,7 @@ public sealed class AssetsTabTests
         Assert.Contains("images/sub/c.png", s.DisabledAssetPaths);
         Assert.Contains("images", s.DisabledAssetFolders);
         Assert.False(images.Children.Single().IsChecked);
-        Assert.Equal(Loc.GetF("label_0_images_1_videos_active", 0, 1), tab.TxtAssetCounts.Text);
+        Assert.Equal(Loc.GetF("label_0_images_1_videos_active", 0, 2), tab.TxtAssetCounts.Text);
     });
 
     [Fact]
@@ -178,6 +178,55 @@ public sealed class AssetsTabTests
         await Task.CompletedTask;
     });
 
+    [Fact]
+    public Task UntickingVideosDropsTheDealtVideoAndBubbleQueues() => Run(async (shell, tab, s) =>
+    {
+        var overlay = global::ConditioningControlPanel.Avalonia.Views.Overlays.MandatoryVideoOverlay.Instance;
+        var bubbles = BubbleCountHost.Instance;
+        var (oldVideo, oldBubbles) = (overlay.Scheduler, bubbles.Scheduler);
+        overlay.Scheduler = new MandatoryVideoScheduler(overlay);
+        bubbles.Scheduler = new BubbleCountScheduler(bubbles);
+        try
+        {
+            // Both deal a two-clip queue and play one; one clip is left queued.
+            Assert.NotNull(overlay.Scheduler.PickNext());
+            Assert.NotNull(bubbles.Scheduler.PickNext());
+
+            var videos = tab.AssetTree.Single(n => n.Name == "videos");
+            var cb = await Realized(shell, () => tab.AssetTreeView.GetVisualDescendants().OfType<CheckBox>()
+                .FirstOrDefault(c => c.DataContext == videos));
+            PressSpace(shell, cb);
+            Assert.Contains("videos/v.mp4", s.DisabledAssetPaths);
+
+            // WPF #130: the very next pick honours the untick instead of draining the old queue.
+            Assert.Null(overlay.Scheduler.PickNext());
+            Assert.Null(bubbles.Scheduler.PickNext());
+        }
+        finally
+        {
+            overlay.Scheduler = oldVideo;
+            bubbles.Scheduler = oldBubbles;
+        }
+    });
+
+    [Fact]
+    public Task RefreshKeepsTheOpenFolderAndItsThumbnails() => Run(async (shell, tab, s) =>
+    {
+        tab.Inform = (_, _) => Task.CompletedTask;
+        var sub = tab.AssetTree.Single(n => n.Name == "images").Children.Single();
+        tab.AssetTreeView.SelectedItem = sub;
+        tab.BtnRefreshAssets.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(tab.CurrentFolderFiles);
+        Assert.Same(tab.AssetTreeView.SelectedItem, tab.AssetTree.Single(n => n.Name == "images").Children.Single());
+        Assert.False(tab.TxtThumbnailsEmpty.IsVisible);
+
+        tab.BtnDeselectAllAssets.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Contains("images/sub/c.png", s.DisabledAssetPaths);
+        Assert.DoesNotContain("images/a.png", s.DisabledAssetPaths);
+        await tab.ThumbnailLoads;
+    });
+
     // ---- harness ----------------------------------------------------------------------
 
     private static void PressSpace(Window shell, Control target)
@@ -228,6 +277,7 @@ public sealed class AssetsTabTests
         Png(Path.Combine(assets, "images", "sub", "c.png"));
         Directory.CreateDirectory(Path.Combine(assets, "videos"));
         File.WriteAllBytes(Path.Combine(assets, "videos", "v.mp4"), new byte[16]);
+        File.WriteAllBytes(Path.Combine(assets, "videos", "w.mp4"), new byte[16]);
         var provider = ConditioningControlPanel.CorePaths.EffectiveAssetsProvider;
         var oldSettings = ConditioningControlPanel.CoreSettings.ServiceProvider;
         var svc = new SettingsService();

@@ -119,10 +119,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // :467 one-time heal for extensionless media; the tree it just built predates the renames.
             AssetExtensionRepair.RunOnceInBackground(_ => Dispatcher.UIThread.Post(() =>
             {
-                try { RefreshAssetTree(); }
+                try
+                {
+                    // WPF reloaded Flash/Video/BubbleCount here: the dealt queues predate the renames.
+                    InvalidateAssetPoolsAfterSelectionChange();
+                    RefreshAssetTree();
+                }
                 catch (Exception ex) { Log.Warning("AssetExtensionRepair: post-repair refresh failed: {Error}", ex.Message); }
             }));
 
+            // WPF keeps the open folder across a rescan/preset switch; re-find it in the new tree.
+            var openPath = _selectedFolder?.FullPath;
             _assetTree.Clear();
             _selectedFolder = null;
             _currentFolderFiles.Clear();
@@ -140,6 +147,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 _assetTree.Add(node);
             }
             UpdateAssetCounts();
+            if (!string.IsNullOrEmpty(openPath) && Find(_assetTree, openPath) is { } reopen)
+            {
+                for (var p = reopen.Parent; p != null; p = p.Parent) p.IsExpanded = true;
+                AssetTreeView.SelectedItem = reopen;
+                if (!ReferenceEquals(_selectedFolder, reopen)) SelectFolder(reopen);
+            }
+        }
+
+        private static AssetTreeItem? Find(IEnumerable<AssetTreeItem> nodes, string path)
+        {
+            foreach (var n in nodes)
+            {
+                if (string.Equals(n.FullPath, path, StringComparison.Ordinal)) return n;
+                if (Find(n.Children, path) is { } hit) return hit;
+            }
+            return null;
         }
 
         private static AssetTreeItem BuildFolderTree(string path, string name)
@@ -346,9 +369,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             catch (Exception ex) { Log.Error(ex, "Failed to open asset preview for {File}", file.Name); }
         }
 
-        /// <summary>The media services read DisabledAssetPaths live on this head (FlashOverlay,
-        /// MandatoryVideoScheduler.LocalLibrary), so WPF's cache drops reduce to the save.</summary>
-        private static void InvalidateAssetPoolsAfterSelectionChange() => CoreSettings.Save();
+        /// <summary>WPF InvalidateAssetPoolsAfterSelectionChange (MainWindow.Assets.cs:1318, #130). Flash
+        /// lists the disk per burst here (FlashOverlay.LoadPictures), so it has no cache to drop; the
+        /// mandatory-video and bubble-count schedulers deal from a queue refilled only when empty, so
+        /// it is dropped or an unticked clip keeps playing. DisabledAssetPaths is mutated in place, so
+        /// nothing autosaves: the explicit (debounced) save keeps the toggle across a restart.</summary>
+        private static void InvalidateAssetPoolsAfterSelectionChange()
+        {
+            Overlays.MandatoryVideoOverlay.Instance.Scheduler.ReloadAssets();
+            Windows.BubbleCountHost.Instance.Scheduler.ReloadAssets();
+            CoreSettings.Save();
+        }
 
         private void BtnSelectAllAssets_Click(object? sender, RoutedEventArgs e)
         {
