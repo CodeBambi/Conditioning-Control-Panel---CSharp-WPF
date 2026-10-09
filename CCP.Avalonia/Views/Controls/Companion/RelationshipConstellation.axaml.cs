@@ -1,27 +1,70 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
+using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Views.Controls.Companion;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 {
     /// <summary>
     /// Z1 bottom band — the relationship constellation. See the XAML header for the visual spec.
     ///
-    /// <para>The WPF code-behind only fires the band's one-shot intro (node twinkle when live,
-    /// shimmer sweep when dormant) from two keyed Storyboards. ponytail: those are not ported
-    /// (CompanionTheme.axaml section 17 carries no twin), so neither is <c>PlayIntro</c> and the
-    /// band is static. The HOST is no longer the blocker - CompanionHeroCard composes this band
-    /// and CompanionRoomView composes the card - only the animation is. Avalonia throws on
-    /// Animation.RunAsync against a code-held Transform, so the port is the shared ~16ms
-    /// DispatcherTimer tween ChaosHudWindow uses, not a Storyboard translation.</para>
+    /// <para>WPF's code-behind fires a one-shot intro on Loaded: the dormant shimmer sweep (ported
+    /// here as one DoubleTransition, like ChatThresholdView's) or, when live, the node twinkle -
+    /// which the shipped dormant vm never reaches, so it is not ported.</para>
     /// </summary>
     public partial class RelationshipConstellation : UserControl
     {
+        private bool _introPlayed;
+
         public RelationshipConstellation()
         {
             AvaloniaXamlLoader.Load(this);
-            DataContext = RelationshipConstellationViewModel.Live();
+            DataContext = RelationshipConstellationViewModel.Runtime();
+            // Normal, never Loaded priority. The shell attaches the Companion tab hidden, so a Loaded
+            // play would spend the one-shot unseen: PlayIntro waits for effective visibility and
+            // CompanionRoomView.ResumeClocks calls it again when the tab is shown.
+            Loaded += (_, _) => Dispatcher.UIThread.Post(PlayIntro, DispatcherPriority.Normal);
+        }
+
+        /// <summary>True once the dormant sweep has been started (tests).</summary>
+        internal bool ShimmerStarted { get; private set; }
+
+        /// <summary>WPF PlayIntro: the dormant shimmer, once, from a loaded and visible tree.</summary>
+        public void PlayIntro()
+        {
+            // One-shot (re-entering the tab must not stack a second sweep), and only where it is seen.
+            if (_introPlayed || !IsLoaded || !IsEffectivelyVisible || ViewModel is not { IsLive: false }) return;
+            var band = this.FindControl<Border>("DormantShimmer");
+            var host = this.FindControl<Border>("DormantHost");
+            if (band?.RenderTransform is not TransformGroup group) return;
+            var shift = group.Children.OfType<TranslateTransform>().FirstOrDefault();
+            if (shift is null) return;
+
+            // One-time Bounds read - a value, not a binding (WPF: ActualWidth + 90, else 620).
+            double travel = host is { Bounds.Width: > 1 } ? host.Bounds.Width + 90 : 620;
+            shift.Transitions = null;
+            shift.X = -90;
+            shift.Transitions = new Transitions
+            {
+                new DoubleTransition
+                {
+                    Property = TranslateTransform.XProperty,
+                    Duration = TimeSpan.FromSeconds(1.4),
+                    Delay = TimeSpan.FromSeconds(0.25),   // CmpShimmerSweepStoryboard BeginTime
+                    Easing = new CubicEaseInOut()
+                }
+            };
+            band.Opacity = 1;
+            shift.X = travel;
+            _introPlayed = true;
+            ShimmerStarted = true;
         }
 
         /// <summary>Convenience for hosts that hand in a viewmodel rather than setting DataContext.</summary>
@@ -33,38 +76,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     }
 
     /// <summary>
-    /// The WPF head's MockRelationshipConstellationVm, minus the interface: IRelationshipConstellationVm,
-    /// ConstellationMath and CompanionRelayCommand all still live in the WPF head
-    /// (CompanionVmPrimitives.cs), so this carries the same placeholder states and copies the
-    /// three lines of stage arithmetic rather than a second class hierarchy.
+    /// WPF <c>RelationshipConstellationRuntimeVm</c> (CompanionHeroRuntimeVm.cs:301-346) over CCP.Core's
+    /// <see cref="ConstellationMath"/>. Train 4 owns the stages, so the shipped state is dormant: names
+    /// visible (a mod may reflavor them), nodes outlined, the promise copy underneath. The node command
+    /// is a no-op there too, which is why the node buttons carry none.
     /// </summary>
     public sealed class RelationshipConstellationViewModel
     {
-        /// <summary>New ▸ Warming ▸ Bestie ▸ Possessive ▸ Inevitable. ConstellationMath.StageCount.</summary>
-        public const int StageCount = 5;
-
-        public RelationshipConstellationViewModel(bool isLive, int currentStage)
+        public RelationshipConstellationViewModel(bool isLive, int currentStage, string? modId = null)
         {
             IsLive = isLive;
-            CurrentStage = currentStage < 0 ? 0 : (currentStage >= StageCount ? StageCount - 1 : currentStage);
+            CurrentStage = ConstellationMath.ClampStage(currentStage);
 
-            var nodes = new List<ConstellationNodeViewModel>(StageCount);
-            for (int i = 0; i < StageCount; i++)
+            var nodes = new List<ConstellationNodeViewModel>(ConstellationMath.StageCount);
+            for (int i = 0; i < ConstellationMath.StageCount; i++)
             {
-                // ConstellationMath.StateFor: dormant = every node Future.
-                bool filled = isLive && i < CurrentStage;
-                bool current = isLive && i == CurrentStage;
+                var state = ConstellationMath.StateFor(i, CurrentStage, isLive);
                 nodes.Add(new ConstellationNodeViewModel
                 {
                     Index = i,
-                    // companion_stage_{i}: the same key path the shipped vm uses (mods reflavor
-                    // via the _<modId> sibling keys, not wired here).
-                    Name = Loc.Get($"companion_stage_{i}"),
-                    // Mockup glyph ladder: reached ✦, here ★, still ahead ✧.
-                    Glyph = filled ? "✦" : current ? "★" : "✧",
+                    Name = ResolveStage(i, modId),
+                    // Mockup glyph ladder: reached ✦, here ★, still ahead ✧ (the runtime's only glyph).
+                    Glyph = state switch { ConstellationNodeState.Filled => "✦", ConstellationNodeState.Current => "★", _ => "✧" },
                     Description = Loc.Get($"companion_stage_{i}_blurb"),
-                    IsFilled = filled,
-                    IsCurrent = current,
+                    IsFilled = state == ConstellationNodeState.Filled,
+                    IsCurrent = state == ConstellationNodeState.Current,
                 });
             }
             Nodes = nodes;
@@ -77,20 +113,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public int CurrentStage { get; }
 
         /// <summary>ConstellationFillConverter.FillFraction: 0..1 along the node-centre span.</summary>
-        public double FillFraction => IsLive ? CurrentStage / (double)(StageCount - 1) : 0.0;
+        public double FillFraction => IsLive ? CurrentStage / (double)(ConstellationMath.StageCount - 1) : 0.0;
 
         /// <summary>Always five entries, in order.</summary>
         public IReadOnlyList<ConstellationNodeViewModel> Nodes { get; }
 
-        public string FlavorLine { get; init; } = Loc.Get("companion_constellation_flavor");
-        public string FlavorAccent { get; init; } = Loc.Get("companion_constellation_flavor_accent");
+        public string FlavorLine { get; init; } = Loc.Get("companion_constellation_flavor_new");
+        public string FlavorAccent { get; init; } = Loc.Get("companion_constellation_flavor_new_accent");
         public string DormantCopy { get; init; } = Loc.Get("companion_constellation_dormant");
 
-        /// <summary>Stage 2 of 5, live — the artboard state.</summary>
-        public static RelationshipConstellationViewModel Live() => new(isLive: true, currentStage: 2);
+        /// <summary>What WPF's hero builds today: dormant, stage names reflavored by the active mod.</summary>
+        public static RelationshipConstellationViewModel Runtime() => new(isLive: false, currentStage: 0, CoreMods.ActiveModId);
 
-        /// <summary>Pre-Train 4: names visible, every node a faint outline, promise copy under.</summary>
-        public static RelationshipConstellationViewModel Dormant() => new(isLive: false, currentStage: 0);
+        /// <summary>A mod may reflavor a stage name; the base key is the fallback (WPF ResolveStage).</summary>
+        private static string ResolveStage(int index, string? modId)
+        {
+            if (!string.IsNullOrEmpty(modId))
+            {
+                var modKey = ConstellationMath.StageKey(index, modId);
+                var modName = Loc.Get(modKey);
+                if (!string.Equals(modName, modKey, StringComparison.Ordinal)) return modName;
+            }
+            return Loc.Get(ConstellationMath.StageKey(index));
+        }
     }
 
     /// <summary>One node of the ladder. State is two bools so the XAML can bind them to classes.</summary>

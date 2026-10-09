@@ -11,7 +11,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// PORTED from ConditioningControlPanel/Views/Deeper/NewEnhancementDialog.xaml.cs. Deviations:
     ///  - DialogResult becomes Close(bool); callers use ShowDialog&lt;bool&gt;.
     ///  - OpenFileDialog becomes the StorageProvider file picker.
-    ///  - The three interactive tutorials and the last-directory memory are stubs. AppSettings is
+    ///  - The three interactive tutorials are stubs. AppSettings is
     ///    NOT what blocks them - the HypnoTube flow's one settings write is restored below - and
     ///    nor is the overlay, which is ported
     ///    (CCP.Avalonia/Views/Windows/TutorialOverlay.axaml.cs). See StartInteractiveTutorial and
@@ -47,12 +47,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private async System.Threading.Tasks.Task BrowseAsync()
         {
             var isVideo = _rbVideo.IsChecked == true;
-            // ponytail: WPF seeds InitialDirectory from App.EnhancementLibrary.LastDirectory;
-            // ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs is still head-only, so
-            // there is no SuggestedStartLocation and the picker opens where the OS last left it.
+            // WPF seeds InitialDirectory from EnhancementLibrary.LastDirectory
+            // (NewEnhancementDialog.xaml.cs:57); the editor holds that member on this head.
+            IStorageFolder? start = null;
+            try { start = await StorageProvider.TryGetFolderFromPathAsync(DeeperEditorWindow.LastDirectory); }
+            catch { /* a folder that will not resolve just leaves the picker where the OS had it */ }
             var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 Title = Loc.Get(isVideo ? "deeper_dialog_pick_video" : "deeper_dialog_pick_audio"),
+                SuggestedStartLocation = start,
                 AllowMultiple = false,
                 FileTypeFilter = new List<FilePickerFileType>
                 {

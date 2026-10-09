@@ -731,6 +731,7 @@
   "exclusives_badge_beta": "BETA",
   "exclusives_chip_unlocked": "DESBLOQUEADO",
   "exclusives_chip_lab": "✨ ACCESO AL LAB",
+  "exclusives_not_on_this_build": "Aún no disponible en esta versión.",
   "exclusives_chip_pass_ready": "PASE SEMANAL LISTO",
   "exclusives_enter": "Abrir",
   "tab_fyp": "Para ti",
