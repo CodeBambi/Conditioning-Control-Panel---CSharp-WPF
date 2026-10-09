@@ -20,6 +20,7 @@ public static class LeashExplainHost
         try { Requested?.Invoke(role); } catch { }
         try
         {
+            if (Presenter == null) Explain.LeashExplainer.Install();
             if (Presenter != null) Presenter(role);
             else Serilog.Log.Debug("[Leash] explainer asked for {Role}; no presenter", role);
         }

@@ -4,7 +4,8 @@
 // reason when an answer did not go through. Shown in a borderless overlay window over the owner;
 // Escape is "later". No free text (Leash CONTRACT).
 // Juice as WPF: LeashFx.Ask when it lands, a pop on newly allowed chips, Denied on a refused answer,
-// and the snap (LeashSnapCard) after Put it on, through the shared LeashOverlay.
+// and the snap (LeashSnapCard) after Put it on, through the shared LeashOverlay. The explainer
+// (LeashExplainCard, 2 x 2) above the switch, the "?" (Ask), and the "read first" gate on Put it on.
 using System;
 using System.Threading.Tasks;
 using Avalonia;
@@ -55,15 +56,18 @@ public sealed class LeashAskCard : Border
         var t = new TextBlock { FontFamily = FriendsDrawer.Display, FontSize = 18, Foreground = FriendsDrawer.Text, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Tag = "leash-ask-title" };
         t.Inlines!.Add(new Run(offer.From.Name) { Foreground = FriendsDrawer.Gold, FontWeight = FontWeight.SemiBold });
         t.Inlines.Add(new Run(" " + Loc.Get("leash_ask_title")));
+        var help = LeashLook.Help(LeashExplainRole.Ask);
+        help.VerticalAlignment = VerticalAlignment.Top;
+        help.Margin = new Thickness(6, 0, 0, 0);
+        DockPanel.SetDock(help, Dock.Right);
+        head.Children.Add(help);
         head.Children.Add(t);
         sp.Children.Add(head);
 
-        var panels = new global::Avalonia.Controls.Primitives.UniformGrid { Columns = 2, Tag = "leash-explainer-plain" };
-        panels.Children.Add(Panel(FriendsDrawer.Lilac, "leash_ask_p_sees", false));
-        panels.Children.Add(Panel(FriendsDrawer.Gold, "leash_ask_p_rewards", false));
-        panels.Children.Add(Panel(FriendsDrawer.Pink, "leash_ask_p_tasks", false));
-        panels.Children.Add(Panel(FriendsDrawer.Mint, "leash_ask_p_cut", true));
-        sp.Children.Add(panels);
+        // WPF: the explainer (four pictures + two lines, 2 x 2) sits above the switch.
+        ExplainerSlot.Child = ExplainerFactory?.Invoke(offer)
+            ?? new Explain.LeashExplainCard(LeashIntroSide.Leashed, offer.From.Name, Explain.LeashExplainLayout.Grid);
+        sp.Children.Add(ExplainerSlot);
 
         var cap = LeashLook.Caption(Loc.Get("leash_ask_level"));
         cap.Margin = new Thickness(2, 12, 0, 4);
@@ -78,6 +82,15 @@ public sealed class LeashAskCard : Border
         _yes = LeashLook.Chunky(Loc.Get("leash_ask_yes"), LeashLook.Tone.Gold, "leash-ask-yes", 15);
         _yes.Margin = new Thickness(10, 0, 0, 0);
         _yes.Click += async (_, _) => await AnswerAsync(true);
+        // The "read first" gate: on the first ask, Put it on waits until the explainer was read.
+        if (ExplainerSlot.Child is Explain.LeashExplainCard intro
+            && LeashIntroRule.ShouldExplain(Explain.LeashExplainer.Settings(), LeashIntroSide.Leashed))
+        {
+            _yes.IsEnabled = false;
+            ToolTip.SetTip(_yes, Loc.Get("leash_explain_read_first"));
+            intro.ReadyForAnswer += () => { _yes.IsEnabled = true; ToolTip.SetTip(_yes, null); };
+            intro.StartReadClock(alreadySeen: false);
+        }
         row.Children.Add(no);
         row.Children.Add(_yes);
         sp.Children.Add(row);
@@ -89,6 +102,14 @@ public sealed class LeashAskCard : Border
         sp.Children.Add(_error);
         Child = sp;
     }
+
+    /// <summary>The explainer's room above the switch.</summary>
+    public Border ExplainerSlot { get; } = new() { Tag = "leash-explainer-slot" };
+
+    /// <summary>Test seam: builds the slot's content. Null = the real explainer.</summary>
+    internal static Func<LeashOffer, Control>? ExplainerFactory { get; set; }
+
+    internal Button PutItOnButton => _yes;
 
     internal LeashIntensity Level => _level;
 
@@ -168,6 +189,7 @@ public sealed class LeashAskCard : Border
             LeashFx.Denied();
             if (result != LeashAnswerResult.Gone) return;
         }
+        if (result == LeashAnswerResult.Done) Explain.LeashAskIntro.Answered();
         Answered?.Invoke(_offer, accept, _level);
     }
 

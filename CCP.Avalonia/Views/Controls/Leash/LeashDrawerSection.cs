@@ -3,7 +3,7 @@
 // the leashed side's own card, then one holder card per account held. Also the source of the Offer
 // chip on a friend's card. Cards are kept between repaints so an open menu survives a poll.
 // Juice as WPF: LeashFx Pop on the Offer chip, Sent / Denied sounds, the "?" (Offer) beside it.
-// ponytail: the offer explainer (LeashExplainer.BeforeOffer) and the snap replay.
+// The holder's first offer goes through LeashExplainer.BeforeOffer (WPF).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -227,15 +227,18 @@ public sealed class LeashDrawerSection : StackPanel
         chip.Click += async (_, _) =>
         {
             LeashFx.Pop(chip);
-            // SEAM: WPF wraps the send in Explain.LeashExplainer.BeforeOffer(owner, f.Name, send)
-            // (the "read first" explainer on a first offer); LeashExplainer is not on this head yet.
-            var r = await OfferAsync(f.Id);
-            if (LeashUiRules.IsGood(r)) label.Text = Loc.Get("leash_offer_sent");
-            else
+            // WPF: the holder's first offer opens the explainer; the offer goes only from its Offer.
+            Explain.LeashExplainer.BeforeOffer(TopLevel.GetTopLevel(chip) as Window, f.Name, async () =>
             {
-                label.Text = Loc.Get(LeashUiRules.ResultKey(r));
-                chip.IsEnabled = false;
-            }
+                var r = await OfferAsync(f.Id);
+                if (LeashUiRules.IsGood(r)) label.Text = Loc.Get("leash_offer_sent");
+                else
+                {
+                    label.Text = Loc.Get(LeashUiRules.ResultKey(r));
+                    chip.IsEnabled = false;
+                }
+            });
+            await Task.CompletedTask;
         };
         // WPF: the chip and the round "?" (Offer) side by side.
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
