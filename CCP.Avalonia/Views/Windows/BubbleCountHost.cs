@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private readonly List<Window> _messages = new();
 
-        private BubbleCountHost() => Scheduler = new BubbleCountScheduler(this);
+        private BubbleCountHost() => Scheduler = new BubbleCountScheduler(this) { PackVideos = new PackMediaPool(ContentPackStore.VideoType) };
 
         internal IReadOnlyList<Window> Messages => _messages;
         public double LastVideoDurationSeconds => BubbleCountWindow.LastVideoDurationSeconds;

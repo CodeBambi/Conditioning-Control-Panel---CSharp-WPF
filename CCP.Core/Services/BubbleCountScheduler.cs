@@ -33,8 +33,7 @@ namespace ConditioningControlPanel.Services
     /// The Bambi Freeze lead-in (:353) goes through <see cref="CoreSubliminal.TriggerBambiFreeze"/>.
     /// A game due while another fullscreen interaction is up waits and replays once it ends
     /// (WPF TriggerGame :321 queueing on InteractionQueue), re-checked every <see cref="QueuePoll"/>.
-    /// ponytail: local clips only - pack clips and the For You defer need ContentPacks / the feed
-    /// host, neither of which exists outside the WPF head yet.
+    /// Pack clips come through <see cref="PackVideos"/>. ponytail: the For You defer needs the feed host.
     /// </summary>
     public sealed class BubbleCountScheduler
     {
@@ -245,9 +244,18 @@ namespace ConditioningControlPanel.Services
 
         internal string? PickNext()
         {
+            var packCount = PackVideos?.Count ?? 0;
             if (_queue.Count == 0) _queue = new Queue<string>(_library().OrderBy(_ => _random.Next()));
+            // WPF GetNextVideo (BubbleCountService.cs:697): pack clips join, weighted by count, each a
+            // fresh decrypt kept on PackVideos' record.
+            if (PackVideos != null && Flash.FlashSourceRules.ShouldDrawPack(_queue.Count, packCount, _random)
+                && PackVideos.TryNext(out var entry) && PackVideos.Decrypt(entry) is { } temp)
+                return temp;
             return _queue.Count > 0 ? _queue.Dequeue() : null;
         }
+
+        /// <summary>The content-pack clips mixed in (WPF _packVideos); null = local only.</summary>
+        public PackMediaPool? PackVideos { get; set; }
 
         private ITimer After(TimeSpan due, Action<ITimer?> tick)
         {

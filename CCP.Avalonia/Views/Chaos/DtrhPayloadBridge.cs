@@ -25,7 +25,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     internal static class DtrhPayloadBridge
     {
         // Seams for tests; the defaults are the real services.
-        internal static Func<bool> HasVideos = () => MandatoryVideoScheduler.LocalLibrary().Count > 0;
+        internal static Func<bool> HasVideos = () => MandatoryVideoScheduler.LocalLibrary().Count > 0
+            || (ContentPackStore.Current?.GetAllActivePackVideos().Count ?? 0) > 0;   // WPF: pack clips count
         internal static Func<bool> TriggerVideo = () => MandatoryVideoOverlay.Instance.Scheduler.Trigger();
         internal static Func<bool> Whisper = () =>
         {

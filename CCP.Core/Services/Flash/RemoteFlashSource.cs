@@ -106,6 +106,15 @@ namespace ConditioningControlPanel.Services.Flash
             return rng.Next(100) < Math.Clamp(s.RemoteMediaRatio, 0, 100);
         }
 
+        /// <summary>WPF GetNextImages / GetNextVideo local split: with both pools full, a pack entry
+        /// wins in proportion to its share of the local pool; with only packs, always.</summary>
+        internal static bool ShouldDrawPack(int diskCount, int packCount, Random rng)
+        {
+            if (packCount <= 0) return false;
+            if (diskCount <= 0) return true;
+            return rng.Next(diskCount + packCount) >= diskCount;
+        }
+
         /// <summary>WPF IsRemotePath: an absolute http(s) URL, which no local path can look like.</summary>
         internal static bool IsRemotePath(string? path)
             => !string.IsNullOrEmpty(path)

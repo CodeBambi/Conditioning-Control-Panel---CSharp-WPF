@@ -424,6 +424,10 @@ namespace ConditioningControlPanel.Services
         /// <summary>WPF GetNextVideo, local half: a shuffled queue refilled when it runs dry.</summary>
         internal string? PickNext()
         {
+            // WPF GetNextVideo: active pack clips join the local pick, weighted by count. They skip the
+            // length filter (PackFileEntry carries no duration) and decrypt to a fresh temp file that
+            // PackVideos keeps on record and sweeps.
+            var packCount = PackVideos?.Count ?? 0;
             if (_queue.Count == 0)
             {
                 var enabled = _library();
@@ -433,8 +437,14 @@ namespace ConditioningControlPanel.Services
                 LastFunnelDuration = kept.Count;
                 _queue = new Queue<string>(kept.OrderBy(_ => _random.Next()));
             }
+            if (PackVideos != null && Flash.FlashSourceRules.ShouldDrawPack(_queue.Count, packCount, _random)
+                && PackVideos.TryNext(out var entry) && PackVideos.Decrypt(entry) is { } temp)
+                return temp;
             return _queue.Count > 0 ? _queue.Dequeue() : null;
         }
+
+        /// <summary>The content-pack clips this scheduler mixes in (WPF _packVideoQueue); null = local only.</summary>
+        public PackMediaPool? PackVideos { get; set; }
 
         /// <summary>WPF VideoService.MetadataCache: a clip's cached length, null on a miss. Null keeps
         /// every clip (WPF without LibVLC).</summary>

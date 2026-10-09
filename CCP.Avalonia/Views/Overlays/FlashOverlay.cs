@@ -315,18 +315,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     .ToList()
                 : new List<string>();
             files = AssetFolderExclusion.Enabled(files, root, s);
+            // WPF GetNextImages: active content-pack images are the second local source.
+            var packCount = PackImages.Count;
 
-            // WPF GetNextImages: the online clip pool is the third source beside disk (and packs).
+            // WPF GetNextImages: the online clip pool is the third source beside disk and packs.
             // Non-blocking: kicks a background top-up and reads what is already warm.
             RemoteFlashSource.EnsurePrefetch();
-            var haveLocal = files.Count > 0;
+            var haveLocal = files.Count > 0 || packCount > 0;
             var remoteReady = RemoteFlashSource.ReadyCount;
             if (!haveLocal && remoteReady == 0) return result;
 
             for (var tries = Math.Max(count * 5, 20); result.Count < count && tries > 0; tries--)
             {
                 string path, identity;
-                string? clip = null;
+                string? clip = null, packTemp = null;
                 var remote = remoteReady > 0 && FlashSourceRules.ShouldDrawRemote(s, haveLocal, Rng);
                 if (remote && RemoteFlashSource.TryTake(Rng) is { } item)
                 {
@@ -337,8 +339,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 else
                 {
                     if (remote) { remoteReady = 0; if (!haveLocal) break; }   // pool went cold: silently local
-                    if (NextPath(files) is not { } local) break;
-                    path = identity = local;
+                    if (FlashSourceRules.ShouldDrawPack(files.Count, packCount, Rng) && PackImages.TryNext(out var entry))
+                    {
+                        // A pack entry decrypts to a FRESH temp file: identity is its source key,
+                        // and the decrypt is deleted as soon as it is decoded into memory.
+                        if (PackImages.Decrypt(entry) is not { } temp) continue;
+                        path = packTemp = temp;
+                        identity = ContentPackStore.SourceKey(entry.PackId, entry.File);
+                    }
+                    else
+                    {
+                        if (files.Count == 0 || NextPath(files) is not { } local) break;
+                        path = identity = local;
+                    }
                 }
                 try
                 {
@@ -360,6 +373,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     occupied.Add(rect);
                 }
                 catch (Exception ex) { Log.Debug("Flash: could not decode {Path}: {E}", path, ex.Message); }
+                finally { PackImages.Release(packTemp); }
             }
             return result;
         }

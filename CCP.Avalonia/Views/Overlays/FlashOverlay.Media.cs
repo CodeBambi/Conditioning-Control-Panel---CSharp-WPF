@@ -25,6 +25,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static Action? _stopSound;
         private static bool _mediaSeeded;
 
+        /// <summary>WPF FlashService _packImageList + PackBag + _tempPackFiles: the active content-pack
+        /// images, dealt on source identity; refreshed by the store's PacksChanged.</summary>
+        internal static readonly PackMediaPool PackImages = new(ContentPackStore.ImageType, new Random());
+
         /// <summary>Poster bitmap -> downloaded clip of an online flash (set by LoadPictures).</summary>
         private static readonly ConditionalWeakTable<Bitmap, string> Clips = new();
 
@@ -43,6 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         internal static void ClearFileCache()
         {
             lock (DiskBag) DiskBag.Reset();
+            PackImages.Invalidate();   // WPF RefreshImageLists: pack list re-read, decrypts swept
             FlashVoicePool.Reset();
             RemoteFlashSource.ClearReady();
             try { Dispatcher.UIThread.Post(ChaosImagePool.Invalidate); } catch { ChaosImagePool.Invalidate(); }
@@ -53,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             StopFlashSound();
             RemoteFlashSource.CleanupCache();
+            PackImages.CleanupTemps();
         }
 
         // ---- the burst's voice line ----
@@ -166,13 +172,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     .ToList()
                 : new List<string>();
             files = AssetFolderExclusion.Enabled(files, root, s);
+            var packCount = PackImages.Count;
             RemoteFlashSource.EnsurePrefetch();
             var remoteReady = RemoteFlashSource.ReadyCount;
-            var haveLocal = files.Count > 0;
-            var want = Math.Min(count, files.Count + remoteReady);
+            var localPool = files.Count + packCount;
+            var haveLocal = localPool > 0;
+            var want = Math.Min(count, localPool + remoteReady);
             var chosen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Pack picks dedupe on the SOURCE key: every decrypt is a fresh temp path (WPF chosenPack).
+            var chosenPack = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var chosenRemote = new HashSet<string>(StringComparer.Ordinal);
-            for (int guard = 0, max = (files.Count + remoteReady) * 8 + 16; result.Count < want && guard < max; guard++)
+            for (int guard = 0, max = (localPool + remoteReady) * 8 + 16; result.Count < want && guard < max; guard++)
             {
                 var remoteSpent = remoteReady <= 0 || chosenRemote.Count >= remoteReady;
                 if (!haveLocal && remoteSpent) break;
@@ -185,6 +195,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     }
                     remoteReady = 0;
                     if (!haveLocal) break;
+                }
+                if (FlashSourceRules.ShouldDrawPack(files.Count, packCount, Rng))
+                {
+                    // The decrypt stays on PackImages' record (the overlay reads it later) and is
+                    // swept past the cap, on a selection change and at exit, as WPF does.
+                    if (!PackImages.TryNext(out var entry)) continue;
+                    if (!chosenPack.Add(ContentPackStore.SourceKey(entry.PackId, entry.File))) continue;
+                    if (PackImages.Decrypt(entry) is { } temp) result.Add(temp);
+                    continue;
                 }
                 if (NextPath(files) is { } local && chosen.Add(local)) result.Add(local);
             }
