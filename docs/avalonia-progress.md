@@ -1636,3 +1636,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-descent-fuse: +933
 - Fuse rail chip (tiers, flash-out at zero, Spiral Room door) and the zero-show stage visual are ported; both rows are now wired.
 - 2 fail-proven headless tests and a sandbox Keincheck run. win/shell descent-fuse rows stay stub (openers, sounds, dimming).
+
+## avalonia-port/rows-awareness-privacy: +661
+- Z5 privacy card on real settings: consent-gated dial, deny/allow chips, pause, wipe; WPF older-pipeline band whenever awareness is on (v2 observer still missing; decision logged).
+- "Set up local" opens the local-AI wizard (untested); tests can no longer read the real desktop (X11ActiveWindow.Disabled); duplicate awareness ledger rows merged.
