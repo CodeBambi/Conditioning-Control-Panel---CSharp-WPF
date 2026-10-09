@@ -78,7 +78,11 @@ public sealed class AwarenessPrivacyCardTests
         {
             shell.Show();
             Dispatcher.UIThread.RunJobs();
-            shell.GetLogicalDescendants().OfType<ConditioningControlPanel.Avalonia.Views.Tabs.CompanionTabView>().Single().IsVisible = true;
+            var companionTab = shell.GetLogicalDescendants().OfType<ConditioningControlPanel.Avalonia.Views.Tabs.CompanionTabView>().Single();
+            companionTab.IsVisible = true;
+            // 7.1.5 (v2): the card lives in the room, collapsed under the conversation (WPF too); show
+            // the room to drive the card itself.
+            companionTab.RoomView.IsVisible = true;
             Dispatcher.UIThread.RunJobs();
             var card = shell.GetLogicalDescendants().OfType<AwarenessPrivacyView>().Single();
             var vm = card.ViewModel!;
@@ -163,6 +167,12 @@ public sealed class AwarenessPrivacyCardTests
             var tab = shell.GetLogicalDescendants().OfType<ConditioningControlPanel.Avalonia.Views.Tabs.CompanionTabView>().Single();
             var card = tab.GetLogicalDescendants().OfType<AwarenessPrivacyView>().Single();
             tab.IsVisible = true;
+            Dispatcher.UIThread.RunJobs();
+            // 7.1.5 (v2): the room is collapsed under the conversation, so the card is not shown and
+            // must not tick behind it.
+            Assert.False(tab.RoomView.IsVisible);
+            Assert.False(card.IsRefreshing);
+            tab.RoomView.IsVisible = true;   // the room shown: the card ticks
             Dispatcher.UIThread.RunJobs();
             Assert.True(card.IsRefreshing);
             tab.IsVisible = false;

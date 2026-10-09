@@ -75,13 +75,12 @@ public sealed class CompanionHeroSyncTests
             Assert.Equal(5, vm.Level);
 
             // audit #1899: the dim AI plate lands on Settings \u00b7 Account (WPF ShowTab("patreon") -> ShowAppInfoPopup).
+            // 7.1.5: the plate lives on the hero card in the collapsed room (the v2 page shows the
+            // conversation), so it has no on-screen point to click; run the command it binds.
             var plate = global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(shell)
                 .OfType<global::Avalonia.Controls.Button>().First(b => b.Name == "AiPlateButton");
-            plate.BringIntoView();
-            Dispatcher.UIThread.RunJobs();
-            var at = plate.TranslatePoint(new Point(plate.Bounds.Width / 2, plate.Bounds.Height / 2), shell)!.Value;
-            shell.MouseDown(at, global::Avalonia.Input.MouseButton.Left);
-            shell.MouseUp(at, global::Avalonia.Input.MouseButton.Left);
+            Assert.Same(vm.Header!.OpenPatreonCommand, plate.Command);
+            plate.Command!.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Assert.True(global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(shell)
                 .OfType<global::Avalonia.Controls.Control>().First(c => c.Name == "AppSettingsTab").IsVisible);

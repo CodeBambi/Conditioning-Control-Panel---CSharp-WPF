@@ -95,6 +95,13 @@ public sealed class CompanionCardsRowTests
             Assert.All(cvm.Nodes, n => Assert.False(n.IsFilled || n.IsCurrent));
             Assert.Equal(Loc.Get("companion_stage_0"), cvm.Nodes[0].Name);
             Assert.Equal(Loc.Get("companion_constellation_flavor_new"), cvm.FlavorLine);
+            // 7.1.5 (v2): the band sits in the room, collapsed under the conversation, so the sweep is
+            // not spent unseen; it plays the first time the room itself is shown.
+            var room = shell.GetLogicalDescendants().OfType<CompanionRoomView>().Single();
+            Assert.False(room.IsVisible);
+            Assert.False(band.ShimmerStarted);
+            room.IsVisible = true;
+            Dispatcher.UIThread.RunJobs();
             Assert.True(band.ShimmerStarted);
 
             // ---- Z2 History: the stored transcript opens ----
