@@ -59,14 +59,14 @@ public sealed class SplitFeatureCardFxTests
             s.MotionLevel = MotionLevel.Reduced;
             Reshow();
             Assert.Null(F<object?>(card, "_breath"));
-            Assert.Equal(0.90, F<DropShadowEffect>(card, "_activeGlow").Opacity, 3);
+            Assert.Equal(0.90, F<Border>(card, "_activeGlow").Opacity, 3);
 
             // Performance tier: no glow at all.
             s.MotionLevel = MotionLevel.Full;
             s.PerformanceMode = true;
             Reshow();
             Assert.Null(F<object?>(card, "_breath"));
-            Assert.Equal(0, F<DropShadowEffect>(card, "_activeGlow").Opacity);
+            Assert.Equal(0, F<Border>(card, "_activeGlow").Opacity);
 
             // Sweep gated off: hovering the OFF half B lands the seam on its end state at once, A's "?" steps aside.
             shell.UpdateLayout();

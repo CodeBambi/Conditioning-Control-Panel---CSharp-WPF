@@ -91,7 +91,8 @@ namespace ConditioningControlPanel.Avalonia.Controls.Fx
         private void OnFrame(TimeSpan now)
         {
             if (!IsEnabled) return;
-            if (!_gate.Due(now)) return;
+            bool due = _source is TopLevelFrameSource top ? top.BeatDue(_gate, now) : _gate.Due(now);
+            if (!due) return;
             Tick?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -145,6 +146,29 @@ namespace ConditioningControlPanel.Avalonia.Controls.Fx
             if (!_top.TryGetTarget(out var top)) return;
             _requested = true;
             top.RequestAnimationFrame(_callback);
+        }
+
+        // ---- the shared beat (Home lag, 2026-10-09) -------------------------------------------
+        //
+        // Every clock used to gate on its own FrameGate, so two 30 fps clocks on one window (the
+        // Home fog and the logo dial) could tick on ALTERNATE 60 Hz frames: the compositor then ran
+        // 60 times a second and each frame repainted the whole dashboard under the fog. Clocks of
+        // the same rate on one window now share one gate, so they tick on the same frames and the
+        // window composes 30 frames a second. A clock that starts mid-beat waits for the next one
+        // (at most one interval); a clock alone behaves exactly as before.
+
+        private readonly Dictionary<long, (FrameGate Gate, TimeSpan Frame, bool Due)> _beats = new();
+
+        /// <summary>True when the beat for <paramref name="own"/>'s interval is due on this frame.</summary>
+        internal bool BeatDue(FrameGate own, TimeSpan now)
+        {
+            long key = (long)Math.Round(own.Interval.TotalMilliseconds);
+            if (!_beats.TryGetValue(key, out var beat))
+                beat = (new FrameGate { Interval = own.Interval }, TimeSpan.MinValue, false);
+            if (beat.Frame != now)
+                beat = (beat.Gate, now, beat.Gate.Due(now));
+            _beats[key] = beat;
+            return beat.Due;
         }
 
         private void OnFrame(TimeSpan now)

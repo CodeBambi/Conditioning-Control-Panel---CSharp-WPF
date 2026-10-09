@@ -30,6 +30,11 @@
         </Grid>
     </Border>
     <Panel x:Name="PressFace">
+    <!-- The on glow (perf, 2026-10-09): a sibling BoxShadow layer whose Opacity breathes, never an
+         Effect on RootBorder. An Effect turns the whole tile into an offscreen layer that is
+         re-rendered and blurred on every breath frame; this ring of shadow is one cheap draw.
+         Shadow colour = FxGlowColor, bound in the code-behind. -->
+    <Border x:Name="GlowLayer" Margin="6" CornerRadius="12" Opacity="0" IsHitTestVisible="False"/>
     <Border x:Name="RootBorder"
             Background="{DynamicResource ElevatedSurfaceBrush}"
             BorderBrush="{DynamicResource GlassBorderBrush}"
@@ -40,18 +45,14 @@
             RenderTransformOrigin="50%,50%">
         <!-- RootScale (hover lift) is built in the code-behind: a transform's x:Name is not
              reachable through FindControl. -->
-        <!-- The card's glow. Colour comes from FxTheme (FxGlowColor is rewritten on every mod
-             switch) rather than PinkColor, so an active tile is the mod's colour, not Bambi's.
-             Opacity is driven entirely from code (ApplyActiveState / StartActiveBreath). -->
-        <Border.Effect>
-            <DropShadowEffect
-                              Color="{DynamicResource FxGlowColor}"
-                              BlurRadius="18"
-                              OffsetX="0" OffsetY="0"
-                              Opacity="0"/>
-        </Border.Effect>
 
         <Grid x:Name="ContentRoot">
+            <!-- STATIC FACE (perf, 2026-10-09): art, glyph, tease veil and title render once into a
+                 BitmapCache. The Home fog repaints under every tile at 30 fps and Avalonia redraws
+                 everything under a dirty rect, so without the cache each tile downscaled its
+                 1024 px art and re-laid its text 30 times a second. -->
+            <Panel x:Name="StaticFace">
+              <Panel.CacheMode><BitmapCache/></Panel.CacheMode>
             <!-- Full-bleed background image via ImageBrush (respects parent CornerRadius) -->
             <Border x:Name="ImgIconHost" CornerRadius="11"
                     RenderOptions.BitmapInterpolationMode="HighQuality"/>
@@ -103,6 +104,7 @@
                            FontSize="12"
                            FontWeight="SemiBold"/>
             </Border>
+            </Panel>
 
             <!-- Hover rim-light. A separate 1.5px ring rather than a brush swap on RootBorder.
                  Opacity-only, 150ms. -->

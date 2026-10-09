@@ -92,7 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private readonly Grid _contentRoot, _teaseHost;
         private readonly TextBlock _txtTitle, _txtGlyph, _txtTeaseGlyph, _txtLockLabel, _txtTierBadge;
         private readonly Button _btnHelp;
-        private readonly DropShadowEffect _activeGlow;
+        private readonly Border _activeGlow;   // the GlowLayer sibling (CardGlow)
         private readonly ScaleTransform _rootScale = new(1, 1);
         private CancellationTokenSource? _breath;
         private IDisposable? _visibilityWatch;
@@ -117,7 +117,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _txtLockLabel = this.FindControl<TextBlock>("TxtLockLabel")!;
             _txtTierBadge = this.FindControl<TextBlock>("TxtTierBadge")!;
             _btnHelp = this.FindControl<Button>("BtnHelp")!;
-            _activeGlow = (DropShadowEffect)_rootBorder.Effect!;
+            _activeGlow = this.FindControl<Border>("GlowLayer")!;
+            CardGlow.Bind(_activeGlow, () => CardGlow.BlurRadius);
             var depthSocket = this.FindControl<Border>("DepthSocket")!;
             _depth = new global::ConditioningControlPanel.Avalonia.Controls.Depth.DashboardCardDepth(this,
                 this.FindControl<Panel>("PressFace")!, this.FindControl<Border>("DepthBevel")!,
