@@ -1569,3 +1569,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-takeaway: +70
 - shell-takeaway: sample Takeaway orders replaced with WPF's empty state (no drawer/door on this head); headless test fail-proven, live sandbox check, binding errors 0.
 - Row stays stub: drawer, door, chips, tray and actions still missing.
+
+## avalonia-port/audit-fix-ui: +194
+- Closed the open P1/P2 audit items from #1974 (hint relocalises), #1976 (drawer click-inside), #1914 (cosmetics ride every sync; empty only as the explicit clear), #1899 (patreon -> Settings · Account), #1847 (right-dock input cut), plus 2 doc corrections (#1976, #1837).
+- Each fix has a real-path test proven to fail when the fix is broken (evidence/audit-fix-ui/fail-proofs.txt); gate OK.
