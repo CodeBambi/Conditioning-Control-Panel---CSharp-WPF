@@ -10,7 +10,7 @@ namespace ConditioningControlPanel
     /// level loop with <c>HighestLevelEver</c>.
     /// ponytail: of the skill multiplier only Pink Rush's 3x is applied (sparkle boosts, streak power, night
     /// shift, early bird and event boost are not, so owners are under-awarded, which errs safe), no skill
-    /// points or companion XP - each lands with its ported feature. Level achievements listen to <see cref="LevelUp"/>; quests listen to <see cref="Awarded"/>
+    /// companion XP - it lands with its ported feature. Skill points per level: <see cref="SkillPointsBank"/>. Level achievements listen to <see cref="LevelUp"/>; quests listen to <see cref="Awarded"/>
     /// (the Avalonia head feeds it to QuestService.TrackXPEarned, as WPF AddXP:120 does).
     /// </summary>
     public static class ProgressionBank
@@ -30,11 +30,11 @@ namespace ConditioningControlPanel
                 Log.Debug("XP not awarded - user not logged in and not in offline mode");
                 return;
             }
-            // ponytail: no idle tracker on this head, so the passive sources WPF suppresses while idle
-            // (ProgressionService.cs:70-78) are never banked; bank them again once an idle tracker exists.
-            if (source is "Flash" or "Subliminal" or "BouncingText")
+            // WPF ProgressionService.cs:70-78 anti-cheat: passive sources are dropped only while the user is
+            // idle (ActivityIdle, 3 min without input), never while active.
+            if (ActivityIdle.IsIdle && source is "Flash" or "Subliminal" or "BouncingText")
             {
-                Log.Debug("XP not banked: +{Amount} from passive {Source} (no idle tracker)", amount, source);
+                Log.Debug("XP suppressed (idle): +{Amount} from {Source}", amount, source);
                 return;
             }
             // WPF ProgressionService.AddXP:90: the lasting Descent bonus for a migrated account (1.0 otherwise).
@@ -50,6 +50,7 @@ namespace ConditioningControlPanel
                 s.PlayerXP -= need;
                 s.PlayerLevel++;
                 if (s.PlayerLevel > s.HighestLevelEver) s.HighestLevelEver = s.PlayerLevel;
+                SkillPointsBank.OnLevelUp(s, s.PlayerLevel);   // WPF SpendXPOnLevels:303 App.SkillTree.OnLevelUp
                 levels.Add(s.PlayerLevel);
                 Log.Information("Level up! Now level {Level}", s.PlayerLevel);
             }

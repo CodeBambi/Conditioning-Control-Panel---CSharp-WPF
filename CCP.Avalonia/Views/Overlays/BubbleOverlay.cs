@@ -150,6 +150,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 : Path.Combine(dir, "bubbles", new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" }[Field.Random.Next(3)]);
             if (b.Lucky) vol *= 0.35f;
             CoreAudio.PlayOneShot(path, Math.Min(vol, 1f), "bubble-pop");
+            try { App.Achievements?.TrackBubblePopped(); } catch (Exception ex) { Log.Debug("bubble count: {E}", ex.Message); }   // WPF AchievementService.TrackBubblePopped: count, pop_the_thought, 1 SP per 100
             try { App.Quests?.TrackBubblePopped(); } catch (Exception ex) { Log.Debug("bubble quest credit: {E}", ex.Message); }
             _ = CoreHaptics.Service?.BubblePopAsync();   // WPF BubbleService.cs:1089
         }

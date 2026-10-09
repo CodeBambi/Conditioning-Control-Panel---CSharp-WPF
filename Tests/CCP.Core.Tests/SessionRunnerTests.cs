@@ -21,7 +21,8 @@ public sealed class SessionRunnerTests : IDisposable
 {
     private const string Id = "runner-golden";
     private static readonly string[] AllowedSettingsChanges =
-        { "TotalSessions", "RecentSessionStartsUtc", "LastSessionModId", "SameModRun" };
+        { "TotalSessions", "RecentSessionStartsUtc", "LastSessionModId", "SameModRun",
+          "TotalConditioningMinutes" };   // the engine stop credits the run (ConditioningTime, WPF StopConditioningTimeTracker)
     private static readonly string[] Timestamps = { "started_at", "ended_at", "timestamp", "session_time_seconds" };
 
     private readonly SessionLogService _logs = new();
@@ -219,6 +220,25 @@ public sealed class SessionRunnerTests : IDisposable
             Assert.Equal(expected, banked);
         }
         finally { CoreProgression.AddXPProvider = old; CoreSettings.Current.PlayerXP = oldXp; }
+    }
+
+    [Fact]
+    public void OnlyACompletedSessionCreditsTheSessionQuests()
+    {
+        var old = CoreProgression.TrackSessionCompletedProvider;
+        var credited = 0;
+        CoreProgression.TrackSessionCompletedProvider = () => credited++;   // WPF AchievementService.cs:999
+        try
+        {
+            _runner.Start(OneMinute());
+            _runner.Tick(TimeSpan.FromSeconds(30));
+            _runner.Stop();
+            Assert.Equal(0, credited);
+            _runner.Start(OneMinute());
+            _runner.Tick(TimeSpan.FromSeconds(61));
+            Assert.Equal(1, credited);
+        }
+        finally { CoreProgression.TrackSessionCompletedProvider = old; }
     }
 
     [Fact]

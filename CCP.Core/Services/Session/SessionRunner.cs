@@ -318,6 +318,7 @@ namespace ConditioningControlPanel.Services
                 xp = (int)Math.Round(ProfileAdopt.TotalXp(s) - before);
                 Log.Information("Session completed: {Name}, XP: {XP} (banked {Banked}, paused {PauseCount}x, penalty: -{Penalty})",
                     session.Name, award, xp, PauseCount, XPPenalty);
+                CoreProgression.TrackSessionCompleted();   // WPF SessionEngine.cs:442 -> AchievementService.cs:999
             }
             else Log.Information("Session stopped early");
 
