@@ -203,15 +203,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             UiTimer_Tick(null, EventArgs.Empty);
         }
 
+        /// <summary>WPF EnhancementHostService.LoadedFilePath: the .ccpenh.json this player last
+        /// loaded from disk, so the hub's ▶ on the same row only brings it forward.</summary>
+        public string? LoadedFilePath { get; private set; }
+
         /// <summary>
         /// The WPF window took (EnhancementAudioPlayer, EnhancementHostService) and a second ctor
         /// added (Enhancement, sourceTag) for the editor's Preview button. Both services live in the
         /// WPF head, so only the second pair survives; pass (null, null) for the empty player.
         /// </summary>
-        /// <summary>WPF EnhancementHostService.LoadedFilePath: the .ccpenh.json this player last
-        /// loaded from disk, so the hub's ▶ on the same row only brings it forward.</summary>
-        public string? LoadedFilePath { get; private set; }
-
         public EnhancementPlayerWindow(Enhancement? enhancement, string? sourceTag)
         {
             AvaloniaXamlLoader.Load(this);
@@ -404,6 +404,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _txtStatus.Text = Loc.GetF("deeper_player_status_enh_failed_fmt", reason);
             IngestErrorLine(reason);
         }
+
+        /// <summary>WPF LoadEnhancementFromMemory: catalogue downloads into the shared player.</summary>
+        public void LoadEnhancementFromMemory(Enhancement enhancement, string sourceTag)
+            => LoadEnhancementInMemory(enhancement, sourceTag);
 
         /// <summary>External launcher entry (file association, drag-drop dispatch).</summary>
         public void OpenLocalMediaFile(string path)

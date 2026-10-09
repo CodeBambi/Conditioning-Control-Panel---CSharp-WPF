@@ -275,14 +275,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF's opener (MainWindow.xaml.cs:674): a downloaded enhancement auto-plays in
         /// the player, tagged "catalogue". False on a parse failure -> the OpenError toast.</summary>
-        // ponytail: a new player window per open; WPF's ShowOrActivate reuses one. Add a
-        // single-instance guard when the player gets one on this head.
         private bool OpenCatalogueEnhancement(string path)
         {
             try
             {
                 var enhancement = ConditioningControlPanel.Services.Deeper.EnhancementSerializer.LoadFromFile(path);
-                new Views.Deeper.EnhancementPlayerWindow(enhancement, "catalogue").Show(this);
+                ShowOrActivateDeeperPlayer().LoadEnhancementFromMemory(enhancement, "catalogue");
                 return true;
             }
             catch (Exception ex)
