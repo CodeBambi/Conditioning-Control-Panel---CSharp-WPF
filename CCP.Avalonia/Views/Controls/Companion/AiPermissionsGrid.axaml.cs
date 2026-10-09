@@ -2,6 +2,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
@@ -143,8 +144,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
 
         /// <summary>WPF MainWindow.Patreon.cs BtnClearChatMemory_Click: confirm, then the brain forgets the
-        /// conversation (session.json + live turn log). ponytail: no AiServiceStrategy.ClearLocalHistory
-        /// or AiLiveActions feed on this head yet (local providers are slice 7).</summary>
+        /// conversation (session.json + live turn log) and the local-provider history is cleared.
+        /// ponytail: no AiLiveActions feed on this head yet, so there is no feed to clear.</summary>
         private async void BtnClearChatMemory_Click(object? sender, RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
@@ -153,15 +154,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             try
             {
                 App.Brain?.ForgetConversation();
+                (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
                 await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("btn_forget_everything"),
                     Loc.Get("dialog_forget_everything_done"));
             }
             catch (Exception ex) { Log.Warning(ex, "BtnClearChatMemory_Click failed"); }
         }
 
+        /// <summary>WPF BtnLabEffectsSetupLocal_Click (MainWindow.Patreon.cs:1619): reveal the Engine Room,
+        /// then the same local-AI wizard its own "set up local" button runs.</summary>
         private void BtnLabEffectsSetupLocal_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs the Engine Room deep link + LocalAiSetupWizard, wired when they are ported
+            var room = this.FindAncestorOfType<CompanionRoomView>();
+            try { room?.RevealEngineRoom(); }
+            catch (Exception ex) { Log.Debug("BtnLabEffectsSetupLocal_Click: {E}", ex.Message); }
+            (room?.FindControl<EngineRoomDrawer>("EngineZone")?.DataContext as EngineRoomVm)?.SetupLocalCommand.Execute(null);
         }
 
         /// <summary>One handler for the ten effect boxes; the Tag names the permission, as on WPF.</summary>

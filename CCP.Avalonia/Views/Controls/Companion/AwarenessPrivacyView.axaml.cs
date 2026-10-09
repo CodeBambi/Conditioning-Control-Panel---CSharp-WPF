@@ -12,7 +12,8 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
-using ConditioningControlPanel.Avalonia.Views.Dialogs;
+using Avalonia.VisualTree;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
@@ -25,10 +26,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// live) and the dormant block's one-shot shimmer - and both stop on unload so a hidden tab
     /// is not still animating.</para>
     ///
-    /// <para>Not ported: the 1.5 s refresh timer. It existed to call
-    /// <c>AwarenessPrivacyRuntimeVm.Sync()</c>, and that runtime viewmodel reads the awareness
-    /// service, which is still in the WPF head. The mock exhibits are static, so a timer here
-    /// would tick at nothing.</para>
+    /// <para>The 1.5 s refresh (WPF <c>RefreshInterval</c>) re-reads the live viewmodel only while
+    /// the card is on screen: started on load when visible and by the room's ResumeClocks, stopped
+    /// by ParkClocks and on unload (P01).</para>
     /// </summary>
     public partial class AwarenessPrivacyView : UserControl
     {
@@ -45,7 +45,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // WipeConfirm never raises a change, so a later assignment leaves them bound to null.
             WipeConfirm = new MemoryForgetConfirm();
             AvaloniaXamlLoader.Load(this);
-            DataContext = AwarenessPrivacyViewModel.Live(this);
+            DataContext = new AwarenessPrivacyViewModel(
+                () => TopLevel.GetTopLevel(this) as MainShellWindow,
+                () => this.FindAncestorOfType<CompanionRoomView>()?.RevealWorkshop(CompanionRoomAnchors.WorkshopAwarenessCell));
             Loaded += OnLoaded;
             DataContextChanged += (_, _) =>
             {
@@ -55,6 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             Unloaded += (_, _) =>
             {
                 StopCursorBlink();
+                StopRefresh();
                 WipeConfirm.Disarm();
                 Observe(null);
             };
@@ -78,6 +81,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             Observe(ViewModel);
             WipeConfirm.Bind(ViewModel?.WipeCommand);
+            if (IsEffectivelyVisible) StartRefresh();
             // Normal, never Loaded — DispatcherPriority.Loaded is starved in this app.
             Dispatcher.UIThread.Post(() =>
             {
@@ -170,20 +174,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             shift.X = host.Bounds.Width > 1 ? host.Bounds.Width + 90 : 420;
         }
 
-        /// <summary>
-        /// The one command on this card that needs a window: the per-app title allow list opens the
-        /// already-ported picker. The list it hands back is applied to the viewmodel's exhibit
-        /// only; nothing here writes settings.
-        /// </summary>
-        internal async void OpenAllowPicker()
+        /// <summary>WPF RefreshInterval: the observer's own poll, so the readout never lags it.</summary>
+        public static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(1500);
+        private DispatcherTimer? _refresh;
+        internal bool IsRefreshing => _refresh != null;
+
+        /// <summary>Arms the visible-only re-read. Idempotent.</summary>
+        public void StartRefresh()
         {
-            var vm = ViewModel;
-            if (vm is null || TopLevel.GetTopLevel(this) is not Window owner) return;
-            var listed = vm.TitleAllowList.Select(c => c.Label).ToList();
-            var candidates = vm.SeenApps.Select(c => c.Label).ToList();
-            var dialog = new AwarenessAppPickerDialog(AwarenessListKind.TitleAllow, listed, candidates);
-            await dialog.ShowDialogSafe(owner);
-            if (dialog.Result is { } picked) vm.SetTitleAllowList(picked);
+            ViewModel?.Sync();
+            if (_refresh != null) return;
+            _refresh = new DispatcherTimer(RefreshInterval, DispatcherPriority.Normal, (_, _) => ViewModel?.Sync());
+            _refresh.Start();
+        }
+
+        /// <summary>Disarms the refresh. Safe when it was never started.</summary>
+        public void StopRefresh()
+        {
+            _refresh?.Stop();
+            _refresh = null;
         }
     }
 
@@ -288,191 +297,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
             ConfirmedCount++;
             target.Execute(null);
-        }
-    }
-
-    /// <summary>
-    /// The view's data contract, as a concrete type for compiled bindings. The WPF view binds to
-    /// <c>IAwarenessPrivacyVm</c>, whose mock and runtime implementations both live in the head
-    /// (the runtime one reads the awareness service). This is that interface's shape seeded with
-    /// the mock's exhibits; <see cref="Live"/> is what the view shows by default.
-    /// </summary>
-    public sealed class AwarenessPrivacyViewModel : INotifyPropertyChanged
-    {
-        private AwarenessIntensity _intensity = AwarenessIntensity.BroadStrokes;
-        private bool _allowPageTitles;
-        private bool _isJsonExpanded;
-        private int _retentionDays = 30;
-        private IReadOnlyList<AwarenessChip> _titleAllowList = Array.Empty<AwarenessChip>();
-
-        public AwarenessPrivacyViewModel(AwarenessPrivacyView? view = null)
-        {
-            // ponytail: chips are static exhibits; the remove/hide/forget commands are no-ops until
-            // the awareness ledger moves to Core.
-            var noop = new RelayCommand(() => { });
-            DenyList = new[]
-            {
-                new AwarenessChip(Loc.Get("companion_awareness_deny_passwords"), noop),
-                new AwarenessChip(Loc.Get("companion_awareness_deny_banking"), noop),
-                new AwarenessChip(Loc.Get("companion_awareness_deny_email"), noop)
-            };
-            SeenApps = new[]
-            {
-                new AwarenessChip("Chrome", noop, Loc.Get("companion_awareness_seen_tip")),
-                new AwarenessChip("Discord", noop, Loc.Get("companion_awareness_seen_tip")),
-                new AwarenessChip("Steam", noop, Loc.Get("companion_awareness_seen_tip"))
-            };
-            KnownApps = new[]
-            {
-                new AwarenessChip("YouTube", noop, Loc.Get("companion_awareness_forget_tip")),
-                new AwarenessChip("Discord", noop, Loc.Get("companion_awareness_forget_tip"))
-            };
-
-            AddDenyCommand = noop;            // ponytail: needs the deny-list editor, wired when awareness moves to Core
-            AllowPerAppCommand = new RelayCommand(() => view?.OpenAllowPicker());
-            ToggleJsonCommand = new RelayCommand(() => IsJsonExpanded = !IsJsonExpanded);
-            PauseCommand = noop;              // ponytail: needs the awareness service
-            WipeCommand = noop;               // ponytail: needs the awareness ledger
-            FineTuningCommand = noop;         // ponytail: needs ICompanionRoomNavigator (workshop deep link)
-            ReviewConsentCommand = noop;      // ponytail: needs the v2 consent dialog
-        }
-
-        public AwarenessIntensity Intensity
-        {
-            get => _intensity;
-            set { if (Set(ref _intensity, value)) Raise(nameof(DialHint)); }
-        }
-
-        public string DialHint => _intensity switch
-        {
-            AwarenessIntensity.Off => Loc.Get("companion_awareness_dial_hint_off"),
-            AwarenessIntensity.BroadStrokes => Loc.Get("companion_awareness_dial_hint_broad"),
-            _ => Loc.Get("companion_awareness_dial_hint_everything")
-        };
-
-        public bool IsLegacyPipeline { get; init; }
-
-        public string IncognitoCopy => Loc.Get(IsLegacyPipeline
-            ? "companion_awareness_incognito_legacy"
-            : "companion_awareness_incognito");
-
-        public string LegacyHead => Loc.Get("companion_awareness_legacy_head");
-        public string LegacyBody => Loc.Get("companion_awareness_legacy_body");
-        public string LegacyAction => Loc.Get("companion_awareness_legacy_action");
-        public ICommand ReviewConsentCommand { get; }
-
-        public bool IsEverythingAvailable { get; init; }
-
-        /// <summary>WPF: a DataTrigger sets the tooltip only while the stop is locked.</summary>
-        public string? EverythingLockedTip => IsEverythingAvailable
-            ? null
-            : Loc.Get("companion_awareness_everything_locked_tip");
-
-        public string WireLine { get; init; } = "[ fun · Chrome · 22m ]";
-        public bool IsWireLive { get; init; } = true;
-        public string WireCaption { get; init; } = Loc.Get("companion_awareness_wire_caption");
-        public string DormantCopy { get; init; } = Loc.Get("companion_awareness_dormant_copy");
-        public bool IsDormant { get; init; }
-
-        public string WireJson { get; init; } =
-            "{\n  \"v\": 1,\n  \"cluster\": \"site_video\",\n  \"app\": \"YouTube\",\n" +
-            "  \"visits_today\": 4,\n  \"minutes_today\": 45,\n  \"dwell\": \"15-30m\"\n}";
-        public bool HasWireJson => !string.IsNullOrWhiteSpace(WireJson);
-        public string WireJsonEmptyCopy { get; init; } = Loc.Get("companion_awareness_wire_json_empty");
-
-        public bool IsJsonExpanded
-        {
-            get => _isJsonExpanded;
-            set { if (Set(ref _isJsonExpanded, value)) Raise(nameof(JsonToggleLabel)); }
-        }
-
-        public string JsonToggleLabel => Loc.Get(IsJsonExpanded
-            ? "companion_awareness_wire_json_hide"
-            : "companion_awareness_wire_json_show");
-
-        public IReadOnlyList<AwarenessChip> DenyList { get; }
-        public string AddDenyLabel { get; init; } = Loc.Get("companion_awareness_add_deny");
-
-        public IReadOnlyList<AwarenessChip> TitleAllowList
-        {
-            get => _titleAllowList;
-            private set { if (Set(ref _titleAllowList, value)) Raise(nameof(HasTitleAllowList)); }
-        }
-        public bool HasTitleAllowList => TitleAllowList.Count > 0;
-        public string TitleAllowLabel { get; init; } = Loc.Get("companion_awareness_allow_label");
-
-        public IReadOnlyList<AwarenessChip> SeenApps { get; }
-        public bool HasSeenApps => SeenApps.Count > 0;
-        public string SeenAppsLabel { get; init; } = Loc.Get("companion_awareness_seen_label");
-
-        public IReadOnlyList<AwarenessChip> KnownApps { get; }
-        public bool HasKnownApps => KnownApps.Count > 0;
-        public string KnownAppsLabel { get; init; } = Loc.Get("companion_awareness_known_label");
-
-        public bool AllowPageTitles
-        {
-            get => _allowPageTitles;
-            set => Set(ref _allowPageTitles, value);
-        }
-
-        public string PageTitlesLabel { get; init; } = Loc.Get("companion_awareness_page_titles_hidden");
-
-        public int RetentionDays
-        {
-            get => _retentionDays;
-            set { if (Set(ref _retentionDays, value)) Raise(nameof(RetentionLabel)); }
-        }
-
-        public string RetentionLabel => Loc.GetF("companion_awareness_retention_fmt", RetentionDays);
-
-        public bool IsPaused { get; init; }
-        public string PauseLabel => Loc.Get(IsPaused
-            ? "companion_awareness_pause_resume"
-            : "companion_awareness_pause");
-
-        public string WipeLabel { get; init; } = Loc.Get("companion_awareness_wipe");
-
-        public ICommand AddDenyCommand { get; }
-        public ICommand AllowPerAppCommand { get; }
-        public ICommand FineTuningCommand { get; }
-        public ICommand ToggleJsonCommand { get; }
-        public ICommand PauseCommand { get; }
-        public ICommand WipeCommand { get; }
-
-        /// <summary>What the picker handed back becomes the allow chips, each removable (no-op).</summary>
-        public void SetTitleAllowList(IEnumerable<string> apps)
-        {
-            var noop = new RelayCommand(() => { });
-            TitleAllowList = apps.Select(a => new AwarenessChip(a, noop)).ToList();
-        }
-
-        // ------------------------------- state exhibits -------------------------------
-
-        public static AwarenessPrivacyViewModel Live(AwarenessPrivacyView? view = null) => new(view)
-        {
-            IsEverythingAvailable = true
-        };
-
-        public static AwarenessPrivacyViewModel Dormant(AwarenessPrivacyView? view = null) => new(view)
-        {
-            IsEverythingAvailable = false,
-            IsDormant = true,
-            IsWireLive = false,
-            WireLine = "[ her eyes are closed ]",
-            WireJson = string.Empty
-        };
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        private void Raise([CallerMemberName] string? name = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
-        private bool Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
-        {
-            if (EqualityComparer<T>.Default.Equals(field, value)) return false;
-            field = value;
-            Raise(name);
-            return true;
         }
     }
 

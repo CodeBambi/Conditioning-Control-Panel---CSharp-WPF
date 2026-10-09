@@ -658,3 +658,15 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Chose A on the supervisor's advice (P44). WPF behaviour changes for safety only: after a panic the late follow-up
   reply's effects no longer fire. Tests: `Tests/CCP.Core.Tests/AiCommandGateTests.cs` (panic drops, uncancelled runs,
   chat reply runs).
+
+## 2026-10-09: Z5 privacy card shows WPF's "older pipeline" band whenever awareness is on (avalonia-port/rows-awareness-privacy)
+- Question: the v2 observer/ledger (`AwarenessObserver`, `AwarenessLive`, `ActivityLedger`) is not on this head, so WPF's own
+  rule (`IsLegacyPipeline = on && !AwarenessObserver.IsEnabled`) puts the card in its legacy state whenever awareness is on.
+  The band says incognito, the deny list and page titles are not protected. Here page titles do reach the AI (true), but the
+  deny list and incognito drop ARE enforced by `WindowAwarenessService.PassesPrivacyRules`, so 2 of 3 claims over-warn.
+- Option A (chosen): show the WPF band verbatim. Over-warning is the safe direction; no new strings.
+- Option B: head-specific copy in 9 languages. Option C: enforce the title allow list on the legacy path (behaviour change).
+- Chose A on the supervisor's advice (P44). Nothing the card claims as protected is unenforced; the wire reads "not reported",
+  the JSON stays empty, known apps stay empty (no ledger). Wipe deletes `awareness_ledger.json` + `.tmp` only (the legacy poll
+  keeps no history beyond the window in front). Test `Tests/CCP.Avalonia.Tests/AwarenessPrivacyCardTests.cs`.
+- Follow-up: once the v2 observer is ported the band hides as on WPF, and B or C can be revisited then.
