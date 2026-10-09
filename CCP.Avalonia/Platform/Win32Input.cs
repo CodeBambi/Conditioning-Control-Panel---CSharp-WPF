@@ -27,7 +27,7 @@ internal static class PanicListeners
 /// </summary>
 internal static class Win32Input
 {
-    private static bool _escDown, _wired;
+    private static bool _escDown, _pauseDown, _wired;
 
     /// <summary>MainShellWindow.StartPanicKey on Windows (the desktop path only, never tests or renders).
     /// False when the hook did not install.</summary>
@@ -42,17 +42,61 @@ internal static class Win32Input
         });
         Win32PanicKey.KeyDown += (vk, _) =>
         {
+            OnPauseKeyDown(vk);
             if (vk != VirtualKeys.Escape || _escDown) return;   // a held Esc is one press here too
             _escDown = true;
             Dispatcher.UIThread.Post(EscapeDoor);
         };
-        Win32PanicKey.KeyUp += (vk, _) => { if (vk == VirtualKeys.Escape) _escDown = false; };
-        return Win32PanicKey.Start(() => CoreSettings.Current.PanicKey, () =>
+        Win32PanicKey.KeyUp += (vk, _) =>
         {
-            Log.Information("Panic trigger: WH_KEYBOARD_LL key press");
-            Dispatcher.UIThread.Post(onPanicPress);
-        });
+            if (vk == VirtualKeys.Escape) _escDown = false;
+            if (vk != 0 && vk == VirtualKeys.Of(CoreSettings.Current.PauseKey)) _pauseDown = false;
+        };
+        return Win32PanicKey.Start(() => CoreSettings.Current.PanicKey, () => OnPanicPress(onPanicPress));
     }
+
+    /// <summary>One press of the bound panic key, on the listener thread (WPF OnGlobalKeyPressed's panic
+    /// branch, MainWindow.xaml.cs:921-951). Reads only, then queues; never works here.</summary>
+    internal static void OnPanicPress(Action onPanicPress)
+    {
+        var s = CoreSettings.Current;
+        // Panic off, rebinding or Lockdown: the handler refuses on the UI thread as before. No watchdog:
+        // WPF never armed one there, so the off-thread teardown cannot outrank those rules.
+        if (!s.PanicKeyEnabled || MainShellWindow.CapturingPanicKey || MainShellWindow.LockdownActive)
+        {
+            Dispatcher.UIThread.Post(onPanicPress);
+            return;
+        }
+        // An Escape aimed at a CCP surface that drops or closes on it is that surface's (TAB-8 / DESK-3).
+        if (EscapeClaim.TakenBySurface(s.PanicKeyEnabled, s.PanicKey, LockCardWindow.IsAnyOpen(), DateTime.UtcNow)) return;
+        Log.Information("Panic trigger: WH_KEYBOARD_LL key press");
+        PanicWatchdog.QueueWatched(onPanicPress);   // #919b: torn down off-thread if the UI never runs it
+    }
+
+    /// <summary>WPF's optional Pause key (v6.8.5, MainWindow.xaml.cs:955): parks a playing mandatory video
+    /// behind the grace card. Unbound by default; the panic key always wins a shared binding; Lockdown
+    /// ignores it (WPF returns before it); a held key is one press. No watchdog. True = queued.</summary>
+    internal static bool OnPauseKeyDown(int vk)
+    {
+        var s = CoreSettings.Current;
+        int pauseVk = VirtualKeys.Of(s.PauseKey);
+        if (vk == 0 || vk != pauseVk || _pauseDown) return false;
+        _pauseDown = true;
+        if (PanicPolicy.PauseKeyIsShadowedByPanicKey(s.PanicKey, s.PanicKeyEnabled, s.PauseKey)
+            || (s.PanicKeyEnabled && pauseVk == VirtualKeys.Of(s.PanicKey))
+            || MainShellWindow.CapturingPanicKey || MainShellWindow.LockdownActive)
+            return false;
+        Log.Information("Pause key {Key} received - queueing the video grace pause", s.PauseKey);
+        Dispatcher.UIThread.Post(() =>
+        {
+            try { MandatoryVideoOverlay.Instance.TryGracePause(fromPanicKey: false); }
+            catch (Exception ex) { Log.Warning(ex, "Pause key: grace pause failed"); }
+        });
+        return true;
+    }
+
+    /// <summary>Test seam: forget a held pause key.</summary>
+    internal static void ResetPauseKeyForTest() => _pauseDown = false;
 
     /// <summary>WPF OnLockdownActivated/Deactivated (MainWindow.Lab.cs:621/714): the system keys are
     /// blocked only while a Lockdown runs with its "block system keys" safety on. A no-op until
