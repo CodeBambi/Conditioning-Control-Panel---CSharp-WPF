@@ -127,6 +127,8 @@ public sealed partial class FriendsDrawer : Border
     /// <summary>The name in the header (WPF App.UserDisplayName, else "you").</summary>
     internal Func<string> MeName { get; set; } = () =>
         string.IsNullOrWhiteSpace(CoreAccount.DisplayName) ? Loc.Get("friends_you") : CoreAccount.DisplayName!.Trim();
+    /// <summary>Your own picture (ShareProfilePicture + Discord), or null for initials.</summary>
+    internal Func<string?> MeAvatarUrl { get; set; } = () => Helpers.AvatarPhotos.OwnUrl(128);
     public void OnOpened()
     {
         _isOpen = true;
@@ -174,7 +176,7 @@ public sealed partial class FriendsDrawer : Border
     {
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         var name = MeName();
-        var avatar = Avatar(name, 40, _svc?.Available == true ? Shared() : null);
+        var avatar = Avatar(name, 40, _svc?.Available == true ? Shared() : null, MeAvatarUrl());
         avatar.Margin = new Thickness(0, 0, 10, 0);
         var who = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         who.Children.Add(Label(name, 16, Text, Display, FontWeight.SemiBold));
@@ -272,7 +274,7 @@ public sealed partial class FriendsDrawer : Border
     {
         bool open = _openId == f.Id;
         var top = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*") };
-        var avatar = Avatar(f.Name, 38, f.Online);
+        var avatar = Avatar(f.Name, 38, f.Online, f.AvatarUrl);
         if (!f.Online) avatar.Opacity = 0.55;
         var mid = new StackPanel { Margin = new Thickness(10, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
         var nameLine = new StackPanel { Orientation = Orientation.Horizontal };
@@ -476,7 +478,7 @@ public sealed partial class FriendsDrawer : Border
         {
             CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 1),
             Tag = (incoming ? "friends-request-in:" : "friends-request-out:") + r.Id,
-            Child = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*,Auto"), Children = { Avatar(r.Name, 38, null), mid, buttons } },
+            Child = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*,Auto"), Children = { Avatar(r.Name, 38, null, r.AvatarUrl), mid, buttons } },
         };
     }
 
@@ -626,19 +628,19 @@ public sealed partial class FriendsDrawer : Border
         CornerRadius = new CornerRadius(8), Padding = new Thickness(9, 3, 9, 3), Tag = tag, VerticalAlignment = VerticalAlignment.Center,
     };
 
-    /// <summary>Initials on a lilac disc, with a presence dot (mint on, grey off, none for null).</summary>
-    internal static Control Avatar(string name, double size, bool? dot)
+    /// <summary>Initials on a lilac disc, with a presence dot (mint on, grey off, none for null). A picture
+    /// url (WPF FriendsLook.Avatar) replaces the initials once it loads; null keeps them.</summary>
+    internal static Control Avatar(string name, double size, bool? dot, string? url = null)
     {
         var g = new Grid { Width = size, Height = size };
-        g.Children.Add(new Border
+        var initials = new TextBlock
         {
-            CornerRadius = new CornerRadius(size / 2), Background = Lilac,
-            Child = new TextBlock
-            {
-                Text = FriendsDrawerRules.Initials(name), FontFamily = Display, FontWeight = FontWeight.SemiBold, FontSize = size * 0.4,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x0B, 0x07, 0x16)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-            },
-        });
+            Text = FriendsDrawerRules.Initials(name), FontFamily = Display, FontWeight = FontWeight.SemiBold, FontSize = size * 0.4,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x0B, 0x07, 0x16)), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        var disc = new Border { CornerRadius = new CornerRadius(size / 2), Background = Lilac, ClipToBounds = true, Child = initials };
+        g.Children.Add(disc);
+        Helpers.AvatarPhotos.Paint(disc, initials, url, (int)Math.Ceiling(size * 2));
         if (dot is bool on)
             g.Children.Add(new Ellipse
             {

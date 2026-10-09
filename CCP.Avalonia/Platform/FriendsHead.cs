@@ -8,7 +8,9 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 
 /// <summary>The Core <see cref="FriendsService"/> on this head (WPF FriendsServiceApp). Sandbox rule as
 /// <see cref="ChasterHead"/>: with CCP_USERDATA_DIR set only a loopback <see cref="EnvVar"/> is called;
-/// with none the service is not built and the drawer reads signed out.</summary>
+/// with none the service is not built and the drawer reads signed out. Exception: the owner-approved
+/// online desk sandbox (CCP_SANDBOX_ONLINE=1, as CorePaths) reaches the real proxy, so a signed-in desk
+/// run shows its friends (2026-10-09: the drawer said "Friends need an account" while signed in).</summary>
 internal static class FriendsHead
 {
     internal const string EnvVar = "CCP_FRIENDS_API_URL";
@@ -24,8 +26,17 @@ internal static class FriendsHead
     }
 
     internal static string? BaseUrl(string? userDataDir, string? overrideUrl) =>
+        BaseUrl(userDataDir, overrideUrl, SandboxOnline());
+
+    internal static string? BaseUrl(string? userDataDir, string? overrideUrl, bool sandboxOnline) =>
         LoopbackUrl.IsHonoured(overrideUrl, out var u) ? u.ToString().TrimEnd('/')
-        : string.IsNullOrEmpty(userDataDir) ? "https://codebambi-proxy.vercel.app" : null;
+        : string.IsNullOrEmpty(userDataDir) || sandboxOnline ? "https://codebambi-proxy.vercel.app" : null;
+
+    /// <summary>The owner-approved online desk sandbox (CorePaths reads the same switch).</summary>
+    internal static Func<bool> SandboxOnline { get; set; } = () =>
+    {
+        try { return Environment.GetEnvironmentVariable("CCP_SANDBOX_ONLINE") == "1"; } catch { return false; }
+    };
 
     /// <summary>The invites wire rides the same proxy and door; a sandbox without a loopback url gets none.</summary>
     internal static void SeedInvites(string? userDataDir, string? overrideUrl)

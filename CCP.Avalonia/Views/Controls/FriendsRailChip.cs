@@ -20,6 +20,7 @@ public sealed class FriendsRailChip : Grid
 {
     private readonly Border _pill = new(), _face = new() { Width = 48, Height = 48, CornerRadius = new CornerRadius(14) };
     private readonly TextBlock _pillText = new(), _name;
+    private readonly Grid _faceGrid = new();
     private readonly Popup _popup;
     private IFriendsService? _svc;
     public FriendsRailChip() : this(null) { }
@@ -32,7 +33,8 @@ public sealed class FriendsRailChip : Grid
         (_pill.Child, _pill.Background, _pill.CornerRadius, _pill.Padding, _pill.IsVisible, _pill.Tag) = (_pillText, FriendsDrawer.Mint, new CornerRadius(999), new Thickness(5, 0), false, "friends-chip-online");
         (_pill.HorizontalAlignment, _pill.VerticalAlignment, _pill.Margin) = (HorizontalAlignment.Right, VerticalAlignment.Top, new Thickness(0, -2, -4, 0));
         _face.HorizontalAlignment = HorizontalAlignment.Center;
-        _face.Child = new Grid { Children = { FriendsDrawer.Avatar(Drawer.MeName(), 40, null), _pill } };
+        _face.Child = _faceGrid;
+        RefreshFace();
         // The name column is 0 px wide while the rail is shut, so nothing in it may wrap.
         _name = FriendsDrawer.Label(Drawer.MeName(), 14, FriendsDrawer.Text, FriendsDrawer.Display, FontWeight.SemiBold);
         _name.Margin = new Thickness(0, 0, 10, 0);
@@ -63,6 +65,17 @@ public sealed class FriendsRailChip : Grid
         Rebind();
     }
     internal FriendsDrawer Drawer { get; }
+
+    /// <summary>Your face and name again: sign-in, sign-out and a Discord link all change them
+    /// (the shell calls this beside RefreshProfileBubble). The picture follows ShareProfilePicture.</summary>
+    internal void RefreshFace()
+    {
+        var name = Drawer.MeName();
+        _faceGrid.Children.Clear();
+        _faceGrid.Children.Add(FriendsDrawer.Avatar(name, 40, null, Drawer.MeAvatarUrl()));
+        _faceGrid.Children.Add(_pill);
+        if (_name != null) _name.Text = name;
+    }
     internal bool IsOpen => _popup.IsOpen;
 
     internal int PillCount => _pill.IsVisible && int.TryParse(_pillText.Text, out var n) ? n : 0;
