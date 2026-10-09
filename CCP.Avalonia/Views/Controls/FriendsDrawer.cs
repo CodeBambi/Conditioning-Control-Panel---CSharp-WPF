@@ -22,6 +22,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Controls.Friends;
+using ConditioningControlPanel.Avalonia.Views.Controls.Friends;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
 
@@ -187,6 +188,7 @@ public sealed partial class FriendsDrawer : Border
     {
         // WPF: a friend who just came online hops once after the repaint.
         var hop = FriendsDrawerRules.CameOnline(_last, snap);
+        FriendsBlockList.MigrateIfDue(_svc);   // WPF: the landing tick; a server list retires this PC list
         Render();
         foreach (var id in hop) HopAvatar(id);
     }
@@ -349,7 +351,7 @@ public sealed partial class FriendsDrawer : Border
         }
         if (online.Count + offline.Count + req == 0 && !_showBlocked) _list.Children.Add(AsPage ? PageEmptyBlock() : EmptyLine(Loc.Get("friends_empty")));
         if (!_showBlocked) return;
-        var blocked = snap.Blocked ?? Array.Empty<BlockedFriend>();
+        var blocked = BlockedRows();
         Section("friends_section_blocked", blocked.Count);
         if (blocked.Count == 0)
             _list.Children.Add(Tagged(Wrap(Label(Loc.Get(snap.Blocked != null ? "friends_blocked_none" : "friends_blocked_empty"), 11.5, Muted)), "friends-blocked-empty"));
@@ -551,12 +553,14 @@ public sealed partial class FriendsDrawer : Border
         else ShowTimed(f.Id, Loc.Get(FriendsDrawerRules.ActResultKey(r)), false);
         await SafeRefreshAsync();
     }
-    internal async Task<ActResult> ReportAsync(string friendId, string reason)
+    internal async Task<ActResult> ReportAsync(string friendId, string reason, string? rowId = null)
     {
         if (_svc == null) return ActResult.TryLater;
+        Friends.FriendsSfx.Click();
         ActResult r;
         try { r = await _svc.ReportAsync(friendId, reason); } catch { r = ActResult.TryLater; }
-        ShowTimed(friendId, Loc.Get(r == ActResult.Done ? "friends_report_done" : FriendsDrawerRules.ActResultKey(r)), r == ActResult.Done);
+        if (r == ActResult.Done) ShowTimed(rowId ?? friendId, Loc.Get("friends_report_done"), true);
+        else ShowActResult(rowId ?? friendId, r);
         return r;
     }
 
@@ -569,11 +573,13 @@ public sealed partial class FriendsDrawer : Border
         catch { r = ActResult.TryLater; }
         if (r == ActResult.Done)
         {
-            if (_openId == id) _openId = null;
+            Friends.FriendsSfx.Dismiss();
+            if (what == "block") OnBlocked(id, name);
+            if (_openId == id) (_openId, _picker) = (null, null);
             // The row is gone after the refresh, so the word goes where the player is looking.
-            Say(Loc.GetF(what == "block" ? "friends_blocked_done" : "friends_removed_done", name), true);
+            TellOutside(Loc.GetF(what == "block" ? "friends_blocked_done" : "friends_removed_done", name), good: true, always: true);
         }
-        else ShowTimed(id, Loc.Get(FriendsDrawerRules.ActResultKey(r)), false);
+        else ShowActResult(id, r);
         await SafeRefreshAsync();
         Render();
         return r;
@@ -615,6 +621,7 @@ public sealed partial class FriendsDrawer : Border
         {
             CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(0, 1),
             Tag = (incoming ? "friends-request-in:" : "friends-request-out:") + r.Id,
+            ContextMenu = incoming ? RequestMenu(r) : null,
             Child = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*,Auto"), Children = { Avatar(r.Name, 38, null, r.AvatarUrl), mid, buttons } },
         };
     }
@@ -622,6 +629,7 @@ public sealed partial class FriendsDrawer : Border
     internal async Task<ActResult> AnswerRequestAsync(FriendRequest r, string what)
     {
         if (_svc == null) return ActResult.TryLater;
+        Friends.FriendsSfx.Click();
         ActResult res;
         try
         {
@@ -633,11 +641,16 @@ public sealed partial class FriendsDrawer : Border
             };
         }
         catch { res = ActResult.TryLater; }
-        if (res != ActResult.Done) ShowTimed((what == "cancel" ? "out:" : "in:") + r.Id, Loc.Get(FriendsDrawerRules.ActResultKey(res)), false);
+        if (res == ActResult.Done)
+        {
+            if (what == "accept") { Friends.FriendsSfx.Accepted(); TellOutside(Loc.Get("friends_add_accepted"), good: true); }
+            else Friends.FriendsSfx.Dismiss();
+        }
+        else ShowActResult((what == "cancel" ? "out:" : "in:") + r.Id, res);
         await SafeRefreshAsync();
         return res;
     }
-    private Control BlockedRow(BlockedFriend b)
+    private Control BlockedRow(BlockedEntry b)
     {
         var avatar = Avatar(b.Name, 30, null);
         avatar.Opacity = 0.5;
@@ -654,13 +667,23 @@ public sealed partial class FriendsDrawer : Border
             Child = new Grid { ColumnDefinitions = new ColumnDefinitions("30,*,Auto"), Children = { avatar, mid, unblock } },
         };
     }
-    internal async Task<ActResult> UnblockAsync(BlockedFriend b)
+    internal Task<ActResult> UnblockAsync(BlockedFriend b) => UnblockAsync(new BlockedEntry(FriendsBlockList.Account() ?? "", b.Id, b.Name, DateTimeOffset.MinValue));
+    /// <summary>Unblock, and forget the block on this PC only once the server agreed.</summary>
+    internal async Task<ActResult> UnblockAsync(BlockedEntry b)
     {
         if (_svc == null) return ActResult.TryLater;
+        Friends.FriendsSfx.Click();
         ActResult r;
         try { r = await _svc.UnblockAsync(b.Id); } catch { r = ActResult.TryLater; }
-        if (r == ActResult.Done) { Say(Loc.GetF("friends_unblocked_done", b.Name), true); await SafeRefreshAsync(); Render(); }
-        else ShowTimed("blocked:" + b.Id, Loc.Get(FriendsDrawerRules.ActResultKey(r)), false);
+        if (r == ActResult.Done)
+        {
+            try { FriendsBlockList.Shared.Remove(b.Account, b.Id); } catch { }
+            Friends.FriendsSfx.Accepted();
+            TellOutside(Loc.GetF("friends_unblocked_done", b.Name), good: true, always: true);
+            await SafeRefreshAsync();
+            Render();
+        }
+        else ShowActResult("blocked:" + b.Id, r);
         return r;
     }
     internal void ToggleBlocked() { _showBlocked = !_showBlocked; Render(); }

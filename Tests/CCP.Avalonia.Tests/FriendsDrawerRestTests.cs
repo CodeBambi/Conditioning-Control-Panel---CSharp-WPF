@@ -181,6 +181,56 @@ public sealed class FriendsDrawerRestTests
         finally { FriendsSfx.Player = null; ConditioningControlPanel.CoreSettings.Current.MasterVolume = vol; }
     });
 
+    /// <summary>WPF FriendsBlockList: per account, newest first, capped; Remove forgets one.</summary>
+    [Fact]
+    public void BlockListIsPerAccountAndCapped()
+    {
+        var store = new List<BlockedEntry>();
+        var list = new FriendsBlockList(() => store, s => { store = new List<BlockedEntry>(s); });
+        list.Add("a", "u1", "One", DateTimeOffset.UtcNow.AddMinutes(-1));
+        list.Add("a", "u2", " Two ", DateTimeOffset.UtcNow);
+        list.Add("b", "u3", "Three", DateTimeOffset.UtcNow);
+        Assert.Equal(new[] { "u2", "u1" }, list.For("a").Select(e => e.Id).ToArray());
+        Assert.Equal("Two", list.For("a")[0].Name);
+        Assert.Empty(list.For(null));
+        list.Remove("a", "u2");
+        Assert.Equal(new[] { "u1" }, list.For("a").Select(e => e.Id).ToArray());
+        for (int i = 0; i < FriendsBlockList.Cap + 5; i++) list.Add("c", "x" + i, "X", DateTimeOffset.UtcNow.AddSeconds(i));
+        Assert.True(store.Count <= FriendsBlockList.Cap);
+    }
+
+    /// <summary>The Blocked list: the server's list when it sends one, else this PC's memory (an old server).</summary>
+    [Fact]
+    public Task BlockedRowsPreferTheServerList() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var (shared, account) = (FriendsBlockList.Shared, FriendsBlockList.Account);
+        try
+        {
+            var store = new List<BlockedEntry>();
+            FriendsBlockList.Shared = new FriendsBlockList(() => store, s => store = new List<BlockedEntry>(s));
+            FriendsBlockList.Account = () => "u_me";
+            FriendsBlockList.Shared.Add("u_me", "u_local", "Local", DateTimeOffset.UtcNow);
+            var old = new Wire { Body = State.Replace(",\"blocked\":[]", "") };
+            var d = await Drawer(Service(old));
+            Assert.Equal(new[] { "u_local" }, d.BlockedRows().Select(b => b.Id).ToArray());
+            var d2 = await Drawer(Service(new Wire { Body = State.Replace("\"blocked\":[]", "\"blocked\":[{\"id\":\"u_srv\",\"name\":\"Srv\"}]") }));
+            Assert.Equal(new[] { "u_srv" }, d2.BlockedRows().Select(b => b.Id).ToArray());
+        }
+        finally { (FriendsBlockList.Shared, FriendsBlockList.Account) = (shared, account); }
+    });
+
+    /// <summary>WPF BuildRequestMenu: an incoming request carries Block, then Report by reason.</summary>
+    [Fact]
+    public Task AnIncomingRequestHasBlockAndReport() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var body = State.Replace("\"incoming\":[]", "\"incoming\":[{\"id\":\"u_req\",\"name\":\"Ann\",\"via\":null,\"at\":null}]");
+        var d = await Drawer(Service(new Wire { Body = body }));
+        var row = Tagged<Border>(d, "friends-request-in:u_req")!;
+        var menu = Assert.IsType<ContextMenu>(row.ContextMenu);
+        var tags = menu.ItemsSource!.Cast<Control>().Select(c => c.Tag as string).ToArray();
+        Assert.Equal(new[] { "friends-menu-item:block", "friends-menu-item:report" }, tags);
+    });
+
     /// <summary>Juice: online dots carry the breathing tag, a row has the sheen host, and motion Off
     /// leaves the drawer still (no transform after the entrance).</summary>
     [Fact]
