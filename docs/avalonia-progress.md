@@ -1624,3 +1624,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-she-listening: +132
 - She's Listening: title-bar mic privacy pill (click/Enter = disarm), armed-disc pulse, open-models button; 5 fail-proven assertions in SheListeningTests.
 - Rows shell-she-listening / views-tab-she-listening stay stub (sherpa KWS, bark lines, grammar gaps).
+
+## avalonia-port/rows-keyword-triggers: +606
+- Awareness custom trigger list (add/import/9 row editors), OCR combos persisted, OCR access gate + panel resync; 9-language strings; 3 fail-proven tests.
+- Rows stay stub: KeywordTriggerService/ScreenOcr/KeywordHighlight runtime (no Linux keystroke source) not ported.
