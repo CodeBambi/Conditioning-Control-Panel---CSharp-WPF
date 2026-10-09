@@ -1558,3 +1558,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/audit-fix-misc: +273
 - Closes seven open P0-P2 audit findings (#2096 #1763 #1908 #1456 #1318 #1313 #1289): the update tooltip key, the passive recap no longer staying on top, the rack toolbar layout, locked sessions shown as "Coming Soon", `**bold**` in help text, and the freeze pre-tick in the bug report.
 - Each Avalonia fix has a test that was seen to fail when the fix was broken; #1763 was checked with a string script.
+
+## avalonia-port/flake-followup: +12
+- Fixes the intermittent Core test `AiCommandGateTests.AFollowUpThatIsNotCancelledStillRunsItsReplysCommands`, which failed in the rows-roadmap and rows-takeaway push gates. The test now waits for the reply's flash instead of asserting the moment it releases the AI. Test-only change.
+
+## avalonia-port/rows-roadmap: +149
+- shell-roadmap stub -> wired: completion chime (WPF Exclamation) and keyboard-reachable nodes with a focus border; RoadmapNodeTests (2, fail-proven); live nodes screenshot in evidence/avalonia-port/rows-roadmap.
+- Mod-gated Roadmap sub-tab visibility recorded as missing under shell-ui-updates.
