@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -11,7 +12,10 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
+using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 {
@@ -37,9 +41,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public MakeHerYoursView()
         {
             AvaloniaXamlLoader.Load(this);
-            DataContext = new MakeHerYoursViewModel();
+            // WPF MakeHerYoursView ctor: under Companion v2 the Train 3 preview tag and interview card go.
+            if (ConditioningControlPanel.Services.Companion.CompanionExperience.IsV2Enabled)
+            {
+                this.FindControl<Control>("PreviewTrainTag")!.IsVisible = false;
+                this.FindControl<Control>("InterviewSpotlight")!.IsVisible = false;
+            }
+            DataContext = ViewModel = new MakeHerYoursViewModel(this);
             Loaded += OnLoaded;
         }
+
+        public MakeHerYoursViewModel ViewModel { get; }
 
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
@@ -83,48 +95,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     }
 
     /// <summary>
-    /// The view's data contract and its strings, in one class. See AchievementsTabViewModel for
-    /// why the strings cannot stay as {loc:Str}.
-    ///
-    /// <para>The WPF view binds to <c>IMakeHerYoursVm</c>, which lives in the head alongside
-    /// <c>MockMakeHerYoursVm</c> and cannot cross. This class is that interface's shape as a
-    /// concrete type — compiled bindings need one anyway — seeded with the mock's
-    /// <c>Dormant()</c> exhibit, which is the shipping pre-Train-3 state.</para>
+    /// Z4 over the live personality - port of WPF MakeHerYoursRuntimeVm
+    /// (ConditioningControlPanel/Views/Controls/Companion/Runtime/CompanionDepthRuntimeVms.cs:29).
+    /// Interview and trait glance are Train 3 and dormant on WPF too. Writes go through the shell
+    /// (<see cref="Windows.MainShellWindow.SetSlutModeAsync"/> / ActivatePersonalityPresetAsync) so the
+    /// explicit-content acknowledgement gate runs, and every write re-reads what actually happened.
     /// </summary>
     public sealed class MakeHerYoursViewModel : INotifyPropertyChanged
     {
+        private readonly global::Avalonia.Visual? _host;
+        private readonly ObservableCollection<PresetChip> _presets = new();
         private bool _isSpiceOn;
+        private string _activeLine = string.Empty;
+        private bool _canReset;
+        private bool _suppressChipEcho;
 
-        public MakeHerYoursViewModel()
+        public MakeHerYoursViewModel(global::Avalonia.Visual? host = null)
         {
-            Traits = new[]
+            _host = host;
+            StartInterviewCommand = new CompanionRelayCommand(() => { }, () => false);
+            OpenTraitDashboardCommand = new CompanionRelayCommand(OpenPromptEditor);
+            ViewCompiledPromptCommand = new CompanionRelayCommand(OpenPromptEditor);
+            ForkPromptCommand = new CompanionRelayCommand(OpenPromptEditor);
+            ResetPersonalityCommand = new CompanionRelayCommand(() =>
             {
-                new TraitGauge(Loc.Get("companion_personality_trait_dominance"), 40),
-                new TraitGauge(Loc.Get("companion_personality_trait_tease"), 50)
-            };
-            TraitChips = new[] { "Frame: Bestie", "Quirk: sparkly ✨", "Spicy", "Chatty" };
-            Presets = BuildPresets();
-
-            // Preset chips behave as one radio group — including the second click on the chip that
-            // is already active, which a ToggleButton would otherwise turn into "no preset
-            // selected" while the compiled personality behind it is unchanged.
-            foreach (var p in Presets)
-            {
-                p.PropertyChanged += (_, e) =>
-                {
-                    if (e.PropertyName != nameof(PresetChip.IsSelected)) return;
-                    if (!p.IsSelected)
-                    {
-                        bool anySelected = false;
-                        foreach (var other in Presets) if (other.IsSelected) { anySelected = true; break; }
-                        if (!anySelected) p.IsSelected = true;
-                        return;
-                    }
-                    foreach (var other in Presets)
-                        if (!ReferenceEquals(other, p)) other.IsSelected = false;
-                };
-            }
+                // WPF BtnDeactivatePrompt_Click -> CommunityPromptService.DeactivatePrompt.
+                PersonalityService.ClearCustomPromptOverride(CoreSettings.Current);
+                CoreSettings.Save();
+                Sync();
+            });
+            Sync();
         }
+
+        internal Windows.MainShellWindow? Shell =>
+            _host == null ? null : TopLevel.GetTopLevel(_host) as Windows.MainShellWindow;
 
         // ---- strings the markup used to get from {loc:Str} ----
         public string LocPersonalityTitle => Loc.Get("companion_personality_title");
@@ -136,95 +140,164 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public string LocFork => Loc.Get("companion_personality_fork");
         public string LocCommunity => Loc.Get("companion_personality_community");
 
-        // ---- interview CTA ----
-        public bool IsInterviewAvailable { get; init; }
-        /// <summary>Already interviewed — the card compresses to a chip row.</summary>
-        public bool IsInterviewed { get; init; }
-        public string InterviewTitle { get; init; } =
-            Loc.Get("companion_personality_interview_title");
+        // ---- interview / trait glance: Train 3, dormant (WPF returns false / empty too) ----
+        public bool IsInterviewAvailable => false;
+        public bool IsInterviewed => false;
+        public string InterviewTitle => Loc.Get("companion_personality_interview_title");
+        public string InterviewBody => Loc.Get("companion_personality_interview_body_1");
+        public string InterviewCtaLabel => Loc.Get("companion_personality_interview_cta");
+        public string InterviewedLine => string.Empty;
+        public string InterviewDormantCopy => Loc.Get("companion_personality_interview_dormant");
+        public bool AreTraitsAvailable => false;
+        public IReadOnlyList<TraitGauge> Traits { get; } = Array.Empty<TraitGauge>();
+        public IReadOnlyList<string> TraitChips { get; } = Array.Empty<string>();
 
-        /// <summary>
-        /// Two staged keys joined here rather than one key with an escaped newline: language
-        /// files in this repo may not carry literal line breaks, and two sentences handed to a
-        /// translator separately cannot be welded into one by accident.
-        /// </summary>
-        public string InterviewBody { get; init; } =
-            Loc.Get("companion_personality_interview_body_1") + "\n" +
-            Loc.Get("companion_personality_interview_body_2");
-        public string InterviewCtaLabel { get; init; } =
-            Loc.Get("companion_personality_interview_cta");
-        /// <summary>
-        /// The compressed chip. The two verbs from the design's chip row ("re-interview me~",
-        /// "adjust her") are real buttons in the view, so this string carries the date only.
-        /// </summary>
-        public string InterviewedLine { get; init; } =
-            string.Format(Loc.Get("companion_personality_interviewed_fmt"), "2026-08-12");
-        public string InterviewDormantCopy { get; init; } =
-            Loc.Get("companion_personality_interview_dormant");
-
-        // ---- trait glance (read-only; the dashboard lives one click down) ----
-        public bool AreTraitsAvailable { get; init; }
-        public IReadOnlyList<TraitGauge> Traits { get; }
-        /// <summary>Frame / Quirk / Explicitness chips.</summary>
-        public IReadOnlyList<string> TraitChips { get; }
-
-        // ---- presets ----
-        public IReadOnlyList<PresetChip> Presets { get; }
+        public IReadOnlyList<PresetChip> Presets => _presets;
 
         // ---- spice ----
-        /// <summary>Slut Mode, restyled as a small flame toggle. Two-way.</summary>
         public bool IsSpiceOn
         {
             get => _isSpiceOn;
-            set { if (_isSpiceOn == value) return; _isSpiceOn = value; Raise(); }
+            set
+            {
+                if (_isSpiceOn == value) return;
+                // Never set from the setter: the gate can refuse, and Sync reads back the settings file.
+                _ = SetSpiceAsync(value);
+            }
         }
 
-        public string SpiceTitle { get; init; } =
-            Loc.Get("companion_personality_spice_title");
-        public string SpiceSubtitle { get; init; } =
-            Loc.Get("companion_personality_spice_subtitle");
+        private async Task SetSpiceAsync(bool value)
+        {
+            if (Shell is { } shell) await shell.SetSlutModeAsync(value);
+            Sync();
+        }
+
+        public string SpiceTitle => Loc.Get("companion_personality_spice_title");
+        public string SpiceSubtitle => Loc.Get("companion_personality_spice_subtitle");
 
         // ---- readout ----
-        public string ActivePersonalityLine { get; init; } =
-            string.Format(Loc.Get("companion_personality_active_preset_fmt"),
-                          Loc.Get("companion_personality_preset_sweet_bestie"));
-        /// <summary>A hand-edited custom prompt is active, so the sliders are disconnected.</summary>
-        public bool CanResetPersonality { get; init; }
-        public string ResetLabel { get; init; } =
-            Loc.Get("companion_personality_reset");
+        public string ActivePersonalityLine { get => _activeLine; private set { if (_activeLine == value) return; _activeLine = value; Raise(); } }
+        public bool CanResetPersonality { get => _canReset; private set { if (_canReset == value) return; _canReset = value; Raise(); } }
+        public string ResetLabel => Loc.Get("companion_personality_reset");
 
-        // UNWIRED. Every one of these opens a host-owned surface — the interview flow, the trait
-        // dashboard, the compiled-prompt viewer, the fork editor, the community browser — and none
-        // of those exist on this head yet. Null, deliberately, rather than a NoOp that would let a
-        // dead button look alive.
-        public ICommand? StartInterviewCommand => null;
-        public ICommand? OpenTraitDashboardCommand => null;
-        public ICommand? ResetPersonalityCommand => null;
-        public ICommand? ViewCompiledPromptCommand => null;
-        public ICommand? ForkPromptCommand => null;
+        public ICommand StartInterviewCommand { get; }
+        public ICommand OpenTraitDashboardCommand { get; }
+        public ICommand ResetPersonalityCommand { get; }
+        public ICommand ViewCompiledPromptCommand { get; }
+        public ICommand ForkPromptCommand { get; }
+        // ponytail: WPF BtnBrowsePrompts_Click opens the community prompt browser
+        // (App.CommunityPrompts, WPF-head CommunityPromptService); no browser exists on this head, so the
+        // link stays a null command (disabled) rather than a dead button that looks alive.
         public ICommand? CommunityPromptsCommand => null;
 
-        /// <summary>
-        /// The preset chips. Ids are stable keys (they name the compiled personality); the
-        /// labels come back through the staged loc layer as companion_personality_preset_&lt;id&gt;.
-        /// </summary>
-        private static IReadOnlyList<PresetChip> BuildPresets()
+        /// <summary>Re-reads settings and the personality service (WPF MakeHerYoursRuntimeVm.SyncCore).</summary>
+        public void Sync()
         {
-            string[] ids =
-            {
-                "sweet_bestie", "playful_tease", "strict_domme", "hypno_guide",
-                "bimbo_coach", "drone_handler", "bratty_rival"
-            };
+            try { SyncCore(); }
+            catch (Exception ex) { Log.Warning(ex, "Companion room: personality sync failed"); }
+        }
 
-            var chips = new List<PresetChip>(ids.Length);
-            for (int i = 0; i < ids.Length; i++)
+        private void SyncCore()
+        {
+            var settings = CoreSettings.Current;
+            _isSpiceOn = settings.SlutModeEnabled;
+            Raise(nameof(IsSpiceOn));
+
+            RebuildPresets();
+
+            var communityId = settings.ActiveCommunityPromptId;
+            if (!string.IsNullOrEmpty(communityId))
             {
-                chips.Add(new PresetChip(
-                    ids[i],
-                    Loc.Get($"companion_personality_preset_{ids[i]}"),
-                    selected: i == 0));
+                // ponytail: WPF shows the installed prompt's NAME (CommunityPromptService.GetInstalledPrompt,
+                // head-only); this head has no installed-prompt store yet, so the id stands in.
+                ActivePersonalityLine = Loc.GetF("companion_personality_active_custom_fmt", communityId);
+                CanResetPersonality = true;
+                return;
             }
-            return chips;
+
+            if (settings.CompanionPrompt?.UseCustomPrompt == true)
+            {
+                ActivePersonalityLine = Loc.GetF("companion_personality_active_custom_fmt", Loc.Get("label_custom_edited"));
+                CanResetPersonality = false;
+                return;
+            }
+
+            var active = PersonalityService.Shared.GetActivePreset();
+            var name = active == null ? string.Empty : DisplayName(active.Name);
+            ActivePersonalityLine = Loc.GetF("companion_personality_active_preset_fmt", name);
+            CanResetPersonality = false;
+        }
+
+        private static string DisplayName(string name) => CoreMods.Service?.GetPersonalityDisplayName(name) ?? name;
+
+        private void RebuildPresets()
+        {
+            var activeId = PersonalityService.Shared.GetActivePreset()?.Id;
+            var wanted = new List<PresetChip>();
+            foreach (var preset in PersonalityService.Shared.GetAllPresets())
+            {
+                if (preset == null || string.IsNullOrEmpty(preset.Id)) continue;
+                // The preset's own one-liner rides along as the chip's tooltip (a mod writes it).
+                var about = string.IsNullOrWhiteSpace(preset.Description) ? null : DisplayName(preset.Description).Trim();
+                wanted.Add(new PresetChip(preset.Id, DisplayName(preset.Name),
+                    string.Equals(preset.Id, activeId, StringComparison.Ordinal), about));
+            }
+
+            // Writing IsSelected here REPORTS what the service did; it must not round-trip into
+            // ActivatePersonalityPresetAsync and re-open a gate the user may have just cancelled.
+            var previousEcho = _suppressChipEcho;
+            _suppressChipEcho = true;
+            try
+            {
+                if (wanted.Count == _presets.Count && wanted.Select((w, i) => w.Id == _presets[i].Id
+                        && w.Label == _presets[i].Label && w.Description == _presets[i].Description).All(x => x))
+                {
+                    for (int i = 0; i < wanted.Count; i++) _presets[i].IsSelected = wanted[i].IsSelected;
+                    return;
+                }
+
+                foreach (var stale in _presets) stale.PropertyChanged -= OnChipChanged;
+                _presets.Clear();
+                foreach (var chip in wanted)
+                {
+                    chip.PropertyChanged += OnChipChanged;
+                    _presets.Add(chip);
+                }
+            }
+            finally
+            {
+                _suppressChipEcho = previousEcho;
+            }
+        }
+
+        private void OnChipChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (_suppressChipEcho || e.PropertyName != nameof(PresetChip.IsSelected)) return;
+            if (sender is not PresetChip chip) return;
+            if (!chip.IsSelected)
+            {
+                // A second click on the active chip would read "no preset"; the compiled personality is unchanged.
+                Sync();
+                return;
+            }
+            _ = ActivateAsync(chip.Id);
+        }
+
+        private async Task ActivateAsync(string id)
+        {
+            if (Shell is { } shell) await shell.ActivatePersonalityPresetAsync(id);
+            // Reads back what happened: a cancelled acknowledgement leaves the old preset active.
+            Sync();
+        }
+
+        private async void OpenPromptEditor()
+        {
+            try
+            {
+                if (Shell is { } shell) await shell.OpenCompanionPromptEditorAsync();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Companion room: prompt editor failed"); }
+            Sync();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -256,15 +329,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     {
         private bool _isSelected;
 
-        public PresetChip(string id, string label, bool selected = false)
+        public PresetChip(string id, string label, bool selected = false, string? description = null)
         {
             Id = id;
             Label = label;
             _isSelected = selected;
+            Description = description;
         }
 
         public string Id { get; }
         public string Label { get; }
+        /// <summary>The preset's own one-liner - the chip's tooltip, off when null (WPF DataTrigger).</summary>
+        public string? Description { get; }
+        public bool HasDescription => Description != null;
 
         public bool IsSelected
         {

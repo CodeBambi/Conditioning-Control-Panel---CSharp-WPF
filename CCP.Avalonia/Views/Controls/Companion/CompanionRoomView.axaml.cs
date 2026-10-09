@@ -133,6 +133,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 AwarenessZone.SyncCursorBlink();
                 ChatZone.ViewModel?.Sync();
                 MemoryZone.ViewModel?.Sync();
+                PersonalityZone.ViewModel.Sync();   // WPF CompanionRoomRuntimeVm.Sync -> PersonalityVm.Sync
                 AttentionZone.ViewModel?.Sync();
                 // The constellation's one-shot dormant sweep waits for the first time the tab is seen.
                 HeroZone.GetLogicalDescendants().OfType<RelationshipConstellation>().FirstOrDefault()?.PlayIntro();

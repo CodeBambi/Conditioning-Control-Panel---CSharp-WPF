@@ -117,8 +117,12 @@
 
             <DataTemplate x:Key="CmpPresetChipTemplate" x:DataType="local:PresetChip">
                 <ToggleButton Content="{Binding Label}" Theme="{StaticResource CmpToggleChipStyle}"
-                              ToolTip.Tip="{Binding Label}"
-                              IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+                              ToolTip.IsEnabled="{Binding HasDescription}"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                    <ToolTip.Tip>
+                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" MaxWidth="360"/>
+                    </ToolTip.Tip>
+                </ToggleButton>
             </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -137,13 +141,13 @@
                     <TextBlock Text="🪞" FontSize="16" Margin="0,0,9,0" VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding LocPersonalityTitle}" Theme="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
-                <Border Grid.Column="2" Theme="{StaticResource CmpTrainTagStyle}">
+                <Border x:Name="PreviewTrainTag" Grid.Column="2" Theme="{StaticResource CmpTrainTagStyle}">
                     <TextBlock Text="{Binding LocTagTrain3}" Theme="{StaticResource CmpTrainTagTextStyle}"/>
                 </Border>
             </Grid>
 
             <!-- ========== interview spotlight ========== -->
-            <Grid Margin="0,13,0,14" IsVisible="{Binding !IsInterviewed}">
+            <Grid x:Name="InterviewSpotlight" Margin="0,13,0,14" IsVisible="{Binding !IsInterviewed}">
                 <Border x:Name="InterviewCard" Theme="{StaticResource CmpZ4InterviewCardStyle}"
                         Classes.dormant="{Binding !IsInterviewAvailable}">
                     <Grid>
