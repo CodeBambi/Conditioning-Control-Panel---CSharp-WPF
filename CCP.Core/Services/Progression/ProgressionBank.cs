@@ -9,8 +9,7 @@ namespace ConditioningControlPanel
     /// <see cref="CoreProgression.AddXPProvider"/> with <see cref="Add"/>: the login gate, the XP add and the
     /// level loop with <c>HighestLevelEver</c>.
     /// ponytail: of the skill multiplier only Pink Rush's 3x is applied (sparkle boosts, streak power, night
-    /// shift, early bird and event boost are not, so owners are under-awarded, which errs safe), no skill
-    /// companion XP - it lands with its ported feature. Skill points per level: <see cref="SkillPointsBank"/>. Level achievements listen to <see cref="LevelUp"/>; quests listen to <see cref="Awarded"/>
+    /// shift, early bird and event boost are not, so owners are under-awarded, which errs safe). Companion XP: CompanionCore.AddCompanionXP gets the base amount (progression#47). Skill points per level: <see cref="SkillPointsBank"/>. Level achievements listen to <see cref="LevelUp"/>; quests listen to <see cref="Awarded"/>
     /// (the Avalonia head feeds it to QuestService.TrackXPEarned, as WPF AddXP:120 does).
     /// </summary>
     public static class ProgressionBank
@@ -54,6 +53,9 @@ namespace ConditioningControlPanel
                 levels.Add(s.PlayerLevel);
                 Log.Information("Level up! Now level {Level}", s.PlayerLevel);
             }
+            // progression#47: WPF AddXP:73 App.Companion.AddCompanionXP(amount, source, context) - the BASE amount, after the gates.
+            try { Services.Companion.CompanionCore.AddCompanionXP(amount, source); }
+            catch (Exception ex) { Log.Debug("Companion XP failed: {E}", ex.Message); }
             CoreSettings.Save();
             foreach (var l in levels) LevelUp?.Invoke(l);
             Awarded?.Invoke(amount, source);

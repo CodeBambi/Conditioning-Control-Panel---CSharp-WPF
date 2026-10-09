@@ -49,7 +49,7 @@ internal static class ProgressionHead
 
     /// <summary>WPF PlayLevelUpSound verbatim: the first lvup.mp3 found, master volume ^1.5 x 0.2625,
     /// any previous level-up sound stopped first.</summary>
-    private static void PlayLevelUpSound()
+    internal static void PlayLevelUpSound()
     {
         try
         {

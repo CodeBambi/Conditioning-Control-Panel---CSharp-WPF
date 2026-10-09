@@ -683,6 +683,8 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                Platform.CompanionHead.Start();   // ai#5 + progression#47: companion switch, XP, drain, level-up
+                Platform.BarkHead.Start();        // ai#1: the bark engine, its seams and sources
 
                 // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no
                 // ContentPackService or RoadmapService, so it answers "no pack videos, no roadmap".
