@@ -6,9 +6,7 @@
 // worded result for 3 s, and the receipts timeline ("what you sent" with its steps). Punishments the
 // leashed side's intensity does not allow are HIDDEN, never greyed. No free text: every send is a
 // preset id; the only box is the Hypnotube number, filtered to digits as it is typed.
-// Flat on this head: no Effect glow on the card (Avalonia effect/cache rule). LeashFx is r11's:
-// every WPF LeashFx call is a "// FX:" comment the main session wires on merge. The heart tag and
-// the "?" help are r11 art: "// ART:" / "// SEAM:" comments mark where they go.
+// Flat on this head: no Effect glow on the card (Avalonia effect/cache rule).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -193,7 +191,7 @@ public sealed class LeashHolderCard : Border
         };
         ToolTip.SetTip(g, LeashUiRules.Timeline(i, now, Loc.Get));
 
-        var ic = HolderArt.Icon(ItemIcon(i), FriendsDrawer.Muted, 12);
+        var ic = LeashLook.Icon(ItemIcon(i), FriendsDrawer.Muted, 12);
         ic.Margin = new Thickness(0, 0, 6, 0);
         ic.VerticalAlignment = VerticalAlignment.Center;
         g.Children.Add(ic);
@@ -239,8 +237,12 @@ public sealed class LeashHolderCard : Border
         var face = FriendsDrawer.Avatar(_h.Who.Name, 46, _h.Online, _h.Who.AvatarUrl);
         face.VerticalAlignment = VerticalAlignment.Top;
         av.Children.Add(face);
-        // ART: WPF _tag = LeashLook.HeartTag(22) (Left, Bottom, Margin -2,0,0,-4) added to `av` here (r11 art).
-        // FX: LeashFx.Swing(_tag);
+        var tag = LeashLook.HeartTag(22);
+        tag.HorizontalAlignment = HorizontalAlignment.Left;
+        tag.VerticalAlignment = VerticalAlignment.Bottom;
+        tag.Margin = new Thickness(-2, 0, 0, -4);
+        av.Children.Add(tag);
+        LeashFx.Swing(tag);
         g.Children.Add(av);
 
         var who = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -257,7 +259,7 @@ public sealed class LeashHolderCard : Border
 
         if (_readOnly) return g;
         var tools = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top, Tag = "leash-holder-tools" };
-        // SEAM: WPF tools.Children.Add(LeashLook.Help(LeashExplainRole.Holder)) first (r11's "?" help).
+        tools.Children.Add(LeashLook.Help(LeashExplainRole.Holder));
         var more = FriendsDrawer.Pill(new TextBlock { Text = "…", FontSize = 13, Foreground = FriendsDrawer.Muted, HorizontalAlignment = HorizontalAlignment.Center },
             Brushes.Transparent, FriendsDrawer.Muted, "leash-holder-more");
         more.Width = 22;
@@ -305,7 +307,8 @@ public sealed class LeashHolderCard : Border
         bool ok = false;
         try { if (_svc() is { } s) ok = await s.ReleaseAsync(_h.Who.Id); }
         catch (Exception ex) { Serilog.Log.Debug("[Leash] release failed: {E}", ex.Message); }
-        // FX: if (ok) LeashFx.Cut(); else LeashFx.Denied();
+        if (ok) LeashFx.Cut();
+        else LeashFx.Denied();
         try
         {
             App.Notifications.Show(Loc.GetF(ok ? "leash_release_done" : "leash_release_failed", _h.Who.Name),
@@ -323,7 +326,7 @@ public sealed class LeashHolderCard : Border
         var r = _h.Report;
         int goal = LeashUiRules.MinutesGoal(_h.Assignment);
         int minutes = r?.Minutes ?? 0;
-        g.Children.Add(Fig(LeashHoldRing.Ring(LeashUiRules.RingFraction(minutes, goal), r == null ? "-" : minutes.ToString(), HolderArt.PinkC, 48),
+        g.Children.Add(Fig(LeashHoldRing.Ring(LeashUiRules.RingFraction(minutes, goal), r == null ? "-" : minutes.ToString(), LeashFx.PinkC, 48),
             Loc.Get("leash_fig_minutes"), null, "leash-fig-minutes"));
         g.Children.Add(Fig(Figure(r == null ? "-" : r.QuestsDone.ToString(), r == null ? "" : "/" + r.QuestsTotal, FriendsDrawer.Text),
             Loc.Get("leash_fig_quests"), r == null ? null : Loc.GetF("leash_fig_streak", r.Streak), "leash-fig-quests"));
@@ -356,7 +359,7 @@ public sealed class LeashHolderCard : Border
     {
         var box = new Border
         {
-            Background = HolderArt.Shade,
+            Background = LeashLook.Shade,
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(4, 8, 4, 7),
             Margin = new Thickness(3, 0, 3, 0),
@@ -392,7 +395,7 @@ public sealed class LeashHolderCard : Border
             _ => ("leash_task_open", FriendsDrawer.Gold),
         };
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 10, 0, 0), Tag = "leash-holder-task" };
-        var ic = HolderArt.Icon("task", brush, 13);
+        var ic = LeashLook.Icon("task", brush, 13);
         ic.Margin = new Thickness(0, 0, 6, 0);
         row.Children.Add(ic);
         row.Children.Add(FriendsDrawer.Label(Loc.GetF(key, what), 11.5, brush, null, FontWeight.SemiBold));
@@ -410,7 +413,7 @@ public sealed class LeashHolderCard : Border
     {
         var g = new UniformGrid { Columns = 7, Margin = new Thickness(0, 10, 0, 0), Tag = "leash-week" };
         foreach (var d in _h.Week.TakeLast(7))
-            g.Children.Add(HolderArt.WeekCell(d.Mark, LeashUiRules.DayLetter(d.Day)));
+            g.Children.Add(LeashLook.WeekCell(d.Mark, LeashUiRules.DayLetter(d.Day)));
         return g;
     }
 
@@ -419,10 +422,10 @@ public sealed class LeashHolderCard : Border
     private Control Buttons(bool dnd)
     {
         var g = new UniformGrid { Columns = 4, Margin = new Thickness(0, 10, 0, 0), Tag = "leash-holder-buttons" };
-        Add(g, "assign", Loc.Get("leash_btn_assign"), HolderArt.Tone.Gold, "task", !dnd);
-        Add(g, "reward", Loc.Get("leash_btn_reward"), HolderArt.Tone.Mint, "star", true);
-        Add(g, "punish", Loc.Get("leash_btn_punish"), HolderArt.Tone.Red, "bolt", !dnd);
-        var tug = HolderArt.Stacked(Loc.Get("leash_btn_tug"), HolderArt.Tone.Ghost, "hand", "leash-btn:tug");
+        Add(g, "assign", Loc.Get("leash_btn_assign"), LeashLook.Tone.Gold, "task", !dnd);
+        Add(g, "reward", Loc.Get("leash_btn_reward"), LeashLook.Tone.Mint, "star", true);
+        Add(g, "punish", Loc.Get("leash_btn_punish"), LeashLook.Tone.Red, "bolt", !dnd);
+        var tug = LeashLook.Stacked(Loc.Get("leash_btn_tug"), LeashLook.Tone.Ghost, "hand", "leash-btn:tug");
         tug.Margin = new Thickness(3, 0, 0, 0);
         tug.IsEnabled = !dnd;
         tug.Click += async (_, _) => await TugAsync();
@@ -430,9 +433,9 @@ public sealed class LeashHolderCard : Border
         return g;
     }
 
-    private void Add(UniformGrid g, string id, string text, HolderArt.Tone tone, string icon, bool enabled)
+    private void Add(UniformGrid g, string id, string text, LeashLook.Tone tone, string icon, bool enabled)
     {
-        var b = HolderArt.Stacked(text, tone, icon, "leash-btn:" + id + (_sheet == id ? ":open" : ""));
+        var b = LeashLook.Stacked(text, tone, icon, "leash-btn:" + id + (_sheet == id ? ":open" : ""));
         b.Margin = new Thickness(g.Children.Count == 0 ? 0 : 3, 0, 3, 0);
         b.IsEnabled = enabled;
         if (_sheet == id) b.BorderBrush = FriendsDrawer.Text;
@@ -445,7 +448,11 @@ public sealed class LeashHolderCard : Border
         _sheet = _sheet == id ? null : id;
         _videoFor = null;
         Render();
-        // FX: if (_sheet != null && LeashFx.Amount > 0) MotionFx.StaggerIn(the sheet: _body.Children[^(_result != null ? 2 : 1)]);
+        if (_sheet != null && _body.Children.Count > 0 && LeashFx.Amount > 0)
+        {
+            int at = _body.Children.Count - (_result != null ? 2 : 1);
+            if (at >= 0) LeashFx.SheetIn(_body.Children[at]);
+        }
     }
 
     // ---- sheets -----------------------------------------------------------------------
@@ -474,7 +481,7 @@ public sealed class LeashHolderCard : Border
     {
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 2, 0, 2) };
         var name = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        var ic = HolderArt.Icon(icon, accent, 13);
+        var ic = LeashLook.Icon(icon, accent, 13);
         ic.Margin = new Thickness(0, 0, 6, 0);
         name.Children.Add(ic);
         name.Children.Add(FriendsDrawer.Label(label, 12.5, FriendsDrawer.Text, FriendsDrawer.Display, FontWeight.Medium));
@@ -483,7 +490,7 @@ public sealed class LeashHolderCard : Border
         foreach (var (text, tag, send) in chips)
         {
             var c = FriendsDrawer.Pill(new TextBlock { Text = text, FontFamily = FriendsDrawer.Mono, FontSize = 11.5, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center },
-                HolderArt.ButtonBg, FriendsDrawer.Text, tag, FriendsDrawer.Line2);
+                LeashLook.ButtonBg, FriendsDrawer.Text, tag, FriendsDrawer.Line2);
             c.MinWidth = 40;
             c.Margin = new Thickness(4, 0, 0, 0);
             c.Padding = new Thickness(7, 4, 7, 4);
@@ -491,7 +498,8 @@ public sealed class LeashHolderCard : Border
             c.Cursor = FriendsDrawer.Hand();
             c.Click += async (_, _) =>
             {
-                // FX: LeashFx.Pop(c); LeashFx.Sparks(_fx, c, (int)(8 * LeashFx.Amount), accent colour, Gold);
+                LeashFx.Pop(c);
+                LeashFx.Sparks(_fx, c, (int)(8 * LeashFx.Amount), accent is ISolidColorBrush ab ? ab.Color : LeashFx.GoldC, LeashFx.GoldC);
                 await send();
             };
             chipsPanel.Children.Add(c);
@@ -578,7 +586,7 @@ public sealed class LeashHolderCard : Border
         foreach (var id in LeashUiRules.Stickers)
         {
             var sid = id;
-            var disc = HolderArt.StickerDisc(id, 32, i++);
+            var disc = LeashLook.StickerDisc(id, 32, i++);
             var b = FriendsDrawer.Pill(disc, Brushes.Transparent, FriendsDrawer.Text, "leash-reward:sticker:" + id);
             b.CornerRadius = new CornerRadius(18);
             b.Padding = new Thickness(2);
@@ -587,7 +595,8 @@ public sealed class LeashHolderCard : Border
             ToolTip.SetTip(b, Loc.Get("leash_rew_sticker_" + id));
             b.Click += async (_, _) =>
             {
-                // FX: LeashFx.Pop(b); LeashFx.Sparks(_fx, b, (int)(10 * LeashFx.Amount), Gold, Mint);
+                LeashFx.Pop(b);
+                LeashFx.Sparks(_fx, b, (int)(10 * LeashFx.Amount), LeashFx.GoldC, LeashFx.MintC);
                 await SendRewardAsync(RewardKind.Sticker, sid, null);
             };
             stickers.Children.Add(b);
@@ -632,7 +641,7 @@ public sealed class LeashHolderCard : Border
         try { list = FriendsInviteCodes.CatalogueWatches(); } catch { list = Array.Empty<(string, string)>(); }
         foreach (var (id, title) in list.Take(5))
         {
-            var b = FriendsDrawer.Pill(title, HolderArt.ButtonBg, FriendsDrawer.Text, "leash-video-catalogue:" + id, FriendsDrawer.Line2);
+            var b = FriendsDrawer.Pill(title, LeashLook.ButtonBg, FriendsDrawer.Text, "leash-video-catalogue:" + id, FriendsDrawer.Line2);
             b.HorizontalAlignment = HorizontalAlignment.Stretch;
             b.HorizontalContentAlignment = HorizontalAlignment.Left;
             b.Padding = new Thickness(8, 4, 8, 4);
@@ -716,11 +725,12 @@ public sealed class LeashHolderCard : Border
         if (!TugThrottle.TryTug(_h.Who.Id, DateTime.UtcNow))
         {
             var slow = new LeashSendResult(LeashSendStatus.TooFast);
-            // FX: LeashFx.Denied();
+            LeashFx.Denied();
             Word(slow, Loc.GetF("leash_done_tug", _h.Who.Name));
             return slow.Status;
         }
-        // FX: LeashFx.Tug(this); LeashFx.Jingle();
+        LeashFx.Tug(this);
+        LeashFx.Jingle();
         var r = await Guarded(s => s.TugAsync(_h.Who.Id), sentCue: false);
         Word(r, Honest("leash_done_tug"));
         return r.Status;
@@ -733,14 +743,14 @@ public sealed class LeashHolderCard : Border
             var s = _svc();
             if (s == null) return new LeashSendResult(LeashSendStatus.Off);
             var r = await call(s);
-            // FX: if (IsGood(r.Status)) { if (sentCue) LeashFx.Sent(); } else if (r.Status is TooFast or Dnd or Failed) LeashFx.Denied();
-            _ = sentCue;
+            if (LeashUiRules.IsGood(r.Status)) { if (sentCue) LeashFx.Sent(); }
+            else if (r.Status is LeashSendStatus.TooFast or LeashSendStatus.Dnd or LeashSendStatus.Failed) LeashFx.Denied();
             return r;
         }
         catch (Exception ex)
         {
             Serilog.Log.Debug("[Leash] send failed: {E}", ex.Message);
-            // FX: LeashFx.Denied();
+            LeashFx.Denied();
             return new LeashSendResult(LeashSendStatus.Failed);
         }
     }
@@ -757,152 +767,5 @@ public sealed class LeashHolderCard : Border
         _resultTimer.Tick += (_, _) => { _resultTimer?.Stop(); _result = null; Render(); };
         _resultTimer.Start();
         Render();
-    }
-}
-
-/// <summary>The WPF LeashLook pieces the holder card draws (Icon, StickerDisc, WeekCell, the stacked
-/// chunky button with a Red tone). Kept here so r10 never edits r11's LeashLook; fold into LeashLook
-/// after the wave merges. Flat: no glow Effects (Avalonia effect/cache rule).</summary>
-internal static class HolderArt
-{
-    internal enum Tone { Gold, Mint, Red, Ghost }
-
-    internal static readonly Color PinkC = Color.FromRgb(0xFF, 0x5F, 0xB4);
-    internal static readonly IBrush Shade = new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0)),
-        Idle = new SolidColorBrush(Color.FromRgb(0x4A, 0x3D, 0x61)),
-        ButtonBg = new SolidColorBrush(Color.FromRgb(0x1C, 0x12, 0x33));
-
-    /// <summary>(path data, filled, stroke width) per icon, in a 24 unit box. WPF LeashLook.Icons.</summary>
-    private static readonly Dictionary<string, (string Data, bool Fill, double Stroke)[]> Icons = new()
-    {
-        ["lock"] = new[] { ("M8,10 L16,10 A3,3 0 0 1 19,13 L19,18 A3,3 0 0 1 16,21 L8,21 A3,3 0 0 1 5,18 L5,13 A3,3 0 0 1 8,10 Z", true, 0.0), ("M8,10 V7 A4,4 0 0 1 16,7 V10", false, 2.4) },
-        ["eye"] = new[] { ("M2,12 C2,12 6,5 12,5 C18,5 22,12 22,12 C22,12 18,19 12,19 C6,19 2,12 2,12 Z", false, 2.0), ("M8.8,12 A3.2,3.2 0 1 0 15.2,12 A3.2,3.2 0 1 0 8.8,12 Z", true, 0.0) },
-        ["scissors"] = new[] { ("M3,6 A3,3 0 1 0 9,6 A3,3 0 1 0 3,6 Z", false, 2.0), ("M3,18 A3,3 0 1 0 9,18 A3,3 0 1 0 3,18 Z", false, 2.0), ("M8.5,7.5 L20,18 M8.5,16.5 L20,6", false, 2.0) },
-        ["star"] = new[] { ("M12,2 L15,8.5 L22,9.3 L16.8,14.1 L18.2,21.1 L12,17.6 L5.8,21 L7.2,14 L2,9.3 L9,8.5 Z", true, 0.0) },
-        ["bolt"] = new[] { ("M13,2 L4,14 L11,14 L10,22 L19,10 L12,10 Z", true, 0.0) },
-        ["link"] = new[] { ("M6,8 H9 A4,4 0 0 1 9,16 H6 A4,4 0 0 1 6,8 Z", false, 2.2), ("M15,8 H18 A4,4 0 0 1 18,16 H15 A4,4 0 0 1 15,8 Z", false, 2.2) },
-        ["hand"] = new[] { ("M7,11 V5 A1.5,1.5 0 0 1 10,5 V10 V3 A1.5,1.5 0 0 1 13,3 V10 V4 A1.5,1.5 0 0 1 16,4 V11 V7 A1.5,1.5 0 0 1 19,7 V14 A7,7 0 0 1 12,21 H11 A7,7 0 0 1 5.5,18.3 L3,14.5 A1.5,1.5 0 0 1 5.3,12.6 Z", true, 0.0) },
-        ["play"] = new[] { ("M7,4 V20 L20,12 Z", true, 0.0) },
-        ["bubble"] = new[] { ("M3,12 A8,8 0 1 0 19,12 A8,8 0 1 0 3,12 Z", false, 2.0), ("M6,9 A2,2 0 1 0 10,9 A2,2 0 1 0 6,9 Z", true, 0.0) },
-        ["task"] = new[] { ("M6,3 H18 A2,2 0 0 1 20,5 V19 A2,2 0 0 1 18,21 H6 A2,2 0 0 1 4,19 V5 A2,2 0 0 1 6,3 Z", false, 2.0), ("M8,12 L11,15 L16,9", false, 2.2) },
-        ["heart"] = new[] { ("M12,21 C5,16 2,12.5 2,8.5 A5,5 0 0 1 12,6.2 A5,5 0 0 1 22,8.5 C22,12.5 19,16 12,21 Z", true, 0.0) },
-        ["clock"] = new[] { ("M12,2 A10,10 0 1 0 12.01,2 Z", false, 2.0), ("M12,6 V12 L16,14", false, 2.2) },
-    };
-
-    internal static Control Icon(string name, IBrush brush, double size)
-    {
-        var canvas = new Canvas { Width = 24, Height = 24 };
-        if (Icons.TryGetValue(name, out var parts))
-        {
-            foreach (var (data, fill, stroke) in parts)
-            {
-                var p = new Path { Data = Geometry.Parse(data), StrokeJoin = PenLineJoin.Round, StrokeLineCap = PenLineCap.Round };
-                if (fill) p.Fill = brush;
-                else { p.Stroke = brush; p.StrokeThickness = stroke; }
-                canvas.Children.Add(p);
-            }
-        }
-        return new Viewbox { Width = size, Height = size, Child = canvas, Tag = "leash-icon:" + name };
-    }
-
-    /// <summary>A round sticker from the shelf, tilted a little, coloured by its id.</summary>
-    internal static Control StickerDisc(string id, double size = 30, int seed = 0)
-    {
-        var (color, word) = id switch
-        {
-            "good" => (Color.FromRgb(0xFF, 0xCF, 0x6B), "GOOD"),
-            "star" => (Color.FromRgb(0xFF, 0xCF, 0x6B), "★"),
-            "pet" => (Color.FromRgb(0xB9, 0x9C, 0xFF), "PET"),
-            "heart" => (PinkC, "♥"),
-            "wow" => (Color.FromRgb(0x5F, 0xFF, 0xD0), "WOW"),
-            _ => (Color.FromRgb(0xB9, 0x9C, 0xFF), id.Length > 4 ? id.Substring(0, 4).ToUpperInvariant() : id.ToUpperInvariant()),
-        };
-        var g = new Grid
-        {
-            Width = size,
-            Height = size,
-            RenderTransformOrigin = RelativePoint.Center,
-            RenderTransform = new RotateTransform(((seed * 37) % 21) - 10),
-            Tag = "leash-sticker:" + id,
-        };
-        g.Children.Add(new Ellipse { Fill = new SolidColorBrush(color) });
-        g.Children.Add(new TextBlock
-        {
-            Text = word,
-            FontFamily = new FontFamily("Consolas, Courier New, Segoe UI Symbol, Segoe UI"),
-            FontWeight = FontWeight.Bold,
-            FontSize = word.Length > 1 ? size * 0.26 : size * 0.5,
-            Foreground = LeashLook.InkBrush,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        return g;
-    }
-
-    /// <summary>One cell of the 7-day strip with its weekday letter.</summary>
-    internal static Control WeekCell(WeekMark mark, string letter)
-    {
-        var sp = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Tag = "leash-week:" + mark };
-        var dot = new Ellipse { Width = 15, Height = 15, HorizontalAlignment = HorizontalAlignment.Center };
-        switch (mark)
-        {
-            case WeekMark.Did: dot.Fill = FriendsDrawer.Mint; break;
-            case WeekMark.Punished: dot.Fill = FriendsDrawer.Red; break;
-            case WeekMark.Today:
-                dot.Fill = Brushes.Transparent;
-                dot.Stroke = FriendsDrawer.Gold;
-                dot.StrokeThickness = 2;
-                dot.StrokeDashArray = new global::Avalonia.Collections.AvaloniaList<double> { 1.6, 1.2 };
-                break;
-            default: dot.Fill = Idle; break;
-        }
-        sp.Children.Add(dot);
-        sp.Children.Add(new TextBlock
-        {
-            Text = letter,
-            FontFamily = FriendsDrawer.Mono,
-            FontSize = 9.5,
-            FontWeight = FontWeight.Bold,
-            Foreground = FriendsDrawer.Dim,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 3, 0, 0),
-        });
-        return sp;
-    }
-
-    /// <summary>WPF LeashLook.Chunky(text, tone, icon, stacked: true, size: 12): the icon over the word.</summary>
-    internal static Button Stacked(string text, Tone tone, string icon, string tag)
-    {
-        // WPF LeashLook.Colors: a top-to-bottom gradient body, ink text, a faint white edge. The WPF
-        // glow Effect is left off (Avalonia effect/cache rule).
-        var ink = LeashLook.InkBrush;
-        var (top, bottom, fg) = tone switch
-        {
-            Tone.Mint => (Color.FromRgb(0xA8, 0xFF, 0xE6), Color.FromRgb(0x5F, 0xFF, 0xD0), ink),
-            Tone.Red => (Color.FromRgb(0xFF, 0x8A, 0x9E), Color.FromRgb(0xFF, 0x5F, 0x7A), (IBrush)Brushes.White),
-            Tone.Ghost => (Color.FromRgb(0x2E, 0x20, 0x46), Color.FromRgb(0x26, 0x1A, 0x3C), FriendsDrawer.Muted),
-            _ => (Color.FromRgb(0xFF, 0xE3, 0xA0), Color.FromRgb(0xFF, 0xCF, 0x6B), ink),
-        };
-        var bg = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops = { new GradientStop(top, 0), new GradientStop(bottom, 1) },
-        };
-        var sp = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-        var ic = Icon(icon, fg, 20);
-        ic.HorizontalAlignment = HorizontalAlignment.Center;
-        ic.Margin = new Thickness(0, 0, 0, 3);
-        sp.Children.Add(ic);
-        var t = new TextBlock { Text = text, FontFamily = FriendsDrawer.Display, FontSize = 12, FontWeight = FontWeight.SemiBold, Foreground = fg,
-            HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-        sp.Children.Add(t);
-        var b = FriendsDrawer.Pill(sp, bg, fg, tag, new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)));
-        b.CornerRadius = new CornerRadius(11);
-        b.Padding = new Thickness(8, 8, 8, 7);
-        b.HorizontalAlignment = HorizontalAlignment.Stretch;
-        b.HorizontalContentAlignment = HorizontalAlignment.Center;
-        b.Cursor = FriendsDrawer.Hand();
-        return b;
     }
 }
