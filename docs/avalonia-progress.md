@@ -1672,3 +1672,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/programs-run-3-0: +220
 - Core schema-skew seam for programs.json: `Extra` at three levels, a `SchemaVersion` stamp that forces read-only, `IsReadOnly`, and a stepped `Now` clock. WPF's bytes are unchanged.
 - Logs checkpoint-B decision (c); Avalonia still calls `CreateReadOnly()`.
+
+## avalonia-port/rows-shell-rails: +592
+- Dashboard FAVORITES + RECENT rail ported: art chips, pin menus, RECENT from ShowTab, lock repaint; Core FavoritesRailRule/Art moved with git mv; premium-rail stand-in deleted.
+- Banner One Account link is a real link and retires its beat; Just Drop and the rest of the marquee remain stubs, with the missing pieces listed in the ledger.
