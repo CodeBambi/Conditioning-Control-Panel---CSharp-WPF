@@ -52,6 +52,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             Closed += (_, _) => picture.Dispose();
         }
 
+        /// <summary>An animated flash (GIF / animated WebP): WPF's heartbeat frame-stepper, one
+        /// frame every <paramref name="frameDelay"/> (already scaled by the GIF speed setting),
+        /// looping for the flash's whole life. The window owns the frames and frees them on close.</summary>
+        public FlashOverlayWindow(System.Collections.Generic.List<Bitmap> frames, TimeSpan frameDelay)
+            : this(frames[0])
+        {
+            _frames = frames;
+            _frameTimer = new DispatcherTimer { Interval = frameDelay };
+            _frameTimer.Tick += (_, _) => StepFrame();
+            Opened += (_, _) => _frameTimer?.Start();
+            Closed += (_, _) =>
+            {
+                _frameTimer?.Stop();
+                _frameTimer = null;
+                for (var i = 1; i < frames.Count; i++) frames[i].Dispose();   // [0] goes with the base close
+            };
+        }
+
+        private readonly System.Collections.Generic.List<Bitmap>? _frames;
+        private DispatcherTimer? _frameTimer;
+        internal int FrameIndex { get; private set; }
+
+        /// <summary>One heartbeat step: next frame, wrapping to the first.</summary>
+        internal void StepFrame()
+        {
+            if (_frames == null || _frames.Count < 2) return;
+            FrameIndex = (FrameIndex + 1) % _frames.Count;
+            _image.Source = _frames[FrameIndex];
+        }
+
         /// <summary>
         /// Fade in to <paramref name="alpha"/> over <paramref name="fade"/>, hold until
         /// <paramref name="lifetime"/> after spawn, fade out over <paramref name="fade"/>, close.

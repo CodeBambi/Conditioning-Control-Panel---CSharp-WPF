@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     ///
     /// <para>ponytail: not here yet, each a later branch - audio + ducking (lifetime then follows the sound's length), clickable
     /// flashes (hydra multiply / XP / pops - FlashClickable is ignored, always click-through),
-    /// the Pendulum motion style (Drift and Bounce is below), GIF animation (first frame only), glow, content-pack and remote pools, avatar pre-announce.</para>
+    /// the Pendulum motion style (Drift and Bounce is below), glow, content-pack and remote pools, avatar pre-announce.</para>
     /// </summary>
     internal static class FlashOverlay
     {
@@ -99,14 +99,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var refused = false;
                 for (var i = 0; i < flashes.Count; i++)
                 {
-                    var (bmp, rect, path, screen) = flashes[i];
+                    var (bmp, rect, path, screen, frames) = flashes[i];
                     var last = i == flashes.Count - 1;
                     DispatcherTimer.RunOnce(() =>
                     {
                         try
                         {
-                            if (refused || _closed || generation != _generation || Active.Count >= MaxConcurrent) { bmp.Dispose(); return; }
-                            refused = !Spawn(bmp, rect, screen, alpha, fade, lifetime);
+                            if (refused || _closed || generation != _generation || Active.Count >= MaxConcurrent)
+                            {
+                                bmp.Dispose();
+                                if (frames != null) foreach (var f in frames.Value.Frames) f.Dispose();
+                                return;
+                            }
+                            refused = !Spawn(bmp, rect, screen, alpha, fade, lifetime, frames);
                             // WPF FlashService.cs:1608 records the batch; per shown image here, so the
                             // log's media count is exactly what reached the screen.
                             if (!refused) App.Sessions?.SessionLog.RecordImages(new[] { path });
@@ -158,9 +163,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// BEFORE SetOverrideRedirect so its XSync covers them: the window maps already
         /// click-through and at alpha 0, never as one opaque or clickable frame. False (window
         /// closed) when the platform refuses.</summary>
-        private static bool Spawn(Bitmap bmp, PixelRect rect, PixelRect screen, double alpha, TimeSpan fade, TimeSpan lifetime)
+        private static bool Spawn(Bitmap bmp, PixelRect rect, PixelRect screen, double alpha, TimeSpan fade, TimeSpan lifetime,
+            (List<Bitmap> Frames, TimeSpan Delay)? anim = null)
         {
-            var w = new FlashOverlayWindow(bmp);
+            FlashOverlayWindow w;
+            if (anim is { } a)
+            {
+                bmp.Dispose();   // the still is only the fallback; frame 0 stands in for it
+                w = new FlashOverlayWindow(a.Frames, FlashGifFrames.ScaleFrameDelay(a.Delay, CoreSettings.Current.FlashGifSpeedMultiplier));
+            }
+            else w = new FlashOverlayWindow(bmp);
             if (!X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, rect))
             {
                 if (!_warnedUnavailable) Log.Warning("Flash: the platform refused a click-through topmost overlay window; flashes skipped");
@@ -274,12 +286,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// from the header size alone, so each picture is decoded AT its display size like WPF's
         /// decode-at-display-size - never a full-resolution source held per window.
         /// </summary>
-        private static List<(Bitmap Bitmap, PixelRect Rect, string Path, PixelRect Screen)> LoadPictures(int count, IReadOnlyList<Screen> screens,
+        private static List<(Bitmap Bitmap, PixelRect Rect, string Path, PixelRect Screen, (List<Bitmap> Frames, TimeSpan Delay)? Anim)> LoadPictures(int count, IReadOnlyList<Screen> screens,
             int[] targets, AppSettings s, List<PixelRect> occupied, int? size)
         {
             var root = CorePaths.EffectiveAssets;
             var dir = Path.Combine(root, "images");
-            var result = new List<(Bitmap, PixelRect, string, PixelRect)>(count);
+            var result = new List<(Bitmap, PixelRect, string, PixelRect, (List<Bitmap> Frames, TimeSpan Delay)?)>(count);
             if (!Directory.Exists(dir) || targets.Length == 0) return result;
 
             var files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
@@ -302,7 +314,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     var screen = screens[targets[Rng.Next(targets.Length)]];
                     var rect = Place(screen.Bounds, screen.Scaling, info.Width, info.Height, s, Rng, occupied, size);
                     using var stream = File.OpenRead(path);
-                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, path, screen.Bounds));
+                    // WPF LoadGifFrames / TryLoadAnimatedWebpFrames: an animated file plays, at display size.
+                    var ext = Path.GetExtension(path).ToLowerInvariant();
+                    var anim = ext is ".gif" or ".webp" ? FlashGifFrames.Decode(path, rect.Width, rect.Height) : null;
+                    result.Add((Bitmap.DecodeToWidth(stream, rect.Width), rect, path, screen.Bounds, anim));
                     occupied.Add(rect);
                 }
                 catch (Exception ex) { Log.Debug("Flash: could not decode {Path}: {E}", path, ex.Message); }
