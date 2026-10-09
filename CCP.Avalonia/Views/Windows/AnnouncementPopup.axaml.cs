@@ -365,6 +365,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try
                 {
                     Platform.ExternalOpener.Open(uri.AbsoluteUri);
+                    // WPF :323: acting on it answers it on the account; the local slot stays with the dismiss button.
+                    if (_onDismiss == null) MainShellWindow.RecordAnnouncementDismissal(_announcementId);
                 }
                 catch (Exception ex)
                 {
@@ -386,6 +388,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // The single server-announcement slot. No Save() here, matching WPF: the settings
                 // service's own debounce writes it out.
                 CoreSettings.Current.DismissedAnnouncementId = _announcementId;
+                MainShellWindow.RecordAnnouncementDismissal(_announcementId);   // WPF RecordServerDismissal (:342)
             }
 
             try

@@ -14,9 +14,9 @@
 // string work, but a formatter for a type this head cannot name is not restorable in isolation -
 // it would need rewriting against a Core order shape that does not exist.
 //
-// The strip is not missing: CCP.Avalonia/Views/Tabs/PresetsTabView.axaml.cs already paints a
-// placeholder shelf into TakeawayShelf/TakeawayTray with the real chrome, so the tab renders
-// finished rather than gapped. What it has no way to get is rows.
+// The strip is not missing: CCP.Avalonia/Views/Tabs/PresetsTabView.axaml.cs SeedTakeaway paints
+// WPF's own empty state (no orders, door withheld: shelf collapsed, sd_takeaway_empty shown) -
+// never sample orders. What it has no way to get is rows.
 //
 // Members, grouped by what each needs:
 //   Load + repaint (JustDropOrdersService list read):
@@ -42,7 +42,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // Nothing here on purpose. Shelf chrome: CCP.Avalonia/Views/Tabs/PresetsTabView.axaml.cs.
+        // Nothing here on purpose. Empty state: CCP.Avalonia/Views/Tabs/PresetsTabView.axaml.cs.
         // Rows need an order-drawer seam, which needs a seeded CoreSecrets first.
     }
 }

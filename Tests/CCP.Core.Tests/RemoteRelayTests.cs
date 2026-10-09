@@ -355,6 +355,41 @@ public sealed class RemoteRelayTests
         finally { (s.StrictLockEnabled, s.PanicKeyEnabled, CoreDispatch.InvokeProvider, CoreDispatch.PostProvider) = saved; }
     });
 
+    // Audit #1937: ending the session stops the controller's effects on the UI thread (they close
+    // windows), and still stops them, posted, when a stalled UI cancels the Invoke.
+    [Fact]
+    public async Task Ending_the_session_stops_effects_on_the_ui_thread()
+    {
+        var saved = (CoreDispatch.InvokeProvider, CoreDispatch.PostProvider);
+        try
+        {
+            var onUi = false;
+            var stoppedOnUi = new List<bool>();
+            CoreDispatch.InvokeProvider = (fn, _) => { onUi = true; try { return (true, fn()); } finally { onUi = false; } };
+            var f = new FakeRelay();
+            using (var r = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", (_, _) => null, _ => stoppedOnUi.Add(onUi), f) { AutoPoll = false })
+            {
+                await r.StartAsync("full");
+                await r.StopAsync();
+            }
+            Assert.Equal(new[] { true }, stoppedOnUi);
+
+            var posted = new List<Action>();
+            CoreDispatch.InvokeProvider = (_, _) => (false, null);
+            CoreDispatch.PostProvider = posted.Add;
+            stoppedOnUi.Clear();
+            using (var r = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", (_, _) => null, _ => stoppedOnUi.Add(onUi), f) { AutoPoll = false })
+            {
+                await r.StartAsync("full");
+                await r.StopAsync();
+                Assert.Empty(stoppedOnUi);
+                foreach (var a in posted.ToArray()) a();
+                Assert.Single(stoppedOnUi);
+            }
+        }
+        finally { (CoreDispatch.InvokeProvider, CoreDispatch.PostProvider) = saved; }
+    }
+
     // main d39969827: 1 s polls while a connected controller is busy; a 429 still backs off from 5 s.
     [Fact]
     public async Task Hot_cadence_while_the_controller_is_busy()

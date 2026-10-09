@@ -63,6 +63,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         public void CloseAll() => Dispatcher.UIThread.Invoke(() =>
         {
             _deferred = null;
+            LockCardWindow.DropHeld();   // first: the last quiz closing would replay a held card
             PopQuizWindow.ForceCloseAll();
         });
     }

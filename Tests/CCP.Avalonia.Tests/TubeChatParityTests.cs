@@ -199,6 +199,7 @@ public sealed class TubeChatParityTests
         var dir = Directory.CreateTempSubdirectory("ccp-ask-").FullName;
         var previousBrain = AvApp.Brain;
         var previousVideo = CoreEngine.Video;
+        var previousLockdown = LockdownService.Current;
         AvApp.Brain = new CompanionBrain(new AiService("http://127.0.0.1:9"), memory: new MemoryStore(Path.Combine(dir, "memory.json")),
             store: new CompanionSessionStore(Path.Combine(dir, "session.json"), Path.Combine(dir, "legacy.json")));
         var restore = SaveSeams();
@@ -227,10 +228,20 @@ public sealed class TubeChatParityTests
             Assert.True(video.Trigger());
             Assert.False(ConversationDelivery.AskCardsShown!(ask));   // busy: a mandatory video is playing
             video.ForceCleanup();
+            Assert.True(ConversationDelivery.AskCardsShown!(ask));
+
+            // Audit #1956: WPF's IsBusy counts an active Lockdown (App.xaml.cs BusyProvider).
+            var ld = LockdownService.Current = new LockdownService();
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Assert.False(ConversationDelivery.AskCardsShown!(ask));   // busy: lockdown
+            ld.Deactivate();
+            Assert.True(ConversationDelivery.AskCardsShown!(ask));
         }
         finally
         {
             restore();
+            LockdownService.Current?.Deactivate();
+            LockdownService.Current = previousLockdown;
             CoreEngine.Video = previousVideo;
             AvApp.Brain?.Dispose();
             AvApp.Brain = previousBrain;
