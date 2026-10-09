@@ -187,14 +187,24 @@ public sealed class AnimatedLogoDial : Grid
 
     // ---- frames off the UI thread (owner, 2026-10-09: "still a bit of lag" on the dashboard) ----
     // The dial is ~8 ms of CPU raster per frame; on the UI thread that stole a quarter of every
-    // second from input and the other loops. A worker now draws each frame into a back bitmap and
-    // the paint only blits the newest finished one (one frame behind, at 30 fps). The renderer is
-    // only ever touched under _drawGate; a busy worker drops the tick rather than queueing.
+    // second from input and the other loops. A worker now draws each frame into its own raster
+    // surface and publishes an IMMUTABLE snapshot; the paint only draws the newest one (one frame
+    // behind, at 30 fps). The first cut swapped two mutable SKBitmaps and the dial read as frozen
+    // on the owner's GPU window (owner, 2026-10-09: "the logo isnt animating now"), so nothing
+    // mutable crosses threads any more, and a dial whose worker has not delivered a frame for
+    // StaleAfter draws inline again, so it can never sit still while its clock runs.
+    // The renderer is only ever touched under _drawGate; a busy worker drops the tick.
 
+    private static readonly TimeSpan StaleAfter = TimeSpan.FromMilliseconds(250);
+    private static bool _workerFailLogged;
     private readonly object _drawGate = new(), _frameGate = new();
-    private SKBitmap? _front, _back;
+    private SKImage? _ready;
+    private long _readyAt;
     private int _side;
-    private bool _working;
+    private volatile bool _working;
+
+    /// <summary>Worker frames published so far (tests).</summary>
+    internal int WorkerFrames { get; private set; }
 
     private void RenderAhead(double phase, double drive)
     {
@@ -205,28 +215,32 @@ public sealed class AnimatedLogoDial : Grid
         {
             try
             {
+                SKImage? frame = null;
                 lock (_drawGate)
                 {
                     var r = _renderer;
                     if (r == null) return;
-                    if (_back == null || _back.Width != side)
-                    {
-                        _back?.Dispose();
-                        _back = new SKBitmap(side, side, SKColorType.Bgra8888, SKAlphaType.Premul);
-                    }
-                    using (var c = new SKCanvas(_back))
-                    {
-                        c.Clear(SKColors.Transparent);
-                        r.Draw(c, side, side, phase, drive);
-                    }
-                    // Skia keys an uploaded bitmap on its generation id, and drawing through an
-                    // SKCanvas does not bump it: without this the paint kept showing the first two
-                    // frames forever (the dial looked frozen).
-                    _back.NotifyPixelsChanged();
-                    lock (_frameGate) (_front, _back) = (_back, _front);
+                    using var surface = SKSurface.Create(new SKImageInfo(side, side, SKColorType.Bgra8888, SKAlphaType.Premul));
+                    if (surface == null) return;
+                    surface.Canvas.Clear(SKColors.Transparent);
+                    r.Draw(surface.Canvas, side, side, phase, drive);
+                    surface.Canvas.Flush();
+                    frame = surface.Snapshot();
                 }
+                SKImage? old;
+                lock (_frameGate)
+                {
+                    old = _ready;
+                    _ready = frame;
+                    _readyAt = Stopwatch.GetTimestamp();
+                    WorkerFrames++;
+                }
+                old?.Dispose();
             }
-            catch (Exception ex) { Log.Debug("Logo dial worker frame failed: {E}", ex.Message); }
+            catch (Exception ex)
+            {
+                if (!_workerFailLogged) { _workerFailLogged = true; Log.Warning("Logo dial worker frame failed, drawing inline: {E}", ex.Message); }
+            }
             finally { _working = false; }
         });
     }
@@ -248,9 +262,15 @@ public sealed class AnimatedLogoDial : Grid
             {
                 lock (_frameGate)
                 {
-                    if (_front != null && _front.Width == side) { canvas.DrawBitmap(_front, 0, 0); return; }
+                    if (_ready != null && _ready.Width == side
+                        && Stopwatch.GetElapsedTime(_readyAt) < StaleAfter)
+                    {
+                        canvas.DrawImage(_ready, 0, 0);
+                        return;
+                    }
                 }
-                // No finished frame at this size yet (first tick, a resize): draw this one inline.
+                // No fresh worker frame at this size (first tick, a resize, a stalled worker):
+                // draw this one inline.
                 lock (_drawGate) r.Draw(canvas, side, side, _phase, HomeDashboardRules.LogoDrive(_energy));
             }
             else lock (_drawGate) r.DrawStill(canvas, side, side);
