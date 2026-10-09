@@ -480,7 +480,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     okText: Loc.Get("btn_program_withdraw_confirm"),
                     cancelText: Loc.Get("btn_program_withdraw_keep"));
                 if (!confirmed) return;
-                // ponytail: WPF SuppressNextSessionSummary("program withdraw") - the recap still opens here.
+                // SEAM(f-shell): MainShellWindow.SessionRun.cs OnSessionLogReady needs WPF Presets.cs:1679 SuppressNextSessionSummary(reason)
+                // (20 s one-shot); call it here when sessionLive, before Withdraw. Until then the recap still opens.
                 svc.Withdraw();
                 RefreshBrowse();
                 shell.RefreshProgramTodayCard();
