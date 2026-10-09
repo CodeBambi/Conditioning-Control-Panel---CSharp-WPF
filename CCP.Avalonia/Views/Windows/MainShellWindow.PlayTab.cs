@@ -1,46 +1,44 @@
-// NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.PlayTab.cs (331 lines).
-//
-// Sorted member by member against the fifteen Core seams and the ported views: this file is
-// GENUINELY 100% head-side, and it is head-side for one reason rather than fifteen. It is the Play
-// wall's ENTITLEMENT painter - every line of it decides "is this card locked, free today, or paid
-// for", and not one of those answers exists on this head. There is nothing here that is layout,
-// navigation or settings, so there is no half to restore; a token method would be a lie about a
-// wall that would then draw every card unlocked.
-//
-// What each member needs, exactly:
-//   RefreshPlayCards        - Services.TierGate.RequiresLab / RequiresPremium for eight verdicts,
-//                             which IS available now (CCP.Core/Services/TierGate.cs, over the
-//                             CoreEntitlement seam) - the rest of the member is not:
-//                             MainWindow.PremiumRail.cs's SetLockband / SetLockbandVisible to paint
-//                             one; App.Patreon.HasPremiumAccess / HasLabAccess
-//                             (ConditioningControlPanel/Services/Account/PatreonService.cs) for the
-//                             two Goon perk lines; and the two static door flags
-//                             Services.Arcademy.ArcademyHostService.DoorAvailable and
-//                             Services.JustDrop.JustDropService.DoorAvailable, which decide whether
-//                             those two cards are on the wall at all.
-//   RefreshPlayFreeStamps   - App.DailyFree.IsFreeToday. DailyFreeService itself IS in Core
-//   SetFreeStamp              (CCP.Core/Services/DailyFreeService.cs), but no head seeds an
-//                             instance and there is no CoreDailyFree seam, so nothing can be asked
-//                             which door the wheel opened today. The TierBadge.FreeToday property
-//                             it writes is already ported (Views/Controls/TierBadge).
-//   RefreshPlayIntakeCard   - App.IntakePass.State + IntakePassService.DaysUntilNextPass
-//                             (ConditioningControlPanel/Services/Progression/IntakePassService.cs)
-//                             for the card's four pass states.
-//   StartMantraSession      - PORTED below (MantraService is in Core). Its one caller, as in WPF
-//                             (#1230), is the Programs Mantra-task door (ProgramsTabView).
-//   GoonPerkLockedOpacity   - the 0.42 dim for an unbought Goon perk. A constant with no reader
-//                             until RefreshPlayCards has its two entitlement answers.
-//
-// One correction for whoever wires this: an earlier revision of this header warned that
-// Views/Tabs/PlayTabView loads with AvaloniaXamlLoader.Load and so has null x:Name fields. That was
-// fixed at the source - PlayTabView's constructor calls InitializeComponent(), so PlayLockDtrh,
-// SlotArcademy, TxtPlayGoonPerkSend and the rest are populated and can be used directly. The hazard
-// is still real for THIS window, whose partials must reach controls through Named<T>(name).
+// PORTED from WPF 7.1.5 ConditioningControlPanel/MainWindow/MainWindow.PlayTab.cs (331 lines), in parts:
+//   ScrollPlayZone       - ScrollPlayZoneFor below (zone pills scroll the wall, play#9).
+//   LaunchPlay* / OpenPlayWebApp - the card shims in Views/Tabs/PlayTabView.axaml.cs run the
+//                          launcher entry (LauncherWindow.LaunchGame); OpenPlayWebApp is below.
+//   RefreshPlayCards     - the lockbands live in PlayTabView.RefreshPlayCards (TierGate verdicts).
+//   StartMantraSession   - PORTED below (MantraService is in Core).
+// Not here yet: RefreshPlayFreeStamps (no CoreDailyFree seam) and RefreshPlayIntakeCard
+// (IntakePassService state on this head).
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
+        /// <summary>The Play key ShowTab last landed on ("play", "playsessions", "playeyes"), so a
+        /// return to plain Play from another zone scrolls back to Games (WPF TabNavigation.cs:549).</summary>
+        private string? _lastPlayKey;
+
+        /// <summary>WPF MainWindow.PlayTab.cs ScrollPlayZone + TabNavigation.cs:547-557: the zone pills
+        /// scroll the wall to their header and glow it once; a plain return to Play keeps its scroll
+        /// unless the previous pill was another zone.</summary>
+        internal void ScrollPlayZoneFor(string tab)
+        {
+            var before = _lastPlayKey;
+            _lastPlayKey = tab;
+            string? zone = tab switch
+            {
+                "playsessions" => "sessions",
+                "playeyes" => "eyes",
+                _ => before is "playsessions" or "playeyes" ? "games" : null,
+            };
+            if (zone == null) return;
+            var play = Named<Tabs.PlayTabView>("PlayTab");
+            if (play == null) { Serilog.Log.Debug("ScrollPlayZone({Zone}): no Play view", zone); return; }
+            try { play.ScrollToZone(zone); }
+            catch (System.Exception ex) { Serilog.Log.Debug("ScrollPlayZone({Zone}): {E}", zone, ex.Message); }
+        }
+
+        /// <summary>WPF OpenPlayWebApp: the Web App card runs the rail door's two lines (open through
+        /// the browser launcher, retire the banner beat).</summary>
+        internal void OpenPlayWebApp() => DoorWebApp_Click(this, new global::Avalonia.Interactivity.RoutedEventArgs());
+
         /// <summary>
         /// WPF MainWindow.PlayTab.cs StartMantraSession: focus a running MantraWindow rather than
         /// restart it (a second StartSession would wipe the run), else start the session THEN open the

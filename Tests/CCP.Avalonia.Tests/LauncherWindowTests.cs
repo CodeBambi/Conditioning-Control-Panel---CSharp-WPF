@@ -133,27 +133,34 @@ public sealed class LauncherWindowTests
     });
 
     [Fact]
-    public void HostlessCard_FlinchesAndSaysSo_LauncherStaysAndPanelStaysTucked() => Run(shell =>
+    public void RaceCard_WithATrack_OpensTheRace_LauncherHidesBehindIt() => Run(shell =>
     {
         CoreAccount.IsLoggedInProvider = () => true;
         CoreEntitlement.HasLabProvider = () => true;
         LauncherWindow.BackToLauncher(shell);
         Dispatcher.UIThread.RunJobs();
         var w = LauncherWindow.Instance!;
-        // Every game has a window now (Views/Games/GameWindow); a revealed Racing Thoughts is the one card left
-        // with no host on this head.
+        // Racing Thoughts has its own host now (Views/Games/RaceWindow, play#6/#42): a revealed card
+        // carries no "not on this build" tip and opens the race.
         var oldGrants = ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted;
         ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted = id => id == "rt.original.03";
-        w.BuildTiles();
-        var backroom = Tile(w, "race");
-        Assert.Equal(Loc.Get("exclusives_not_on_this_build"), ToolTip.GetTip(backroom));
-        Assert.Null(ToolTip.GetTip(Tile(w, "backroom")));
-        Assert.Null(ToolTip.GetTip(Tile(w, "intake")));
-        ClickPlay(backroom);
-        Dispatcher.UIThread.RunJobs();
-        ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted = oldGrants;
-        Assert.True(w.IsVisible);
-        Assert.False(shell.IsVisible);
+        try
+        {
+            w.BuildTiles();
+            var race = Tile(w, "race");
+            Assert.Null(ToolTip.GetTip(race));
+            Assert.Null(ToolTip.GetTip(Tile(w, "backroom")));
+            ClickPlay(race);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(ConditioningControlPanel.Avalonia.Views.Games.GameWindow.IsAnyOpen());
+            Assert.False(shell.IsVisible);
+        }
+        finally
+        {
+            ConditioningControlPanel.Avalonia.Views.Games.GameWindow.CloseAllForPanic();
+            Dispatcher.UIThread.RunJobs();
+            ConditioningControlPanel.Avalonia.Platform.PrizeOwnership.IsGranted = oldGrants;
+        }
     });
 
     [Fact]
@@ -377,7 +384,7 @@ public sealed class LauncherWindowTests
         Assert.Equal("gradedintake", shell.CurrentTab);
         Assert.False(LauncherWindow.Instance!.IsVisible);
 
-        LauncherWindow.Boot = BootDecision.GameFirst("race");   // a WPF game with no host on this head
+        LauncherWindow.Boot = BootDecision.GameFirst("nosuchgame");   // a game this head has no card for
         LauncherWindow.RouteBoot(shell);
         Dispatcher.UIThread.RunJobs();
         Assert.False(shell.IsVisible);
