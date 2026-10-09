@@ -1604,3 +1604,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-exclusives: +400
 - Vault: tier plates read the access gates, 3px/4px tier livery, two coming-soon teasers, and one visibility-gated 24fps clock for padlock breath, FREE TODAY pulse, Ken Burns and sheens.
 - Duplicate shell-exclusives ledger rows merged; both rows stay stub (re-tint, hover lift, launches and hero art still missing).
+
+## avalonia-port/rows-profile-cards: +663
+- Profile bubble paints identity, tier and account doors and reacts to XP/level/achievements; the public-profile door is live (row stays stub).
+- Profile FX wired: card stagger, search glow, OG border loop gated per P01; spiral/vat/faucet blocked on DescentService, privacy panel on a sync payload change (P44).
