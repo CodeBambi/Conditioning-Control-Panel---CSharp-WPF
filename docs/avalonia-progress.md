@@ -1550,3 +1550,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-inbox: +317
 - shell-inbox: server announcement routed via the startup Inbox (Core V2AuthService fetch + account dismissal), row/popup dismiss record both halves; 3 tests, fail-proven x4.
 - Row stays stub (modal ladder, intake nudge, other posters).
+
+## avalonia-port/audit-fix-safety: +257
+- Closes 7 still-open P1/P2 audit findings (#1790, #1987 x2, #1982, #1956, #1833, #1937): rebind double-capture, a CRLF scan test, a late follow-up reply's effects after a panic (both heads), a refused pink filter overwriting settings, Lockdown counted as busy, a held lock card replaying on stop, and remote session-end stops moved to the UI thread.
+- Each fix has a fail-proven headless or Core test.

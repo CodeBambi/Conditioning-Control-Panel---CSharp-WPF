@@ -658,3 +658,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   would lapse.
 - Chose A on the supervisor's advice (P44). Reason: no lapsing enrollments.
 - Tests: `Tests/CCP.Avalonia.Tests/ProgramEnrollDialogTests.cs`.
+## 2026-10-09: a panic drops a getbacktome follow-up's late reply commands on both heads (avalonia-port/audit-fix-safety)
+- Question (audit #1987): the follow-up's AI reply runs its own effect commands inside `GetBambiReplyExAsync`
+  (`CompanionBrain.CommandExecutor`), before `GetBackToMeCommand` checks its cancellation, so a panic during the round
+  trip still fired them. Shared Core: WPF had the same gap.
+- Option A (chosen): Core fix. `GetBackToMeCommand` sets an `AsyncLocal` ambient token (its own follow-up token, cancelled
+  by `AiCommandService.CancelAll`) around its AI call; `AiCommandService.ExecuteCommand` drops, logged and before any
+  side effect, every command while that token is cancelled. Chat replies and user-triggered commands never see the token.
+  Option B (rejected): no code change; correct the progress-doc claim that a late reply is dropped.
+- Chose A on the supervisor's advice (P44). WPF behaviour changes for safety only: after a panic the late follow-up
+  reply's effects no longer fire. Tests: `Tests/CCP.Core.Tests/AiCommandGateTests.cs` (panic drops, uncancelled runs,
+  chat reply runs).
