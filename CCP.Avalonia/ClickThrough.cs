@@ -148,7 +148,7 @@ namespace ConditioningControlPanel.Avalonia
 
         private static void Pump()
         {
-            for (var i = 0; i < 4; i++) Dispatcher.UIThread.RunJobs();
+            for (var i = 0; i < 4; i++) RenderProof.Pump();
         }
 
         private static void Save(Window w, string path)

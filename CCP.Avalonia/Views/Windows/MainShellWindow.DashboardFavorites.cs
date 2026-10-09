@@ -10,8 +10,8 @@
 // picture resolves. Locked destinations keep their chip and wear the padlock and the gold rim.
 //
 // Not on this head yet (seam requests in the lane hand-back): ShowTab does not call
-// NoteDestinationOpened (RECENT fills only from chips and the board), the palette rows and rail
-// doors carry no pin menu (pin from a chip's own menu is unpin only), mod art overrides
+// NoteDestinationOpened (RECENT fills only from chips and the board), the palette rows carry no pin menu (rail rows,
+// strip pills and Play cards do: MainShellWindow.FavoritePins.cs), mod art overrides
 // (ModResourceResolver) are not consulted: the shipped art and its themed forks are.
 
 using System;
@@ -43,6 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void InitFavoritesRail()
         {
             HomeFavorites?.ApplySetting();
+            WireFavoritePinMenus();
             RefreshFavoritesRail();
         }
 

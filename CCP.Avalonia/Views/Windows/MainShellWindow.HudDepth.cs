@@ -110,7 +110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 ApplyXpMeniscusPulse();
                 // Tier has no change event in Core; coming back to the window (after a sign-in
                 // dialog, a browser Patreon round trip) is when it can have moved. Idempotent.
-                if (IsActive) RefreshPremiumSpark();
+                if (IsActive) RefreshAccountIdentity();
                 if (!IsActive) Named<global::ConditioningControlPanel.Avalonia.Controls.SparkleWallet>("HeaderSparkleWallet")?.ClosePopup();
             }
             catch (Exception ex) { Log.Debug("OnHudActivationChanged: {E}", ex.Message); }

@@ -82,6 +82,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     cols[0].Width = new GridLength(pct, GridUnitType.Star);
                     cols[1].Width = new GridLength(1.0 - pct, GridUnitType.Star);
                 }
+                // WPF UpdateXPBarLoginState: the account chip and the bubble ride the same repaint (shell#17/#18).
+                RefreshAccountIdentity();
             }
             catch (Exception ex) { Log.Debug("UpdateLevelDisplay: {E}", ex.Message); }
         }
