@@ -143,11 +143,7 @@
                     <Grid x:Name="ProfileCardWrapper" IsVisible="False" Margin="0,0,0,14">
 
                         <!-- OG animated border (behind the card).
-                             ponytail: the 3s Storyboard that spun the gradient's RelativeTransform
-                             is dropped - Avalonia has no RelativeTransform on a GradientBrush and
-                             the WPF clock is owned by MainWindow.ProfileFx, which is not on this
-                             head. The static frame is drawn; restore the spin with a
-                             DispatcherTimer once ProfileFx moves to Core. -->
+                             MainShellWindow.ProfileFx.cs spins this brush (Transform, 3 s) while it shows. -->
                         <Border x:Name="OgBorderContainer" IsVisible="False" Padding="0" CornerRadius="18">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">

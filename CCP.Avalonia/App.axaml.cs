@@ -50,6 +50,11 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The Core quest board (WPF App.Quests), built by StartQuests before the shell.</summary>
         internal static QuestService? Quests { get; set; }
 
+        /// <summary>WPF App.Programs (App.xaml.cs:2704), LOAD-ONLY on this head until the run panel and
+        /// the session runner land (docs/avalonia-decisions.md 2026-10-09): no rollover, no timers, never
+        /// writes programs.json. CoreQuests.TrackProgramVerifierProvider stays unseeded (it mutates).</summary>
+        internal static Services.Program.ProgramService? Programs { get; set; }
+
         /// <summary>The typed mantra game (WPF App.Mantra, built unconditionally at App.xaml.cs:3260).</summary>
         internal static MantraService Mantra { get; } = new();
         /// <summary>WPF App.MantraVoice: the active mod's Spoken Mantras (mantras.json).</summary>
@@ -685,6 +690,7 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                Programs = Services.Program.ProgramService.CreateReadOnly();
 
                 // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no
                 // ContentPackService or RoadmapService, so it answers "no pack videos, no roadmap".
@@ -753,6 +759,7 @@ namespace ConditioningControlPanel.Avalonia
                     shell.RefreshEntitlementVeils(persist: true);
                     shell.RefreshExclusivesTab();
                     shell.RefreshNavPremiumTags();
+                    shell.RefreshProfileBubble();   // WPF OnPatreonTierChanged
                 });
                 dailyFree.TodayChanged += RepaintVeils;
                 // WPF NavPremiumTags.cs:118 / Lab.cs:435: a spent or refunded pass moves the star and the vault.
@@ -1054,6 +1061,7 @@ namespace ConditioningControlPanel.Avalonia
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
+            try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; read-only here, so it never writes */ }
             try { MediaHistory?.Dispose(); } catch { /* WPF App.OnExit:6231; flushes the final entries */ }
             try { (Platform.FriendsHead.Service as IDisposable)?.Dispose(); } catch { /* WPF App.OnExit: the friends poll stops */ }
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }

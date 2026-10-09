@@ -95,6 +95,46 @@ public sealed class SessionIoTests
         return Task.CompletedTask;
     });
 
+    /// <summary>WPF PulseSessionLockRibbon (SessionFeatureLock.cs:503): a refused dose change
+    /// strobes the visible ribbon 1 - 0.25 - 1 - 0.25 - 1 over 560 ms with no fill, and a hidden
+    /// ribbon is not pulsed. Asserts the animation started, not its frames: Avalonia 12's
+    /// animation clock types are internal, so a test cannot step them.</summary>
+    [Fact]
+    public Task RefusedChangePulsesTheLockRibbon() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+        LocalizationManager.Instance.SetLanguage("en");
+        var shell = new ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+        shell.Show();
+        try
+        {
+            ConditioningControlPanel.CoreSession.IsSessionRunningProvider = () => false;
+            shell.RefreshSessionFeatureLock();
+            Assert.False(shell.RefuseIfSessionFeatureLocked("test"));
+            Assert.Null(shell.LastRibbonPulse);
+
+            ConditioningControlPanel.CoreSession.IsSessionRunningProvider = () => true;
+            shell.RefreshSessionFeatureLock();
+            Assert.True(shell.SettingsPage!.ProgramFeatureLockRibbon.IsVisible);
+            Assert.True(shell.RefuseIfSessionFeatureLocked("test"));
+
+            var pulse = Assert.IsType<global::Avalonia.Animation.Animation>(shell.LastRibbonPulse);
+            Assert.Equal(TimeSpan.FromMilliseconds(560), pulse.Duration);
+            Assert.Equal(global::Avalonia.Animation.FillMode.None, pulse.FillMode);
+            var frames = pulse.Children.Select(k => (k.Cue.CueValue,
+                (double)((global::Avalonia.Styling.Setter)k.Setters.Single()).Value!)).ToArray();
+            Assert.Equal(new[] { (0d, 1d), (0.25, 0.25), (0.5, 1d), (0.75, 0.25), (1d, 1d) }, frames);
+        }
+        finally
+        {
+            ConditioningControlPanel.CoreSession.IsSessionRunningProvider = null;
+            shell.Close();
+        }
+        return Task.CompletedTask;
+    });
+
     [Fact]
     public Task DroppedSessionIsImportedAndItsRowDeleteButtonRemovesIt() => AvaloniaTestDispatcher.RunAsync(() =>
     {

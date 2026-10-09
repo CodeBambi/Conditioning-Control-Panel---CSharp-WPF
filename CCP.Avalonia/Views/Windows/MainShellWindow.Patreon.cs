@@ -8,7 +8,9 @@
 // The handlers named by MainShellWindow.axaml are real (empty) methods, because a
 // missing one is a XAML compile error, not a runtime gap.
 //
-// Members dropped (74; BtnGateUnlock_Click, RefreshPremiumGate, EnforceEntitlementLapse, RefreshEntitlementVeils restored below):
+// Members dropped (74; BtnGateUnlock_Click, RefreshPremiumGate, EnforceEntitlementLapse, RefreshEntitlementVeils,
+// MaybeShowPremiumCelebration and OnPatreonTierChanged's celebration half restored below; UpdatePatreonUI,
+// BtnPatreonLogin/Discord/Link*, UpdateAccountLinkingUI and BtnVisitPatreon live in AccountSettingsSection):
 //   private void UpdatePatreonUI(…)
 //   internal async void BtnPatreonLogin_Click(…)
 //   internal async void BtnDiscordLogin_Click(…)
@@ -261,6 +263,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 });
             }
             catch (System.Exception ex) { Serilog.Log.Warning(ex, "[VaultGate] invite-ending check failed"); }
+        }
+
+        /// <summary>WPF InitializePatreonTab/InitializeSubscribeStarTab (TierChanged -> OnPatreonTierChanged /
+        /// OnSubscribeStarTierChanged) and MainWindow_Loaded's launch re-check (MainWindow.xaml.cs:3559), for the
+        /// celebration half; the veils already repaint from App.axaml.cs. Unsubscribed when the shell closes (P41).</summary>
+        private void InitializePremiumCelebration()
+        {
+            Opened += (_, _) => MaybeShowPremiumCelebration();
+            System.EventHandler<Models.PatreonTier> tier = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(MaybeShowPremiumCelebration);
+            var patreon = Platform.AccountSeed.Patreon;
+            var substar = Platform.AccountSeed.SubscribeStar;
+            if (patreon != null) patreon.TierChanged += tier;
+            if (substar != null) substar.TierChanged += tier;
+            Closed += (_, _) =>
+            {
+                if (patreon != null) patreon.TierChanged -= tier;
+                if (substar != null) substar.TierChanged -= tier;
+            };
+        }
+
+        /// <summary>WPF MaybeShowPremiumCelebration (MainWindow.Patreon.cs:1118): the one-time card per tier, re-read from
+        /// the combined entitlement, never for an invite week, through the presenter (an Inbox row when quiet). The seen-flag
+        /// is spent at open time. ponytail: no live-rise path (EntitlementTierSync.TierRaised, the immediate card and the
+        /// profile-bubble fanfare) on this head yet, so every grant takes the presenter route.</summary>
+        internal void MaybeShowPremiumCelebration()
+        {
+            try
+            {
+                if (!CoreAccount.HasPremiumAccess) return;
+                var s = CoreSettings.Current;
+                if (ProviderSubscription.IsInviteWeekOnly(Platform.AccountSeed.Patreon, Platform.AccountSeed.SubscribeStar, s)) return;
+                var tier = CoreAccount.HasLabAccess ? 2 : 1;
+                if (!TierCelebration.IsOwed(s.SeenFeatureIntros, tier, onRise: false)) return;
+                var key = TierCelebration.KeyFor(tier)!;
+                Platform.StartupLadder.PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:" + key,
+                    Glyph = "💖",
+                    Title = Loc.Get(tier >= 2 ? "premium_celebration_inbox_t2" : "premium_celebration_inbox_t1"),
+                    Summary = Loc.Get("premium_celebration_inbox_summary"),
+                    Open = () => FeatureIntroPopup.ShowCelebrationIfFirstTime(this, key),
+                });
+            }
+            catch (System.Exception ex) { Serilog.Log.Warning(ex, "Premium celebration hook failed"); }
         }
 
         private static void MarkIntroSeen(string key)

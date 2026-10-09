@@ -1518,105 +1518,15 @@ namespace ConditioningControlPanel
             }
         }
 
-        private enum DropType { None, Session, Preset, Assets, Zip, Folder, Enhancement, Mod, Unrecognised }
-
-        private static readonly HashSet<string> AssetVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm", ".m4v", ".flv", ".mpeg", ".mpg", ".3gp"
-        };
-
-        private static readonly HashSet<string> AssetImageExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif"
-        };
-
-        // Deeper-playable subsets — narrower than AssetVideoExtensions because the
-        // player's WebView2 + NAudio backends only handle these. Used by the
-        // "Open with CCP" file association and the single-file drop prompt.
-        private static readonly HashSet<string> DeeperVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"
-        };
-
-        private static readonly HashSet<string> DeeperAudioExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"
-        };
+        // DropType, the extension sets, IsDeeperPlayableMedia and DetectDropType live in Core
+        // (CCP.Core/Services/Content/DropRules.cs) so the Avalonia head classifies a drop the same way.
+        private static IReadOnlySet<string> AssetVideoExtensions => DropRules.AssetVideoExtensions;
 
         private enum MediaDropChoice { Cancel, Play, Edit, Library }
 
-        private static bool IsDeeperPlayableMedia(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path)) return false;
-            var ext = Path.GetExtension(path);
-            return DeeperVideoExtensions.Contains(ext) || DeeperAudioExtensions.Contains(ext);
-        }
+        private static bool IsDeeperPlayableMedia(string path) => DropRules.IsDeeperPlayableMedia(path);
 
-        private static DropType DetectDropType(string[] files)
-        {
-            if (files.Length == 0) return DropType.None;
-
-            // Single session file
-            if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
-                return DropType.Session;
-
-            // Single preset file: the name is the fast path, any other .json is sniffed,
-            // so a browser rename ("x.preset (1).json") or a plain "x.json" still imports.
-            if (files.Length == 1 && File.Exists(files[0]) && PresetDropRules.FileIsPreset(files[0]))
-                return DropType.Preset;
-
-            // Single mod package. Must be detected before the generic zip/asset
-            // branches — a .ccpmod IS a zip, but it installs, not extracts.
-            if (files.Length == 1 && files[0].EndsWith(".ccpmod", StringComparison.OrdinalIgnoreCase))
-                return DropType.Mod;
-
-            // Deeper enhancement project file(s). Accept the canonical *.ccpenh.json
-            // double-suffix or a plain *.json (the serializer rejects non-enhancement
-            // JSON on import), but never a *.session.json / *.preset.json — those are
-            // handled above and would otherwise be swallowed by the plain-*.json rule.
-            if (files.All(IsImportableEnhancementPath)
-                && !files.Any(f => f.EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
-                && !files.Any(f => f.EndsWith(".preset.json", StringComparison.OrdinalIgnoreCase)))
-            {
-                // A lone plain .json that is neither a preset (checked above) nor an
-                // enhancement gets the generic "not recognised" toast, not the Deeper one.
-                if (files.Length == 1
-                    && !files[0].EndsWith(".ccpenh.json", StringComparison.OrdinalIgnoreCase)
-                    && !Services.Deeper.EnhancementImportRules.FileLooksLikeEnhancement(files[0]))
-                    return DropType.Unrecognised;
-                return DropType.Enhancement;
-            }
-
-            // Single folder
-            if (files.Length == 1 && Directory.Exists(files[0]))
-                return DropType.Folder;
-
-            // Check for ZIP files or asset files
-            var hasZip = false;
-            var hasAssets = false;
-
-            foreach (var file in files)
-            {
-                if (Directory.Exists(file))
-                {
-                    hasAssets = true;
-                    continue;
-                }
-
-                var ext = Path.GetExtension(file);
-                if (ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
-                    hasZip = true;
-                else if (AssetVideoExtensions.Contains(ext) || AssetImageExtensions.Contains(ext))
-                    hasAssets = true;
-            }
-
-            if (hasZip) return DropType.Zip;
-            if (hasAssets) return DropType.Assets;
-
-            // Files that none of the rules claim: accepted so the drop says so in a
-            // toast instead of doing nothing.
-            return DropType.Unrecognised;
-        }
+        private static DropType DetectDropType(string[] files) => DropRules.Detect(files);
 
         private void UpdateDropOverlay(DropType dropType, string[] files)
         {
