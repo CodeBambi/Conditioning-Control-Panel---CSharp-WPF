@@ -79,8 +79,15 @@ public class ProgramLapsedEventArgs : EventArgs
 public class ProgramService : IDisposable
 {
     private readonly string _statePath;
-    private readonly Timer _saveTimer;
-    private readonly Timer _clockTimer;
+    private readonly Timer? _saveTimer;
+    private readonly Timer? _clockTimer;
+
+    /// <summary>
+    /// Load-only: no startup repair or rollover, no timers, never writes programs.json or moves a
+    /// leftover temp. The Avalonia head's mode until it can run a program's days
+    /// (docs/avalonia-decisions.md, 2026-10-09 programs CHECKPOINT A).
+    /// </summary>
+    private readonly bool _readOnly;
 
     /// <summary>
     /// Bumped by every <see cref="MarkDirty"/>, and only ever caught up to by a write that actually
@@ -152,14 +159,28 @@ public class ProgramService : IDisposable
     public event EventHandler<ProgramDayEventArgs>? ProgramGraduated;
     public event EventHandler<ProgramLapsedEventArgs>? ProgramLapsed;
 
-    public ProgramService()
+    public ProgramService() : this(Path.Combine(CorePaths.UserData, "programs.json"), readOnly: false)
     {
-        _statePath = Path.Combine(
-            CorePaths.UserData,
-            "programs.json");
+    }
+
+    /// <summary>The Avalonia head's load-only instance; see <see cref="_readOnly"/>.</summary>
+    public static ProgramService CreateReadOnly() =>
+        new(Path.Combine(CorePaths.UserData, "programs.json"), readOnly: true);
+
+    internal ProgramService(string statePath, bool readOnly)
+    {
+        _statePath = statePath;
+        _readOnly = readOnly;
 
         State = LoadState();
         Library = BuiltInPrograms.All();
+
+        if (readOnly)
+        {
+            Log.Information("ProgramService initialized read-only. Active: {Program} day {Day}, library {Count}",
+                State.Active?.ProgramId ?? "none", State.Active?.CurrentDay ?? 0, Library.Count);
+            return;
+        }
 
         // #959: un-lapse runs the OLD day clock condemned. Must run BEFORE the rollover below,
         // which returns early on anything that is not Active and would otherwise leave the run
@@ -629,6 +650,7 @@ public class ProgramService : IDisposable
     /// </summary>
     public void EvaluateRollover()
     {
+        if (_readOnly) return;   // nothing may lapse on a head that cannot run the days
         var enrollment = State.Active;
         var program = ActiveProgram;
         if (enrollment == null || program == null) return;
@@ -1595,7 +1617,8 @@ public class ProgramService : IDisposable
                 if (recovered == null) continue;
 
                 Log.Warning("Recovered program state from {Temp}", candidate);
-                try { File.Move(candidate, _statePath, overwrite: true); } catch { }
+                if (!_readOnly)
+                    try { File.Move(candidate, _statePath, overwrite: true); } catch { }
                 return recovered;
             }
             catch (Exception ex)
@@ -1676,6 +1699,7 @@ public class ProgramService : IDisposable
     /// </summary>
     private void WriteState(string json, long generation)
     {
+        if (_readOnly) return;   // no temp, and the generation stays unsaved
         var tmpPath = _statePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
         try
@@ -1705,8 +1729,8 @@ public class ProgramService : IDisposable
     public void Dispose()
     {
         _disposed = true;
-        _saveTimer.Dispose();
-        _clockTimer.Dispose();
+        _saveTimer?.Dispose();
+        _clockTimer?.Dispose();
 
         // Dropped so nothing can reach back into the engine after shutdown has begun - shutdown is
         // not a moment to be calling StopSession. The head's event subscriptions outlive this

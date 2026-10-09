@@ -200,24 +200,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                             MaybeShowFeatureIntro("descent-spiral", "spiral");
                         break;
 
-                    // WPF gets here through DiscordTabView's IsVisibleChanged ->
-                    // MainWindow.ProfileFx.cs:OnProfileTabVisibilityChanged, which refreshes the
-                    // community rail's sharing footer on every show because a toggle can be
-                    // flipped from Settings or the Goon tab in between. That FX partial is a stub
-                    // on this head, so the one line of it that resolves lands here instead - this
-                    // is the head's home for per-tab entry side effects, and "the Profile tab
-                    // became visible" is exactly the event WPF is reacting to.
-                    // ponytail: the rest of OnProfileTabVisibilityChanged (the OG border loop, the
-                    // vat poll, RefreshProfileShareButton, StaggerProfileCards) needs
-                    // MainShellWindow.ProfileFx.cs / .ProfileVat.cs. EnsureProfileMeFirst is here.
-                    case "discord": UpdateProfileSharingSummary(); ProfilePage?.EnsureProfileMeFirst(); MaybeShowFeatureIntro("profile-hub", "discord"); break;
+                    // WPF DiscordTabView IsVisibleChanged -> MainWindow.ProfileFx.cs:OnProfileTabVisibilityChanged
+                    // (incoming tab): sharing footer, share-button gate, me-first, OG loop + card stagger.
+                    // ponytail: its vat poll half needs MainShellWindow.ProfileVat.cs (DescentService).
+                    case "discord": UpdateProfileSharingSummary(); RefreshProfileShareButton(); ProfilePage?.EnsureProfileMeFirst(); OnProfileTabShownFx(); MaybeShowFeatureIntro("profile-hub", "discord"); break;
 
                     // WPF MainWindow.TabNavigation.cs:292/367: throttled share-status polls on tab open.
                     case "presets":
                         _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindPresets);
                         _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindSessions);
                         break;
-                    case "deeper": _ = CheckDeeperSubmissionStatusesAsync(); break;
+                    // WPF TabNavigation.cs:358: every door into the tab rescans the library.
+                    case "deeper": InitializeDeeperHub(); _ = CheckDeeperSubmissionStatusesAsync(); break;
 
                     // WPF MainWindow.TabNavigation.cs:429: every show re-fetches the board (read-only).
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
@@ -264,6 +258,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// view's visibility instead. Called by SettingsTabView.</summary>
         internal void OnDashboardTabVisibilityChanged(bool visible)
         {
+            if (visible) ResettleBrowserFold();   // WPF :1135, the fold's backstop
             if (!visible || _dashboardIntroQueued) return;
             if (CoreSession.IsSessionRunning) return; // re-shown mid-session, not a launch
             _dashboardIntroQueued = true;

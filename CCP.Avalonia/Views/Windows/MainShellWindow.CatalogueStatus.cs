@@ -50,8 +50,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Helpers.NotificationType.Success, TimeSpan.FromSeconds(15)),
                 () => RefreshCatalogueShareBadges(kind));
 
-        /// <summary>WPF CheckDeeperSubmissionStatusesAsync: GET /api/enhancements/mine. The library list
-        /// that WPF re-sorts afterwards is not on this head, so nothing repaints.</summary>
+        /// <summary>WPF CheckDeeperSubmissionStatusesAsync: GET /api/enhancements/mine; a changed status
+        /// repaints the library rows' badges.</summary>
         internal Task CheckDeeperSubmissionStatusesAsync(bool force = false) =>
             PollAsync(CatalogueKindDeeper, CoreSettings.Current.DeeperSubmissions, force,
                 () => App.Catalogue.FetchMySubmissionsAsync(default),
@@ -59,7 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Loc.GetF("deeper_submission_accepted_toast_fmt", Path.GetFileNameWithoutExtension(key)),
                     Helpers.NotificationType.Success, TimeSpan.FromSeconds(15),
                     Loc.Get("deeper_submission_accepted_action_view"), () => ShowTab("deeper")),
-                () => { });
+                RefreshDeeperLibraryRows);
 
         // The two WPF polls are the same loop over a different dictionary and endpoint.
         private async Task PollAsync(string kind, Dictionary<string, DeeperSubmissionRecord>? dict, bool force,

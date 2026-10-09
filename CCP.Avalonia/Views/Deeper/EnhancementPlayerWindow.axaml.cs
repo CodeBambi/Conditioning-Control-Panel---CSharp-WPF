@@ -203,6 +203,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             UiTimer_Tick(null, EventArgs.Empty);
         }
 
+        /// <summary>WPF EnhancementHostService.LoadedFilePath: the .ccpenh.json this player last
+        /// loaded from disk, so the hub's ▶ on the same row only brings it forward.</summary>
+        public string? LoadedFilePath { get; private set; }
+
         /// <summary>
         /// The WPF window took (EnhancementAudioPlayer, EnhancementHostService) and a second ctor
         /// added (Enhancement, sourceTag) for the editor's Preview button. Both services live in the
@@ -347,10 +351,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         public void LoadEnhancementFile(string ccpenhJsonPath)
         {
             if (string.IsNullOrWhiteSpace(ccpenhJsonPath)) return;
+            LoadedFilePath = null;
             if (!File.Exists(ccpenhJsonPath)) { ReportLoadFailure($"File not found: {ccpenhJsonPath}"); return; }
             try
             {
-                LoadEnhancementInMemory(EnhancementSerializer.LoadFromFile(ccpenhJsonPath), ccpenhJsonPath);
+                if (LoadEnhancementInMemory(EnhancementSerializer.LoadFromFile(ccpenhJsonPath), ccpenhJsonPath))
+                    LoadedFilePath = ccpenhJsonPath;
             }
             catch (Exception ex)
             {
@@ -368,6 +374,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private bool LoadEnhancementInMemory(Enhancement? enh, string? sourceTag)
         {
             if (enh == null) return false;
+            LoadedFilePath = null;   // LoadEnhancementFile sets it again after a successful load
             try
             {
                 var firstError = EnhancementValidator.Validate(enh)
@@ -398,10 +405,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             IngestErrorLine(reason);
         }
 
+        /// <summary>WPF LoadEnhancementFromMemory: catalogue downloads into the shared player.</summary>
+        public void LoadEnhancementFromMemory(Enhancement enhancement, string sourceTag)
+            => LoadEnhancementInMemory(enhancement, sourceTag);
+
         /// <summary>External launcher entry (file association, drag-drop dispatch).</summary>
         public void OpenLocalMediaFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
+            LoadedFilePath = null;
             if (DeeperPreview.IsLocalVideoFile(path)) LoadLocalVideo(path);
             else LoadAudio(path);
             TryAutoLoadEnhancement(path);

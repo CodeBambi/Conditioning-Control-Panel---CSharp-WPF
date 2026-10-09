@@ -78,6 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnSL_TestMantra.Click += (_, _) => Main?.TestSpokenMantra();
             BtnSL_RevokeConsent.Click += (_, _) => Main?.SL_RevokeMicConsent_Click();
             BtnSL_GateUnlock.Click += (s, e) => Main?.BtnGateUnlock_Click(s, e);
+            BtnSL_OpenModels.Click += (_, _) => Main?.OpenSpeechModelFolder();   // WPF SheListeningTabView.xaml.cs:127
             ChkSL_Mantras.IsCheckedChanged += (_, _) => Main?.SL_Mantras_Changed();
 
             // MainWindow.SheListening.cs:419, both halves. The readout uses Math.Round, not a

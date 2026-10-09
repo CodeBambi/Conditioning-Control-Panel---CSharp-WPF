@@ -15,8 +15,8 @@ using ConditioningControlPanel.Services.Program;
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// Read-only Programs catalogue. It reads the Core catalogue directly and deliberately does not
-    /// construct ProgramService: this slice has no enrollment, timers, ledger or session execution.
+    /// Programs tab: the Core catalogue (browse) or, when App.Programs holds an enrollment, the
+    /// read-only run view (ProgramsTabView.Run.cs). No enrollment, timers, writes or sessions here.
     /// </summary>
     public partial class ProgramsTabView : UserControl
     {
@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             InitializeComponent();
             Find<ListBox>("ProgramLibraryList").SelectionChanged += ProgramLibraryList_SelectionChanged;
-            RefreshBrowse();
+            RefreshPrograms();
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -35,13 +35,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             CoreMods.ModChanged += OnModChanged;   // the active mod's programs lead (WPF #966)
-            RefreshBrowse();
+            RefreshPrograms();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             CoreMods.ModChanged -= OnModChanged;
+            UnsubscribePrograms();
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -50,7 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnLanguageChanged(object? sender, EventArgs e) =>
             Dispatcher.UIThread.Post(() =>
             {
-                if (VisualRoot is not null) RefreshBrowse();
+                if (VisualRoot is not null) RefreshPrograms();
             });
 
         /// <summary>Uses a supplied read-only catalogue without creating a runtime service.</summary>
@@ -125,9 +126,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- HANDLERS -------------------------------------------------------------
 
-        // Execution belongs to the later enrollment/session layer. These handlers intentionally do
-        // nothing while their buttons are disabled by the browse-only carrier; no progress state is
-        // implied by opening or rendering this view.
+        // Execution belongs to programs slice 3 (CHECKPOINT B). These handlers intentionally do
+        // nothing: their buttons are disabled (browse) or hidden (read-only run view), and no
+        // progress state is implied by opening or rendering this view.
         private void BtnProgramEnroll_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e) { }

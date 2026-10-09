@@ -85,6 +85,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CoreSettings.Current.PerformanceMode = ChkPerformanceMode.IsChecked ?? false;
             Log.Information("Performance mode set to {Enabled}", CoreSettings.Current.PerformanceMode);
             CoreSettings.Save();
+            // The tier feeds Env.AllowAmbientLoops/AllowGlow, so running loops re-read it now
+            // (improvement: WPF re-evaluated only on the next activation).
+            global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.RaiseMotionGateChanged();
         }
 
         private void ChkAutoPerformance_Changed(object? sender, RoutedEventArgs e)

@@ -12,6 +12,7 @@ using Avalonia.Styling;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Services;
+using Env = ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
 {
@@ -260,19 +261,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ApplyActiveBreath(showActive);
         }
 
-        /// <summary>The glow and the ring share one 3.5s clock so the tile pulses as one object.</summary>
+        /// <summary>WPF FeatureCard.RefreshFx (:613): re-reads the motion/tier/focus gates. Called by
+        /// the shell's ApplyDashboardFxLoops on a motion/performance change and window activation.</summary>
+        internal void RefreshFx() => ApplyActiveState();
+
+        /// <summary>True while the breath clock runs (test seam).</summary>
+        internal bool IsBreathing => _breath != null;
+
+        /// <summary>WPF AmbientAllowed (:622): visibility + window focus + motion + tier.</summary>
+        private bool AmbientAllowed =>
+            IsEffectivelyVisible
+            && (TopLevel.GetTopLevel(this) is not Window w || (w.IsActive && w.WindowState != WindowState.Minimized))
+            && Env.AllowAmbientLoops;
+
+        /// <summary>The glow and the ring share one 3.5s clock so the tile pulses as one object.
+        /// WPF ApplyActiveBreath (:643): when ambient motion is not allowed both park at PEAK.</summary>
         private void ApplyActiveBreath(bool active)
         {
             _breath?.Cancel();
             _breath = null;
-            if (!active || !IsEffectivelyVisible)
+            if (!active)
             {
                 _activeGlow.Opacity = 0;
                 _activeBorder.Opacity = 1;
                 return;
             }
+            var tier = Env.CurrentTier;
+            bool glow = Env.AllowGlow(tier) && Env.Level != Models.MotionLevel.Off;
+            if (glow) _activeGlow.BlurRadius = Math.Min(18, Env.MaxGlowBlurRadius(tier));
+            if (!AmbientAllowed)
+            {
+                _activeGlow.Opacity = glow ? ActiveGlowMaxOpacity : 0;
+                _activeBorder.Opacity = ActiveRingMaxOpacity;
+                return;
+            }
             _breath = new CancellationTokenSource();
-            _ = Breathe(_activeGlow, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
+            if (glow) _ = Breathe(_activeGlow, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
+            else _activeGlow.Opacity = 0;
             _ = Breathe(_activeBorder, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeBorder, _breath.Token);
         }
 
