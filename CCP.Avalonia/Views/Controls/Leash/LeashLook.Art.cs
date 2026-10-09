@@ -14,6 +14,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Leash;
 
 internal static partial class LeashLook
 {
+    /// <summary>WPF LeashLook.CutPanelBrush: the deep mint panel behind the cut lines.</summary>
+    internal static readonly IBrush CutPanelBrush = new LinearGradientBrush
+    {
+        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+        GradientStops = { new GradientStop(Color.FromRgb(0x1F, 0x3A, 0x33), 0), new GradientStop(Color.FromRgb(0x17, 0x2A, 0x26), 1) },
+    };
+
     /// <summary>The round "?" every leash surface carries; opens the explainer for <paramref name="role"/>.</summary>
     internal static Button Help(LeashExplainRole role)
     {

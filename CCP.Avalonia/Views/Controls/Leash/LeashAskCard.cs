@@ -3,8 +3,8 @@
 // strict (only this side picks), which punishments that level allows, Not now / Put it on, and the
 // reason when an answer did not go through. Shown in a borderless overlay window over the owner;
 // Escape is "later". No free text (Leash CONTRACT).
-// ponytail: the animated explainer (LeashExplainer / LeashAskIntro "read first" gate), LeashFx.Ask
-// and the snap card played after Put it on (LeashSnapCard).
+// Juice as WPF: LeashFx.Ask when it lands, a pop on newly allowed chips, Denied on a refused answer,
+// and the snap (LeashSnapCard) after Put it on, through the shared LeashOverlay.
 using System;
 using System.Threading.Tasks;
 using Avalonia;
@@ -91,6 +91,9 @@ public sealed class LeashAskCard : Border
     }
 
     internal LeashIntensity Level => _level;
+
+    /// <summary>The last answer's result (the snap plays only on a real Done).</summary>
+    internal LeashAnswerResult? LastResult { get; private set; }
     internal string? ErrorShown => _error.IsVisible ? _error.Text : null;
 
     /// <summary>What the card says when an answer did not go through. Null = it went through.</summary>
@@ -137,7 +140,15 @@ public sealed class LeashAskCard : Border
         }
     }
 
-    internal void SetLevel(LeashIntensity level) { _level = level; PaintLevel(); }
+    internal void SetLevel(LeashIntensity level)
+    {
+        bool up = (int)level > (int)_level;
+        _level = level;
+        PaintLevel();
+        if (up)
+            foreach (var c in _allowed.Children)
+                if (c is Border b && b.Tag is string s && s.EndsWith(":on")) LeashFx.Pop(b);
+    }
 
     internal void Dismiss() => Dismissed?.Invoke();
 
@@ -148,11 +159,13 @@ public sealed class LeashAskCard : Border
         var result = LeashAnswerResult.Failed;
         try { if (_svc() is { } s) result = await s.AnswerAsync(_offer.From.Id, accept, _level); }
         catch (Exception ex) { Serilog.Log.Debug("[Leash] answer failed: {E}", ex.Message); }
+        LastResult = result;
         _yes.IsEnabled = wasEnabled && result != LeashAnswerResult.Gone;
         if (ErrorKey(result) is { } key)
         {
             _error.Text = Loc.GetF(key, _offer.From.Name);
             _error.IsVisible = true;
+            LeashFx.Denied();
             if (result != LeashAnswerResult.Gone) return;
         }
         Answered?.Invoke(_offer, accept, _level);
@@ -160,51 +173,23 @@ public sealed class LeashAskCard : Border
 
     // ---- the overlay -----------------------------------------------------------------
 
-    private static Window? _overlay;
-
     /// <summary>Test seam: receives the card instead of a window being shown.</summary>
     internal static Action<LeashAskCard>? ShowOverride { get; set; }
 
-    /// <summary>WPF LeashSurfaces.ShowAsk: the ask card in a borderless overlay over the owner.</summary>
+    /// <summary>WPF LeashSurfaces.ShowAsk: the ask card in the leash overlay over the owner, the ask
+    /// chime, and on Put it on the snap (LeashSnapCard) for this side.</summary>
     internal static void Show(LeashOffer offer, Func<ILeashService?> service, Window? owner)
     {
         var card = new LeashAskCard(offer, service);
         try { service()?.NoteShown(offer.Id); } catch { }
         if (ShowOverride is { } o) { o(card); return; }
-        Close();
-        var w = new Window
+        card.Answered += (off, accepted, _) =>
         {
-            WindowDecorations = WindowDecorations.None,
-            TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent },
-            Background = Brushes.Transparent,
-            CanResize = false,
-            ShowInTaskbar = false,
-            SizeToContent = SizeToContent.WidthAndHeight,
-            WindowStartupLocation = owner != null ? WindowStartupLocation.CenterOwner : WindowStartupLocation.CenterScreen,
-            Title = Loc.Get("leash_title"),
-            Content = new Grid { Margin = new Thickness(40), Children = { card } },
+            LeashOverlay.Close();
+            if (accepted && card.LastResult == LeashAnswerResult.Done) LeashSnapCard.Show(off.From, LeashOverlay.Me(), owner);
         };
-        w.KeyDown += (_, e) =>
-        {
-            if (e.Key != Key.Escape) return;
-            e.Handled = true;
-            card.Dismiss();
-        };
-        card.Answered += (_, _, _) => Close();
-        card.Dismissed += Close;
-        _overlay = w;
-        try
-        {
-            if (owner is { IsVisible: true }) w.Show(owner); else w.Show();
-            w.Activate();
-        }
-        catch (Exception ex) { Serilog.Log.Debug("[Leash] overlay failed: {E}", ex.Message); _overlay = null; }
-    }
-
-    private static void Close()
-    {
-        var o = _overlay;
-        _overlay = null;
-        try { o?.Close(); } catch { }
+        card.Dismissed += LeashOverlay.Close;
+        LeashOverlay.Open(card, card.Dismiss, owner);
+        LeashFx.Ask();
     }
 }
