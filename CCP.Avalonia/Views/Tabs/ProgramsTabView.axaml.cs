@@ -35,6 +35,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             CoreMods.ModChanged += OnModChanged;   // the active mod's programs lead (WPF #966)
+            HookPrograms();   // progression#1
             RefreshBrowse();
         }
 
@@ -42,6 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             CoreMods.ModChanged -= OnModChanged;
+            UnhookPrograms();
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -64,11 +66,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void RefreshBrowse()
         {
+            // progression#1: with a live service the tab follows the enrollment (WPF RebuildProgramsTab).
+            if (RefreshRunState()) return;
             var list = Find<ListBox>("ProgramLibraryList");
             // Snapshot first: replacing ItemsSource raises SelectionChanged with an empty
             // selection, which would null out _selectedProgramId before we can restore it.
             var wantedId = _selectedProgramId;
-            var items = MainShellWindow.BuildProgramBrowseItems(_library);
+            var items = MainShellWindow.BuildProgramBrowseItems(App.Programs?.Library ?? _library, App.Programs);
             list.ItemsSource = items;
 
             Find<StackPanel>("ProgramsBrowsePanel").IsVisible = true;
@@ -128,11 +132,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // Execution belongs to the later enrollment/session layer. These handlers intentionally do
         // nothing while their buttons are disabled by the browse-only carrier; no progress state is
         // implied by opening or rendering this view.
-        private void BtnProgramEnroll_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnStartTodaySession_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramSubmitRitual_Click(object? sender, RoutedEventArgs e) { }
 
         /// <summary>WPF MainWindow.ProgramsTab.cs:2174 BtnProgramOpenMantras_Click.</summary>
         internal void BtnProgramOpenMantras_Click(object? sender, RoutedEventArgs e)
@@ -144,8 +143,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Program mantra launch failed"); }
         }
-        private void BtnProgramRestart_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramDismissGraduated_Click(object? sender, RoutedEventArgs e) { }
 
         /// <summary>
         /// Keeps the session bar's clip a rounded rect at its live size. A Border's ClipToBounds

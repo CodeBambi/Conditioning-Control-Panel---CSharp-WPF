@@ -81,9 +81,10 @@ public sealed class ProgramsBrowseTests
                 Assert.Equal(definitions.Select(program => program.Id), rows.Select(row => row.ProgramId));
                 Assert.Equal(definitions.Select(program => program.Title), rows.Select(row => row.Title));
                 Assert.All(rows, row => Assert.False(row.IsActionEnabled));
-                // Nothing can be started here, so no card may blame a missing pledge.
+                // No ProgramService (App.Programs null in tests): a free card says it cannot start;
+                // a locked premium card carries WPF's pledge hint (BuildProgramBrowseList, progression#1).
                 var unavailable = Loc.Get("programs_unavailable");
-                Assert.All(rows, row => Assert.Equal(unavailable, row.ReasonText));
+                Assert.All(rows, row => Assert.Equal(row.IsLocked ? Loc.Get("programs_locked_hint") : unavailable, row.ReasonText));
                 Assert.All(rows, row => Assert.True(row.ReasonVisible));
                 Assert.Contains(rows, row => row.IsLocked);
                 Assert.Contains(rows, row => row.TierLabel == Loc.Get("programs_tier_premium"));
@@ -182,8 +183,8 @@ public sealed class ProgramsBrowseTests
                     view.FindControl<TextBlock>("TxtProgramDetailsTitle")!.Text);
                 Assert.Equal(selected.Chapters.Count,
                     view.FindControl<ItemsControl>("ProgramDetailsChapterList")!.ItemCount);
-                Assert.Equal(Loc.Get("programs_unavailable"),
-                    ((ProgramBrowseItem)list.SelectedItem!).ReasonText);
+                var picked = (ProgramBrowseItem)list.SelectedItem!;
+                Assert.Equal(Loc.Get(picked.IsLocked ? "programs_locked_hint" : "programs_unavailable"), picked.ReasonText);
             }
             finally
             {

@@ -650,6 +650,7 @@ namespace ConditioningControlPanel.Avalonia
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
                 Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
                 WireAchievementUnlocks(Achievements);
+                Platform.LoginStreak.Start(Achievements);   // progression#42: WPF AchievementService ctor + App.xaml.cs:2732 + CheckDayRollover
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
                 // WPF App.xaml.cs: the invite ladder's badges and the invites wire (friends' proxy and
@@ -684,6 +685,7 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                StartPrograms();   // progression#1: WPF App.xaml.cs:2165, after Quests (verifier seam)
                 Platform.CompanionHead.Start();   // ai#5 + progression#47: companion switch, XP, drain, level-up
                 Platform.BarkHead.Start();        // ai#1: the bark engine, its seams and sources
 
@@ -785,6 +787,7 @@ namespace ConditioningControlPanel.Avalonia
                     StopDesktopOverlays();
                     Views.Overlays.CornerGifOverlay.StopAll();   // WPF CornerGifService.OnMainWindowClosing / OnExit
                     Views.Windows.LockCardWindow.ForceCloseAll();
+                    StopPrograms();   // WPF App.OnExit Programs?.Dispose()
                 };
                 // WPF App.xaml.cs:2602: restore at ApplicationIdle, once startup has settled (#709).
                 Dispatcher.UIThread.Post(() =>
