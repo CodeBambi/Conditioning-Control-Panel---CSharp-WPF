@@ -148,8 +148,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// so suppressing it (unspent) is always safe and delaying it never is. It belongs to no
         /// door, so it neither claims nor is blocked by the per-door budget.
         /// </summary>
-        internal static void ShowCelebrationIfFirstTime(Window? owner) =>
-            ShowCore(CelebrationKey, owner, paced: false, doorKey: null);
+        internal static void ShowCelebrationIfFirstTime(Window? owner, string key = CelebrationKey) =>
+            ShowCore(key, owner, paced: false, doorKey: null);
 
         /// <summary>
         /// For the ONE card whose surface the app lands on by itself: the Dashboard is visible
@@ -746,12 +746,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
             },
 
-            [FeatureIntroPopup.CelebrationKey] = new FeatureIntroContent
+            [FeatureIntroPopup.CelebrationKey] = Celebration(FeatureIntroPopup.CelebrationKey, "Premium"),
+            // WPF FeatureIntroPopup.xaml.cs:734: one card per tier (TierCelebration), so a Basic -> Prime upgrade celebrates again.
+            [global::ConditioningControlPanel.Services.TierCelebration.KeyT1] = Celebration(global::ConditioningControlPanel.Services.TierCelebration.KeyT1, "Premium"),
+            [global::ConditioningControlPanel.Services.TierCelebration.KeyT2] = Celebration(global::ConditioningControlPanel.Services.TierCelebration.KeyT2, "Prime"),
+        };
+
+        private static FeatureIntroContent Celebration(string key, string tierName) => new()
             {
-                Key = FeatureIntroPopup.CelebrationKey,
+                Key = key,
                 Glyph = "💖",
                 RailTitle = "Thank You",
-                Title = "💖  Premium Unlocked",
+                Title = "💖  " + tierName + " Unlocked",
                 Tagline = "Your support keeps the Lab running - and it just opened every door.",
                 Accent = "#FF69B4",
                 Bullets = new[]
@@ -763,7 +769,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 },
                 Footer = "Everything lives under the Exclusives menu. Enjoy - you earned it.",
                 DismissLabel = "Let's go 💖"
-            }
-        };
+            };
     }
 }
