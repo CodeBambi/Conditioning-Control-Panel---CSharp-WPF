@@ -38,6 +38,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public BouncingTextFeatureControl()
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
+            // WPF ApplyFeatureArt: hero + side plates from features/bouncing_text.png, mod override first, repainted on a mod switch.
+            Helpers.ModArt.BindFeaturePlates(this, "features/bouncing_text.png", HeroArt, SideArt);
 
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
             SliderSpeed.ValueChanged += SliderSpeed_Changed;

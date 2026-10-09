@@ -4,8 +4,7 @@
 // BtnStart_Click (stop-session dialog) is ConfirmStopSession (MainShellWindow.SessionRun.cs).
 // ponytail: still missing, each with no service on this head: the remote-control gate,
 // Relapse/TotalSessions achievements, the bubble/brain-drain/pop-quiz/autonomy/
-// ramp starts, the scheduler, the Presets "running" label, the hero FX and Jump right in
-// (RandomizeAndStart).
+// ramp starts, the scheduler, the Presets "running" label and the hero FX.
 
 using Avalonia.Controls;
 using Avalonia.Data;
@@ -41,8 +40,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             else StartEngine();
         }
 
-        // ponytail: needs RandomizeAndStart's mix + the session lock refusal; wired with Jump right in.
-        private void MenuJumpRightIn_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        private void MenuJumpRightIn_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => RandomizeAndStart();
+
+        /// <summary>WPF MainWindow.StartStop.cs:142 RandomizeAndStart, "Jump right in": a fun,
+        /// non-overwhelming mix with random pacing, then start. Refused whole mid-session (it used
+        /// to re-roll the prescribed mix and start nothing). Setters clamp, so the ranges are safe.</summary>
+        internal void RandomizeAndStart()
+        {
+            if (RefuseActionIfSessionLocked("jump-right-in")) return;
+            var s = CoreSettings.Current;
+            if (s != null)
+            {
+                var rng = new System.Random();
+                s.FlashEnabled = true;
+                s.FlashFrequency = rng.Next(20, 81);
+                s.SimultaneousImages = rng.Next(2, 9);
+                s.SubliminalEnabled = true;
+                s.SubliminalFrequency = rng.Next(3, 13);
+                s.SpiralEnabled = rng.Next(2) == 0;
+                s.PinkFilterEnabled = rng.Next(2) == 0;
+                CoreSettings.Save();
+            }
+            if (!CoreEngine.IsRunning) StartEngine();
+        }
 
         private void MenuStartNormal_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
