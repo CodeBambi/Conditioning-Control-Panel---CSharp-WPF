@@ -1600,3 +1600,35 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/panic-order-test: +60
 - PanicSurfacesTests checks WPF-cited ordering pairs, unique ids and a safety-critical set instead of one exact list, so branches that add a surface stop conflicting on it (P53).
+
+## avalonia-port/rows-exclusives: +400
+- Vault: tier plates read the access gates, 3px/4px tier livery, two coming-soon teasers, and one visibility-gated 24fps clock for padlock breath, FREE TODAY pulse, Ken Burns and sheens.
+- Duplicate shell-exclusives ledger rows merged; both rows stay stub (re-tint, hover lift, launches and hero art still missing).
+
+## avalonia-port/rows-profile-cards: +663
+- Profile bubble paints identity, tier and account doors and reacts to XP/level/achievements; the public-profile door is live (row stays stub).
+- Profile FX wired: card stagger, search glow, OG border loop gated per P01; spiral/vat/faucet blocked on DescentService, privacy panel on a sync payload change (P44).
+
+## avalonia-port/rows-play-tab: +487
+- Play wall matches WPF's 2026-09-18 layout: GAMES zone with Breakout covers, Graded Intake states and FREE TODAY stamps; Devices and Loom buttons open the right section. Game buttons stay disabled because this head has no host for them.
+- Start caret "Jump right in" (RandomizeAndStart) ported, refused while a session holds the lock; tests fail-proven and checked live.
+
+## avalonia-port/rows-session-io: +629
+- Window-wide file drop (session/preset/mod/assets/zip/folder/unrecognised + overlay) over a new Core `DropRules` that WPF also calls; a single media file offers Add to Library only (decision logged).
+- Session-lock ribbon pulses on a refused change; `WindowDropTests` (8, incl. session/preset/mod) + `SessionIoTests.RefusedChangePulsesTheLockRibbon`, all fail-proven.
+
+## avalonia-port/rows-programs-tab: +362
+- Programs browse cards + intro popup show WPF's banner/sigil/plate art via new Core ProgramArtPaths (shared with WPF ProgramArt).
+- Enroll/run panel still unwired (decision A); slice plan in briefs/programs-run-plan.md.
+
+## avalonia-port/rows-she-listening: +132
+- She's Listening: title-bar mic privacy pill (click/Enter = disarm), armed-disc pulse, open-models button; 5 fail-proven assertions in SheListeningTests.
+- Rows shell-she-listening / views-tab-she-listening stay stub (sherpa KWS, bark lines, grammar gaps).
+
+## avalonia-port/rows-keyword-triggers: +606
+- Awareness custom trigger list (add/import/9 row editors), OCR combos persisted, OCR access gate + panel resync; 9-language strings; 3 fail-proven tests.
+- Rows stay stub: KeywordTriggerService/ScreenOcr/KeywordHighlight runtime (no Linux keystroke source) not ported.
+
+## avalonia-port/rows-patreon-subscribestar: +234
+- Premium celebration is back: a Patreon or SubscribeStar tier change, or the launch re-check, shows one card per tier (none for an invite week), via the presenter or Inbox. 2 fail-proven tests; live sandbox run showed the card.
+- shell-patreon and shell-subscribestar stay stub, with an exact missing list (live tier rise, unlockables/programs/profile-bubble repaint).

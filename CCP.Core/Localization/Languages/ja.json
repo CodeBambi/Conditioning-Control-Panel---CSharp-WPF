@@ -7292,6 +7292,9 @@
   "vaultgate_ending_keep": "Basicを続ける",
   "vaultgate_ending_let_close": "閉じさせる",
   "vaultgate_ending_inbox": "招待ウィークがもうすぐ終わります",
+  "premium_celebration_inbox_t1": "プレミアムはあなたのもの",
+  "premium_celebration_inbox_t2": "プライムはあなたのもの",
+  "premium_celebration_inbox_summary": "ロックされていたものがすべて開きました。",
   "vaultgate_price_year": "/ 年 · 月あたり{0}",
   "vaultgate_yearly_hint": "またはPatreonで年{0}：2か月分無料。",
   "vaultgate_billing_monthly": "月額",
@@ -7299,5 +7302,16 @@
   "vaultgate_yearly_note": "年額払いは今のところPatreonのみです。他の支払い方法は月額です。",
   "vaultgate_sale_first": "/ 初月",
   "vaultgate_sale_line": "初月{0}%オフ、その後は月{1}。",
-  "vaultgate_sale_ends": "セールは{0}まで。"
+  "vaultgate_sale_ends": "セールは{0}まで。",
+  "kwt_no_audio": "音声なし",
+  "kwt_cd": "CD:",
+  "kwt_vol": "音量:",
+  "kwt_effect_none": "なし",
+  "kwt_effect_highlight_only": "ハイライトのみ",
+  "kwt_effect_subliminal": "サブリミナル",
+  "kwt_effect_exact_subliminal": "正確なサブリミナル",
+  "kwt_effect_image_flash": "画像フラッシュ",
+  "kwt_effect_overlay_pulse": "オーバーレイパルス",
+  "kwt_effect_mind_wipe": "マインドワイプ",
+  "kwt_effect_bubbles": "バブル"
 }
