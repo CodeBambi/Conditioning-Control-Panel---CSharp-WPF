@@ -3,7 +3,6 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using ConditioningControlPanel.Services.BackRoom;
 using ConditioningControlPanel.Services.Friends;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -30,6 +29,10 @@ public sealed class LeashApi : ILeashApi
 
     private static readonly HttpClient SharedHttp = new() { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
 
+    /// <summary>The head's account door and proxy (WPF BackRoomApi.AppIdentity / BaseUrl). Unseeded: no call.</summary>
+    public static Func<(string UnifiedId, string Token)?>? DefaultIdentity { get; set; }
+    public static string? DefaultBaseUrl { get; set; }
+
     private readonly HttpClient _http;
     private readonly Func<(string UnifiedId, string Token)?> _identity;
     private readonly string _baseUrl;
@@ -37,14 +40,14 @@ public sealed class LeashApi : ILeashApi
     public LeashApi(HttpClient? http = null, Func<(string UnifiedId, string Token)?>? identity = null, string? baseUrl = null)
     {
         _http = http ?? SharedHttp;
-        _identity = identity ?? BackRoomApi.AppIdentity;
-        _baseUrl = baseUrl ?? BackRoomApi.BaseUrl;
+        _identity = identity ?? DefaultIdentity ?? (() => null);
+        _baseUrl = baseUrl ?? DefaultBaseUrl ?? "";
     }
 
     public async Task<JObject?> CallAsync(string op, JObject body, CancellationToken ct = default)
     {
         var id = _identity();
-        if (id == null) return null;
+        if (id == null || string.IsNullOrEmpty(_baseUrl)) return null;
         var o = (JObject)body.DeepClone();
         o["unified_id"] = id.Value.UnifiedId;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -63,7 +66,7 @@ public sealed class LeashApi : ILeashApi
         catch (OperationCanceledException) { return null; }
         catch (Exception ex)
         {
-            App.Logger?.Debug("Leash {Op} failed: {E}", op, ex.Message);
+            Serilog.Log.Debug("Leash {Op} failed: {E}", op, ex.Message);
             return null;
         }
     }

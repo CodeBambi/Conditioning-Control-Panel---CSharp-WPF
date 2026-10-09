@@ -30,7 +30,14 @@ public static class LeashCutSafety
     public const string StepSettings = "settings";
     public const string StepTab = "tab";
 
-    /// <summary>What the cut touches. <see cref="AppTargets"/> is the real app; tests pass a fake.</summary>
+    /// <summary>The live app's targets, seeded by each head at startup (WPF LeashCutSafetyApp.AppTargets,
+    /// Avalonia LeashHead.Targets). Null = nothing seeded: <see cref="Apply()"/> runs no step.</summary>
+    public static ITargets? LiveTargets { get; set; }
+
+    /// <summary>Runs an action synchronously on the head's UI thread (WPF DispatcherHelper.RunOnUISync).</summary>
+    public static Action<Action>? RunOnUi { get; set; }
+
+    /// <summary>What the cut touches. Each head's live targets implement it; tests pass a fake.</summary>
     public interface ITargets
     {
         bool LockdownActive { get; }
@@ -53,11 +60,13 @@ public static class LeashCutSafety
         IReadOnlyList<string> done = Array.Empty<string>();
         try
         {
-            Helpers.DispatcherHelper.RunOnUISync(() => done = Apply(AppTargets.Instance));
+            var live = LiveTargets;
+            if (live == null) { Serilog.Log.Warning("[Leash] Cut safety has no live targets on this head"); return done; }
+            (RunOnUi ?? (a => a()))(() => done = Apply(live));
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "[Leash] Cut safety could not reach the UI thread");
+            Serilog.Log.Error(ex, "[Leash] Cut safety could not reach the UI thread");
         }
         return done;
     }
@@ -90,7 +99,7 @@ public static class LeashCutSafety
         Step(done, StepSettings, () => { t.ReleaseSafetySettings(); return true; });
         Step(done, StepTab, t.DropUnpushedLeashBookings);
 
-        App.Logger?.Information("[Leash] Cut safety applied: {Steps}", string.Join(", ", done));
+        Serilog.Log.Information("[Leash] Cut safety applied: {Steps}", string.Join(", ", done));
         return done;
     }
 
@@ -99,45 +108,8 @@ public static class LeashCutSafety
         try { if (run()) done.Add(name); }
         catch (Exception ex)
         {
-            App.Logger?.Warning("[Leash] Cut safety step {Step} failed: {Error}", name, ex.Message);
+            Serilog.Log.Warning("[Leash] Cut safety step {Step} failed: {Error}", name, ex.Message);
         }
     }
 
-    /// <summary>The live app. Every member tolerates a service that is not built yet.</summary>
-    public sealed class AppTargets : ITargets
-    {
-        public static readonly AppTargets Instance = new();
-
-        public bool LockdownActive => App.Lockdown?.IsActive == true;
-        public void EndLockdown() => App.Lockdown?.Deactivate();
-        public void DiscardLockdownRecovery() => LockdownService.DiscardRecovery();
-
-        public bool RemoteActive => App.RemoteControl?.IsActive == true;
-        public void EndRemote() => App.RemoteControl?.EndSessionNow();
-
-        public bool StrictVideoRunning => App.Video?.IsStrictActive == true;
-        public void StopVideo() => App.Video?.ForceCleanup();
-
-        public void ReleaseSafetySettings()
-        {
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.StrictLockEnabled = false;
-            s.PanicKeyEnabled = true;
-            App.Settings!.SaveImmediate();
-            // Same resync RemoteControlService's enable_panic does: the global hook and the
-            // Settings checkbox move with the flag, or the stale checkbox writes false back.
-            try { App.MainWindowRef?.SyncNoPanicState(); }
-            catch (Exception ex) { App.Logger?.Warning("[Leash] Panic-key UI sync failed: {Error}", ex.Message); }
-        }
-
-        /// <summary>
-        /// OWED. Circe's Tab keeps one pooled balance (<c>TabState.BalanceSeconds</c>), not
-        /// per-booking rows it can take back: the entry log records what was booked, but nothing
-        /// marks which of the balance's seconds were already pushed, so "the unpushed leash part"
-        /// cannot be carved out cleanly. The live push also lands within about 30 s of a booking.
-        /// Needs a small tab API (leash seconds tracked apart until pushed) from the Chaster side.
-        /// </summary>
-        public bool DropUnpushedLeashBookings() => false;
-    }
 }

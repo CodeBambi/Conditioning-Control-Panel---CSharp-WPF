@@ -61,7 +61,7 @@ public sealed class LeashService : ILeashService
     private readonly Queue<string> _shownOrder = new();
 
     /// <summary>Where a <c>seen</c> goes: the friends poll's shared receipt channel (the app wires
-    /// it in <see cref="CreateForApp"/>). Null = nowhere yet; the ids are still remembered, so an
+    /// it in the head's CreateForApp). Null = nowhere yet; the ids are still remembered, so an
     /// item is never reported twice.</summary>
     internal Action<string>? ReportSeen { get; set; }
 
@@ -163,7 +163,7 @@ public sealed class LeashService : ILeashService
         _shownOrder.Enqueue(id!);
         while (_shownOrder.Count > SeenCap) _shown.Remove(_shownOrder.Dequeue());
         try { ReportSeen?.Invoke(id!); }
-        catch (Exception ex) { App.Logger?.Debug("Leash seen report failed: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Debug("Leash seen report failed: {E}", ex.Message); }
     }
 
     /// <summary>Holder side: the sender receipts of a friends poll reply, leash kinds only
@@ -184,7 +184,7 @@ public sealed class LeashService : ILeashService
     private void RaiseReceipts()
     {
         try { ReceiptsChanged?.Invoke(); }
-        catch (Exception ex) { App.Logger?.Debug("Leash receipts handler failed: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Debug("Leash receipts handler failed: {E}", ex.Message); }
     }
 
     private void NoteSent(LeashItemKind kind, string to, LeashSendResult r,
@@ -203,7 +203,7 @@ public sealed class LeashService : ILeashService
         if (me == null) { LastReport = null; return null; }
         LeashDayInputs? inputs;
         try { inputs = _dayInputs(); }
-        catch (Exception ex) { App.Logger?.Debug("Leash report inputs failed: {E}", ex.Message); inputs = null; }
+        catch (Exception ex) { Serilog.Log.Debug("Leash report inputs failed: {E}", ex.Message); inputs = null; }
         if (inputs is not { } w) return null;
         var watched = me.Assignment is { } a && _watchedAids.Contains(a.Aid);
         var r = LeashReportBuilder.Build(w, me.Assignment, watched, _now());
@@ -249,7 +249,7 @@ public sealed class LeashService : ILeashService
             Handle(e);
             receipts |= _sent.ApplyEvent(e);
             try { EventArrived?.Invoke(e); }
-            catch (Exception ex) { App.Logger?.Debug("Leash event handler failed: {E}", ex.Message); }
+            catch (Exception ex) { Serilog.Log.Debug("Leash event handler failed: {E}", ex.Message); }
         }
         if (receipts) RaiseReceipts();
 
@@ -370,11 +370,11 @@ public sealed class LeashService : ILeashService
             _completedLocal.Add(pid);
             Publish();
             _kick();
-            App.Logger?.Information("[Leash] punishment {Pid} will not play: skipped on the server", pid);
+            Serilog.Log.Information("[Leash] punishment {Pid} will not play: skipped on the server", pid);
             return LeashSkipResult.Skipped;
         }
         _unplayableUntil[pid] = _now() + UnplayableHold;
-        App.Logger?.Information("[Leash] punishment {Pid} will not play: kept pending, off the gate for {H} h ({Reason})",
+        Serilog.Log.Information("[Leash] punishment {Pid} will not play: kept pending, off the gate for {H} h ({Reason})",
             pid, UnplayableHold.TotalHours, o == null ? "no reply" : skipStatus ?? LeashParse.Str(o["reason"]) ?? "?");
         return LeashSkipResult.Marked;
     }
@@ -383,7 +383,7 @@ public sealed class LeashService : ILeashService
     {
         // The local safety steps run first and whatever the network does. Never gated.
         try { _cutSafety(); }
-        catch (Exception ex) { App.Logger?.Warning("Leash cut safety failed: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Warning("Leash cut safety failed: {E}", ex.Message); }
 
         // Signed out (or the token dropped), the leash on screen still belongs to the last account:
         // cut it for that one. The leash goes here at once, and the stored mark sends the cut the
@@ -392,7 +392,7 @@ public sealed class LeashService : ILeashService
         var account = _account() ?? _lastAccount;
         if (account == null) return;
         _cutPending = true;
-        try { _cutStore.Write(account); } catch (Exception ex) { App.Logger?.Debug("Leash cut store failed: {E}", ex.Message); }
+        try { _cutStore.Write(account); } catch (Exception ex) { Serilog.Log.Debug("Leash cut store failed: {E}", ex.Message); }
         _watchedAids.Clear();
         _unplayableUntil.Clear();
         // The cut leash is gone here for good; a later block must not read as a second ending.
@@ -442,13 +442,13 @@ public sealed class LeashService : ILeashService
 
     private void LoseLeash()
     {
-        App.Logger?.Information("[Leash] the leash ended from the other side; running the cut safety");
+        Serilog.Log.Information("[Leash] the leash ended from the other side; running the cut safety");
         _watchedAids.Clear();
         _unplayableUntil.Clear();
         try { _cutSafety(); }
-        catch (Exception ex) { App.Logger?.Warning("Leash cut safety failed: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Warning("Leash cut safety failed: {E}", ex.Message); }
         try { LeashLost?.Invoke(); }
-        catch (Exception ex) { App.Logger?.Debug("Leash lost handler failed: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Debug("Leash lost handler failed: {E}", ex.Message); }
     }
 
     /// <summary>A mark lives only while its punishment is still pending.</summary>
@@ -490,7 +490,7 @@ public sealed class LeashService : ILeashService
         if (seconds > 0)
         {
             var applied = _tab.BookPunish(seconds);
-            App.Logger?.Information("[Leash] chaster punishment {Pid}: asked {S}s, booked {A}s", p.Pid, seconds, applied);
+            Serilog.Log.Information("[Leash] chaster punishment {Pid}: asked {S}s, booked {A}s", p.Pid, seconds, applied);
         }
         // It completes itself whether or not the player's own limits let any of it book.
         _completedLocal.Add(p.Pid);
@@ -552,7 +552,7 @@ public sealed class LeashService : ILeashService
     {
         if (!_cutPending) return;
         _cutPending = false;
-        try { _cutStore.Write(null); } catch (Exception ex) { App.Logger?.Debug("Leash cut store failed: {E}", ex.Message); }
+        try { _cutStore.Write(null); } catch (Exception ex) { Serilog.Log.Debug("Leash cut store failed: {E}", ex.Message); }
     }
 
     private async Task<LeashSendResult> SendAsync(string op, JObject body)
@@ -573,7 +573,7 @@ public sealed class LeashService : ILeashService
         var sentFor = _lastAccount;
         JObject? o;
         try { o = await _api.CallAsync(op, body); }
-        catch (Exception ex) { App.Logger?.Debug("Leash {Op} threw: {E}", op, ex.Message); return null; }
+        catch (Exception ex) { Serilog.Log.Debug("Leash {Op} threw: {E}", op, ex.Message); return null; }
         if (_account() != sentFor) return null;
         if (o != null && o.Value<bool?>("ok") == false && LeashParse.Str(o["reason"]) == "off") _off = true;
         else if (o != null && o.Value<bool?>("ok") == true) _off = false;
@@ -600,7 +600,7 @@ public sealed class LeashService : ILeashService
         _shownOrder.Clear();
         LastReport = null;
         string? stored = null;
-        try { stored = _cutStore.Read(); } catch (Exception ex) { App.Logger?.Debug("Leash cut store failed: {E}", ex.Message); }
+        try { stored = _cutStore.Read(); } catch (Exception ex) { Serilog.Log.Debug("Leash cut store failed: {E}", ex.Message); }
         _cutPending = now != null && string.Equals(stored, now, StringComparison.Ordinal);
         Publish();
         return now != null;
@@ -618,35 +618,18 @@ public sealed class LeashService : ILeashService
         _signature = sig;
         Snapshot = next;
         try { SnapshotChanged?.Invoke(next); }
-        catch (Exception ex) { App.Logger?.Debug("Leash snapshot handler failed: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Debug("Leash snapshot handler failed: {E}", ex.Message); }
         var leashed = next.Me != null;
         if (leashed == _wasLeashed) return;
         _wasLeashed = leashed;
         try { LeashedChanged?.Invoke(leashed); }
-        catch (Exception ex) { App.Logger?.Debug("Leash leashed handler failed: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Debug("Leash leashed handler failed: {E}", ex.Message); }
     }
 
     // ---- app wiring ----
 
-    /// <summary>The app's own wiring: the real wire, the account off AppSettings, the real tab,
-    /// the day numbers off the services that already count them, and the friends poll's shared
-    /// receipt channel both ways (a <c>seen</c> rides the next poll out; the holder's sender
-    /// receipts come back on it).</summary>
-    public static LeashService CreateForApp(Action kick)
-    {
-        var svc = new LeashService(
-            new LeashApi(),
-            () => BackRoom.BackRoomApi.AppIdentity()?.UnifiedId,
-            dayInputs: AppDayInputs,
-            tab: new ChasterLeashTab(),
-            kick: kick,
-            cutStore: new FileCutStore(Path.Combine(App.UserDataPath, "leash_cut_pending.txt")));
-        if (App.Friends is { } friends) svc.Attach(friends);
-        return svc;
-    }
-
     /// <summary>Hooks this service to the friends poll's receipt channel.</summary>
-    internal void Attach(Friends.IFriendsService friends) =>
+    public void Attach(Friends.IFriendsService friends) =>
         Attach(friends.ReportReceipt, h => friends.ReceiptsArrived += h);
 
     /// <summary>The same, by its two halves: <paramref name="report"/> queues a report for the
@@ -672,59 +655,6 @@ public sealed class LeashService : ILeashService
             mine.Add(new LeashReceipt(r.Id!, kind.Value, r.To, r.ToName, state.Value, at, r.Ref));
         }
         return mine;
-    }
-
-    /// <summary>R's numbers, read fresh. Null when the services are not up yet.</summary>
-    internal static LeashDayInputs? AppDayInputs()
-    {
-        var local = DateTime.Now;
-        var minutes = 0;
-        try
-        {
-            var key = local.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-            var day = App.FeatureDayLog?.Log?.Days?.FirstOrDefault(d => d.D == key);
-            minutes = day?.Cm ?? 0;
-        }
-        catch (Exception ex) { App.Logger?.Debug("Leash minutes read failed: {E}", ex.Message); }
-
-        int done = 0, total = 0;
-        try
-        {
-            var slots = App.Quests?.GetDailySlots();
-            if (slots != null)
-                foreach (var (q, _) in slots)
-                {
-                    if (q == null) continue;
-                    total++;
-                    if (q.IsCompleted) done++;
-                }
-        }
-        catch (Exception ex) { App.Logger?.Debug("Leash quests read failed: {E}", ex.Message); }
-
-        var streak = 0;
-        try { streak = App.Achievements?.Progress?.ConsecutiveDays ?? 0; } catch { }
-
-        bool linked = false;
-        DateTime? ends = null;
-        bool hidden = false;
-        int? tab = null;
-        try
-        {
-            var c = App.Chaster;
-            // chaster_linked is what offers the holder "Chaster time": only while it can book
-            // (linked, tab on, the player's "leash" row on). Rows are never switched on here.
-            if (c != null && c.TakesLeashTime)
-            {
-                linked = true;
-                var l = c.Lock;
-                ends = l?.EndsAtUtc;
-                hidden = l?.TimerHidden == true;
-                tab = c.BalanceSeconds;
-            }
-        }
-        catch (Exception ex) { App.Logger?.Debug("Leash chaster read failed: {E}", ex.Message); }
-
-        return new LeashDayInputs(local, minutes, done, total, streak, linked, ends, hidden, tab);
     }
 
     private sealed class NoTab : ILeashTab
@@ -759,7 +689,7 @@ public sealed class LeashService : ILeashService
                 if (accountId == null) { if (File.Exists(_path)) File.Delete(_path); }
                 else File.WriteAllText(_path, accountId);
             }
-            catch (Exception ex) { App.Logger?.Debug("Leash cut file failed: {E}", ex.Message); }
+            catch (Exception ex) { Serilog.Log.Debug("Leash cut file failed: {E}", ex.Message); }
         }
     }
 }
