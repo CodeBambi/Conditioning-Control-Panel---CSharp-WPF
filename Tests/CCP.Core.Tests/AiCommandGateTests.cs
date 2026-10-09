@@ -245,11 +245,16 @@ public sealed class AiCommandGateTests : IDisposable
     public async Task PanicDuringTheFollowUpRoundTripDropsTheReplysOwnCommands()
     {
         var acting = SeedActingAi();
+        var reported = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        AiCommandService.LiveActionSink = l => { _feed.Add(l); if (l.Contains("getbacktome didn't fire")) reported.TrySetResult(); };
         Run(FollowUp());
         await acting.Asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
         AiCommandService.CancelAll();             // panic while the AI is answering
         acting.Release.SetResult();               // the late reply executes its commands inline
         Assert.DoesNotContain(_flashes, f => f.Amount == 5);
+        // The cancelled follow-up finishes on the posted continuation and reports "didn't fire" through the
+        // static LiveActionSink; wait for it here, or it lands in the next test's feed.
+        await reported.Task.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     [Fact]
