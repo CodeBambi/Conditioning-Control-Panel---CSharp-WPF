@@ -3,8 +3,8 @@
 // offline, blocked), a friend's card with the menu (squelch, remove and block after a confirm,
 // report), request answers, add by code and your own code. Driven only by IFriendsService.
 // The send pickers (poke / invite / watch) are in FriendsDrawer.Pickers.cs.
-// The feed is FriendsDrawer.Feed.cs; the leash section mounts through MountLeash (FriendsDrawer.Leash.cs).
-// ponytail: no trails, open tables, lock-day chip, tier plates or juice (.Juice.cs); no per-PC block
+// The feed is FriendsDrawer.Feed.cs, the sent trail and lock chip FriendsDrawer.Trail.cs; the leash section mounts through MountLeash (FriendsDrawer.Leash.cs).
+// ponytail: no open tables, tier plates or juice (.Juice.cs); no per-PC block
 // list (the server's list only). A word WPF throws outside the drawer
 // (FriendsLanding.Tell) is a FloatingWord over the rail chip's window (OwnerWindow).
 using System;
@@ -161,11 +161,12 @@ public sealed partial class FriendsDrawer : Border
         if (!ReferenceEquals(next, _svc)) { Unsubscribe(); _svc = next; }
         if (_subscribed || _svc == null) return;
         _svc.SnapshotChanged += OnSnapshot;
+        _svc.SentTrailsChanged += OnTrailsChanged;
         _subscribed = true;
     }
     public void Unsubscribe()
     {
-        if (_subscribed && _svc != null) _svc.SnapshotChanged -= OnSnapshot;
+        if (_subscribed && _svc != null) { _svc.SnapshotChanged -= OnSnapshot; _svc.SentTrailsChanged -= OnTrailsChanged; }
         _subscribed = false;
     }
     private void OnSnapshot(FriendsSnapshot _) => Render();
@@ -322,7 +323,7 @@ public sealed partial class FriendsDrawer : Border
     private Control FriendRow(Friend f)
     {
         bool open = _openId == f.Id;
-        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*") };
+        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("38,*,Auto") };
         var avatar = Avatar(f.Name, 38, f.Online, f.AvatarUrl);
         if (!f.Online) avatar.Opacity = 0.55;
         var mid = new StackPanel { Margin = new Thickness(10, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -336,9 +337,12 @@ public sealed partial class FriendsDrawer : Border
         }
         mid.Children.Add(nameLine);
         mid.Children.Add(ActivityLine(f));
+        // What you last sent them and how far it got (sent, arrived, seen, answered).
+        if (TrailLine(f) is { } trail) mid.Children.Add(trail);
         Grid.SetColumn(mid, 1);
         top.Children.Add(avatar);
         top.Children.Add(mid);
+        if (LockChip(f) is { } lockChip) { Grid.SetColumn(lockChip, 2); top.Children.Add(lockChip); }
         var outer = new StackPanel { Children = { top } };
         if (open) outer.Children.Add(Card(f));
         if (_results.TryGetValue(f.Id, out var res))

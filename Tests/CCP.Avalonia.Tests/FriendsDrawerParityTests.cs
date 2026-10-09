@@ -23,7 +23,7 @@ public sealed class FriendsDrawerParityTests
 {
     private const string State = """
         {"ok":true,"code":"CCP-ABCDE","me":{"activity":"panel","lock_day":null,"shared":false},
-         "friends":[{"id":"u_on","name":"Mia","tier":0,"online":true,"activity":"session","lock_day":null,"last_seen":null,"squelched":false}],
+         "friends":[{"id":"u_on","name":"Mia","tier":0,"online":true,"activity":"session","lock_day":3,"last_seen":null,"squelched":false}],
          "incoming":[],"outgoing":[],"blocked":[]}
         """;
 
@@ -79,6 +79,8 @@ public sealed class FriendsDrawerParityTests
         Assert.Equal(ReportReason.All.Count, report.ItemsSource!.Cast<object>().Count());
         Assert.NotNull(menu.Background);
         Assert.Equal(PlacementMode.Pointer, menu.Placement);
+        // WPF BuildFriendRow: a friend in a lock wears the day chip.
+        Assert.NotNull(Tagged<Border>(d, "friends-lock"));
     });
 
     /// <summary>WPF FriendsDrawer.Feed: lines newest first under the leash, read once shown in an open drawer.</summary>
