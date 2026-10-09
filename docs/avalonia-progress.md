@@ -1526,3 +1526,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-program-enroll: +135
 - ProgramEnrollDialog headless test (contract gate, Strict unavailable, clock results, Escape, Cancel), each fail-proven; row stays stub (caller, run panel, session runner missing).
 - Decision logged: Enroll caller lands only together with the run panel (no lapsing enrollments).
+
+## avalonia-port/rows-asset-submit: +289
+- dialogs-asset-submit wired: preset Share + session rack ☁ open AssetSubmitDialog -> Core CatalogueClient submit/record/badge/toast; auth + affirmation gates as WPF (AssetSubmitWireTests, 4 fail-proofs).
+- Live (sandbox) limited to listing/disabled state; mod (MEGA) branch still waits on shell-mod-catalogue.
