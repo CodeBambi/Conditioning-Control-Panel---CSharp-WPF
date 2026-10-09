@@ -64,7 +64,8 @@ public sealed partial class AccountSeedTests
         wire ??= new SyncWire();
         wire.Profile = profile;
         var local = new List<string>();
-        var sync = new SyncPush(() => local, () => true, wire);
+        var sync = new SyncPush(() => local, () => true, wire,
+            global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.SanitizeOwnWardrobe);   // as App seeds it
         var now = T0;
         sync.UtcNow = () => now;
         AccountSeed.Sync = sync;
