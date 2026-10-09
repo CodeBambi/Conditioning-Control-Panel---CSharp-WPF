@@ -111,7 +111,10 @@ public sealed partial class FriendsDrawer
             if (friends.Any(f => f.Id == l.Event.FriendId)) MakeOpener(row, l.Event.FriendId);
             _feedBox.Children.Add(row);
             if (!l.Read) shownUnread.Add(l.Key);
+            // WPF: a different newest line on top slides in.
+            if (i == 0 && _isOpen && _feedTop != null && _feedTop != l.Key) LandLine(row);
         }
+        if (show > 0) _feedTop = lines[0].Key;
         var hidden = lines.Count - show;
         if (hidden > 0 || _feedExtra > 0)
         {
@@ -120,7 +123,7 @@ public sealed partial class FriendsDrawer
             {
                 var hiddenNew = lines.Skip(show).Count(IsNew);
                 var more = FeedLink(hiddenNew > 0 ? Loc.GetF("friends_feed_more_new", hidden, hiddenNew) : Loc.GetF("friends_feed_more", hidden), "friends-feed-more");
-                more.Click += (_, _) => ShowMoreFeed();
+                more.Click += (_, _) => { Friends.FriendsSfx.Click(); ShowMoreFeed(); };
                 foot.Children.Add(more);
             }
             if (_feedExtra > 0)
@@ -154,6 +157,8 @@ public sealed partial class FriendsDrawer
         return g;
     }
 
+    /// <summary>The newest line last drawn: a different one on top slides in.</summary>
+    private string? _feedTop;
     private static Border FeedRow(FriendEvent e, bool isNew, IReadOnlyList<Friend> friends, DateTime nowUtc)
     {
         var g = new Grid { MinHeight = 22, ColumnDefinitions = new ColumnDefinitions("10,*,Auto") };

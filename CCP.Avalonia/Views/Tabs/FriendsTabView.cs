@@ -2,10 +2,8 @@
 // (nav rework 2026-10-06). The page hosts the SAME FriendsDrawer the rail chip pops up. Code only:
 // the WPF XAML is one Grid (DrawerHost, margin 32,20) and nothing else.
 //
-// Deviation: WPF builds the drawer in PAGE MODE (asPage: no shadow, fills the column, Escape never
-// claimed). This head's FriendsDrawer has no page mode yet (seam request in the lane hand-back), so
-// the page un-pins its fixed width / max height from outside and ignores CloseRequested. The drawer
-// still marks Escape handled while focused; the panic key is a global hook, so it is not starved.
+// Page mode (asPage: fills the column up to 620, leaves the leash to the Leash page, never claims
+// Escape) is the drawer's own, as in WPF.
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -34,13 +32,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary><paramref name="service"/> is for the suite; the app passes nothing.</summary>
         internal FriendsTabView(IFriendsService? service)
         {
-            Drawer = new FriendsDrawer(service)
+            Drawer = new FriendsDrawer(service, asPage: true)
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Stretch,
-                // Page mode by hand: the drawer pins 300 x 548 for the rail popup.
-                Width = double.NaN,
-                MaxHeight = double.PositiveInfinity,
             };
             Drawer.SettingsRequested += OpenSettings;
             Drawer.SignInRequested += () => _ = Shell?.OpenUnifiedLoginDialog();
