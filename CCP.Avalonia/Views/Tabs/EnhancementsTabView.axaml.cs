@@ -88,7 +88,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _visibilityWatch = EffectiveVisibility.Watch(this, OnVisibilityChanged);
             _window = TopLevel.GetTopLevel(this) as Window;
             if (_window != null) _window.PropertyChanged += OnWindowPropertyChanged;
-            Repaint();
+            // The ctor already painted; repaint only what changed while detached.
+            if (_dirty) Repaint(); else EvaluateFx();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -109,15 +110,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName is nameof(AppSettings.SkillPoints) or nameof(AppSettings.UnlockedSkills) or nameof(AppSettings.PinkRushActive))
-                Dispatcher.UIThread.Post(Repaint);
+                Dispatcher.UIThread.Post(RepaintIfShown);
         }
 
         private void OnModChanged(object? sender, ModPackage e) => Dispatcher.UIThread.Post(() => { _art.Clear(); RepaintIfShown(); });
 
         private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(RepaintIfShown);
 
-        /// <summary>A hidden tab repaints on its next show (WPF's sweep does the same).</summary>
-        private void RepaintIfShown() { if (IsEffectivelyVisible) Repaint(); }
+        /// <summary>A hidden or detached tab repaints on its next show/attach (P07; WPF's sweep
+        /// and SparkleWallet refresh only the visible tab).</summary>
+        private void RepaintIfShown()
+        {
+            if (IsEffectivelyVisible && VisualRoot != null) Repaint();
+            else _dirty = true;
+        }
+
+        private bool _dirty;
 
         private void OnVisibilityChanged()
         {
@@ -133,6 +141,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>RefreshEnhancementsUI: hidden named fields, tree, secret rail, active bonuses.</summary>
         private void Repaint()
         {
+            _dirty = false;
             var settings = CoreSettings.Current;
             var multiplier = SkillTreeRules.GetTotalXpMultiplier(settings, DateTime.Now.Hour, 0.0);
             TxtSkillPoints.Text = settings.SkillPoints.ToString("N0");

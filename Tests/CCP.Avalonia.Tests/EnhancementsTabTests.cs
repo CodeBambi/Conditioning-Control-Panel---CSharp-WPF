@@ -60,6 +60,7 @@ public sealed class EnhancementsTabTests
             s.EarlyMorningUsageCount = 0;                     // early_bird hidden
             s.CurrentStreak = 0;
             s.PinkRushActive = false;
+            s.PerformanceMode = false;
             s.UnlockedSkills = new List<string> { "pink_hours", "ditzy_data", "sparkle_boost_1" };
 
             var tab = new EnhancementsTabView();
@@ -129,6 +130,23 @@ public sealed class EnhancementsTabTests
             Assert.Equal(0.6, tab.OwnedGlows[0].Opacity, 3);
             s.MotionLevel = MotionLevel.Full;
             AmbientFxCanvas.Env.RaiseMotionGateChanged();
+            Assert.True(tab.FxRunning);
+            s.PerformanceMode = true;                          // Performance tier: also rests
+            AmbientFxCanvas.Env.RaiseMotionGateChanged();
+            Assert.False(tab.FxRunning);
+            Assert.Equal(0.6, tab.OwnedGlows[0].Opacity, 3);
+            s.PerformanceMode = false;
+            AmbientFxCanvas.Env.RaiseMotionGateChanged();
+
+            // A settings change while hidden does not rebuild (P07); the next show does.
+            var before = tab.FindControl<Canvas>("SkillTreeCanvas")!.Children[0];
+            tab.IsVisible = false;
+            s.SkillPoints = 999;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Same(before, tab.FindControl<Canvas>("SkillTreeCanvas")!.Children[0]);
+            tab.IsVisible = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotSame(before, tab.FindControl<Canvas>("SkillTreeCanvas")!.Children[0]);
 
             // Hover pop from a real pointer: z-lift and the 1.25 target; leaving drops it.
             nodes = tab.FindControl<Canvas>("SkillTreeCanvas")!.Children.OfType<Control>()
