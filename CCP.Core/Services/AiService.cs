@@ -131,8 +131,11 @@ namespace ConditioningControlPanel.Services
             LoopbackUrl.IsHonoured(overrideUrl, out var u) ? u.GetLeftPart(UriPartial.Path).TrimEnd('/')
             : sandboxed ? null : ProxyBaseUrl;
 
+        // CCP_SANDBOX_ONLINE=1 is the owner-approved desk-run exception (CorePaths): the companion
+        // answers from a sandbox profile. Tests never set it.
         public AiService() : this(ResolveBaseUrl(Environment.GetEnvironmentVariable("CCP_AI_BASE_URL"),
-            !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")))) { }
+            !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"))
+            && Environment.GetEnvironmentVariable("CCP_SANDBOX_ONLINE") != "1")) { }
 
         internal AiService(string? baseUrl)
         {

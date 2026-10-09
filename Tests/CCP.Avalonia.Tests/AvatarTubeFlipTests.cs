@@ -118,6 +118,36 @@ public sealed class AvatarTubeFlipTests
         Assert.True(PaintsNear(frame, r, fg), $"no text-coloured pixel in {r}");
     });
 
+    /// <summary>Owner, 2026-10-09: typed to her, got an empty bubble. The send path opens the chat box
+    /// and shows the thinking phrase while the reply is out.</summary>
+    [Fact]
+    public Task ThinkingBubble_WhileChatIsOpen_ShowsItsPhrase() => Run((main, tube) =>
+    {
+        tube.OpenChatInput();
+        Dispatcher.UIThread.RunJobs();
+        tube.StartThinkingAnimation();
+        Dispatcher.UIThread.RunJobs();
+        var bubble = tube.FindControl<Border>("SpeechBubble")!;
+        var text = tube.FindControl<TextBlock>("TxtSpeech")!;
+        try
+        {
+            Assert.True(bubble.IsEffectivelyVisible);
+            Assert.False(string.IsNullOrEmpty(text.Text));
+            Assert.True(text.IsEffectivelyVisible, "TxtSpeech hidden");
+            Assert.True(text.Bounds.Width > 20 && text.Bounds.Height > 10, $"text bounds {text.Bounds} bubble {bubble.Bounds}");
+            var frame = tube.CaptureRenderedFrame();
+            Assert.NotNull(frame);
+            if (Environment.GetEnvironmentVariable("CCP_TUBE_PNG") is { Length: > 0 } png) frame!.Save(png);
+            var fg = ((ISolidColorBrush)text.Foreground!).Color;
+            var origin = text.TranslatePoint(new Point(0, 0), tube)!.Value;
+            double k = frame!.PixelSize.Width / tube.Bounds.Width;
+            var r = new PixelRect((int)(origin.X * k), (int)(origin.Y * k),
+                Math.Max(1, (int)(text.Bounds.Width * k)), Math.Max(1, (int)(text.Bounds.Height * k)));
+            Assert.True(PaintsNear(frame, r, fg), $"no text-coloured pixel in {r}");
+        }
+        finally { tube.StopThinkingAnimation(); }
+    });
+
     private static bool PaintsNear(global::Avalonia.Media.Imaging.WriteableBitmap bmp, PixelRect r, Color want)
     {
         using var fb = bmp.Lock();

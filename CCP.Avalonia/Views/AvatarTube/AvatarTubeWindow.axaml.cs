@@ -1591,6 +1591,14 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                     PlayDoubleBounce();
                     if (result.Refusal != null) { ShowModerationRefusalBubble(result.Refusal.Source); return; }
                     AddToChatHistory(input, isUser: true);
+                    if (string.IsNullOrWhiteSpace(result.Text))
+                    {
+                        // Companion v2 fails with empty text and a kind (owner, 2026-10-09: an empty
+                        // bubble). Say why, as the Companion page does, and log it.
+                        Log.Warning("AvatarTube chat: no reply ({Failure}, retryable={Retry})", result.Failure, result.Retryable);
+                        GigglePriority(Loc.Get(Controls.Companion.V2.ConversationPageVm.FailureNoticeKey(result.Failure)), aiGenerated: false);
+                        return;
+                    }
                     GigglePriority(result.Text, aiGenerated: result.IsAiGenerated);
                     if (routesThroughBrain) ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.OfferForRequest(input);
                 }
