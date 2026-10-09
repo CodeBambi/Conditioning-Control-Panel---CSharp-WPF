@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// renderer under XWayland that stalled the UI dispatcher ~1.7 s per burst (staggers and
     /// timers late). With the property the app renders each flash exactly once.</para>
     /// </summary>
-    internal sealed class FlashOverlayWindow : Window
+    internal sealed partial class FlashOverlayWindow : Window
     {
         private readonly Image _image;
 
@@ -91,7 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             _alpha = alpha;
             Fade(0, alpha, fade);
-            DispatcherTimer.RunOnce(() => { if (!_popped) Fade(alpha, 0, fade, Close); }, lifetime);
+            ScheduleExpiry(alpha, fade, lifetime);   // FlashOverlayWindow.Fx.cs: a deadline gaze-linger can push
         }
 
         private double _alpha;
@@ -99,7 +99,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private bool _popped;
 
         /// <summary>Raised once when a clickable flash is clicked (WPF FlashService.OnFlashClicked).</summary>
-        internal event Action? Popped;
+        internal event Action<bool>? Popped;
 
         /// <summary>WPF FlashClickable: the picture takes the click and pops; off = click-through.</summary>
         internal void MakeClickable()
@@ -107,16 +107,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             IsHitTestVisible = true;
             _image.IsHitTestVisible = true;
             Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));   // a hit surface over transparent letterbox
-            PointerPressed += (_, e) => { e.Handled = true; Pop(); };
+            PointerPressed += (_, e) => { e.Handled = true; OnFlashPressed(e); };
         }
 
         /// <summary>Cut this flash's own lifetime short: a quick fade, then close. Other flashes live on.</summary>
-        internal void Pop()
+        internal void Pop(bool fromGaze = false)
         {
             if (_popped) return;
             _popped = true;
-            Popped?.Invoke();
-            Fade(_alpha, 0, TimeSpan.FromMilliseconds(180), Close);
+            Popped?.Invoke(fromGaze);
+            PlayExit();   // FlashOverlayWindow.Fx.cs: exit style, or the 180 ms fade
         }
 
         /// <summary>WPF's heartbeat ramp - linear, alpha written in 1/32 steps (FADE_ALPHA_EPSILON) -
