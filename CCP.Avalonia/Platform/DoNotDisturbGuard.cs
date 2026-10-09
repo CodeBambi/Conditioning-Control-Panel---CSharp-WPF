@@ -1,9 +1,9 @@
 // PORTED from ConditioningControlPanel/Services/UI/DoNotDisturbGuard.cs (same numbers: 1 s foreground
 // cache, 60 s log throttle). The list rule lives in Core (Services/UI/DndProcessList).
-// ponytail: the guard is not consulted yet. The chaos lane gates its spawns with it, as WPF does:
-// FlashOverlay's spawn (WPF FlashService.cs:682 ShouldSuppressFlashes + LogSuppressionThrottled("flash"))
-// and the scheduled mandatory video (WPF VideoService.cs:3007 ShouldSuppressVideos, "scheduled video");
-// the settings lane wires BtnDndPickApp to RunningWindowedProcesses. Linux reads no foreground process
+// Consulted by the scheduled flash (App CoreFlash.ShowProvider -> HoldsScheduledFlash, WPF FlashService.cs:689)
+// and the scheduled mandatory video (MandatoryVideoScheduler.ShouldDefer -> HoldsScheduledVideo, WPF
+// VideoService.cs:3013); Settings > Performance BtnDndPickApp lists RunningWindowedProcesses.
+// ponytail: Linux reads no foreground process
 // yet (X11ActiveWindow reads the title only; needs _NET_WM_PID), so it never suppresses there.
 
 using System;
@@ -90,6 +90,22 @@ internal static class DoNotDisturbGuard
     {
         try { return CoreSettings.Current.DndSuppressFlashes && IsPrivilegedAppForeground(); }
         catch { return false; }
+    }
+
+    /// <summary>WPF FlashService.TriggerFlash :689: hold this scheduled flash (logged once a minute).</summary>
+    internal static bool HoldsScheduledFlash()
+    {
+        if (!ShouldSuppressFlashes()) return false;
+        LogSuppressionThrottled("flash");
+        return true;
+    }
+
+    /// <summary>WPF VideoService.cs:3013: defer this scheduled video tick (logged once a minute).</summary>
+    internal static bool HoldsScheduledVideo()
+    {
+        if (!ShouldSuppressVideos()) return false;
+        LogSuppressionThrottled("scheduled video");
+        return true;
     }
 
     internal static void LogSuppressionThrottled(string what)

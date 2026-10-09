@@ -74,7 +74,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private DispatcherTimer? _graceTimer, _guard;
         private readonly Stopwatch _sinceShow = new();
 
-        private MandatoryVideoOverlay() => Scheduler = new MandatoryVideoScheduler(this) { DurationOf = LengthOf };
+        private MandatoryVideoOverlay() => Scheduler = new MandatoryVideoScheduler(this) { DurationOf = LengthOf, ShouldDefer = DoNotDisturbGuard.HoldsScheduledVideo };
 
         /// <summary>WPF VideoService.MetadataCache: created on first use on the shared LibVLC; a miss starts
         /// a background parse and the clip is kept this refill.</summary>

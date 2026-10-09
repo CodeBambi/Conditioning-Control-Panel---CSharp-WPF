@@ -67,6 +67,26 @@ public sealed class MandatoryVideoSchedulerTests
         Assert.Equal(2, host.Shown.Count);
     });
 
+    [Fact]   // WPF VideoService.cs:3013: a DND app in front reschedules the tick 30 s on, never drops it
+    public void ShouldDefer_reschedules_a_scheduled_tick_and_never_blocks_a_hand_trigger() => With(60, false, () =>
+    {
+        var clock = new FakeClock(); var host = new Host(); var dnd = true; var asked = 0;
+        var v = new MandatoryVideoScheduler(host, clock, () => Clips) { ShouldDefer = () => { asked++; return dnd; } };
+        v.Start();
+        for (var i = 0; i < 4000 && asked == 0; i++) clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(1, asked);
+        Assert.False(v.IsPlaying);
+        clock.Advance(TimeSpan.FromSeconds(MandatoryVideoScheduler.SkipRetrySeconds));
+        Assert.Equal(2, asked);                             // the retry came 30 s later
+        dnd = false;
+        clock.Advance(TimeSpan.FromSeconds(MandatoryVideoScheduler.SkipRetrySeconds + 1.3));
+        Assert.Single(host.Shown);                          // alt-tabbed away: videos resume
+        v.Stop();
+        dnd = true;
+        Assert.True(v.Trigger());                           // the Test button ignores the DND rule
+        v.ForceCleanup();
+    });
+
     [Fact]   // WPF VideoStarted (VideoService.cs:3370): once the clip is on screen, not at the trigger
     public void VideoStarted_fires_when_the_clip_is_shown() => With(20, false, () =>
     {

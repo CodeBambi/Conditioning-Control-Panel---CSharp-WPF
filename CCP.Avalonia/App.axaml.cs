@@ -36,9 +36,9 @@ namespace ConditioningControlPanel.Avalonia
         internal static AchievementEngine? Achievements { get; private set; }
 
         /// <summary>WPF App.WindowAwareness (App.xaml.cs:2674), the legacy title observer. X11/XWayland
-        /// titles only; unlike WPF, the privacy rules run on each title first (docs/avalonia-decisions.md).</summary>
+        /// titles on Linux, user32 on Windows (Platform/ActiveWindowTitle); unlike WPF, the privacy rules run on each title first (docs/avalonia-decisions.md).</summary>
         internal static WindowAwarenessService WindowAwareness { get; } =
-            new(Platform.X11ActiveWindow.ReadTitle, WindowAwarenessService.PassesPrivacyRules);
+            new(Platform.ActiveWindowTitle.Read, WindowAwarenessService.PassesPrivacyRules);
 
         /// <summary>The one session runner (WPF MainWindow._sessionEngine), or null on the headless render path.</summary>
         internal static SessionRunner? Sessions { get; set; }
@@ -76,7 +76,9 @@ namespace ConditioningControlPanel.Avalonia
             // Real probes, not the fail-open default (which reads present + resolved). A throw
             // (no pactl) reaches the gate's CachedProbe and still fails open, as WPF's strict pair does.
             CoreQuests.CameraProbe = () => System.IO.Directory.EnumerateFiles("/dev", "video*").Any();
-            CoreQuests.MicrophoneProbe = () => Platform.PulseMicSource.ParseSources(Platform.LibVlcAudio.Pactl("list short sources")).Count > 1;
+            CoreQuests.MicrophoneProbe = () => OperatingSystem.IsWindows()
+                ? Platform.WinMmMicSource.DeviceCount > 0
+                : Platform.PulseMicSource.ParseSources(Platform.LibVlcAudio.Pactl("list short sources")).Count > 1;
 
             var definitions = new QuestDefinitionService();
             _ = definitions.InitializeAsync(); // cache first, then the server, as WPF
@@ -419,6 +421,7 @@ namespace ConditioningControlPanel.Avalonia
                 CoreFlash.ShowProvider = () =>
                 {
                     if (desktop.MainWindow is not { } host) return;
+                    if (Platform.DoNotDisturbGuard.HoldsScheduledFlash()) return;   // WPF FlashService.cs:689
                     Views.Overlays.FlashOverlay.TriggerOnce(host);
                     NoteFeatureUsed(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureFlash);
                 };

@@ -1,6 +1,8 @@
 using System;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using System.Linq;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Models;
@@ -185,7 +187,54 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CoreSettings.Save();
         }
 
-        // ponytail: needs DoNotDisturbGuard.RunningWindowedProcesses (Win32 window enumeration); per-platform in the head
-        private void BtnDndPickApp_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF BtnDndPickApp_Click: a menu of the apps with a window; listed ones show ticked
+        /// and inert. Linux finds no main-window handles, so it reads "set2_dnd_pick_empty" there.</summary>
+        private void BtnDndPickApp_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var running = Platform.DoNotDisturbGuard.RunningWindowedProcesses();
+                var menu = new ContextMenu { Placement = PlacementMode.Bottom, MaxHeight = 420 };
+                if (running.Count == 0)
+                    menu.Items.Add(new MenuItem { Header = global::ConditioningControlPanel.Localization.Loc.Get("set2_dnd_pick_empty"), IsEnabled = false });
+                else
+                {
+                    var already = CoreSettings.Current.DndProcessList ?? new System.Collections.Generic.List<string>();
+                    foreach (var name in running)
+                    {
+                        var item = new MenuItem { Header = name };
+                        if (already.Contains(name, StringComparer.OrdinalIgnoreCase))
+                        {
+                            item.ToggleType = MenuItemToggleType.CheckBox;
+                            item.IsChecked = true;
+                            item.IsEnabled = false;
+                        }
+                        else
+                        {
+                            var picked = name;
+                            item.Click += (_, _) => AddDndProcess(picked);
+                        }
+                        menu.Items.Add(item);
+                    }
+                }
+                BtnDndPickApp.ContextMenu = menu;
+                menu.Open(BtnDndPickApp);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[DND] app picker failed to open"); }
+        }
+
+        /// <summary>WPF AddDndProcess: re-parses the BOX (an unblurred edit survives the pick).</summary>
+        internal void AddDndProcess(string processName)
+        {
+            var list = DndProcessList.Parse(TxtDndProcesses.Text);
+            var name = DndProcessList.Normalize(processName);
+            if (name.Length == 0) return;
+            if (!list.Contains(name, StringComparer.OrdinalIgnoreCase)) list.Add(name);
+            CoreSettings.Current.DndProcessList = list;
+            CoreSettings.Save();
+            _isLoading = true;
+            try { TxtDndProcesses.Text = DndProcessList.Format(list); }
+            finally { _isLoading = false; }
+        }
     }
 }

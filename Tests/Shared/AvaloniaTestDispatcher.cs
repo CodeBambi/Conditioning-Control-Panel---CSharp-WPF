@@ -167,6 +167,7 @@ internal static class TestXdgConfigSandbox
     {
         System.IO.Directory.CreateDirectory(Root);
         Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", Root);
+        Environment.SetEnvironmentVariable("CCP_STARTUP_FOLDER", System.IO.Path.Combine(Root, "Startup"));
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             try { System.IO.Directory.Delete(Root, recursive: true); } catch { }
