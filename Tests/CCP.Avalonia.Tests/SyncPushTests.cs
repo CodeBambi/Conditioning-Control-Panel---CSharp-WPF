@@ -328,14 +328,25 @@ public sealed partial class AccountSeedTests
     });
 
     [Fact]
-    public void ProgressionBank_IgnoresPassiveSources_WithNoIdleTracker() => WithFreshInstall(() =>
+    public void ProgressionBank_IgnoresPassiveSources_OnlyWhileIdle() => WithFreshInstall(() =>
     {
         var s = CoreSettings.Current;
         CoreAccount.UnifiedUserId = "u1";
-        foreach (var src in new[] { "Flash", "Subliminal", "BouncingText" }) ProgressionBank.Add(50, src);
-        Assert.Equal(0, s.PlayerXP);
-        ProgressionBank.Add(50, "Session");
-        Assert.Equal(50, s.PlayerXP);
+        var probe = ActivityIdle.IdleSecondsProvider;
+        try
+        {
+            // WPF ProgressionService.cs:70-78: AFK (3 min without input) drops the passive sources.
+            ActivityIdle.IdleSecondsProvider = () => ActivityIdle.IdleThresholdSeconds;
+            foreach (var src in new[] { "Flash", "Subliminal", "BouncingText" }) ProgressionBank.Add(50, src);
+            Assert.Equal(0, s.PlayerXP);
+            ProgressionBank.Add(50, "Session");
+            Assert.Equal(50, s.PlayerXP);
+            // Active: they bank like any other source.
+            ActivityIdle.IdleSecondsProvider = () => 0;
+            ProgressionBank.Add(10, "Flash");
+            Assert.Equal(60, s.PlayerXP);
+        }
+        finally { ActivityIdle.IdleSecondsProvider = probe; }
         return Task.CompletedTask;
     });
 
