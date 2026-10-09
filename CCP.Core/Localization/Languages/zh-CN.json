@@ -3104,6 +3104,8 @@
   "lab_ai_effects_memory_subtitle": "让陪伴角色从聊天中触发应用效果（闪现、音频、覆盖层），并决定在会话之间记住什么。",
   "tooltip_lab_ai_effects": "AI 驱动效果的总开关。打开后，本地 AI 可以在聊天里触发闪图、音频、泡泡、叠层、触觉等应用效果。每种效果都在下方单独开启。云端 AI 无法驱动效果，只有本地 Ollama 模型可以。",
   "tooltip_lab_ai_memory": "开启时，AI会在重启后记住过去对话，让聊天保持连贯。关闭时每次聊天都从头开始。‘忘记一切’立即清除保存的记忆",
+  "tooltip_remember_save": "记住我当前的设置",
+  "tooltip_remember_recall": "恢复我保存的设置（右键重新保存）",
   "btn_forget_everything": "忘记一切",
   "tooltip_forget_everything": "清除本地AI保存的对话记忆（内存+磁盘）",
   "dialog_forget_everything_prompt": "这将清除伙伴的本地过去对话记忆。下次聊天时从头开始。是否继续？",
