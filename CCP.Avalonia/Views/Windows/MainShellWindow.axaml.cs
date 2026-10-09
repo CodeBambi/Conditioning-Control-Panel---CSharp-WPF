@@ -104,6 +104,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // The rail's setup pass. Here, not in OnAttachedToVisualTree: a Window IS the visual
             // root, so that override never fires on it and the rail never opened.
             InitializeNavRail();
+            InitFavoritesRail(); // MainShellWindow.FavoritesRail.cs (WPF MainWindow.xaml.cs:3501)
             ApplyEnableDeeper(); // MainShellWindow.DeeperTab.cs (WPF LoadSettings: rail door follows EnableDeeper)
             InitializeTabHistoryInput(); // MainShellWindow.TabHistory.cs (WPF MainWindow ctor)
             // The mod switcher's rows, the saved mod's palette and the pending first-run choice
@@ -127,6 +128,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeHelpButtons(); // MainShellWindow.HelpButtons.cs (WPF MainWindow.Presets.cs:35 SetupHelpButtons)
             InitializeDashboardFx(); // MainShellWindow.DashboardFx.cs (WPF MainWindow ctor -> InitializeDashboardFx)
             InitDashboardBrowserFold(); // MainShellWindow.DashboardFold.cs (WPF MainWindow.xaml.cs:3505)
+            InitializeRememberButton(); // MainShellWindow.Remember.cs (WPF MainWindow.xaml.cs:3508)
             InitializeMicActivePill(); // MainShellWindow.SheListening.cs (WPF MainWindow.xaml.cs:3594 WireMicActivePill)
             InitializeRemoteControlOverlay(); // MainShellWindow.RemoteControl.cs (WPF MainWindow.RemoteControl.cs:784)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.

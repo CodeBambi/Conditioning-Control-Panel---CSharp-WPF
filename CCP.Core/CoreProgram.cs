@@ -38,6 +38,17 @@ namespace ConditioningControlPanel
         /// <summary>The head's roadmap instance, for filing ritual photos. Unseeded: null.</summary>
         public static volatile Func<RoadmapService?>? RoadmapProvider;
 
+        /// <summary>Whether this head can ever raise the signal a task waits on (programs-3a decision,
+        /// docs/avalonia-decisions.md). Unseeded: every task is available, so WPF never seeds it.</summary>
+        public static volatile Func<Models.Program.ProgramTask, bool>? TaskAvailableProvider;
+
+        public static bool IsTaskAvailable(Models.Program.ProgramTask task)
+        {
+            var provider = TaskAvailableProvider;
+            if (provider is null) return true;
+            try { return provider(task); } catch { return false; }   // refuse rather than forgive work
+        }
+
         public static bool HasPremium
         {
             get { try { return HasPremiumProvider?.Invoke() == true; } catch { return false; } }

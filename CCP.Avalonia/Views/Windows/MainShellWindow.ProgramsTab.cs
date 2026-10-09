@@ -61,8 +61,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ActionOpacity = 0.5,
                     // Tier metadata stays, but nothing here can be started - by a pledge or
                     // otherwise - so every card gets the truthful unavailable explanation rather
-                    // than programs_locked_hint, which promises a pledge unlocks execution.
-                    ReasonText = Loc.Get("programs_unavailable"),
+                    // than programs_locked_hint, which promises a pledge unlocks execution. A program
+                    // this head can never finish says what it is missing (programs-3a decision).
+                    ReasonText = ProgramService.UnavailableReason(definition, Platform.ProgramCapabilities.IsAvailable)
+                                 ?? Loc.Get("programs_unavailable"),
                     ReasonVisible = true,
                     CardOpacity = locked ? 0.72 : 1.0
                 });

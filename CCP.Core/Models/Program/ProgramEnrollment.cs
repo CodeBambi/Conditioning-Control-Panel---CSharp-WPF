@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ConditioningControlPanel.Models.Program;
 
@@ -42,6 +44,9 @@ public enum ProgramEnrollmentState
 public class ProgramDayRecord
 {
     public int DayIndex { get; set; }
+
+    /// <summary>Fields a newer build wrote; kept so this build's save does not drop them. Null writes nothing.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 
     /// <summary>The program-date this day belongs to (already shifted by the boundary hour).</summary>
     public DateTime ProgramDate { get; set; }
@@ -195,6 +200,9 @@ public class ProgramEnrollment
 {
     public string ProgramId { get; set; } = "";
 
+    /// <summary>Fields a newer build wrote; kept so this build's save does not drop them. Null writes nothing.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
     /// <summary>Reserved for cohorts so shipping them later is not a migration.</summary>
     public string? CohortId { get; set; }
 
@@ -322,4 +330,18 @@ public class ProgramState
 
     /// <summary>Programs the user has graduated at least once, by id.</summary>
     public List<string> GraduatedProgramIds { get; set; } = new();
+
+    /// <summary>
+    /// Bump only for a change that is not additive (a rename or a change of meaning); additive
+    /// fields ride in <see cref="Extra"/>. A file stamped newer than this build loads read-only.
+    /// At 0 it is never written, so existing files keep their bytes
+    /// (docs/avalonia-decisions.md 2026-10-09, programs CHECKPOINT B).
+    /// </summary>
+    public const int CurrentSchemaVersion = 0;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int SchemaVersion { get; set; }
+
+    /// <summary>Fields a newer build wrote; kept so this build's save does not drop them. Null writes nothing.</summary>
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
