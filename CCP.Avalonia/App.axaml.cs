@@ -76,7 +76,9 @@ namespace ConditioningControlPanel.Avalonia
             // Real probes, not the fail-open default (which reads present + resolved). A throw
             // (no pactl) reaches the gate's CachedProbe and still fails open, as WPF's strict pair does.
             CoreQuests.CameraProbe = () => System.IO.Directory.EnumerateFiles("/dev", "video*").Any();
-            CoreQuests.MicrophoneProbe = () => Platform.PulseMicSource.ParseSources(Platform.LibVlcAudio.Pactl("list short sources")).Count > 1;
+            CoreQuests.MicrophoneProbe = () => OperatingSystem.IsWindows()
+                ? Platform.WinMmMicSource.DeviceCount > 0
+                : Platform.PulseMicSource.ParseSources(Platform.LibVlcAudio.Pactl("list short sources")).Count > 1;
 
             var definitions = new QuestDefinitionService();
             _ = definitions.InitializeAsync(); // cache first, then the server, as WPF
