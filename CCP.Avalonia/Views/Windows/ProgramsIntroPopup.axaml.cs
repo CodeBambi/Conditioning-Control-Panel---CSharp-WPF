@@ -29,10 +29,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>ShowIfFirstTime</c> reads CoreSettings / CoreMods and the built-in library; no
     ///    ProgramService is constructed (its timers must not start on a head with no run panel).
     ///    Routed through Platform.StartupLadder, so the quiet window parks it as an Inbox row.
-    ///  - <c>ProgramArt.Sigil/DayPlate</c> stays unresolved, blocked on the unlinked
-    ///    <c>Assets/programs</c> art rather than on the resolver - see the note at its call site.
-    ///    The sigil stays hidden and the rail shows its gradient, glow and program title, which is
-    ///    what the WPF fallback plate draws.
     ///  - <c>PreviewKeyDown</c> -&gt; <c>KeyDown</c>; <c>DragMove()</c> -&gt; <c>BeginMoveDrag(e)</c>.
     /// </summary>
     public partial class ProgramsIntroPopup : Window
@@ -157,13 +153,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 for (int i = 1; i <= 4; i++)
                     this.FindControl<TextBlock>("Bullet" + i)!.Foreground = accent;
 
-                // ponytail: the sigil Rectangle stays hidden. Mask + Helpers.ModArt.TryLoad are portable;
-                // what is missing is the file NAME: WPF's ProgramArt.Sigil ?? DayPlate
-                // (Services/Program/ProgramArt.cs Slug/TemplateSlug) is head-only, and a second copy
-                // here is the fork this repo forbids. Move that naming to Core, then link
-                // Assets/programs and set the mask.
-                // The rail still draws its gradient, glow and title, which is what the WPF
-                // shared-fallback-plate path looks like.
+                // WPF ProgramsIntroPopup.xaml.cs:189: sigil, else day 1's mood plate; none collapses the rail.
+                var sigilPath = ProgramArtPaths.Sigil(program);
+                var art = Helpers.ModArt.FirstOf(sigilPath != null ? new[] { sigilPath } : Array.Empty<string>(), 256)
+                          ?? Helpers.ModArt.FirstOf(ProgramArtPaths.DayPlate(program, program.GetDay(1)), 256);
+                if (art == null)
+                {
+                    artPanel.IsVisible = false;
+                    return;
+                }
+
+                var sigil = this.FindControl<Rectangle>("ArtSigil")!;
+                sigil.OpacityMask = new ImageBrush(art) { Stretch = Stretch.Uniform };
+                sigil.Fill = accent;
+                sigil.IsVisible = true;
                 this.FindControl<Rectangle>("ArtGlow")!.Fill = GlowBrush(accent);
 
                 var title = this.FindControl<TextBlock>("TxtArtProgramTitle")!;
