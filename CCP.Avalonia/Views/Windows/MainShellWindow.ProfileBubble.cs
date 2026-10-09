@@ -8,19 +8,8 @@
 // menu and lands on the Profile tab (key "discord" - "profile" matches no case; see
 // MainShellWindow.TabNavigation.cs).
 //
-// THE MENU IS PAINTED HONEST, NOT FULL. RefreshProfileMenu's identity half reads App.IsLoggedIn,
-// App.UserDisplayName, App.Patreon.HasLabAccess/HasPremiumAccess and App.Achievements - none of
-// which exist on this head - so the rows those would fill are HIDDEN rather than left showing the
-// XAML's placeholders:
-//   * ProfileMenuName + ProfileMenuBadge - no display name and no tier truth here.
-//   * ProfileMenuBadges - the achievement count reads App.Achievements. The Level/XP rail above it
-//     is LIVE, painted by UpdateLevelDisplay (MainShellWindow.HeroFx.cs) with the header's numbers.
-//   * ProfileMenuAccountBtn - the XAML ships it captioned "Log out". Whether that is even the
-//     right word needs App.IsLoggedIn, and acting on it needs BtnQuickLogout_Click
-//     (ConditioningControlPanel/MainWindow/MainWindow.Login.cs). A row that says "Log out" and
-//     does nothing is the exact state-lie this port refuses, so the row is hidden and
-//     ProfileMenuAccount_Click stays a stub.
-// The result is a menu that shows only what it can prove: four working doors.
+// THE MENU IS PAINTED IN FULL (wave A, shell#18 / social#21): name, tier badge, achievement count and
+// the Log out / Sign in row are painted by RefreshProfileMenu in MainShellWindow.AccountChip.cs.
 //
 // Controls are reached with Named<T>(name). MainShellWindow loads with AvaloniaXamlLoader.Load,
 // so a `ProfileBubblePopup` field would compile and be null forever.
@@ -81,7 +70,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private DispatcherTimer? _profileBubbleOpenTimer;
         private DispatcherTimer? _profileBubbleCloseTimer;
         private bool _profileBubbleWatchersOn;
-        private bool _profileBubbleMenuPainted;
 
         private Popup? ProfileBubblePopupHost => Named<Popup>("ProfileBubblePopup");
 
@@ -173,36 +161,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (popup != null) popup.Closed -= OnProfileBubblePopupClosed;
         }
 
-        /// <summary>
-        /// Hides every row whose truth source is not on this head, so the menu offers only doors
-        /// it can honour. See the header for what each one needs. This is the menu's one paint
-        /// choke point, so restoring any of them is an edit here and nowhere else.
-        /// </summary>
-        private void RefreshProfileMenu()
-        {
-            if (_profileBubbleMenuPainted) return;   // the hidden set cannot change yet
-            _profileBubbleMenuPainted = true;
-            try
-            {
-                Hide("ProfileMenuName");
-                Hide("ProfileMenuBadge");
-                Hide("ProfileMenuBadges");
-                Hide("ProfileMenuAccountBtn");
-            }
-            catch (Exception ex) { Log.Debug("RefreshProfileMenu: {E}", ex.Message); }
-
-            // Instrumented, not silently guarded. A Popup does not open a new namescope, so the
-            // window's FindControl reaches its children - but "the x:Name lookup quietly returned
-            // null" is this port's most expensive failure mode, and here it would mean the menu
-            // opens showing the very rows this method exists to hide.
-            void Hide(string name)
-            {
-                var c = Named<Control>(name);
-                if (c == null) { Log.Warning("[ProfileBubble] {Name} not in the window namescope - the menu will show it", name); return; }
-                c.IsVisible = false;
-            }
-        }
-
         // ----- window-level watchers, live only while the menu is open --------------
         // The menu must never outlive a minimize, an alt-tab or a click somewhere else in the
         // window. WPF's PreviewMouseDown is Avalonia's PointerPressed on the Tunnel strategy; its
@@ -289,14 +247,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             CloseProfileBubbleMenu();
         }
-
-        /// <summary>
-        /// Deliberately inert, and its row is hidden by RefreshProfileMenu. Signed in it must run
-        /// the full quick-logout flow (sync-before-clear, provider logouts, repaint) in
-        /// MainWindow.Login.cs's BtnQuickLogout_Click; signed out it opens Settings scrolled to
-        /// Account. Which of the two it is needs App.IsLoggedIn, and guessing that branch either
-        /// drops a logout on the floor or sends a signed-in user to a sign-in page.
-        /// </summary>
-        private void ProfileMenuAccount_Click(object? sender, RoutedEventArgs e) { }
     }
 }
